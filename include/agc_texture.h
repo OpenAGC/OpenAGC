@@ -84,6 +84,18 @@ void agcBufferDescriptorSetAddress(AgcBufferDescriptor *desc, uint64_t gpu_addr)
 void agcBufferDescriptorSetStride(AgcBufferDescriptor *desc, uint32_t stride_bytes);
 void agcBufferDescriptorSetNumRecords(AgcBufferDescriptor *desc, uint32_t num_records);
 
+void agcSamplerDescriptorInit(AgcSamplerDescriptor *desc);
+void agcSamplerDescriptorSetFilters(AgcSamplerDescriptor *desc,
+    uint32_t min_filter, uint32_t mag_filter, uint32_t mip_filter);
+void agcSamplerDescriptorSetWrapModes(AgcSamplerDescriptor *desc,
+    uint32_t wrap_s, uint32_t wrap_t, uint32_t wrap_r);
+void agcSamplerDescriptorSetLod(AgcSamplerDescriptor *desc,
+    float min_lod, float max_lod, float lod_bias);
+void agcSamplerDescriptorSetCompareFunc(AgcSamplerDescriptor *desc,
+    uint32_t compare_func);
+void agcSamplerDescriptorSetAnisotropy(AgcSamplerDescriptor *desc,
+    uint32_t max_anisotropy);
+
 #ifdef __cplusplus
 }
 #endif
