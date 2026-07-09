@@ -1,0 +1,70 @@
+# /dev/gc ioctl command table for PS5 FW 5.50
+#
+# Encoding: FreeBSD IOC = (dir << 30) | (size << 16) | (type << 8) | nr
+# where type = 0x81 for the GC driver.
+#
+# Source: kernel gc_ioctl_internal at 0x6ed39c (BST + 4 jump tables),
+# gc_submit_with_pid at 0x6e65c0, gc_frame_submit_internal at 0xb7da90.
+# Cross-referenced with libSceAgcDriver.sprx / libSceAgcVsh.sprx ioctl calls.
+#
+# The PS5 FW 5.50 gc_ioctl_internal dispatch table handles 76 distinct
+# (dir, nr, size) command variants. The table below lists the 46 named
+# commands that are currently exposed as macros in include/agc_ioctl.h.
+# Other entries are internal-size variants or undocumented commands that
+# map to the same nr with different sizes/directions.
+#
+# Columns:
+#   nr         : ioctl command number (low 8 bits)
+#   symbol     : macro name in agc_ioctl.h
+#   direction  : IOC direction (NONE / WRITE / READ / RW)
+#   size       : arg size in bytes (14 bits)
+#   encoded_cmd: full 32-bit IOC command word
+#   handler    : kernel function / semantic area
+#   notes      : additional RE notes
+nr	symbol	direction	size	encoded_cmd	handler	notes
+0x00	AGC_GC_IOCTL_FRAME_OPEN	RW	8	0xC0088100	gc_open_internal	Open a submit frame for the calling process.
+0x01	AGC_GC_IOCTL_CLOSE	RW	8	0xC0088101	gc_close	Close / cleanup the current frame.
+0x02	AGC_GC_IOCTL_SUBMIT_16	RW	16	0xC0108102	gc_submit_with_pid	16-byte submit variant (pid, num_cbs, cb_array).
+0x09	AGC_GC_IOCTL_MAKESYSMAP_8	RW	8	0xC0088109	gc_makesysmap	8-byte userspace makesysmap (CPU VA -> GPU VA).
+0x0c	AGC_GC_IOCTL_MAKESYSMAP_32	RW	32	0xC020810C	gc_makesysmap	32-byte kernel-internal makesysmap variant.
+0x0c	AGC_GC_IOCTL_MAKESYSMAP_48	RW	48	0xC030810C	gc_makesysmap	48-byte kernel-internal makesysmap variant.
+0x0d	AGC_GC_IOCTL_MAKESYSMAP_12	RW	12	0xC00C810D	gc_makesysmap	12-byte makesysmap variant.
+0x0f	AGC_GC_IOCTL_LARGE_260	RW	260	0xC104810F	gc_large_arg	260-byte generic RW buffer ioctl.
+0x11	AGC_GC_IOCTL_CPASSETID	RW	8	0xC0088111	gc_cpassetid	CP asset ID query/configuration.
+0x13	AGC_GC_IOCTL_SUBMIT_4	RW	4	0xC0048113	gc_submit_with_pid	4-byte submit variant.
+0x14	AGC_GC_IOCTL_SUBMIT_MFENCE	RW	4	0xC0048114	gc_submit_with_pid	Submit + mfence variant.
+0x15	AGC_GC_IOCTL_WFDEBUG_15	RW	4	0xC0048115	gc_wfdebug	Wavefront debug command 0x15.
+0x16	AGC_GC_IOCTL_QUEUE_DISC	RW	4	0xC0048116	gc_gfx_queue_disconnect	Disconnect a graphics queue.
+0x17	AGC_GC_IOCTL_WFDEBUG_17	RW	4	0xC0048117	gc_wfdebug	Wavefront debug command 0x17.
+0x18	AGC_GC_IOCTL_WFDEBUG_18	RW	4	0xC0048118	gc_wfdebug	Wavefront debug command 0x18.
+0x19	AGC_GC_IOCTL_LARGE_132	RW	132	0xC0848119	gc_large_arg	132-byte generic RW buffer ioctl.
+0x1b	AGC_GC_IOCTL_IH_TASKLET	RW	8	0xC008811B	gc_ih_tasklet	Interrupt handler tasklet command.
+0x1c	AGC_GC_IOCTL_SUSPEND_16	RW	16	0xC010811C	gc_accept_suspend_locked	Suspend point submission (16-byte).
+0x1d	AGC_GC_IOCTL_WFDEBUG_1D	RW	4	0xC004811D	gc_wfdebug	Wavefront debug command 0x1d.
+0x1e	AGC_GC_IOCTL_LARGE_48	RW	48	0xC030811E	gc_large_arg	48-byte generic RW buffer ioctl.
+0x1f	AGC_GC_IOCTL_SETUP_ASYNC	RW	4	0xC004811F	gc_setup_async	Setup async graphics queue.
+0x20	AGC_GC_IOCTL_SET_TF_RING	RW	16	0xC0108120	gc_set_tf_ring	Set tessellation factor ring params.
+0x21	AGC_GC_IOCTL_LARGE_64	RW	64	0xC0408121	gc_large_arg	64-byte generic RW buffer ioctl.
+0x23	AGC_GC_IOCTL_QUERY_120	READ	120	0x80048123	gc_push_only_bad_packet_to_user	Bad-packet / fault query (120-byte read).
+0x24	AGC_GC_IOCTL_QUERY_68	READ	68	0x80448124	gc_query	Query ioctl (68-byte read).
+0x25	AGC_GC_IOCTL_SUBMITDONE	RW	4	0xC0048125	gc_setup_submitdone	Submit-done / fence setup.
+0x26	AGC_GC_IOCTL_QUEUE_STATUS	READ	4	0x80048126	gc_gfx_queue_status	Queue status read.
+0x27	AGC_GC_IOCTL_QUEUE_STAT_16	READ	4	0x80048127	gc_gfx_queue_status	Queue status read (16-byte arg variant).
+0x2a	AGC_GC_IOCTL_QUEUE_CREATE	READ	4	0x8004812A	gc_queue_create	Create / map a user special queue.
+0x2b	AGC_GC_IOCTL_QUEUE_DESTROY	WRITE	4	0x4004812B	gc_queue_destroy	Destroy a user special queue.
+0x2c	AGC_GC_IOCTL_SET_HS_OFFCHIP	RW	16	0xC010812C	gc_set_hs_offchip	Set hull shader offchip parameters.
+0x2d	AGC_GC_IOCTL_IH_TASKLET_2D	RW	8	0xC008812D	gc_ih_tasklet	Interrupt handler tasklet variant.
+0x2e	AGC_GC_IOCTL_WFDEBUG_2E	RW	4	0xC004812E	gc_wfdebug	Wavefront debug command 0x2e.
+0x30	AGC_GC_IOCTL_SUBMIT_40	RW	40	0xC0288130	gc_submit_with_pid	40-byte submit variant.
+0x31	AGC_GC_IOCTL_LARGE_72	RW	72	0xC0488131	gc_large_arg	72-byte generic RW buffer ioctl.
+0x32	AGC_GC_IOCTL_LARGE_24	RW	24	0xC0188132	gc_large_arg	24-byte generic RW buffer ioctl.
+0x33	AGC_GC_IOCTL_INFO_33	RW	8	0xC0088133	gc_info	Info query (8-byte).
+0x34	AGC_GC_IOCTL_INFO_34	READ	4	0x80048134	gc_info	Info query (4-byte read).
+0x36	AGC_GC_IOCTL_CWSR_INIT_8	READ	8	0x80088136	gc_acq_cwsr_initialize	CWSR init (8-byte read).
+0x37	AGC_GC_IOCTL_PADEBUG_8	WRITE	8	0x40088137	gc_padebug_operation	PA debug operation (8-byte write).
+0x38	AGC_GC_IOCTL_PADEBUG_4	READ	4	0x80048138	gc_padebug_operation	PA debug interface version read.
+0x39	AGC_GC_IOCTL_SUSPEND_39	RW	16	0xC0108139	gc_accept_suspend_locked	Suspend point variant (nr=0x39).
+0x3a	AGC_GC_IOCTL_CWSR_INIT_4A	WRITE	4	0x4004813A	gc_acq_cwsr_initialize	CWSR init (4-byte write).
+0x3b	AGC_GC_IOCTL_SUBMIT_PID	RW	16	0xC010813B	gc_submit_with_pid	Primary submit path with pid check.
+0x3c	AGC_GC_IOCTL_QUERY_4C	READ	4	0x8004813C	gc_query	Query ioctl (4-byte read).
+0x3d	AGC_GC_IOCTL_CWSR_INIT_4D	WRITE	4	0x4004813D	gc_acq_cwsr_initialize	CWSR init (4-byte write).

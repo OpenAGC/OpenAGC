@@ -1,0 +1,23 @@
+CMakeFiles/openagc.dir/src/context_state.c.o: \
+  /Users/bizkut/Downloads/PS5/homebrew/ps4-freegnm/openagc/src/context_state.c \
+  /Users/bizkut/Downloads/PS5/homebrew/ps4-freegnm/openagc/include/agcdriver.h \
+  /Users/bizkut/ps5-payload-sdk/target/include/stdbool.h \
+  /Users/bizkut/ps5-payload-sdk/target/include/stddef.h \
+  /Users/bizkut/ps5-payload-sdk/target/include/sys/cdefs.h \
+  /Users/bizkut/ps5-payload-sdk/target/include/sys/_null.h \
+  /Users/bizkut/ps5-payload-sdk/target/include/sys/_types.h \
+  /Users/bizkut/ps5-payload-sdk/target/include/machine/_types.h \
+  /Users/bizkut/ps5-payload-sdk/target/include/x86/_types.h \
+  /Users/bizkut/ps5-payload-sdk/target/include/machine/_limits.h \
+  /Users/bizkut/ps5-payload-sdk/target/include/x86/_limits.h \
+  /Users/bizkut/ps5-payload-sdk/target/include/stdint.h \
+  /Users/bizkut/ps5-payload-sdk/target/include/machine/_stdint.h \
+  /Users/bizkut/ps5-payload-sdk/target/include/x86/_stdint.h \
+  /Users/bizkut/ps5-payload-sdk/target/include/sys/_stdint.h \
+  /Users/bizkut/Downloads/PS5/homebrew/ps4-freegnm/openagc/include/agc_error.h \
+  /Users/bizkut/Downloads/PS5/homebrew/ps4-freegnm/openagc/include/agc_types.h \
+  /Users/bizkut/Downloads/PS5/homebrew/ps4-freegnm/openagc/include/agc_pm4.h \
+  /Users/bizkut/ps5-payload-sdk/target/include/string.h \
+  /Users/bizkut/ps5-payload-sdk/target/include/strings.h \
+  /Users/bizkut/ps5-payload-sdk/target/include/xlocale/_strings.h \
+  /Users/bizkut/ps5-payload-sdk/target/include/xlocale/_string.h

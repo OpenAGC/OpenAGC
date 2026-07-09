@@ -1,0 +1,36 @@
+/*
+ * openagc test runner
+ */
+
+#include "test.h"
+
+int g_test_pass = 0;
+int g_test_fail = 0;
+
+/* Test suite declarations */
+void test_suite_types(void);
+void test_suite_acb(void);
+void test_suite_cb(void);
+void test_suite_dcb(void);
+void test_suite_driver(void);
+void test_suite_texture(void);
+void test_suite_shader(void);
+void test_suite_ioctl(void);
+void test_suite_register_defaults(void);
+
+int main(void) {
+    printf("openagc test suite\n");
+
+    test_suite_types();
+    test_suite_acb();
+    test_suite_cb();
+    test_suite_dcb();
+    test_suite_driver();
+    test_suite_texture();
+    test_suite_shader();
+    test_suite_ioctl();
+    test_suite_register_defaults();
+
+    TEST_SUMMARY();
+    return 0;
+}

@@ -1,0 +1,67 @@
+# PS5 FW 5.50 AGC register default groups
+#
+# Source: SharpEmu src/SharpEmu.Libs/Agc/AgcExports.cs
+# Primary defaults table lengths: CX=78, SH=29, UC=20
+# Internal defaults table lengths: CX=4, SH=15, UC=3
+#
+# Layout of a register-defaults blob:
+#   0x00: CX table pointer (uint64)
+#   0x08: SH table pointer (uint64)
+#   0x10: UC table pointer (uint64)
+#   0x18: (unknown, 8 bytes)
+#   0x20: (unknown, 8 bytes)
+#   0x28: (unknown, 8 bytes)
+#   0x30: type table pointer (uint64)
+#   0x38: group count (uint32)
+#   0x40: CX table (length * uint64 pointers)
+#   ...: SH table
+#   ...: UC table
+#   ...: type table (count * 3 * uint32)
+#   ...: register blocks (count * 128 bytes)
+#
+# Each register block is 128 bytes (16 * (offset:uint32, value:uint32)).
+# The group table at 0x00/0x08/0x10 points to the register block for each
+# (space, index) pair.
+#
+# Columns:
+#   set       : primary or internal
+#   space     : 0=CX, 1=SH, 2=UC
+#   index     : index into the per-space table
+#   type_hash : 32-bit group identifier (SharpEmu "Type")
+#   registers : comma-separated offset:value pairs
+set	space	index	type_hash	registers
+primary	0	3	0x0BC65DA4	0x08F:0
+primary	0	4	0x9E5AD592	0x08E:0
+primary	0	12	0x6DE4C312	0x203:0
+primary	0	72	0x38E92C91	0x318:0,0x31B:0,0x31C:0,0x31D:0,0x31E:0x48,0x31F:0,0x321:0,0x323:0,0x324:0,0x325:0,0x390:0,0x398:0,0x3A0:0,0x3A8:0,0x3B0:0,0x3B8:0x0006C000
+primary	0	73	0x0B177B43	0x00C:0,0x00D:0x40004000
+primary	0	74	0x48531062	0x191:0
+primary	0	76	0x7690AF6F	0x10F:0x4E7E0000,0x111:0x4E7E0000,0x113:0x4E7E0000,0x110:0,0x112:0,0x114:0,0x094:0x80000000,0x095:0x40004000,0x0B4:0,0x0B5:0
+primary	1	13	0xC918DF3E	0x20C:0,0x20D:0
+primary	1	14	0xC9751C9C	0x0C8:0,0x0C9:0
+primary	1	18	0xC9E01B31	0x008:0,0x009:0
+primary	2	3	0x105971C2	0x25B:0
+primary	2	7	0x40D49AD1	0x262:0
+primary	2	12	0x9EBFAB10	0x242:0
+internal	0	0	0x8FB4EDB5	0x00E:0
+internal	0	1	0xB994AD29	0x2AF:0
+internal	0	2	0xD427322F	0x314:0
+internal	0	3	0xF58FEA31	0x1B5:0
+internal	1	0	0x6AC156EF	0x216:0
+internal	1	1	0x6AC15610	0x217:0
+internal	1	2	0x6AC15009	0x219:0
+internal	1	3	0x6AC153BA	0x21A:0
+internal	1	4	0xBE7DCD73	0x27D:0
+internal	1	5	0x0C4B1438	0x22A:0
+internal	1	6	0xDB00D71A	0x204:0
+internal	1	7	0xDB00D249	0x205:0
+internal	1	8	0xDB00EC60	0x206:0
+internal	1	9	0x0C4D6FE4	0x080:0
+internal	1	10	0x0C4A80EF	0x100:0
+internal	1	11	0x0DD283E7	0x006:0
+internal	1	12	0xC620E68C	0x081:0
+internal	1	13	0xC67EFACF	0x101:0
+internal	1	14	0xD9E6D9F7	0x001:0
+internal	2	0	0x31F34B9F	0x24F:0
+internal	2	1	0xAC0F9E76	0x80003FFF:0
+internal	2	2	0x929FD95D	0x250:0
