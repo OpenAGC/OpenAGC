@@ -178,6 +178,9 @@
 #define AGC_NID_SCE_AGC_SET_UC_REG_IND_PATCH_SET_ADDR    "6lNcCp+fxi4"
 #define AGC_NID_SCE_AGC_SET_UC_REG_IND_PATCH_ADD_REGS    "vRoArM9zaIk"
 
+/* libSceAgc.sprx — additional patcher */
+#define AGC_NID_SCE_AGC_DMA_DATA_PATCH_SET_SRC           "cdDRpqcFGbU"
+
 /* libSceAgc.sprx — utility */
 #define AGC_NID_SCE_AGC_SET_NOP                      "K2mciNVxUCE"
 #define AGC_NID_SCE_AGC_DEBUG_RAISE_EXCEPTION        "T6xuVw0KUJo"

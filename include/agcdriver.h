@@ -163,6 +163,8 @@ uint32_t *PS5_SYSV_ABI sceAgcCbSetCxRegistersDirect(
 /* In-place packet patchers — overwrite an address field in an already-emitted packet */
 int32_t PS5_SYSV_ABI sceAgcDmaDataPatchSetDstAddressOrOffset(
     uint32_t *cmd, uint64_t destination_address);
+int32_t PS5_SYSV_ABI sceAgcDmaDataPatchSetSrcAddressOrOffsetOrImmediate(
+    uint32_t *cmd, uint64_t source_address);
 int32_t PS5_SYSV_ABI sceAgcWaitRegMemPatchAddress(
     uint32_t *cmd, uint64_t address);
 int32_t PS5_SYSV_ABI sceAgcQueueEndOfPipeActionPatchAddress(

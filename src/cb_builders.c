@@ -412,13 +412,21 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbSetUcRegistersIndirect(
 }
 
 /*
- * RE source: SharpEmu sceAgc{DmaData,WaitRegMem,QueueEndOfPipeAction}PatchAddress.
- * These are in-place patchers — they take a pointer to an already-emitted packet
- * (the return value from a builder) and overwrite a specific 64-bit address field.
- * They return int32_t AGC error codes, not uint32_t* like the builders.
+ * RE source: SPRX disassembly of libSceAgc.sprx (FW 5.50).
+ * Both DmaData patchers check for raw DMA_DATA (opcode 0x50) by reading
+ * byte [cmd + 1] (the opcode byte in the header) and comparing shifted
+ * left by 8 against 0x5000. They return 0x8a6c000c if the packet is not
+ * DMA_DATA.
  *
- * DmaDataPatchSetDstAddressOrOffset: patches cmd[4..5] (dst address at +16 bytes)
- *   in a DmaData packet (NOP + sub 0x19).
+ * DmaDataPatchSetDstAddressOrOffset: patches qword at [cmd + 0x10]
+ *   (cmd[4..5] = destination address in raw DMA_DATA format).
+ * DmaDataPatchSetSrcAddressOrOffsetOrImmediate: patches qword at [cmd + 0x08]
+ *   (cmd[2..3] = source address in raw DMA_DATA format).
+ *
+ * For backward compatibility with our NOP-wrapped DmaData builder
+ * (opcode 0x10, sub 0x19), we also accept that format and patch the
+ * corresponding fields (dst at cmd[4..5], src at cmd[6..7]).
+ *
  * WaitRegMemPatchAddress: patches cmd[2..3] (addr at +8 bytes) for a standard
  *   WAIT_REG_MEM packet (op 0x3C), or cmd[1..2] (addr at +4 bytes) for a
  *   NOP-wrapped wait (sub 0x0A WAIT_MEM32 or 0x16 WAIT_MEM64).
@@ -432,13 +440,47 @@ int32_t PS5_SYSV_ABI sceAgcDmaDataPatchSetDstAddressOrOffset(
         return AGC_ERROR_INVALID_ARGUMENT;
 
     uint32_t opcode = agcPm4Opcode(cmd[0]);
+    if (opcode == AGC_PM4_OP_DMA_DATA) {
+        /* Raw DMA_DATA: dst at cmd[4..5] (offset 0x10) */
+        cmd[4] = (uint32_t)destination_address;
+        cmd[5] = (uint32_t)(destination_address >> 32);
+        return AGC_OK;
+    }
+
+    /* Backward compat: NOP-wrapped DMA_DATA (sub 0x19) */
     uint32_t sub = agcPm4Subcommand(cmd[0]);
-    if (opcode != AGC_PM4_OP_NOP || sub != AGC_PM4_SUB_DMA_DATA)
+    if (opcode == AGC_PM4_OP_NOP && sub == AGC_PM4_SUB_DMA_DATA) {
+        cmd[4] = (uint32_t)destination_address;
+        cmd[5] = (uint32_t)(destination_address >> 32);
+        return AGC_OK;
+    }
+
+    return 0x8a6c000c;
+}
+
+int32_t PS5_SYSV_ABI sceAgcDmaDataPatchSetSrcAddressOrOffsetOrImmediate(
+    uint32_t *cmd, uint64_t source_address)
+{
+    if (!cmd)
         return AGC_ERROR_INVALID_ARGUMENT;
 
-    cmd[4] = (uint32_t)destination_address;
-    cmd[5] = (uint32_t)(destination_address >> 32);
-    return AGC_OK;
+    uint32_t opcode = agcPm4Opcode(cmd[0]);
+    if (opcode == AGC_PM4_OP_DMA_DATA) {
+        /* Raw DMA_DATA: src at cmd[2..3] (offset 0x08) */
+        cmd[2] = (uint32_t)source_address;
+        cmd[3] = (uint32_t)(source_address >> 32);
+        return AGC_OK;
+    }
+
+    /* Backward compat: NOP-wrapped DMA_DATA (sub 0x19), src at cmd[6..7] */
+    uint32_t sub = agcPm4Subcommand(cmd[0]);
+    if (opcode == AGC_PM4_OP_NOP && sub == AGC_PM4_SUB_DMA_DATA) {
+        cmd[6] = (uint32_t)source_address;
+        cmd[7] = (uint32_t)(source_address >> 32);
+        return AGC_OK;
+    }
+
+    return 0x8a6c000c;
 }
 
 int32_t PS5_SYSV_ABI sceAgcWaitRegMemPatchAddress(

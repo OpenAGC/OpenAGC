@@ -336,10 +336,38 @@ static void test_sce_agc_dcb_patch_address(void) {
     TEST_ASSERT_EQ(dma[6], 0x40u, "DmaDataPatch src lo unchanged");
     TEST_ASSERT_EQ(dma[7], 0x2u, "DmaDataPatch src hi unchanged");
 
-    /* DmaDataPatch on a non-DmaData packet must fail */
+    /* DmaData Src patch: src address at cmd[6..7] in NOP-wrapped format */
+    TEST_ASSERT_EQ(sceAgcDmaDataPatchSetSrcAddressOrOffsetOrImmediate(dma, 0x400000080ULL), AGC_OK,
+        "DmaDataSrcPatch returns OK on DmaData packet");
+    TEST_ASSERT_EQ(dma[6], 0x80u, "DmaDataSrcPatch src lo");
+    TEST_ASSERT_EQ(dma[7], 0x4u, "DmaDataSrcPatch src hi");
+    TEST_ASSERT_EQ(dma[4], 0x60u, "DmaDataSrcPatch dst lo unchanged");
+
+    /* DmaDataPatch on a non-DmaData packet must fail with 0x8a6c000c (SPRX) */
     uint32_t* flip = sceAgcDcbSetFlip(&cb, 1, 0, 0, 0);
-    TEST_ASSERT_EQ(sceAgcDmaDataPatchSetDstAddressOrOffset(flip, 0x300000060ULL),
-        AGC_ERROR_INVALID_ARGUMENT, "DmaDataPatch rejects non-DmaData packet");
+    TEST_ASSERT_EQ((uint32_t)sceAgcDmaDataPatchSetDstAddressOrOffset(flip, 0x300000060ULL),
+        0x8a6c000cu, "DmaDataPatch rejects non-DmaData packet");
+    TEST_ASSERT_EQ((uint32_t)sceAgcDmaDataPatchSetSrcAddressOrOffsetOrImmediate(flip, 0x400000080ULL),
+        0x8a6c000cu, "DmaDataSrcPatch rejects non-DmaData packet");
+
+    /* Raw DMA_DATA (opcode 0x50) patch test */
+    uint32_t raw_dma[8];
+    raw_dma[0] = agcPm4Header3(AGC_PM4_OP_DMA_DATA, 8);
+    raw_dma[1] = 0;
+    raw_dma[2] = 0;  /* src lo */
+    raw_dma[3] = 0;  /* src hi */
+    raw_dma[4] = 0;  /* dst lo */
+    raw_dma[5] = 0;  /* dst hi */
+    raw_dma[6] = 0;
+    raw_dma[7] = 0;
+    TEST_ASSERT_EQ(sceAgcDmaDataPatchSetSrcAddressOrOffsetOrImmediate(raw_dma, 0x12345678ABULL), AGC_OK,
+        "DmaDataSrcPatch on raw DMA_DATA");
+    TEST_ASSERT_EQ(raw_dma[2], 0x345678ABu, "Raw DMA_DATA src lo");
+    TEST_ASSERT_EQ(raw_dma[3], 0x12u, "Raw DMA_DATA src hi");
+    TEST_ASSERT_EQ(sceAgcDmaDataPatchSetDstAddressOrOffset(raw_dma, 0xDEAD0000BEEFULL), AGC_OK,
+        "DmaDataDstPatch on raw DMA_DATA");
+    TEST_ASSERT_EQ(raw_dma[4], 0x0000BEEFu, "Raw DMA_DATA dst lo");
+    TEST_ASSERT_EQ(raw_dma[5], 0xDEADu, "Raw DMA_DATA dst hi");
 
     /* WaitRegMemPatch: standard WAIT_REG_MEM → addr at cmd[2..3] (+8 bytes) */
     uint32_t* wrm_std = sceAgcDcbWaitRegMem(&cb, 0, 3, 2, 0, 0x100000020ULL, 0x55, 0xFF, 400);
@@ -375,9 +403,11 @@ static void test_sce_agc_dcb_patch_address(void) {
     TEST_ASSERT_EQ(sceAgcQueueEndOfPipeActionPatchAddress(flip, 0x5000000A0ULL),
         AGC_ERROR_INVALID_ARGUMENT, "QueueEndOfPipeActionPatch rejects non-ReleaseMem packet");
 
-    /* NULL cmd must fail for all three */
+    /* NULL cmd must fail for all patchers */
     TEST_ASSERT_EQ(sceAgcDmaDataPatchSetDstAddressOrOffset(0, 0), AGC_ERROR_INVALID_ARGUMENT,
         "DmaDataPatch rejects NULL");
+    TEST_ASSERT_EQ(sceAgcDmaDataPatchSetSrcAddressOrOffsetOrImmediate(0, 0), AGC_ERROR_INVALID_ARGUMENT,
+        "DmaDataSrcPatch rejects NULL");
     TEST_ASSERT_EQ(sceAgcWaitRegMemPatchAddress(0, 0), AGC_ERROR_INVALID_ARGUMENT,
         "WaitRegMemPatch rejects NULL");
     TEST_ASSERT_EQ(sceAgcQueueEndOfPipeActionPatchAddress(0, 0), AGC_ERROR_INVALID_ARGUMENT,

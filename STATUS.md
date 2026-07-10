@@ -48,7 +48,7 @@ make -B test
 Expected result:
 
 ```text
-1341 passed, 0 failed
+1353 passed, 0 failed
 ```
 
 PS5 prospero backend (cross-compiled, no tests):
@@ -319,16 +319,38 @@ Submit model:
 
 ## Game Compatibility
 
+### Coverage across 3 game binaries
+
+| Game | Title ID | AGC imports | Implemented | Missing |
+|------|----------|-------------|-------------|---------|
+| Joe & Mac Caveman Ninja | PPSA02801 | 70 | 70 | 0 |
+| PPSA09076 (backport) | PPSA09076 | 69 | 69 | 0 |
+| PPSA03157 | PPSA03157 | 58 | 58 | 0 |
+
+**Total unique AGC functions across all 3 games: 72**
+**All 72 implemented.** 100% coverage.
+
 ### Joe & Mac Caveman Ninja (PPSA02801, v01.003)
 - **Engine:** Unity IL2CPP
 - **SDK:** PS5 5.00
-- **AGC imports:** 71 total (62 from libSceAgc, 9 from libSceAgcDriver)
-- **Implemented:** 38/71 before game_compat.c, now 69/71 after
+- **AGC imports:** 70 total (61 from libSceAgc, 9 from libSceAgcDriver)
 - **Analysis:** `analysis/game_agc_usage.md`
 
-The game imports from both libSceAgc (user-facing API) and
-libSceAgcDriver (driver-facing API). The libSceAgc functions are mostly
-packet builders which we already implement. The missing functions were:
+### PPSA09076 (01.000.000 backport)
+- **AGC imports:** 69 total (60 from libSceAgc, 9 from libSceAgcDriver)
+- Same import set as Joe & Mac minus `sceAgcInit`, `sceAgcGetDataPacketPayload`
+
+### PPSA03157
+- **AGC imports:** 58 total (52 from libSceAgc, 6 from libSceAgcDriver)
+- Smallest import set; no `sceAgcAcbJump`, `sceAgcAcbCopyData`,
+  `sceAgcAcbPopMarker`, `sceAgcAcbPushMarker`, `sceAgcCbSetUcRegistersDirect`,
+  `sceAgcDebugRaiseException`, `sceAgcSetNop`, `sceAgcDriverGetEqContextId`,
+  `sceAgcDriverRegisterOwner`, `sceAgcDriverRegisterResource`
+- Uses `sceAgcDmaDataPatchSetSrcAddressOrOffsetOrImmediate` (unique to this game)
+
+### Implemented missing functions
+
+All missing functions across the 3 games are now implemented:
 
 1. **libSceAgcDriver stubs** — `RegisterOwner`/`RegisterResource` return
    `0x8a6c9018` (not supported on non-dev hardware per SPRX).
@@ -345,8 +367,10 @@ packet builders which we already implement. The missing functions were:
    `GetDataPacketPayload`, `CreateShader`, `CreatePrimState`.
 7. **Wrapper functions** — `sceAgcInit`, `sceAgcSuspendPoint`,
    `sceAgcGetRegisterDefaults2` / `2Internal`.
-
-All 33 missing functions are now implemented in `src/game_compat.c`.
+8. **DmaData Src patcher** — `sceAgcDmaDataPatchSetSrcAddressOrOffsetOrImmediate`
+   (SPRX-confirmed: checks raw DMA_DATA opcode 0x50, patches cmd[2..3]).
+   Also fixed `sceAgcDmaDataPatchSetDstAddressOrOffset` to match SPRX
+   (now accepts both raw DMA_DATA and NOP-wrapped formats).
 
 ## ps5-openagc Audit
 
