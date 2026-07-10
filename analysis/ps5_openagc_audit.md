@@ -48,22 +48,35 @@ kernel dump, NOT just inherited from ps5-openagc:
 6. **Setup async graphics**: nr=0x26, cmd=0x80048126
    - Confirmed from SPRX `sceAgcDriverSetupAsyncGraphics` disassembly
 
+7. **Memory type constants** (hardware-confirmed):
+   - PS5: WB_ONION=1, WC_GARLIC=3, WB_GARLIC=2
+   - ps5-openagc had: WB_ONION=0, WC_GARLIC=1, WB_GARLIC=2 (WRONG)
+   - Confirmed by deploying to PS5 FW 5.50: type=1 (onion) returns EINVAL
+     in the exploited payload context, type=3 (garlic) works for all regions
+   - Cross-referenced with PS5_DEV_HOMEBREW/examples/ps5_sdk which uses
+     type=1 for command buffers and type=3 for framebuffers
+
 ### INHERITED UNVERIFIED (from ps5-openagc, not independently confirmed)
 
 These came from ps5-openagc and have NOT been independently verified against
 SPRX or kernel disassembly. They could be wrong:
 
 1. **Internal memory region sizes** (driver_prospero.c `sce_agc_initialize_internal_memory`):
-   - DDID: 0x1000 (4KB), WB_ONION
-   - CWSR: 0x10000 (64KB), WB_GARLIC
+   - DDID: 0x1000 (4KB), WC_GARLIC
+   - CWSR: 0x10000 (64KB), WC_GARLIC
    - EOP FIFO: 0x1000 (4KB), WC_GARLIC
-   - Shadow regs: 0x4000 (16KB), WB_GARLIC
+   - Shadow regs: 0x4000 (16KB), WC_GARLIC
    - Trap code: 0x4000 (16KB), WC_GARLIC
-   - Trap data: 0x4000 (16KB), WB_GARLIC
-   - GPU info: 0x1000 (4KB), WB_ONION
-   - Workload: 0x1000 (4KB), WB_ONION
+   - Trap data: 0x4000 (16KB), WC_GARLIC
+   - GPU info: 0x1000 (4KB), WC_GARLIC
+   - Workload: 0x1000 (4KB), WC_GARLIC
    - **Source**: ps5-openagc src/agc_driver.c, claimed "from GNM driver string
      analysis"
+   - **Hardware test**: All 8 regions allocate successfully on PS5 FW 5.50
+     with WC_GARLIC (type=3). WB_ONION (type=1) returns EINVAL on the
+     exploited PS5, so all regions now use garlic. The actual SPRX sizes
+     are still unconfirmed — all 8 allocate but may be larger/smaller than
+     what the real driver uses.
    - **Risk**: If sizes are wrong, the kernel may reject the MAKESYSMAP ioctls
      or the GPU may malfunction. The SPRX module_start uses 0x100000 (1MB) total
      locked memory, which doesn't directly match these individual sizes.

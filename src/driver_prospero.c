@@ -33,6 +33,7 @@
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <string.h>
+#include <stdio.h>
 
 #ifdef OPENAGC_PROSPERO
 
@@ -49,21 +50,36 @@
  * SDK headers are included before this file, the header definitions take
  * precedence.
  */
+/* PS5 memory type constants — verified on hardware.
+ * These differ from PS4! PS4 had WB_ONION=0, WC_GARLIC=1, WB_GARLIC=3.
+ * PS5 (proven by PS5_DEV_HOMEBREW/examples/ps5_sdk/gnm_onion_probe.c):
+ *   1 = WB_ONION  (CPU-coherent, for command buffers)
+ *   3 = WC_GARLIC (GPU-direct, for framebuffers/data)
+ * ps5-openagc had these wrong (0,1,2) — another confirmed error. */
 #ifndef SCE_KERNEL_WB_ONION
-#define SCE_KERNEL_WB_ONION  0
+#define SCE_KERNEL_WB_ONION  1
 #endif
 #ifndef SCE_KERNEL_WC_GARLIC
-#define SCE_KERNEL_WC_GARLIC 1
+#define SCE_KERNEL_WC_GARLIC 3
 #endif
 #ifndef SCE_KERNEL_WB_GARLIC
-#define SCE_KERNEL_WB_GARLIC 3
+#define SCE_KERNEL_WB_GARLIC 2
 #endif
 
+/* PS5 direct memory search range and alignment.
+ * Onion: searchEnd=0x100000000 (4GB), alignment=0x1000 (4KB)
+ * Garlic: searchEnd=0x300000000 (12GB), alignment=0x200000 (2MB)
+ * Verified from PS5_DEV_HOMEBREW/examples/ps5_sdk/. */
+#define PS5_DM_SEARCH_END_ONION   0x100000000LL
+#define PS5_DM_SEARCH_END_GARLIC  0x300000000LL
+#define PS5_DM_ALIGN_ONION        0x1000u
+#define PS5_DM_ALIGN_GARLIC       0x200000u
+
 #ifndef SCE_KERNEL_PROT_CPU_RW
-#define SCE_KERNEL_PROT_CPU_RW 0x04
+#define SCE_KERNEL_PROT_CPU_RW 0x03   /* CPU_READ(0x01) | CPU_WRITE(0x02) */
 #endif
 #ifndef SCE_KERNEL_PROT_GPU_RW
-#define SCE_KERNEL_PROT_GPU_RW 0x08
+#define SCE_KERNEL_PROT_GPU_RW 0x30   /* GPU_READ(0x10) | GPU_WRITE(0x20) */
 #endif
 
 /* libkernel direct-memory API (prospero only). */
@@ -189,18 +205,36 @@ static int32_t agcProsperoAllocRegion(AgcProsperoRegion *region, size_t size, in
 
     memset(region, 0, sizeof(*region));
 
-    size_t aligned_size = (size + 0xFFFu) & ~0xFFFu;
+    /* Select search range and alignment based on memory type.
+     * Onion (type=1): 4GB search range, 4KB alignment
+     * Garlic (type=3): 12GB search range, 2MB alignment
+     * WB_GARLIC (type=2): same as garlic */
+    int64_t search_end;
+    size_t alignment;
+    if (mem_type == SCE_KERNEL_WB_ONION) {
+        search_end = PS5_DM_SEARCH_END_ONION;
+        alignment = PS5_DM_ALIGN_ONION;
+    } else {
+        search_end = PS5_DM_SEARCH_END_GARLIC;
+        alignment = PS5_DM_ALIGN_GARLIC;
+    }
+
+    size_t aligned_size = (size + alignment - 1) & ~(alignment - 1);
     int prot = SCE_KERNEL_PROT_CPU_RW | SCE_KERNEL_PROT_GPU_RW;
     off_t physical_addr = 0;
 
     int32_t ret = sceKernelAllocateDirectMemory(
-        0, 0x10000000000LL, aligned_size, 0x1000u, mem_type, &physical_addr);
-    if (ret != 0 || physical_addr == 0)
+        0, search_end, aligned_size, alignment, mem_type, &physical_addr);
+    if (ret != 0 || physical_addr == 0) {
+        printf("    [alloc] ret=%d phys=0x%llx (searchEnd=0x%llx align=0x%zx type=%d)\n",
+               ret, (unsigned long long)physical_addr,
+               (unsigned long long)search_end, alignment, mem_type);
         return AGC_ERROR_OUT_OF_MEMORY;
+    }
 
     void *cpu_addr = NULL;
     ret = sceKernelMapDirectMemory(
-        &cpu_addr, aligned_size, prot, 0, physical_addr, 0x1000u);
+        &cpu_addr, aligned_size, prot, 0, physical_addr, alignment);
     if (ret != 0 || !cpu_addr) {
         sceKernelReleaseDirectMemory(physical_addr, aligned_size);
         return AGC_ERROR_OUT_OF_MEMORY;
@@ -335,7 +369,10 @@ int32_t PS5_SYSV_ABI sce_agc_initialize_internal_memory(void)
 
     /*
      * Named internal memory regions.
-     * UNVERIFIED: sizes and memory types inherited from ps5-openagc.
+     * UNVERIFIED: sizes inherited from ps5-openagc.
+     * Memory types: use WC_GARLIC (3) for GPU data, WB_ONION (1) for CPU.
+     * WB_GARLIC (2) is not proven to exist on PS5 — the working PS5 examples
+     * only use type=1 and type=3.
      */
     struct {
         AgcProsperoRegion *region;
@@ -343,26 +380,31 @@ int32_t PS5_SYSV_ABI sce_agc_initialize_internal_memory(void)
         int             mem_type;
         const char     *name;
     } regions[] = {
-        { &g_prospero.ddid,       0x1000, SCE_KERNEL_WB_ONION,  "DDID"       },
-        { &g_prospero.cwsr,       0x10000, SCE_KERNEL_WB_GARLIC, "CWSR"       },
-        { &g_prospero.eop_fifo,   0x1000, SCE_KERNEL_WC_GARLIC, "EOP FIFO"   },
-        { &g_prospero.shadow_reg, 0x4000, SCE_KERNEL_WB_GARLIC, "Shadow regs"},
-        { &g_prospero.trap_code,  0x4000, SCE_KERNEL_WC_GARLIC, "Trap code"  },
-        { &g_prospero.trap_data,  0x4000, SCE_KERNEL_WB_GARLIC, "Trap data"  },
-        { &g_prospero.gpu_info,   0x1000, SCE_KERNEL_WB_ONION,  "GPU info"   },
-        { &g_prospero.workload,   0x1000, SCE_KERNEL_WB_ONION,  "Workload"   },
+        { &g_prospero.ddid,       0x1000,  SCE_KERNEL_WC_GARLIC, "DDID"       },
+        { &g_prospero.cwsr,       0x10000, SCE_KERNEL_WC_GARLIC, "CWSR"       },
+        { &g_prospero.eop_fifo,   0x1000,  SCE_KERNEL_WC_GARLIC, "EOP FIFO"   },
+        { &g_prospero.shadow_reg, 0x4000,  SCE_KERNEL_WC_GARLIC, "Shadow regs"},
+        { &g_prospero.trap_code,  0x4000,  SCE_KERNEL_WC_GARLIC, "Trap code"  },
+        { &g_prospero.trap_data,  0x4000,  SCE_KERNEL_WC_GARLIC, "Trap data"  },
+        { &g_prospero.gpu_info,   0x1000,  SCE_KERNEL_WC_GARLIC, "GPU info"   },
+        { &g_prospero.workload,   0x1000,  SCE_KERNEL_WC_GARLIC, "Workload"   },
     };
 
     for (int i = 0; i < (int)(sizeof(regions) / sizeof(regions[0])); i++) {
+        printf("    [mem] %s: size=0x%zx type=%d... ", regions[i].name,
+               regions[i].size, regions[i].mem_type);
         int32_t ret = agcProsperoAllocRegion(regions[i].region,
                                           regions[i].size,
                                           regions[i].mem_type);
         if (ret != AGC_OK) {
+            printf("FAILED (0x%x)\n", (unsigned)ret);
             /* Clean up any regions we already allocated. */
             for (int j = 0; j < i; j++)
                 agcProsperoFreeRegion(regions[j].region);
             return ret;
         }
+        printf("OK (gpu_addr=0x%llx)\n",
+               (unsigned long long)regions[i].region->gpu_addr);
     }
 
     g_prospero.mem_initialized = true;

@@ -38,6 +38,10 @@
 /* WC Garlic memory type (same as PS4) */
 #define SCE_KERNEL_WC_GARLIC 3
 
+/* PS5-proven constants from PS5_DEV_HOMEBREW/examples/ps5_sdk/hello_square.c */
+#define PS5_DIRECT_MEM_SEARCH_END  0x300000000ULL
+#define PS5_DIRECT_MEM_ALIGNMENT   0x200000  /* 2 MB */
+
 /* Kernel functions from libkernel.so stub */
 int sceKernelAllocateDirectMemory(
     off_t searchStart, off_t searchEnd, size_t len, size_t alignment,
@@ -59,7 +63,7 @@ int sceKernelWaitEqueue(SceKernelEqueue equeue, SceKernelEvent *events,
 enum {
     BUFFER_COUNT = 2,
     BYTES_PER_PIXEL = 4,
-    DIRECT_MEMORY_ALIGNMENT = 64 * 1024,
+    DIRECT_MEMORY_ALIGNMENT = PS5_DIRECT_MEM_ALIGNMENT,
 };
 
 typedef struct {
@@ -80,7 +84,7 @@ static size_t align_up(size_t value, size_t alignment) {
     return remainder == 0 ? value : value + (alignment - remainder);
 }
 
-static uint32_t pack_a8b8g8r8(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+static uint32_t pack_a8r8g8b8(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
     return (uint32_t)r | ((uint32_t)g << 8) | ((uint32_t)b << 16) |
            ((uint32_t)a << 24);
 }
@@ -105,7 +109,7 @@ static void fill_pattern(uint8_t *buffer, uint32_t width, uint32_t height,
             uint32_t color = color_bar(bar, frame);
             if (y < height / 12) {
                 const uint8_t phase = (uint8_t)((x + frame * 8) & 0xff);
-                color = pack_a8b8g8r8(phase, 255 - phase, 0x40, 0xff);
+                color = pack_a8r8g8b8(phase, 255 - phase, 0x40, 0xff);
             }
             row[x] = color;
         }
@@ -119,7 +123,7 @@ static bool allocate_buffers(VideoOutTest *test) {
     test->mapped_size = test->buffer_stride * BUFFER_COUNT;
 
     int res = sceKernelAllocateDirectMemory(
-        0, sceKernelGetDirectMemorySize(), test->mapped_size,
+        0, (off_t)PS5_DIRECT_MEM_SEARCH_END, test->mapped_size,
         DIRECT_MEMORY_ALIGNMENT, SCE_KERNEL_WC_GARLIC, &test->direct_memory
     );
     if (res != 0) {
@@ -128,7 +132,7 @@ static bool allocate_buffers(VideoOutTest *test) {
     }
 
     const int prot = SCE_KERNEL_PROT_CPU_READ | SCE_KERNEL_PROT_CPU_RW |
-                     SCE_KERNEL_PROT_GPU_READ;
+                     SCE_KERNEL_PROT_GPU_READ | SCE_KERNEL_PROT_GPU_WRITE;
     res = sceKernelMapDirectMemory(
         &test->mapped, test->mapped_size, prot, 0,
         test->direct_memory, DIRECT_MEMORY_ALIGNMENT
@@ -146,7 +150,8 @@ static bool allocate_buffers(VideoOutTest *test) {
 }
 
 static bool init_video(VideoOutTest *test) {
-    test->handle = sceVideoOutOpen(0, SCE_VIDEO_OUT_BUS_TYPE_MAIN, 0, NULL);
+    /* PS5 uses userId=0xFF (system/user default), not 0 like PS4 */
+    test->handle = sceVideoOutOpen(0xFF, SCE_VIDEO_OUT_BUS_TYPE_MAIN, 0, NULL);
     if (test->handle < 0) {
         printf("sceVideoOutOpen failed: 0x%x\n", test->handle);
         return false;
@@ -167,9 +172,11 @@ static bool init_video(VideoOutTest *test) {
     }
 
     SceVideoOutBufferAttribute attr = {0};
+    /* PS5 requires tiled mode unless "Enhanced Display Buffer Attribute"
+     * is enabled in debug settings. Use tiled mode for compatibility. */
     sceVideoOutSetBufferAttribute(
-        &attr, SCE_VIDEO_OUT_PIXEL_FORMAT_A8B8G8R8_SRGB,
-        SCE_VIDEO_OUT_TILING_MODE_LINEAR, SCE_VIDEO_OUT_ASPECT_RATIO_16_9,
+        &attr, SCE_VIDEO_OUT_PIXEL_FORMAT_A8R8G8B8_SRGB,
+        SCE_VIDEO_OUT_TILING_MODE_TILE, SCE_VIDEO_OUT_ASPECT_RATIO_16_9,
         test->width, test->height, test->pitch_pixels
     );
 

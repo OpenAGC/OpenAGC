@@ -147,8 +147,8 @@ int main(void) {
     /* Init command buffer cursor */
     agcCbInit(&cb, cb_buffer, sizeof(cb_buffer));
 
-    /* Add a NOP packet (1 dword payload) */
-    uint32_t *nop = sceAgcCbNop(&cb, 1);
+    /* Add a NOP packet (minimum 2 dwords for type-3 header) */
+    uint32_t *nop = sceAgcCbNop(&cb, 2);
     if (!nop) {
         printf("    ERROR: failed to build NOP packet\n");
         return 1;

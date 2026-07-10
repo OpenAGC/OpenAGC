@@ -212,43 +212,59 @@ Submit model:
 - `sceAgcDriverSubmitDcb`
 - `sceAgcDriverSubmitAcb`
 
+## Hardware Validation Results (FW 5.50, exploited PS5 @ 10.0.1.41)
+
+### videoout_linear.elf — PASS
+- `sceVideoOutOpen(userId=0xFF, BUS_MAIN, 0)` — OK (PS5 requires userId=0xFF, not 0)
+- `sceVideoOutGetResolutionStatus` — 3840x2160 (4K)
+- `sceKernelAllocateDirectMemory` (garlic, 12GB range, 2MB align) — OK
+- `sceVideoOutRegisterBuffers` (A8R8G8B8_SRGB, tiled) — OK
+- Flip loop running at 60fps
+
+### agc_init.elf — PARTIAL PASS
+- **[1] sce_agc_initialize()** — PASS
+  - /dev/gc opened (fd=7), CONTEXT_QUERY OK, mmap at 0xfe0200000
+  - FRAME_OPEN correctly returns EINVAL (confirms ps5-openagc audit)
+- **[2] sce_agc_initialize_internal_memory()** — PASS
+  - All 8 regions allocated with WC_GARLIC (type=3)
+  - WB_ONION (type=1) returns EINVAL on this PS5 — all regions use garlic
+  - GPU VAs: 0x200200000–0x201000000
+- **[3] sceAgcDriverNotifyDefaultStates()** — PASS
+- **[4] sceAgcDriverGetPaDebugInterfaceVersion()** — returns 0 (unsupported?)
+- **[5] sceAgcDriverSubmitDcb(NOP)** — PASS (NOP submitted to GPU!)
+- **[6] SuspendPointSubmitDirect** — FAIL (0x80890201 SUBMIT_FAILED)
+  - 4-dword argument layout needs RE validation
+- **[7] CreateUserSpecialQueue** — FAIL (0x80890201 INTERNAL)
+  - Ring buffer allocation or magic tokens may be wrong
+- **[9] BeginWorkload/EndWorkload** — PASS
+
+### Hardware-discovered bugs fixed
+- PS5 memory type constants differ from PS4:
+  - PS4: WB_ONION=0, WC_GARLIC=1, WB_GARLIC=3
+  - PS5: WB_ONION=1, WC_GARLIC=3, WB_GARLIC=2 (type=1 fails on exploited PS5)
+- PS5 VideoOut requires userId=0xFF, not 0
+- PS5 VideoOut requires tiled mode (linear needs debug setting)
+- PS5 direct memory: garlic searchEnd=0x300000000, alignment=0x200000
+- `__ORBIS__` → `__PROSPERO__` (prospero toolchain defines __PROSPERO__)
+
 ## Next RE Tasks
 
-1. **Hardware validation** — build and deploy `samples/hw_test/`:
-   - **Build (done locally):** `videoout_linear.elf`, `agc_init.elf`, and
-     fake-SELF `*.bin` packages built successfully with ps5-payload-sdk +
-     LibProsperoPkg.
-   - **Sample updated:** `agc_init.c` now exercises `sce_agc_initialize`,
-     `sce_agc_initialize_internal_memory`, `sceAgcDriverNotifyDefaultStates`,
-     `sceAgcDriverGetPaDebugInterfaceVersion`, `sceAgcDriverSubmitDcb(NOP)`,
-     `sceAgcDriverSuspendPointSubmitDirect`,
-     `sceAgcDriverIsSuspendPointInFlightDirect`, and user special queue
-     create/destroy.
-   - **Step 1:** `videoout_linear.elf` — VideoOut display pipeline smoke
-     test (no GPU). Validates `sceVideoOutOpen`, direct memory allocation,
-     buffer registration, and flip. Adapted from `freegnm-examples/videoout-linear/`.
-   - **Step 2:** `agc_init.elf` — AGC init + NOP submit + queue test.
-     Validates `sce_agc_initialize`, `SubmitDcb(NOP)`, `NotifyDefaultStates`,
-     `SuspendPointSubmitDirect`, queue create/destroy.
-     Adapted from `freegnm-examples/triangle/` submit pattern.
-   - Deploy: `make deploy_videoout` / `make deploy_agc` (exploited PS5)
-   - Install: `make install_videoout` / `make install_agc` (debug PS5)
-2. **Verify internal memory region sizes** — the 8 region sizes in
+1. **Fix SuspendPointSubmitDirect** — the 4-dword argument layout for
+   `SUSPEND_16` (nr=0x1c) needs RE validation from SPRX disassembly.
+   Currently returns SUBMIT_FAILED on hardware.
+2. **Fix CreateUserSpecialQueue** — the ring buffer allocation or magic auth
+   tokens may be wrong. Needs SPRX disassembly of the queue create path to
+   verify the ring buffer address computation and ioctl argument layout.
+3. **Verify internal memory region sizes** — the 8 region sizes in
    `sce_agc_initialize_internal_memory` (DDID 0x1000, CWSR 0x10000, etc.)
-   are INHERITED UNVERIFIED from ps5-openagc and need to be confirmed by
-   disassembling the actual `sce_agc_initialize_internal_memory` function
-   from the SPRX. See `analysis/ps5_openagc_audit.md`.
-3. **Validate default state blobs** — confirm the primary/internal
-   register-defaults blobs built by `sceAgcDriverNotifyDefaultStates` are
-   accepted by the kernel and that the GPU state matches expectations.
-4. **Validate suspend ioctls** — confirm the RE'd 4-dword argument layout for
-   `SUSPEND_16` (nr=0x1c) and `SUSPEND_39` (nr=0x39) by testing on hardware.
-5. **Queue creation** — `QUEUE_CREATE` / `QUEUE_DESTROY` / `SetupAsyncGraphics`
-   are implemented with SPRX-confirmed ioctl layouts (independently verified
-   from SPRX disassembly, NOT from ps5-openagc which had wrong ioctl numbers).
-   Hardware validation needed to confirm the magic auth tokens and ring buffer
-   addresses are accepted by the kernel. Async-compute submission via the
-   created queue is the remaining work.
+   are INHERITED UNVERIFIED from ps5-openagc. All 8 allocate successfully
+   on hardware with garlic type=3, but the actual sizes may differ from
+   what the SPRX uses. Needs SPRX disassembly to confirm.
+4. **Investigate WB_ONION (type=1) failure** — onion memory allocation
+   returns EINVAL on this exploited PS5. May be a sandbox restriction or
+   the memory type constant may be different. The working PS5 examples
+   (PS5_DEV_HOMEBREW) use type=1 for command buffers successfully, so this
+   needs investigation.
 
 ## ps5-openagc Audit
 
@@ -259,17 +275,19 @@ verified from SPRX/kernel disassembly.
 
 **Confirmed wrong in ps5-openagc:**
 - `FRAME_OPEN` (nr=0x00) — claimed valid, but kernel returns `EINVAL`
+  (hardware-confirmed)
 - Queue create — used nr=0x2a (4-byte), real SPRX uses nr=0x21 (64-byte RW
   with magic tokens)
 - Queue destroy — used nr=0x2b (4-byte), real SPRX uses nr=0x0e (12-byte RW)
 - VMID mask — `0x000FFFFF00000000` (transcription error), correct is
   `0x000FFFFFFFFFFFFF`
+- Memory type constants — ps5-openagc had WB_ONION=0, WC_GARLIC=1, WB_GARLIC=2
+  (wrong for PS5). Correct PS5 values: WB_ONION=1, WC_GARLIC=3, WB_GARLIC=2
+  (hardware-confirmed)
 
 **Still unverified (inherited from ps5-openagc):**
-- Internal memory region sizes and memory types in
-  `sce_agc_initialize_internal_memory`
-
-Full audit: `analysis/ps5_openagc_audit.md`
+- Internal memory region sizes in `sce_agc_initialize_internal_memory`
+  (all 8 allocate successfully on hardware, but actual SPRX sizes unconfirmed)
 
 ## Non-Goals For Current Milestone
 
