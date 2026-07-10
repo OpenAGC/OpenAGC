@@ -155,4 +155,45 @@
 #define AGC_NID_SCE_AGC_DRIVER_SET_BASE                "zmw2uVSEj94"
 #define AGC_NID_SCE_AGC_DRIVER_SET_CONTEXT_REG         "+b34-CLWc0s"
 
+/* Game-critical NIDs (from Joe & Mac game binary analysis) */
+
+/* libSceAgc.sprx — packet builders missing from original table */
+#define AGC_NID_SCE_AGC_DCB_ACQUIRE_MEM              "57labkp+rSQ"
+#define AGC_NID_SCE_AGC_DCB_COPY_DATA                "1rZSWUv1IRc"
+#define AGC_NID_SCE_AGC_DCB_JUMP                     "xSAR0LTcRKM"
+#define AGC_NID_SCE_AGC_DCB_RESET_QUEUE              "TRO721eVt4g"
+#define AGC_NID_SCE_AGC_DCB_SET_INDEX_COUNT          "8N2tmT3jmC8"
+#define AGC_NID_SCE_AGC_DCB_SET_INDEX_SIZE           "GIIW2J37e70"
+#define AGC_NID_SCE_AGC_DCB_SET_NUM_INSTANCES        "tSBxhAPyytQ"
+#define AGC_NID_SCE_AGC_DCB_STALL_CB_PARSER          "u2T2DiA5hRI"
+#define AGC_NID_SCE_AGC_DCB_DRAW_INDEX               "q88lQ+GP5Yk"
+#define AGC_NID_SCE_AGC_CB_SET_SH_REG_RANGE_DIRECT   "n2fD4A+pb+g"
+#define AGC_NID_SCE_AGC_CB_SET_UC_REGISTERS_DIRECT   "03RZmELWWzw"
+
+/* libSceAgc.sprx — patchers */
+#define AGC_NID_SCE_AGC_SET_SH_REG_IND_PATCH_SET_ADDR    "Qrj4c+61z4A"
+#define AGC_NID_SCE_AGC_SET_SH_REG_IND_PATCH_ADD_REGS    "z2duB-hHQSM"
+#define AGC_NID_SCE_AGC_SET_CX_REG_IND_PATCH_SET_ADDR    "vcmNN+AAXnY"
+#define AGC_NID_SCE_AGC_SET_CX_REG_IND_PATCH_ADD_REGS    "d-6uF9sZDIU"
+#define AGC_NID_SCE_AGC_SET_UC_REG_IND_PATCH_SET_ADDR    "6lNcCp+fxi4"
+#define AGC_NID_SCE_AGC_SET_UC_REG_IND_PATCH_ADD_REGS    "vRoArM9zaIk"
+
+/* libSceAgc.sprx — utility */
+#define AGC_NID_SCE_AGC_SET_NOP                      "K2mciNVxUCE"
+#define AGC_NID_SCE_AGC_DEBUG_RAISE_EXCEPTION        "T6xuVw0KUJo"
+#define AGC_NID_SCE_AGC_CREATE_PRIM_STATE            "D9sr1xGUriE"
+
+/* libSceAgc.sprx — init/suspend wrappers */
+#define AGC_NID_SCE_AGC_INIT                         "kW3GLb7QfPg"
+#define AGC_NID_SCE_AGC_SUSPEND_POINT_WRAPPER        "h9z6+0hEydk"
+
+/* libSceAgcDriver.sprx — non-Direct variants */
+#define AGC_NID_SCE_AGC_DRIVER_AGR_SUBMIT_DCB        "AhGvpITrf4M"
+#define AGC_NID_SCE_AGC_DRIVER_SET_TF_RING           "XlNp7jzGiPo"
+#define AGC_NID_SCE_AGC_DRIVER_SET_HS_OFFCHIP_PARAM  "MM4IZSEYytQ"
+#define AGC_NID_SCE_AGC_DRIVER_GET_EQ_CONTEXT_ID     "Zw7uUVPulbw"
+#define AGC_NID_SCE_AGC_DRIVER_ADD_EQ_EVENT_DRV      "w2rJhmD+dsE"
+#define AGC_NID_SCE_AGC_DRIVER_REGISTER_OWNER        "X-Nm5KLREeg"
+#define AGC_NID_SCE_AGC_DRIVER_REGISTER_RESOURCE     "W5z4eZrjEas"
+
 #endif /* _AGC_NIDS_H_ */

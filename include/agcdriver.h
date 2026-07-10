@@ -346,6 +346,105 @@ int32_t PS5_SYSV_ABI sceAgcVshDcbSetWorkloadsActive(
 /* VshCb - shared VSH command buffer helpers */
 int32_t PS5_SYSV_ABI sceAgcVshCbMemSemaphore(uint32_t *cb, uint32_t size_dw);
 
+/* ===================================================================== */
+/* Game-critical missing functions (from Joe & Mac game binary analysis)  */
+/* ===================================================================== */
+
+/* libSceAgcDriver non-Direct variants (games import these directly) */
+
+/* Stub: returns AGC_ERROR_NOT_SUPPORTED (0x8a6c9018) per SPRX. */
+int32_t PS5_SYSV_ABI sceAgcDriverRegisterOwner(void *resource, uint32_t *out_handle);
+/* Stub: returns AGC_ERROR_NOT_SUPPORTED (0x8a6c9018) per SPRX. */
+int32_t PS5_SYSV_ABI sceAgcDriverRegisterResource(void *resource, uint32_t owner_handle);
+/* Returns the EQ (event queue) context ID. */
+uint32_t PS5_SYSV_ABI sceAgcDriverGetEqContextId(void);
+/* Non-Direct TF ring set (clamps to 0x4000). */
+int32_t PS5_SYSV_ABI sceAgcDriverSetTFRing(uint32_t pipe_id, uint32_t size);
+/* Non-Direct HS offchip param set. */
+int32_t PS5_SYSV_ABI sceAgcDriverSetHsOffchipParam(uint32_t pipe_id, uint64_t list_addr, uint32_t num_entries);
+/* AGR (async graphics ring) DCB submit. */
+int32_t PS5_SYSV_ABI sceAgcDriverAgrSubmitDcb(const AgcCommandBufferSubmit *packet);
+/* Add an EQ event. */
+int32_t PS5_SYSV_ABI sceAgcDriverAddEqEvent(void *eq, uint32_t type, void *event);
+
+/* libSceAgc user-facing init (wrapper around sce_agc_initialize) */
+int32_t PS5_SYSV_ABI sceAgcInit(uint32_t init_level, uint32_t flags, uint32_t *out_value);
+
+/* libSceAgc SuspendPoint wrapper (calls sceAgcDriverSuspendPointSubmit) */
+int32_t PS5_SYSV_ABI sceAgcSuspendPoint(
+    uint32_t field0, uint32_t field1, uint32_t field2, uint32_t field3);
+
+/* Register defaults queries (different NIDs from our existing ones) */
+int32_t PS5_SYSV_ABI sceAgcGetRegisterDefaults2(
+    uint32_t init_level, AgcContextState *out_state);
+int32_t PS5_SYSV_ABI sceAgcGetRegisterDefaults2Internal(
+    uint32_t init_level, void *out_state, uint32_t size);
+
+/* DCB packet builders missing from our API */
+
+/* IT_ACQUIRE_MEM for DCB. NID: 57labkp+rSQ */
+uint32_t *PS5_SYSV_ABI sceAgcDcbAcquireMem(
+    SceAgcCb *cb, uint32_t engine_sel, uint32_t coher_cntl,
+    uint32_t coher_size, uint64_t coher_base);
+
+/* IT_COPY_DATA for DCB. NID: 1rZSWUv1IRc */
+uint32_t *PS5_SYSV_ABI sceAgcDcbCopyData(
+    SceAgcCb *cb, uint32_t src_sel, uint32_t dst_sel,
+    uint64_t src_addr, uint64_t dst_addr, uint32_t byte_count);
+
+/* IT_JUMP for DCB. NID: xSAR0LTcRKM */
+uint32_t *PS5_SYSV_ABI sceAgcDcbJump(SceAgcCb *cb, uint64_t target_addr);
+
+/* Queue reset for DCB. NID: TRO721eVt4g */
+uint32_t *PS5_SYSV_ABI sceAgcDcbResetQueue(SceAgcCb *cb, uint32_t queue_id);
+
+/* Set index count. NID: 8N2tmT3jmC8 */
+uint32_t *PS5_SYSV_ABI sceAgcDcbSetIndexCount(SceAgcCb *cb, uint32_t index_count);
+
+/* Set index size. NID: GIIW2J37e70 */
+uint32_t *PS5_SYSV_ABI sceAgcDcbSetIndexSize(
+    SceAgcCb *cb, uint32_t index_type, uint32_t swap);
+
+/* Set number of instances. NID: tSBxhAPyytQ */
+uint32_t *PS5_SYSV_ABI sceAgcDcbSetNumInstances(SceAgcCb *cb, uint32_t num_instances);
+
+/* Stall command buffer parser. NID: u2T2DiA5hRI */
+uint32_t *PS5_SYSV_ABI sceAgcDcbStallCommandBufferParser(SceAgcCb *cb);
+
+/* Indexed draw. NID: q88lQ+GP5Yk */
+uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndex(
+    SceAgcCb *cb, uint32_t index_count, uint64_t index_base_addr,
+    uint32_t draw_initiator);
+
+/* CB register range setters */
+uint32_t *PS5_SYSV_ABI sceAgcCbSetShRegisterRangeDirect(
+    SceAgcCb *cb, uint32_t reg_offset, const uint32_t *values, uint32_t count);
+uint32_t *PS5_SYSV_ABI sceAgcCbSetUcRegistersDirect(
+    SceAgcCb *cb, const AgcRegisterValue *registers, uint32_t register_count);
+
+/* Patcher functions for indirect register writes */
+int32_t PS5_SYSV_ABI sceAgcSetShRegIndirectPatchSetAddress(
+    uint32_t *cmd, uint64_t address);
+int32_t PS5_SYSV_ABI sceAgcSetShRegIndirectPatchAddRegisters(
+    uint32_t *cmd, uint32_t count);
+int32_t PS5_SYSV_ABI sceAgcSetCxRegIndirectPatchSetAddress(
+    uint32_t *cmd, uint64_t address);
+int32_t PS5_SYSV_ABI sceAgcSetCxRegIndirectPatchAddRegisters(
+    uint32_t *cmd, uint32_t count);
+int32_t PS5_SYSV_ABI sceAgcSetUcRegIndirectPatchSetAddress(
+    uint32_t *cmd, uint64_t address);
+int32_t PS5_SYSV_ABI sceAgcSetUcRegIndirectPatchAddRegisters(
+    uint32_t *cmd, uint32_t count);
+
+/* Utility functions */
+uint32_t *PS5_SYSV_ABI sceAgcSetNop(uint32_t *cmd, uint32_t count);
+int32_t PS5_SYSV_ABI sceAgcDebugRaiseException(void);
+uint32_t *PS5_SYSV_ABI sceAgcGetDataPacketPayload(uint32_t *cmd, uint64_t *out_addr);
+
+/* Shader and primitive state creation */
+int32_t PS5_SYSV_ABI sceAgcCreateShader(void *shader_record, uint32_t type);
+int32_t PS5_SYSV_ABI sceAgcCreatePrimState(void *out_state, uint32_t prim_type);
+
 #ifdef __cplusplus
 }
 #endif

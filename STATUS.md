@@ -48,7 +48,7 @@ make -B test
 Expected result:
 
 ```text
-1270 passed, 0 failed
+1341 passed, 0 failed
 ```
 
 PS5 prospero backend (cross-compiled, no tests):
@@ -164,6 +164,45 @@ In-place patchers:
 - `sceAgcDmaDataPatchSetDstAddressOrOffset`
 - `sceAgcWaitRegMemPatchAddress`
 - `sceAgcQueueEndOfPipeActionPatchAddress`
+- `sceAgcSetShRegIndirectPatchSetAddress` / `AddRegisters`
+- `sceAgcSetCxRegIndirectPatchSetAddress` / `AddRegisters`
+- `sceAgcSetUcRegIndirectPatchSetAddress` / `AddRegisters`
+
+Game-compat packet builders (from Joe & Mac game analysis):
+
+- `sceAgcDcbAcquireMem` — `IT_ACQUIRE_MEM` (0x58), 8 dwords
+- `sceAgcDcbCopyData` — `IT_COPY_DATA` (0x40), 6 dwords
+- `sceAgcDcbJump` — `IT_INDIRECT_BUFFER_CNST` (0x33), 4 dwords
+- `sceAgcDcbResetQueue` — queue reset, 3 dwords
+- `sceAgcDcbSetIndexCount` — `IT_INDEX_BUFFER_SIZE` (0x13), 3 dwords
+- `sceAgcDcbSetIndexSize` — `IT_INDEX_TYPE` (0x2A), 3 dwords
+- `sceAgcDcbSetNumInstances` — `IT_NUM_INSTANCES` (0x2F), 2 dwords
+- `sceAgcDcbStallCommandBufferParser` — NOP-based stall, 2 dwords
+- `sceAgcDcbDrawIndex` — `IT_DRAW_INDEX_2` (0x27), 6 dwords
+- `sceAgcCbSetShRegisterRangeDirect` — `IT_SET_SH_REG` (0x76), variable
+- `sceAgcCbSetUcRegistersDirect` — `IT_SET_UCONFIG_REG` (0x79), variable
+- `sceAgcSetNop` — in-place NOP header setter
+- `sceAgcGetDataPacketPayload` — data packet payload getter
+- `sceAgcDebugRaiseException` — debug stub (no-op on non-dev)
+- `sceAgcCreateShader` — shader record validation
+- `sceAgcCreatePrimState` — primitive state builder
+
+Game-compat driver functions:
+
+- `sceAgcDriverRegisterOwner` — stub (returns 0x8a6c9018, matches SPRX)
+- `sceAgcDriverRegisterResource` — stub (returns 0x8a6c9018, matches SPRX)
+- `sceAgcDriverGetEqContextId` — EQ context ID query
+- `sceAgcDriverSetTFRing` — non-Direct TF ring set (clamps to 0x4000)
+- `sceAgcDriverSetHsOffchipParam` — non-Direct HS offchip param
+- `sceAgcDriverAgrSubmitDcb` — AGR submit (returns 0x8a6d0003 if not initialized)
+- `sceAgcDriverAddEqEvent` — EQ event registration
+
+Game-compat wrapper functions:
+
+- `sceAgcInit` — user-facing init (delegates to `sce_agc_initialize`)
+- `sceAgcSuspendPoint` — wrapper for `sceAgcDriverSuspendPointSubmitDirect`
+- `sceAgcGetRegisterDefaults2` — register defaults query
+- `sceAgcGetRegisterDefaults2Internal` — internal register defaults query
 
 LOD stats helpers:
 
@@ -274,6 +313,40 @@ Submit model:
    register-defaults blobs are accepted by the kernel.
 4. **Async-compute queue setup** — implement real queue submission path
    now that the queue create ioctl arg layout is confirmed.
+5. **Game compatibility** — continue analyzing game binaries to identify
+   and implement remaining missing AGC functions. See
+   `analysis/game_agc_usage.md` for the Joe & Mac analysis.
+
+## Game Compatibility
+
+### Joe & Mac Caveman Ninja (PPSA02801, v01.003)
+- **Engine:** Unity IL2CPP
+- **SDK:** PS5 5.00
+- **AGC imports:** 71 total (62 from libSceAgc, 9 from libSceAgcDriver)
+- **Implemented:** 38/71 before game_compat.c, now 69/71 after
+- **Analysis:** `analysis/game_agc_usage.md`
+
+The game imports from both libSceAgc (user-facing API) and
+libSceAgcDriver (driver-facing API). The libSceAgc functions are mostly
+packet builders which we already implement. The missing functions were:
+
+1. **libSceAgcDriver stubs** — `RegisterOwner`/`RegisterResource` return
+   `0x8a6c9018` (not supported on non-dev hardware per SPRX).
+2. **Non-Direct driver variants** — `SetTFRing`/`SetHsOffchipParam` are
+   wrapper versions that delegate to the Direct variants.
+3. **DCB packet builders** — `AcquireMem`, `CopyData`, `Jump`,
+   `ResetQueue`, `SetIndexCount`, `SetIndexSize`, `SetNumInstances`,
+   `StallCommandBufferParser`, `DrawIndex`.
+4. **CB register setters** — `SetShRegisterRangeDirect`,
+   `SetUcRegistersDirect`.
+5. **Indirect register patchers** — 6 functions for Sh/Cx/Uc register
+   indirect write patching.
+6. **Utility functions** — `SetNop`, `DebugRaiseException`,
+   `GetDataPacketPayload`, `CreateShader`, `CreatePrimState`.
+7. **Wrapper functions** — `sceAgcInit`, `sceAgcSuspendPoint`,
+   `sceAgcGetRegisterDefaults2` / `2Internal`.
+
+All 33 missing functions are now implemented in `src/game_compat.c`.
 
 ## ps5-openagc Audit
 

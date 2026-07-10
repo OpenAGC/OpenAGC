@@ -14,7 +14,8 @@ SRCS = \
 	src/acb.c \
 	src/dcb.c \
 	src/texture.c \
-	src/shader.c
+	src/shader.c \
+	src/game_compat.c
 
 OBJS = $(SRCS:.c=.o)
 
