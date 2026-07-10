@@ -15,7 +15,7 @@ static AgcCommandBufferSubmit g_last_dcb_submit;
 static AgcCommandBufferSubmit g_last_acb_submit;
 static uint32_t g_last_acb_owner;
 
-/* Async-compute queue tracking (mirrors the orbis backend's 32-slot array).
+/* Async-compute queue tracking (mirrors the prospero backend's 32-slot array).
  * Each slot records whether a user special queue is active and the pipe_id
  * passed to sceAgcDriverSetupAsyncGraphics. */
 #define AGC_GENERIC_MAX_QUEUES 32
@@ -175,7 +175,7 @@ int32_t PS5_SYSV_ABI sceAgcDriverSubmitEopFlip(
     (void)flip_mode;
     (void)present_ptr;
 
-    /* EOP flip submit requires the orbis /dev/gc backend and
+    /* EOP flip submit requires the prospero /dev/gc backend and
      * sceVideoOutSubmitEopFlip — not available on the generic host. */
     return AGC_ERROR_NOT_SUPPORTED;
 }
@@ -244,7 +244,7 @@ int32_t PS5_SYSV_ABI _sceAgcDriverDestroyUserSpecialQueue(void)
     if (!g_agc_initialized)
         return AGC_ERROR_NOT_INITIALIZED;
 
-    /* Find the first in-use queue and destroy it (matching orbis behavior:
+    /* Find the first in-use queue and destroy it (matching prospero behavior:
      * the SPRX takes no parameters — the kernel tracks the queue). */
     for (int i = 0; i < AGC_GENERIC_MAX_QUEUES; i++) {
         if (g_queues[i].in_use) {

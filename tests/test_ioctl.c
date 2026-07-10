@@ -5,7 +5,7 @@
 /*
  * Ioctl command encoding tests — verify the IOC macro produces the exact
  * 32-bit command words recovered from the kernel dump. These values are
- * load-bearing ABI facts; if any change, the orbis backend would call the
+ * load-bearing ABI facts; if any change, the prospero backend would call the
  * wrong ioctl.
  */
 static void test_ioctl_encoding(void) {
@@ -57,8 +57,8 @@ static void test_command_buffer_struct_layout(void) {
 }
 
 static void test_cb_header_opcodes(void) {
-    TEST_ASSERT_EQ(AGC_GC_CB_HEADER_IB,        0xC0023300u, "CB IB opcode");
-    TEST_ASSERT_EQ(AGC_GC_CB_HEADER_IB_CNST,   0xC0023F00u, "CB IB_CNST opcode");
+    TEST_ASSERT_EQ(AGC_GC_CB_HEADER_IB,        0xC0023F00u, "CB IB opcode (0x3F)");
+    TEST_ASSERT_EQ(AGC_GC_CB_HEADER_IB_CNST,   0xC0023300u, "CB IB_CNST opcode (0x33)");
 }
 
 static void test_ib_vmid_layout(void) {

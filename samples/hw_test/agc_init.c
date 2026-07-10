@@ -49,6 +49,7 @@ static const char *errstr(int32_t err) {
 
 int main(void) {
     int32_t err;
+    int32_t dcb_err = -1;  /* result of DCB submit (step 5) */
     uint32_t version;
     SceAgcCb cb;
     AgcCommandBufferSubmit submit;
@@ -157,12 +158,18 @@ int main(void) {
     uint32_t used_dwords = agcCbUsedDwords(&cb);
     printf("    CB built: %u dwords at %p\n", used_dwords, (void *)cb_buffer);
 
-    /* Submit it */
+    /* Submit it.
+     * NOTE: On the prospero backend, command_address must be a GPU VA, not a
+     * CPU address. This sample passes a CPU static array which works on the
+     * generic backend but will FAIL on real hardware. To fix, the buffer
+     * must be allocated via sceKernelAllocateDirectMemory + MapDirectMemory +
+     * makesysmap ioctl, and the GPU VA passed here. */
     submit.command_address = (uintptr_t)cb_buffer;
     submit.dword_count = used_dwords;
     submit.reserved = 0;
 
     err = sceAgcDriverSubmitDcb(&submit);
+    dcb_err = err;
     printf("    result: 0x%08X (%s)\n", (unsigned)err, errstr(err));
     if (err != AGC_OK) {
         printf("    WARNING: DCB submit failed\n");
@@ -226,7 +233,7 @@ int main(void) {
     printf("  Default states:    notified\n");
     printf("  PA debug version:  0x%08X\n", version);
     printf("  DCB submit (NOP):  %s\n",
-           err == AGC_OK ? "OK" : "check step 9");
+           dcb_err == AGC_OK ? "OK" : "check step 5");
     printf("  Suspend point:     submitted, in_flight=%s\n",
            in_flight ? "yes" : "no");
     printf("  Queue create/destroy: %s\n",

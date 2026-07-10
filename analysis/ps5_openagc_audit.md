@@ -53,7 +53,7 @@ kernel dump, NOT just inherited from ps5-openagc:
 These came from ps5-openagc and have NOT been independently verified against
 SPRX or kernel disassembly. They could be wrong:
 
-1. **Internal memory region sizes** (driver_orbis.c `sce_agc_initialize_internal_memory`):
+1. **Internal memory region sizes** (driver_prospero.c `sce_agc_initialize_internal_memory`):
    - DDID: 0x1000 (4KB), WB_ONION
    - CWSR: 0x10000 (64KB), WB_GARLIC
    - EOP FIFO: 0x1000 (4KB), WC_GARLIC

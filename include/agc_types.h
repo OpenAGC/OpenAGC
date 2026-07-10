@@ -5,7 +5,9 @@
 #include <stddef.h>
 #include <stdbool.h>
 
-#ifdef __ORBIS__
+/* The PS5 prospero toolchain defines __PROSPERO__.
+ * Some older SDKs may define __ORBIS__ instead (PS4 codename). */
+#if defined(__PROSPERO__) || defined(__ORBIS__)
 #define PS5_SYSV_ABI __attribute__((sysv_abi))
 #else
 #define PS5_SYSV_ABI

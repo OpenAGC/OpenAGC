@@ -168,7 +168,7 @@ static void test_submit_eop_flip_generic_stub(void) {
     /*
      * On the generic backend, sceAgcDriverSubmitEopFlip is a stub that
      * returns AGC_ERROR_NOT_SUPPORTED — the EOP flip path requires the
-     * orbis /dev/gc backend and sceVideoOutSubmitEopFlip.
+     * prospero /dev/gc backend and sceVideoOutSubmitEopFlip.
      */
     int32_t r = sceAgcDriverSubmitEopFlip((void *)1, 0, 0, NULL);
     TEST_ASSERT_EQ(r, AGC_ERROR_NOT_SUPPORTED, "SubmitEopFlip returns NOT_SUPPORTED on generic backend");

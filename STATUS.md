@@ -26,12 +26,12 @@ The host-generic implementation now has a tested model for:
 - Typed sampler helpers: `SetClampMode`, `SetFilterMode`, `SetBorderColor`, `SetMaxAnisotropy` (hardware-correct SQ_IMG_SAMP_WORD0-3 bit layout)
 - Texture format encode/decode helpers: `agcTextureFormatEncode`, `agcTextureFormatGetDataFormat`, `agcTextureFormatGetNumberType`
 - Shader linking: `agcShaderLinkHsGs` — combines HS/LS + CS shader records into GS (matches SPRX ordinal 131)
-- EOP flip submit: `sceAgcDriverSubmitEopFlip` (orbis) + `sceAgcDcbSetEopFlip` DCB builder (IT_RELEASE_MEM 0x49)
+- EOP flip submit: `sceAgcDriverSubmitEopFlip` (prospero) + `sceAgcDcbSetEopFlip` DCB builder (IT_RELEASE_MEM 0x49)
 - NID table expanded to 114 identified exports (78 original + 36 new from deep SPRX capstone disassembly)
 - Async-compute queue submission: generic backend queue tracking (32 slots), ACB submit validates queue in-use, full create→submit→destroy flow tested
 - 13 new DCB builders from SPRX disassembly: ReleaseMem, IndirectBuffer, IndirectBufferConst, DrawIndirect, DrawIndex2, DrawIndexIndirect, DrawIndirectMulti, DrawIndexIndirectMulti, SetPredication, EventWrite, SetConfigReg, SetShReg, SetUconfigReg
 - 4 AGC-custom flip builders: WaitFlipDone (0x4C), WaitFlip (0x51), InsertWaitFlipDone (0x54), WaitFlipEos (0x4F+0x4E)
-- Workload tracking: sceAgcDriverBeginWorkload / EndWorkload with SET_WORKLOAD (0x1E) submit on orbis
+- Workload tracking: sceAgcDriverBeginWorkload / EndWorkload with SET_WORKLOAD (0x1E) submit on prospero
 - FW 5.50 register-defaults blob builder/parser with embedded primary/internal tables
 
 ## Verified
@@ -51,16 +51,16 @@ Expected result:
 1270 passed, 0 failed
 ```
 
-PS5 orbis backend (cross-compiled, no tests):
+PS5 prospero backend (cross-compiled, no tests):
 
 ```sh
 export PS5_PAYLOAD_SDK=~/ps5-payload-sdk
-cmake -B build-orbis -DOPENAGC_PLATFORM=orbis -DOPENAGC_BUILD_TESTS=OFF \
+cmake -B build-prospero -DOPENAGC_PLATFORM=prospero -DOPENAGC_BUILD_TESTS=OFF \
     -DCMAKE_TOOLCHAIN_FILE=$PS5_PAYLOAD_SDK/toolchain/prospero.cmake
-cmake --build build-orbis
+cmake --build build-prospero
 ```
 
-Expected result: `build-orbis/libopenagc.a` — PS5 x86_64 static library,
+Expected result: `build-prospero/libopenagc.a` — PS5 x86_64 static library,
 zero warnings, zero errors. All `sceAgcDriver*` and `sce_agc_*` symbols
 present in the symbol table. Hardware validation pending.
 
@@ -148,13 +148,13 @@ Old-style ACB stubs (from `src/acb.c`):
 
 Default state submission:
 
-- `sceAgcDriverNotifyDefaultStates` (orbis) now builds the primary/internal
+- `sceAgcDriverNotifyDefaultStates` (prospero) now builds the primary/internal
   register-defaults blobs in GPU-visible memory and submits an
   `IT_CLEAR_STATE` (0x14) DCB to load them.
 
 Suspend points:
 
-- `sceAgcDriverIsSuspendPointInFlightDirect` (orbis) now queries the gfx
+- `sceAgcDriverIsSuspendPointInFlightDirect` (prospero) now queries the gfx
   queue status via ioctl `nr=0x27` and returns whether the status is non-zero.
 - `sceAgcSuspendPointAndCheckStatus` combines a direct suspend-point submit
   with the in-flight query.
@@ -182,7 +182,7 @@ Ioctl / submit / queue layer (FW 5.50 kernel RE, `include/agc_ioctl.h`):
 - Kernel-side error codes (module 0x4C)
 - Kernel function offsets (ioctl_internal, submit_with_pid, frame_submit)
 
-Native orbis backend (`src/driver_orbis.c`, `#ifdef OPENAGC_ORBIS`):
+Native prospero backend (`src/driver_prospero.c`, `#ifdef OPENAGC_PROSPERO`):
 
 - `sce_agc_initialize` — opens `/dev/gc`, calls `CONTEXT_QUERY` ioctl (0xc004812e, nr=0x2e), mmaps GPU register space at 0xfe0200000 if context not yet initialized. **NOTE:** The old `FRAME_OPEN` (nr=0x00) does NOT exist in FW 5.50 — the kernel returns EINVAL. See `analysis/sprx_sce_agc_initialize_disasm.md`.
 - `sce_agc_initialize_internal_memory` — allocates 8 named regions via `sceKernelAllocateDirectMemory` + `sceKernelMapDirectMemory` + `MAKESYSMAP_8`
@@ -202,7 +202,7 @@ Native orbis backend (`src/driver_orbis.c`, `#ifdef OPENAGC_ORBIS`):
 - `sceAgcDriverIsSuspendPointInFlightDirect` — stub query (returns false)
 - `sceAgcSuspendPointAndCheckStatus` — stub query (returns OK)
 - `sce_agc_internal_suspend_point_submit_final` — `SUSPEND_39` ioctl with same 4-dword argument
-- `agcOrbisMakeSysmap` (internal) — `MAKESYSMAP_8` ioctl for GPU VA mapping
+- `agcProsperoMakeSysmap` (internal) — `MAKESYSMAP_8` ioctl for GPU VA mapping
 - CB descriptor builder using `AgcGcCommandBuffer` with VMID masking
 - Queue tracking (32 slots, gfx/compute/dma types)
 

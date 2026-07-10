@@ -106,7 +106,7 @@ Implemented and host-tested:
 - DCB/VSH packet builders for clear state, atomic GDS, context state ops, reset
   queue, set flip, workload markers, wait-safe, and preemption (SPRX-confirmed
   unimplemented VSH-only stub).
-- Native orbis `/dev/gc` backend skeleton with ioctl submission, internal memory
+- Native prospero `/dev/gc` backend skeleton with ioctl submission, internal memory
   allocation, default-state `CLEAR_STATE` submission, and suspend-point
   submit/query.
 - Hardware validation samples (`samples/hw_test/`) built as ELF and fake-SELF.
@@ -241,7 +241,7 @@ Acceptance criteria:
 
 ## Phase 3: Register Defaults and State Builders
 
-Status: implemented (FW 5.50 primary/internal groups embedded; orbis
+Status: implemented (FW 5.50 primary/internal groups embedded; prospero
 `NotifyDefaultStates` builds the blobs in GPU memory and submits a `CLEAR_STATE`
 DCB; hardware validation pending).
 
@@ -266,7 +266,7 @@ Work:
 2. Add typed structures for register default records. ✅ Done.
 3. Implement read-only helpers first. ✅ Done.
 4. Implement state builders only after tests lock down expected records.
-   ✅ Builder and parser tested; orbis backend uses the builder.
+   ✅ Builder and parser tested; prospero backend uses the builder.
 5. Wire default-state submission via `IT_CLEAR_STATE`. ✅ Done.
 
 Acceptance criteria:
@@ -304,12 +304,12 @@ Work:
    - CWSR/EOP/trap regions where applicable
    - queue ring buffers
    - doorbell/read-pointer areas
-   ✅ Documented in `STATUS.md` and `driver_orbis.c`.
+   ✅ Documented in `STATUS.md` and `driver_prospero.c`.
 3. Model queue creation and destruction as host-testable structs first.
-   ✅ `AgcOrbisQueue` modeled; `sceAgcDriverSubmitMultiCommandBuffersDirect` uses
+   ✅ `AgcProsperoQueue` modeled; `sceAgcDriverSubmitMultiCommandBuffersDirect` uses
    the submit descriptor layout.
 4. Add native backend stubs only after structure sizes are known.
-   ✅ `driver_orbis.c` skeleton implemented; `sceAgcDriverSuspendPointSubmitDirect`
+   ✅ `driver_prospero.c` skeleton implemented; `sceAgcDriverSuspendPointSubmitDirect`
    now calls the suspend ioctl; in-flight query uses `QUEUE_STAT_16`.
 
 Acceptance criteria:
@@ -321,7 +321,7 @@ Acceptance criteria:
 
 ## Phase 5: Native PS5 Backend
 
-Status: implemented and built (orbis backend compiles and links; hardware
+Status: implemented and built (prospero backend compiles and links; hardware
 validation is the remaining gate).
 
 Purpose:

@@ -41,7 +41,7 @@ builds with ps5-payload-sdk; hardware validation is the remaining step.
 - **Shader binary format** — RDNA2 ISA shader header parsing
 - **Two backend targets:**
   - `generic` — pure software implementation for host testing
-  - `orbis` — native PS5 `/dev/gc` backend with ioctl submission and internal
+  - `prospero` — native PS5 `/dev/gc` backend with ioctl submission and internal
     memory allocation
 - **Binary-compatible struct layouts** — `_Static_assert` verified sizes
 - **Hardware validation samples** — `samples/hw_test/` builds ELF + fake-SELF
@@ -92,7 +92,7 @@ Completed and tested:
 - Texture/buffer descriptor helpers
 - AGC shader record parser (magic, pointer fields, semantics counts, shader type)
 - FW 5.50 register-defaults blob builder and parser with embedded primary/internal tables
-- Native orbis `/dev/gc` backend with ioctl submission, internal memory allocation,
+- Native prospero `/dev/gc` backend with ioctl submission, internal memory allocation,
   default-state `CLEAR_STATE` submission, and suspend-point submit/query
 - Hardware validation samples (`samples/hw_test/`) built as ELF and fake-SELF
 - Build system (CMake + Makefile)
@@ -146,13 +146,13 @@ Current expected host result:
 
 ```sh
 export PS5_PAYLOAD_SDK=~/ps5-payload-sdk
-cmake -B build-orbis -DOPENAGC_PLATFORM=orbis -DOPENAGC_BUILD_TESTS=OFF \
+cmake -B build-prospero -DOPENAGC_PLATFORM=prospero -DOPENAGC_BUILD_TESTS=OFF \
     -DCMAKE_TOOLCHAIN_FILE=$PS5_PAYLOAD_SDK/toolchain/prospero.cmake
-cmake --build build-orbis
-# Output: build-orbis/libopenagc.a
+cmake --build build-prospero
+# Output: build-prospero/libopenagc.a
 ```
 
-The `orbis` backend builds as a native PS5 `/dev/gc` driver backend. It
+The `prospero` backend builds as a native PS5 `/dev/gc` driver backend. It
 implements ioctl submission, internal memory allocation, default-state
 submission, and suspend-point submission. It requires hardware validation
 before it can be considered production-ready.
@@ -177,7 +177,7 @@ openagc/
 │   └── agc_known_nids.tsv   # Known AGC NID table
 ├── src/
 │   ├── driver_generic.c     # Generic (host) backend
-│   ├── driver_orbis.c       # PS5 hardware backend
+│   ├── driver_prospero.c       # PS5 hardware backend
 │   ├── cb.c                 # SceAgcCb cursor allocation
 │   ├── cb_builders.c        # sceAgcCb*/sceAgcDcb* packet builders
 │   ├── context_state.c      # Context state management

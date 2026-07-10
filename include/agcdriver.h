@@ -56,7 +56,7 @@ int32_t PS5_SYSV_ABI sceAgcDriverSdmaCopyLinearBlocking(
     void *dst, const void *src, size_t size);
 
 /* EOP flip submit — builds an IT_RELEASE_MEM EOP packet and calls
- * sceVideoOutSubmitEopFlip internally. Only functional on the orbis
+ * sceVideoOutSubmitEopFlip internally. Only functional on the prospero
  * backend; the generic backend returns AGC_ERROR_NOT_SUPPORTED.
  * \param video_out_handle  VideoOut handle from sceVideoOutOpen
  * \param display_buf_index Display buffer index (0-15, validated)

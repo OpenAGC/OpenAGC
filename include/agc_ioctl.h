@@ -20,8 +20,8 @@
  * copied code. The ioctl table is FW-version-specific; 5.50 is the first
  * target. Other FW versions would populate a different table.
  *
- * Nothing here is used by the generic host backend. It exists so the orbis
- * backend (driver_orbis.c) has a typed surface to call into once native
+ * Nothing here is used by the generic host backend. It exists so the prospero
+ * backend (driver_prospero.c) has a typed surface to call into once native
  * submission is implemented.
  */
 
@@ -192,7 +192,7 @@ enum AgcGcIoctlNr {
  *     - validates num_cbs in [1, 0xFFF]
  *     - allocates ring space: num_cbs * 16 bytes
  *     - copyin(cb_array, ring_buf, num_cbs * 16)
- *     - per CB: checks header opcode, masks ib_base with 0x000FFFFF00000000,
+ *     - per CB: checks header opcode, masks ib_base with 0x000FFFFFFFFFFFFF,
  *       ORs in VMID<<52, calls gc_insert_indirect_buffer
  */
 typedef struct AgcGcSubmitArgs {
@@ -214,12 +214,13 @@ _Static_assert(sizeof(AgcGcSubmitArgs) == 0x18,
 /*
  * Command buffer descriptor (16 bytes each, copyin'd by kernel).
  *
- * The header is a PM4 type-3 packet header:
- *   (3 << 30) | (opcode << 8) | (count - 1)
+ * The header is a PM4 type-3 packet header in the lower 32 bits:
+ *   (3 << 30) | ((count - 2) << 16) | (opcode << 8)
+ * The upper 32 bits contain the IB size in dwords.
  *
- * Valid opcodes:
- *   0xC0023300 = PM4_TYPE3(0x23, 1) — IT_DRAW_INDEX_INDIRECT (used as IB)
- *   0xC0023F00 = PM4_TYPE3(0x3F, 1) — IT_COND_INDIRECT_BUFFER_CNST
+ * Valid opcodes (see AGC_GC_CB_HEADER_* above):
+ *   0xC0023300 = IT_INDIRECT_BUFFER_CNST (opcode 0x33) — for ACB
+ *   0xC0023F00 = IT_INDIRECT_BUFFER      (opcode 0x3F) — for DCB
  *
  * The ib_base field contains:
  *   bits [51:0]  = GPU virtual address of the indirect buffer
@@ -236,9 +237,12 @@ _Static_assert(offsetof(AgcGcCommandBuffer, ib_base) == 0x08,
 _Static_assert(sizeof(AgcGcCommandBuffer) == 0x10,
     "AgcGcCommandBuffer size mismatch");
 
-/* Valid CB header opcodes */
-#define AGC_GC_CB_HEADER_IB         0xC0023300u  /* IT_DRAW_INDEX_INDIRECT as IB */
-#define AGC_GC_CB_HEADER_IB_CNST    0xC0023F00u  /* IT_COND_INDIRECT_BUFFER_CNST */
+/* Valid CB header opcodes for the kernel submit descriptor.
+ *   0x33 = IT_INDIRECT_BUFFER_CNST (used for ACB / const command buffers)
+ *   0x3F = IT_INDIRECT_BUFFER      (used for DCB / draw command buffers)
+ * NOTE: names follow the IB type, not the descriptor usage. */
+#define AGC_GC_CB_HEADER_IB_CNST    0xC0023300u  /* opcode 0x33 = IT_INDIRECT_BUFFER_CNST */
+#define AGC_GC_CB_HEADER_IB         0xC0023F00u  /* opcode 0x3F = IT_INDIRECT_BUFFER */
 
 /* VMID is stored in bits [63:52] of ib_base; bits [51:0] are the GPU VA.
  * The kernel masks ib_base with 0x000FFFFFFFFFFFFF (52-bit address space)
@@ -496,7 +500,7 @@ _Static_assert(sizeof(AgcGcQueueDestroyArg) == 0x0C,
 /*
  * Kernel function offsets in FW 5.50 kernel dump
  * (kernel_550_merged_by_offset.bin). Documented for reference; not used
- * by the host backend, but needed if the orbis backend ever needs to
+ * by the host backend, but needed if the prospero backend ever needs to
  * validate behavior against the dump.
  */
 #define AGC_GC_KERN_IOCTL_INTERNAL      0x6ed39cu  /* gc_ioctl_internal */

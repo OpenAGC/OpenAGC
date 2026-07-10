@@ -136,7 +136,7 @@ There are three functions that open `/dev/gc`:
 
 ## Corrected Initialization Sequence
 
-For the orbis backend, the correct sequence is:
+For the prospero backend, the correct sequence is:
 
 1. `open("/dev/gc", O_RDWR)` — get file descriptor
 2. `ioctl(fd, 0xc004812e, &result)` — query context state (4-byte RW)

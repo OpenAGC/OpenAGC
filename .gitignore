@@ -1,5 +1,5 @@
 build/
-build-orbis/
+build-prospero/
 *.o
 *.a
 openagc_tests

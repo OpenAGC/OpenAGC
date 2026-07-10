@@ -9,7 +9,7 @@ providing `sceAgc*` / `sceAgcDriver*` ABI compatibility with the Sony PS5 SDK,
 buildable without proprietary SDK headers. Targets two backends:
 
 - `generic` — pure software host backend, used for tests
-- `orbis` — native PS5 `/dev/gc` backend (implemented, awaiting hardware
+- `prospero` — native PS5 `/dev/gc` backend (implemented, awaiting hardware
   validation)
 
 The codebase is C (C99-ish), MIT licensed, and depends only on libc on the
@@ -33,21 +33,21 @@ make test
 # or: make -B test
 ```
 
-PS5 (orbis) — requires the ps5-payload-sdk:
+PS5 (prospero) — requires the ps5-payload-sdk:
 
 ```sh
 # One-time SDK setup (see "PS5 SDK" section below for details)
 export PS5_PAYLOAD_SDK=~/ps5-payload-sdk
 
-# Build openagc for orbis
-cmake -B build-orbis -DOPENAGC_PLATFORM=orbis -DOPENAGC_BUILD_TESTS=OFF \
+# Build openagc for prospero
+cmake -B build-prospero -DOPENAGC_PLATFORM=prospero -DOPENAGC_BUILD_TESTS=OFF \
     -DCMAKE_TOOLCHAIN_FILE=$PS5_PAYLOAD_SDK/toolchain/prospero.cmake
-cmake --build build-orbis
+cmake --build build-prospero
 
-# Output: build-orbis/libopenagc.a (PS5 x86_64 static library)
+# Output: build-prospero/libopenagc.a (PS5 x86_64 static library)
 ```
 
-The orbis build compiles `driver_orbis.c` with native `/dev/gc` ioctl calls.
+The prospero build compiles `driver_prospero.c` with native `/dev/gc` ioctl calls.
 It links against `kernel` and `SceAgcDriver` stubs from the SDK.
 
 Expected host test result: `1270 passed, 0 failed`. Any change that drops this
@@ -108,9 +108,9 @@ Before marking a task complete:
   `agcCbAllocDwords(cb, n)` advances the cursor and returns the write pointer.
   Builders must check the return for `NULL` and bail out cleanly.
 - **Backend split:** `driver_generic.c` is the testable host backend;
-  `driver_orbis.c` is the PS5 backend. Anything that touches `/dev/gc`,
-  ioctls, or kernel objects belongs only in `driver_orbis.c` and must be
-  guarded by `#ifdef OPENAGC_ORBIS`.
+  `driver_prospero.c` is the PS5 backend. Anything that touches `/dev/gc`,
+  ioctls, or kernel objects belongs only in `driver_prospero.c` and must be
+  guarded by `#ifdef OPENAGC_PROSPERO`.
 - **No firmware blobs:** Firmware SPRX modules and microcode from
   `/Users/bizkut/Downloads/PS5/FIRMWARE_FILES/5.50` are RE references only.
   Never copy, embed, or commit them. Constants recovered from RE go in
@@ -132,9 +132,9 @@ Before marking a task complete:
 These are for cross-referencing ABI only. Do not copy code from them verbatim
 — openagc is a clean rewrite.
 
-## PS5 SDK (orbis backend toolchain)
+## PS5 SDK (prospero backend toolchain)
 
-The `orbis` backend builds against the **ps5-payload-sdk** — the open-source
+The `prospero` backend builds against the **ps5-payload-sdk** — the open-source
 SDK for building payloads for exploited PS5s.
 
 - **Local source:** `/Users/bizkut/Downloads/PS5/sdk`
@@ -142,7 +142,7 @@ SDK for building payloads for exploited PS5s.
   env var). The official path is `/opt/ps5-payload-sdk` but that requires
   sudo; `~/ps5-payload-sdk` works without sudo.
 - **Toolchain:** Clang 18 + LLD 18, targeting x86_64 PS5 FreeBSD-ish ABI.
-  The toolchain defines `__ORBIS__`, which openagc's `agc_types.h` uses to
+  The toolchain defines `__PROSPERO__`, which openagc's `agc_types.h` uses to
   resolve `PS5_SYSV_ABI` to `__attribute__((sysv_abi))`.
 - **Provides:** `crt` (C runtime), `libc`, `libufs`, kernel headers
   (`include/freebsd`) for `ioctl`/`mmap`/`open`(`/dev/gc`), and the
@@ -153,7 +153,7 @@ SDK for building payloads for exploited PS5s.
 ### Linking AGC SPRX exports
 
 The `sce_stubs` mechanism lets you link decrypted SPRX modules as stubs so
-the orbis backend can call `sceAgc*` / `sceAgcDriver*` exports by NID:
+the prospero backend can call `sceAgc*` / `sceAgcDriver*` exports by NID:
 
 ```sh
 ln -s /path/to/libSceAgc.sprx      $PS5_PAYLOAD_SDK/../sdk/sce_stubs/libSceAgc.sprx
@@ -174,7 +174,7 @@ Two deployment paths:
 
 ```sh
 export PS5_HOST=ps5; export PS5_PORT=9021
-prospero-deploy -h $PS5_HOST -p $PS5_PORT build-orbis/openagc_payload.elf
+prospero-deploy -h $PS5_HOST -p $PS5_PORT build-prospero/openagc_payload.elf
 ```
 
 **2. Installable .pkg (debug-mode PS5):**
@@ -217,7 +217,7 @@ $PKG_TOOLS/prosperopkg-gp5 app_dir out.gp5 --flat --type app
 
 ### CMake integration
 
-The orbis CMake build (`-DOPENAGC_PLATFORM=orbis`) already links
+The prospero CMake build (`-DOPENAGC_PLATFORM=prospero`) already links
 `kernel` and `SceAgcDriver` (see `CMakeLists.txt` lines 58–63). Those
 libraries must be available in the SDK's lib directory after stubs are
 installed. The host build does not need the SDK.
@@ -301,14 +301,14 @@ See `STATUS.md` and `PLAN.md`. Next RE tasks, in order:
 
 All userspace packet builders, patchers, LOD stats helpers, the FW 5.50
 ioctl/submit/queue RE layer, the shader record parser, the register-defaults
-blob builder/parser, and the native orbis backend (`driver_orbis.c`) are
+blob builder/parser, and the native prospero backend (`driver_prospero.c`) are
 implemented and build. The remaining work is hardware validation and the
 async-compute queue setup path.
 
 ## Non-Goals
 
 - No firmware blobs or proprietary microcode embedded in the repo.
-- No claim that the `orbis` backend is hardware-ready.
+- No claim that the `prospero` backend is hardware-ready.
 - No claim of full official SDK drop-in completeness.
 - No PS4 (`sceGnm*`) content here — that belongs in the sibling `opengnm`
   project, not `openagc`.

@@ -394,7 +394,7 @@ VSH-only stub.
 
 ## `sceAgcDriverNotifyDefaultStates` userspace submission path
 
-- `sceAgcDriverNotifyDefaultStates` (orbis backend, `src/driver_orbis.c`):
+- `sceAgcDriverNotifyDefaultStates` (prospero backend, `src/driver_prospero.c`):
   1. Allocates GPU-visible memory for the primary and internal register-default
      blobs.
   2. Builds both blobs with `agcRegisterDefaultsBuild()`.

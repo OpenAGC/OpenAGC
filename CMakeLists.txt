@@ -4,18 +4,18 @@ project(openagc C)
 # openagc — clean-rewrite PS5 AGC library
 # sceAgc*/sceAgcDriver* drop-in API compatibility with the Sony PS5 SDK.
 
-set(OPENAGC_PLATFORM "auto" CACHE STRING "openagc platform: auto, orbis, or generic")
-set_property(CACHE OPENAGC_PLATFORM PROPERTY STRINGS auto orbis generic)
+set(OPENAGC_PLATFORM "auto" CACHE STRING "openagc platform: auto, prospero, or generic")
+set_property(CACHE OPENAGC_PLATFORM PROPERTY STRINGS auto prospero generic)
 
-if(OPENAGC_PLATFORM STREQUAL "orbis")
-    set(OPENAGC_ORBIS_PLATFORM ON)
+if(OPENAGC_PLATFORM STREQUAL "prospero")
+    set(OPENAGC_PROSPERO_PLATFORM ON)
 elseif(OPENAGC_PLATFORM STREQUAL "generic")
-    set(OPENAGC_ORBIS_PLATFORM OFF)
+    set(OPENAGC_PROSPERO_PLATFORM OFF)
 else()
-    if(ORBIS OR PLATFORM_PS5 OR CMAKE_SYSTEM_NAME STREQUAL "Prospero")
-        set(OPENAGC_ORBIS_PLATFORM ON)
+    if(PROSPERO OR PLATFORM_PS5 OR CMAKE_SYSTEM_NAME STREQUAL "Prospero")
+        set(OPENAGC_PROSPERO_PLATFORM ON)
     else()
-        set(OPENAGC_ORBIS_PLATFORM OFF)
+        set(OPENAGC_PROSPERO_PLATFORM OFF)
     endif()
 endif()
 
@@ -32,9 +32,9 @@ set(OPENAGC_SOURCES
 )
 
 # Platform-specific sources
-if(OPENAGC_ORBIS_PLATFORM)
+if(OPENAGC_PROSPERO_PLATFORM)
     list(APPEND OPENAGC_SOURCES
-        src/driver_orbis.c
+        src/driver_prospero.c
     )
 else()
     list(APPEND OPENAGC_SOURCES
@@ -56,8 +56,8 @@ if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
     target_compile_options(openagc PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
-if(OPENAGC_ORBIS_PLATFORM)
-    target_compile_definitions(openagc PUBLIC OPENAGC_ORBIS OPENAGC_REQUIRE_ABI)
+if(OPENAGC_PROSPERO_PLATFORM)
+    target_compile_definitions(openagc PUBLIC OPENAGC_PROSPERO OPENAGC_REQUIRE_ABI)
     target_link_libraries(openagc PUBLIC kernel SceAgcDriver)
 else()
     target_compile_definitions(openagc PUBLIC OPENAGC_GENERIC)

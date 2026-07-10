@@ -6,7 +6,7 @@
 #
 # Prerequisites:
 #   export PS5_PAYLOAD_SDK=~/ps5-payload-sdk
-#   Build openagc first: cmake --build build-orbis
+#   Build openagc first: cmake --build build-prospero
 #   Build LibProsperoPkg for eboot.bin: see AGENTS.md
 
 PS5_HOST ?= ps5
@@ -25,7 +25,7 @@ endif
 
 # Path to openagc root
 OPENAGC_ROOT := $(abspath $(THIS_DIR)/../..)
-OPENAGC_LIB  := $(OPENAGC_ROOT)/build-orbis/libopenagc.a
+OPENAGC_LIB  := $(OPENAGC_ROOT)/build-prospero/libopenagc.a
 OPENAGC_INC  := $(OPENAGC_ROOT)/include
 
 # LibProsperoPkg tools (for eboot.bin)

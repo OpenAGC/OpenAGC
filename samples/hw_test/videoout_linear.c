@@ -49,11 +49,11 @@ int sceKernelReleaseDirectMemory(off_t directMemoryStart, size_t len);
 off_t sceKernelGetDirectMemorySize(void);
 
 /* Event queue (same as PS4) */
-typedef int OrbisKernelEqueue;
-typedef struct { char _opaque[64]; } OrbisKernelEvent;
-int sceKernelCreateEqueue(OrbisKernelEqueue *equeue, const char *name);
-int sceKernelDeleteEqueue(OrbisKernelEqueue equeue);
-int sceKernelWaitEqueue(OrbisKernelEqueue equeue, OrbisKernelEvent *events,
+typedef int SceKernelEqueue;
+typedef struct { char _opaque[64]; } SceKernelEvent;
+int sceKernelCreateEqueue(SceKernelEqueue *equeue, const char *name);
+int sceKernelDeleteEqueue(SceKernelEqueue equeue);
+int sceKernelWaitEqueue(SceKernelEqueue equeue, SceKernelEvent *events,
                         int numEvents, int *out, void *timeout);
 
 enum {
@@ -64,7 +64,7 @@ enum {
 
 typedef struct {
     int handle;
-    OrbisKernelEqueue flipqueue;
+    SceKernelEqueue flipqueue;
     off_t direct_memory;
     void *mapped;
     size_t mapped_size;
@@ -240,7 +240,7 @@ int main(void) {
             break;
         }
 
-        OrbisKernelEvent event = {0};
+        SceKernelEvent event = {0};
         int out = 0;
         res = sceKernelWaitEqueue(test.flipqueue, &event, 1, &out, NULL);
         if (res != 0) {
