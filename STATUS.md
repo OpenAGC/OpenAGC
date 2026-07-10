@@ -185,7 +185,7 @@ Ioctl / submit / queue layer (FW 5.50 kernel RE, `include/agc_ioctl.h`):
 Native prospero backend (`src/driver_prospero.c`, `#ifdef OPENAGC_PROSPERO`):
 
 - `sce_agc_initialize` — opens `/dev/gc`, calls `CONTEXT_QUERY` ioctl (0xc004812e, nr=0x2e), mmaps GPU register space at 0xfe0200000 if context not yet initialized. **NOTE:** The old `FRAME_OPEN` (nr=0x00) does NOT exist in FW 5.50 — the kernel returns EINVAL. See `analysis/sprx_sce_agc_initialize_disasm.md`.
-- `sce_agc_initialize_internal_memory` — allocates 8 named regions via `sceKernelAllocateDirectMemory` + `sceKernelMapDirectMemory` + `MAKESYSMAP_8`
+- `sce_agc_initialize_internal_memory` — allocates 9 named regions via `sceKernelMapNamedSystemFlexibleMemory` (matches SPRX). Region sizes confirmed from SPRX disassembly: SceGnmGpuInfo (1MB), SceGnmTrapCode (16KB), SceGnmTrapData (16KB), SceGnmDdid (1008KB), SceGnmEopFifo (240KB), SceGnmShadowReg (16KB), SceGnmCwsr (16MB), SceGnmMisc (16KB), SceGnmACQRB (1920KB). See `analysis/sprx_agc_driver_internal_mem_disasm.md`.
 - `sceAgcDriverSubmitMultiCommandBuffersDirect` — builds CB descriptors, calls `SUBMIT_PID`
 - `sceAgcDriverSubmitDcb` — single DCB submit via `SUBMIT_PID`
 - `sceAgcDriverSubmitAcb` — single ACB submit (const IB type) via `SUBMIT_PID`
@@ -195,14 +195,13 @@ Native prospero backend (`src/driver_prospero.c`, `#ifdef OPENAGC_PROSPERO`):
 - `sceAgcDriverSetTFRingDirect` — `SET_TF_RING` ioctl (user arg ignored on FW 5.50)
 - `sceAgcDriverSetHsOffchipParamDirect` — `SET_HS_OFFCHIP` ioctl with RE'd 16-byte patch-list argument
 - `sceAgcDriverGetPaDebugInterfaceVersion` — `PADEBUG_4` ioctl
-- `_sceAgcDriverCreateUserSpecialQueue` — `QUEUE_CREATE` ioctl (nr=0x21, 64-byte RW arg with magic auth tokens; SPRX-confirmed)
+- `_sceAgcDriverCreateUserSpecialQueue` — `QUEUE_CREATE` ioctl (nr=0x21, 64-byte RW arg). Ring buffer address computed from EOP FIFO base + 0x39000 (SPRX-confirmed). Arg layout: magic tokens, pipe_id, mmio_base, queue_id, ring_addr, ring_size.
 - `_sceAgcDriverDestroyUserSpecialQueue` — `QUEUE_DESTROY` ioctl (nr=0x0e, 12-byte RW arg with magic auth tokens; SPRX-confirmed)
 - `sceAgcDriverNotifyDefaultStates` — takes `uint32_t flags`; builds FW 5.50 primary/internal register-defaults blobs in GPU-visible memory (kernel consumption path still pending RE)
 - `sceAgcDriverSuspendPointSubmitDirect` — `SUSPEND_16` ioctl with RE'd 4-dword argument
 - `sceAgcDriverIsSuspendPointInFlightDirect` — stub query (returns false)
 - `sceAgcSuspendPointAndCheckStatus` — stub query (returns OK)
 - `sce_agc_internal_suspend_point_submit_final` — `SUSPEND_39` ioctl with same 4-dword argument
-- `agcProsperoMakeSysmap` (internal) — `MAKESYSMAP_8` ioctl for GPU VA mapping
 - CB descriptor builder using `AgcGcCommandBuffer` with VMID masking
 - Queue tracking (32 slots, gfx/compute/dma types)
 
@@ -221,21 +220,31 @@ Submit model:
 - `sceVideoOutRegisterBuffers` (A8R8G8B8_SRGB, tiled) — OK
 - Flip loop running at 60fps
 
-### agc_init.elf — PARTIAL PASS
+### agc_init.elf — PARTIAL PASS (pre-SPRX-disassembly run)
 - **[1] sce_agc_initialize()** — PASS
   - /dev/gc opened (fd=7), CONTEXT_QUERY OK, mmap at 0xfe0200000
   - FRAME_OPEN correctly returns EINVAL (confirms ps5-openagc audit)
-- **[2] sce_agc_initialize_internal_memory()** — PASS
-  - All 8 regions allocated with WC_GARLIC (type=3)
+- **[2] sce_agc_initialize_internal_memory()** — PASS (but sizes were wrong)
+  - All 8 regions allocated with WC_GARLIC (type=3) via sceKernelAllocateDirectMemory
   - WB_ONION (type=1) returns EINVAL on this PS5 — all regions use garlic
   - GPU VAs: 0x200200000–0x201000000
+  - **FIXED**: SPRX disassembly revealed 6 of 9 region sizes were wrong,
+    and the SPRX uses sceKernelMapNamedSystemFlexibleMemory (not
+    sceKernelAllocateDirectMemory). Updated to match SPRX: 9 regions
+    totaling ~19.3MB with correct names (SceGnmGpuInfo, SceGnmTrapCode,
+    SceGnmTrapData, SceGnmDdid, SceGnmEopFifo, SceGnmShadowReg,
+    SceGnmCwsr, SceGnmMisc, SceGnmACQRB).
 - **[3] sceAgcDriverNotifyDefaultStates()** — PASS
 - **[4] sceAgcDriverGetPaDebugInterfaceVersion()** — returns 0 (unsupported?)
 - **[5] sceAgcDriverSubmitDcb(NOP)** — PASS (NOP submitted to GPU!)
 - **[6] SuspendPointSubmitDirect** — FAIL (0x80890201 SUBMIT_FAILED)
-  - 4-dword argument layout needs RE validation
+  - SPRX disassembly confirms ioctl 0xc010811c with 4-dword arg layout.
+  - The ioctl mechanism is correct; the field values may need adjustment.
 - **[7] CreateUserSpecialQueue** — FAIL (0x80890201 INTERNAL)
-  - Ring buffer allocation or magic tokens may be wrong
+  - **FIXED**: SPRX disassembly revealed the 64-byte ioctl arg layout was
+    completely wrong (field order at offsets 0x10-0x28 was mismatched).
+    Also, the ring buffer should be carved from EOP FIFO base + 0x39000,
+    not separately allocated. Updated to match SPRX.
 - **[9] BeginWorkload/EndWorkload** — PASS
 
 ### Hardware-discovered bugs fixed
@@ -249,22 +258,22 @@ Submit model:
 
 ## Next RE Tasks
 
-1. **Fix SuspendPointSubmitDirect** — the 4-dword argument layout for
-   `SUSPEND_16` (nr=0x1c) needs RE validation from SPRX disassembly.
-   Currently returns SUBMIT_FAILED on hardware.
-2. **Fix CreateUserSpecialQueue** — the ring buffer allocation or magic auth
-   tokens may be wrong. Needs SPRX disassembly of the queue create path to
-   verify the ring buffer address computation and ioctl argument layout.
-3. **Verify internal memory region sizes** — the 8 region sizes in
-   `sce_agc_initialize_internal_memory` (DDID 0x1000, CWSR 0x10000, etc.)
-   are INHERITED UNVERIFIED from ps5-openagc. All 8 allocate successfully
-   on hardware with garlic type=3, but the actual sizes may differ from
-   what the SPRX uses. Needs SPRX disassembly to confirm.
-4. **Investigate WB_ONION (type=1) failure** — onion memory allocation
-   returns EINVAL on this exploited PS5. May be a sandbox restriction or
-   the memory type constant may be different. The working PS5 examples
-   (PS5_DEV_HOMEBREW) use type=1 for command buffers successfully, so this
-   needs investigation.
+1. **Re-validate on hardware** — deploy the updated `agc_init.elf` with
+   the SPRX-confirmed fixes:
+   - 9 internal memory regions with correct sizes via
+     `sceKernelMapNamedSystemFlexibleMemory` (type=0x33)
+   - Queue create with correct 64-byte ioctl arg layout and ring buffer
+     carved from EOP FIFO base + 0x39000
+   - Suspend point with confirmed ioctl 0xc010811c
+2. **Fix SuspendPointSubmitDirect** — SPRX disassembly confirms the ioctl
+   command (0xc010811c) and 4-dword arg layout are correct. The
+   SUBMIT_FAILED error may be due to incorrect field values or missing
+   prior initialization (e.g., the suspend point may require the queue
+   to be created first, or specific GPU state).
+3. **Validate default state blobs** — confirm the primary/internal
+   register-defaults blobs are accepted by the kernel.
+4. **Async-compute queue setup** — implement real queue submission path
+   now that the queue create ioctl arg layout is confirmed.
 
 ## ps5-openagc Audit
 
@@ -284,10 +293,16 @@ verified from SPRX/kernel disassembly.
 - Memory type constants — ps5-openagc had WB_ONION=0, WC_GARLIC=1, WB_GARLIC=2
   (wrong for PS5). Correct PS5 values: WB_ONION=1, WC_GARLIC=3, WB_GARLIC=2
   (hardware-confirmed)
-
-**Still unverified (inherited from ps5-openagc):**
-- Internal memory region sizes in `sce_agc_initialize_internal_memory`
-  (all 8 allocate successfully on hardware, but actual SPRX sizes unconfirmed)
+- Internal memory region sizes — 6 of 9 sizes were wrong. SPRX uses
+  `sceKernelMapNamedSystemFlexibleMemory` (not `sceKernelAllocateDirectMemory`)
+  with type=0x33. Correct sizes from SPRX disassembly:
+  SceGnmGpuInfo=1MB, SceGnmDdid=1008KB, SceGnmEopFifo=240KB,
+  SceGnmCwsr=16MB, SceGnmACQRB=1920KB (all were 4KB-64KB in ps5-openagc).
+  See `analysis/sprx_agc_driver_internal_mem_disasm.md`.
+- Queue create ioctl arg layout — field order at offsets 0x10-0x28 was
+  completely wrong. Correct layout from SPRX: pipe_id at 0x10, caller_arg
+  at 0x18, mmio_base at 0x20, queue_id at 0x28. Ring buffer is carved
+  from EOP FIFO base + 0x39000, not separately allocated.
 
 ## Non-Goals For Current Milestone
 

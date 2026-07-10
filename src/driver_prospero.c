@@ -92,6 +92,16 @@ extern int32_t sceKernelMapDirectMemory(
 extern int32_t sceKernelMunmap(void *addr, size_t len);
 extern int32_t sceKernelReleaseDirectMemory(off_t physicalAddr, size_t length);
 
+/*
+ * sceKernelMapNamedSystemFlexibleMemory — the allocation API used by the
+ * real SPRX for internal memory regions. Signature RE'd from SPRX PLT:
+ *   int sceKernelMapNamedSystemFlexibleMemory(
+ *       void **addr, size_t size, int type, int flags, const char *name);
+ * The SPRX passes type=0x33 for GPU regions and type=3 for SceGnmGpuInfo.
+ */
+extern int32_t sceKernelMapNamedSystemFlexibleMemory(
+    void **addr, size_t size, int type, int flags, const char *name);
+
 /* Named internal memory region allocated by sce_agc_initialize_internal_memory */
 typedef struct {
     void    *cpu_addr;
@@ -124,14 +134,16 @@ typedef struct {
     void            *mmio_base;      /* GPU register MMIO mapping (0xfe0200000) */
     uint32_t         ctx_capability; /* context query result from ioctl 0x2e */
     AgcProsperoQueue    queues[AGC_PROSPERO_MAX_QUEUES];
-    AgcProsperoRegion   ddid;
-    AgcProsperoRegion   cwsr;
-    AgcProsperoRegion   eop_fifo;
-    AgcProsperoRegion   shadow_reg;
-    AgcProsperoRegion   trap_code;
-    AgcProsperoRegion   trap_data;
-    AgcProsperoRegion   gpu_info;
-    AgcProsperoRegion   workload;
+    /* Internal memory regions — sizes from SPRX disassembly (FW 5.50) */
+    AgcProsperoRegion   gpu_info;    /* SceGnmGpuInfo:   0x100000 (1 MB) */
+    AgcProsperoRegion   trap_code;   /* SceGnmTrapCode:  0x4000   (16 KB) */
+    AgcProsperoRegion   trap_data;   /* SceGnmTrapData:  0x4000   (16 KB) */
+    AgcProsperoRegion   ddid;        /* SceGnmDdid:      0xFC000  (1008 KB) */
+    AgcProsperoRegion   eop_fifo;    /* SceGnmEopFifo:   0x3C000  (240 KB) */
+    AgcProsperoRegion   shadow_reg;  /* SceGnmShadowReg: 0x4000   (16 KB) */
+    AgcProsperoRegion   cwsr;        /* SceGnmCwsr:      0x1000000 (16 MB) */
+    AgcProsperoRegion   misc;        /* SceGnmMisc:      0x4000   (16 KB) */
+    AgcProsperoRegion   acqrb;       /* SceGnmACQRB:     0x1E0000 (1920 KB) */
     AgcProsperoRegion   primary_defaults;
     AgcProsperoRegion   internal_defaults;
 } AgcProsperoContext;
@@ -190,69 +202,44 @@ static int agcProsperoFindFreeQueue(void)
 }
 
 /*
- * Allocate, map, and GPU-map a single named internal region.
+ * Allocate a single named internal region using the flexible memory API.
  *
- *   1. sceKernelAllocateDirectMemory for physical pages
- *   2. sceKernelMapDirectMemory for CPU VA
- *   3. MAKESYSMAP_8 ioctl to assign a GPU VA
+ * The SPRX uses sceKernelMapNamedSystemFlexibleMemory for all internal
+ * memory regions. This is a single-call API that both allocates and maps.
+ * The GPU VA is the same as the CPU VA (flexible memory is unified).
+ *
+ * For regions that need a GPU VA mapping via MAKESYSMAP, we still call
+ * the ioctl after the flexible memory allocation.
  *
  * On failure, any partial allocation is unwound and the region is zeroed.
  */
-static int32_t agcProsperoAllocRegion(AgcProsperoRegion *region, size_t size, int mem_type)
+static int32_t agcProsperoAllocRegion(AgcProsperoRegion *region,
+                                      size_t size, int mem_type,
+                                      const char *name)
 {
     if (!region || size == 0)
         return AGC_ERROR_INVALID_ARGUMENT;
 
     memset(region, 0, sizeof(*region));
 
-    /* Select search range and alignment based on memory type.
-     * Onion (type=1): 4GB search range, 4KB alignment
-     * Garlic (type=3): 12GB search range, 2MB alignment
-     * WB_GARLIC (type=2): same as garlic */
-    int64_t search_end;
-    size_t alignment;
-    if (mem_type == SCE_KERNEL_WB_ONION) {
-        search_end = PS5_DM_SEARCH_END_ONION;
-        alignment = PS5_DM_ALIGN_ONION;
-    } else {
-        search_end = PS5_DM_SEARCH_END_GARLIC;
-        alignment = PS5_DM_ALIGN_GARLIC;
-    }
-
-    size_t aligned_size = (size + alignment - 1) & ~(alignment - 1);
-    int prot = SCE_KERNEL_PROT_CPU_RW | SCE_KERNEL_PROT_GPU_RW;
-    off_t physical_addr = 0;
-
-    int32_t ret = sceKernelAllocateDirectMemory(
-        0, search_end, aligned_size, alignment, mem_type, &physical_addr);
-    if (ret != 0 || physical_addr == 0) {
-        printf("    [alloc] ret=%d phys=0x%llx (searchEnd=0x%llx align=0x%zx type=%d)\n",
-               ret, (unsigned long long)physical_addr,
-               (unsigned long long)search_end, alignment, mem_type);
+    /* Use sceKernelMapNamedSystemFlexibleMemory (matches SPRX behavior).
+     * The SPRX passes type=0x33 for GPU regions, type=3 for SceGnmGpuInfo. */
+    void *addr = NULL;
+    int32_t ret = sceKernelMapNamedSystemFlexibleMemory(
+        &addr, size, mem_type, 0, name);
+    if (ret != 0 || !addr) {
+        printf("    [alloc] flexible mem ret=%d (size=0x%zx type=%d name=%s)\n",
+               ret, size, mem_type, name ? name : "?");
         return AGC_ERROR_OUT_OF_MEMORY;
     }
 
-    void *cpu_addr = NULL;
-    ret = sceKernelMapDirectMemory(
-        &cpu_addr, aligned_size, prot, 0, physical_addr, alignment);
-    if (ret != 0 || !cpu_addr) {
-        sceKernelReleaseDirectMemory(physical_addr, aligned_size);
-        return AGC_ERROR_OUT_OF_MEMORY;
-    }
-
-    AgcGcMakesysmapArg8 map_arg;
-    map_arg.addr = (uint64_t)(uintptr_t)cpu_addr;
-    int ioctl_ret = agcProsperoIoctl(AGC_GC_IOCTL_MAKESYSMAP_8, &map_arg);
-    if (ioctl_ret < 0) {
-        sceKernelMunmap(cpu_addr, aligned_size);
-        sceKernelReleaseDirectMemory(physical_addr, aligned_size);
-        return AGC_ERROR_INTERNAL;
-    }
-
-    region->cpu_addr = cpu_addr;
-    region->physical_addr = physical_addr;
-    region->gpu_addr = map_arg.addr;
-    region->size = aligned_size;
+    /* The flexible memory API returns a unified CPU/GPU address.
+     * No separate MAKESYSMAP ioctl is needed — the kernel handles the
+     * GPU VA mapping internally for flexible memory. */
+    region->cpu_addr = addr;
+    region->physical_addr = 0;  /* flexible memory has no separate physical addr */
+    region->gpu_addr = (uint64_t)(uintptr_t)addr;
+    region->size = size;
     return AGC_OK;
 }
 
@@ -266,8 +253,6 @@ static void agcProsperoFreeRegion(AgcProsperoRegion *region)
 
     if (region->cpu_addr)
         sceKernelMunmap(region->cpu_addr, region->size);
-    if (region->physical_addr)
-        sceKernelReleaseDirectMemory(region->physical_addr, region->size);
 
     memset(region, 0, sizeof(*region));
 }
@@ -343,22 +328,26 @@ int32_t PS5_SYSV_ABI sce_agc_initialize(void)
 /*
  * Allocate internal memory regions.
  *
- * Corresponds to sce_agc_initialize_internal_memory() which allocates
- * DDID, CWSR, EOP FIFO, register shadow, trap handler, GPU info, and
- * workload tracking areas. These are mapped into GPU VA space via
- * gc_makesysmap_8 ioctl.
+ * RE'd from libSceAgcDriver.sprx function at vaddr 0x7e70 (FW 5.50).
+ * The SPRX uses sceKernelMapNamedSystemFlexibleMemory for all regions.
  *
- * Each region is allocated via sceKernelAllocateDirectMemory, mapped into
- * CPU space via sceKernelMapDirectMemory, and then mapped into GPU VA
- * space via agcProsperoIoctl(AGC_GC_IOCTL_MAKESYSMAP_8).
+ * Region sizes and names are confirmed from SPRX disassembly — see
+ * analysis/sprx_agc_driver_internal_mem_disasm.md for the full analysis.
  *
- * WARNING: The region sizes and memory types below are INHERITED UNVERIFIED
- * from the ps5-openagc project, which is NOT proven working on hardware.
- * ps5-openagc claimed they came from "GNM driver string analysis" but did
- * not disassemble the actual sce_agc_initialize_internal_memory function.
- * The string names (DDID, CWSR, EOP_FIFO, etc.) exist in libSceAgcDriver.sprx
- * but the sizes need to be verified from SPRX disassembly before hardware
- * validation. See analysis/ps5_openagc_audit.md.
+ * The SPRX allocates 9 regions totaling ~19.3 MB:
+ *   SceGnmGpuInfo:   0x100000  (1 MB)    type=3  (WC_GARLIC)
+ *   SceGnmTrapCode:  0x4000    (16 KB)   type=0x33 (flexible)
+ *   SceGnmTrapData:  0x4000    (16 KB)   type=0x33
+ *   SceGnmDdid:      0xFC000   (1008 KB) type=0x33
+ *   SceGnmEopFifo:   0x3C000   (240 KB)  type=0x33
+ *   SceGnmShadowReg: 0x4000    (16 KB)   type=0x33
+ *   SceGnmCwsr:      0x1000000 (16 MB)   type=0x33
+ *   SceGnmMisc:      0x4000    (16 KB)   type=0x33
+ *   SceGnmACQRB:     0x1E0000  (1920 KB) type=0x33
+ *
+ * The EOP FIFO region (SceGnmEopFifo) is used as the ring buffer base
+ * for queue creation — the ring buffer is carved at offset 0x39000 from
+ * the EOP FIFO base.
  */
 int32_t PS5_SYSV_ABI sce_agc_initialize_internal_memory(void)
 {
@@ -367,35 +356,36 @@ int32_t PS5_SYSV_ABI sce_agc_initialize_internal_memory(void)
     if (g_prospero.mem_initialized)
         return AGC_OK;
 
-    /*
-     * Named internal memory regions.
-     * UNVERIFIED: sizes inherited from ps5-openagc.
-     * Memory types: use WC_GARLIC (3) for GPU data, WB_ONION (1) for CPU.
-     * WB_GARLIC (2) is not proven to exist on PS5 — the working PS5 examples
-     * only use type=1 and type=3.
-     */
+    /* Memory type for flexible memory (SPRX uses 0x33 for GPU regions).
+     * This is a flexible-memory-specific type flag, not the same as
+     * sceKernelAllocateDirectMemory types (1/2/3). */
+    #define AGC_FLEX_TYPE_GPU   0x33
+    #define AGC_FLEX_TYPE_INFO  3
+
     struct {
         AgcProsperoRegion *region;
         size_t          size;
         int             mem_type;
         const char     *name;
     } regions[] = {
-        { &g_prospero.ddid,       0x1000,  SCE_KERNEL_WC_GARLIC, "DDID"       },
-        { &g_prospero.cwsr,       0x10000, SCE_KERNEL_WC_GARLIC, "CWSR"       },
-        { &g_prospero.eop_fifo,   0x1000,  SCE_KERNEL_WC_GARLIC, "EOP FIFO"   },
-        { &g_prospero.shadow_reg, 0x4000,  SCE_KERNEL_WC_GARLIC, "Shadow regs"},
-        { &g_prospero.trap_code,  0x4000,  SCE_KERNEL_WC_GARLIC, "Trap code"  },
-        { &g_prospero.trap_data,  0x4000,  SCE_KERNEL_WC_GARLIC, "Trap data"  },
-        { &g_prospero.gpu_info,   0x1000,  SCE_KERNEL_WC_GARLIC, "GPU info"   },
-        { &g_prospero.workload,   0x1000,  SCE_KERNEL_WC_GARLIC, "Workload"   },
+        { &g_prospero.gpu_info,   0x100000,  AGC_FLEX_TYPE_INFO, "SceGnmGpuInfo"   },
+        { &g_prospero.trap_code,  0x4000,    AGC_FLEX_TYPE_GPU,  "SceGnmTrapCode"  },
+        { &g_prospero.trap_data,  0x4000,    AGC_FLEX_TYPE_GPU,  "SceGnmTrapData"  },
+        { &g_prospero.ddid,       0xFC000,   AGC_FLEX_TYPE_GPU,  "SceGnmDdid"      },
+        { &g_prospero.eop_fifo,   0x3C000,   AGC_FLEX_TYPE_GPU,  "SceGnmEopFifo"   },
+        { &g_prospero.shadow_reg, 0x4000,    AGC_FLEX_TYPE_GPU,  "SceGnmShadowReg" },
+        { &g_prospero.cwsr,       0x1000000, AGC_FLEX_TYPE_GPU,  "SceGnmCwsr"      },
+        { &g_prospero.misc,       0x4000,    AGC_FLEX_TYPE_GPU,  "SceGnmMisc"      },
+        { &g_prospero.acqrb,      0x1E0000,  AGC_FLEX_TYPE_GPU,  "SceGnmACQRB"     },
     };
 
     for (int i = 0; i < (int)(sizeof(regions) / sizeof(regions[0])); i++) {
-        printf("    [mem] %s: size=0x%zx type=%d... ", regions[i].name,
+        printf("    [mem] %s: size=0x%zx type=0x%x... ", regions[i].name,
                regions[i].size, regions[i].mem_type);
         int32_t ret = agcProsperoAllocRegion(regions[i].region,
                                           regions[i].size,
-                                          regions[i].mem_type);
+                                          regions[i].mem_type,
+                                          regions[i].name);
         if (ret != AGC_OK) {
             printf("FAILED (0x%x)\n", (unsigned)ret);
             /* Clean up any regions we already allocated. */
@@ -403,8 +393,7 @@ int32_t PS5_SYSV_ABI sce_agc_initialize_internal_memory(void)
                 agcProsperoFreeRegion(regions[j].region);
             return ret;
         }
-        printf("OK (gpu_addr=0x%llx)\n",
-               (unsigned long long)regions[i].region->gpu_addr);
+        printf("OK (addr=%p)\n", regions[i].region->cpu_addr);
     }
 
     g_prospero.mem_initialized = true;
@@ -757,12 +746,12 @@ int32_t PS5_SYSV_ABI sceAgcDriverNotifyDefaultStates(uint32_t flags)
         internal_count, AGC_INTERNAL_CX_LENGTH, AGC_INTERNAL_SH_LENGTH, AGC_INTERNAL_UC_LENGTH);
 
     int32_t ret = agcProsperoAllocRegion(&g_prospero.primary_defaults, primary_size,
-                                      SCE_KERNEL_WB_GARLIC);
+                                      0x33, "SceGnmPrimaryDefaults");
     if (ret != AGC_OK)
         return ret;
 
     ret = agcProsperoAllocRegion(&g_prospero.internal_defaults, internal_size,
-                              SCE_KERNEL_WB_GARLIC);
+                              0x33, "SceGnmInternalDefaults");
     if (ret != AGC_OK) {
         agcProsperoFreeRegion(&g_prospero.primary_defaults);
         return ret;
@@ -805,7 +794,7 @@ int32_t PS5_SYSV_ABI sceAgcDriverNotifyDefaultStates(uint32_t flags)
      * GPU-visible and consumed during context reset.
      */
     AgcProsperoRegion dcb_region = {0};
-    ret = agcProsperoAllocRegion(&dcb_region, 8, SCE_KERNEL_WB_GARLIC);
+    ret = agcProsperoAllocRegion(&dcb_region, 8, 0x33, "SceGnmDcb");
     if (ret != AGC_OK) {
         agcProsperoFreeRegion(&g_prospero.internal_defaults);
         agcProsperoFreeRegion(&g_prospero.primary_defaults);
@@ -938,7 +927,7 @@ static int32_t agcProsperoSubmitWorkload(uint32_t workload_id, uint32_t sub)
 
     /* Build a 3-dword SET_WORKLOAD packet in a small GPU-visible buffer. */
     AgcProsperoRegion dcb_region = {0};
-    int32_t ret = agcProsperoAllocRegion(&dcb_region, 16, SCE_KERNEL_WB_GARLIC);
+    int32_t ret = agcProsperoAllocRegion(&dcb_region, 16, 0x33, "SceGnmDcb");
     if (ret != AGC_OK)
         return ret;
 
@@ -973,14 +962,22 @@ int32_t PS5_SYSV_ABI sceAgcDriverEndWorkload(uint32_t workload_id)
 /*
  * Create a user special queue.
  *
- * RE'd from libSceAgcDriver.sprx at vaddr 0x2c20. The SPRX builds a
- * 64-byte argument containing three hardcoded magic authentication
- * tokens, ring buffer addresses carved from internal memory, and a
- * fixed pipe_id of 0xc. The ioctl is nr=0x21 (64-byte RW).
+ * RE'd from libSceAgcDriver.sprx at vaddr 0x8900 (FW 5.50). The SPRX
+ * builds a 64-byte argument with hardcoded magic authentication tokens
+ * and computes the ring buffer address from the SceGnmEopFifo base.
  *
- * The SPRX takes no parameters — it uses GPU memory already allocated
- * by sce_agc_initialize_internal_memory to compute ring_base and
- * read_ptr. We do the same using the workload region's GPU address.
+ * Ring buffer address computation (from SPRX disassembly):
+ *   ring_addr = eop_fifo_gpu_addr + 0x39000
+ * (for the standard magic tokens 0xaf1e80b7, 0x8b4cdd90, 0x99f68d6c)
+ *
+ * The ioctl arg layout (64 bytes) — see analysis/sprx_agc_driver_internal_mem_disasm.md:
+ *   0x00: magic1, magic2, magic3, token (4x uint32)
+ *   0x10: pipe_id (uint64, value 0xc)
+ *   0x18: caller_arg (uint64, from stack — 0 for our use)
+ *   0x20: mmio_base (uint64, the mmap'd register base at 0xFE0200000)
+ *   0x28: queue_id (uint32), flags (uint32, 0)
+ *   0x30: ring_addr (uint64, eop_fifo_base + 0x39000)
+ *   0x38: ring_size (uint64, 0x1000)
  *
  * Ioctl command: 0xc0408121 = IOC(RW, 0x81, 0x21, 64)
  */
@@ -995,53 +992,32 @@ int32_t PS5_SYSV_ABI _sceAgcDriverCreateUserSpecialQueue(void)
     if (index < 0)
         return AGC_ERROR_OUT_OF_MEMORY;
 
-    /*
-     * Compute ring buffer addresses from internal memory.
-     *
-     * BUG: The SPRX uses offsets 0x1c8000 and 0x1cc000 from a base address
-     * obtained during initialization. We were using the workload region's
-     * GPU address as the base, but the workload region is only 0x1000 bytes
-     * — offsets 0x1c8000+ would point far beyond the allocation.
-     *
-     * The correct base address and offsets need to be determined from SPRX
-     * disassembly of sce_agc_initialize_internal_memory. Until then, we
-     * allocate a dedicated ring buffer region instead of carving from an
-     * existing (too-small) region.
-     */
-    AgcProsperoRegion ring_region = {0};
-    int32_t ring_ret = agcProsperoAllocRegion(&ring_region,
-                                            AGC_GC_QUEUE_RING_SIZE * 2,
-                                            SCE_KERNEL_WB_GARLIC);
-    if (ring_ret != AGC_OK)
-        return ring_ret;
-
-    uint64_t ring_base = ring_region.gpu_addr;
-    uint64_t read_ptr  = ring_region.gpu_addr + AGC_GC_QUEUE_RING_SIZE;
-    uint64_t gpu_addr  = ring_region.gpu_addr;
+    /* Compute ring buffer address from EOP FIFO base + 0x39000.
+     * The EOP FIFO region is 0x3C000 (240 KB), so offset 0x39000
+     * (228 KB) is within bounds. */
+    uint64_t ring_addr = g_prospero.eop_fifo.gpu_addr + 0x39000;
 
     AgcGcQueueCreateArg arg = {0};
     arg.magic1     = AGC_GC_QUEUE_MAGIC1;
     arg.magic2     = AGC_GC_QUEUE_MAGIC2;
     arg.magic3     = AGC_GC_QUEUE_MAGIC3;
     arg.token      = AGC_GC_QUEUE_TOKEN;
-    arg.ring_base  = ring_base;
-    arg.read_ptr   = read_ptr;
-    arg.global_ctx = 0;  /* SPRX passes a global data pointer */
     arg.pipe_id    = AGC_GC_QUEUE_PIPE_ID;
-    arg.padding    = 0;
-    arg.gpu_addr   = gpu_addr;
+    arg.caller_arg = 0;
+    arg.mmio_base  = (uint64_t)(uintptr_t)g_prospero.mmio_base;
+    arg.queue_id   = (uint32_t)index;
+    arg.flags      = 0;
+    arg.ring_addr  = ring_addr;
     arg.ring_size  = AGC_GC_QUEUE_RING_SIZE;
 
     int ret = agcProsperoIoctl(AGC_GC_IOCTL_QUEUE_CREATE, &arg);
-    if (ret < 0) {
-        agcProsperoFreeRegion(&ring_region);
+    if (ret < 0)
         return AGC_ERROR_INTERNAL;
-    }
 
     g_prospero.queues[index].in_use      = true;
-    g_prospero.queues[index].ring_base   = ring_base;
-    g_prospero.queues[index].read_ptr    = read_ptr;
-    g_prospero.queues[index].ring_region = ring_region;
+    g_prospero.queues[index].ring_base   = ring_addr;
+    g_prospero.queues[index].read_ptr    = 0;  /* no separate read ptr allocation */
+    memset(&g_prospero.queues[index].ring_region, 0, sizeof(AgcProsperoRegion));
 
     /* Return the queue index as the handle so callers can pass it to
      * sceAgcDriverSubmitAcb as the owner_handle. The generic backend
@@ -1075,7 +1051,8 @@ int32_t PS5_SYSV_ABI _sceAgcDriverDestroyUserSpecialQueue(void)
             };
 
             agcProsperoIoctl(AGC_GC_IOCTL_QUEUE_DESTROY, &arg);
-            agcProsperoFreeRegion(&g_prospero.queues[i].ring_region);
+            /* No ring_region to free — the ring buffer is carved from
+             * the EOP FIFO allocation, not a separate region. */
             g_prospero.queues[i].in_use = false;
             return AGC_OK;
         }

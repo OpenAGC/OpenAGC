@@ -423,24 +423,24 @@ typedef struct AgcGcQueueCreateArg {
     uint32_t magic2;        /* offset 0x04: 0x8b4cdd90 (auth token 2) */
     uint32_t magic3;        /* offset 0x08: 0x99f68d6c (auth token 3) */
     uint32_t token;         /* offset 0x0C: 0xe5fcc174 (secondary token) */
-    uint64_t ring_base;     /* offset 0x10: GPU VA of queue ring buffer */
-    uint64_t read_ptr;      /* offset 0x18: GPU VA of read pointer */
-    uint64_t global_ctx;    /* offset 0x20: userspace context pointer */
-    uint32_t pipe_id;       /* offset 0x28: pipe id (0xc) */
-    uint32_t padding;       /* offset 0x2C: zero */
-    uint64_t gpu_addr;      /* offset 0x30: computed GPU address */
-    uint64_t ring_size;     /* offset 0x38: ring size in bytes (0x1000) */
+    uint64_t pipe_id;       /* offset 0x10: pipe_id (0xc) as qword */
+    uint64_t caller_arg;    /* offset 0x18: caller-provided value (from stack) */
+    uint64_t mmio_base;     /* offset 0x20: mmap'd register base (0xFE0200000) */
+    uint32_t queue_id;      /* offset 0x28: queue id (from r9d) */
+    uint32_t flags;         /* offset 0x2C: 0 (1st variant) or caller-provided */
+    uint64_t ring_addr;     /* offset 0x30: eop_fifo_base + computed offset */
+    uint64_t ring_size;     /* offset 0x38: ring entry size (0x1000) */
 } AgcGcQueueCreateArg;
 _Static_assert(sizeof(AgcGcQueueCreateArg) == 0x40,
     "AgcGcQueueCreateArg size mismatch");
 _Static_assert(offsetof(AgcGcQueueCreateArg, magic1) == 0x00,
     "AgcGcQueueCreateArg magic1 offset mismatch");
-_Static_assert(offsetof(AgcGcQueueCreateArg, ring_base) == 0x10,
-    "AgcGcQueueCreateArg ring_base offset mismatch");
-_Static_assert(offsetof(AgcGcQueueCreateArg, pipe_id) == 0x28,
+_Static_assert(offsetof(AgcGcQueueCreateArg, pipe_id) == 0x10,
     "AgcGcQueueCreateArg pipe_id offset mismatch");
-_Static_assert(offsetof(AgcGcQueueCreateArg, gpu_addr) == 0x30,
-    "AgcGcQueueCreateArg gpu_addr offset mismatch");
+_Static_assert(offsetof(AgcGcQueueCreateArg, mmio_base) == 0x20,
+    "AgcGcQueueCreateArg mmio_base offset mismatch");
+_Static_assert(offsetof(AgcGcQueueCreateArg, ring_addr) == 0x30,
+    "AgcGcQueueCreateArg ring_addr offset mismatch");
 _Static_assert(offsetof(AgcGcQueueCreateArg, ring_size) == 0x38,
     "AgcGcQueueCreateArg ring_size offset mismatch");
 
