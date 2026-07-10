@@ -520,3 +520,416 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbGetLodStats(
     cmd[4] = packet_control;
     return cmd;
 }
+
+/*
+ * RE source: SPRX capstone disassembly of libSceAgc.sprx DCB builders.
+ * These are cursor-based PM4 type-3 packet builders using standard AMD/Gen5
+ * opcodes (not NOP-wrapped subcommands). Each follows the same pattern:
+ * agcCbAllocDwords → NULL check → write header + payload → return pointer.
+ */
+
+/* sceAgcDcbReleaseMem (NID wr23dPKyWc0) — IT_RELEASE_MEM (0x49), 7 dwords.
+ * SPRX evidence: "isReleaseMemValid", validation 0x2f/0x7/0x8.
+ * Layout:
+ *   [0] header
+ *   [1] event_control = event_type[5:0] | (event_index[3:0] << 8)
+ *   [2] dst_addr_lo
+ *   [3] dst_addr_hi
+ *   [4] data
+ *   [5] reserved (0)
+ *   [6] reserved (0) */
+uint32_t *PS5_SYSV_ABI sceAgcDcbReleaseMem(
+    SceAgcCb *cb, uint32_t event_type, uint32_t event_index,
+    uint64_t dst_addr, uint32_t data)
+{
+    uint32_t *cmd = agcCbAllocDwords(cb, 7);
+    if (!cmd)
+        return 0;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_RELEASE_MEM, 7);
+    cmd[1] = (event_type & 0x3Fu) | ((event_index & 0xFu) << 8);
+    cmd[2] = (uint32_t)dst_addr;
+    cmd[3] = (uint32_t)(dst_addr >> 32);
+    cmd[4] = data;
+    cmd[5] = 0;
+    cmd[6] = 0;
+    return cmd;
+}
+
+/* sceAgcDcbIndirectBuffer (NID w1KFAHVqpaU) — IT_INDIRECT_BUFFER (0x3F), 4 dwords.
+ * SPRX evidence: 14-dword IB, vmid/addr packing, validation 0xd/0xe.
+ * Layout (shadPS4 PM4CmdIndirectBuffer):
+ *   [0] header
+ *   [1] ibase_lo
+ *   [2] ibase_hi[15:0]
+ *   [3] ib_size[19:0] | (vmid[31:24]) */
+uint32_t *PS5_SYSV_ABI sceAgcDcbIndirectBuffer(
+    SceAgcCb *cb, uint64_t gpu_addr, uint32_t size_dwords, uint32_t vmid)
+{
+    uint32_t *cmd = agcCbAllocDwords(cb, 4);
+    if (!cmd)
+        return 0;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_INDIRECT_BUFFER, 4);
+    cmd[1] = (uint32_t)gpu_addr;
+    cmd[2] = (uint32_t)(gpu_addr >> 32) & 0xFFFFu;
+    cmd[3] = (size_dwords & 0xFFFFFu) | ((vmid & 0xFFu) << 24);
+    return cmd;
+}
+
+/* sceAgcDcbIndirectBufferConst (NID xSAR0LTcRKM) — IT_INDIRECT_BUFFER (0x3F), 4 dwords.
+ * SPRX evidence: header 0xc00N3f00 (same opcode 0x3F as IndirectBuffer),
+ * 4-dword IB, simpler addr, validation 0x3/0x4.
+ * The PS5 AGC does not use the AMD IT_INDIRECT_BUFFER_CNST (0x33) opcode;
+ * both IB variants use 0x3F. The "Const" variant is a simpler wrapper
+ * with the same packet layout. */
+uint32_t *PS5_SYSV_ABI sceAgcDcbIndirectBufferConst(
+    SceAgcCb *cb, uint64_t gpu_addr, uint32_t size_dwords, uint32_t vmid)
+{
+    uint32_t *cmd = agcCbAllocDwords(cb, 4);
+    if (!cmd)
+        return 0;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_INDIRECT_BUFFER, 4);
+    cmd[1] = (uint32_t)gpu_addr;
+    cmd[2] = (uint32_t)(gpu_addr >> 32) & 0xFFFFu;
+    cmd[3] = (size_dwords & 0xFFFFFu) | ((vmid & 0xFFu) << 24);
+    return cmd;
+}
+
+/* sceAgcDcbDrawIndirect (NID 1rZSWUv1IRc) — IT_DRAW_INDIRECT (0x24), 5 dwords.
+ * SPRX evidence: 0x28000000000 (VGT_INDEX_TYPE), validation 0x4/0x5.
+ * Layout (shadPS4 PM4CmdDrawIndirect):
+ *   [0] header
+ *   [1] data_offset
+ *   [2] base_vtx_loc[15:0]
+ *   [3] start_inst_loc[15:0]
+ *   [4] draw_initiator */
+uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndirect(
+    SceAgcCb *cb, uint32_t data_offset, uint32_t base_vtx_loc,
+    uint32_t start_inst_loc, uint32_t draw_initiator)
+{
+    uint32_t *cmd = agcCbAllocDwords(cb, 5);
+    if (!cmd)
+        return 0;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_DRAW_INDIRECT, 5);
+    cmd[1] = data_offset;
+    cmd[2] = base_vtx_loc & 0xFFFFu;
+    cmd[3] = start_inst_loc & 0xFFFFu;
+    cmd[4] = draw_initiator;
+    return cmd;
+}
+
+/* sceAgcDcbDrawIndex2 (NID q88lQ+GP5Yk) — IT_DRAW_INDEX_2 (0x27), 6 dwords.
+ * SPRX evidence: validation 0x5/0x6, leaq data ref.
+ * Layout (shadPS4 PM4CmdDrawIndex2):
+ *   [0] header
+ *   [1] max_size
+ *   [2] index_base_lo
+ *   [3] index_base_hi
+ *   [4] index_count
+ *   [5] draw_initiator */
+uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndex2(
+    SceAgcCb *cb, uint32_t max_size, uint64_t index_base_addr,
+    uint32_t index_count, uint32_t draw_initiator)
+{
+    uint32_t *cmd = agcCbAllocDwords(cb, 6);
+    if (!cmd)
+        return 0;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_DRAW_INDEX_2, 6);
+    cmd[1] = max_size;
+    cmd[2] = (uint32_t)index_base_addr & ~0x1u;  /* [31:1] word-aligned */
+    cmd[3] = (uint32_t)(index_base_addr >> 32);
+    cmd[4] = index_count;
+    cmd[5] = draw_initiator;
+    return cmd;
+}
+
+/* sceAgcDcbDrawIndexIndirect (NID t1vNu082-jM) — IT_DRAW_INDEX_INDIRECT (0x25), 5 dwords.
+ * SPRX evidence: 0x28000000000, bextrl 0x509/0x50e/0x513, validation 0x4/0x5.
+ * Layout (shadPS4 PM4CmdDrawIndexIndirect):
+ *   [0] header
+ *   [1] data_offset
+ *   [2] base_vtx_loc[15:0]
+ *   [3] start_inst_loc[15:0]
+ *   [4] draw_initiator */
+uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndexIndirect(
+    SceAgcCb *cb, uint32_t data_offset, uint32_t base_vtx_loc,
+    uint32_t start_inst_loc, uint32_t draw_initiator)
+{
+    uint32_t *cmd = agcCbAllocDwords(cb, 5);
+    if (!cmd)
+        return 0;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_DRAW_INDEX_INDIRECT, 5);
+    cmd[1] = data_offset;
+    cmd[2] = base_vtx_loc & 0xFFFFu;
+    cmd[3] = start_inst_loc & 0xFFFFu;
+    cmd[4] = draw_initiator;
+    return cmd;
+}
+
+/* sceAgcDcbDrawIndirectMulti (NID kUlvghKs-mA) — IT_DRAW_INDIRECT_MULTI (0x2C), 7 dwords.
+ * SPRX evidence: 0x28000000000, 2*helper+10 pattern.
+ * Layout (shadPS4 PM4CmdDrawIndirectMulti):
+ *   [0] header
+ *   [1] data_offset
+ *   [2] base_vtx_loc[15:0]
+ *   [3] start_inst_loc[15:0]
+ *   [4] count
+ *   [5] stride
+ *   [6] draw_initiator */
+uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndirectMulti(
+    SceAgcCb *cb, uint32_t data_offset, uint32_t base_vtx_loc,
+    uint32_t start_inst_loc, uint32_t count, uint32_t stride,
+    uint32_t draw_initiator)
+{
+    uint32_t *cmd = agcCbAllocDwords(cb, 7);
+    if (!cmd)
+        return 0;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_DRAW_INDIRECT_MULTI, 7);
+    cmd[1] = data_offset;
+    cmd[2] = base_vtx_loc & 0xFFFFu;
+    cmd[3] = start_inst_loc & 0xFFFFu;
+    cmd[4] = count;
+    cmd[5] = stride;
+    cmd[6] = draw_initiator;
+    return cmd;
+}
+
+/* sceAgcDcbDrawIndexIndirectMulti (NID ypVBz4uPKcQ) — IT_DRAW_INDEX_INDIRECT_MULTI (0x38), 7 dwords.
+ * SPRX evidence: 0x28000000000, 2*helper+10 pattern.
+ * Layout (shadPS4 PM4CmdDrawIndexIndirectMulti):
+ *   [0] header
+ *   [1] data_offset
+ *   [2] base_vtx_loc[15:0]
+ *   [3] start_inst_loc[15:0]
+ *   [4] count
+ *   [5] stride
+ *   [6] draw_initiator */
+uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndexIndirectMulti(
+    SceAgcCb *cb, uint32_t data_offset, uint32_t base_vtx_loc,
+    uint32_t start_inst_loc, uint32_t count, uint32_t stride,
+    uint32_t draw_initiator)
+{
+    uint32_t *cmd = agcCbAllocDwords(cb, 7);
+    if (!cmd)
+        return 0;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_DRAW_INDEX_INDIRECT_MULTI, 7);
+    cmd[1] = data_offset;
+    cmd[2] = base_vtx_loc & 0xFFFFu;
+    cmd[3] = start_inst_loc & 0xFFFFu;
+    cmd[4] = count;
+    cmd[5] = stride;
+    cmd[6] = draw_initiator;
+    return cmd;
+}
+
+/* sceAgcDcbSetPredication (NID bbFueFP+J4k) — IT_SET_PREDICATION (0x20), 3 dwords.
+ * SPRX evidence: validation 0x3/0x4, `andl 0xfffffff0` (16-byte align).
+ * Layout (AMD SET_PREDICATION):
+ *   [0] header
+ *   [1] addr_lo (16-byte aligned)
+ *   [2] addr_hi[15:0] | (op[17:16]) | (keep_count[30:18]) | (predicate[31]) */
+uint32_t *PS5_SYSV_ABI sceAgcDcbSetPredication(
+    SceAgcCb *cb, uint64_t addr, uint32_t op, uint32_t keep_count,
+    bool predicate)
+{
+    uint32_t *cmd = agcCbAllocDwords(cb, 3);
+    if (!cmd)
+        return 0;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_PREDICATION, 3);
+    cmd[1] = (uint32_t)addr & ~0xFu;
+    cmd[2] = ((uint32_t)(addr >> 32) & 0xFFFFu) |
+        ((op & 0x3u) << 16) |
+        ((keep_count & 0x1FFFu) << 18) |
+        ((predicate ? 1u : 0u) << 31);
+    return cmd;
+}
+
+/* sceAgcDcbEventWrite (NID aJf+j5yntiU) — IT_EVENT_WRITE (0x46), 2 dwords.
+ * SPRX evidence: `orl 0xc0004600`, validation 0x38/0x39, 0x18080 bitmask.
+ * Layout (shadPS4 PM4CmdEventWrite, simple event_index=0):
+ *   [0] header
+ *   [1] event_control = event_type[5:0] | (event_index[3:0] << 8) */
+uint32_t *PS5_SYSV_ABI sceAgcDcbEventWrite(
+    SceAgcCb *cb, uint32_t event_type, uint32_t event_index)
+{
+    uint32_t *cmd = agcCbAllocDwords(cb, 2);
+    if (!cmd)
+        return 0;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_EVENT_WRITE, 2);
+    cmd[1] = (event_type & 0x3Fu) | ((event_index & 0xFu) << 8);
+    return cmd;
+}
+
+/* sceAgcDcbSetConfigReg (NID BVFg3CWU6Eo) — IT_SET_CONFIG_REG (0x68), variable.
+ * SPRX evidence: `orl 0xc0006800`, 3x indirect CB grow, validation 0x2/0x3.
+ * Layout:
+ *   [0] header (length = count + 2)
+ *   [1] reg_offset
+ *   [2..] register values */
+uint32_t *PS5_SYSV_ABI sceAgcDcbSetConfigReg(
+    SceAgcCb *cb, uint32_t reg_offset, const uint32_t *values, uint32_t count)
+{
+    if (!values || count == 0 || count > 0x3FFFu)
+        return 0;
+
+    uint32_t *cmd = agcCbAllocDwords(cb, count + 2);
+    if (!cmd)
+        return 0;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_CONFIG_REG, count + 2);
+    cmd[1] = reg_offset & 0xFFFFu;
+    for (uint32_t i = 0; i < count; ++i)
+        cmd[2 + i] = values[i];
+    return cmd;
+}
+
+/* sceAgcDcbSetShReg (NID n2fD4A+pb+g) — IT_SET_SH_REG (0x76), variable.
+ * SPRX evidence: `orl 0xc0007600`, validation (count+2), calls 0xe120.
+ * Same layout as SetConfigReg but with SET_SH_REG opcode. */
+uint32_t *PS5_SYSV_ABI sceAgcDcbSetShReg(
+    SceAgcCb *cb, uint32_t reg_offset, const uint32_t *values, uint32_t count)
+{
+    if (!values || count == 0 || count > 0x3FFFu)
+        return 0;
+
+    uint32_t *cmd = agcCbAllocDwords(cb, count + 2);
+    if (!cmd)
+        return 0;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_SH_REG, count + 2);
+    cmd[1] = reg_offset & 0xFFFFu;
+    for (uint32_t i = 0; i < count; ++i)
+        cmd[2 + i] = values[i];
+    return cmd;
+}
+
+/* sceAgcDcbSetUconfigReg (NID MDLD5Ly94Xk) — IT_SET_UCONFIG_REG (0x79), variable.
+ * SPRX evidence: `orl 0xc0007900`, validation (count+2), calls 0xe120.
+ * Same layout as SetConfigReg but with SET_UCONFIG_REG opcode. */
+uint32_t *PS5_SYSV_ABI sceAgcDcbSetUconfigReg(
+    SceAgcCb *cb, uint32_t reg_offset, const uint32_t *values, uint32_t count)
+{
+    if (!values || count == 0 || count > 0x3FFFu)
+        return 0;
+
+    uint32_t *cmd = agcCbAllocDwords(cb, count + 2);
+    if (!cmd)
+        return 0;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_UCONFIG_REG, count + 2);
+    cmd[1] = reg_offset & 0xFFFFu;
+    for (uint32_t i = 0; i < count; ++i)
+        cmd[2 + i] = values[i];
+    return cmd;
+}
+
+/*
+ * RE source: libSceAgc.sprx flip/display wait builders.
+ *
+ * These use AGC-custom PM4 opcodes (0x4C/0x4E/0x4F/0x51/0x54) rather
+ * than the standard NOP-wrapped subcommand encoding. The SPRX validates
+ * the flip slot index < 32 (0x20) before emitting the packet; we do the
+ * same and return NULL on invalid input.
+ *
+ * sceAgcDcbWaitFlipDone (NID pdEV7bI6COI, ordinal 216):
+ *   3-dword packet, opcode 0x4C.
+ *   [0] header = agcPm4Header3(WAIT_FLIP_DONE, 3)
+ *   [1] flip_slot
+ *   [2] reserved (0)
+ *
+ * sceAgcDcbWaitFlip (NID HV4j+E0MBHE, ordinal 133):
+ *   Same layout as WaitFlipDone but opcode 0x51.
+ *
+ * sceAgcDcbInsertWaitFlipDone (NID k0E7vkgqAuE, ordinal 134):
+ *   3-dword packet, opcode 0x54, sub=0x06 (WAIT_FLIP_DONE).
+ *   [0] header = agcPm4Header3Sub(INSERT_WAIT_FLIP_DONE, WAIT_FLIP_DONE, 3)
+ *   [1] flip_slot
+ *   [2] reserved (0)
+ *
+ * sceAgcDcbWaitFlipEos (NID SbuY2jN+axQ, ordinal 217):
+ *   Emits two 3-dword packets back-to-back (opcodes 0x4F then 0x4E).
+ *   [0] header = agcPm4Header3(WAIT_FLIP_EOS, 3)
+ *   [1] flip_slot
+ *   [2] reserved (0)
+ *   [3] header = agcPm4Header3(WAIT_FLIP_EOS_2, 3)
+ *   [4] flip_slot
+ *   [5] reserved (0)
+ */
+
+/* Maximum flip slot index accepted by the SPRX (validation: < 0x20). */
+#define AGC_FLIP_SLOT_MAX 32u
+
+uint32_t *PS5_SYSV_ABI sceAgcDcbWaitFlipDone(SceAgcCb *cb, uint32_t flip_slot)
+{
+    if (flip_slot >= AGC_FLIP_SLOT_MAX)
+        return 0;
+
+    uint32_t *cmd = agcCbAllocDwords(cb, 3);
+    if (!cmd)
+        return 0;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_WAIT_FLIP_DONE, 3);
+    cmd[1] = flip_slot;
+    cmd[2] = 0;
+    return cmd;
+}
+
+uint32_t *PS5_SYSV_ABI sceAgcDcbWaitFlip(SceAgcCb *cb, uint32_t flip_slot)
+{
+    if (flip_slot >= AGC_FLIP_SLOT_MAX)
+        return 0;
+
+    uint32_t *cmd = agcCbAllocDwords(cb, 3);
+    if (!cmd)
+        return 0;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_WAIT_FLIP, 3);
+    cmd[1] = flip_slot;
+    cmd[2] = 0;
+    return cmd;
+}
+
+uint32_t *PS5_SYSV_ABI sceAgcDcbInsertWaitFlipDone(SceAgcCb *cb, uint32_t flip_slot)
+{
+    if (flip_slot >= AGC_FLIP_SLOT_MAX)
+        return 0;
+
+    uint32_t *cmd = agcCbAllocDwords(cb, 3);
+    if (!cmd)
+        return 0;
+
+    cmd[0] = agcPm4Header3Sub(AGC_PM4_OP_INSERT_WAIT_FLIP_DONE,
+                              AGC_PM4_SUB_WAIT_FLIP_DONE, 3);
+    cmd[1] = flip_slot;
+    cmd[2] = 0;
+    return cmd;
+}
+
+uint32_t *PS5_SYSV_ABI sceAgcDcbWaitFlipEos(SceAgcCb *cb, uint32_t flip_slot)
+{
+    if (flip_slot >= AGC_FLIP_SLOT_MAX)
+        return 0;
+
+    uint32_t *cmd = agcCbAllocDwords(cb, 6);
+    if (!cmd)
+        return 0;
+
+    /* First packet: opcode 0x4F (WAIT_FLIP_EOS) */
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_WAIT_FLIP_EOS, 3);
+    cmd[1] = flip_slot;
+    cmd[2] = 0;
+    /* Second packet: opcode 0x4E (WAIT_FLIP_EOS_2) */
+    cmd[3] = agcPm4Header3(AGC_PM4_OP_WAIT_FLIP_EOS_2, 3);
+    cmd[4] = flip_slot;
+    cmd[5] = 0;
+    return cmd;
+}

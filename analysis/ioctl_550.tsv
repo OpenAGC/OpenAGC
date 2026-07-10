@@ -44,14 +44,15 @@ nr	symbol	direction	size	encoded_cmd	handler	notes
 0x1e	AGC_GC_IOCTL_LARGE_48	RW	48	0xC030811E	gc_large_arg	48-byte generic RW buffer ioctl.
 0x1f	AGC_GC_IOCTL_SETUP_ASYNC	RW	4	0xC004811F	gc_setup_async	Setup async graphics queue.
 0x20	AGC_GC_IOCTL_SET_TF_RING	RW	16	0xC0108120	gc_set_tf_ring	Set tessellation factor ring params.
-0x21	AGC_GC_IOCTL_LARGE_64	RW	64	0xC0408121	gc_large_arg	64-byte generic RW buffer ioctl.
+0x21	AGC_GC_IOCTL_QUEUE_CREATE	RW	64	0xC0408121	gc_queue_create	Create user special queue (SPRX-confirmed: 64-byte arg with magic tokens).
 0x23	AGC_GC_IOCTL_QUERY_120	READ	120	0x80048123	gc_push_only_bad_packet_to_user	Bad-packet / fault query (120-byte read).
 0x24	AGC_GC_IOCTL_QUERY_68	READ	68	0x80448124	gc_query	Query ioctl (68-byte read).
 0x25	AGC_GC_IOCTL_SUBMITDONE	RW	4	0xC0048125	gc_setup_submitdone	Submit-done / fence setup.
-0x26	AGC_GC_IOCTL_QUEUE_STATUS	READ	4	0x80048126	gc_gfx_queue_status	Queue status read.
+0x26	AGC_GC_IOCTL_QUEUE_STATUS	READ	4	0x80048126	gc_setup_async	Setup async graphics queue (SPRX-confirmed: arg=1).
 0x27	AGC_GC_IOCTL_QUEUE_STAT_16	READ	4	0x80048127	gc_gfx_queue_status	Queue status read (16-byte arg variant).
-0x2a	AGC_GC_IOCTL_QUEUE_CREATE	READ	4	0x8004812A	gc_queue_create	Create / map a user special queue.
-0x2b	AGC_GC_IOCTL_QUEUE_DESTROY	WRITE	4	0x4004812B	gc_queue_destroy	Destroy a user special queue.
+0x2a	AGC_GC_IOCTL_QUEUE_CREATE_OLD	READ	4	0x8004812A	gc_queue_create	Kernel-internal queue create (not used by SPRX).
+0x2b	AGC_GC_IOCTL_QUEUE_DESTROY_OLD	WRITE	4	0x4004812B	gc_queue_destroy	Kernel-internal queue destroy (not used by SPRX).
+0x0e	AGC_GC_IOCTL_QUEUE_DESTROY	RW	12	0xC00C810E	gc_queue_destroy	Destroy user special queue (SPRX-confirmed: 12-byte arg with magic tokens).
 0x2c	AGC_GC_IOCTL_SET_HS_OFFCHIP	RW	16	0xC010812C	gc_set_hs_offchip	Set hull shader offchip parameters.
 0x2d	AGC_GC_IOCTL_IH_TASKLET_2D	RW	8	0xC008812D	gc_ih_tasklet	Interrupt handler tasklet variant.
 0x2e	AGC_GC_IOCTL_WFDEBUG_2E	RW	4	0xC004812E	gc_wfdebug	Wavefront debug command 0x2e.

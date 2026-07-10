@@ -19,8 +19,10 @@ AMD PM4 packet ancestry overlap in useful ways.
 Use these labels in docs, analysis notes, and code comments:
 
 - **Implemented**: present in openagc, covered by host tests.
-- **Observed**: found in SharpEmu, RPCSX, ps5-openagc notes, firmware strings,
-  or local analysis, but not implemented yet.
+- **Observed**: found in SharpEmu, RPCSX, ps5-openagc notes (NID mapping only —
+  ps5-openagc is NOT proven working and contains known ioctl errors; see
+  `analysis/ps5_openagc_audit.md`), firmware strings, or local analysis, but
+  not implemented yet.
 - **Inferred**: likely from AMD/RDNA2 behavior or reference projects, but not
   confirmed in AGC firmware paths yet.
 - **Speculative**: plausible roadmap item with no local implementation evidence
@@ -112,7 +114,7 @@ Implemented and host-tested:
 Current expected host test result:
 
 ```text
-519 passed, 0 failed
+581 passed, 0 failed
 ```
 
 ## Phase 0: RE Groundwork
@@ -287,7 +289,8 @@ code.
 Inputs:
 
 - Firmware 5.50 dump.
-- ps5-openagc ioctl tables and analysis.
+- ps5-openagc NID tables (ioctl tables from ps5-openagc are NOT trusted —
+  contains known errors; see `analysis/ps5_openagc_audit.md`).
 - RPCSX queue/ring model for conceptual comparison.
 - freegnm/opengnm and shadPS4 as lower-priority structural references.
 
@@ -330,8 +333,11 @@ Work:
 1. Open and validate `/dev/gc`. ✅ Done in `sce_agc_initialize`.
 2. Allocate required kernel/direct memory regions.
    ✅ Done in `sce_agc_initialize_internal_memory`.
-3. Create graphics and compute queues. — Stub (`sceAgcDriverSetupAsyncGraphics`)
-   needs queue creation ioctl.
+3. Create graphics and compute queues. ✅ Done — `sceAgcDriverSetupAsyncGraphics`
+   uses `QUEUE_STATUS` ioctl (nr=0x26); `_sceAgcDriverCreateUserSpecialQueue`
+   uses `QUEUE_CREATE` ioctl (nr=0x21, 64-byte RW with magic auth tokens);
+   `_sceAgcDriverDestroyUserSpecialQueue` uses `QUEUE_DESTROY` ioctl (nr=0x0e,
+   12-byte RW). All SPRX-confirmed.
 4. Submit DCB/ACB buffers using recovered descriptors.
    ✅ `sceAgcDriverSubmitDcb` / `sceAgcDriverSubmitMultiCommandBuffersDirect`
    use the recovered descriptor layout.
@@ -411,6 +417,7 @@ No placeholder VRS enums in public headers until evidence is found.
 
 - Firmware dump: `/Users/bizkut/Downloads/PS5/FIRMWARE_FILES/5.50`
 - Existing open AGC notes: `/Users/bizkut/Downloads/PS5/homebrew/ps5-openagc`
+  (NOT proven working — NID mapping only; see `analysis/ps5_openagc_audit.md`)
 - SharpEmu AGC HLE: `/Users/bizkut/Downloads/PS5/homebrew/sharpemu`
 - RPCSX GPU/PM4/GNM reference: `/Users/bizkut/Downloads/PS5/homebrew/rpcsx`
 - PS4 GNM clean rewrite reference: `../opengnm`

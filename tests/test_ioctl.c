@@ -19,24 +19,23 @@ static void test_ioctl_encoding(void) {
     TEST_ASSERT_EQ(AGC_GC_IOCTL_SUBMIT_PID,    0xC010813Bu, "SUBMIT_PID cmd");
     TEST_ASSERT_EQ(AGC_GC_IOCTL_MAKESYSMAP_8,  0xC0088109u, "MAKESYSMAP_8 cmd");
     TEST_ASSERT_EQ(AGC_GC_IOCTL_MAKESYSMAP_12, 0xC00C810Du, "MAKESYSMAP_12 cmd");
-    TEST_ASSERT_EQ(AGC_GC_IOCTL_QUEUE_CREATE,  0x8004812Au, "QUEUE_CREATE cmd");
-    TEST_ASSERT_EQ(AGC_GC_IOCTL_QUEUE_DESTROY, 0x4004812Bu, "QUEUE_DESTROY cmd");
-    TEST_ASSERT_EQ(AGC_GC_IOCTL_QUEUE_STATUS,  0x80048126u, "QUEUE_STATUS cmd");
+    TEST_ASSERT_EQ(AGC_GC_IOCTL_QUEUE_CREATE,  0xC0408121u, "QUEUE_CREATE cmd");
+    TEST_ASSERT_EQ(AGC_GC_IOCTL_QUEUE_DESTROY, 0xC00C810Eu, "QUEUE_DESTROY cmd");
+    TEST_ASSERT_EQ(AGC_GC_IOCTL_QUEUE_STATUS,  0x80048126u, "QUEUE_STATUS cmd (setup async)");
     TEST_ASSERT_EQ(AGC_GC_IOCTL_SET_TF_RING,   0xC0108120u, "SET_TF_RING cmd");
     TEST_ASSERT_EQ(AGC_GC_IOCTL_SET_HS_OFFCHIP,0xC010812Cu, "SET_HS_OFFCHIP cmd");
     TEST_ASSERT_EQ(AGC_GC_IOCTL_SETUP_ASYNC,   0xC004811Fu, "SETUP_ASYNC cmd");
     TEST_ASSERT_EQ(AGC_GC_IOCTL_SUSPEND_16,    0xC010811Cu, "SUSPEND_16 cmd");
     TEST_ASSERT_EQ(AGC_GC_IOCTL_SUBMITDONE,    0xC0048125u, "SUBMITDONE cmd");
     TEST_ASSERT_EQ(AGC_GC_IOCTL_LARGE_132,     0xC0848119u, "LARGE_132 cmd");
-    TEST_ASSERT_EQ(AGC_GC_IOCTL_LARGE_64,      0xC0408121u, "LARGE_64 cmd");
     TEST_ASSERT_EQ(AGC_GC_IOCTL_CWSR_INIT_8,   0x80088136u, "CWSR_INIT_8 cmd");
 }
 
 static void test_ioctl_nr_enum(void) {
     TEST_ASSERT_EQ(AGC_GC_NR_FRAME_OPEN,       0x00u, "NR FRAME_OPEN");
     TEST_ASSERT_EQ(AGC_GC_NR_SUBMIT_PID,       0x3Bu, "NR SUBMIT_PID");
-    TEST_ASSERT_EQ(AGC_GC_NR_QUEUE_CREATE,     0x2Au, "NR QUEUE_CREATE");
-    TEST_ASSERT_EQ(AGC_GC_NR_QUEUE_DESTROY,    0x2Bu, "NR QUEUE_DESTROY");
+    TEST_ASSERT_EQ(AGC_GC_NR_QUEUE_CREATE,     0x21u, "NR QUEUE_CREATE");
+    TEST_ASSERT_EQ(AGC_GC_NR_QUEUE_DESTROY,    0x0Eu, "NR QUEUE_DESTROY");
     TEST_ASSERT_EQ(AGC_GC_NR_MAKESYSMAP_8,     0x09u, "NR MAKESYSMAP_8");
     TEST_ASSERT_EQ(AGC_GC_NR_SET_TF_RING,      0x20u, "NR SET_TF_RING");
     TEST_ASSERT_EQ(AGC_GC_NR_SETUP_ASYNC,      0x1Fu, "NR SETUP_ASYNC");
@@ -120,8 +119,49 @@ static void test_set_hs_offchip_struct_layout(void) {
     TEST_ASSERT_EQ(offsetof(AgcGcSetHsOffchipArg, reserved), 0x0Cu, "SetHsOffchipArg reserved");
 }
 
+static void test_queue_create_struct_layout(void) {
+    TEST_ASSERT_EQ(sizeof(AgcGcQueueCreateArg), 0x40u, "QueueCreateArg size");
+    TEST_ASSERT_EQ(offsetof(AgcGcQueueCreateArg, magic1),    0x00u, "QueueCreateArg magic1");
+    TEST_ASSERT_EQ(offsetof(AgcGcQueueCreateArg, magic2),    0x04u, "QueueCreateArg magic2");
+    TEST_ASSERT_EQ(offsetof(AgcGcQueueCreateArg, magic3),    0x08u, "QueueCreateArg magic3");
+    TEST_ASSERT_EQ(offsetof(AgcGcQueueCreateArg, token),     0x0Cu, "QueueCreateArg token");
+    TEST_ASSERT_EQ(offsetof(AgcGcQueueCreateArg, ring_base), 0x10u, "QueueCreateArg ring_base");
+    TEST_ASSERT_EQ(offsetof(AgcGcQueueCreateArg, read_ptr),  0x18u, "QueueCreateArg read_ptr");
+    TEST_ASSERT_EQ(offsetof(AgcGcQueueCreateArg, global_ctx),0x20u, "QueueCreateArg global_ctx");
+    TEST_ASSERT_EQ(offsetof(AgcGcQueueCreateArg, pipe_id),   0x28u, "QueueCreateArg pipe_id");
+    TEST_ASSERT_EQ(offsetof(AgcGcQueueCreateArg, gpu_addr),  0x30u, "QueueCreateArg gpu_addr");
+    TEST_ASSERT_EQ(offsetof(AgcGcQueueCreateArg, ring_size), 0x38u, "QueueCreateArg ring_size");
+}
+
+static void test_queue_create_magic_values(void) {
+    TEST_ASSERT_EQ(AGC_GC_QUEUE_MAGIC1,    0xaf1e80b7u, "QUEUE_MAGIC1");
+    TEST_ASSERT_EQ(AGC_GC_QUEUE_MAGIC2,    0x8b4cdd90u, "QUEUE_MAGIC2");
+    TEST_ASSERT_EQ(AGC_GC_QUEUE_MAGIC3,    0x99f68d6cu, "QUEUE_MAGIC3");
+    TEST_ASSERT_EQ(AGC_GC_QUEUE_TOKEN,     0xe5fcc174u, "QUEUE_TOKEN");
+    TEST_ASSERT_EQ(AGC_GC_QUEUE_PIPE_ID,   0xcu,        "QUEUE_PIPE_ID");
+    TEST_ASSERT_EQ(AGC_GC_QUEUE_RING_SIZE, 0x1000u,     "QUEUE_RING_SIZE");
+}
+
+static void test_queue_destroy_struct_layout(void) {
+    TEST_ASSERT_EQ(sizeof(AgcGcQueueDestroyArg), 0x0Cu, "QueueDestroyArg size");
+    TEST_ASSERT_EQ(offsetof(AgcGcQueueDestroyArg, magic1), 0x00u, "QueueDestroyArg magic1");
+    TEST_ASSERT_EQ(offsetof(AgcGcQueueDestroyArg, magic2), 0x04u, "QueueDestroyArg magic2");
+    TEST_ASSERT_EQ(offsetof(AgcGcQueueDestroyArg, magic3), 0x08u, "QueueDestroyArg magic3");
+}
+
+static void test_queue_api(void) {
+    int32_t ret = sce_agc_initialize();
+    TEST_ASSERT_EQ(ret, (int32_t)AGC_OK, "initialize for queue");
+
+    ret = _sceAgcDriverCreateUserSpecialQueue();
+    TEST_ASSERT_EQ(ret, (int32_t)AGC_OK, "CreateUserSpecialQueue");
+
+    ret = _sceAgcDriverDestroyUserSpecialQueue();
+    TEST_ASSERT_EQ(ret, (int32_t)AGC_OK, "DestroyUserSpecialQueue");
+}
+
 static void test_misc_driver_ioctls(void) {
-    int32_t ret = sceAgcDriverSetupAsyncGraphics();
+    int32_t ret = sceAgcDriverSetupAsyncGraphics(0u);
     TEST_ASSERT_EQ(ret, (int32_t)AGC_OK, "SetupAsyncGraphics");
 
     ret = sceAgcDriverSetTFRingDirect();
@@ -166,6 +206,10 @@ void test_suite_ioctl(void) {
     TEST_RUN(test_suspend_struct_layout);
     TEST_RUN(test_suspend_point_api);
     TEST_RUN(test_set_hs_offchip_struct_layout);
+    TEST_RUN(test_queue_create_struct_layout);
+    TEST_RUN(test_queue_create_magic_values);
+    TEST_RUN(test_queue_destroy_struct_layout);
+    TEST_RUN(test_queue_api);
     TEST_RUN(test_misc_driver_ioctls);
     TEST_RUN(test_frame_open_struct);
     TEST_RUN(test_kernel_error_codes);

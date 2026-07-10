@@ -1,2 +1,0 @@
-/Users/bizkut/ps5-payload-sdk/toolchain/../bin/prospero-ar qc libopenagc.a CMakeFiles/openagc.dir/src/cb.c.o CMakeFiles/openagc.dir/src/cb_builders.c.o CMakeFiles/openagc.dir/src/context_state.c.o CMakeFiles/openagc.dir/src/register_defaults.c.o CMakeFiles/openagc.dir/src/acb.c.o CMakeFiles/openagc.dir/src/dcb.c.o CMakeFiles/openagc.dir/src/texture.c.o CMakeFiles/openagc.dir/src/shader.c.o CMakeFiles/openagc.dir/src/driver_orbis.c.o
-/Users/bizkut/ps5-payload-sdk/toolchain/../bin/prospero-ranlib libopenagc.a

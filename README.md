@@ -96,7 +96,7 @@ Completed and tested:
   default-state `CLEAR_STATE` submission, and suspend-point submit/query
 - Hardware validation samples (`samples/hw_test/`) built as ELF and fake-SELF
 - Build system (CMake + Makefile)
-- Test suite with 519 passing assertions on the host generic backend
+- Test suite with 581 passing assertions on the host generic backend
 
 Still open before hardware submission:
 - Register-block and Wave32/Wave64 shader parsing (pending observed evidence)
@@ -111,6 +111,8 @@ Reference inputs used for the open implementation:
 - AGC modules: `libSceAgc.sprx`, `libSceAgcDriver.sprx`, `libSceAgcVsh.sprx`
 - GPU microcode names: `oberon_c0_{ce,me,mec,pfp,rlc,sdma0,sdma1}.bin`
 - Incomplete reference project: `/Users/bizkut/Downloads/PS5/homebrew/ps5-openagc`
+  — **NOT proven working.** Used for NID cross-reference only; contains known
+  ioctl errors. See `analysis/ps5_openagc_audit.md`.
 - Emulator reference: `/Users/bizkut/Downloads/PS5/homebrew/sharpemu`
 - GPU/PM4 reference: `/Users/bizkut/Downloads/PS5/homebrew/rpcsx`
 
@@ -137,7 +139,7 @@ make test
 Current expected host result:
 
 ```text
-519 passed, 0 failed
+581 passed, 0 failed
 ```
 
 ### PS5
@@ -213,7 +215,9 @@ openagc/
 - Clean rewrite, based on local PS5 firmware ABI analysis
 - PS5 firmware 5.50 SPRX module references
 - AMD RDNA2 public documentation and Mesa packet/register references
-- Existing `ps5-openagc` notes for NID maps, ioctl tables, and PM4 cataloging
+- Existing `ps5-openagc` notes for NID maps (ioctl tables and PM4 cataloging
+  from ps5-openagc are NOT trusted — contains known errors; see
+  `analysis/ps5_openagc_audit.md`)
 - `sharpemu` as a PS5 HLE/runtime behavior reference
 - `rpcsx` as a GPU/PM4/GNM queue, packet, tiler, and shader reference
 

@@ -29,8 +29,10 @@ typedef enum AgcPm4Opcode {
     AGC_PM4_OP_DRAW_INDEX_INDIRECT       = 0x25,
     AGC_PM4_OP_INDEX_BASE                = 0x26,
     AGC_PM4_OP_DRAW_INDEX_2              = 0x27,
+    AGC_PM4_OP_DRAW_INDIRECT_MULTI       = 0x2C,
     AGC_PM4_OP_INDEX_TYPE                = 0x2A,
     AGC_PM4_OP_DRAW_INDEX_AUTO           = 0x2D,
+    AGC_PM4_OP_DRAW_INDEX_INDIRECT_MULTI = 0x38,
     AGC_PM4_OP_NUM_INSTANCES             = 0x2F,
     AGC_PM4_OP_INDIRECT_BUFFER_CNST      = 0x33,
     AGC_PM4_OP_DRAW_INDEX_OFFSET_2       = 0x35,
@@ -64,6 +66,14 @@ typedef enum AgcPm4Opcode {
     AGC_PM4_OP_UNMAP_QUEUES              = 0xA3,
     AGC_PM4_OP_QUERY_STATUS              = 0xA4,
     AGC_PM4_OP_RUN_LIST                  = 0xA5,
+    /* AGC-custom display/flip opcodes (libSceAgc.sprx only).
+     * These are not standard PM4 opcodes — they are AGC-specific
+     * extensions used by the flip/display wait builders. */
+    AGC_PM4_OP_WAIT_FLIP_DONE         = 0x4C,
+    AGC_PM4_OP_WAIT_FLIP_EOS_2        = 0x4E,
+    AGC_PM4_OP_WAIT_FLIP_EOS          = 0x4F,
+    AGC_PM4_OP_WAIT_FLIP              = 0x51,
+    AGC_PM4_OP_INSERT_WAIT_FLIP_DONE  = 0x54,
 } AgcPm4Opcode;
 
 typedef enum AgcPm4Subcommand {
@@ -84,6 +94,12 @@ typedef enum AgcPm4Subcommand {
     AGC_PM4_SUB_FLIP             = 0x17,
     AGC_PM4_SUB_RELEASE_MEM      = 0x18,
     AGC_PM4_SUB_DMA_DATA         = 0x19,
+    /* SET_WORKLOAD subcommands — used by sceAgcDriverBeginWorkload /
+     * sceAgcDriverEndWorkload (libSceAgcDriver.sprx ordinals 87/88).
+     * The 0xcc / 0xcd prefix bits in the SPRX correspond to these
+     * subcommand selectors within the SET_WORKLOAD opcode (0x1E). */
+    AGC_PM4_SUB_WORKLOAD_BEGIN    = 0x20,
+    AGC_PM4_SUB_WORKLOAD_END      = 0x21,
 } AgcPm4Subcommand;
 
 static inline uint32_t agcPm4Header3Sub(

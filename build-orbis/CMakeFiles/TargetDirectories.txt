@@ -1,7 +1,0 @@
-/Users/bizkut/Downloads/PS5/homebrew/ps4-freegnm/openagc/build-orbis/CMakeFiles/openagc.dir
-/Users/bizkut/Downloads/PS5/homebrew/ps4-freegnm/openagc/build-orbis/CMakeFiles/edit_cache.dir
-/Users/bizkut/Downloads/PS5/homebrew/ps4-freegnm/openagc/build-orbis/CMakeFiles/rebuild_cache.dir
-/Users/bizkut/Downloads/PS5/homebrew/ps4-freegnm/openagc/build-orbis/CMakeFiles/list_install_components.dir
-/Users/bizkut/Downloads/PS5/homebrew/ps4-freegnm/openagc/build-orbis/CMakeFiles/install.dir
-/Users/bizkut/Downloads/PS5/homebrew/ps4-freegnm/openagc/build-orbis/CMakeFiles/install/local.dir
-/Users/bizkut/Downloads/PS5/homebrew/ps4-freegnm/openagc/build-orbis/CMakeFiles/install/strip.dir

@@ -50,7 +50,7 @@ cmake --build build-orbis
 The orbis build compiles `driver_orbis.c` with native `/dev/gc` ioctl calls.
 It links against `kernel` and `SceAgcDriver` stubs from the SDK.
 
-Expected host test result: `519 passed, 0 failed`. Any change that drops this
+Expected host test result: `1270 passed, 0 failed`. Any change that drops this
 count is a regression — fix it before declaring the task done.
 
 ## Verification Checklist
@@ -58,7 +58,7 @@ count is a regression — fix it before declaring the task done.
 Before marking a task complete:
 
 1. Build clean from scratch for the `generic` platform (rm -rf build, re-cmake).
-2. `ctest --test-dir build --output-on-failure` passes with 519/519 (or the
+2. `ctest --test-dir build --output-on-failure` passes with 772/772 (or the
    updated count if you intentionally added tests).
 3. No new compiler warnings under `-Wall -Wextra -Wpedantic` (already enabled
    in both CMake and Makefile).
@@ -121,6 +121,11 @@ Before marking a task complete:
 
 - Firmware dump: `/Users/bizkut/Downloads/PS5/FIRMWARE_FILES/5.50`
 - Incomplete prior project: `/Users/bizkut/Downloads/PS5/homebrew/ps5-openagc`
+  — **NOT proven working on hardware.** Contains known errors (wrong
+  FRAME_OPEN ioctl, wrong queue create/destroy ioctls, wrong VMID mask).
+  Use for NID mapping cross-reference only. Do NOT trust its ioctl layouts
+  or memory region sizes without independent SPRX verification.
+  See `analysis/ps5_openagc_audit.md` for the full audit.
 - Emulator reference: `/Users/bizkut/Downloads/PS5/homebrew/sharpemu`
 - GPU/PM4 reference: `/Users/bizkut/Downloads/PS5/homebrew/rpcsx`
 
@@ -237,7 +242,7 @@ If this works, the display pipeline is functional.
 
 Adapted from `freegnm-examples/triangle/` submit pattern. Tests the
 native `/dev/gc` backend via `libopenagc.a`:
-- `sce_agc_initialize()` — `/dev/gc` open + `FRAME_OPEN` ioctl
+- `sce_agc_initialize()` — `/dev/gc` open + `CONTEXT_QUERY` ioctl (0xc004812e) + mmap GPU registers at 0xfe0200000
 - `sce_agc_initialize_internal_memory()` — allocate 8 named internal regions
 - `sceAgcDriverNotifyDefaultStates()` — build primary/internal register-defaults blobs
 - `sceAgcDriverSuspendPointSubmitDirect()` — submit a suspend point
@@ -266,7 +271,8 @@ make install_agc      # uploads as eboot.bin
 ```
 
 Files:
-- `ps5_video_out.h` — PS5 VideoOut constants/decls (from ps5-openagc)
+- `ps5_video_out.h` — PS5 VideoOut constants/decls (adapted from ps5-openagc;
+  VideoOut constants are well-known and not affected by ps5-openagc's ioctl errors)
 - `videoout_linear.c` — display smoke test
 - `agc_init.c` — AGC init + submit test
 - `Makefile` — builds both, with deploy/install targets
@@ -287,8 +293,11 @@ See `STATUS.md` and `PLAN.md`. Next RE tasks, in order:
    accepted by the kernel and produce the expected GPU state.
 3. **Validate suspend ioctls** — confirm the argument layouts for
    `SUSPEND_16` (nr=0x1c) and `SUSPEND_39` (nr=0x39) by testing on hardware.
-4. **Queue creation** — implement real `QUEUE_CREATE` / `QUEUE_DESTROY` in
-   `sceAgcDriverSetupAsyncGraphics` and async-compute submission.
+4. **Queue creation** — `QUEUE_CREATE` (nr=0x21, 64-byte RW),
+   `QUEUE_DESTROY` (nr=0x0e, 12-byte RW), and `SetupAsyncGraphics`
+   (nr=0x26, 4-byte R) are implemented with SPRX-confirmed ioctl layouts.
+   Hardware validation needed to confirm magic auth tokens and ring buffer
+   addresses. Async-compute submission is the remaining work.
 
 All userspace packet builders, patchers, LOD stats helpers, the FW 5.50
 ioctl/submit/queue RE layer, the shader record parser, the register-defaults

@@ -35,11 +35,10 @@ void agcTextureDescriptorSetFormat(AgcTextureDescriptor* desc,
     AgcDataFormat fmt, AgcNumberType ntype)
 {
     if (!desc) return;
-    /* In RDNA2, format is set via the unified format field.
-     * The exact mapping depends on the hw tables.
-     * TODO: implement full format table. */
-    (void)fmt;
-    (void)ntype;
+    /* Pack data format (6 bits, [5:0]) and number type (4 bits, [9:6])
+     * into the format field, matching SQ_IMG_RSRC_WORD1 layout where
+     * DATA_FORMAT is at [25:20] and NUM_FORMAT is at [29:26]. */
+    desc->format = ((uint32_t)fmt & 0x3Fu) | (((uint32_t)ntype & 0xFu) << 6);
 }
 
 void agcTextureDescriptorSetSwizzleMode(AgcTextureDescriptor* desc,
@@ -54,6 +53,105 @@ void agcTextureDescriptorSetBaseAddress(AgcTextureDescriptor* desc,
 {
     if (!desc) return;
     desc->base_address = gpu_addr;
+}
+
+void agcTextureDescriptorSetImageType(AgcTextureDescriptor* desc,
+    AgcImageType type)
+{
+    if (!desc) return;
+    /* img_type is a 4-bit field (0-15); AgcImageType values fit in 3 bits. */
+    desc->img_type = (uint32_t)type & 0xFu;
+}
+
+void agcTextureDescriptorSetTileMode(AgcTextureDescriptor* desc,
+    AgcTileMode mode)
+{
+    if (!desc) return;
+    /* sw_mode is a 5-bit field (0-31); AgcTileMode values use the full range,
+     * e.g. kAgcTileDisplay_LinearGeneral == 31. */
+    desc->sw_mode = (uint32_t)mode & 0x1Fu;
+}
+
+void agcTextureDescriptorSetMipLevels(AgcTextureDescriptor* desc,
+    uint32_t num_levels)
+{
+    if (!desc) return;
+    /* mip_levels is a 5-bit field (0-31). Store the count directly; values
+     * above 31 are clamped to the maximum representable level count. */
+    desc->mip_levels = (num_levels > 31u) ? 31u : num_levels;
+}
+
+void agcTextureDescriptorSetArraySize(AgcTextureDescriptor* desc,
+    uint32_t base_array, uint32_t last_array)
+{
+    if (!desc) return;
+    /* base_array/last_array are 3-bit fields (0-7). The slice range is
+     * clamped to the representable window. */
+    desc->base_array = (base_array > 7u) ? 7u : base_array;
+    desc->last_array = (last_array > 7u) ? 7u : last_array;
+}
+
+void agcTextureDescriptorSetDepth(AgcTextureDescriptor* desc, uint32_t depth)
+{
+    if (!desc) return;
+    desc->depth_minus1 = (depth > 0) ? (depth - 1) : 0;
+}
+
+void agcTextureDescriptorSetPitch(AgcTextureDescriptor* desc, uint32_t pitch)
+{
+    if (!desc) return;
+    desc->pitch_minus1 = (pitch > 0) ? (pitch - 1) : 0;
+}
+
+void agcTextureDescriptorSetDstSel(AgcTextureDescriptor* desc,
+    uint32_t x, uint32_t y, uint32_t z, uint32_t w)
+{
+    if (!desc) return;
+    /* Each destination selector is a 3-bit field (0-7, SQ_SEL_*). */
+    desc->dst_sel_x = x & 0x7u;
+    desc->dst_sel_y = y & 0x7u;
+    desc->dst_sel_z = z & 0x7u;
+    desc->dst_sel_w = w & 0x7u;
+}
+
+uint64_t agcTextureDescriptorGetBaseAddress(const AgcTextureDescriptor* desc)
+{
+    if (!desc) return 0;
+    return desc->base_address;
+}
+
+uint32_t agcTextureDescriptorGetWidth(const AgcTextureDescriptor* desc)
+{
+    if (!desc) return 0;
+    return desc->width_minus1 + 1u;
+}
+
+uint32_t agcTextureDescriptorGetHeight(const AgcTextureDescriptor* desc)
+{
+    if (!desc) return 0;
+    return desc->height_minus1 + 1u;
+}
+
+/*
+ * Hardware format field encode/decode helpers.
+ *
+ * The format field packs data_format (6 bits, [5:0]) and number_type
+ * (4 bits, [9:6]). This matches the packing in
+ * agcTextureDescriptorSetFormat and the SQ_IMG_RSRC_WORD1 layout.
+ */
+uint32_t agcTextureFormatEncode(AgcDataFormat fmt, AgcNumberType ntype)
+{
+    return ((uint32_t)fmt & 0x3Fu) | (((uint32_t)ntype & 0xFu) << 6);
+}
+
+AgcDataFormat agcTextureFormatGetDataFormat(uint32_t format)
+{
+    return (AgcDataFormat)(format & 0x3Fu);
+}
+
+AgcNumberType agcTextureFormatGetNumberType(uint32_t format)
+{
+    return (AgcNumberType)((format >> 6) & 0xFu);
 }
 
 void agcBufferDescriptorInit(AgcBufferDescriptor* desc) {
@@ -86,90 +184,285 @@ void agcBufferDescriptorSetNumRecords(AgcBufferDescriptor* desc,
     desc->num_records = num_records & 0xFFFF;
 }
 
+/*
+ * Sampler descriptor bit layout — matches AMD SQ_IMG_SAMP_WORD0-3 registers
+ * (R_008F30 - R_008F3C) and freegnm GnmSampler struct.
+ *
+ * Word 0 (SQ_IMG_SAMP_WORD0):
+ *   [2:0]   CLAMP_X           (GnmTexClamp, 3 bits)
+ *   [5:3]   CLAMP_Y           (GnmTexClamp, 3 bits)
+ *   [8:6]   CLAMP_Z           (GnmTexClamp, 3 bits)
+ *   [11:9]  MAX_ANISO_RATIO   (log2(aniso level), 3 bits)
+ *   [14:12] DEPTH_COMPARE_FUNC (GnmDepthCompare, 3 bits)
+ *   [15]    FORCE_UNNORMALIZED
+ *   [18:16] ANISO_THRESHOLD
+ *   [19]    MC_COORD_TRUNC
+ *   [20]    FORCE_DEGAMMA
+ *   [26:21] ANISO_BIAS        (6 bits)
+ *   [27]    TRUNC_COORD
+ *   [28]    DISABLE_CUBE_WRAP
+ *   [30:29] FILTER_MODE       (0=Blend, 1=Min, 2=Max)
+ *   [31]    COMPAT_MODE
+ *
+ * Word 1 (SQ_IMG_SAMP_WORD1):
+ *   [11:0]  MIN_LOD           (4.8 fixed point, 12 bits)
+ *   [23:12] MAX_LOD           (4.8 fixed point, 12 bits)
+ *   [27:24] PERF_MIP
+ *   [31:28] PERF_Z
+ *
+ * Word 2 (SQ_IMG_SAMP_WORD2):
+ *   [13:0]  LOD_BIAS          (4.8 fixed point signed, 14 bits)
+ *   [19:14] LOD_BIAS_SEC      (6 bits)
+ *   [21:20] XY_MAG_FILTER     (GnmFilter: 0=Point,1=Bilinear,2=AnisoPoint,3=AnisoBilinear)
+ *   [23:22] XY_MIN_FILTER     (GnmFilter)
+ *   [25:24] Z_FILTER          (GnmZFilter: 0=None,1=Point,2=Linear)
+ *   [27:26] MIP_FILTER        (GnmMipFilter: 0=None,1=Point,2=Linear)
+ *   [28]    MIP_POINT_PRECLAMP
+ *   [29]    DISABLE_LSB_CEIL
+ *   [31:30] (unused)
+ *
+ * Word 3 (SQ_IMG_SAMP_WORD3):
+ *   [11:0]  BORDER_COLOR_PTR  (index into border color table)
+ *   [29:12] (unused)
+ *   [31:30] BORDER_COLOR_TYPE (GnmBorderColor: 0=TransBlack,1=OpaqueBlack,2=OpaqueWhite,3=FromTable)
+ */
+
 void agcSamplerDescriptorInit(AgcSamplerDescriptor *desc) {
     if (!desc) return;
     memset(desc, 0, sizeof(*desc));
-    /* Word 0: clamp modes + filter modes
-     * bits [3:0]   clamp_x (wrap_s)
-     * bits [7:4]   clamp_y (wrap_t)
-     * bits [11:10] clamp_z (wrap_r)
-     * bits [15:12] filter_min (min_filter + mip_filter combined)
-     * bits [19:16] filter_mag (mag_filter)
-     */
-    desc->words[0] = 0;
-    /* Word 1: LOD bias + min/max LOD
-     * bits [15:0]  min_lod (fixed point 4.8)
-     * bits [31:16] max_lod (fixed point 4.8)
-     */
-    desc->words[1] = 0;
-    /* Word 2: anisotropy + compare function
-     * bits [2:0]   compare_func
-     * bits [6:4]   anisotropic_filter_enable + max_aniso
-     */
-    desc->words[2] = 0;
-    /* Word 3: reserved */
-    desc->words[3] = 0;
 }
 
 void agcSamplerDescriptorSetFilters(AgcSamplerDescriptor *desc,
     uint32_t min_filter, uint32_t mag_filter, uint32_t mip_filter)
 {
     if (!desc) return;
-    /* Clear filter fields */
-    desc->words[0] &= ~0x000FF000u;
-    /* Min filter: bit 12 = min_filter, bit 13 = mip_filter */
-    desc->words[0] |= (min_filter & 1u) << 12;
-    desc->words[0] |= (mip_filter & 1u) << 13;
-    /* Mag filter: bit 16 */
-    desc->words[0] |= (mag_filter & 1u) << 16;
+    /* XY_MIN_FILTER at word2 [23:22], XY_MAG_FILTER at [21:20],
+     * MIP_FILTER at [27:26]. Each is 2 bits. */
+    desc->words[2] &= ~((0x3u << 22) | (0x3u << 20) | (0x3u << 26));
+    desc->words[2] |= (min_filter & 0x3u) << 22;
+    desc->words[2] |= (mag_filter & 0x3u) << 20;
+    desc->words[2] |= (mip_filter & 0x3u) << 26;
 }
 
 void agcSamplerDescriptorSetWrapModes(AgcSamplerDescriptor *desc,
     uint32_t wrap_s, uint32_t wrap_t, uint32_t wrap_r)
 {
     if (!desc) return;
-    desc->words[0] &= ~0x00000FFFu;
-    desc->words[0] |= (wrap_s & 0xFu);
-    desc->words[0] |= (wrap_t & 0xFu) << 4;
-    desc->words[0] |= (wrap_r & 0x3u) << 8;
+    /* CLAMP_X at [2:0], CLAMP_Y at [5:3], CLAMP_Z at [8:6].
+     * Each is 3 bits (hardware GnmTexClamp values 0-7). */
+    desc->words[0] &= ~((0x7u << 0) | (0x7u << 3) | (0x7u << 6));
+    desc->words[0] |= (wrap_s & 0x7u);
+    desc->words[0] |= (wrap_t & 0x7u) << 3;
+    desc->words[0] |= (wrap_r & 0x7u) << 6;
 }
 
 void agcSamplerDescriptorSetLod(AgcSamplerDescriptor *desc,
     float min_lod, float max_lod, float lod_bias)
 {
     if (!desc) return;
-    /* LOD values in 4.8 fixed point */
-    uint32_t min_lod_fp = (uint32_t)(min_lod * 256.0f) & 0xFFFFu;
-    uint32_t max_lod_fp = (uint32_t)(max_lod * 256.0f) & 0xFFFFu;
-    desc->words[1] = min_lod_fp | (max_lod_fp << 16);
-    /* LOD bias in word 2 bits [31:16], 4.8 fixed point */
-    int32_t bias_fp = (int32_t)(lod_bias * 256.0f) & 0xFFFFu;
-    desc->words[2] &= ~0xFFFF0000u;
-    desc->words[2] |= (uint32_t)bias_fp << 16;
+    /* MIN_LOD at word1 [11:0], MAX_LOD at word1 [23:12].
+     * Both are 12-bit 4.8 fixed point. */
+    uint32_t min_lod_fp = (uint32_t)(min_lod * 256.0f) & 0xFFFu;
+    uint32_t max_lod_fp = (uint32_t)(max_lod * 256.0f) & 0xFFFu;
+    desc->words[1] &= ~0x00FFFFFFu;
+    desc->words[1] |= min_lod_fp;
+    desc->words[1] |= max_lod_fp << 12;
+
+    /* LOD_BIAS at word2 [13:0], 14-bit 4.8 fixed point (signed). */
+    int32_t bias_fp = (int32_t)(lod_bias * 256.0f);
+    desc->words[2] &= ~0x3FFFu;
+    desc->words[2] |= (uint32_t)bias_fp & 0x3FFFu;
 }
 
 void agcSamplerDescriptorSetCompareFunc(AgcSamplerDescriptor *desc,
     uint32_t compare_func)
 {
     if (!desc) return;
-    desc->words[2] &= ~0x7u;
-    desc->words[2] |= (compare_func & 0x7u);
+    /* DEPTH_COMPARE_FUNC at word0 [14:12], 3 bits. */
+    desc->words[0] &= ~(0x7u << 12);
+    desc->words[0] |= (compare_func & 0x7u) << 12;
 }
 
 void agcSamplerDescriptorSetAnisotropy(AgcSamplerDescriptor *desc,
     uint32_t max_anisotropy)
 {
     if (!desc) return;
-    if (max_anisotropy > 0) {
-        /* Enable anisotropic filtering + set max aniso level */
-        desc->words[2] |= (1u << 4); /* aniso enable */
-        uint32_t aniso_level = 0;
-        if (max_anisotropy >= 16) aniso_level = 7;
-        else if (max_anisotropy >= 8) aniso_level = 6;
-        else if (max_anisotropy >= 4) aniso_level = 5;
-        else if (max_anisotropy >= 2) aniso_level = 4;
-        else aniso_level = 0;
-        desc->words[2] &= ~(0x7u << 5);
-        desc->words[2] |= (aniso_level << 5);
-    }
+    /* MAX_ANISO_RATIO at word0 [11:9], 3 bits.
+     * Stored as log2 of the aniso level: 1→0, 2→1, 4→2, 8→3, 16→4.
+     * A ratio of 0 means no anisotropic filtering. */
+    uint32_t ratio = 0;
+    if (max_anisotropy >= 16) ratio = 4;
+    else if (max_anisotropy >= 8) ratio = 3;
+    else if (max_anisotropy >= 4) ratio = 2;
+    else if (max_anisotropy >= 2) ratio = 1;
+    /* max_anisotropy <= 1 → ratio = 0 (no aniso) */
+    desc->words[0] &= ~(0x7u << 9);
+    desc->words[0] |= ratio << 9;
+}
+
+void agcSamplerDescriptorSetClampMode(AgcSamplerDescriptor *desc,
+    AgcClampMode s, AgcClampMode t, AgcClampMode r)
+{
+    if (!desc) return;
+    /* Convert AgcClampMode enum values to hardware GnmTexClamp values.
+     * The enum values 0-2 map 1:1, but Border(3)→CLAMP_BORDER(6) and
+     * MirrorOnce(4)→MIRROR_ONCE_LAST_TEXEL(3). */
+    static const uint32_t hw_clamp[] = {
+        0,  /* kAgcClampRepeat     → WRAP                  (0) */
+        1,  /* kAgcClampMirror     → MIRROR                (1) */
+        2,  /* kAgcClampClamp      → CLAMP_LAST_TEXEL      (2) */
+        6,  /* kAgcClampBorder     → CLAMP_BORDER          (6) */
+        3,  /* kAgcClampMirrorOnce → MIRROR_ONCE_LAST_TEXEL (3) */
+    };
+    uint32_t hs = (s < 5) ? hw_clamp[s] : 0;
+    uint32_t ht = (t < 5) ? hw_clamp[t] : 0;
+    uint32_t hr = (r < 5) ? hw_clamp[r] : 0;
+    agcSamplerDescriptorSetWrapModes(desc, hs, ht, hr);
+}
+
+void agcSamplerDescriptorSetFilterMode(AgcSamplerDescriptor *desc,
+    AgcFilterMode min_filter, AgcFilterMode mag_filter, AgcMipFilterMode mip_filter)
+{
+    if (!desc) return;
+    /* AgcFilterMode values (0-3) map 1:1 to hardware GnmFilter values.
+     * AgcMipFilterMode values (0-2) map 1:1 to hardware GnmMipFilter values.
+     * Both are 2-bit fields, so we can pass them directly to the raw setter. */
+    agcSamplerDescriptorSetFilters(desc,
+        (uint32_t)min_filter & 0x3u,
+        (uint32_t)mag_filter & 0x3u,
+        (uint32_t)mip_filter & 0x3u);
+}
+
+void agcSamplerDescriptorSetBorderColor(AgcSamplerDescriptor *desc,
+    AgcBorderColor border_color)
+{
+    if (!desc) return;
+    /* BORDER_COLOR_TYPE at word3 [31:30], 2 bits. */
+    desc->words[3] &= ~(0x3u << 30);
+    desc->words[3] |= (uint32_t)border_color << 30;
+}
+
+void agcSamplerDescriptorSetMaxAnisotropy(AgcSamplerDescriptor *desc,
+    uint32_t max_aniso)
+{
+    if (!desc) return;
+    /* Thin wrapper over the raw anisotropy setter; accepts the standard
+     * power-of-two levels (1, 2, 4, 8, 16) and maps them to log2 ratio. */
+    agcSamplerDescriptorSetAnisotropy(desc, max_aniso);
+}
+
+/* ==================== Render Target helpers ==================== */
+
+void agcRenderTargetInit(AgcRenderTarget *rt) {
+    if (!rt) return;
+    memset(rt, 0, sizeof(*rt));
+    /* Default to 1 sample / 1 fragment (log2 = 0, already zeroed).
+     * Default tile mode is display 2D thin (common for color buffers). */
+    rt->attrib.tile_mode_index = kAgcTileDisplay_2DThin;
+    rt->attrib.fmask_tile_mode = kAgcTileDisplay_2DThin;
+}
+
+void agcRenderTargetSetBaseAddress(AgcRenderTarget *rt, uint64_t gpu_addr) {
+    if (!rt) return;
+    /* CB_COLOR_BASE stores address >> 8 (256-byte granularity). */
+    rt->base_base256b = (uint32_t)(gpu_addr >> 8);
+}
+
+void agcRenderTargetSetFormat(AgcRenderTarget *rt,
+    AgcDataFormat fmt, AgcSurfaceNumber ntype)
+{
+    if (!rt) return;
+    /* CB_COLOR_INFO.format is bits [6:2], number_type is bits [10:8]. */
+    rt->info.format = (uint32_t)fmt & 0x1Fu;
+    rt->info.number_type = (uint32_t)ntype & 0x7u;
+}
+
+void agcRenderTargetSetCompSwap(AgcRenderTarget *rt, AgcSurfaceSwap swap) {
+    if (!rt) return;
+    rt->info.comp_swap = (uint32_t)swap & 0x3u;
+}
+
+void agcRenderTargetSetDimensions(AgcRenderTarget *rt,
+    uint32_t width, uint32_t height, uint32_t pitch)
+{
+    if (!rt) return;
+    /* Store width/height in dword 15 (not a GPU register, host-side). */
+    rt->size.width  = (uint16_t)(width & 0xFFFFu);
+    rt->size.height = (uint16_t)(height & 0xFFFFu);
+
+    /* CB_COLOR_PITCH.tile_max = (pitch / 8) - 1, in 8-pixel tiles. */
+    if (pitch >= 8)
+        rt->pitch.tile_max = (pitch / 8u) - 1u;
+    else
+        rt->pitch.tile_max = 0;
+
+    /* CB_COLOR_SLICE.tile_max = (pitch/8 * height/8) - 1, in 64B tiles. */
+    uint32_t tiles_x = (pitch >= 8) ? (pitch / 8u) : 1u;
+    uint32_t tiles_y = (height >= 8) ? (height / 8u) : 1u;
+    uint32_t slice_tiles = tiles_x * tiles_y;
+    rt->slice.tile_max = (slice_tiles > 0) ? (slice_tiles - 1u) : 0;
+}
+
+void agcRenderTargetSetTileMode(AgcRenderTarget *rt, AgcTileMode mode) {
+    if (!rt) return;
+    rt->attrib.tile_mode_index = (uint32_t)mode & 0x1Fu;
+}
+
+void agcRenderTargetSetFmaskTileMode(AgcRenderTarget *rt, AgcTileMode mode) {
+    if (!rt) return;
+    rt->attrib.fmask_tile_mode = (uint32_t)mode & 0x1Fu;
+}
+
+void agcRenderTargetSetNumSamples(AgcRenderTarget *rt, uint32_t num_samples) {
+    if (!rt) return;
+    /* Stored as log2; valid values are 1, 2, 4, 8. */
+    uint32_t log2 = 0;
+    if (num_samples >= 8) log2 = 3;
+    else if (num_samples >= 4) log2 = 2;
+    else if (num_samples >= 2) log2 = 1;
+    rt->attrib.num_samples_log2 = log2;
+}
+
+void agcRenderTargetSetNumFragments(AgcRenderTarget *rt,
+    uint32_t num_fragments)
+{
+    if (!rt) return;
+    uint32_t log2 = 0;
+    if (num_fragments >= 4) log2 = 2;
+    else if (num_fragments >= 2) log2 = 1;
+    rt->attrib.num_fragments_log2 = log2;
+}
+
+void agcRenderTargetSetCmaskBaseAddress(AgcRenderTarget *rt,
+    uint64_t gpu_addr)
+{
+    if (!rt) return;
+    rt->cmask_base256b = (uint32_t)(gpu_addr >> 8);
+}
+
+void agcRenderTargetSetFmaskBaseAddress(AgcRenderTarget *rt,
+    uint64_t gpu_addr)
+{
+    if (!rt) return;
+    rt->fmask_base256b = (uint32_t)(gpu_addr >> 8);
+}
+
+void agcRenderTargetSetDccBaseAddress(AgcRenderTarget *rt,
+    uint64_t gpu_addr)
+{
+    if (!rt) return;
+    rt->dcc_base256b = (uint32_t)(gpu_addr >> 8);
+}
+
+void agcRenderTargetSetDccEnable(AgcRenderTarget *rt, uint32_t enable) {
+    if (!rt) return;
+    rt->info.dcc_enable = enable ? 1u : 0u;
+}
+
+void agcRenderTargetSetClearWords(AgcRenderTarget *rt,
+    uint32_t word0, uint32_t word1)
+{
+    if (!rt) return;
+    rt->clear_word0 = word0;
+    rt->clear_word1 = word1;
 }

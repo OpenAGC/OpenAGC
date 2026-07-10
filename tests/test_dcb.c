@@ -1,6 +1,7 @@
 #include "test.h"
 #include "agcdriver.h"
 #include "agc_pm4.h"
+#include "agc_cb.h"
 
 static void test_dcb_init_null(void) {
     int32_t r = sceAgcVshDcbInitializeDefaultHardwareState_pre0090(NULL, 100);
@@ -120,6 +121,53 @@ static void test_dcb_wait_until_safe(void) {
     TEST_ASSERT_EQ(agcPm4Subcommand(buf[0]), AGC_PM4_SUB_WAIT_FLIP_DONE, "WaitUntilSafeForRendering subcommand");
 }
 
+static void test_dcb_eop_flip_null(void) {
+    int32_t r = sceAgcDcbSetEopFlip(NULL, 0, 0, 0x100000020ULL, 0x1234);
+    TEST_ASSERT(r < 0, "NULL dcb should fail for EopFlip");
+}
+
+static void test_dcb_eop_flip_packet(void) {
+    uint32_t buffer[16];
+    SceAgcCb cb;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+
+    int32_t r = sceAgcDcbSetEopFlip(&cb, 0x05, 0x03, 0x100000020ULL, 0xDEADBEEF);
+    TEST_ASSERT_EQ(r, 8, "EopFlip should write 8 dwords");
+    TEST_ASSERT_EQ(agcPm4Type(buffer[0]), AGC_PM4_TYPE3, "EopFlip should emit PM4 type 3");
+    TEST_ASSERT_EQ(agcPm4Opcode(buffer[0]), AGC_PM4_OP_RELEASE_MEM, "EopFlip opcode 0x49");
+    TEST_ASSERT_EQ(agcPm4Length(buffer[0]), 8, "EopFlip packet length 8");
+    TEST_ASSERT_EQ(buffer[0], 0xC0064900u, "EopFlip header matches SPRX 0xc0064900");
+    TEST_ASSERT_EQ(buffer[1], 0x0305u, "EopFlip event_control (type=5, index=3)");
+    TEST_ASSERT_EQ(buffer[2], 0x20u, "EopFlip dst_addr lo");
+    TEST_ASSERT_EQ(buffer[3], 0x1u, "EopFlip dst_addr hi");
+    TEST_ASSERT_EQ(buffer[4], 0xDEADBEEFu, "EopFlip data");
+    TEST_ASSERT_EQ(buffer[5], 0x0u, "EopFlip reserved 5");
+    TEST_ASSERT_EQ(buffer[6], 0x0u, "EopFlip reserved 6");
+    TEST_ASSERT_EQ(buffer[7], 0x0u, "EopFlip reserved 7");
+}
+
+static void test_dcb_eop_flip_cursor_advance(void) {
+    uint32_t buffer[16];
+    SceAgcCb cb;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0, "cursor starts at 0");
+    int32_t r = sceAgcDcbSetEopFlip(&cb, 0, 0, 0, 0);
+    TEST_ASSERT_EQ(r, 8, "EopFlip returns 8 dwords");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 8, "EopFlip advances cursor by 8");
+    TEST_ASSERT_EQ(agcCbRemainingDwords(&cb), 8, "EopFlip leaves 8 remaining");
+}
+
+static void test_dcb_eop_flip_overflow(void) {
+    uint32_t buffer[7];
+    SceAgcCb cb;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+
+    int32_t r = sceAgcDcbSetEopFlip(&cb, 0, 0, 0, 0);
+    TEST_ASSERT(r < 0, "EopFlip should fail on insufficient buffer");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0, "EopFlip overflow does not advance cursor");
+}
+
 void test_suite_dcb(void) {
     TEST_SUITE("DCB Commands");
     TEST_RUN(test_dcb_init_null);
@@ -135,4 +183,8 @@ void test_suite_dcb(void) {
     TEST_RUN(test_dcb_reset_queue);
     TEST_RUN(test_dcb_set_preemption);
     TEST_RUN(test_dcb_wait_until_safe);
+    TEST_RUN(test_dcb_eop_flip_null);
+    TEST_RUN(test_dcb_eop_flip_packet);
+    TEST_RUN(test_dcb_eop_flip_cursor_advance);
+    TEST_RUN(test_dcb_eop_flip_overflow);
 }

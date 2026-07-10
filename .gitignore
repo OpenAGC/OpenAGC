@@ -1,4 +1,5 @@
 build/
+build-orbis/
 *.o
 *.a
 openagc_tests

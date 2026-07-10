@@ -412,6 +412,526 @@ static void test_sce_agc_dcb_lod_stats(void) {
     TEST_ASSERT_EQ(cmd[4], 0x200EAF34u, "GetLodStats packet_control");
 }
 
+/* AGC-custom flip/display wait builders (libSceAgc.sprx only).
+ * These use AGC-specific opcodes (0x4C/0x4E/0x4F/0x51/0x54) and
+ * validate flip_slot < 32. */
+static void test_sce_agc_dcb_wait_flip_done(void) {
+    uint32_t buffer[16];
+    SceAgcCb cb;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+
+    /* Valid flip slots: 0, 15, 31 */
+    uint32_t* cmd0 = sceAgcDcbWaitFlipDone(&cb, 0);
+    TEST_ASSERT(cmd0 != NULL, "WaitFlipDone slot 0 returns packet");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd0[0]), AGC_PM4_OP_WAIT_FLIP_DONE, "WaitFlipDone opcode 0x4C");
+    TEST_ASSERT_EQ(agcPm4Length(cmd0[0]), 3, "WaitFlipDone length");
+    TEST_ASSERT_EQ(cmd0[1], 0u, "WaitFlipDone slot 0");
+    TEST_ASSERT_EQ(cmd0[2], 0u, "WaitFlipDone reserved");
+
+    uint32_t* cmd15 = sceAgcDcbWaitFlipDone(&cb, 15);
+    TEST_ASSERT(cmd15 != NULL, "WaitFlipDone slot 15 returns packet");
+    TEST_ASSERT_EQ(cmd15[1], 15u, "WaitFlipDone slot 15");
+
+    uint32_t* cmd31 = sceAgcDcbWaitFlipDone(&cb, 31);
+    TEST_ASSERT(cmd31 != NULL, "WaitFlipDone slot 31 returns packet");
+    TEST_ASSERT_EQ(cmd31[1], 31u, "WaitFlipDone slot 31");
+
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 9, "WaitFlipDone advances cursor by 3 each");
+}
+
+static void test_sce_agc_dcb_wait_flip_done_rejects_invalid(void) {
+    uint32_t buffer[16];
+    SceAgcCb cb;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+
+    /* Invalid flip slots: 32, 100 */
+    TEST_ASSERT(sceAgcDcbWaitFlipDone(&cb, 32) == 0, "WaitFlipDone rejects slot 32");
+    TEST_ASSERT(sceAgcDcbWaitFlipDone(&cb, 100) == 0, "WaitFlipDone rejects slot 100");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0, "WaitFlipDone rejects do not advance cursor");
+
+    /* NULL cb */
+    TEST_ASSERT(sceAgcDcbWaitFlipDone(NULL, 0) == 0, "WaitFlipDone rejects NULL cb");
+
+    /* Overflow: buffer too small for 3 dwords */
+    uint32_t small[2];
+    SceAgcCb cb_small;
+    agcCbInit(&cb_small, small, sizeof(small));
+    TEST_ASSERT(sceAgcDcbWaitFlipDone(&cb_small, 0) == 0, "WaitFlipDone rejects overflow");
+}
+
+static void test_sce_agc_dcb_wait_flip(void) {
+    uint32_t buffer[16];
+    SceAgcCb cb;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+
+    uint32_t* cmd = sceAgcDcbWaitFlip(&cb, 15);
+    TEST_ASSERT(cmd != NULL, "WaitFlip slot 15 returns packet");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_WAIT_FLIP, "WaitFlip opcode 0x51");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 3, "WaitFlip length");
+    TEST_ASSERT_EQ(cmd[1], 15u, "WaitFlip slot");
+    TEST_ASSERT_EQ(cmd[2], 0u, "WaitFlip reserved");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 3, "WaitFlip advances cursor");
+
+    /* Invalid slot */
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT(sceAgcDcbWaitFlip(&cb, 32) == 0, "WaitFlip rejects slot 32");
+    TEST_ASSERT(sceAgcDcbWaitFlip(NULL, 0) == 0, "WaitFlip rejects NULL cb");
+}
+
+static void test_sce_agc_dcb_insert_wait_flip_done(void) {
+    uint32_t buffer[16];
+    SceAgcCb cb;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+
+    uint32_t* cmd = sceAgcDcbInsertWaitFlipDone(&cb, 7);
+    TEST_ASSERT(cmd != NULL, "InsertWaitFlipDone slot 7 returns packet");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_INSERT_WAIT_FLIP_DONE, "InsertWaitFlipDone opcode 0x54");
+    TEST_ASSERT_EQ(agcPm4Subcommand(cmd[0]), AGC_PM4_SUB_WAIT_FLIP_DONE, "InsertWaitFlipDone sub 0x06");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 3, "InsertWaitFlipDone length");
+    TEST_ASSERT_EQ(cmd[1], 7u, "InsertWaitFlipDone slot");
+    TEST_ASSERT_EQ(cmd[2], 0u, "InsertWaitFlipDone reserved");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 3, "InsertWaitFlipDone advances cursor");
+
+    /* Invalid slot */
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT(sceAgcDcbInsertWaitFlipDone(&cb, 32) == 0, "InsertWaitFlipDone rejects slot 32");
+    TEST_ASSERT(sceAgcDcbInsertWaitFlipDone(NULL, 0) == 0, "InsertWaitFlipDone rejects NULL cb");
+}
+
+static void test_sce_agc_dcb_wait_flip_eos(void) {
+    uint32_t buffer[16];
+    SceAgcCb cb;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+
+    uint32_t* cmd = sceAgcDcbWaitFlipEos(&cb, 3);
+    TEST_ASSERT(cmd != NULL, "WaitFlipEos slot 3 returns packet");
+    /* First packet: opcode 0x4F */
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_WAIT_FLIP_EOS, "WaitFlipEos first opcode 0x4F");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 3, "WaitFlipEos first length");
+    TEST_ASSERT_EQ(cmd[1], 3u, "WaitFlipEos first slot");
+    TEST_ASSERT_EQ(cmd[2], 0u, "WaitFlipEos first reserved");
+    /* Second packet: opcode 0x4E */
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[3]), AGC_PM4_OP_WAIT_FLIP_EOS_2, "WaitFlipEos second opcode 0x4E");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[3]), 3, "WaitFlipEos second length");
+    TEST_ASSERT_EQ(cmd[4], 3u, "WaitFlipEos second slot");
+    TEST_ASSERT_EQ(cmd[5], 0u, "WaitFlipEos second reserved");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 6, "WaitFlipEos advances cursor by 6");
+
+    /* Invalid slot */
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT(sceAgcDcbWaitFlipEos(&cb, 32) == 0, "WaitFlipEos rejects slot 32");
+    TEST_ASSERT(sceAgcDcbWaitFlipEos(NULL, 0) == 0, "WaitFlipEos rejects NULL cb");
+
+    /* Overflow: buffer too small for 6 dwords */
+    uint32_t small[4];
+    SceAgcCb cb_small;
+    agcCbInit(&cb_small, small, sizeof(small));
+    TEST_ASSERT(sceAgcDcbWaitFlipEos(&cb_small, 0) == 0, "WaitFlipEos rejects overflow");
+}
+
+/* === SPRX DCB builder tests (capstone disassembly) === */
+
+/* sceAgcDcbReleaseMem — IT_RELEASE_MEM (0x49), 7 dwords.
+ * event_type=0x05 event_index=0x03 dst=0x1_0000_0020 data=0xDEADBEEF
+ * → [1]=0x0305 [2]=0x20 [3]=0x1 [4]=0xDEADBEEF [5]=0 [6]=0 */
+static void test_sce_agc_dcb_release_mem(void) {
+    uint32_t buffer[16];
+    SceAgcCb cb;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+
+    uint32_t* cmd = sceAgcDcbReleaseMem(&cb, 0x05, 0x03, 0x100000020ULL, 0xDEADBEEF);
+    TEST_ASSERT(cmd == buffer, "DcbReleaseMem returns allocated packet");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_RELEASE_MEM, "DcbReleaseMem opcode");
+    TEST_ASSERT_EQ(agcPm4Subcommand(cmd[0]), AGC_PM4_SUB_ZERO, "DcbReleaseMem subcommand");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 7, "DcbReleaseMem length");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 7, "DcbReleaseMem advances cursor");
+    TEST_ASSERT_EQ(cmd[1], 0x0305u, "DcbReleaseMem event_control");
+    TEST_ASSERT_EQ(cmd[2], 0x20u, "DcbReleaseMem dst lo");
+    TEST_ASSERT_EQ(cmd[3], 0x1u, "DcbReleaseMem dst hi");
+    TEST_ASSERT_EQ(cmd[4], 0xDEADBEEFu, "DcbReleaseMem data");
+    TEST_ASSERT_EQ(cmd[5], 0u, "DcbReleaseMem reserved 5");
+    TEST_ASSERT_EQ(cmd[6], 0u, "DcbReleaseMem reserved 6");
+
+    /* NULL cb returns 0 */
+    TEST_ASSERT(sceAgcDcbReleaseMem(NULL, 0, 0, 0x100, 0) == 0,
+        "DcbReleaseMem rejects NULL cb");
+
+    /* overflow returns 0 */
+    SceAgcCb small;
+    uint32_t small_buf[6];
+    agcCbInit(&small, small_buf, sizeof(small_buf));
+    TEST_ASSERT(sceAgcDcbReleaseMem(&small, 0, 0, 0x100, 0) == 0,
+        "DcbReleaseMem rejects overflow");
+}
+
+/* sceAgcDcbIndirectBuffer — IT_INDIRECT_BUFFER (0x3F), 4 dwords.
+ * gpu_addr=0x2_0000_0040 size=256 vmid=0xA
+ * → [1]=0x40 [2]=0x2 [3]=(256&0xFFFFF)|((0xA)<<24)=0x0A000100 */
+static void test_sce_agc_dcb_indirect_buffer(void) {
+    uint32_t buffer[16];
+    SceAgcCb cb;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+
+    uint32_t* cmd = sceAgcDcbIndirectBuffer(&cb, 0x200000040ULL, 256, 0xA);
+    TEST_ASSERT(cmd == buffer, "DcbIndirectBuffer returns allocated packet");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_INDIRECT_BUFFER, "DcbIndirectBuffer opcode");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 4, "DcbIndirectBuffer length");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 4, "DcbIndirectBuffer advances cursor");
+    TEST_ASSERT_EQ(cmd[1], 0x40u, "DcbIndirectBuffer ibase lo");
+    TEST_ASSERT_EQ(cmd[2], 0x2u, "DcbIndirectBuffer ibase hi");
+    TEST_ASSERT_EQ(cmd[3], 0x0A000100u, "DcbIndirectBuffer size|vmid");
+
+    TEST_ASSERT(sceAgcDcbIndirectBuffer(NULL, 0x100, 4, 0) == 0,
+        "DcbIndirectBuffer rejects NULL cb");
+
+    SceAgcCb small;
+    uint32_t small_buf[3];
+    agcCbInit(&small, small_buf, sizeof(small_buf));
+    TEST_ASSERT(sceAgcDcbIndirectBuffer(&small, 0x100, 4, 0) == 0,
+        "DcbIndirectBuffer rejects overflow");
+}
+
+/* sceAgcDcbIndirectBufferConst — IT_INDIRECT_BUFFER (0x3F), 4 dwords.
+ * SPRX evidence: both IB variants use opcode 0x3F, not 0x33.
+ * Same layout as IndirectBuffer. */
+static void test_sce_agc_dcb_indirect_buffer_const(void) {
+    uint32_t buffer[16];
+    SceAgcCb cb;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+
+    uint32_t* cmd = sceAgcDcbIndirectBufferConst(&cb, 0x200000040ULL, 256, 0xA);
+    TEST_ASSERT(cmd == buffer, "DcbIndirectBufferConst returns allocated packet");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_INDIRECT_BUFFER, "DcbIndirectBufferConst opcode 0x3F (same as IndirectBuffer)");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 4, "DcbIndirectBufferConst length");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 4, "DcbIndirectBufferConst advances cursor");
+    TEST_ASSERT_EQ(cmd[1], 0x40u, "DcbIndirectBufferConst ibase lo");
+    TEST_ASSERT_EQ(cmd[2], 0x2u, "DcbIndirectBufferConst ibase hi");
+    TEST_ASSERT_EQ(cmd[3], 0x0A000100u, "DcbIndirectBufferConst size|vmid");
+
+    TEST_ASSERT(sceAgcDcbIndirectBufferConst(NULL, 0x100, 4, 0) == 0,
+        "DcbIndirectBufferConst rejects NULL cb");
+
+    SceAgcCb small;
+    uint32_t small_buf[3];
+    agcCbInit(&small, small_buf, sizeof(small_buf));
+    TEST_ASSERT(sceAgcDcbIndirectBufferConst(&small, 0x100, 4, 0) == 0,
+        "DcbIndirectBufferConst rejects overflow");
+}
+
+/* sceAgcDcbDrawIndirect — IT_DRAW_INDIRECT (0x24), 5 dwords.
+ * data_offset=0x100 base_vtx=0x200 start_inst=0x300 initiator=0x42
+ * → [1]=0x100 [2]=0x200 [3]=0x300 [4]=0x42 */
+static void test_sce_agc_dcb_draw_indirect(void) {
+    uint32_t buffer[16];
+    SceAgcCb cb;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+
+    uint32_t* cmd = sceAgcDcbDrawIndirect(&cb, 0x100, 0x200, 0x300, 0x42);
+    TEST_ASSERT(cmd == buffer, "DcbDrawIndirect returns allocated packet");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_DRAW_INDIRECT, "DcbDrawIndirect opcode");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 5, "DcbDrawIndirect length");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 5, "DcbDrawIndirect advances cursor");
+    TEST_ASSERT_EQ(cmd[1], 0x100u, "DcbDrawIndirect data_offset");
+    TEST_ASSERT_EQ(cmd[2], 0x200u, "DcbDrawIndirect base_vtx_loc");
+    TEST_ASSERT_EQ(cmd[3], 0x300u, "DcbDrawIndirect start_inst_loc");
+    TEST_ASSERT_EQ(cmd[4], 0x42u, "DcbDrawIndirect draw_initiator");
+
+    TEST_ASSERT(sceAgcDcbDrawIndirect(NULL, 0, 0, 0, 0) == 0,
+        "DcbDrawIndirect rejects NULL cb");
+
+    SceAgcCb small;
+    uint32_t small_buf[4];
+    agcCbInit(&small, small_buf, sizeof(small_buf));
+    TEST_ASSERT(sceAgcDcbDrawIndirect(&small, 0, 0, 0, 0) == 0,
+        "DcbDrawIndirect rejects overflow");
+}
+
+/* sceAgcDcbDrawIndex2 — IT_DRAW_INDEX_2 (0x27), 6 dwords.
+ * max_size=0x1000 index_base=0x1_0000_0080 count=123 initiator=0x42
+ * → [1]=0x1000 [2]=0x80 [3]=0x1 [4]=123 [5]=0x42 */
+static void test_sce_agc_dcb_draw_index2(void) {
+    uint32_t buffer[16];
+    SceAgcCb cb;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+
+    uint32_t* cmd = sceAgcDcbDrawIndex2(&cb, 0x1000, 0x100000080ULL, 123, 0x42);
+    TEST_ASSERT(cmd == buffer, "DcbDrawIndex2 returns allocated packet");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_DRAW_INDEX_2, "DcbDrawIndex2 opcode");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 6, "DcbDrawIndex2 length");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 6, "DcbDrawIndex2 advances cursor");
+    TEST_ASSERT_EQ(cmd[1], 0x1000u, "DcbDrawIndex2 max_size");
+    TEST_ASSERT_EQ(cmd[2], 0x80u, "DcbDrawIndex2 index_base lo");
+    TEST_ASSERT_EQ(cmd[3], 0x1u, "DcbDrawIndex2 index_base hi");
+    TEST_ASSERT_EQ(cmd[4], 123u, "DcbDrawIndex2 index_count");
+    TEST_ASSERT_EQ(cmd[5], 0x42u, "DcbDrawIndex2 draw_initiator");
+
+    TEST_ASSERT(sceAgcDcbDrawIndex2(NULL, 0, 0x100, 0, 0) == 0,
+        "DcbDrawIndex2 rejects NULL cb");
+
+    /* Odd address gets word-aligned (bit 0 cleared) */
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    uint32_t* cmd_odd = sceAgcDcbDrawIndex2(&cb, 0, 0x100000081ULL, 0, 0);
+    TEST_ASSERT(cmd_odd != NULL, "DcbDrawIndex2 odd addr returns packet");
+    TEST_ASSERT_EQ(cmd_odd[2], 0x80u, "DcbDrawIndex2 aligns odd addr lo (clears bit 0)");
+
+    SceAgcCb small;
+    uint32_t small_buf[5];
+    agcCbInit(&small, small_buf, sizeof(small_buf));
+    TEST_ASSERT(sceAgcDcbDrawIndex2(&small, 0, 0x100, 0, 0) == 0,
+        "DcbDrawIndex2 rejects overflow");
+}
+
+/* sceAgcDcbDrawIndexIndirect — IT_DRAW_INDEX_INDIRECT (0x25), 5 dwords.
+ * Same layout as DrawIndirect but with INDEX variant opcode. */
+static void test_sce_agc_dcb_draw_index_indirect(void) {
+    uint32_t buffer[16];
+    SceAgcCb cb;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+
+    uint32_t* cmd = sceAgcDcbDrawIndexIndirect(&cb, 0x100, 0x200, 0x300, 0x42);
+    TEST_ASSERT(cmd == buffer, "DcbDrawIndexIndirect returns allocated packet");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_DRAW_INDEX_INDIRECT, "DcbDrawIndexIndirect opcode");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 5, "DcbDrawIndexIndirect length");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 5, "DcbDrawIndexIndirect advances cursor");
+    TEST_ASSERT_EQ(cmd[1], 0x100u, "DcbDrawIndexIndirect data_offset");
+    TEST_ASSERT_EQ(cmd[2], 0x200u, "DcbDrawIndexIndirect base_vtx_loc");
+    TEST_ASSERT_EQ(cmd[3], 0x300u, "DcbDrawIndexIndirect start_inst_loc");
+    TEST_ASSERT_EQ(cmd[4], 0x42u, "DcbDrawIndexIndirect draw_initiator");
+
+    TEST_ASSERT(sceAgcDcbDrawIndexIndirect(NULL, 0, 0, 0, 0) == 0,
+        "DcbDrawIndexIndirect rejects NULL cb");
+
+    SceAgcCb small;
+    uint32_t small_buf[4];
+    agcCbInit(&small, small_buf, sizeof(small_buf));
+    TEST_ASSERT(sceAgcDcbDrawIndexIndirect(&small, 0, 0, 0, 0) == 0,
+        "DcbDrawIndexIndirect rejects overflow");
+}
+
+/* sceAgcDcbDrawIndirectMulti — IT_DRAW_INDIRECT_MULTI (0x2C), 7 dwords.
+ * data_offset=0x100 base_vtx=0x200 start_inst=0x300 count=4 stride=0x40 init=0x42
+ * → [1]=0x100 [2]=0x200 [3]=0x300 [4]=4 [5]=0x40 [6]=0x42 */
+static void test_sce_agc_dcb_draw_indirect_multi(void) {
+    uint32_t buffer[16];
+    SceAgcCb cb;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+
+    uint32_t* cmd = sceAgcDcbDrawIndirectMulti(&cb, 0x100, 0x200, 0x300, 4, 0x40, 0x42);
+    TEST_ASSERT(cmd == buffer, "DcbDrawIndirectMulti returns allocated packet");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_DRAW_INDIRECT_MULTI, "DcbDrawIndirectMulti opcode");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 7, "DcbDrawIndirectMulti length");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 7, "DcbDrawIndirectMulti advances cursor");
+    TEST_ASSERT_EQ(cmd[1], 0x100u, "DcbDrawIndirectMulti data_offset");
+    TEST_ASSERT_EQ(cmd[2], 0x200u, "DcbDrawIndirectMulti base_vtx_loc");
+    TEST_ASSERT_EQ(cmd[3], 0x300u, "DcbDrawIndirectMulti start_inst_loc");
+    TEST_ASSERT_EQ(cmd[4], 4u, "DcbDrawIndirectMulti count");
+    TEST_ASSERT_EQ(cmd[5], 0x40u, "DcbDrawIndirectMulti stride");
+    TEST_ASSERT_EQ(cmd[6], 0x42u, "DcbDrawIndirectMulti draw_initiator");
+
+    TEST_ASSERT(sceAgcDcbDrawIndirectMulti(NULL, 0, 0, 0, 0, 0, 0) == 0,
+        "DcbDrawIndirectMulti rejects NULL cb");
+
+    SceAgcCb small;
+    uint32_t small_buf[6];
+    agcCbInit(&small, small_buf, sizeof(small_buf));
+    TEST_ASSERT(sceAgcDcbDrawIndirectMulti(&small, 0, 0, 0, 0, 0, 0) == 0,
+        "DcbDrawIndirectMulti rejects overflow");
+}
+
+/* sceAgcDcbDrawIndexIndirectMulti — IT_DRAW_INDEX_INDIRECT_MULTI (0x38), 7 dwords.
+ * Same layout as DrawIndirectMulti but with INDEX variant opcode. */
+static void test_sce_agc_dcb_draw_index_indirect_multi(void) {
+    uint32_t buffer[16];
+    SceAgcCb cb;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+
+    uint32_t* cmd = sceAgcDcbDrawIndexIndirectMulti(&cb, 0x100, 0x200, 0x300, 4, 0x40, 0x42);
+    TEST_ASSERT(cmd == buffer, "DcbDrawIndexIndirectMulti returns allocated packet");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_DRAW_INDEX_INDIRECT_MULTI, "DcbDrawIndexIndirectMulti opcode");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 7, "DcbDrawIndexIndirectMulti length");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 7, "DcbDrawIndexIndirectMulti advances cursor");
+    TEST_ASSERT_EQ(cmd[1], 0x100u, "DcbDrawIndexIndirectMulti data_offset");
+    TEST_ASSERT_EQ(cmd[2], 0x200u, "DcbDrawIndexIndirectMulti base_vtx_loc");
+    TEST_ASSERT_EQ(cmd[3], 0x300u, "DcbDrawIndexIndirectMulti start_inst_loc");
+    TEST_ASSERT_EQ(cmd[4], 4u, "DcbDrawIndexIndirectMulti count");
+    TEST_ASSERT_EQ(cmd[5], 0x40u, "DcbDrawIndexIndirectMulti stride");
+    TEST_ASSERT_EQ(cmd[6], 0x42u, "DcbDrawIndexIndirectMulti draw_initiator");
+
+    TEST_ASSERT(sceAgcDcbDrawIndexIndirectMulti(NULL, 0, 0, 0, 0, 0, 0) == 0,
+        "DcbDrawIndexIndirectMulti rejects NULL cb");
+
+    SceAgcCb small;
+    uint32_t small_buf[6];
+    agcCbInit(&small, small_buf, sizeof(small_buf));
+    TEST_ASSERT(sceAgcDcbDrawIndexIndirectMulti(&small, 0, 0, 0, 0, 0, 0) == 0,
+        "DcbDrawIndexIndirectMulti rejects overflow");
+}
+
+/* sceAgcDcbSetPredication — IT_SET_PREDICATION (0x20), 3 dwords.
+ * addr=0x1_0000_0027 op=2 keep_count=0x1234 predicate=true
+ * addr lo = 0x27 & ~0xF = 0x20
+ * addr hi = 0x1, op<<16 = 0x20000, keep<<18 = 0x48D0000, pred<<31 = 0x80000000
+ * [2] = 0x80000000 | 0x48D0000 | 0x20000 | 0x1 = 0xC8D20001
+ * (0x48D0000 = 0x048D0000, | 0x00020000 = 0x048F0000, | 0x1 = 0x048F0001, | 0x80000000 = 0x8048F0001... wait)
+ * Recalc: 0x1234 = 4660. 4660 << 18 = 4660 * 262144 = 1,222,174,720 = 0x48D00000
+ * 2 << 16 = 0x00020000
+ * 1 << 31 = 0x80000000
+ * 0x48D00000 | 0x00020000 = 0x48D20000
+ * 0x48D20000 | 0x00000001 = 0x48D20001
+ * 0x48D20001 | 0x80000000 = 0xC8D20001 */
+static void test_sce_agc_dcb_set_predication(void) {
+    uint32_t buffer[16];
+    SceAgcCb cb;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+
+    uint32_t* cmd = sceAgcDcbSetPredication(&cb, 0x100000027ULL, 2, 0x1234, true);
+    TEST_ASSERT(cmd == buffer, "DcbSetPredication returns allocated packet");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_SET_PREDICATION, "DcbSetPredication opcode");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 3, "DcbSetPredication length");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 3, "DcbSetPredication advances cursor");
+    TEST_ASSERT_EQ(cmd[1], 0x20u, "DcbSetPredication addr lo aligned");
+    TEST_ASSERT_EQ(cmd[2], 0xC8D20001u, "DcbSetPredication addr hi|op|keep|pred");
+
+    /* predicate=false clears bit 31 */
+    uint32_t* cmd2 = sceAgcDcbSetPredication(&cb, 0x100000020ULL, 0, 0, false);
+    TEST_ASSERT(cmd2 != NULL, "DcbSetPredication false returns allocated packet");
+    TEST_ASSERT_EQ(cmd2[2], 0x1u, "DcbSetPredication false clears predicate bit");
+
+    TEST_ASSERT(sceAgcDcbSetPredication(NULL, 0x100, 0, 0, false) == 0,
+        "DcbSetPredication rejects NULL cb");
+
+    SceAgcCb small;
+    uint32_t small_buf[2];
+    agcCbInit(&small, small_buf, sizeof(small_buf));
+    TEST_ASSERT(sceAgcDcbSetPredication(&small, 0x100, 0, 0, false) == 0,
+        "DcbSetPredication rejects overflow");
+}
+
+/* sceAgcDcbEventWrite — IT_EVENT_WRITE (0x46), 2 dwords.
+ * event_type=0x05 event_index=0x03 → [1]=0x0305 */
+static void test_sce_agc_dcb_event_write(void) {
+    uint32_t buffer[16];
+    SceAgcCb cb;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+
+    uint32_t* cmd = sceAgcDcbEventWrite(&cb, 0x05, 0x03);
+    TEST_ASSERT(cmd == buffer, "DcbEventWrite returns allocated packet");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_EVENT_WRITE, "DcbEventWrite opcode");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 2, "DcbEventWrite length");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 2, "DcbEventWrite advances cursor");
+    TEST_ASSERT_EQ(cmd[1], 0x0305u, "DcbEventWrite event_control");
+
+    TEST_ASSERT(sceAgcDcbEventWrite(NULL, 0, 0) == 0,
+        "DcbEventWrite rejects NULL cb");
+
+    SceAgcCb small;
+    uint32_t small_buf[1];
+    agcCbInit(&small, small_buf, sizeof(small_buf));
+    TEST_ASSERT(sceAgcDcbEventWrite(&small, 0, 0) == 0,
+        "DcbEventWrite rejects overflow");
+}
+
+/* sceAgcDcbSetConfigReg — IT_SET_CONFIG_REG (0x68), variable (count+2).
+ * reg_offset=0x200 values={0xAA,0xBB,0xCC} count=3
+ * → [0] header len=5 [1]=0x200 [2]=0xAA [3]=0xBB [4]=0xCC */
+static void test_sce_agc_dcb_set_config_reg(void) {
+    uint32_t buffer[16];
+    SceAgcCb cb;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+
+    uint32_t values[3] = {0xAA, 0xBB, 0xCC};
+    uint32_t* cmd = sceAgcDcbSetConfigReg(&cb, 0x200, values, 3);
+    TEST_ASSERT(cmd == buffer, "DcbSetConfigReg returns allocated packet");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_SET_CONFIG_REG, "DcbSetConfigReg opcode");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 5, "DcbSetConfigReg length (3+2)");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 5, "DcbSetConfigReg advances cursor");
+    TEST_ASSERT_EQ(cmd[1], 0x200u, "DcbSetConfigReg reg_offset");
+    TEST_ASSERT_EQ(cmd[2], 0xAAu, "DcbSetConfigReg value 0");
+    TEST_ASSERT_EQ(cmd[3], 0xBBu, "DcbSetConfigReg value 1");
+    TEST_ASSERT_EQ(cmd[4], 0xCCu, "DcbSetConfigReg value 2");
+
+    /* NULL values rejected */
+    TEST_ASSERT(sceAgcDcbSetConfigReg(&cb, 0x200, NULL, 3) == 0,
+        "DcbSetConfigReg rejects NULL values");
+    /* zero count rejected */
+    TEST_ASSERT(sceAgcDcbSetConfigReg(&cb, 0x200, values, 0) == 0,
+        "DcbSetConfigReg rejects zero count");
+    /* excessive count rejected */
+    TEST_ASSERT(sceAgcDcbSetConfigReg(&cb, 0x200, values, 0x4000) == 0,
+        "DcbSetConfigReg rejects excessive count");
+    /* NULL cb rejected */
+    TEST_ASSERT(sceAgcDcbSetConfigReg(NULL, 0x200, values, 1) == 0,
+        "DcbSetConfigReg rejects NULL cb");
+
+    SceAgcCb small;
+    uint32_t small_buf[3];
+    agcCbInit(&small, small_buf, sizeof(small_buf));
+    TEST_ASSERT(sceAgcDcbSetConfigReg(&small, 0x200, values, 3) == 0,
+        "DcbSetConfigReg rejects overflow");
+}
+
+/* sceAgcDcbSetShReg — IT_SET_SH_REG (0x76), variable (count+2).
+ * Same layout as SetConfigReg but with SET_SH_REG opcode. */
+static void test_sce_agc_dcb_set_sh_reg(void) {
+    uint32_t buffer[16];
+    SceAgcCb cb;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+
+    uint32_t values[2] = {0x1234, 0x5678};
+    uint32_t* cmd = sceAgcDcbSetShReg(&cb, 0x2C0, values, 2);
+    TEST_ASSERT(cmd == buffer, "DcbSetShReg returns allocated packet");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_SET_SH_REG, "DcbSetShReg opcode");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 4, "DcbSetShReg length (2+2)");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 4, "DcbSetShReg advances cursor");
+    TEST_ASSERT_EQ(cmd[1], 0x2C0u, "DcbSetShReg reg_offset");
+    TEST_ASSERT_EQ(cmd[2], 0x1234u, "DcbSetShReg value 0");
+    TEST_ASSERT_EQ(cmd[3], 0x5678u, "DcbSetShReg value 1");
+
+    TEST_ASSERT(sceAgcDcbSetShReg(&cb, 0x2C0, NULL, 2) == 0,
+        "DcbSetShReg rejects NULL values");
+    TEST_ASSERT(sceAgcDcbSetShReg(&cb, 0x2C0, values, 0) == 0,
+        "DcbSetShReg rejects zero count");
+    TEST_ASSERT(sceAgcDcbSetShReg(NULL, 0x2C0, values, 1) == 0,
+        "DcbSetShReg rejects NULL cb");
+
+    SceAgcCb small;
+    uint32_t small_buf[3];
+    agcCbInit(&small, small_buf, sizeof(small_buf));
+    TEST_ASSERT(sceAgcDcbSetShReg(&small, 0x2C0, values, 2) == 0,
+        "DcbSetShReg rejects overflow");
+}
+
+/* sceAgcDcbSetUconfigReg — IT_SET_UCONFIG_REG (0x79), variable (count+2).
+ * Same layout as SetConfigReg but with SET_UCONFIG_REG opcode. */
+static void test_sce_agc_dcb_set_uconfig_reg(void) {
+    uint32_t buffer[16];
+    SceAgcCb cb;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+
+    uint32_t values[2] = {0xDEAD, 0xBEEF};
+    uint32_t* cmd = sceAgcDcbSetUconfigReg(&cb, 0x300, values, 2);
+    TEST_ASSERT(cmd == buffer, "DcbSetUconfigReg returns allocated packet");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_SET_UCONFIG_REG, "DcbSetUconfigReg opcode");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 4, "DcbSetUconfigReg length (2+2)");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 4, "DcbSetUconfigReg advances cursor");
+    TEST_ASSERT_EQ(cmd[1], 0x300u, "DcbSetUconfigReg reg_offset");
+    TEST_ASSERT_EQ(cmd[2], 0xDEADu, "DcbSetUconfigReg value 0");
+    TEST_ASSERT_EQ(cmd[3], 0xBEEFu, "DcbSetUconfigReg value 1");
+
+    TEST_ASSERT(sceAgcDcbSetUconfigReg(&cb, 0x300, NULL, 2) == 0,
+        "DcbSetUconfigReg rejects NULL values");
+    TEST_ASSERT(sceAgcDcbSetUconfigReg(&cb, 0x300, values, 0) == 0,
+        "DcbSetUconfigReg rejects zero count");
+    TEST_ASSERT(sceAgcDcbSetUconfigReg(NULL, 0x300, values, 1) == 0,
+        "DcbSetUconfigReg rejects NULL cb");
+
+    SceAgcCb small;
+    uint32_t small_buf[3];
+    agcCbInit(&small, small_buf, sizeof(small_buf));
+    TEST_ASSERT(sceAgcDcbSetUconfigReg(&small, 0x300, values, 2) == 0,
+        "DcbSetUconfigReg rejects overflow");
+}
+
 void test_suite_cb(void) {
     TEST_SUITE("Command Buffer Builders");
     TEST_RUN(test_cb_layout_offsets);
@@ -433,4 +953,22 @@ void test_suite_cb(void) {
     TEST_RUN(test_sce_agc_dcb_set_registers_indirect);
     TEST_RUN(test_sce_agc_dcb_patch_address);
     TEST_RUN(test_sce_agc_dcb_lod_stats);
+    TEST_RUN(test_sce_agc_dcb_wait_flip_done);
+    TEST_RUN(test_sce_agc_dcb_wait_flip_done_rejects_invalid);
+    TEST_RUN(test_sce_agc_dcb_wait_flip);
+    TEST_RUN(test_sce_agc_dcb_insert_wait_flip_done);
+    TEST_RUN(test_sce_agc_dcb_wait_flip_eos);
+    TEST_RUN(test_sce_agc_dcb_release_mem);
+    TEST_RUN(test_sce_agc_dcb_indirect_buffer);
+    TEST_RUN(test_sce_agc_dcb_indirect_buffer_const);
+    TEST_RUN(test_sce_agc_dcb_draw_indirect);
+    TEST_RUN(test_sce_agc_dcb_draw_index2);
+    TEST_RUN(test_sce_agc_dcb_draw_index_indirect);
+    TEST_RUN(test_sce_agc_dcb_draw_indirect_multi);
+    TEST_RUN(test_sce_agc_dcb_draw_index_indirect_multi);
+    TEST_RUN(test_sce_agc_dcb_set_predication);
+    TEST_RUN(test_sce_agc_dcb_event_write);
+    TEST_RUN(test_sce_agc_dcb_set_config_reg);
+    TEST_RUN(test_sce_agc_dcb_set_sh_reg);
+    TEST_RUN(test_sce_agc_dcb_set_uconfig_reg);
 }

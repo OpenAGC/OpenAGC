@@ -9,6 +9,8 @@
 #include "agc_types.h"
 #include "agcdriver.h"
 
+#include "agc_cb.h"
+
 static int32_t dcb_write_nop(uint32_t *dcb, uint32_t size_dw, uint32_t marker)
 {
     if (!dcb || size_dw < 2)
@@ -237,6 +239,47 @@ int32_t PS5_SYSV_ABI sceAgcVshDcbSetWorkloadsActive(
     dcb[5] = 0;
     dcb[6] = 0;
     dcb[7] = 0;
+    return 8;
+}
+
+int32_t PS5_SYSV_ABI sceAgcDcbSetEopFlip(SceAgcCb *dcb,
+    uint32_t event_type, uint32_t event_index,
+    uint64_t dst_addr, uint32_t data)
+{
+    if (!dcb)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    /*
+     * EOP flip via IT_RELEASE_MEM (Ariel/AMD opcode 0x49) type-3 packet.
+     *
+     * RE'd from libSceAgcDriver.sprx ordinals 49/50 (cwbxjPSJ7WQ /
+     * u8BkdHb1+Po). The SPRX writes 0xc0064900 as the PM4 header — a
+     * type-3 packet with opcode 0x49 (IT_RELEASE_MEM) and count field 6
+     * (7 payload dwords + 1 header = 8 total). The SPRX also uses
+     * 0xfffd1000 as a mask/flag value in the EOP control field.
+     *
+     * Packet layout (8 dwords):
+     *   [0] header (0xc0064900 = type-3, opcode 0x49, length 8)
+     *   [1] event_control = event_type[5:0] | event_index[13:8]
+     *   [2] dst_addr_lo
+     *   [3] dst_addr_hi
+     *   [4] data
+     *   [5] reserved (0)
+     *   [6] reserved (0)
+     *   [7] reserved (0)
+     */
+    uint32_t *cmd = agcCbAllocDwords(dcb, 8);
+    if (!cmd)
+        return AGC_ERROR_CB_OVERFLOW;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_RELEASE_MEM, 8);
+    cmd[1] = (event_type & 0x3Fu) | ((event_index & 0x0Fu) << 8);
+    cmd[2] = (uint32_t)(dst_addr & 0xFFFFFFFFu);
+    cmd[3] = (uint32_t)(dst_addr >> 32);
+    cmd[4] = data;
+    cmd[5] = 0;
+    cmd[6] = 0;
+    cmd[7] = 0;
     return 8;
 }
 

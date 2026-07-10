@@ -17,6 +17,21 @@ The host-generic implementation now has a tested model for:
 - DCB/ACB submit descriptor layout
 - Generic submit validation and debug capture
 - AGC shader record parser (magic, pointer fields, semantics counts, shader type)
+- AGC shader Specials block struct (`AgcShaderSpecials`: GE_CNTL, VGT_SHADER_STAGES_EN, VGT_GS_OUT_PRIM_TYPE, GE_USER_VGPR_EN)
+- AGC shader User Data Table struct (`AgcShaderUserData`: 5× 64-bit entries)
+- Typed accessors for shader sub-blocks (`agcShaderRecordGetSpecialsTyped`, `agcShaderRecordGetUserDataTyped`, `agcShaderRecordGetShRegisterValues`, `agcShaderRecordGetCxRegisterValues`)
+- Extended texture/surface enums: 18 tile modes, 8 image types, 28 data formats (BC1-7, depth/stencil, Fmask, subsampled), 7 number types, 5 clamp modes, 4 filter modes, 3 mip filter modes, 4 border color types
+- Full 64-byte `AgcRenderTarget` struct with CMASK/FMASK/DCC compression fields, CB_COLOR register mapping, and 14 init/setter helpers
+- Texture descriptor convenience helpers: `SetImageType`, `SetTileMode`, `SetMipLevels`, `SetArraySize`, `SetDepth`, `SetPitch`, `SetDstSel`, `GetBaseAddress`, `GetWidth`, `GetHeight`
+- Typed sampler helpers: `SetClampMode`, `SetFilterMode`, `SetBorderColor`, `SetMaxAnisotropy` (hardware-correct SQ_IMG_SAMP_WORD0-3 bit layout)
+- Texture format encode/decode helpers: `agcTextureFormatEncode`, `agcTextureFormatGetDataFormat`, `agcTextureFormatGetNumberType`
+- Shader linking: `agcShaderLinkHsGs` — combines HS/LS + CS shader records into GS (matches SPRX ordinal 131)
+- EOP flip submit: `sceAgcDriverSubmitEopFlip` (orbis) + `sceAgcDcbSetEopFlip` DCB builder (IT_RELEASE_MEM 0x49)
+- NID table expanded to 114 identified exports (78 original + 36 new from deep SPRX capstone disassembly)
+- Async-compute queue submission: generic backend queue tracking (32 slots), ACB submit validates queue in-use, full create→submit→destroy flow tested
+- 13 new DCB builders from SPRX disassembly: ReleaseMem, IndirectBuffer, IndirectBufferConst, DrawIndirect, DrawIndex2, DrawIndexIndirect, DrawIndirectMulti, DrawIndexIndirectMulti, SetPredication, EventWrite, SetConfigReg, SetShReg, SetUconfigReg
+- 4 AGC-custom flip builders: WaitFlipDone (0x4C), WaitFlip (0x51), InsertWaitFlipDone (0x54), WaitFlipEos (0x4F+0x4E)
+- Workload tracking: sceAgcDriverBeginWorkload / EndWorkload with SET_WORKLOAD (0x1E) submit on orbis
 - FW 5.50 register-defaults blob builder/parser with embedded primary/internal tables
 
 ## Verified
@@ -33,7 +48,7 @@ make -B test
 Expected result:
 
 ```text
-531 passed, 0 failed
+1270 passed, 0 failed
 ```
 
 PS5 orbis backend (cross-compiled, no tests):
@@ -94,6 +109,8 @@ Cursor-based builders:
 - `sceAgcDcbPushMarker`
 - `sceAgcDcbPopMarker`
 - `sceAgcDcbSetFlip`
+- `sceAgcDcbSetEopFlip` — emits `IT_RELEASE_MEM` (opcode 0x49) with 8-dword
+  EOP flip packet (header 0xc0064900, matching SPRX RE)
 - `sceAgcCbReleaseMem`
 - `sceAgcDcbSetShRegistersIndirect`
 - `sceAgcDcbSetCxRegistersIndirect`
@@ -158,7 +175,7 @@ Ioctl / submit / queue layer (FW 5.50 kernel RE, `include/agc_ioctl.h`):
 - 76 ioctl command constants (IOC-encoded, nr enum)
 - `AgcGcSubmitArgs` submit ioctl arg struct (24 bytes)
 - `AgcGcCommandBuffer` CB descriptor (16 bytes)
-- `AgcGcFrameOpenArg`, `AgcGcMakesysmapArg8/12/48`
+- `AgcGcFrameOpenArg` (nr=0x00, NOT HANDLED in FW 5.50), `AgcGcContextQueryResult` (nr=0x2e), `AgcGcMakesysmapArg8/12/48`
 - `AgcGcSuspendArg` — 16-byte layout with four dwords (RE'd from kernel handler at 0x6e6ff0)
 - `AgcGcSetHsOffchipArg` — 16-byte patch-list pointer/count (RE'd from kernel handler at 0x6ee6d2)
 - CB header opcodes, VMID layout, num_cbs/VMID ranges
@@ -167,17 +184,19 @@ Ioctl / submit / queue layer (FW 5.50 kernel RE, `include/agc_ioctl.h`):
 
 Native orbis backend (`src/driver_orbis.c`, `#ifdef OPENAGC_ORBIS`):
 
-- `sce_agc_initialize` — opens `/dev/gc`, calls `FRAME_OPEN` ioctl
+- `sce_agc_initialize` — opens `/dev/gc`, calls `CONTEXT_QUERY` ioctl (0xc004812e, nr=0x2e), mmaps GPU register space at 0xfe0200000 if context not yet initialized. **NOTE:** The old `FRAME_OPEN` (nr=0x00) does NOT exist in FW 5.50 — the kernel returns EINVAL. See `analysis/sprx_sce_agc_initialize_disasm.md`.
 - `sce_agc_initialize_internal_memory` — allocates 8 named regions via `sceKernelAllocateDirectMemory` + `sceKernelMapDirectMemory` + `MAKESYSMAP_8`
 - `sceAgcDriverSubmitMultiCommandBuffersDirect` — builds CB descriptors, calls `SUBMIT_PID`
 - `sceAgcDriverSubmitDcb` — single DCB submit via `SUBMIT_PID`
 - `sceAgcDriverSubmitAcb` — single ACB submit (const IB type) via `SUBMIT_PID`
-- `sceAgcDriverSetupAsyncGraphics` — `SETUP_ASYNC` ioctl
+- `sceAgcDriverSubmitEopFlip` — EOP flip submit; validates display buffer
+  index (< 16), delegates to `sceVideoOutSubmitEopFlip` (SPRX ordinals 49/50)
+- `sceAgcDriverSetupAsyncGraphics` — `QUEUE_STATUS` ioctl (nr=0x26, arg=1; SPRX-confirmed)
 - `sceAgcDriverSetTFRingDirect` — `SET_TF_RING` ioctl (user arg ignored on FW 5.50)
 - `sceAgcDriverSetHsOffchipParamDirect` — `SET_HS_OFFCHIP` ioctl with RE'd 16-byte patch-list argument
 - `sceAgcDriverGetPaDebugInterfaceVersion` — `PADEBUG_4` ioctl
-- `_sceAgcDriverCreateUserSpecialQueue` — `QUEUE_CREATE` ioctl
-- `_sceAgcDriverDestroyUserSpecialQueue` — `QUEUE_DESTROY` ioctl
+- `_sceAgcDriverCreateUserSpecialQueue` — `QUEUE_CREATE` ioctl (nr=0x21, 64-byte RW arg with magic auth tokens; SPRX-confirmed)
+- `_sceAgcDriverDestroyUserSpecialQueue` — `QUEUE_DESTROY` ioctl (nr=0x0e, 12-byte RW arg with magic auth tokens; SPRX-confirmed)
 - `sceAgcDriverNotifyDefaultStates` — takes `uint32_t flags`; builds FW 5.50 primary/internal register-defaults blobs in GPU-visible memory (kernel consumption path still pending RE)
 - `sceAgcDriverSuspendPointSubmitDirect` — `SUSPEND_16` ioctl with RE'd 4-dword argument
 - `sceAgcDriverIsSuspendPointInFlightDirect` — stub query (returns false)
@@ -214,13 +233,43 @@ Submit model:
      Adapted from `freegnm-examples/triangle/` submit pattern.
    - Deploy: `make deploy_videoout` / `make deploy_agc` (exploited PS5)
    - Install: `make install_videoout` / `make install_agc` (debug PS5)
-2. **Validate default state blobs** — confirm the primary/internal
+2. **Verify internal memory region sizes** — the 8 region sizes in
+   `sce_agc_initialize_internal_memory` (DDID 0x1000, CWSR 0x10000, etc.)
+   are INHERITED UNVERIFIED from ps5-openagc and need to be confirmed by
+   disassembling the actual `sce_agc_initialize_internal_memory` function
+   from the SPRX. See `analysis/ps5_openagc_audit.md`.
+3. **Validate default state blobs** — confirm the primary/internal
    register-defaults blobs built by `sceAgcDriverNotifyDefaultStates` are
    accepted by the kernel and that the GPU state matches expectations.
-3. **Validate suspend ioctls** — confirm the RE'd 4-dword argument layout for
+4. **Validate suspend ioctls** — confirm the RE'd 4-dword argument layout for
    `SUSPEND_16` (nr=0x1c) and `SUSPEND_39` (nr=0x39) by testing on hardware.
-4. **Queue creation** — implement real `QUEUE_CREATE` / `QUEUE_DESTROY` in
-   `sceAgcDriverSetupAsyncGraphics` and async-compute submission.
+5. **Queue creation** — `QUEUE_CREATE` / `QUEUE_DESTROY` / `SetupAsyncGraphics`
+   are implemented with SPRX-confirmed ioctl layouts (independently verified
+   from SPRX disassembly, NOT from ps5-openagc which had wrong ioctl numbers).
+   Hardware validation needed to confirm the magic auth tokens and ring buffer
+   addresses are accepted by the kernel. Async-compute submission via the
+   created queue is the remaining work.
+
+## ps5-openagc Audit
+
+The sibling `ps5-openagc` project is **NOT proven working on hardware** and
+contains known errors. It was used for initial NID mapping cross-reference
+only. All ioctl layouts and struct sizes in openagc have been independently
+verified from SPRX/kernel disassembly.
+
+**Confirmed wrong in ps5-openagc:**
+- `FRAME_OPEN` (nr=0x00) — claimed valid, but kernel returns `EINVAL`
+- Queue create — used nr=0x2a (4-byte), real SPRX uses nr=0x21 (64-byte RW
+  with magic tokens)
+- Queue destroy — used nr=0x2b (4-byte), real SPRX uses nr=0x0e (12-byte RW)
+- VMID mask — `0x000FFFFF00000000` (transcription error), correct is
+  `0x000FFFFFFFFFFFFF`
+
+**Still unverified (inherited from ps5-openagc):**
+- Internal memory region sizes and memory types in
+  `sce_agc_initialize_internal_memory`
+
+Full audit: `analysis/ps5_openagc_audit.md`
 
 ## Non-Goals For Current Milestone
 

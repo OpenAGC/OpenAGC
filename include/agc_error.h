@@ -26,6 +26,7 @@
 #define AGC_ERROR_BUSY                  ((int32_t)0x80890008)
 #define AGC_ERROR_NOT_FOUND             ((int32_t)0x80890009)
 #define AGC_ERROR_INTERNAL              ((int32_t)0x8089000A)
+#define AGC_ERROR_NOT_SUPPORTED         ((int32_t)0x8089000B)
 
 /* Command buffer errors */
 #define AGC_ERROR_CB_INVALID_SIZE       ((int32_t)0x80890101)
@@ -39,6 +40,10 @@
 /* Shader errors */
 #define AGC_ERROR_SHADER_INVALID        ((int32_t)0x80890301)
 #define AGC_ERROR_SHADER_COMPILE        ((int32_t)0x80890302)
+/* Shader type mismatch during linking — matches SPRX error 0x8a6c0008
+ * observed in sceAgcShaderLinkHsGs (ordinal 131) when the source shader
+ * type is not HS(4)/LS(5) or the CS shader type is not CS(6). */
+#define AGC_ERROR_SHADER_INVALID_TYPE   ((int32_t)0x8a6c0008)
 
 /* Resource errors */
 #define AGC_ERROR_RESOURCE_INVALID      ((int32_t)0x80890401)
@@ -60,6 +65,7 @@ static inline const char* agcErrorString(int32_t err) {
     case AGC_ERROR_BUSY:                return "AGC_ERROR_BUSY";
     case AGC_ERROR_NOT_FOUND:           return "AGC_ERROR_NOT_FOUND";
     case AGC_ERROR_INTERNAL:            return "AGC_ERROR_INTERNAL";
+    case AGC_ERROR_NOT_SUPPORTED:       return "AGC_ERROR_NOT_SUPPORTED";
     case AGC_ERROR_CB_INVALID_SIZE:     return "AGC_ERROR_CB_INVALID_SIZE";
     case AGC_ERROR_CB_OVERFLOW:         return "AGC_ERROR_CB_OVERFLOW";
     case AGC_ERROR_CB_INVALID_QUEUE:    return "AGC_ERROR_CB_INVALID_QUEUE";
@@ -67,6 +73,7 @@ static inline const char* agcErrorString(int32_t err) {
     case AGC_ERROR_SUBMIT_NOT_ALLOWED:  return "AGC_ERROR_SUBMIT_NOT_ALLOWED";
     case AGC_ERROR_SHADER_INVALID:      return "AGC_ERROR_SHADER_INVALID";
     case AGC_ERROR_SHADER_COMPILE:      return "AGC_ERROR_SHADER_COMPILE";
+    case AGC_ERROR_SHADER_INVALID_TYPE: return "AGC_ERROR_SHADER_INVALID_TYPE";
     case AGC_ERROR_RESOURCE_INVALID:    return "AGC_ERROR_RESOURCE_INVALID";
     case AGC_ERROR_RESOURCE_NOT_BOUND:  return "AGC_ERROR_RESOURCE_NOT_BOUND";
     case AGC_ERROR_VALIDATION_FAILED:   return "AGC_ERROR_VALIDATION_FAILED";

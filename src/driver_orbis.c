@@ -13,6 +13,8 @@
  * - Kernel dump gc_ioctl_internal at 0x6ed39c (BST + 4 jump tables)
  * - gc_submit_with_pid at 0x6e65c0, gc_frame_submit_internal at 0xb7da90
  * - Sibling ps5-openagc project's agc_driver.c / agc_submit.c / agc_queue.c
+ *   (NOT proven working — used for initial NID mapping only; ioctl layouts
+ *   and queue structs were independently verified from SPRX disassembly)
  * - SharpEmu HLE for userspace ioctl call patterns
  *
  * openagc is a clean rewrite — it calls ioctls directly rather than
@@ -29,6 +31,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
+#include <sys/mman.h>
 #include <string.h>
 
 #ifdef OPENAGC_ORBIS
@@ -73,34 +76,11 @@ extern int32_t sceKernelMapDirectMemory(
 extern int32_t sceKernelMunmap(void *addr, size_t len);
 extern int32_t sceKernelReleaseDirectMemory(off_t physicalAddr, size_t length);
 
-/* Queue types (bits [10:9] of queue create ioctl arg) */
-enum {
-    AGC_ORBIS_QUEUE_GFX      = 0,
-    AGC_ORBIS_QUEUE_COMPUTE  = 1,
-    AGC_ORBIS_QUEUE_DMA      = 2,
-};
-
-/*
- * Queue create/destroy ioctl argument (nr=0x2a / 0x2b, size=4).
- * Packed as a 32-bit value:
- *   bits [0:8]   = queue index (9 bits, 0-31 used)
- *   bits [9:10]  = queue type (2 bits)
- *   bits [11:31] = reserved
- */
-typedef union {
-    uint32_t value;
-    struct {
-        uint32_t index    : 9;
-        uint32_t type     : 2;
-        uint32_t reserved : 21;
-    };
-} AgcOrbisQueueArg;
-
 /* Per-queue state */
 typedef struct {
-    uint32_t index;
-    uint32_t type;
     bool     in_use;
+    uint64_t ring_base;    /* GPU VA of ring buffer */
+    uint64_t read_ptr;     /* GPU VA of read pointer */
 } AgcOrbisQueue;
 
 /* Named internal memory region allocated by sce_agc_initialize_internal_memory */
@@ -123,6 +103,9 @@ typedef struct {
     bool             initialized;    /* sce_agc_initialize succeeded */
     bool             mem_initialized;/* sce_agc_initialize_internal_memory succeeded */
     bool             defaults_notified;/* sceAgcDriverNotifyDefaultStates succeeded */
+    bool             async_setup_done;/* sceAgcDriverSetupAsyncGraphics succeeded */
+    void            *mmio_base;      /* GPU register MMIO mapping (0xfe0200000) */
+    uint32_t         ctx_capability; /* context query result from ioctl 0x2e */
     AgcOrbisQueue    queues[AGC_ORBIS_MAX_QUEUES];
     AgcOrbisRegion   ddid;
     AgcOrbisRegion   cwsr;
@@ -261,26 +244,61 @@ static void agcOrbisFreeRegion(AgcOrbisRegion *region)
 /*
  * Open /dev/gc and initialize the AGC context.
  *
- * Corresponds to the firmware's sce_agc_initialize() which:
- * 1. Opens /dev/gc
- * 2. Calls FRAME_OPEN ioctl to get a GPU context
+ * RE'd from libSceAgcDriver.sprx module_start (vaddr 0x77f0) and its
+ * /dev/gc open helper at vaddr 0x7cc0. See
+ * analysis/sprx_sce_agc_initialize_disasm.md for the full disassembly.
+ *
+ * The real initialization sequence (matching the SPRX):
+ * 1. Open /dev/gc with O_RDWR
+ * 2. Query context state via ioctl 0xc004812e (CONTEXT_QUERY, nr=0x2e)
+ *    - Returns a 32-bit capability mask
+ *    - If lower 16 bits are 0, the context is not yet initialized
+ * 3. If context is not initialized (capability == 0):
+ *    - mmap GPU register space at fixed address 0xfe0200000 (16KB, MAP_SHARED)
+ *    - mlock the mapping to prevent page-out
+ * 4. Store the fd and capability for later use
+ *
+ * NOTE: The old implementation used FRAME_OPEN (nr=0x00) which does NOT
+ * exist in FW 5.50 — the kernel returns EINVAL for it. This was the
+ * cause of the hardware validation failure.
  */
 int32_t PS5_SYSV_ABI sce_agc_initialize(void)
 {
     if (g_orbis.initialized)
         return AGC_OK;
 
+    /* Step 1: Open /dev/gc */
     g_orbis.gc_fd = open(AGC_GC_DEVICE_PATH, O_RDWR);
     if (g_orbis.gc_fd < 0)
         return AGC_ERROR_NOT_INITIALIZED;
 
-    /* Call FRAME_OPEN ioctl to initialize the GPU context */
-    AgcGcFrameOpenArg frame_arg = {0};
-    int ret = agcOrbisIoctl(AGC_GC_IOCTL_FRAME_OPEN, &frame_arg);
+    /* Step 2: Query context capability via ioctl 0xc004812e (nr=0x2e).
+     * This is a 4-byte RW ioctl that returns a capability bitmask. */
+    AgcGcContextQueryResult query_result = {0};
+    int ret = agcOrbisIoctl(AGC_GC_IOCTL_CONTEXT_QUERY, &query_result);
     if (ret < 0) {
         close(g_orbis.gc_fd);
         g_orbis.gc_fd = -1;
         return AGC_ERROR_NOT_INITIALIZED;
+    }
+
+    g_orbis.ctx_capability = query_result.capability_mask;
+
+    /* Step 3: If context is not initialized (capability lower 16 bits == 0),
+     * mmap the GPU register space at the fixed address used by the SPRX. */
+    if ((query_result.capability_mask & 0xFFFF) == 0) {
+        void *mmio = mmap((void *)AGC_GC_MMIO_BASE, AGC_GC_MMIO_SIZE,
+                          PROT_READ | PROT_WRITE, MAP_SHARED,
+                          g_orbis.gc_fd, 0);
+        if (mmio == MAP_FAILED || mmio == NULL) {
+            close(g_orbis.gc_fd);
+            g_orbis.gc_fd = -1;
+            return AGC_ERROR_NOT_INITIALIZED;
+        }
+        g_orbis.mmio_base = mmio;
+
+        /* Lock the mapping to prevent page-out (matches SPRX behavior) */
+        mlock(mmio, AGC_GC_MMIO_SIZE);
     }
 
     g_orbis.initialized = true;
@@ -297,9 +315,15 @@ int32_t PS5_SYSV_ABI sce_agc_initialize(void)
  *
  * Each region is allocated via sceKernelAllocateDirectMemory, mapped into
  * CPU space via sceKernelMapDirectMemory, and then mapped into GPU VA
- * space via agcOrbisIoctl(AGC_GC_IOCTL_MAKESYSMAP_8). The region sizes and
- * memory types are documented in the sibling ps5-openagc project's
- * src/agc_driver.c.
+ * space via agcOrbisIoctl(AGC_GC_IOCTL_MAKESYSMAP_8).
+ *
+ * WARNING: The region sizes and memory types below are INHERITED UNVERIFIED
+ * from the ps5-openagc project, which is NOT proven working on hardware.
+ * ps5-openagc claimed they came from "GNM driver string analysis" but did
+ * not disassemble the actual sce_agc_initialize_internal_memory function.
+ * The string names (DDID, CWSR, EOP_FIFO, etc.) exist in libSceAgcDriver.sprx
+ * but the sizes need to be verified from SPRX disassembly before hardware
+ * validation. See analysis/ps5_openagc_audit.md.
  */
 int32_t PS5_SYSV_ABI sce_agc_initialize_internal_memory(void)
 {
@@ -309,8 +333,8 @@ int32_t PS5_SYSV_ABI sce_agc_initialize_internal_memory(void)
         return AGC_OK;
 
     /*
-     * Named internal memory regions (sizes and memory types from GNM driver
-     * string analysis and the sibling ps5-openagc project).
+     * Named internal memory regions.
+     * UNVERIFIED: sizes and memory types inherited from ps5-openagc.
      */
     struct {
         AgcOrbisRegion *region;
@@ -479,6 +503,8 @@ int32_t PS5_SYSV_ABI sceAgcDriverSubmitAcb(
         return AGC_ERROR_INVALID_ARGUMENT;
     if (owner_handle >= AGC_ORBIS_MAX_QUEUES)
         return AGC_ERROR_CB_INVALID_QUEUE;
+    if (!g_orbis.queues[owner_handle].in_use)
+        return AGC_ERROR_CB_INVALID_QUEUE;
 
     AgcGcCommandBuffer cb_desc;
     agcOrbisBuildCbDescriptor(&cb_desc,
@@ -576,16 +602,36 @@ int32_t PS5_SYSV_ABI sce_agc_internal_suspend_point_submit_final(
 
 /*
  * Setup async graphics queue.
- * Uses ioctl nr=0x1f (SETUP_ASYNC, 4-byte RW).
+ *
+ * RE'd from libSceAgcDriver.sprx at vaddr 0x3ac0. The SPRX calls
+ * ioctl nr=0x26 (QUEUE_STATUS, 4-byte READ) with a fixed value of 1
+ * to initialize the async graphics queue. The pipe_id parameter only
+ * controls a flag in the SPRX's global state (pipe_id != 0 → async
+ * compute enabled). The ioctl is only called once; subsequent calls
+ * are a no-op.
+ *
+ * Ioctl command: 0x80048126 = IOC(READ, 0x81, 0x26, 4)
  */
-int32_t PS5_SYSV_ABI sceAgcDriverSetupAsyncGraphics(void)
+int32_t PS5_SYSV_ABI sceAgcDriverSetupAsyncGraphics(uint32_t pipe_id)
 {
     if (!g_orbis.initialized)
         return AGC_ERROR_NOT_INITIALIZED;
 
-    uint32_t arg = 0;
-    int ret = agcOrbisIoctl(AGC_GC_IOCTL_SETUP_ASYNC, &arg);
-    return (ret < 0) ? AGC_ERROR_INTERNAL : AGC_OK;
+    if (g_orbis.async_setup_done) {
+        /* SPRX only calls the ioctl once, then sets a flag. */
+        return AGC_OK;
+    }
+
+    uint32_t arg = 1;
+    int ret = agcOrbisIoctl(AGC_GC_IOCTL_QUEUE_STATUS, &arg);
+    if (ret < 0)
+        return AGC_ERROR_INTERNAL;
+
+    g_orbis.async_setup_done = true;
+    /* Store pipe_id != 0 flag (used by SPRX for async compute routing). */
+    (void)pipe_id;
+
+    return AGC_OK;
 }
 
 /*
@@ -760,55 +806,212 @@ int32_t PS5_SYSV_ABI sceAgcDriverSdmaCopyLinearBlocking(
 }
 
 /* ===================================================================== */
+/* Public API — EOP flip submit                                          */
+/* ===================================================================== */
+
+/*
+ * Submit an end-of-pipe flip to the display.
+ *
+ * RE'd from libSceAgcDriver.sprx ordinals 49 (cwbxjPSJ7WQ, 585B) and 50
+ * (u8BkdHb1+Po, 428B). Both functions:
+ *   - Validate display buffer index: r8d+2 < 0x12 (max 16 display buffers)
+ *   - Return VideoOut error 0x8029000a on invalid index
+ *   - Build an IT_RELEASE_MEM (opcode 0x49) PM4 type-3 header (0xc0064900)
+ *   - Call sceVideoOutSubmitEopFlip from the VideoOut library
+ *   - Use 0xfffd1000 as a mask/flag value in the EOP packet
+ *
+ * The SPRX internally delegates to sceVideoOutSubmitEopFlip rather than
+ * issuing a /dev/gc ioctl — the EOP flip is a VideoOut-side operation that
+ * the GPU signals via the IT_RELEASE_MEM packet.
+ */
+
+/* VideoOut error code for invalid display buffer index (from SPRX RE). */
+#define AGC_VIDEO_OUT_ERROR_INVALID_INDEX  ((int32_t)0x8029000a)
+
+/* Maximum number of display buffers (SPRX checks r8d+2 < 0x12 → max 16). */
+#define AGC_ORBIS_MAX_DISPLAY_BUFFERS 16
+
+/* sceVideoOutSubmitEopFlip — provided by libSceVideoOut.sprx at runtime. */
+extern int32_t sceVideoOutSubmitEopFlip(
+    int32_t videoOutHandle, int32_t bufferIndex,
+    int32_t flipMode, int32_t presentPtr);
+
+int32_t PS5_SYSV_ABI sceAgcDriverSubmitEopFlip(
+    void *video_out_handle, uint32_t display_buf_index,
+    uint32_t flip_mode, void *present_ptr)
+{
+    if (!g_orbis.initialized)
+        return AGC_ERROR_NOT_INITIALIZED;
+
+    /* Validate display buffer index (SPRX: r8d+2 < 0x12 → index < 16). */
+    if (display_buf_index >= AGC_ORBIS_MAX_DISPLAY_BUFFERS)
+        return AGC_VIDEO_OUT_ERROR_INVALID_INDEX;
+
+    /*
+     * Delegate to sceVideoOutSubmitEopFlip. The VideoOut handle is an
+     * int32_t from sceVideoOutOpen; we cast from the void* wrapper. The
+     * present_ptr is a GPU address or 0; cast to int32_t for the VideoOut
+     * ABI (the upper bits are unused on PS5 since GPU VAs fit in 32 bits
+     * for the present-queue range).
+     */
+    int32_t handle = (int32_t)(intptr_t)video_out_handle;
+    int32_t present = (int32_t)(intptr_t)present_ptr;
+
+    return sceVideoOutSubmitEopFlip(
+        handle, (int32_t)display_buf_index, (int32_t)flip_mode, present);
+}
+
+/* ===================================================================== */
+/* Public API — workload tracking                                        */
+/* ===================================================================== */
+
+/*
+ * Workload tracking — orbis backend.
+ *
+ * RE'd from libSceAgcDriver.sprx ordinals 87 (UM9b9NunSrE, BeginWorkload)
+ * and 88 (i6bfTi13ApA, EndWorkload). Both functions:
+ *   - Validate workload_id (error 0x8a6c0033 if invalid/zero)
+ *   - Build a SET_WORKLOAD (0x1E) PM4 packet with a subcommand
+ *   - Submit it to the GPU via the submit ioctl
+ *
+ * The 0xcc / 0xcd prefix bits in the SPRX correspond to the begin/end
+ * subcommand selectors (AGC_PM4_SUB_WORKLOAD_BEGIN / _END).
+ *
+ * Packet layout (3 dwords):
+ *   [0] header = agcPm4Header3Sub(SET_WORKLOAD, sub, 3)
+ *   [1] workload_id
+ *   [2] reserved (0)
+ */
+static int32_t agcOrbisSubmitWorkload(uint32_t workload_id, uint32_t sub)
+{
+    if (!g_orbis.initialized)
+        return AGC_ERROR_NOT_INITIALIZED;
+    if (workload_id == 0)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    /* Build a 3-dword SET_WORKLOAD packet in a small GPU-visible buffer. */
+    AgcOrbisRegion dcb_region = {0};
+    int32_t ret = agcOrbisAllocRegion(&dcb_region, 16, SCE_KERNEL_WB_GARLIC);
+    if (ret != AGC_OK)
+        return ret;
+
+    uint32_t *dcb = (uint32_t *)dcb_region.cpu_addr;
+    dcb[0] = agcPm4Header3Sub(AGC_PM4_OP_SET_WORKLOAD, sub, 3);
+    dcb[1] = workload_id;
+    dcb[2] = 0;
+
+    AgcCommandBufferSubmit submit = {0};
+    submit.command_address = (uintptr_t)dcb_region.gpu_addr;
+    submit.dword_count = 3;
+
+    ret = sceAgcDriverSubmitDcb(&submit);
+    agcOrbisFreeRegion(&dcb_region);
+    return ret;
+}
+
+int32_t PS5_SYSV_ABI sceAgcDriverBeginWorkload(uint32_t workload_id)
+{
+    return agcOrbisSubmitWorkload(workload_id, AGC_PM4_SUB_WORKLOAD_BEGIN);
+}
+
+int32_t PS5_SYSV_ABI sceAgcDriverEndWorkload(uint32_t workload_id)
+{
+    return agcOrbisSubmitWorkload(workload_id, AGC_PM4_SUB_WORKLOAD_END);
+}
+
+/* ===================================================================== */
 /* Public API — user special queue management                            */
 /* ===================================================================== */
 
 /*
  * Create a user special queue.
- * Uses ioctl nr=0x2a (QUEUE_CREATE, 4-byte R).
+ *
+ * RE'd from libSceAgcDriver.sprx at vaddr 0x2c20. The SPRX builds a
+ * 64-byte argument containing three hardcoded magic authentication
+ * tokens, ring buffer addresses carved from internal memory, and a
+ * fixed pipe_id of 0xc. The ioctl is nr=0x21 (64-byte RW).
+ *
+ * The SPRX takes no parameters — it uses GPU memory already allocated
+ * by sce_agc_initialize_internal_memory to compute ring_base and
+ * read_ptr. We do the same using the workload region's GPU address.
+ *
+ * Ioctl command: 0xc0408121 = IOC(RW, 0x81, 0x21, 64)
  */
 int32_t PS5_SYSV_ABI _sceAgcDriverCreateUserSpecialQueue(void)
 {
     if (!g_orbis.initialized)
+        return AGC_ERROR_NOT_INITIALIZED;
+    if (!g_orbis.mem_initialized)
         return AGC_ERROR_NOT_INITIALIZED;
 
     int index = agcOrbisFindFreeQueue();
     if (index < 0)
         return AGC_ERROR_OUT_OF_MEMORY;
 
-    AgcOrbisQueueArg arg = {0};
-    arg.index = (uint32_t)index;
-    arg.type = AGC_ORBIS_QUEUE_COMPUTE;
+    /*
+     * Compute ring buffer addresses from the workload internal region.
+     * The SPRX uses offsets 0x1c8000 and 0x1cc000 from a base address
+     * obtained during initialization. We use the workload region's
+     * GPU address as the base.
+     */
+    uint64_t base = g_orbis.workload.gpu_addr;
+    uint64_t ring_base = base + 0x1c8000;
+    uint64_t read_ptr  = base + 0x1cc000;
+    uint64_t gpu_addr  = base + 0x39000;
 
-    int ret = agcOrbisIoctl(AGC_GC_IOCTL_QUEUE_CREATE, &arg.value);
+    AgcGcQueueCreateArg arg = {0};
+    arg.magic1     = AGC_GC_QUEUE_MAGIC1;
+    arg.magic2     = AGC_GC_QUEUE_MAGIC2;
+    arg.magic3     = AGC_GC_QUEUE_MAGIC3;
+    arg.token      = AGC_GC_QUEUE_TOKEN;
+    arg.ring_base  = ring_base;
+    arg.read_ptr   = read_ptr;
+    arg.global_ctx = 0;  /* SPRX passes a global data pointer */
+    arg.pipe_id    = AGC_GC_QUEUE_PIPE_ID;
+    arg.padding    = 0;
+    arg.gpu_addr   = gpu_addr;
+    arg.ring_size  = AGC_GC_QUEUE_RING_SIZE;
+
+    int ret = agcOrbisIoctl(AGC_GC_IOCTL_QUEUE_CREATE, &arg);
     if (ret < 0)
         return AGC_ERROR_INTERNAL;
 
-    g_orbis.queues[index].index = (uint32_t)index;
-    g_orbis.queues[index].type = AGC_ORBIS_QUEUE_COMPUTE;
-    g_orbis.queues[index].in_use = true;
+    g_orbis.queues[index].in_use    = true;
+    g_orbis.queues[index].ring_base = ring_base;
+    g_orbis.queues[index].read_ptr  = read_ptr;
 
-    return AGC_OK;
+    /* Return the queue index as the handle so callers can pass it to
+     * sceAgcDriverSubmitAcb as the owner_handle. The generic backend
+     * does the same. */
+    return (int32_t)index;
 }
 
 /*
  * Destroy a user special queue.
- * Uses ioctl nr=0x2b (QUEUE_DESTROY, 4-byte W).
+ *
+ * RE'd from libSceAgcDriver.sprx at vaddr 0x2e30. The SPRX sends a
+ * 12-byte argument containing only the three magic authentication
+ * tokens. The kernel identifies the queue to destroy from the
+ * calling process's state. The ioctl is nr=0x0e (12-byte RW).
+ *
+ * Ioctl command: 0xc00c810e = IOC(RW, 0x81, 0x0e, 12)
  */
 int32_t PS5_SYSV_ABI _sceAgcDriverDestroyUserSpecialQueue(void)
 {
     if (!g_orbis.initialized)
         return AGC_ERROR_NOT_INITIALIZED;
 
-    /* Find the first in-use compute queue and destroy it.
-     * The real API takes a queue handle; this stub destroys the first. */
+    /* Find the first in-use queue and destroy it.
+     * The SPRX takes no parameters — the kernel tracks the queue. */
     for (int i = 0; i < AGC_ORBIS_MAX_QUEUES; i++) {
         if (g_orbis.queues[i].in_use) {
-            AgcOrbisQueueArg arg = {0};
-            arg.index = g_orbis.queues[i].index;
-            arg.type = g_orbis.queues[i].type;
+            AgcGcQueueDestroyArg arg = {
+                .magic1 = AGC_GC_QUEUE_MAGIC1,
+                .magic2 = AGC_GC_QUEUE_MAGIC2,
+                .magic3 = AGC_GC_QUEUE_MAGIC3,
+            };
 
-            agcOrbisIoctl(AGC_GC_IOCTL_QUEUE_DESTROY, &arg.value);
+            agcOrbisIoctl(AGC_GC_IOCTL_QUEUE_DESTROY, &arg);
             g_orbis.queues[i].in_use = false;
             return AGC_OK;
         }

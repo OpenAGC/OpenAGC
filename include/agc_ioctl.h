@@ -10,7 +10,11 @@
  * RE source: kernel dump gc_ioctl_internal at 0x6ed39c (BST + 4 jump tables),
  * gc_submit_with_pid at 0x6e65c0, gc_frame_submit_internal at 0xb7da90.
  * Cross-referenced with the sibling ps5-openagc project's
- * analysis/ioctl_dispatch.md and include/ps5/internal/agc_{ioctl,submit,fw}.h.
+ * analysis/ioctl_dispatch.md — but ps5-openagc is NOT proven working and
+ * its ioctl_dispatch.md contains known errors (e.g. it claimed FRAME_OPEN
+ * nr=0x00 was valid; it used wrong queue create/destroy ioctl numbers).
+ * All ioctl numbers and struct layouts used by openagc have been independently
+ * verified from SPRX disassembly. See analysis/ps5_openagc_audit.md.
  *
  * openagc is a clean rewrite — these constants are recovered ABI facts, not
  * copied code. The ioctl table is FW-version-specific; 5.50 is the first
@@ -41,7 +45,12 @@
  */
 enum AgcGcIoctlNr {
     /* Frame / submit */
-    AGC_GC_NR_FRAME_OPEN       = 0x00, /* gc_open_internal — open submit frame */
+    /* NOTE: nr=0x00 (FRAME_OPEN) does NOT exist in FW 5.50. The kernel's
+     * gc_ioctl_internal has no handler for it and returns EINVAL via the
+     * default path. The real init is done by libSceAgcDriver's module_start
+     * which opens /dev/gc, queries context state via CONTEXT_QUERY (nr=0x2e),
+     * and mmaps GPU register space. See analysis/sprx_sce_agc_initialize_disasm.md */
+    AGC_GC_NR_FRAME_OPEN       = 0x00, /* NOT HANDLED in FW 5.50 (EINVAL) */
     AGC_GC_NR_CLOSE            = 0x01, /* close / cleanup */
     AGC_GC_NR_SUBMIT_16        = 0x02, /* gc_submit_with_pid (16-byte arg) */
     AGC_GC_NR_SUBMIT_4         = 0x13, /* submit variant (4-byte arg) */
@@ -57,9 +66,10 @@ enum AgcGcIoctlNr {
 
     /* Queue management */
     AGC_GC_NR_QUEUE_DISCONNECT = 0x16, /* gc_gfx_queue_disconnect */
-    AGC_GC_NR_QUEUE_STATUS     = 0x27, /* gc_gfx_queue_status */
-    AGC_GC_NR_QUEUE_CREATE     = 0x2a, /* create/map queue */
-    AGC_GC_NR_QUEUE_DESTROY    = 0x2b, /* destroy queue */
+    AGC_GC_NR_QUEUE_STATUS     = 0x26, /* setup async graphics (SPRX-confirmed) */
+    AGC_GC_NR_QUEUE_STAT_16    = 0x27, /* gc_gfx_queue_status query */
+    AGC_GC_NR_QUEUE_DESTROY    = 0x0e, /* destroy queue (12-byte RW, SPRX-confirmed) */
+    /* nr=0x2a and nr=0x2b are kernel-internal queue ops, not used by SPRX */
 
     /* Suspend / resume */
     AGC_GC_NR_SUSPEND_16       = 0x1c, /* gc_accept_suspend_locked (16-byte) */
@@ -80,15 +90,21 @@ enum AgcGcIoctlNr {
     AGC_GC_NR_QUERY_68         = 0x24, /* related query (68-byte R) */
     AGC_GC_NR_QUERY_4C         = 0x3c, /* query (4-byte R) */
 
+    /* Context query — used by libSceAgcDriver module_start to check if
+     * the GPU context is already initialized. Returns a 32-bit bitmask:
+     *   bit  0: ctx->field_30 != 0 (context initialized)
+     *   bit 16: ctx->field_40 != 0 (secondary capability)
+     * Kernel handler at 0x6ee691. */
+    AGC_GC_NR_CONTEXT_QUERY    = 0x2e, /* context capability query (4-byte RW) */
+
     /* WFDebug (wavefront debug) */
     AGC_GC_NR_WFDEBUG_15       = 0x15,
     AGC_GC_NR_WFDEBUG_17       = 0x17,
     AGC_GC_NR_WFDEBUG_18       = 0x18,
     AGC_GC_NR_WFDEBUG_1D       = 0x1d,
-    AGC_GC_NR_WFDEBUG_2E       = 0x2e,
 
     /* Large arg structs */
-    AGC_GC_NR_LARGE_64         = 0x21, /* 64-byte RW (used 3x in AGC driver) */
+    AGC_GC_NR_QUEUE_CREATE     = 0x21, /* queue create (64-byte RW, SPRX-confirmed) */
     AGC_GC_NR_LARGE_132        = 0x19, /* 132-byte RW (used 3x in AGC driver) */
     AGC_GC_NR_LARGE_48         = 0x1e, /* 48-byte RW */
     AGC_GC_NR_LARGE_72         = 0x31, /* 72-byte RW */
@@ -98,7 +114,7 @@ enum AgcGcIoctlNr {
     /* Misc */
     AGC_GC_NR_SET_TF_RING      = 0x20, /* set tessellation factor ring */
     AGC_GC_NR_SET_HS_OFFCHIP   = 0x2c, /* set hull shader offchip params */
-    AGC_GC_NR_SETUP_ASYNC      = 0x1f, /* setup async graphics queue */
+    AGC_GC_NR_SETUP_ASYNC      = 0x1f, /* (not used by SPRX for setup_async) */
     AGC_GC_NR_SUBMITDONE       = 0x25, /* gc_setup_submitdone */
     AGC_GC_NR_CPASSETID        = 0x11, /* gc_cpassetid */
     AGC_GC_NR_IH_TASKLET       = 0x1b, /* gc_ih_tasklet */
@@ -112,7 +128,8 @@ enum AgcGcIoctlNr {
 #define AGC_GC_IOCTL_COUNT 76u
 
 /* Full ioctl command words for FW 5.50 */
-#define AGC_GC_IOCTL_FRAME_OPEN     AGC_GC_IOC(3u, 0x00u, 8u)
+#define AGC_GC_IOCTL_FRAME_OPEN     AGC_GC_IOC(3u, 0x00u, 8u)  /* NOT HANDLED in FW 5.50 */
+#define AGC_GC_IOCTL_CONTEXT_QUERY  AGC_GC_IOC(3u, 0x2eu, 4u)  /* context capability query */
 #define AGC_GC_IOCTL_CLOSE          AGC_GC_IOC(3u, 0x01u, 8u)
 #define AGC_GC_IOCTL_SUBMIT_16      AGC_GC_IOC(3u, 0x02u, 16u)
 #define AGC_GC_IOCTL_MAKESYSMAP_8   AGC_GC_IOC(3u, 0x09u, 8u)
@@ -132,19 +149,18 @@ enum AgcGcIoctlNr {
 #define AGC_GC_IOCTL_SUSPEND_16     AGC_GC_IOC(3u, 0x1cu, 16u)
 #define AGC_GC_IOCTL_WFDEBUG_1D     AGC_GC_IOC(3u, 0x1du, 4u)
 #define AGC_GC_IOCTL_LARGE_48       AGC_GC_IOC(3u, 0x1eu, 48u)
-#define AGC_GC_IOCTL_SETUP_ASYNC    AGC_GC_IOC(3u, 0x1fu, 4u)
+#define AGC_GC_IOCTL_SETUP_ASYNC    AGC_GC_IOC(3u, 0x1fu, 4u)   /* nr=0x1f (not used by SPRX) */
 #define AGC_GC_IOCTL_SET_TF_RING    AGC_GC_IOC(3u, 0x20u, 16u)
-#define AGC_GC_IOCTL_LARGE_64       AGC_GC_IOC(3u, 0x21u, 64u)
+#define AGC_GC_IOCTL_QUEUE_CREATE   AGC_GC_IOC(3u, 0x21u, 64u)  /* nr=0x21, 64-byte RW (SPRX-confirmed) */
 #define AGC_GC_IOCTL_QUERY_120      AGC_GC_IOC(2u, 0x23u, 120u)
 #define AGC_GC_IOCTL_QUERY_68       AGC_GC_IOC(2u, 0x24u, 68u)
 #define AGC_GC_IOCTL_SUBMITDONE     AGC_GC_IOC(3u, 0x25u, 4u)
-#define AGC_GC_IOCTL_QUEUE_STATUS   AGC_GC_IOC(2u, 0x26u, 4u)
-#define AGC_GC_IOCTL_QUEUE_STAT_16  AGC_GC_IOC(2u, 0x27u, 4u)
-#define AGC_GC_IOCTL_QUEUE_CREATE   AGC_GC_IOC(2u, 0x2au, 4u)
-#define AGC_GC_IOCTL_QUEUE_DESTROY  AGC_GC_IOC(1u, 0x2bu, 4u)
+#define AGC_GC_IOCTL_QUEUE_STATUS   AGC_GC_IOC(2u, 0x26u, 4u)   /* nr=0x26, setup async (SPRX-confirmed) */
+#define AGC_GC_IOCTL_QUEUE_STAT_16  AGC_GC_IOC(2u, 0x27u, 4u)   /* nr=0x27, queue status query */
+#define AGC_GC_IOCTL_QUEUE_DESTROY  AGC_GC_IOC(3u, 0x0eu, 12u)  /* nr=0x0e, 12-byte RW (SPRX-confirmed) */
 #define AGC_GC_IOCTL_SET_HS_OFFCHIP AGC_GC_IOC(3u, 0x2cu, 16u)
 #define AGC_GC_IOCTL_IH_TASKLET_2D  AGC_GC_IOC(3u, 0x2du, 8u)
-#define AGC_GC_IOCTL_WFDEBUG_2E     AGC_GC_IOC(3u, 0x2eu, 4u)
+/* 0xc004812e (nr=0x2e) is CONTEXT_QUERY, not WFDEBUG — see AGC_GC_IOCTL_CONTEXT_QUERY above */
 #define AGC_GC_IOCTL_SUBMIT_40      AGC_GC_IOC(3u, 0x30u, 40u)
 #define AGC_GC_IOCTL_LARGE_72       AGC_GC_IOC(3u, 0x31u, 72u)
 #define AGC_GC_IOCTL_LARGE_24       AGC_GC_IOC(3u, 0x32u, 24u)
@@ -243,7 +259,11 @@ _Static_assert(sizeof(AgcGcCommandBuffer) == 0x10,
 
 /*
  * Frame open ioctl argument struct (nr=0x00, dir=RW, size=8).
- * RE'd from gc_open_internal at 0x6ed8dc.
+ *
+ * WARNING: This ioctl is NOT handled by the FW 5.50 kernel. Calling it
+ * returns EINVAL. It is kept here for documentation only. The real
+ * initialization uses CONTEXT_QUERY (nr=0x2e) + mmap instead.
+ * See analysis/sprx_sce_agc_initialize_disasm.md for details.
  */
 typedef struct AgcGcFrameOpenArg {
     uint32_t flags;
@@ -251,6 +271,34 @@ typedef struct AgcGcFrameOpenArg {
 } AgcGcFrameOpenArg;
 _Static_assert(sizeof(AgcGcFrameOpenArg) == 0x08,
     "AgcGcFrameOpenArg size mismatch");
+
+/*
+ * Context query ioctl result (nr=0x2e, dir=RW, size=4).
+ *
+ * RE'd from the kernel handler at 0x6ee691 and libSceAgcDriver.sprx
+ * module_start at vaddr 0x7cc0.
+ *
+ * The kernel reads two fields from the gc context struct and returns
+ * a 32-bit bitmask:
+ *   bits [15:0]  = (ctx->field_30 != 0) — context initialized flag
+ *   bits [31:16] = (ctx->field_40 != 0) — secondary capability flag
+ *
+ * The SPRX checks the lower 16 bits: if zero, the context is not yet
+ * initialized and the SPRX performs mmap + default state setup.
+ */
+typedef struct AgcGcContextQueryResult {
+    uint32_t capability_mask;   /* (field40 != 0) << 16 | (field30 != 0) */
+} AgcGcContextQueryResult;
+_Static_assert(sizeof(AgcGcContextQueryResult) == 0x04,
+    "AgcGcContextQueryResult size mismatch");
+
+/* Context query capability bits */
+#define AGC_GC_CTX_QUERY_INITIALIZED    0x0001u  /* ctx->field_30 != 0 */
+#define AGC_GC_CTX_QUERY_CAPABILITY2    0x00010000u  /* ctx->field_40 != 0 */
+
+/* Fixed GPU register MMIO address used by libSceAgcDriver module_start */
+#define AGC_GC_MMIO_BASE    0xfe0200000ULL
+#define AGC_GC_MMIO_SIZE    0x4000u
 
 /*
  * Makesysmap argument struct (nr=0x09, dir=RW, size=8).
@@ -354,6 +402,85 @@ _Static_assert(offsetof(AgcGcSetHsOffchipArg, reserved) == 0x0C,
     "AgcGcSetHsOffchipArg reserved offset mismatch");
 
 /*
+ * Queue create ioctl argument struct (nr=0x21, dir=RW, size=64).
+ *
+ * RE'd from libSceAgcDriver.sprx _sceAgcDriverCreateUserSpecialQueue
+ * at vaddr 0x2c20 and its internal helper at vaddr 0x8d80.
+ *
+ * The SPRX hardcodes three magic authentication tokens that the kernel
+ * validates before creating the queue. The ring_base and read_ptr are
+ * GPU VAs carved out of the internal memory allocated by
+ * sce_agc_initialize_internal_memory. The pipe_id is fixed at 0xc.
+ *
+ * Ioctl command: 0xc0408121 = IOC(RW, 0x81, 0x21, 64)
+ */
+typedef struct AgcGcQueueCreateArg {
+    uint32_t magic1;        /* offset 0x00: 0xaf1e80b7 (auth token 1) */
+    uint32_t magic2;        /* offset 0x04: 0x8b4cdd90 (auth token 2) */
+    uint32_t magic3;        /* offset 0x08: 0x99f68d6c (auth token 3) */
+    uint32_t token;         /* offset 0x0C: 0xe5fcc174 (secondary token) */
+    uint64_t ring_base;     /* offset 0x10: GPU VA of queue ring buffer */
+    uint64_t read_ptr;      /* offset 0x18: GPU VA of read pointer */
+    uint64_t global_ctx;    /* offset 0x20: userspace context pointer */
+    uint32_t pipe_id;       /* offset 0x28: pipe id (0xc) */
+    uint32_t padding;       /* offset 0x2C: zero */
+    uint64_t gpu_addr;      /* offset 0x30: computed GPU address */
+    uint64_t ring_size;     /* offset 0x38: ring size in bytes (0x1000) */
+} AgcGcQueueCreateArg;
+_Static_assert(sizeof(AgcGcQueueCreateArg) == 0x40,
+    "AgcGcQueueCreateArg size mismatch");
+_Static_assert(offsetof(AgcGcQueueCreateArg, magic1) == 0x00,
+    "AgcGcQueueCreateArg magic1 offset mismatch");
+_Static_assert(offsetof(AgcGcQueueCreateArg, ring_base) == 0x10,
+    "AgcGcQueueCreateArg ring_base offset mismatch");
+_Static_assert(offsetof(AgcGcQueueCreateArg, pipe_id) == 0x28,
+    "AgcGcQueueCreateArg pipe_id offset mismatch");
+_Static_assert(offsetof(AgcGcQueueCreateArg, gpu_addr) == 0x30,
+    "AgcGcQueueCreateArg gpu_addr offset mismatch");
+_Static_assert(offsetof(AgcGcQueueCreateArg, ring_size) == 0x38,
+    "AgcGcQueueCreateArg ring_size offset mismatch");
+
+/* Queue create authentication tokens (hardcoded in libSceAgcDriver.sprx) */
+#define AGC_GC_QUEUE_MAGIC1     0xaf1e80b7u
+#define AGC_GC_QUEUE_MAGIC2     0x8b4cdd90u
+#define AGC_GC_QUEUE_MAGIC3     0x99f68d6cu
+#define AGC_GC_QUEUE_TOKEN      0xe5fcc174u
+#define AGC_GC_QUEUE_PIPE_ID    0xcu
+#define AGC_GC_QUEUE_RING_SIZE  0x1000u
+
+/*
+ * Queue destroy ioctl argument struct (nr=0x0e, dir=RW, size=12).
+ *
+ * RE'd from libSceAgcDriver.sprx _sceAgcDriverDestroyUserSpecialQueue
+ * at vaddr 0x2e30 and its internal helper at vaddr 0x8fc0.
+ *
+ * Only the three magic tokens are sent; the kernel identifies the
+ * queue to destroy from the calling process's state.
+ *
+ * Ioctl command: 0xc00c810e = IOC(RW, 0x81, 0x0e, 12)
+ */
+typedef struct AgcGcQueueDestroyArg {
+    uint32_t magic1;        /* offset 0x00: 0xaf1e80b7 */
+    uint32_t magic2;        /* offset 0x04: 0x8b4cdd90 */
+    uint32_t magic3;        /* offset 0x08: 0x99f68d6c */
+} AgcGcQueueDestroyArg;
+_Static_assert(sizeof(AgcGcQueueDestroyArg) == 0x0C,
+    "AgcGcQueueDestroyArg size mismatch");
+
+/*
+ * Setup async graphics ioctl argument (nr=0x26, dir=READ, size=4).
+ *
+ * RE'd from libSceAgcDriver.sprx sceAgcDriverSetupAsyncGraphics
+ * at vaddr 0x3ac0 and its internal helper at vaddr 0xa110.
+ *
+ * The SPRX sends a fixed value of 1 to initialize the async graphics
+ * queue. The pipeId parameter only controls a flag stored in the
+ * SPRX's global state (pipeId != 0 → async compute enabled).
+ *
+ * Ioctl command: 0x80048126 = IOC(READ, 0x81, 0x26, 4)
+ */
+
+/*
  * Kernel-side error codes from the submit path.
  * Module ID 0x4C = GC driver (distinct from AGC userspace module 0x89).
  */
@@ -373,7 +500,8 @@ _Static_assert(offsetof(AgcGcSetHsOffchipArg, reserved) == 0x0C,
  * validate behavior against the dump.
  */
 #define AGC_GC_KERN_IOCTL_INTERNAL      0x6ed39cu  /* gc_ioctl_internal */
-#define AGC_GC_KERN_OPEN_INTERNAL       0x6ec100u  /* gc_open_internal (FRAME_OPEN) */
+#define AGC_GC_KERN_OPEN_INTERNAL       0x6ec100u  /* gc_open_internal (NOT FRAME_OPEN) */
+#define AGC_GC_KERN_CONTEXT_QUERY       0x6ee691u  /* context capability query handler */
 #define AGC_GC_KERN_SUBMIT_WITH_PID     0x6e65c0u  /* gc_submit_with_pid */
 #define AGC_GC_KERN_FRAME_SUBMIT        0xb7da90u  /* gc_frame_submit_internal */
 

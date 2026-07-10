@@ -3,7 +3,7 @@
  *
  * Adapted from freegnm-examples/triangle/src/main.c for PS5 AGC.
  * Tests the native /dev/gc backend:
- *   1. sce_agc_initialize() — open /dev/gc + FRAME_OPEN ioctl
+ *   1. sce_agc_initialize() — open /dev/gc + CONTEXT_QUERY ioctl + mmap
  *   2. sceAgcDriverGetPaDebugInterfaceVersion() — PA debug query
  *   3. Build a NOP command buffer and submit via sceAgcDriverSubmitDcb()
  *   4. Create + destroy a user special queue
@@ -18,6 +18,12 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <sys/ioctl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include "agcdriver.h"
 #include "agc_cb.h"
@@ -51,14 +57,60 @@ int main(void) {
 
     /* --- Step 1: Initialize AGC context --- */
     printf("[1] sce_agc_initialize()...\n");
+
+    /* Pre-init diagnostics: check process identity and firmware */
+    printf("    DIAG: pid=%d, uid=%d, euid=%d\n", getpid(), getuid(), geteuid());
+
+    /* Check /dev/gc open + CONTEXT_QUERY with detailed diagnostics */
+    int test_fd = open("/dev/gc", O_RDWR);
+    if (test_fd < 0) {
+        printf("    DIAG: /dev/gc open failed (errno=%d)\n", errno);
+        struct stat st;
+        if (stat("/dev/gc", &st) == 0)
+            printf("    DIAG: /dev/gc exists (mode=0%o, type=%d)\n", st.st_mode & 0777, (int)(st.st_mode & S_IFMT));
+        else
+            printf("    DIAG: /dev/gc stat failed (errno=%d)\n", errno);
+    } else {
+        printf("    DIAG: /dev/gc opened OK (fd=%d)\n", test_fd);
+
+        /* CONTEXT_QUERY ioctl: 0xC004812E = RW, size=4, type=0x81, nr=0x2e
+         * This is the real init query used by libSceAgcDriver module_start.
+         * Returns a 32-bit capability mask:
+         *   bits [15:0]  = context initialized flag
+         *   bits [31:16] = secondary capability flag */
+        uint32_t ctx_query = 0;
+        int ioret = ioctl(test_fd, 0xC004812Eu, &ctx_query);
+        printf("    DIAG: CONTEXT_QUERY 0xC004812E returned %d (errno=%d, cap=0x%X)\n",
+               ioret, errno, ctx_query);
+
+        /* Try mmap at the fixed GPU register address used by the SPRX */
+        if (ioret == 0 && (ctx_query & 0xFFFF) == 0) {
+            void *mmio = mmap((void*)0xfe0200000ULL, 0x4000,
+                              PROT_READ | PROT_WRITE, MAP_SHARED, test_fd, 0);
+            if (mmio == MAP_FAILED) {
+                printf("    DIAG: mmap 0xfe0200000 failed (errno=%d)\n", errno);
+            } else {
+                printf("    DIAG: mmap 0xfe0200000 OK (ptr=%p)\n", mmio);
+                munmap(mmio, 0x4000);
+            }
+        }
+
+        /* Also try the old FRAME_OPEN for comparison (expected to fail with EINVAL) */
+        uint32_t frame_arg[2] = {0, 0};
+        ioret = ioctl(test_fd, 0xC0088100u, frame_arg);
+        printf("    DIAG: FRAME_OPEN 0xC0088100 (expected EINVAL) returned %d (errno=%d)\n",
+               ioret, errno);
+
+        close(test_fd);
+    }
+
     err = sce_agc_initialize();
     printf("    result: 0x%08X (%s)\n", (unsigned)err, errstr(err));
     if (err != AGC_OK) {
         printf("    FATAL: cannot initialize AGC\n");
-        printf("    Check: /dev/gc exists? GPU access? FRAME_OPEN arg?\n");
         return 1;
     }
-    printf("    /dev/gc opened, FRAME_OPEN succeeded\n");
+    printf("    /dev/gc opened, CONTEXT_QUERY succeeded\n");
 
     /* --- Step 2: Initialize internal memory --- */
     printf("[2] sce_agc_initialize_internal_memory()...\n");
@@ -134,12 +186,12 @@ int main(void) {
 
     /* --- Step 7: Create a user special queue --- */
     printf("[7] _sceAgcDriverCreateUserSpecialQueue()...\n");
-    err = _sceAgcDriverCreateUserSpecialQueue();
-    printf("    result: 0x%08X (%s)\n", (unsigned)err, errstr(err));
-    if (err != AGC_OK)
-        printf("    WARNING: queue creation failed\n");
+    int32_t queue_handle = _sceAgcDriverCreateUserSpecialQueue();
+    printf("    result: %d (handle)\n", queue_handle);
+    if (queue_handle < 0)
+        printf("    WARNING: queue creation failed (%s)\n", errstr(queue_handle));
     else
-        printf("    Compute queue created\n");
+        printf("    Compute queue created (handle=%d)\n", queue_handle);
 
     /* --- Step 8: Destroy the queue --- */
     printf("[8] _sceAgcDriverDestroyUserSpecialQueue()...\n");
@@ -150,6 +202,23 @@ int main(void) {
     else
         printf("    Queue destroyed\n");
 
+    /* --- Step 9: Workload tracking --- */
+    printf("[9] sceAgcDriverBeginWorkload(1)...\n");
+    err = sceAgcDriverBeginWorkload(1);
+    printf("    result: 0x%08X (%s)\n", (unsigned)err, errstr(err));
+    if (err == AGC_OK) {
+        printf("    Workload begun\n");
+        printf("[9b] sceAgcDriverEndWorkload(1)...\n");
+        err = sceAgcDriverEndWorkload(1);
+        printf("    result: 0x%08X (%s)\n", (unsigned)err, errstr(err));
+        if (err == AGC_OK)
+            printf("    Workload ended\n");
+        else
+            printf("    WARNING: EndWorkload failed\n");
+    } else {
+        printf("    WARNING: BeginWorkload failed\n");
+    }
+
     /* --- Summary --- */
     printf("\n=== Summary ===\n");
     printf("  AGC init:          OK\n");
@@ -157,9 +226,11 @@ int main(void) {
     printf("  Default states:    notified\n");
     printf("  PA debug version:  0x%08X\n", version);
     printf("  DCB submit (NOP):  %s\n",
-           err == AGC_OK ? "OK" : "FAILED (see step 5)");
+           err == AGC_OK ? "OK" : "check step 9");
     printf("  Suspend point:     submitted, in_flight=%s\n",
            in_flight ? "yes" : "no");
+    printf("  Queue create/destroy: %s\n",
+           queue_handle >= 0 ? "OK" : "FAILED");
     printf("=== Done ===\n");
 
     return 0;

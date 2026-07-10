@@ -215,13 +215,16 @@ Relevant kernel offsets:
 - Final suspend handler for `0xC0108139` (same arg layout, function not yet named)
 - Async/TF/HS setup handler `sub_06ee43c` at `0x6ee43c` for ioctls
   `0xC004811F` (SETUP_ASYNC), `0xC0108120` (SET_TF_RING), and related commands
-- Queue create handler `sub_06ee502` at `0x6ee502` for ioctl `0x8004812A`
+- Queue create handler `sub_06ee502` at `0x6ee502` for kernel-internal ioctl `0x8004812A`
+  (not used by SPRX; SPRX uses nr=0x21 for queue create)
 
 Key findings:
 
 - The `gc_ioctl_internal` switch uses multiple binary-search ranges and jump
   tables. A full dispatch map is available in the sibling ps5-openagc project
-  at `analysis/ioctl_dispatch.tsv`.
+  at `analysis/ioctl_dispatch.tsv` — but this table contains known errors
+  (e.g. FRAME_OPEN nr=0x00 listed as valid). Do not trust it without
+  independent verification. See `analysis/ps5_openagc_audit.md`.
 - Suspend ioctl `0xC010811C` (nr=0x1c, size=16) reaches `sub_06e6ff0`, which
   reads the 16-byte argument as four little-endian dwords:
   - `field0` at offset 0x00 — validated as 1 or 2 in the simple path; two
@@ -243,9 +246,20 @@ Key findings:
   pointer and count:
     - `list_addr` at offset 0x00 (GPU/user pointer to 8-byte patch entries)
     - `num_entries` at offset 0x08 (max 0x400)
-- QUEUE_CREATE (`0x8004812A`) packs the request into a 4-bit type (bits 9:10)
-  and a 9-bit queue index (bits 0:8), matching the existing `AgcOrbisQueueArg`
-  layout in `src/driver_orbis.c`.
+- QUEUE_CREATE (kernel-internal `0x8004812A`) packs the request into a 4-bit type
+  (bits 9:10) and a 9-bit queue index (bits 0:8). However, the SPRX
+  (`_sceAgcDriverCreateUserSpecialQueue` at vaddr 0x2c20) does NOT use this ioctl.
+  Instead, it uses ioctl nr=0x21 (`0xC0408121`, 64-byte RW) with a struct
+  containing three hardcoded magic authentication tokens (0xaf1e80b7,
+  0x8b4cdd90, 0x99f68d6c), a secondary token (0xe5fcc174), ring buffer
+  addresses carved from internal memory, pipe_id=0xc, and ring_size=0x1000.
+- QUEUE_DESTROY (SPRX-confirmed) uses ioctl nr=0x0e (`0xC00C810E`, 12-byte RW)
+  with only the three magic tokens. The kernel identifies the queue from
+  process state. The kernel-internal nr=0x2b is NOT used by the SPRX.
+- `sceAgcDriverSetupAsyncGraphics` (SPRX at vaddr 0x3ac0) uses ioctl nr=0x26
+  (`0x80048126`, 4-byte READ) with arg=1, NOT nr=0x1f (SETUP_ASYNC) as
+  previously assumed. The SPRX caches the initialized state and only calls
+  the ioctl once. The pipe_id parameter controls a flag in SPRX global state.
 - `NotifyDefaultStates` kernel consumption path remains unmapped; the current
   evidence is that the primary/internal register-defaults blobs are built in
   GPU-visible memory and consumed later via CLEAR_STATE patching or context
@@ -284,6 +298,7 @@ from it are re-expressed as open data structures in the MIT openagc tree.
 Reference path:
 
 `/Users/bizkut/Downloads/PS5/homebrew/ps5-openagc/src/agc_acb_native.c`
+(NOT proven working — used for PM4 opcode cross-reference only)
 
 Relevant openagc implementation files:
 
@@ -291,7 +306,7 @@ Relevant openagc implementation files:
 - `src/acb.c` — old-style ACB builders (some still stubs)
 
 Key findings recovered from the ps5-openagc native-PM4 reference and AMD RDNA2
-PM4 convention:
+PM4 convention (PM4 opcodes cross-verified against SharpEmu and SPRX):
 
 - `sceAgcAcbEventWrite` (ACB) emits `IT_EVENT_WRITE_EOP` (AGC opcode 0x47)
   with a 5-dword packet:
@@ -403,3 +418,203 @@ VSH-only stub.
 - `sceAgcSuspendPointAndCheckStatus` combines a direct suspend-point submit with
   the in-flight query, returning `AGC_ERROR_BUSY` while in flight and `AGC_OK`
   once it is no longer in flight.
+
+## NID Table Expansion (ps5-openagc cross-reference)
+
+NID mappings from ps5-openagc were cross-verified against the actual FW 5.50
+SPRX symbol tables. The NID-to-name mapping is reliable; ps5-openagc's
+ioctl layouts and implementation code are NOT (see
+`analysis/ps5_openagc_audit.md`).
+
+- Cross-referenced our SharpEmu-derived NID identifications with
+  `ps5-openagc/include/ps5/internal/agc_nid.h` (auto-generated from FW 5.50
+  SPRX NID matching).
+- FW 5.50 export counts: libSceAgc=222, libSceAgcDriver=145, libSceAgcVsh=219.
+- ps5-openagc identified: 43/222 (libSceAgc), 19/145 (libSceAgcDriver),
+  43/219 (libSceAgcVsh).
+- Combined with our SharpEmu identifications, openagc now has 78 identified
+  NIDs in `include/agc_nids.h` and `analysis/agc_known_nids.tsv`.
+- Key new identifications from ps5-openagc:
+  - All 22 ACB builders (sceAgcAcb* functions)
+  - All 13 Vsh DCB builders (sceAgcVshDcb* functions)
+  - All 18 libSceAgcDriver exports (sceAgcDriver* functions)
+  - State queries: sceAgcGetDefaultCxStateFlat, sceAgcGetGameDefaultState,
+    sceAgcSuspendPointAndCheckStatus
+- The remaining ~514 UNKNOWN exports are mostly small stub functions (3-10
+  bytes) that return error codes or constants. Size-based guessing is
+  unreliable — many small functions are genuinely unidentifiable without
+  SDK headers or debug symbols.
+
+## Shader Record Parser Deepening
+
+- Added `AgcShaderSpecials` struct (16 bytes) with fields:
+  - `ge_cntl` — GE_CNTL (geometry engine control)
+  - `vgt_shader_stages_en` — VGT_SHADER_STAGES_EN (stage enable bits)
+  - `vgt_gs_out_prim_type` — VGT_GS_OUT_PRIM_TYPE (GS output primitive)
+  - `ge_user_vgpr_en` — GE_USER_VGPR_EN (user VGPR enable)
+- Added `AgcShaderUserData` struct (40 bytes) with 5× 64-bit entries
+  for resource descriptor pointers (T#, V#, S#) and inline constants.
+- Added typed accessors: `agcShaderRecordGetSpecialsTyped`,
+  `agcShaderRecordGetUserDataTyped`, `agcShaderRecordGetShRegisterValues`,
+  `agcShaderRecordGetCxRegisterValues`.
+- Key difference from PS4 GNM: PS5 AGC uses a pointer-based indirection
+  model for shader records (header contains pointers to sub-blocks),
+  unlike PS4 GNM's monolithic inline model.
+
+## Texture/Surface Descriptor Format Expansion
+
+- Cross-referenced descriptor formats with shadPS4, RPCSX, and freegnm.
+- Added 18-value `AgcTileMode` enum matching shadPS4's TileMode (depth,
+  display, thin, thick variants; LinearGeneral=31, LinearAligned=8).
+- Added 8-value `AgcImageType` enum (1D, 2D, 3D, Cube, 1DArray, 2DArray,
+  2DMSAA, 2DMSAAArray).
+- Extended `AgcDataFormat` from 13 to 28 values: BC2/BC4/BC5/BC6,
+  depth/stencil (8_24, 24_8, X24_8_32), Fmask (4 variants),
+  subsampled (GbGr, BgRg), shared exponent (5_9_9_9, 10_11_11).
+- Extended `AgcNumberType` with Srgb and UnormSnorm.
+- Added `AgcClampMode` (5 values), `AgcFilterMode` (4 values),
+  `AgcMipFilterMode` (3 values), `AgcBorderColor` (4 values).
+- Existing T# (32-byte) and V# (16-byte) descriptor implementations
+  are correct per cross-reference with all sources.
+- Render target descriptor now has full 64-byte layout with CMASK/FMASK/DCC
+  compression fields matching freegnm's `GnmRenderTarget`.
+
+## SPRX Disassembly — Large UNKNOWN Functions (FW 5.50)
+
+Disassembled and analyzed the largest unidentified functions in
+`libSceAgc.sprx` and `libSceAgcDriver.sprx` using Capstone x86_64.
+
+### libSceAgc.sprx findings
+
+**Shader linking functions (HIGH confidence on behavior):**
+- `fd5Bp5tGTgo` (ordinal 131, 1603B): Checks `shader_type` at offset 0x5A
+  for HS(4)+CS(6) or LS(5)+CS(6) pairs. Copies 0x60-byte shader record,
+  sets output type to GS(2). Accesses specials at offset 0x28.
+  Error 0x8a6c0008. This is a **shader linking function** that combines
+  Hull/Local shader + Compute shader into a Geometry shader record.
+  Likely `sceAgcShaderLinkHsGs` / `sceAgcShaderLinkLsGs`.
+- `nApJjpKNBl4` (ordinal 219, 1477B): Same pattern as above — likely a
+  pre-0100 variant of the shader linking function.
+
+**Shader query/extraction functions (MEDIUM confidence):**
+- `MqAdbRMdNz4` (ordinal 132, 1105B): Writes to output at [rdi + 0x100],
+  accesses shader specials via [rcx + 0x28]. 18-way branch (cmp ebp, 0x11).
+  Likely `sceAgcShaderGetSpecials` or `sceAgcShaderGetUserData`.
+- `NKIzURsgV7I` (ordinal 137, 1232B): No calls/syscalls. Manipulates bit
+  fields, checks edx == -1 special case. Shader register/specials field
+  extractor. LOW confidence on exact name.
+
+**Packet builder variants (MEDIUM confidence):**
+- `57labkp+rSQ` (ordinal 48, 687B): Writes 0xc0065800 = type3 PM4 header
+  with opcode 0x58 (IT_ACQUIRE_MEM). DCB variant of `sceAgcAcbAcquireMem`.
+- `03RZmELWWzw` (ordinal 38, 707B): Calls through function pointer
+  [r8 + 0x20], processes array of dwords. Likely `sceAgcCbSetCxRegistersDirect`
+  or similar batch register setter.
+
+### libSceAgcDriver.sprx findings
+
+**Flip/display functions (HIGH confidence):**
+- `cwbxjPSJ7WQ` (ordinal 49, 585B): References strings
+  "displayBufferIndex is invalid value" and "sceVideoOutSubmitEopFlip
+  failed". Checks buffer index < 18 (0x12). Error 0x8029000a (VideoOut
+  error code). This is `sceAgcDriverSubmitEopFlip` or a flip-related
+  submit function.
+- `u8BkdHb1+Po` (ordinal 50, 428B): Same string references as above.
+  A variant of the EOP flip submit function.
+
+**Submit path functions (MEDIUM confidence):**
+- `lYz7vbL4W4A` (ordinal 20, 958B): Error 0x8a6d0003
+  (AGC_ERROR_INVALID_ARG). Checks count > 0x400 (1024 max). Dynamic
+  stack allocation (alloca) based on count. Calls malloc + multiple
+  internal helpers. Likely `sceAgcDriverSubmitMultiCommandBuffers` or
+  a batch submit function.
+- `Fj7r9EHzF38` (ordinal 13, 579B): Uses `lock xadd` (atomic sequence
+  number increment). References "Submit failed" strings. Likely
+  `sceAgcDriverGetSubmitDone` or a submit sequence helper.
+- `QcmHLO2n7mk` (ordinal 18, 767B): References "Submit failed - Unable
+  to lock" and "Submit failed - Unlock error". Mutex lock/unlock pattern
+  with 13 calls. Submit-with-lock helper.
+- `F5ZTyyVUHTs` (ordinal 104, 449B): Checks edi >= 0x58 (88) or >= 0x20
+  (32). Table lookups at 0x1a3e0 and 0x18460. Register/queue lookup
+  function. LOW confidence on exact name.
+
+### Key error codes discovered
+- `0x8a6c0008` — AGC shader error (shader linking/validation)
+- `0x8a6d0000` — AGC driver error base
+- `0x8a6d0003` — AGC_ERROR_INVALID_ARG (argument validation)
+- `0x8029000a` — VideoOut error (display/flip functions)
+
+### Key string references found
+- "[AgcDriver] Error - displayBufferIndex is invalid value."
+- "[AgcDriver] Error - Submit failed - Unable to lock."
+- "[AgcDriver] Error - Submit failed - Unlock error."
+- "[AgcDriver] Error - sceVideoOutGetBufferLabelAddress failed."
+- "[AgcDriver] Error - sceVideoOutSubmitEopFlip failed."
+
+These confirm that libSceAgcDriver internally calls sceVideoOut functions
+for flip operations, and uses mutex locking for submit serialization.
+
+## Deep SPRX Capstone Disassembly (Session 2)
+
+57 unknown export functions (>200 bytes) disassembled with Capstone across
+all three SPRX files. Full findings report (from ps5-openagc, used for NID
+identification only) at:
+`/Users/bizkut/Downloads/PS5/homebrew/ps5-openagc/analysis/nid_identification_findings.md`
+
+### NID identification results
+
+- **36 new NID identifications** (12 HIGH, 7 MEDIUM, 4 LOW confidence, 9 driver, 4 flip)
+- libSceAgc: 43 → 82 identified exports
+- libSceAgcDriver: 19 → 29 identified exports
+- libSceAgcVsh: 43 → 78 identified exports (first deep analysis of this SPRX)
+
+### New HIGH-confidence identifications
+
+| NID | SPRX | Identified Name | Evidence |
+|-----|------|-----------------|----------|
+| `wr23dPKyWc0` | AGC/VSH | `sceAgcDcbReleaseMem` | String "isReleaseMemValid", opcode 0x49 |
+| `w1KFAHVqpaU` | AGC/VSH | `sceAgcDcbIndirectBuffer` | Opcode 0x3F, 14-dword IB |
+| `xSAR0LTcRKM` | AGC/VSH | `sceAgcDcbIndirectBufferConst` | Opcode 0x3F, 4-dword IB |
+| `1rZSWUv1IRc` | AGC/VSH | `sceAgcDcbDrawIndirect` | Opcode 0x24, VGT_INDEX_TYPE ref |
+| `q88lQ+GP5Yk` | AGC/VSH | `sceAgcDcbDrawIndex2` | Opcode 0x27 |
+| `t1vNu082-jM` | AGC/VSH | `sceAgcDcbDrawIndexIndirect` | Opcode 0x25 |
+| `kUlvghKs-mA` | AGC/VSH | `sceAgcDcbDrawIndirectMulti` | Opcode 0x2C |
+| `ypVBz4uPKcQ` | AGC/VSH | `sceAgcDcbDrawIndexIndirectMulti` | Opcode 0x38 |
+| `bbFueFP+J4k` | AGC/VSH | `sceAgcDcbSetPredication` | Opcode 0x20 |
+| `aJf+j5yntiU` | AGC/VSH | `sceAgcDcbEventWrite` | Opcode 0x46 |
+| `BVFg3CWU6Eo` | AGC/VSH | `sceAgcDcbSetConfigReg` | Opcode 0x68 |
+| `n2fD4A+pb+g` | AGC/VSH | `sceAgcDcbSetShReg` | Opcode 0x76 |
+| `MDLD5Ly94Xk` | AGC/VSH | `sceAgcDcbSetUconfigReg` | Opcode 0x79 |
+
+### New driver function identifications
+
+| NID | Identified Name | Evidence |
+|-----|-----------------|----------|
+| `UM9b9NunSrE` | `sceAgcDriverBeginWorkload` | SET_WORKLOAD 0x1E, errors 0x8a6c0033/34 |
+| `i6bfTi13ApA` | `sceAgcDriverEndWorkload` | SET_WORKLOAD 0x1E, calls 0x6bb0 |
+| `Hj4eWnDektQ` | `sceAgcDriverSubmitCommandBuffers` | INDIRECT_BUFFER 0x3F, error 0x8a6d0001 |
+| `XNbrdwCsZ9A` | `sceAgcDriverMapComputeQueue` | Error 0x8a6d0000, validation max 0x1f queues |
+| `b4fpgH5ZXxQ` | `sceAgcDriverInitializeQueue` | Atomic counter, "[AgcDriver" string |
+| `oFb2hMcoJa4` | `sceAgcDriverWaitIdle` | Spin-wait loops, error 0x8a6d0005 |
+
+### New AGC-custom flip/display opcodes discovered
+
+| Opcode | Tentative Name | Evidence |
+|--------|----------------|----------|
+| 0x4C | WAIT_FLIP (variant 1) | libSceAgc only, flip validation pattern |
+| 0x4E | WAIT_FLIP (variant 2) | libSceAgc only |
+| 0x4F | WAIT_FLIP (variant 3) | libSceAgc only, two opcodes emitted |
+| 0x51 | WAIT_FLIP (variant 4) | libSceAgc only |
+| 0x54 | INSERT_WAIT_FLIP_DONE | Sub-field 0x06 (WAIT_FLIP_DONE) |
+
+### Error code patterns confirmed
+
+- `0x8a6cNNNN` — AGC library errors (libSceAgc / libSceAgcVsh)
+- `0x8a6dNNNN` — Driver errors (libSceAgcDriver)
+- `0x8029000a` — VideoOut errors
+
+### PM4 opcode verification
+
+The SPRX disassembly confirmed that `agc_pm4.h` opcode values are correct:
+SET_CONFIG_REG=0x68, SET_SH_REG=0x76, SET_UCONFIG_REG=0x79, WRITE_DATA=0x37,
+RELEASE_MEM=0x49, INDIRECT_BUFFER=0x3F, EVENT_WRITE=0x46 — all match the SPRX.
