@@ -50,7 +50,7 @@ cmake --build build-prospero
 The prospero build compiles `driver_prospero.c` with native `/dev/gc` ioctl calls.
 It links against `kernel` and `SceAgcDriver` stubs from the SDK.
 
-Expected host test result: `1483 passed, 0 failed`. Any change that drops this
+Expected host test result: `1594 passed, 0 failed`. Any change that drops this
 count is a regression — fix it before declaring the task done.
 
 ## Verification Checklist
@@ -58,7 +58,7 @@ count is a regression — fix it before declaring the task done.
 Before marking a task complete:
 
 1. Build clean from scratch for the `generic` platform (rm -rf build, re-cmake).
-2. `ctest --test-dir build --output-on-failure` passes with 772/772 (or the
+2. `ctest --test-dir build --output-on-failure` passes (1/1 test suite, or the
    updated count if you intentionally added tests).
 3. No new compiler warnings under `-Wall -Wextra -Wpedantic` (already enabled
    in both CMake and Makefile).
