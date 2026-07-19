@@ -183,15 +183,15 @@ static const AgcRegisterDefaultsGroup s_internal_defaults[] = {
 };
 
 const AgcRegisterDefaultsGroup *agcRegisterDefaultsGetPrimaryGroups(uint32_t *out_count) {
-    if (out_count)
-        *out_count = (uint32_t)(sizeof(s_primary_defaults) / sizeof(s_primary_defaults[0]));
-    return s_primary_defaults;
+    /* Use the complete v8 register defaults (703 public registers across 127
+     * groups) instead of the incomplete HLE-reference-derived data. */
+    return agcRegisterDefaultsV8GetPrimaryGroups(out_count);
 }
 
 const AgcRegisterDefaultsGroup *agcRegisterDefaultsGetInternalGroups(uint32_t *out_count) {
-    if (out_count)
-        *out_count = (uint32_t)(sizeof(s_internal_defaults) / sizeof(s_internal_defaults[0]));
-    return s_internal_defaults;
+    /* Use the complete v8 register defaults (25 internal registers across 22
+     * groups) instead of the incomplete HLE-reference-derived data. */
+    return agcRegisterDefaultsV8GetInternalGroups(out_count);
 }
 
 size_t agcRegisterDefaultsComputeSize(
