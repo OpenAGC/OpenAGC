@@ -4,3 +4,12 @@ build-prospero/
 *.a
 openagc_tests
 .serena/
+
+# Build artifacts
+*.bin
+*.elf
+*.self
+*.o
+*.gp5
+build/
+build-*/
