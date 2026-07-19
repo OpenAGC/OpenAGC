@@ -258,20 +258,23 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndexOffset(
 uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndexAuto(
     SceAgcCb *cb, uint32_t index_count, uint64_t modifier)
 {
-    if (modifier != 0x40000000ull)
-        return 0;
-
-    uint32_t *cmd = agcCbAllocDwords(cb, 7);
+    /* KytyPS5-confirmed: uses IT_DRAW_INDEX_AUTO (0x2D) directly, 3 dwords.
+     * The previous NOP-wrapped 7-dword encoding was a stub that would fail
+     * on real PS5 hardware. The draw initiator is decoded from the modifier:
+     * if bit 32 is set, initiator base is 0; otherwise bits 8:3 of the
+     * modifier map to bit 5 of the initiator. The | 0x2 sets the
+     * "source select" field indicating auto-indexed draw. */
+    uint32_t *cmd = agcCbAllocDwords(cb, 3);
     if (!cmd)
         return 0;
 
-    cmd[0] = agcPm4Header3Sub(AGC_PM4_OP_NOP, AGC_PM4_SUB_DRAW_INDEX_AUTO, 7);
+    uint32_t initiator = 0;
+    if ((modifier & (1ull << 32)) == 0)
+        initiator = ((uint32_t)modifier >> 3) & 0x20u;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_DRAW_INDEX_AUTO, 3);
     cmd[1] = index_count;
-    cmd[2] = 0;
-    cmd[3] = 0;
-    cmd[4] = 0;
-    cmd[5] = 0;
-    cmd[6] = 0;
+    cmd[2] = initiator | 0x2u;
     return cmd;
 }
 
@@ -372,42 +375,52 @@ uint32_t *PS5_SYSV_ABI sceAgcCbReleaseMem(
 uint32_t *PS5_SYSV_ABI sceAgcDcbSetShRegistersIndirect(
     SceAgcCb *cb, uint64_t registers_address, uint32_t register_count)
 {
-    uint32_t *cmd = agcCbAllocDwords(cb, 4);
+    /* RE: SPRX uses opcode 0x63 (SET_SH_REG_INDIRECT), 5 dwords.
+     * Format: [0] header, [1] addr_lo&~3, [2] addr_hi,
+     *         [3] 0x80000000, [4] count&0x3FFF */
+    uint32_t *cmd = agcCbAllocDwords(cb, 5);
     if (!cmd)
         return 0;
 
-    cmd[0] = agcPm4Header3Sub(AGC_PM4_OP_NOP, AGC_PM4_SUB_SH_REGS_INDIRECT, 4);
-    cmd[1] = register_count;
-    cmd[2] = (uint32_t)registers_address;
-    cmd[3] = (uint32_t)(registers_address >> 32);
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_SH_REG_INDIRECT, 5);
+    cmd[1] = (uint32_t)registers_address & ~3u;
+    cmd[2] = (uint32_t)(registers_address >> 32);
+    cmd[3] = 0x80000000u;
+    cmd[4] = register_count & 0x3FFFu;
     return cmd;
 }
 
 uint32_t *PS5_SYSV_ABI sceAgcDcbSetCxRegistersIndirect(
     SceAgcCb *cb, uint64_t registers_address, uint32_t register_count)
 {
-    uint32_t *cmd = agcCbAllocDwords(cb, 4);
+    /* RE: SPRX uses opcode 0x9F (SET_CX_REG_INDIRECT), 5 dwords.
+     * Same format as Sh variant. */
+    uint32_t *cmd = agcCbAllocDwords(cb, 5);
     if (!cmd)
         return 0;
 
-    cmd[0] = agcPm4Header3Sub(AGC_PM4_OP_NOP, AGC_PM4_SUB_CX_REGS_INDIRECT, 4);
-    cmd[1] = register_count;
-    cmd[2] = (uint32_t)registers_address;
-    cmd[3] = (uint32_t)(registers_address >> 32);
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_CX_REG_INDIRECT, 5);
+    cmd[1] = (uint32_t)registers_address & ~3u;
+    cmd[2] = (uint32_t)(registers_address >> 32);
+    cmd[3] = 0x80000000u;
+    cmd[4] = register_count & 0x3FFFu;
     return cmd;
 }
 
 uint32_t *PS5_SYSV_ABI sceAgcDcbSetUcRegistersIndirect(
     SceAgcCb *cb, uint64_t registers_address, uint32_t register_count)
 {
-    uint32_t *cmd = agcCbAllocDwords(cb, 4);
+    /* RE: SPRX uses opcode 0x64 (SET_UC_REG_INDIRECT), 5 dwords.
+     * Same format as Sh variant. */
+    uint32_t *cmd = agcCbAllocDwords(cb, 5);
     if (!cmd)
         return 0;
 
-    cmd[0] = agcPm4Header3Sub(AGC_PM4_OP_NOP, AGC_PM4_SUB_UC_REGS_INDIRECT, 4);
-    cmd[1] = register_count;
-    cmd[2] = (uint32_t)registers_address;
-    cmd[3] = (uint32_t)(registers_address >> 32);
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_UC_REG_INDIRECT, 5);
+    cmd[1] = (uint32_t)registers_address & ~3u;
+    cmd[2] = (uint32_t)(registers_address >> 32);
+    cmd[3] = 0x80000000u;
+    cmd[4] = register_count & 0x3FFFu;
     return cmd;
 }
 

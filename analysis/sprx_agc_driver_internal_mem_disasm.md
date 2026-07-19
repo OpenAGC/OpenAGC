@@ -136,10 +136,27 @@ passed by the caller. The function takes 5 args: `(fd, field0, field1, field2, f
 The 4 fields are packed into a 16-byte struct on the stack and passed to
 `ioctl(fd, 0xc010811c, &struct)`.
 
-Our current implementation passes the 4 fields correctly but the ioctl
-wrapper `agcProsperoIoctl` uses `ioctl(g_prospero.gc_fd, cmd, arg)` which
-should be equivalent. The SUBMIT_FAILED error may be due to incorrect
-field values, not the ioctl mechanism.
+### Kernel handler (0xd8f66ff0) — HW-validated
+
+The kernel handler uses the SAME credential check (0xd8e70400) and the
+SAME magic triple (0xaf1e80b7, 0x8b4cdd90, 0x99f68d6c) as the queue
+create handler (0xd8f66bb0). When credentials pass (cr_sceAuthId =
+0x4801000000000000), the handler falls through to magic checks. The
+magic triple selects config table at 0xd9d5b360, mapping to slot
+(field0=2, field1=3, field2=5) at ctx offset 0x158 — the SAME slot as
+the queue create.
+
+Non-magic values like (1,0,0) compute a different slot (0x64) and fail
+with 0x804C0001 (no queue at that slot).
+
+The tail-called function at 0xd8e57700 checks
+`(field3 >> queue->shift_amount) == 0` where shift_amount is read from
+queue+0x48. If field3 is non-zero and shift_amount is 0, returns EINVAL.
+Passing field3=0 works.
+
+**HW-validated**: sceAgcDriverSuspendPointSubmitDirect(0xaf1e80b7,
+0x8b4cdd90, 0x99f68d6c, 0) succeeds on PS5 FW 5.50 with the GPU
+credential bypass.
 
 ## Queue Create (0x8900) — `_sceAgcDriverCreateUserSpecialQueue`
 
@@ -218,3 +235,56 @@ Our implementation:
 The fix: use the EOP FIFO allocation as the ring buffer base, and compute
 the ring buffer address as `eop_fifo_base + 0x39000` (for the standard magic
 tokens).
+
+### Kernel RE: actual root cause of queue create failure
+
+After fixing the ioctl arg layout (ring from EOP FIFO, read_ptr/metadata
+from ACQRB), the queue create still fails with `0x804C000B` (EAGAIN from
+GC subsystem). Kernel disassembly of FW 5.50 reveals the actual root cause:
+
+**Kernel handler**: `0xffffffffd8f66bb0` (called from ioctl dispatch at
+`0xffffffffd8f6e74d` for ioctl `0xc0408121`).
+
+The handler flow:
+1. Reads magic tokens from the ioctl arg (offsets 0x00-0x0C)
+2. Calls `0xffffffffd8e4b9d0` (some check) and `0xffffffffd92e3a80(0)`
+3. Gets `curthread` from `gs:[0]`, gets `proc` from `[curthread + 0x140]`
+4. Calls `0xffffffffd8e70400(proc)` — **GPU process credential check**
+5. If the check returns 0 → returns `0x804C000B` (EAGAIN)
+6. If the check returns non-zero → validates magic tokens and proceeds
+
+**Credential check function** at `0xffffffffd8e70400`:
+```c
+int gpu_process_check(proc_t *proc) {
+    uint64_t rax = 0xff0f000000000000ULL & proc->creds;  // [proc + 0x58]
+    uint64_t rcx = 0xb7ff000000000000ULL + rax;
+    return (rcx >> 49) == 0;  // 1 if pass, 0 if fail
+}
+```
+
+For the check to pass: `(proc->creds & 0xff0f000000000000)` must equal
+`0x4901000000000000` (so that `0xb7ff... + 0x4901... = 0` with overflow).
+
+Our homebrew payload (uid=1, euid=0) does not have this GPU process
+credential, so the check fails. This is a **kernel-level permission check**
+that cannot be bypassed from userspace. Options:
+- Patch the kernel check at `0xffffffffd8e70400` (on exploited PS5)
+- Set `proc->creds` at `[proc + 0x58]` to include `0x4901000000000000`
+- Run the payload as a process that already has GPU credentials (game/shell)
+
+### Kernel RE: suspend point failure root cause
+
+The suspend point ioctl (`0xc010811c`) handler at `0xffffffffd8f665c0`:
+
+1. Reads `[device_context + 0x10]` — the frame/render context pointer
+2. If NULL → returns `0x804C0001` (EPERM)
+3. If non-NULL → looks up process by field0, gets VMID, validates VMID in [2,14]
+
+The frame context at `[device_context + 0x10]` is set by `FRAME_OPEN`
+(ioctl `0xc0088100`). Since FRAME_OPEN returns EINVAL for our process
+(insufficient credentials), the frame context is never set, and the
+suspend point handler returns EPERM.
+
+This is also a **kernel-level permission check** — the suspend point
+requires a successfully opened frame context, which requires the same
+GPU process credentials as queue create.

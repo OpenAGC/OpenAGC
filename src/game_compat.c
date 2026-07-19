@@ -229,18 +229,25 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbCopyData(
     return cmd;
 }
 
-/* sceAgcDcbJump (NID: xSAR0LTcRKM) — IT_INDIRECT_BUFFER_CNST (0x33), 4 dwords.
- * The SPRX uses IB_CONST for jump functionality. */
-uint32_t *PS5_SYSV_ABI sceAgcDcbJump(SceAgcCb *cb, uint64_t target_addr)
+/* sceAgcDcbJump (NID: xSAR0LTcRKM) — IT_INDIRECT_BUFFER (0x3F), 4 dwords.
+ * RE: SPRX uses opcode 0x3F (INDIRECT_BUFFER), not 0x33 (IB_CNST).
+ * 5 params: cb, queue_id, flags, target_addr, vmid.
+ * cmd[3] = (flags&3)<<28 | (queue_id&1)<<20 | (vmid&0xFFFFF) | 0x0F200000 */
+uint32_t *PS5_SYSV_ABI sceAgcDcbJump(
+    SceAgcCb *cb, uint32_t queue_id, uint32_t flags,
+    uint64_t target_addr, uint32_t vmid)
 {
     uint32_t *cmd = agcCbAllocDwords(cb, 4);
     if (!cmd)
         return 0;
 
-    cmd[0] = agcPm4Header3(AGC_PM4_OP_INDIRECT_BUFFER_CNST, 4);
-    cmd[1] = (uint32_t)target_addr;
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_INDIRECT_BUFFER, 4);
+    cmd[1] = (uint32_t)target_addr & ~3u;
     cmd[2] = (uint32_t)(target_addr >> 32);
-    cmd[3] = 0;  /* vmid=0, size filled by kernel */
+    cmd[3] = ((flags & 0x3u) << 28) |
+             ((queue_id & 0x1u) << 20) |
+             (vmid & 0xFFFFFu) |
+             0x0F200000u;
     return cmd;
 }
 
@@ -258,22 +265,23 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbResetQueue(SceAgcCb *cb, uint32_t queue_id)
     return cmd;
 }
 
-/* sceAgcDcbSetIndexCount (NID: 8N2tmT3jmC8) — IT_INDEX_BUFFER_SIZE (0x13), 3 dwords.
- * Layout: [0] header, [1] index_count, [2] 0 */
+/* sceAgcDcbSetIndexCount (NID: 8N2tmT3jmC8) — IT_INDEX_BUFFER_SIZE (0x13), 2 dwords.
+ * RE: SPRX uses 2 dwords (not 3), clamps count to max(count, 1).
+ * Layout: [0] header, [1] max(index_count, 1) */
 uint32_t *PS5_SYSV_ABI sceAgcDcbSetIndexCount(SceAgcCb *cb, uint32_t index_count)
 {
-    uint32_t *cmd = agcCbAllocDwords(cb, 3);
+    uint32_t *cmd = agcCbAllocDwords(cb, 2);
     if (!cmd)
         return 0;
 
-    cmd[0] = agcPm4Header3(AGC_PM4_OP_INDEX_BUFFER_SIZE, 3);
-    cmd[1] = index_count;
-    cmd[2] = 0;
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_INDEX_BUFFER_SIZE, 2);
+    cmd[1] = index_count ? index_count : 1;
     return cmd;
 }
 
-/* sceAgcDcbSetIndexSize (NID: GIIW2J37e70) — IT_INDEX_TYPE (0x2A), 3 dwords.
- * Layout: [0] header, [1] index_type | swap, [2] 0 */
+/* sceAgcDcbSetIndexSize (NID: GIIW2J37e70) — opcode 0x7A, 3 dwords.
+ * RE: SPRX uses opcode 0x7A (not 0x2A INDEX_TYPE).
+ * Layout: [0] header, [1] 0x20000243 (constant), [2] (index_type&3)|(swap<<6)|0x400 */
 uint32_t *PS5_SYSV_ABI sceAgcDcbSetIndexSize(
     SceAgcCb *cb, uint32_t index_type, uint32_t swap)
 {
@@ -281,9 +289,9 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbSetIndexSize(
     if (!cmd)
         return 0;
 
-    cmd[0] = agcPm4Header3(AGC_PM4_OP_INDEX_TYPE, 3);
-    cmd[1] = (index_type & 0x3u) | ((swap & 0x1u) << 2);
-    cmd[2] = 0;
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_INDEX_SIZE, 3);
+    cmd[1] = 0x20000243u;
+    cmd[2] = (index_type & 0x3u) | ((swap & 0x1u) << 6) | 0x400u;
     return cmd;
 }
 
@@ -300,23 +308,23 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbSetNumInstances(SceAgcCb *cb, uint32_t num_insta
     return cmd;
 }
 
-/* sceAgcDcbStallCommandBufferParser (NID: u2T2DiA5hRI) — 2-dword NOP-based stall.
- * Uses IT_NOP with a specific subcommand for parser stall. */
+/* sceAgcDcbStallCommandBufferParser (NID: u2T2DiA5hRI) — opcode 0x42, 2 dwords.
+ * RE: SPRX uses opcode 0x42 (STALL_PARSER), not NOP+subcommand.
+ * Layout: [0] header, [1] 0 */
 uint32_t *PS5_SYSV_ABI sceAgcDcbStallCommandBufferParser(SceAgcCb *cb)
 {
     uint32_t *cmd = agcCbAllocDwords(cb, 2);
     if (!cmd)
         return 0;
 
-    /* SPRX uses a NOP with subcommand for stall */
-    cmd[0] = agcPm4Header3Sub(AGC_PM4_OP_NOP, 0x3F, 2);
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_STALL_PARSER, 2);
     cmd[1] = 0;
     return cmd;
 }
 
 /* sceAgcDcbDrawIndex (NID: q88lQ+GP5Yk) — IT_DRAW_INDEX_2 (0x27), 6 dwords.
- * Different from sceAgcDcbDrawIndex2 — this is the libSceAgc variant
- * that the game uses. Layout matches the SPRX. */
+ * RE: SPRX field order: cmd[1]=max(count,1), cmd[4]=index_count,
+ * cmd[5]=draw_initiator (possibly modified by global). */
 uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndex(
     SceAgcCb *cb, uint32_t index_count, uint64_t index_base_addr,
     uint32_t draw_initiator)
@@ -326,11 +334,11 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndex(
         return 0;
 
     cmd[0] = agcPm4Header3(AGC_PM4_OP_DRAW_INDEX_2, 6);
-    cmd[1] = index_count;
+    cmd[1] = index_count ? index_count : 1;
     cmd[2] = (uint32_t)index_base_addr;
     cmd[3] = (uint32_t)(index_base_addr >> 32);
-    cmd[4] = draw_initiator;
-    cmd[5] = 0;
+    cmd[4] = index_count;
+    cmd[5] = draw_initiator;
     return cmd;
 }
 
@@ -384,71 +392,77 @@ uint32_t *PS5_SYSV_ABI sceAgcCbSetUcRegistersDirect(
 /* Indirect register patchers                                            */
 /* ===================================================================== */
 
-/* These patchers modify already-emitted indirect register write packets.
- * The packet format for indirect writes is:
- *   [0] header (NOP-wrapped subcommand)
- *   [1] registers_address_lo
- *   [2] registers_address_hi
- *   [3] register_count
+/* RE source: SPRX disassembly of libSceAgc.sprx (FW 5.50).
+ * Each patcher validates the opcode byte (cmd[0] byte 1) against a
+ * specific opcode and returns 0x8a6c000c if it doesn't match.
  *
- * SetAddress patches the address fields (dwords 1-2).
- * AddRegisters patches the count field (dword 3). */
+ * Indirect register write packet format (5 dwords):
+ *   [0] header (opcode 0x63/0x9F/0x64)
+ *   [1] address_lo (low 2 bits are flags, preserved by SetAddress)
+ *   [2] address_hi
+ *   [3] 0x80000000 (constant)
+ *   [4] register_count (bits 13:0, other bits preserved by AddRegisters)
+ *
+ * SetAddress: cmd[1] = (cmd[1] & 3) | (addr_lo & ~3), cmd[2] = addr_hi
+ * AddRegisters: cmd[4] = (cmd[4] & 0xFFFFC000) | ((cmd[4] + count) & 0x3FFF) */
+
+static int32_t agcIndirectPatchSetAddress(
+    uint32_t *cmd, uint64_t address, uint32_t expected_opcode)
+{
+    if (!cmd)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (agcPm4Opcode(cmd[0]) != expected_opcode)
+        return 0x8a6c000c;
+    cmd[1] = (cmd[1] & 0x3u) | ((uint32_t)address & ~3u);
+    cmd[2] = (uint32_t)(address >> 32);
+    return AGC_OK;
+}
+
+static int32_t agcIndirectPatchAddRegisters(
+    uint32_t *cmd, uint32_t count, uint32_t expected_opcode)
+{
+    if (!cmd)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (agcPm4Opcode(cmd[0]) != expected_opcode)
+        return 0x8a6c000c;
+    cmd[4] = (cmd[4] & 0xFFFFC000u) | ((cmd[4] + count) & 0x3FFFu);
+    return AGC_OK;
+}
 
 int32_t PS5_SYSV_ABI sceAgcSetShRegIndirectPatchSetAddress(
     uint32_t *cmd, uint64_t address)
 {
-    if (!cmd)
-        return AGC_ERROR_INVALID_ARGUMENT;
-    cmd[1] = (uint32_t)address;
-    cmd[2] = (uint32_t)(address >> 32);
-    return AGC_OK;
+    return agcIndirectPatchSetAddress(cmd, address, AGC_PM4_OP_SET_SH_REG_INDIRECT);
 }
 
 int32_t PS5_SYSV_ABI sceAgcSetShRegIndirectPatchAddRegisters(
     uint32_t *cmd, uint32_t count)
 {
-    if (!cmd)
-        return AGC_ERROR_INVALID_ARGUMENT;
-    cmd[3] += count;
-    return AGC_OK;
+    return agcIndirectPatchAddRegisters(cmd, count, AGC_PM4_OP_SET_SH_REG_INDIRECT);
 }
 
 int32_t PS5_SYSV_ABI sceAgcSetCxRegIndirectPatchSetAddress(
     uint32_t *cmd, uint64_t address)
 {
-    if (!cmd)
-        return AGC_ERROR_INVALID_ARGUMENT;
-    cmd[1] = (uint32_t)address;
-    cmd[2] = (uint32_t)(address >> 32);
-    return AGC_OK;
+    return agcIndirectPatchSetAddress(cmd, address, AGC_PM4_OP_SET_CX_REG_INDIRECT);
 }
 
 int32_t PS5_SYSV_ABI sceAgcSetCxRegIndirectPatchAddRegisters(
     uint32_t *cmd, uint32_t count)
 {
-    if (!cmd)
-        return AGC_ERROR_INVALID_ARGUMENT;
-    cmd[3] += count;
-    return AGC_OK;
+    return agcIndirectPatchAddRegisters(cmd, count, AGC_PM4_OP_SET_CX_REG_INDIRECT);
 }
 
 int32_t PS5_SYSV_ABI sceAgcSetUcRegIndirectPatchSetAddress(
     uint32_t *cmd, uint64_t address)
 {
-    if (!cmd)
-        return AGC_ERROR_INVALID_ARGUMENT;
-    cmd[1] = (uint32_t)address;
-    cmd[2] = (uint32_t)(address >> 32);
-    return AGC_OK;
+    return agcIndirectPatchSetAddress(cmd, address, AGC_PM4_OP_SET_UC_REG_INDIRECT);
 }
 
 int32_t PS5_SYSV_ABI sceAgcSetUcRegIndirectPatchAddRegisters(
     uint32_t *cmd, uint32_t count)
 {
-    if (!cmd)
-        return AGC_ERROR_INVALID_ARGUMENT;
-    cmd[3] += count;
-    return AGC_OK;
+    return agcIndirectPatchAddRegisters(cmd, count, AGC_PM4_OP_SET_UC_REG_INDIRECT);
 }
 
 /* ===================================================================== */
@@ -456,15 +470,14 @@ int32_t PS5_SYSV_ABI sceAgcSetUcRegIndirectPatchAddRegisters(
 /* ===================================================================== */
 
 /* sceAgcSetNop (NID: K2mciNVxUCE) — 7-byte function in SPRX.
- * Writes a NOP header into an existing command buffer.
- * Unlike sceAgcCbNop (which allocates), this patches an existing location. */
-uint32_t *PS5_SYSV_ABI sceAgcSetNop(uint32_t *cmd, uint32_t count)
+ * RE: SPRX patches byte at cmd+1 (the opcode byte in a type-3 header)
+ * to 0x10 (NOP), converting any packet into a NOP. Returns NULL. */
+uint32_t *PS5_SYSV_ABI sceAgcSetNop(uint32_t *cmd)
 {
-    if (!cmd || count < 2)
+    if (!cmd)
         return 0;
-
-    cmd[0] = agcPm4Header3Sub(AGC_PM4_OP_NOP, AGC_PM4_SUB_ZERO, count);
-    return cmd;
+    ((uint8_t *)cmd)[1] = AGC_PM4_OP_NOP;
+    return 0;
 }
 
 /* sceAgcDebugRaiseException (NID: T6xuVw0KUJo) — 5-byte function in SPRX.
@@ -477,18 +490,32 @@ int32_t PS5_SYSV_ABI sceAgcDebugRaiseException(void)
 }
 
 /* sceAgcGetDataPacketPayload (NID: V++UgBtQhn0)
- * Returns the payload address from a data packet.
- * The SPRX reads the address from the packet's data fields. */
-uint32_t *PS5_SYSV_ABI sceAgcGetDataPacketPayload(uint32_t *cmd, uint64_t *out_addr)
+ * RE: SPRX takes 3 params: (out_addr, cmd, skip_header).
+ * If skip_header != 0: payload = cmd + 8 bytes (skip 2 dwords).
+ * Else: if count field (bits 29:16) == 0x3FFF (NOP): no payload, *out_addr = 0.
+ *       Else: payload = cmd + 4 bytes (skip 1 dword header).
+ * Always returns NULL. */
+uint32_t *PS5_SYSV_ABI sceAgcGetDataPacketPayload(
+    uint64_t *out_addr, uint32_t *cmd, uint32_t skip_header)
 {
     if (!cmd)
         return 0;
 
-    /* The payload starts at dword 1 in most data packets */
-    if (out_addr) {
-        *out_addr = (uint64_t)cmd[1] | ((uint64_t)cmd[2] << 32);
+    if (skip_header) {
+        cmd += 2;  /* skip 8 bytes */
+    } else {
+        /* Check if count field is 0x3FFF (NOP marker) */
+        if (((cmd[0] >> 16) & 0x3FFFu) == 0x3FFFu) {
+            if (out_addr)
+                *out_addr = 0;
+            return 0;
+        }
+        cmd += 1;  /* skip 4 bytes (header) */
     }
-    return &cmd[1];
+
+    if (out_addr)
+        *out_addr = (uint64_t)(uintptr_t)cmd;
+    return 0;
 }
 
 /* ===================================================================== */
@@ -510,16 +537,702 @@ int32_t PS5_SYSV_ABI sceAgcCreateShader(void *shader_record, uint32_t type)
 }
 
 /* sceAgcCreatePrimState (NID: D9sr1xGUriE) — 0xff bytes in SPRX.
- * Builds a primitive state structure from a primitive type.
- * The SPRX fills in VGT_* registers based on the primitive type. */
-int32_t PS5_SYSV_ABI sceAgcCreatePrimState(void *out_state, uint32_t prim_type)
+ * RE: SPRX takes 5 params: (out_state, out_state2, param3, param4, prim_type).
+ * Reads from global register-default tables and fills VGT_* registers.
+ * Valid prim_type range: 1-18 (prim_type-1 is used as table index, max 0x11).
+ * On the generic backend we zero the output states as a stub. */
+int32_t PS5_SYSV_ABI sceAgcCreatePrimState(
+    void *out_state, void *out_state2, void *param3,
+    void *param4, uint32_t prim_type)
 {
-    if (!out_state)
-        return AGC_ERROR_INVALID_ARGUMENT;
-    if (prim_type > 10)
-        return AGC_ERROR_INVALID_ARGUMENT;
-
-    /* Zero the output state — the caller fills in the details */
-    memset(out_state, 0, 64);  /* primitive state is 64 bytes */
+    (void)param3;
+    (void)param4;
+    (void)prim_type;
+    /* SPRX checks prim_type-1 <= 0x11 (i.e., prim_type 1..18).
+     * If out of range, it uses a default value (2) instead of failing. */
+    if (out_state)
+        memset(out_state, 0, 16);
+    if (out_state2)
+        memset(out_state2, 0, 24);
     return AGC_OK;
+}
+
+/* ===================================================================== */
+/* DCB packet builders — SPRX disassembly batch 2 (FW 5.50)              */
+/* ===================================================================== */
+
+/* sceAgcDcbClearState (NID: PxEFhy0d5v8) — 2 dwords.
+ * RE: SPRX emits 0xc0001200 (opcode 0x12, AGC-custom clear state).
+ * cmd[1] = flags & 0xf */
+uint32_t *PS5_SYSV_ABI sceAgcDcbClearState(SceAgcCb *cb, uint32_t flags)
+{
+    uint32_t *cmd = agcCbAllocDwords(cb, 2);
+    if (!cmd)
+        return 0;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_CLEAR_STATE_AGC, 2);
+    cmd[1] = flags & 0xFu;
+    return cmd;
+}
+
+/* sceAgcDcbRewind (NID: zfcxg-ewMK8) — 2 dwords.
+ * RE: SPRX emits 0xc0005900 (opcode 0x59 = REWIND).
+ * cmd[1] = flags << 31 (only bit 0 of flags, shifted to bit 31) */
+uint32_t *PS5_SYSV_ABI sceAgcDcbRewind(SceAgcCb *cb, uint32_t flags)
+{
+    uint32_t *cmd = agcCbAllocDwords(cb, 2);
+    if (!cmd)
+        return 0;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_REWIND, 2);
+    cmd[1] = (flags & 0x1u) << 31;
+    return cmd;
+}
+
+/* sceAgcDcbCondExec (NID: BIPexNBSGog) — 5 dwords.
+ * RE: SPRX emits 0xc0032200 (opcode 0x22 = COND_EXEC).
+ * cmd[1] = addr_lo & ~3, cmd[2] = addr_hi,
+ * cmd[3] = 0, cmd[4] = count & 0x3fff */
+uint32_t *PS5_SYSV_ABI sceAgcDcbCondExec(
+    SceAgcCb *cb, uint64_t address, uint32_t count)
+{
+    uint32_t *cmd = agcCbAllocDwords(cb, 5);
+    if (!cmd)
+        return 0;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_COND_EXEC, 5);
+    cmd[1] = (uint32_t)address & ~3u;
+    cmd[2] = (uint32_t)(address >> 32);
+    cmd[3] = 0;
+    cmd[4] = count & 0x3FFFu;
+    return cmd;
+}
+
+/* sceAgcDcbSetIndexIndirectArgs (NID: 0o3VDdtA6nM) — 4 dwords.
+ * RE: SPRX emits 0xc0029100 (opcode 0x91, AGC-custom).
+ * cmd[1] = addr_lo & ~0xf, cmd[2] = addr_hi, cmd[3] = offset & 0xffff */
+uint32_t *PS5_SYSV_ABI sceAgcDcbSetIndexIndirectArgs(
+    SceAgcCb *cb, uint64_t address, uint32_t offset)
+{
+    uint32_t *cmd = agcCbAllocDwords(cb, 4);
+    if (!cmd)
+        return 0;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_INDEX_INDIRECT_ARGS, 4);
+    cmd[1] = (uint32_t)address & ~0xFu;
+    cmd[2] = (uint32_t)(address >> 32);
+    cmd[3] = offset & 0xFFFFu;
+    return cmd;
+}
+
+/* ===================================================================== */
+/* DCB atomic/sync builders                                              */
+/* ===================================================================== */
+
+/* sceAgcDcbAtomicMem (NID: 1-gUn1PI4Sw) — 9 dwords.
+ * RE: SPRX emits 0xc0071e00 (opcode 0x1E, sub=0, length=9).
+ * cmd[1] = (op<<30)|(atomic_op<<8)|(loop_count&0x7f)|(...)
+ * cmd[2..3] = address, cmd[4..5] = data, cmd[6..7] = compare,
+ * cmd[8] = loop_count (clamped to 0xFFF) */
+uint32_t *PS5_SYSV_ABI sceAgcDcbAtomicMem(
+    SceAgcCb *cb, uint32_t op, uint32_t loop_count, uint32_t atomic_op,
+    uint64_t address, uint64_t data, uint64_t compare)
+{
+    uint32_t *cmd = agcCbAllocDwords(cb, 9);
+    if (!cmd)
+        return 0;
+
+    uint32_t clamped_loop = loop_count > 0xFFF ? 0xFFF : loop_count;
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_ATOMIC_MEM_AGC, 9);
+    cmd[1] = ((op & 0x3u) << 30) |
+             ((atomic_op & 0xFu) << 8) |
+             (clamped_loop & 0x7Fu);
+    cmd[2] = (uint32_t)address;
+    cmd[3] = (uint32_t)(address >> 32);
+    cmd[4] = (uint32_t)data;
+    cmd[5] = (uint32_t)(data >> 32);
+    cmd[6] = (uint32_t)compare;
+    cmd[7] = (uint32_t)(compare >> 32);
+    cmd[8] = 0;  /* reserved (loop_count is in cmd[1] bits 6:0) */
+    return cmd;
+}
+
+/* sceAgcDcbAtomicGds (NID: pH3-dfRpfA0) — 11 dwords.
+ * RE: SPRX emits 0xc0091d00 (opcode 0x1D = ATOMIC_GDS, length=11).
+ * Complex packed control word in cmd[1..2], data in cmd[3..4],
+ * mask in cmd[5], etc. */
+uint32_t *PS5_SYSV_ABI sceAgcDcbAtomicGds(
+    SceAgcCb *cb, uint32_t op, uint32_t gds_op, uint32_t src,
+    uint32_t data, uint16_t offset, uint16_t index, uint32_t loop_count,
+    uint64_t cmp_data, uint32_t mask)
+{
+    uint32_t *cmd = agcCbAllocDwords(cb, 11);
+    if (!cmd)
+        return 0;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_ATOMIC_GDS, 11);
+    /* Pack control word: (op<<30)|(gds_op<<28)|(src&0x7f)|(...)
+     * The SPRX packing is complex; we match the field layout. */
+    cmd[1] = ((op & 0x3u) << 30) |
+             ((gds_op & 0x1u) << 28) |
+             (src & 0x7Fu) |
+             ((loop_count & 0x1u) << 7) |
+             ((data & 0x1u) << 16) |
+             0x40000000u;
+    cmd[2] = ((uint32_t)offset << 20) | (uint32_t)index;
+    cmd[3] = (uint32_t)cmp_data;
+    cmd[4] = (uint32_t)(cmp_data >> 32);
+    cmd[5] = mask & 0xFF00FFu;
+    cmd[6] = (uint32_t)offset;
+    cmd[7] = 0;  /* reserved */
+    cmd[8] = 0;  /* reserved */
+    cmd[9] = data;
+    cmd[10] = loop_count;
+    return cmd;
+}
+
+/* sceAgcDcbMemSemaphore (NID: G0jrLdvEqDw) — 4 dwords.
+ * RE: SPRX emits 0xc0023900 (opcode 0x39 = MEM_SEMAPHORE).
+ * cmd[1] = addr_lo & ~7, cmd[2] = addr_hi,
+ * cmd[3] = (op<<29)|(signal<<20)|(wait<<16) */
+uint32_t *PS5_SYSV_ABI sceAgcDcbMemSemaphore(
+    SceAgcCb *cb, uint64_t address, uint32_t wait, uint32_t signal,
+    uint32_t op)
+{
+    uint32_t *cmd = agcCbAllocDwords(cb, 4);
+    if (!cmd)
+        return 0;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_MEM_SEMAPHORE, 4);
+    cmd[1] = (uint32_t)address & ~7u;
+    cmd[2] = (uint32_t)(address >> 32);
+    cmd[3] = ((op & 0x7u) << 29) |
+             ((signal & 0x1u) << 20) |
+             ((wait & 0x1u) << 16);
+    return cmd;
+}
+
+/* sceAgcDcbPrimeUtcl2 (NID: jt3pl7EN17o) — 5 dwords.
+ * RE: SPRX emits 0xc0035d00 (opcode 0x5D = PRIME_UTCL2).
+ * cmd[1] = packed (flags<<3)|(cache_policy&7)|0x40000000,
+ * cmd[2] = addr_lo & ~0x3fff, cmd[3] = addr_hi,
+ * cmd[4] = reserved & 0x3fff */
+uint32_t *PS5_SYSV_ABI sceAgcDcbPrimeUtcl2(
+    SceAgcCb *cb, uint32_t cache_policy, uint32_t flags,
+    uint64_t address, uint32_t reserved)
+{
+    uint32_t *cmd = agcCbAllocDwords(cb, 5);
+    if (!cmd)
+        return 0;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_PRIME_UTCL2, 5);
+    cmd[1] = ((flags & 0x1u) << 3) |
+             (cache_policy & 0x7u) |
+             0x40000000u;
+    cmd[2] = (uint32_t)address & ~0x3FFFu;
+    cmd[3] = (uint32_t)(address >> 32);
+    cmd[4] = reserved & 0x3FFFu;
+    return cmd;
+}
+
+/* ===================================================================== */
+/* DCB register direct setters                                           */
+/* ===================================================================== */
+
+/* sceAgcDcbSetCfRegisterDirect (NID: 73ZZdojLIgs) — 3 dwords.
+ * RE: SPRX emits 0xc0016800 (opcode 0x68 = SET_CONFIG_REG).
+ * Takes a 64-bit param: low 16 bits = reg_offset, high 32 bits = value.
+ * cmd[1] = reg_offset & 0xffff, cmd[2] = value */
+uint32_t *PS5_SYSV_ABI sceAgcDcbSetCfRegisterDirect(
+    SceAgcCb *cb, uint64_t reg_offset_and_value)
+{
+    uint32_t *cmd = agcCbAllocDwords(cb, 3);
+    if (!cmd)
+        return 0;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_CONFIG_REG, 3);
+    cmd[1] = (uint32_t)(reg_offset_and_value & 0xFFFFu);
+    cmd[2] = (uint32_t)(reg_offset_and_value >> 32);
+    return cmd;
+}
+
+/* sceAgcDcbSetCxRegisterDirect (NID: LHFXRrlTPD8) — 3 dwords.
+ * RE: SPRX emits 0xc0016900 (opcode 0x69 = SET_CONTEXT_REG). */
+uint32_t *PS5_SYSV_ABI sceAgcDcbSetCxRegisterDirect(
+    SceAgcCb *cb, uint64_t reg_offset_and_value)
+{
+    uint32_t *cmd = agcCbAllocDwords(cb, 3);
+    if (!cmd)
+        return 0;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3);
+    cmd[1] = (uint32_t)(reg_offset_and_value & 0xFFFFu);
+    cmd[2] = (uint32_t)(reg_offset_and_value >> 32);
+    return cmd;
+}
+
+/* sceAgcDcbSetShRegisterDirect (NID: pFLArOT53+w) — 3 dwords.
+ * RE: SPRX emits 0xc0017600 (opcode 0x76 = SET_SH_REG). */
+uint32_t *PS5_SYSV_ABI sceAgcDcbSetShRegisterDirect(
+    SceAgcCb *cb, uint64_t reg_offset_and_value)
+{
+    uint32_t *cmd = agcCbAllocDwords(cb, 3);
+    if (!cmd)
+        return 0;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_SH_REG, 3);
+    cmd[1] = (uint32_t)(reg_offset_and_value & 0xFFFFu);
+    cmd[2] = (uint32_t)(reg_offset_and_value >> 32);
+    return cmd;
+}
+
+/* sceAgcDcbSetUcRegisterDirect (NID: w4-d0n60hdo) — 3 dwords.
+ * RE: SPRX emits 0xc0017900 (opcode 0x79 = SET_UCONFIG_REG). */
+uint32_t *PS5_SYSV_ABI sceAgcDcbSetUcRegisterDirect(
+    SceAgcCb *cb, uint64_t reg_offset_and_value)
+{
+    uint32_t *cmd = agcCbAllocDwords(cb, 3);
+    if (!cmd)
+        return 0;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_UCONFIG_REG, 3);
+    cmd[1] = (uint32_t)(reg_offset_and_value & 0xFFFFu);
+    cmd[2] = (uint32_t)(reg_offset_and_value >> 32);
+    return cmd;
+}
+
+/* sceAgcDcbSetCfRegisterRangeDirect (NID: BVFg3CWU6Eo) — variable length.
+ * RE: SPRX emits 0xc0006800 (opcode 0x68 = SET_CONFIG_REG).
+ * 2 + count dwords: [0] header, [1] reg_offset, [2..] values. */
+uint32_t *PS5_SYSV_ABI sceAgcDcbSetCfRegisterRangeDirect(
+    SceAgcCb *cb, uint32_t reg_offset, const uint32_t *values, uint32_t count)
+{
+    if (!values || count == 0)
+        return 0;
+
+    uint32_t *cmd = agcCbAllocDwords(cb, 2 + count);
+    if (!cmd)
+        return 0;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_CONFIG_REG, 2 + count);
+    cmd[1] = reg_offset & 0xFFFFu;
+    for (uint32_t i = 0; i < count; ++i)
+        cmd[2 + i] = values[i];
+    return cmd;
+}
+
+/* sceAgcCbSetUcRegisterRangeDirect (NID: MDLD5Ly94Xk) — variable length.
+ * RE: SPRX emits 0xc0007900 (opcode 0x79 = SET_UCONFIG_REG).
+ * 2 + count dwords: [0] header, [1] reg_offset (16-bit), [2..] values. */
+uint32_t *PS5_SYSV_ABI sceAgcCbSetUcRegisterRangeDirect(
+    SceAgcCb *cb, uint16_t reg_offset, const uint32_t *values, uint32_t count)
+{
+    if (!values || count == 0)
+        return 0;
+
+    uint32_t total = 2 + count;
+    uint32_t *cmd = agcCbAllocDwords(cb, total);
+    if (!cmd)
+        return 0;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_UCONFIG_REG, total);
+    cmd[1] = (uint32_t)reg_offset;
+    for (uint32_t i = 0; i < count; ++i)
+        cmd[2 + i] = values[i];
+    return cmd;
+}
+
+/* ===================================================================== */
+/* CB builders — branch, cond write, semaphore                           */
+/* ===================================================================== */
+
+/* sceAgcCbBranch (NID: w1KFAHVqpaU) — 14 dwords.
+ * RE: SPRX emits 0xc00c3f00 (opcode 0x3F = INDIRECT_BUFFER, length=14).
+ * 12 arguments per SPRX disassembly. Packet layout:
+ *   cmd[0]  = header 0xc00c3f00
+ *   cmd[1]  = ((ctrl & 7) << 8) | (flags & 3)
+ *   cmd[2]  = target_addr_lo & ~7
+ *   cmd[3]  = target_addr_hi
+ *   cmd[4]  = src_data_lo
+ *   cmd[5]  = src_data_hi
+ *   cmd[6]  = dst_data_lo
+ *   cmd[7]  = dst_data_hi
+ *   cmd[8]  = addr2_lo & ~3
+ *   cmd[9]  = addr2_hi
+ *   cmd[10] = ((dst_engine & 3) << 28) | (size1 & 0xfffff)
+ *   cmd[11] = addr3_lo & ~3
+ *   cmd[12] = addr3_hi
+ *   cmd[13] = ((src_engine & 3) << 28) | (size2 & 0xfffff) */
+uint32_t *PS5_SYSV_ABI sceAgcCbBranch(
+    SceAgcCb *cb, uint32_t flags, uint32_t ctrl, uint64_t target_addr,
+    uint64_t src_data, uint64_t dst_data, uint8_t dst_engine,
+    uint64_t addr2, uint32_t size1, uint8_t src_engine,
+    uint64_t addr3, uint32_t size2)
+{
+    uint32_t *cmd = agcCbAllocDwords(cb, 14);
+    if (!cmd)
+        return 0;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_INDIRECT_BUFFER, 14);
+    cmd[1] = ((ctrl & 0x7u) << 8) | (flags & 0x3u);
+    cmd[2] = (uint32_t)target_addr & ~7u;
+    cmd[3] = (uint32_t)(target_addr >> 32);
+    cmd[4] = (uint32_t)src_data;
+    cmd[5] = (uint32_t)(src_data >> 32);
+    cmd[6] = (uint32_t)dst_data;
+    cmd[7] = (uint32_t)(dst_data >> 32);
+    cmd[8] = (uint32_t)addr2 & ~3u;
+    cmd[9] = (uint32_t)(addr2 >> 32);
+    cmd[10] = ((uint32_t)(dst_engine & 0x3u) << 28) | (size1 & 0xFFFFFu);
+    cmd[11] = (uint32_t)addr3 & ~3u;
+    cmd[12] = (uint32_t)(addr3 >> 32);
+    cmd[13] = ((uint32_t)(src_engine & 0x3u) << 28) | (size2 & 0xFFFFFu);
+    return cmd;
+}
+
+/* sceAgcCbCondWrite (NID: 7toV+elXqNM) — 9 dwords.
+ * RE: SPRX emits 0xc0074500 (opcode 0x45 = COND_WRITE, length=9).
+ * 8 arguments per SPRX disassembly. Packet layout:
+ *   cmd[0] = header 0xc0074500
+ *   cmd[1] = ((write_enable & 3) << 8) | (compare_function & 7) | 0x10
+ *   cmd[2] = ref_lo (arg6 lo)
+ *   cmd[3] = ref_hi (arg6 hi)
+ *   cmd[4] = mask (arg7)
+ *   cmd[5] = reserved (arg8)
+ *   cmd[6] = address_lo (arg4 lo)
+ *   cmd[7] = address_hi (arg4 hi)
+ *   cmd[8] = write_data (arg5) */
+uint32_t *PS5_SYSV_ABI sceAgcCbCondWrite(
+    SceAgcCb *cb, uint32_t compare_function, uint32_t write_enable,
+    uint64_t address, uint32_t write_data, uint64_t ref,
+    uint32_t mask, uint32_t reserved)
+{
+    uint32_t *cmd = agcCbAllocDwords(cb, 9);
+    if (!cmd)
+        return 0;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_COND_WRITE, 9);
+    cmd[1] = ((write_enable & 0x3u) << 8) |
+             (compare_function & 0x7u) |
+             0x10u;
+    cmd[2] = (uint32_t)ref;
+    cmd[3] = (uint32_t)(ref >> 32);
+    cmd[4] = mask;
+    cmd[5] = reserved;
+    cmd[6] = (uint32_t)address;
+    cmd[7] = (uint32_t)(address >> 32);
+    cmd[8] = write_data;
+    return cmd;
+}
+
+/* sceAgcCbMemSemaphore (NID: vHX9guneRBY) — 4 dwords.
+ * RE: SPRX emits 0xc0023900 (opcode 0x39 = MEM_SEMAPHORE).
+ * Same format as DCB MemSemaphore. */
+uint32_t *PS5_SYSV_ABI sceAgcCbMemSemaphore(
+    SceAgcCb *cb, uint64_t address, uint32_t wait, uint32_t signal,
+    uint32_t op)
+{
+    uint32_t *cmd = agcCbAllocDwords(cb, 4);
+    if (!cmd)
+        return 0;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_MEM_SEMAPHORE, 4);
+    cmd[1] = (uint32_t)address & ~7u;
+    cmd[2] = (uint32_t)(address >> 32);
+    cmd[3] = ((op & 0x7u) << 29) |
+             ((signal & 0x1u) << 20) |
+             ((wait & 0x1u) << 16);
+    return cmd;
+}
+
+/* ===================================================================== */
+/* WaitRegMem patchers                                                   */
+/* ===================================================================== */
+
+/* RE: SPRX patchers validate the packet by checking:
+ *   1. byte[1] of cmd[0] (opcode field) must be 0x79 (SET_UCONFIG_REG /
+ *      AGC wrapper opcode)
+ *   2. Calculate adjusted pointer: skip past the 0x79 wrapper packet to
+ *      find the real WAIT_REG_MEM packet
+ *   3. Check adjusted pointer's opcode byte for 0x3C (32-bit) or 0x93 (64-bit)
+ *   4. If any check fails, return 0x8a6c000c
+ *
+ * The adjusted pointer is calculated as:
+ *   - If (cmd[0] & 0x3FFFFF00) == 0x3FFF1000 (NOP max-length): adjusted = cmd + 4
+ *   - Otherwise: adjusted = cmd + total_dwords * 4 (skip past 0x79 packet)
+ *
+ * Patches are applied at the adjusted pointer:
+ *   CompareFunction: adjusted[1] bits 2:0
+ *   Reference:        adjusted[4] (offset 0x10)
+ *   Mask:             adjusted[5] (offset 0x14) for 0x3C, adjusted[6] (offset 0x18) for 0x93 */
+
+static int32_t agcWaitRegMemPatchFindAdjusted(uint32_t *cmd, uint32_t **out_adj)
+{
+    if (!cmd)
+        return 0x8a6c000c;
+
+    /* Check opcode byte (bits 15:8) is 0x79 */
+    uint8_t opcode_byte = (uint8_t)((cmd[0] >> 8) & 0xFFu);
+    if (opcode_byte != 0x79)
+        return 0x8a6c000c;
+
+    /* Extract length field (bits 29:16) and compute total dwords */
+    uint32_t length_minus_2 = (cmd[0] >> 16) & 0x3FFFu;
+    uint32_t total_dwords = length_minus_2 + 2;
+
+    /* Calculate adjusted pointer */
+    uint32_t *adj;
+    if ((cmd[0] & 0x3FFFFF00u) == 0x3FFF1000u)
+        adj = cmd + 1;  /* max-length NOP: real packet at cmd[1] */
+    else
+        adj = cmd + total_dwords;  /* skip past 0x79 wrapper */
+
+    if (!adj)
+        return 0x8a6c000c;
+
+    /* Check adjusted pointer's opcode for 0x3C or 0x93 */
+    uint8_t adj_opcode = (uint8_t)((adj[0] >> 8) & 0xFFu);
+    if (adj_opcode != 0x3C && adj_opcode != 0x93)
+        return 0x8a6c000c;
+
+    *out_adj = adj;
+    return AGC_OK;
+}
+
+/* sceAgcWaitRegMemPatchCompareFunction (NID: n485EBnIWmk)
+ * Patches bits 2:0 of adjusted_cmd[1] (the control word). */
+int32_t PS5_SYSV_ABI sceAgcWaitRegMemPatchCompareFunction(
+    uint32_t *cmd, uint8_t compare_function)
+{
+    uint32_t *adj;
+    int32_t rc = agcWaitRegMemPatchFindAdjusted(cmd, &adj);
+    if (rc != AGC_OK)
+        return rc;
+    adj[1] = (adj[1] & ~0x7u) | (compare_function & 0x7u);
+    return AGC_OK;
+}
+
+/* sceAgcWaitRegMemPatchReference (NID: 7nOoijNPvEU)
+ * Patches adjusted_cmd[4] (offset 0x10 from adjusted pointer). */
+int32_t PS5_SYSV_ABI sceAgcWaitRegMemPatchReference(
+    uint32_t *cmd, uint32_t reference)
+{
+    uint32_t *adj;
+    int32_t rc = agcWaitRegMemPatchFindAdjusted(cmd, &adj);
+    if (rc != AGC_OK)
+        return rc;
+    adj[4] = reference;
+    return AGC_OK;
+}
+
+/* sceAgcWaitRegMemPatchMask (NID: hXAnLgDHCoI)
+ * Patches adjusted_cmd[5] (offset 0x14) for 32-bit (0x3C),
+ * or adjusted_cmd[6] (offset 0x18) for 64-bit (0x93). */
+int32_t PS5_SYSV_ABI sceAgcWaitRegMemPatchMask(
+    uint32_t *cmd, uint32_t mask)
+{
+    uint32_t *adj;
+    int32_t rc = agcWaitRegMemPatchFindAdjusted(cmd, &adj);
+    if (rc != AGC_OK)
+        return rc;
+    uint8_t adj_opcode = (uint8_t)((adj[0] >> 8) & 0xFFu);
+    if (adj_opcode == 0x93)
+        adj[6] = mask;  /* 64-bit: offset 0x18 */
+    else
+        adj[5] = mask;  /* 32-bit: offset 0x14 */
+    return AGC_OK;
+}
+
+/* ===================================================================== */
+/* Complex DCB builders                                                  */
+/* ===================================================================== */
+
+/* sceAgcDcbDrawIndexMultiInstanced (NID: Rlx+bykm0r0)
+ * RE: SPRX emits 0xc0073a00 (opcode 0x3A, AGC-custom, length=9+count).
+ * The packet has a fixed 9-dword header followed by per-instance data.
+ * The SPRX also emits a trailing NOP packet for alignment. */
+uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndexMultiInstanced(
+    SceAgcCb *cb, uint32_t index_count, uint64_t index_base_addr,
+    uint32_t instance_count, uint32_t draw_initiator,
+    const uint32_t *instance_data, uint32_t data_count)
+{
+    if (!instance_data || data_count == 0)
+        return 0;
+
+    uint32_t total = 9 + data_count;
+    uint32_t *cmd = agcCbAllocDwords(cb, total);
+    if (!cmd)
+        return 0;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_DRAW_INDEX_MULTI_INSTANCED, total);
+    cmd[1] = index_count;
+    cmd[2] = (uint32_t)index_base_addr;
+    cmd[3] = (uint32_t)(index_base_addr >> 32);
+    cmd[4] = instance_count ? instance_count : 1;
+    cmd[5] = 0;  /* reserved */
+    cmd[6] = 0;  /* reserved */
+    cmd[7] = 0;  /* reserved */
+    cmd[8] = draw_initiator;
+    for (uint32_t i = 0; i < data_count; ++i)
+        cmd[9 + i] = instance_data[i];
+    return cmd;
+}
+
+/* sceAgcDcbSetMarker (NID: QhCbS4X9Rl8)
+ * RE: SPRX calls a helper to compute the marker size, then calls
+ * an internal builder. The marker is encoded as a NOP-wrapped string.
+ * On the generic backend, we emit a NOP packet with the marker data. */
+uint32_t *PS5_SYSV_ABI sceAgcDcbSetMarker(
+    SceAgcCb *cb, const char *marker, uint32_t flags)
+{
+    if (!marker)
+        return 0;
+
+    /* Compute string length + padding to 4-byte alignment */
+    size_t len = 0;
+    while (marker[len])
+        len++;
+    uint32_t payload_dwords = (uint32_t)((len + 3) / 4);
+    uint32_t total = 2 + payload_dwords;
+
+    uint32_t *cmd = agcCbAllocDwords(cb, total);
+    if (!cmd)
+        return 0;
+
+    cmd[0] = agcPm4Header3Sub(AGC_PM4_OP_NOP, AGC_PM4_SUB_PUSH_MARKER, total);
+    cmd[1] = flags;
+    memset(&cmd[2], 0, payload_dwords * 4);
+    memcpy(&cmd[2], marker, len);
+    return cmd;
+}
+
+/* sceAgcDcbContextStateOp (NID: HabmgqPwPw0)
+ * RE: SPRX switches on op (0..3):
+ *   0: CLEAR_STATE (2 dwords, opcode 0x12)
+ *   1: SET_CONTEXT_REG (3 dwords, opcode 0x69)
+ *   2: SET_CX_REG_INDIRECT (5 dwords, opcode 0x9F)
+ *   3: CLEAR_STATE + SET_CX_REG_INDIRECT (2+1pad+5 = 8 dwords)
+ * The SPRX also checks a global debug flag for op 1/3. */
+uint32_t *PS5_SYSV_ABI sceAgcDcbContextStateOp(
+    SceAgcCb *cb, uint32_t op, uint32_t reg_type,
+    uint32_t reg_offset, uint32_t reg_count, const void *reg_data)
+{
+    (void)reg_type;
+    (void)reg_data;
+
+    switch (op) {
+    case 0: {
+        /* CLEAR_STATE: 2 dwords */
+        uint32_t *cmd = agcCbAllocDwords(cb, 2);
+        if (!cmd)
+            return 0;
+        cmd[0] = agcPm4Header3(AGC_PM4_OP_CLEAR_STATE_AGC, 2);
+        cmd[1] = reg_offset & 0xFu;
+        return cmd;
+    }
+    case 1: {
+        /* SET_CONTEXT_REG: 3 dwords */
+        uint32_t *cmd = agcCbAllocDwords(cb, 3);
+        if (!cmd)
+            return 0;
+        cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3);
+        cmd[1] = reg_offset & 0xFFFFu;
+        cmd[2] = reg_count;
+        return cmd;
+    }
+    case 2: {
+        /* SET_CX_REG_INDIRECT: 5 dwords (opcode 0x9F) */
+        uint32_t *cmd = agcCbAllocDwords(cb, 5);
+        if (!cmd)
+            return 0;
+        cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_CX_REG_INDIRECT, 5);
+        cmd[1] = reg_offset & ~3u;
+        cmd[2] = 0;
+        cmd[3] = 0x80000000u;
+        cmd[4] = reg_count & 0x3FFFu;
+        return cmd;
+    }
+    case 3: {
+        /* CLEAR_STATE (2 dwords) + padding (1 dword) + SET_CX_REG_INDIRECT (5 dwords)
+         * Total: 8 dwords. The padding aligns the second packet to a
+         * 4-dword boundary as observed in SPRX. */
+        uint32_t *cmd = agcCbAllocDwords(cb, 8);
+        if (!cmd)
+            return 0;
+        /* CLEAR_STATE (2 dwords) */
+        cmd[0] = agcPm4Header3(AGC_PM4_OP_CLEAR_STATE_AGC, 2);
+        cmd[1] = reg_offset & 0xFu;
+        cmd[2] = 0;  /* padding */
+        /* SET_CX_REG_INDIRECT (5 dwords) */
+        cmd[3] = agcPm4Header3(AGC_PM4_OP_SET_CX_REG_INDIRECT, 5);
+        cmd[4] = reg_offset & ~3u;
+        cmd[5] = 0;
+        cmd[6] = 0x80000000u;
+        cmd[7] = reg_count & 0x3FFFu;
+        return cmd;
+    }
+    default:
+        return 0;
+    }
+}
+
+/* DCB workload helpers — these delegate to the same packet format as
+ * the ACB/VshDcb variants but operate on a DCB cursor. The SPRX calls
+ * internal helper functions that compute the packet size and fill it in. */
+
+uint32_t *PS5_SYSV_ABI sceAgcDcbSetWorkloadsActive(
+    SceAgcCb *cb, uint32_t flags, const void *data, uint32_t data_size)
+{
+    (void)data;
+    /* SPRX calls an internal helper that builds a SET_WORKLOAD packet.
+     * We emit a simple 8-dword packet matching the ACB format. */
+    uint32_t *cmd = agcCbAllocDwords(cb, 8);
+    if (!cmd)
+        return 0;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_WORKLOAD, 8);
+    cmd[1] = flags;
+    cmd[2] = 0;
+    cmd[3] = 0;
+    cmd[4] = 0;
+    cmd[5] = 0;
+    cmd[6] = 0;
+    cmd[7] = data_size;
+    return cmd;
+}
+
+uint32_t *PS5_SYSV_ABI sceAgcDcbSetWorkloadComplete(
+    SceAgcCb *cb, uint32_t workload_id, uint32_t flags)
+{
+    uint32_t *cmd = agcCbAllocDwords(cb, 8);
+    if (!cmd)
+        return 0;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_WORKLOAD, 8);
+    cmd[1] = workload_id;
+    cmd[2] = flags;
+    cmd[3] = 0;
+    cmd[4] = 0;
+    cmd[5] = 0;
+    cmd[6] = 0;
+    cmd[7] = 0;
+    return cmd;
+}
+
+uint32_t *PS5_SYSV_ABI sceAgcDcbSetWorkloadStreamInactive(
+    SceAgcCb *cb, uint32_t workload_id)
+{
+    uint32_t *cmd = agcCbAllocDwords(cb, 8);
+    if (!cmd)
+        return 0;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_WORKLOAD, 8);
+    cmd[1] = workload_id;
+    cmd[2] = 0;
+    cmd[3] = 0;
+    cmd[4] = 0;
+    cmd[5] = 0;
+    cmd[6] = 0;
+    cmd[7] = 0;
+    return cmd;
 }

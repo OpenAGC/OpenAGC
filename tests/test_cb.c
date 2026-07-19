@@ -216,12 +216,24 @@ static void test_sce_agc_dcb_draw_packets(void) {
     TEST_ASSERT_EQ(offset[2], 4, "DrawIndexOffset offset");
     TEST_ASSERT_EQ(offset[4], 0xE0000001u, "DrawIndexOffset flag mask");
 
+    /* KytyPS5-confirmed: IT_DRAW_INDEX_AUTO (0x2D), 3 dwords.
+     * modifier 0x40000000 → initiator = ((0x40000000 >> 3) & 0x20) | 0x2 = 0x2 */
     uint32_t* auto_draw = sceAgcDcbDrawIndexAuto(&cb, 6, 0x40000000u);
     TEST_ASSERT(auto_draw != NULL, "DrawIndexAuto returns allocated packet");
-    TEST_ASSERT_EQ(agcPm4Opcode(auto_draw[0]), AGC_PM4_OP_NOP, "DrawIndexAuto wrapper opcode");
-    TEST_ASSERT_EQ(agcPm4Subcommand(auto_draw[0]), AGC_PM4_SUB_DRAW_INDEX_AUTO, "DrawIndexAuto subcommand");
-    TEST_ASSERT_EQ(agcPm4Length(auto_draw[0]), 7, "DrawIndexAuto length");
+    TEST_ASSERT_EQ(agcPm4Opcode(auto_draw[0]), AGC_PM4_OP_DRAW_INDEX_AUTO, "DrawIndexAuto opcode");
+    TEST_ASSERT_EQ(agcPm4Length(auto_draw[0]), 3, "DrawIndexAuto length");
     TEST_ASSERT_EQ(auto_draw[1], 6, "DrawIndexAuto count");
+    TEST_ASSERT_EQ(auto_draw[2], 0x2u, "DrawIndexAuto initiator (modifier 0x40000000)");
+
+    /* modifier with bit 8 set (0x100) → initiator = ((0x100 >> 3) & 0x20) | 0x2 = 0x22 */
+    uint32_t* auto_draw2 = sceAgcDcbDrawIndexAuto(&cb, 10, 0x100ull);
+    TEST_ASSERT(auto_draw2 != NULL, "DrawIndexAuto (modifier 0x100) returns allocated packet");
+    TEST_ASSERT_EQ(auto_draw2[2], 0x22u, "DrawIndexAuto initiator (modifier 0x100)");
+
+    /* modifier with bit 32 set → initiator = 0 | 0x2 = 0x2 */
+    uint32_t* auto_draw3 = sceAgcDcbDrawIndexAuto(&cb, 20, (1ull << 32));
+    TEST_ASSERT(auto_draw3 != NULL, "DrawIndexAuto (bit 32 set) returns allocated packet");
+    TEST_ASSERT_EQ(auto_draw3[2], 0x2u, "DrawIndexAuto initiator (bit 32 set)");
 }
 
 static void test_sce_agc_dcb_wait_safe(void) {
@@ -282,8 +294,8 @@ static void test_sce_agc_cb_release_mem_rejects_invalid(void) {
 }
 
 /* All three *RegistersIndirect builders share a 4-dword IT_NOP packet,
- * differing only by subcommand: SH=0x11, CX=0x12, UC=0x13.
- * addr=0x1_0000_0040 count=8 → [1]=8 [2]=0x40 [3]=0x1 */
+ * RE: SPRX uses direct opcodes 0x63 (SH), 0x9F (CX), 0x64 (UC), 5 dwords.
+ * addr=0x1_0000_0040 count=8 → [1]=0x40 [2]=0x1 [3]=0x80000000 [4]=8 */
 static void test_sce_agc_dcb_set_registers_indirect(void) {
     uint32_t buffer[32];
     SceAgcCb cb;
@@ -291,30 +303,32 @@ static void test_sce_agc_dcb_set_registers_indirect(void) {
 
     uint32_t* sh = sceAgcDcbSetShRegistersIndirect(&cb, 0x100000040ULL, 8);
     TEST_ASSERT(sh == buffer, "SetShRegistersIndirect returns allocated packet");
-    TEST_ASSERT_EQ(agcPm4Opcode(sh[0]), AGC_PM4_OP_NOP, "SetSh wrapper opcode");
-    TEST_ASSERT_EQ(agcPm4Subcommand(sh[0]), AGC_PM4_SUB_SH_REGS_INDIRECT, "SetSh subcommand");
-    TEST_ASSERT_EQ(agcPm4Length(sh[0]), 4, "SetSh length");
-    TEST_ASSERT_EQ(sh[1], 8, "SetSh register count");
-    TEST_ASSERT_EQ(sh[2], 0x40u, "SetSh addr lo");
-    TEST_ASSERT_EQ(sh[3], 0x1u, "SetSh addr hi");
+    TEST_ASSERT_EQ(agcPm4Opcode(sh[0]), AGC_PM4_OP_SET_SH_REG_INDIRECT, "SetSh opcode 0x63");
+    TEST_ASSERT_EQ(agcPm4Length(sh[0]), 5, "SetSh length 5 dwords");
+    TEST_ASSERT_EQ(sh[1], 0x40u, "SetSh addr lo (& ~3)");
+    TEST_ASSERT_EQ(sh[2], 0x1u, "SetSh addr hi");
+    TEST_ASSERT_EQ(sh[3], 0x80000000u, "SetSh constant dword");
+    TEST_ASSERT_EQ(sh[4], 8u, "SetSh register count");
 
     uint32_t* cx = sceAgcDcbSetCxRegistersIndirect(&cb, 0x100000040ULL, 8);
     TEST_ASSERT(cx != NULL, "SetCxRegistersIndirect returns allocated packet");
-    TEST_ASSERT_EQ(agcPm4Subcommand(cx[0]), AGC_PM4_SUB_CX_REGS_INDIRECT, "SetCx subcommand");
-    TEST_ASSERT_EQ(agcPm4Length(cx[0]), 4, "SetCx length");
-    TEST_ASSERT_EQ(cx[1], 8, "SetCx register count");
-    TEST_ASSERT_EQ(cx[2], 0x40u, "SetCx addr lo");
-    TEST_ASSERT_EQ(cx[3], 0x1u, "SetCx addr hi");
+    TEST_ASSERT_EQ(agcPm4Opcode(cx[0]), AGC_PM4_OP_SET_CX_REG_INDIRECT, "SetCx opcode 0x9F");
+    TEST_ASSERT_EQ(agcPm4Length(cx[0]), 5, "SetCx length 5 dwords");
+    TEST_ASSERT_EQ(cx[1], 0x40u, "SetCx addr lo");
+    TEST_ASSERT_EQ(cx[2], 0x1u, "SetCx addr hi");
+    TEST_ASSERT_EQ(cx[3], 0x80000000u, "SetCx constant dword");
+    TEST_ASSERT_EQ(cx[4], 8u, "SetCx register count");
 
     uint32_t* uc = sceAgcDcbSetUcRegistersIndirect(&cb, 0x100000040ULL, 8);
     TEST_ASSERT(uc != NULL, "SetUcRegistersIndirect returns allocated packet");
-    TEST_ASSERT_EQ(agcPm4Subcommand(uc[0]), AGC_PM4_SUB_UC_REGS_INDIRECT, "SetUc subcommand");
-    TEST_ASSERT_EQ(agcPm4Length(uc[0]), 4, "SetUc length");
-    TEST_ASSERT_EQ(uc[1], 8, "SetUc register count");
-    TEST_ASSERT_EQ(uc[2], 0x40u, "SetUc addr lo");
-    TEST_ASSERT_EQ(uc[3], 0x1u, "SetUc addr hi");
+    TEST_ASSERT_EQ(agcPm4Opcode(uc[0]), AGC_PM4_OP_SET_UC_REG_INDIRECT, "SetUc opcode 0x64");
+    TEST_ASSERT_EQ(agcPm4Length(uc[0]), 5, "SetUc length 5 dwords");
+    TEST_ASSERT_EQ(uc[1], 0x40u, "SetUc addr lo");
+    TEST_ASSERT_EQ(uc[2], 0x1u, "SetUc addr hi");
+    TEST_ASSERT_EQ(uc[3], 0x80000000u, "SetUc constant dword");
+    TEST_ASSERT_EQ(uc[4], 8u, "SetUc register count");
 
-    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 12, "Three indirect builders advance cursor by 4 each");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 15, "Three indirect builders advance cursor by 5 each");
 }
 
 /* Patchers overwrite a 64-bit address field in an already-emitted packet.

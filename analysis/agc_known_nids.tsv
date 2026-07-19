@@ -54,7 +54,7 @@ libSceAgc	sceAgcDcbSetBaseIndirectArgs	RmaJwLtc8rY	SharpEmu AgcExports.cs
 libSceAgc	sceAgcDcbDispatchIndirect	CtB+A9-VxO0	SharpEmu AgcExports.cs
 libSceAgc	sceAgcDcbPushMarker	+kSrjIVxKFE	SharpEmu AgcExports.cs
 libSceAgc	sceAgcDcbPopMarker	H7uZqCoNuWk	SharpEmu AgcExports.cs
-libSceAgc	sceAgcDcbDrawIndexAuto	Yw0jKSqop+E	SharpEmu AgcExports.cs
+libSceAgc	sceAgcDcbDrawIndexAuto	Yw0jKSqop+E	SharpEmu AgcExports.cs; KytyPS5 agc.cpp
 libSceAgc	sceAgcDcbSetIndexBuffer	l4fM9K-Lyks	SharpEmu AgcExports.cs
 libSceAgc	sceAgcDcbDrawIndexOffset	B+aG9DUnTKA	SharpEmu AgcExports.cs
 libSceAgc	sceAgcGetDefaultCxStateFlat	AAeX-U5-P3M	ps5-openagc agc_nid.h

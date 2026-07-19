@@ -423,20 +423,20 @@ typedef struct AgcGcQueueCreateArg {
     uint32_t magic2;        /* offset 0x04: 0x8b4cdd90 (auth token 2) */
     uint32_t magic3;        /* offset 0x08: 0x99f68d6c (auth token 3) */
     uint32_t token;         /* offset 0x0C: 0xe5fcc174 (secondary token) */
-    uint64_t pipe_id;       /* offset 0x10: pipe_id (0xc) as qword */
-    uint64_t caller_arg;    /* offset 0x18: caller-provided value (from stack) */
+    uint64_t read_ptr_addr; /* offset 0x10: ACQRB base + 0x1C8000 (read ptr GPU VA) */
+    uint64_t caller_arg;    /* offset 0x18: ACQRB base + 0x1CC000 (queue metadata GPU VA) */
     uint64_t mmio_base;     /* offset 0x20: mmap'd register base (0xFE0200000) */
-    uint32_t queue_id;      /* offset 0x28: queue id (from r9d) */
-    uint32_t flags;         /* offset 0x2C: 0 (1st variant) or caller-provided */
-    uint64_t ring_addr;     /* offset 0x30: eop_fifo_base + computed offset */
+    uint32_t pipe_id;       /* offset 0x28: pipe_id (0xc) */
+    uint32_t flags;         /* offset 0x2C: 0 */
+    uint64_t ring_addr;     /* offset 0x30: eop_fifo_base + 0x39000 */
     uint64_t ring_size;     /* offset 0x38: ring entry size (0x1000) */
 } AgcGcQueueCreateArg;
 _Static_assert(sizeof(AgcGcQueueCreateArg) == 0x40,
     "AgcGcQueueCreateArg size mismatch");
 _Static_assert(offsetof(AgcGcQueueCreateArg, magic1) == 0x00,
     "AgcGcQueueCreateArg magic1 offset mismatch");
-_Static_assert(offsetof(AgcGcQueueCreateArg, pipe_id) == 0x10,
-    "AgcGcQueueCreateArg pipe_id offset mismatch");
+_Static_assert(offsetof(AgcGcQueueCreateArg, read_ptr_addr) == 0x10,
+    "AgcGcQueueCreateArg read_ptr_addr offset mismatch");
 _Static_assert(offsetof(AgcGcQueueCreateArg, mmio_base) == 0x20,
     "AgcGcQueueCreateArg mmio_base offset mismatch");
 _Static_assert(offsetof(AgcGcQueueCreateArg, ring_addr) == 0x30,

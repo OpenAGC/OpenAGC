@@ -394,26 +394,34 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbCopyData(
     SceAgcCb *cb, uint32_t src_sel, uint32_t dst_sel,
     uint64_t src_addr, uint64_t dst_addr, uint32_t byte_count);
 
-/* IT_JUMP for DCB. NID: xSAR0LTcRKM */
-uint32_t *PS5_SYSV_ABI sceAgcDcbJump(SceAgcCb *cb, uint64_t target_addr);
+/* IT_INDIRECT_BUFFER for DCB jump. NID: xSAR0LTcRKM
+ * RE: SPRX uses opcode 0x3F (INDIRECT_BUFFER), not 0x33 (IB_CNST).
+ * 5 params: cb, queue_id, flags, target_addr, vmid. */
+uint32_t *PS5_SYSV_ABI sceAgcDcbJump(
+    SceAgcCb *cb, uint32_t queue_id, uint32_t flags,
+    uint64_t target_addr, uint32_t vmid);
 
 /* Queue reset for DCB. NID: TRO721eVt4g */
 uint32_t *PS5_SYSV_ABI sceAgcDcbResetQueue(SceAgcCb *cb, uint32_t queue_id);
 
-/* Set index count. NID: 8N2tmT3jmC8 */
+/* Set index count. NID: 8N2tmT3jmC8
+ * RE: SPRX uses 2 dwords (not 3), clamps count to max(count, 1). */
 uint32_t *PS5_SYSV_ABI sceAgcDcbSetIndexCount(SceAgcCb *cb, uint32_t index_count);
 
-/* Set index size. NID: GIIW2J37e70 */
+/* Set index size. NID: GIIW2J37e70
+ * RE: SPRX uses opcode 0x7A (not 0x2A), 3 dwords with constant cmd[1]. */
 uint32_t *PS5_SYSV_ABI sceAgcDcbSetIndexSize(
     SceAgcCb *cb, uint32_t index_type, uint32_t swap);
 
 /* Set number of instances. NID: tSBxhAPyytQ */
 uint32_t *PS5_SYSV_ABI sceAgcDcbSetNumInstances(SceAgcCb *cb, uint32_t num_instances);
 
-/* Stall command buffer parser. NID: u2T2DiA5hRI */
+/* Stall command buffer parser. NID: u2T2DiA5hRI
+ * RE: SPRX uses opcode 0x42 (not NOP+sub), 2 dwords. */
 uint32_t *PS5_SYSV_ABI sceAgcDcbStallCommandBufferParser(SceAgcCb *cb);
 
-/* Indexed draw. NID: q88lQ+GP5Yk */
+/* Indexed draw. NID: q88lQ+GP5Yk
+ * RE: SPRX field order: cmd[1]=max(count,1), cmd[4]=count, cmd[5]=draw_initiator. */
 uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndex(
     SceAgcCb *cb, uint32_t index_count, uint64_t index_base_addr,
     uint32_t draw_initiator);
@@ -438,14 +446,169 @@ int32_t PS5_SYSV_ABI sceAgcSetUcRegIndirectPatchSetAddress(
 int32_t PS5_SYSV_ABI sceAgcSetUcRegIndirectPatchAddRegisters(
     uint32_t *cmd, uint32_t count);
 
-/* Utility functions */
-uint32_t *PS5_SYSV_ABI sceAgcSetNop(uint32_t *cmd, uint32_t count);
+/* Utility functions.
+ * RE: sceAgcSetNop takes 1 param (cmd), patches byte at offset 1 to 0x10,
+ * returns NULL. sceAgcGetDataPacketPayload takes 3 params. */
+uint32_t *PS5_SYSV_ABI sceAgcSetNop(uint32_t *cmd);
 int32_t PS5_SYSV_ABI sceAgcDebugRaiseException(void);
-uint32_t *PS5_SYSV_ABI sceAgcGetDataPacketPayload(uint32_t *cmd, uint64_t *out_addr);
+uint32_t *PS5_SYSV_ABI sceAgcGetDataPacketPayload(
+    uint64_t *out_addr, uint32_t *cmd, uint32_t skip_header);
 
-/* Shader and primitive state creation */
+/* Shader and primitive state creation.
+ * RE: sceAgcCreatePrimState takes 5 params (out_state, out_state2,
+ * param3, param4, prim_type) and reads from global register-default tables. */
 int32_t PS5_SYSV_ABI sceAgcCreateShader(void *shader_record, uint32_t type);
-int32_t PS5_SYSV_ABI sceAgcCreatePrimState(void *out_state, uint32_t prim_type);
+int32_t PS5_SYSV_ABI sceAgcCreatePrimState(
+    void *out_state, void *out_state2, void *param3,
+    void *param4, uint32_t prim_type);
+
+/* ===================================================================== */
+/* DCB packet builders — SPRX disassembly batch 2 (FW 5.50)              */
+/* ===================================================================== */
+
+/* AGC-custom clear state. NID: PxEFhy0d5v8
+ * 2 dwords: [0] header 0xc0001200, [1] flags&0xf */
+uint32_t *PS5_SYSV_ABI sceAgcDcbClearState(SceAgcCb *cb, uint32_t flags);
+
+/* Rewind command buffer. NID: zfcxg-ewMK8
+ * 2 dwords: [0] header 0xc0005900, [1] flags<<31 */
+uint32_t *PS5_SYSV_ABI sceAgcDcbRewind(SceAgcCb *cb, uint32_t flags);
+
+/* Conditional execute. NID: BIPexNBSGog
+ * 5 dwords: [0] header 0xc0032200, [1] addr_lo&~3, [2] addr_hi,
+ * [3] 0, [4] count&0x3fff */
+uint32_t *PS5_SYSV_ABI sceAgcDcbCondExec(
+    SceAgcCb *cb, uint64_t address, uint32_t count);
+
+/* Atomic memory operation. NID: 1-gUn1PI4Sw
+ * 9 dwords: [0] header 0xc0071e00, [1] packed control, [2] addr_lo,
+ * [3] addr_hi, [4] data_lo, [5] data_hi, [6] cmp_lo, [7] cmp_hi,
+ * [8] loop_count */
+uint32_t *PS5_SYSV_ABI sceAgcDcbAtomicMem(
+    SceAgcCb *cb, uint32_t op, uint32_t loop_count, uint32_t atomic_op,
+    uint64_t address, uint64_t data, uint64_t compare);
+
+/* Atomic GDS operation. NID: pH3-dfRpfA0
+ * 11 dwords: [0] header 0xc0091d00, [1..2] packed control+addr,
+ * [3..4] data, [5] mask, [6] addr2, [7..8] cmp_data, [9..10] extra */
+uint32_t *PS5_SYSV_ABI sceAgcDcbAtomicGds(
+    SceAgcCb *cb, uint32_t op, uint32_t gds_op, uint32_t src,
+    uint32_t data, uint16_t offset, uint16_t index, uint32_t loop_count,
+    uint64_t cmp_data, uint32_t mask);
+
+/* Memory semaphore. NID: G0jrLdvEqDw
+ * 4 dwords: [0] header 0xc0023900, [1] addr_lo&~7, [2] addr_hi,
+ * [3] packed (op<<29)|(wait<<16)|(signal<<20) */
+uint32_t *PS5_SYSV_ABI sceAgcDcbMemSemaphore(
+    SceAgcCb *cb, uint64_t address, uint32_t wait, uint32_t signal,
+    uint32_t op);
+
+/* Prime UTCL2. NID: jt3pl7EN17o
+ * 5 dwords: [0] header 0xc0035d00, [1] packed control, [2] addr_lo,
+ * [3] addr_hi, [4] reserved */
+uint32_t *PS5_SYSV_ABI sceAgcDcbPrimeUtcl2(
+    SceAgcCb *cb, uint32_t cache_policy, uint32_t flags,
+    uint64_t address, uint32_t reserved);
+
+/* Set index indirect args. NID: 0o3VDdtA6nM
+ * 4 dwords: [0] header 0xc0029100, [1] addr_lo&~0xf, [2] addr_hi,
+ * [3] offset&0xffff */
+uint32_t *PS5_SYSV_ABI sceAgcDcbSetIndexIndirectArgs(
+    SceAgcCb *cb, uint64_t address, uint32_t offset);
+
+/* Draw index multi-instanced. NID: Rlx+bykm0r0
+ * Variable length: 9 + count dwords. */
+uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndexMultiInstanced(
+    SceAgcCb *cb, uint32_t index_count, uint64_t index_base_addr,
+    uint32_t instance_count, uint32_t draw_initiator,
+    const uint32_t *instance_data, uint32_t data_count);
+
+/* Set marker. NID: QhCbS4X9Rl8
+ * Variable length: depends on marker string. */
+uint32_t *PS5_SYSV_ABI sceAgcDcbSetMarker(
+    SceAgcCb *cb, const char *marker, uint32_t flags);
+
+/* Context state operation. NID: HabmgqPwPw0
+ * op 0: CLEAR_STATE (2 dwords)
+ * op 1: SET_CONTEXT_REG (3 dwords)
+ * op 2: SET_SH_REG_INDIRECT (5 dwords)
+ * op 3: CLEAR_STATE + SET_CONTEXT_REG_INDIRECT */
+uint32_t *PS5_SYSV_ABI sceAgcDcbContextStateOp(
+    SceAgcCb *cb, uint32_t op, uint32_t reg_type,
+    uint32_t reg_offset, uint32_t reg_count, const void *reg_data);
+
+/* DCB workload helpers (delegate to ACB-style packets) */
+uint32_t *PS5_SYSV_ABI sceAgcDcbSetWorkloadsActive(
+    SceAgcCb *cb, uint32_t flags, const void *data, uint32_t data_size);
+uint32_t *PS5_SYSV_ABI sceAgcDcbSetWorkloadComplete(
+    SceAgcCb *cb, uint32_t workload_id, uint32_t flags);
+uint32_t *PS5_SYSV_ABI sceAgcDcbSetWorkloadStreamInactive(
+    SceAgcCb *cb, uint32_t workload_id);
+
+/* ===================================================================== */
+/* DCB register direct setters — single register writes                  */
+/* ===================================================================== */
+
+/* 3 dwords each: [0] header, [1] reg_offset&0xffff, [2] value */
+uint32_t *PS5_SYSV_ABI sceAgcDcbSetCfRegisterDirect(
+    SceAgcCb *cb, uint64_t reg_offset_and_value);
+uint32_t *PS5_SYSV_ABI sceAgcDcbSetCxRegisterDirect(
+    SceAgcCb *cb, uint64_t reg_offset_and_value);
+uint32_t *PS5_SYSV_ABI sceAgcDcbSetShRegisterDirect(
+    SceAgcCb *cb, uint64_t reg_offset_and_value);
+uint32_t *PS5_SYSV_ABI sceAgcDcbSetUcRegisterDirect(
+    SceAgcCb *cb, uint64_t reg_offset_and_value);
+
+/* Variable-length range setters: 2 + count dwords */
+uint32_t *PS5_SYSV_ABI sceAgcDcbSetCfRegisterRangeDirect(
+    SceAgcCb *cb, uint32_t reg_offset, const uint32_t *values, uint32_t count);
+uint32_t *PS5_SYSV_ABI sceAgcCbSetUcRegisterRangeDirect(
+    SceAgcCb *cb, uint16_t reg_offset, const uint32_t *values, uint32_t count);
+
+/* ===================================================================== */
+/* CB builders — branch, cond write, semaphore                           */
+/* ===================================================================== */
+
+/* CB branch (INDIRECT_BUFFER). NID: w1KFAHVqpaU
+ * 14 dwords: [0] header 0xc00c3f00, [1] packed control, [2..13] packed
+ * addr/size/engine params. 12 arguments per SPRX disassembly. */
+uint32_t *PS5_SYSV_ABI sceAgcCbBranch(
+    SceAgcCb *cb, uint32_t flags, uint32_t ctrl, uint64_t target_addr,
+    uint64_t src_data, uint64_t dst_data, uint8_t dst_engine,
+    uint64_t addr2, uint32_t size1, uint8_t src_engine,
+    uint64_t addr3, uint32_t size2);
+
+/* CB conditional write. NID: 7toV+elXqNM
+ * 9 dwords: [0] header 0xc0074500, [1] packed control,
+ * [2..3] ref (64-bit), [4] mask, [5] reserved, [6..7] address (64-bit),
+ * [8] write_data */
+uint32_t *PS5_SYSV_ABI sceAgcCbCondWrite(
+    SceAgcCb *cb, uint32_t compare_function, uint32_t write_enable,
+    uint64_t address, uint32_t write_data, uint64_t ref,
+    uint32_t mask, uint32_t reserved);
+
+/* CB memory semaphore. NID: vHX9guneRBY
+ * 4 dwords: [0] header 0xc0023900, [1] addr_lo&~7, [2] addr_hi,
+ * [3] packed (signal<<29)|(wait<<16)|(op<<20) */
+uint32_t *PS5_SYSV_ABI sceAgcCbMemSemaphore(
+    SceAgcCb *cb, uint64_t address, uint32_t wait, uint32_t signal,
+    uint32_t op);
+
+/* ===================================================================== */
+/* WaitRegMem patchers — patch fields in an emitted WAIT_REG_MEM packet  */
+/* ===================================================================== */
+
+/* Patch compare function (bits 2:0 of cmd[4]). NID: n485EBnIWmk */
+int32_t PS5_SYSV_ABI sceAgcWaitRegMemPatchCompareFunction(
+    uint32_t *cmd, uint8_t compare_function);
+
+/* Patch mask value (cmd[5] or cmd[6] depending on 32/64-bit). NID: hXAnLgDHCoI */
+int32_t PS5_SYSV_ABI sceAgcWaitRegMemPatchMask(
+    uint32_t *cmd, uint32_t mask);
+
+/* Patch reference value (cmd[4]). NID: 7nOoijNPvEU */
+int32_t PS5_SYSV_ABI sceAgcWaitRegMemPatchReference(
+    uint32_t *cmd, uint32_t reference);
 
 #ifdef __cplusplus
 }

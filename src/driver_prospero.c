@@ -34,6 +34,7 @@
 #include <sys/mman.h>
 #include <string.h>
 #include <stdio.h>
+#include <errno.h>
 
 #ifdef OPENAGC_PROSPERO
 
@@ -160,7 +161,12 @@ static int agcProsperoIoctl(uint32_t cmd, void *arg)
 {
     if (g_prospero.gc_fd < 0)
         return -1;
-    return ioctl(g_prospero.gc_fd, cmd, arg);
+    int ret = ioctl(g_prospero.gc_fd, cmd, arg);
+    if (ret < 0) {
+        printf("[agc_ioctl] cmd=0x%08X ret=%d errno=%d (0x%08X)\n",
+               cmd, ret, errno, (unsigned)errno);
+    }
+    return ret;
 }
 
 /*
@@ -256,6 +262,36 @@ static void agcProsperoFreeRegion(AgcProsperoRegion *region)
 
     memset(region, 0, sizeof(*region));
 }
+
+/*
+ * Carve out a sub-region from an already-allocated parent region.
+ * This avoids calling sceKernelMapNamedSystemFlexibleMemory again (which
+ * fails with ENOMEM after the 9 internal regions exhaust the kernel's
+ * flexible memory quota).
+ *
+ * The SPRX uses the SceGnmDdid region (1008 KB) for default-state blobs
+ * and small DCB buffers, not separate allocations.
+ */
+static int32_t agcProsperoCarveSubRegion(
+    AgcProsperoRegion *parent, size_t offset, size_t size,
+    AgcProsperoRegion *out)
+{
+    if (!parent || !out || offset + size > parent->size)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    memset(out, 0, sizeof(*out));
+    out->cpu_addr = (char *)parent->cpu_addr + offset;
+    out->gpu_addr = parent->gpu_addr + offset;
+    out->size = size;
+    out->physical_addr = 0;  /* sub-region, no separate physical addr */
+    return AGC_OK;
+}
+
+/* DDID sub-region offsets for default-state blobs and DCB scratch.
+ * SceGnmDdid is 0xFC000 (1008 KB); we carve from the end to avoid
+ * conflicting with SPRX-expected DDID layout. */
+#define AGC_DDID_PRIMARY_OFFSET   0xF0000   /* 960 KB offset → 48 KB for primary */
+#define AGC_DDID_INTERNAL_OFFSET  0xF8000   /* 992 KB offset → 16 KB for internal */
+#define AGC_DDID_DCB_OFFSET       0xFC000 - 16  /* last 16 bytes for DCB scratch */
 
 /* ===================================================================== */
 /* Public API — initialization                                           */
@@ -744,18 +780,20 @@ int32_t PS5_SYSV_ABI sceAgcDriverNotifyDefaultStates(uint32_t flags)
         primary_count, AGC_PRIMARY_CX_LENGTH, AGC_PRIMARY_SH_LENGTH, AGC_PRIMARY_UC_LENGTH);
     size_t internal_size = agcRegisterDefaultsComputeSize(
         internal_count, AGC_INTERNAL_CX_LENGTH, AGC_INTERNAL_SH_LENGTH, AGC_INTERNAL_UC_LENGTH);
+    (void)primary_size;   /* sub-region carved from DDID, size checked at build */
+    (void)internal_size;  /* sub-region carved from DDID, size checked at build */
 
-    int32_t ret = agcProsperoAllocRegion(&g_prospero.primary_defaults, primary_size,
-                                      0x33, "SceGnmPrimaryDefaults");
+    int32_t ret = agcProsperoCarveSubRegion(
+        &g_prospero.ddid, AGC_DDID_PRIMARY_OFFSET, 0x8000,
+        &g_prospero.primary_defaults);
     if (ret != AGC_OK)
         return ret;
 
-    ret = agcProsperoAllocRegion(&g_prospero.internal_defaults, internal_size,
-                              0x33, "SceGnmInternalDefaults");
-    if (ret != AGC_OK) {
-        agcProsperoFreeRegion(&g_prospero.primary_defaults);
+    ret = agcProsperoCarveSubRegion(
+        &g_prospero.ddid, AGC_DDID_INTERNAL_OFFSET, 0x4000,
+        &g_prospero.internal_defaults);
+    if (ret != AGC_OK)
         return ret;
-    }
 
     ret = agcRegisterDefaultsBuild(
         g_prospero.primary_defaults.cpu_addr,
@@ -794,12 +832,10 @@ int32_t PS5_SYSV_ABI sceAgcDriverNotifyDefaultStates(uint32_t flags)
      * GPU-visible and consumed during context reset.
      */
     AgcProsperoRegion dcb_region = {0};
-    ret = agcProsperoAllocRegion(&dcb_region, 8, 0x33, "SceGnmDcb");
-    if (ret != AGC_OK) {
-        agcProsperoFreeRegion(&g_prospero.internal_defaults);
-        agcProsperoFreeRegion(&g_prospero.primary_defaults);
+    ret = agcProsperoCarveSubRegion(
+        &g_prospero.ddid, AGC_DDID_DCB_OFFSET, 16, &dcb_region);
+    if (ret != AGC_OK)
         return ret;
-    }
 
     uint32_t *dcb = (uint32_t *)dcb_region.cpu_addr;
     dcb[0] = agcPm4Header3(AGC_PM4_OP_CLEAR_STATE, 2);
@@ -810,12 +846,10 @@ int32_t PS5_SYSV_ABI sceAgcDriverNotifyDefaultStates(uint32_t flags)
     submit.dword_count = 2;
 
     ret = sceAgcDriverSubmitDcb(&submit);
-    agcProsperoFreeRegion(&dcb_region);
-    if (ret != AGC_OK) {
-        agcProsperoFreeRegion(&g_prospero.internal_defaults);
-        agcProsperoFreeRegion(&g_prospero.primary_defaults);
+    /* dcb_region is a sub-region of ddid — don't munmap it, just clear */
+    memset(&dcb_region, 0, sizeof(dcb_region));
+    if (ret != AGC_OK)
         return ret;
-    }
 
     g_prospero.defaults_notified = true;
     return AGC_OK;
@@ -925,9 +959,11 @@ static int32_t agcProsperoSubmitWorkload(uint32_t workload_id, uint32_t sub)
     if (workload_id == 0)
         return AGC_ERROR_INVALID_ARGUMENT;
 
-    /* Build a 3-dword SET_WORKLOAD packet in a small GPU-visible buffer. */
+    /* Build a 3-dword SET_WORKLOAD packet in a small GPU-visible buffer.
+     * Use a sub-region of SceGnmDdid to avoid exhausting flexible memory. */
     AgcProsperoRegion dcb_region = {0};
-    int32_t ret = agcProsperoAllocRegion(&dcb_region, 16, 0x33, "SceGnmDcb");
+    int32_t ret = agcProsperoCarveSubRegion(
+        &g_prospero.ddid, AGC_DDID_DCB_OFFSET, 16, &dcb_region);
     if (ret != AGC_OK)
         return ret;
 
@@ -941,7 +977,8 @@ static int32_t agcProsperoSubmitWorkload(uint32_t workload_id, uint32_t sub)
     submit.dword_count = 3;
 
     ret = sceAgcDriverSubmitDcb(&submit);
-    agcProsperoFreeRegion(&dcb_region);
+    /* dcb_region is a sub-region — don't munmap, just clear */
+    memset(&dcb_region, 0, sizeof(dcb_region));
     return ret;
 }
 
@@ -997,18 +1034,24 @@ int32_t PS5_SYSV_ABI _sceAgcDriverCreateUserSpecialQueue(void)
      * (228 KB) is within bounds. */
     uint64_t ring_addr = g_prospero.eop_fifo.gpu_addr + 0x39000;
 
+    /* Compute read_ptr and queue metadata addresses from ACQRB base.
+     * SPRX: read_ptr = acqrb_base + 0x1C8000, metadata = acqrb_base + 0x1CC000
+     * ACQRB is 0x1E0000 (1920 KB), so both offsets are within bounds. */
+    uint64_t read_ptr_addr = g_prospero.acqrb.gpu_addr + 0x1C8000;
+    uint64_t metadata_addr = g_prospero.acqrb.gpu_addr + 0x1CC000;
+
     AgcGcQueueCreateArg arg = {0};
-    arg.magic1     = AGC_GC_QUEUE_MAGIC1;
-    arg.magic2     = AGC_GC_QUEUE_MAGIC2;
-    arg.magic3     = AGC_GC_QUEUE_MAGIC3;
-    arg.token      = AGC_GC_QUEUE_TOKEN;
-    arg.pipe_id    = AGC_GC_QUEUE_PIPE_ID;
-    arg.caller_arg = 0;
-    arg.mmio_base  = (uint64_t)(uintptr_t)g_prospero.mmio_base;
-    arg.queue_id   = (uint32_t)index;
-    arg.flags      = 0;
-    arg.ring_addr  = ring_addr;
-    arg.ring_size  = AGC_GC_QUEUE_RING_SIZE;
+    arg.magic1        = AGC_GC_QUEUE_MAGIC1;
+    arg.magic2        = AGC_GC_QUEUE_MAGIC2;
+    arg.magic3        = AGC_GC_QUEUE_MAGIC3;
+    arg.token         = AGC_GC_QUEUE_TOKEN;
+    arg.read_ptr_addr = read_ptr_addr;
+    arg.caller_arg    = metadata_addr;
+    arg.mmio_base     = (uint64_t)(uintptr_t)g_prospero.mmio_base;
+    arg.pipe_id       = AGC_GC_QUEUE_PIPE_ID;
+    arg.flags         = 0;
+    arg.ring_addr     = ring_addr;
+    arg.ring_size     = AGC_GC_QUEUE_RING_SIZE;
 
     int ret = agcProsperoIoctl(AGC_GC_IOCTL_QUEUE_CREATE, &arg);
     if (ret < 0)

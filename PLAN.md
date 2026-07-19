@@ -14,15 +14,43 @@ The project target is native PS5 AGC behavior, not PS4 GNM compatibility. GNM
 is still a valuable reference because PS5 backward compatibility, GNM, AGC, and
 AMD PM4 packet ancestry overlap in useful ways.
 
+## Target Priority
+
+Games built with openagc must run on **real PS5 hardware first**, then on
+emulators (KytyPS5, SharpEmu) as secondary dev/testing targets on PC.
+
+This priority determines the trust hierarchy for packet encodings:
+
+1. **SPRX disassembly (ground truth)** — the actual SDK functions that run on
+   real PS5 hardware. openagc's SPRX-confirmed encodings are authoritative.
+2. **KytyPS5** — best secondary reference. Its packet builders reproduce what
+   the SDK outputs (real opcodes like `IT_DRAW_INDEX_AUTO`,
+   `IT_SET_UCONFIG_REG_INDEX`), and its full PM4 command processor validates
+   them. Games run through KytyPS5, so its encodings are empirically tested
+   against game expectations.
+3. **openagc** — this project. SPRX RE-confirmed encodings match KytyPS5. Some
+   builders still use NOP-wrapped stubs that need switching to real opcodes.
+4. **SharpEmu** — useful for NID discovery and cross-reference, but many of its
+   packet encodings would fail on real PS5 hardware. Its NOP-wrapped stubs work
+   only because SharpEmu's inline interpreter doesn't validate packet format.
+   Do NOT adopt SharpEmu's packet encodings without independent SPRX or KytyPS5
+   confirmation. SharpEmu's NID discoveries are safe to adopt regardless of
+   encoding correctness.
+
 ## Evidence Levels
 
 Use these labels in docs, analysis notes, and code comments:
 
 - **Implemented**: present in openagc, covered by host tests.
+- **SPRX-confirmed**: verified against firmware 5.50 SPRX disassembly — highest
+  confidence for real-PS5 correctness.
+- **KytyPS5-confirmed**: verified against KytyPS5 emulator (working PS5 emulator
+  with full PM4 command processor). High confidence for real-PS5 correctness.
 - **Observed**: found in SharpEmu, RPCSX, ps5-openagc notes (NID mapping only —
   ps5-openagc is NOT proven working and contains known ioctl errors; see
   `analysis/ps5_openagc_audit.md`), firmware strings, or local analysis, but
-  not implemented yet.
+  not implemented yet. SharpEmu packet encodings are NOT trusted without
+  independent SPRX or KytyPS5 confirmation.
 - **Inferred**: likely from AMD/RDNA2 behavior or reference projects, but not
   confirmed in AGC firmware paths yet.
 - **Speculative**: plausible roadmap item with no local implementation evidence
@@ -45,9 +73,15 @@ Practical rule:
 
 - Use GNM/RPCSX/opengnm for packet ancestry, descriptor patterns, tiling, and
   queue interpretation.
-- Use SharpEmu and firmware 5.50 artifacts as higher-priority evidence for PS5
-  AGC export names, NIDs, packet wrappers, command-buffer layout, and submit
-  structures.
+- Use KytyPS5 as the highest-priority emulator reference for PS5 AGC packet
+  encodings, register defaults, and PM4 command processing. KytyPS5 is a
+  working emulator with a full PM4 command processor — its packet builders
+  use real AMD/AGC opcodes and are empirically validated against real games.
+- Use firmware 5.50 SPRX disassembly as ground truth for real-PS5 correctness.
+  SPRX-confirmed encodings are authoritative.
+- Use SharpEmu for NID discovery and cross-reference only. SharpEmu's packet
+  encodings are NOT trusted — many use NOP-wrapped stubs that would fail on
+  real PS5 hardware. SharpEmu's NID findings are safe to adopt.
 - Avoid assuming a PS4 GNM packet is valid AGC behavior unless AGC evidence
   confirms it.
 
@@ -114,7 +148,7 @@ Implemented and host-tested:
 Current expected host test result:
 
 ```text
-581 passed, 0 failed
+1483 passed, 0 failed
 ```
 
 ## Phase 0: RE Groundwork

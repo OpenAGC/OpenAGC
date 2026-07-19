@@ -50,7 +50,7 @@ cmake --build build-prospero
 The prospero build compiles `driver_prospero.c` with native `/dev/gc` ioctl calls.
 It links against `kernel` and `SceAgcDriver` stubs from the SDK.
 
-Expected host test result: `1353 passed, 0 failed`. Any change that drops this
+Expected host test result: `1483 passed, 0 failed`. Any change that drops this
 count is a regression — fix it before declaring the task done.
 
 ## Verification Checklist
@@ -173,7 +173,7 @@ Two deployment paths:
 **1. ELF payload (exploited PS5):**
 
 ```sh
-export PS5_HOST=ps5; export PS5_PORT=9021
+export PS5_HOST=10.0.1.41; export PS5_PORT=9021
 prospero-deploy -h $PS5_HOST -p $PS5_PORT build-prospero/openagc_payload.elf
 ```
 
@@ -282,28 +282,28 @@ Files:
 
 See `STATUS.md` and `PLAN.md`. Next RE tasks, in order:
 
-1. **Hardware validation** — deploy `samples/hw_test/` to PS5 and validate:
-   - `sce_agc_initialize` + `sce_agc_initialize_internal_memory`
-   - `sceAgcDriverNotifyDefaultStates` + `CLEAR_STATE` submission
-   - `sceAgcDriverSubmitDcb(NOP)`
-   - `sceAgcDriverSuspendPointSubmitDirect` + `IsSuspendPointInFlightDirect`
-   - `_sceAgcDriverCreateUserSpecialQueue` / `DestroyUserSpecialQueue`
-2. **Validate default state blobs** — confirm the primary/internal
+1. **PA debug ioctl** — `sceAgcDriverGetPaDebugInterfaceVersion` still
+   returns EPERM. This is a separate kernel permission check, not the
+   cr_sceAuthId check. Needs further kernel RE.
+2. **FRAME_OPEN ioctl** — returns EINVAL during init. May need additional
+   context setup. Currently non-blocking (init succeeds without it).
+3. **Validate default state blobs** — confirm the primary/internal
    register-defaults blobs built by `sceAgcDriverNotifyDefaultStates` are
    accepted by the kernel and produce the expected GPU state.
-3. **Validate suspend ioctls** — confirm the argument layouts for
-   `SUSPEND_16` (nr=0x1c) and `SUSPEND_39` (nr=0x39) by testing on hardware.
-4. **Queue creation** — `QUEUE_CREATE` (nr=0x21, 64-byte RW),
-   `QUEUE_DESTROY` (nr=0x0e, 12-byte RW), and `SetupAsyncGraphics`
-   (nr=0x26, 4-byte R) are implemented with SPRX-confirmed ioctl layouts.
-   Hardware validation needed to confirm magic auth tokens and ring buffer
-   addresses. Async-compute submission is the remaining work.
+4. **Full GPU command submission** — now that queue create, suspend point,
+   and DCB submit all work, the next step is to submit actual rendering
+   commands (draw calls, state setup) via the compute queue.
+5. **Game compatibility** — continue analyzing game binaries to identify
+   and implement remaining missing AGC functions.
 
 All userspace packet builders, patchers, LOD stats helpers, the FW 5.50
 ioctl/submit/queue RE layer, the shader record parser, the register-defaults
 blob builder/parser, and the native prospero backend (`driver_prospero.c`) are
-implemented and build. The remaining work is hardware validation and the
-async-compute queue setup path.
+implemented and build. Hardware validation confirmed that init, memory
+allocation, default states, NOP submit, async graphics setup, queue
+create/destroy, suspend point submit, and workload tracking all work
+correctly with the GPU credential bypass (cr_sceAuthId = 0x4801000000000000).
+The only remaining failure is the PA debug ioctl (EPERM).
 
 ## Non-Goals
 

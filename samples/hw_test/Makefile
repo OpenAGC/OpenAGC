@@ -9,7 +9,7 @@
 #   Build openagc first: cmake --build build-prospero
 #   Build LibProsperoPkg for eboot.bin: see AGENTS.md
 
-PS5_HOST ?= ps5
+PS5_HOST ?= 10.0.1.41
 PS5_PORT ?= 9021
 
 TITLE_ID := AGCT00001

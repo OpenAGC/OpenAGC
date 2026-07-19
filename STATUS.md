@@ -27,7 +27,7 @@ The host-generic implementation now has a tested model for:
 - Texture format encode/decode helpers: `agcTextureFormatEncode`, `agcTextureFormatGetDataFormat`, `agcTextureFormatGetNumberType`
 - Shader linking: `agcShaderLinkHsGs` — combines HS/LS + CS shader records into GS (matches SPRX ordinal 131)
 - EOP flip submit: `sceAgcDriverSubmitEopFlip` (prospero) + `sceAgcDcbSetEopFlip` DCB builder (IT_RELEASE_MEM 0x49)
-- NID table expanded to 114 identified exports (78 original + 36 new from deep SPRX capstone disassembly)
+- NID table expanded to 148 identified exports (78 original + 36 from deep SPRX disassembly + 34 from batch 2 disassembly)
 - Async-compute queue submission: generic backend queue tracking (32 slots), ACB submit validates queue in-use, full create→submit→destroy flow tested
 - 13 new DCB builders from SPRX disassembly: ReleaseMem, IndirectBuffer, IndirectBufferConst, DrawIndirect, DrawIndex2, DrawIndexIndirect, DrawIndirectMulti, DrawIndexIndirectMulti, SetPredication, EventWrite, SetConfigReg, SetShReg, SetUconfigReg
 - 4 AGC-custom flip builders: WaitFlipDone (0x4C), WaitFlip (0x51), InsertWaitFlipDone (0x54), WaitFlipEos (0x4F+0x4E)
@@ -48,7 +48,7 @@ make -B test
 Expected result:
 
 ```text
-1353 passed, 0 failed
+1483 passed, 0 failed
 ```
 
 PS5 prospero backend (cross-compiled, no tests):
@@ -62,7 +62,8 @@ cmake --build build-prospero
 
 Expected result: `build-prospero/libopenagc.a` — PS5 x86_64 static library,
 zero warnings, zero errors. All `sceAgcDriver*` and `sce_agc_*` symbols
-present in the symbol table. Hardware validation pending.
+present in the symbol table. Hardware validation in progress — see
+"Hardware Validation Results" section below.
 
 ### PS5 packaging (LibProsperoPkg)
 
@@ -104,7 +105,9 @@ Cursor-based builders:
 - `sceAgcDcbDispatchIndirect`
 - `sceAgcDcbSetIndexBuffer`
 - `sceAgcDcbDrawIndexOffset`
-- `sceAgcDcbDrawIndexAuto`
+- `sceAgcDcbDrawIndexAuto` — now emits `IT_DRAW_INDEX_AUTO` (opcode 0x2D)
+  with 3-dword packet and proper draw initiator decoding (KytyPS5-confirmed;
+  was incorrectly NOP-wrapped 7-dword stub)
 - `sceAgcDcbWaitUntilSafeForRendering`
 - `sceAgcDcbPushMarker`
 - `sceAgcDcbPopMarker`
@@ -112,9 +115,10 @@ Cursor-based builders:
 - `sceAgcDcbSetEopFlip` — emits `IT_RELEASE_MEM` (opcode 0x49) with 8-dword
   EOP flip packet (header 0xc0064900, matching SPRX RE)
 - `sceAgcCbReleaseMem`
-- `sceAgcDcbSetShRegistersIndirect`
-- `sceAgcDcbSetCxRegistersIndirect`
-- `sceAgcDcbSetUcRegistersIndirect`
+- `sceAgcDcbSetShRegistersIndirect` — opcode 0x63, 5 dwords (SPRX-confirmed;
+  was incorrectly NOP-wrapped 4 dwords)
+- `sceAgcDcbSetCxRegistersIndirect` — opcode 0x9F, 5 dwords (SPRX-confirmed)
+- `sceAgcDcbSetUcRegistersIndirect` — opcode 0x64, 5 dwords (SPRX-confirmed)
 
 Old-style ACB stubs (from `src/acb.c`):
 
@@ -164,28 +168,82 @@ In-place patchers:
 - `sceAgcDmaDataPatchSetDstAddressOrOffset`
 - `sceAgcWaitRegMemPatchAddress`
 - `sceAgcQueueEndOfPipeActionPatchAddress`
-- `sceAgcSetShRegIndirectPatchSetAddress` / `AddRegisters`
-- `sceAgcSetCxRegIndirectPatchSetAddress` / `AddRegisters`
-- `sceAgcSetUcRegIndirectPatchSetAddress` / `AddRegisters`
+- `sceAgcSetShRegIndirectPatchSetAddress` / `AddRegisters` — SPRX-confirmed:
+  validate opcode 0x63, SetAddress patches cmd[1..2] preserving low 2 bits,
+  AddRegisters patches cmd[4] bits 13:0
+- `sceAgcSetCxRegIndirectPatchSetAddress` / `AddRegisters` — SPRX-confirmed:
+  validate opcode 0x9F, same patch logic
+- `sceAgcSetUcRegIndirectPatchSetAddress` / `AddRegisters` — SPRX-confirmed:
+  validate opcode 0x64, same patch logic
 
 Game-compat packet builders (from Joe & Mac game analysis):
 
 - `sceAgcDcbAcquireMem` — `IT_ACQUIRE_MEM` (0x58), 8 dwords
 - `sceAgcDcbCopyData` — `IT_COPY_DATA` (0x40), 6 dwords
-- `sceAgcDcbJump` — `IT_INDIRECT_BUFFER_CNST` (0x33), 4 dwords
+- `sceAgcDcbJump` — `IT_INDIRECT_BUFFER` (0x3F), 4 dwords (SPRX-confirmed;
+  was incorrectly 0x33/IB_CNST)
 - `sceAgcDcbResetQueue` — queue reset, 3 dwords
-- `sceAgcDcbSetIndexCount` — `IT_INDEX_BUFFER_SIZE` (0x13), 3 dwords
-- `sceAgcDcbSetIndexSize` — `IT_INDEX_TYPE` (0x2A), 3 dwords
+- `sceAgcDcbSetIndexCount` — `IT_INDEX_BUFFER_SIZE` (0x13), 2 dwords
+  (SPRX-confirmed; was incorrectly 3 dwords; clamps count to max(count,1))
+- `sceAgcDcbSetIndexSize` — opcode 0x7A, 3 dwords (SPRX-confirmed;
+  was incorrectly 0x2A/INDEX_TYPE; cmd[1]=0x20000243 constant,
+  cmd[2]=(type&3)|(swap<<6)|0x400)
 - `sceAgcDcbSetNumInstances` — `IT_NUM_INSTANCES` (0x2F), 2 dwords
-- `sceAgcDcbStallCommandBufferParser` — NOP-based stall, 2 dwords
+- `sceAgcDcbStallCommandBufferParser` — opcode 0x42, 2 dwords
+  (SPRX-confirmed; was incorrectly NOP+subcommand)
 - `sceAgcDcbDrawIndex` — `IT_DRAW_INDEX_2` (0x27), 6 dwords
+  (SPRX-confirmed field order: cmd[1]=max(count,1), cmd[4]=index_count,
+  cmd[5]=draw_initiator)
 - `sceAgcCbSetShRegisterRangeDirect` — `IT_SET_SH_REG` (0x76), variable
 - `sceAgcCbSetUcRegistersDirect` — `IT_SET_UCONFIG_REG` (0x79), variable
-- `sceAgcSetNop` — in-place NOP header setter
-- `sceAgcGetDataPacketPayload` — data packet payload getter
+- `sceAgcSetNop` — patches byte at cmd+1 to 0x10 (NOP), returns NULL
+  (SPRX-confirmed; 1 param, not 2)
+- `sceAgcGetDataPacketPayload` — 3-param payload getter
+  (out_addr, cmd, skip_header); returns NULL (SPRX-confirmed)
 - `sceAgcDebugRaiseException` — debug stub (no-op on non-dev)
 - `sceAgcCreateShader` — shader record validation
-- `sceAgcCreatePrimState` — primitive state builder
+- `sceAgcCreatePrimState` — 5-param primitive state builder
+  (SPRX-confirmed; was incorrectly 2-param with range 0-10)
+
+SPRX disassembly batch 2 (FW 5.50 deep disassembly):
+
+DCB packet builders:
+- `sceAgcDcbClearState` — AGC-custom clear state (opcode 0x12), 2 dwords
+- `sceAgcDcbRewind` — `IT_REWIND` (0x59), 2 dwords
+- `sceAgcDcbCondExec` — `IT_COND_EXEC` (0x22), 5 dwords
+- `sceAgcDcbSetIndexIndirectArgs` — AGC-custom (opcode 0x91), 4 dwords
+- `sceAgcDcbAtomicMem` — opcode 0x1E (AGC ATOMIC_MEM), 9 dwords
+  (NID "1-gUn1PI4Sw" was mislabeled as SET_WORKLOAD; it's actually AtomicMem)
+- `sceAgcDcbAtomicGds` — `IT_ATOMIC_GDS` (0x1D), 11 dwords
+- `sceAgcDcbMemSemaphore` — `IT_MEM_SEMAPHORE` (0x39), 4 dwords
+- `sceAgcDcbPrimeUtcl2` — `IT_PRIME_UTCL2` (0x5D), 5 dwords
+- `sceAgcDcbDrawIndexMultiInstanced` — AGC-custom (opcode 0x3A), 9+count dwords
+- `sceAgcDcbSetMarker` — NOP-wrapped marker string
+- `sceAgcDcbContextStateOp` — 4-op context state switch (CLEAR_STATE /
+  SET_CONTEXT_REG / SET_CX_REG_INDIRECT / combined)
+- `sceAgcDcbSetWorkloadsActive` / `SetWorkloadComplete` / `SetWorkloadStreamInactive`
+  — DCB cursor workload helpers (SET_WORKLOAD 0x1E, 8 dwords)
+
+DCB register direct setters (3 dwords each):
+- `sceAgcDcbSetCfRegisterDirect` — `IT_SET_CONFIG_REG` (0x68)
+- `sceAgcDcbSetCxRegisterDirect` — `IT_SET_CONTEXT_REG` (0x69)
+- `sceAgcDcbSetShRegisterDirect` — `IT_SET_SH_REG` (0x76)
+- `sceAgcDcbSetUcRegisterDirect` — `IT_SET_UCONFIG_REG` (0x79)
+- `sceAgcDcbSetCfRegisterRangeDirect` — variable-length config reg range
+- `sceAgcCbSetUcRegisterRangeDirect` — variable-length uconfig reg range
+
+CB builders:
+- `sceAgcCbBranch` — `IT_INDIRECT_BUFFER` (0x3F), 14 dwords, 12-arg signature
+  (SPRX-confirmed: cmd[1]=((ctrl&7)<<8)|(flags&3), cmd[2]=addr_lo&~7,
+  cmd[10]=((engine&3)<<28)|(size&0xfffff), etc.)
+- `sceAgcCbCondWrite` — AGC-custom `IT_COND_WRITE` (0x45), 9 dwords
+  (SPRX-confirmed: cmd[2..3]=ref, cmd[4]=mask, cmd[6..7]=address, cmd[8]=write_data)
+- `sceAgcCbMemSemaphore` — `IT_MEM_SEMAPHORE` (0x39), 4 dwords
+
+WaitRegMem patchers (SPRX-confirmed: require 0x79 wrapper, use adjusted pointer):
+- `sceAgcWaitRegMemPatchCompareFunction` — patches adjusted[1] bits 2:0
+- `sceAgcWaitRegMemPatchReference` — patches adjusted[4]
+- `sceAgcWaitRegMemPatchMask` — patches adjusted[5] (32-bit 0x3C) or adjusted[6] (64-bit 0x93)
 
 Game-compat driver functions:
 
@@ -259,32 +317,53 @@ Submit model:
 - `sceVideoOutRegisterBuffers` (A8R8G8B8_SRGB, tiled) — OK
 - Flip loop running at 60fps
 
-### agc_init.elf — PARTIAL PASS (pre-SPRX-disassembly run)
+### agc_init.elf — PARTIAL PASS (post-SPRX-disassembly + kernel RE)
 - **[1] sce_agc_initialize()** — PASS
   - /dev/gc opened (fd=7), CONTEXT_QUERY OK, mmap at 0xfe0200000
   - FRAME_OPEN correctly returns EINVAL (confirms ps5-openagc audit)
-- **[2] sce_agc_initialize_internal_memory()** — PASS (but sizes were wrong)
-  - All 8 regions allocated with WC_GARLIC (type=3) via sceKernelAllocateDirectMemory
-  - WB_ONION (type=1) returns EINVAL on this PS5 — all regions use garlic
-  - GPU VAs: 0x200200000–0x201000000
-  - **FIXED**: SPRX disassembly revealed 6 of 9 region sizes were wrong,
-    and the SPRX uses sceKernelMapNamedSystemFlexibleMemory (not
-    sceKernelAllocateDirectMemory). Updated to match SPRX: 9 regions
-    totaling ~19.3MB with correct names (SceGnmGpuInfo, SceGnmTrapCode,
-    SceGnmTrapData, SceGnmDdid, SceGnmEopFifo, SceGnmShadowReg,
-    SceGnmCwsr, SceGnmMisc, SceGnmACQRB).
+- **[2] sce_agc_initialize_internal_memory()** — PASS
+  - All 9 regions allocated with sceKernelMapNamedSystemFlexibleMemory (type=0x33)
+  - GPU VAs: 0x200024000–0x20145C000
+  - Region sizes match SPRX disassembly exactly
 - **[3] sceAgcDriverNotifyDefaultStates()** — PASS
-- **[4] sceAgcDriverGetPaDebugInterfaceVersion()** — returns 0 (unsupported?)
+  - Sub-region carving from SceGnmDdid (1008KB) works correctly
+- **[4] sceAgcDriverGetPaDebugInterfaceVersion()** — FAIL (errno=1, EPERM)
+  - Kernel returns EPERM — requires root/debug capabilities
+  - Not a bug in our implementation; kernel-level permission check
 - **[5] sceAgcDriverSubmitDcb(NOP)** — PASS (NOP submitted to GPU!)
-- **[6] SuspendPointSubmitDirect** — FAIL (0x80890201 SUBMIT_FAILED)
-  - SPRX disassembly confirms ioctl 0xc010811c with 4-dword arg layout.
-  - The ioctl mechanism is correct; the field values may need adjustment.
-- **[7] CreateUserSpecialQueue** — FAIL (0x80890201 INTERNAL)
-  - **FIXED**: SPRX disassembly revealed the 64-byte ioctl arg layout was
-    completely wrong (field order at offsets 0x10-0x28 was mismatched).
-    Also, the ring buffer should be carved from EOP FIFO base + 0x39000,
-    not separately allocated. Updated to match SPRX.
-- **[9] BeginWorkload/EndWorkload** — PASS
+- **[6] sceAgcDriverSetupAsyncGraphics(1)** — PASS
+  - Ioctl 0x80048126 with arg=1 succeeds
+- **[7] _sceAgcDriverCreateUserSpecialQueue()** — PASS (with credential bypass)
+  - Ioctl arg layout confirmed correct via SPRX disassembly
+  - Ring buffer carved from EOP FIFO base + 0x39000 (correct)
+  - Read ptr from ACQRB base + 0x1C8000, metadata from ACQRB base + 0x1CC000
+  - **Credential bypass**: The kernel handler at 0xffffffffd8f66bb0
+    calls 0xffffffffd8e70400 which checks the process's GPU credentials
+    at `[ucred + 0x58]` (cr_sceAuthId). The check masks with 0xff0f000000000000
+    and adds 0xb7ff000000000000; if the result is zero (after >>49), the
+    check passes. Setting cr_sceAuthId = 0x4801000000000000 satisfies this:
+    (0x4801000000000000 & 0xff0f000000000000) + 0xb7ff000000000000 = 0 (64-bit overflow).
+    When the credential check passes, the handler falls through to the
+    magic-value checks. The magic triple (0xaf1e80b7, 0x8b4cdd90, 0x99f68d6c)
+    selects config table at 0xd9d5b360, mapping to slot (field0=2, field1=3,
+    field2=5) at ctx offset 0x158.
+- **[8] sceAgcDriverSuspendPointSubmitDirect()** — PASS (with credential bypass)
+  - Ioctl 0xC010811C with 4-dword arg layout confirmed correct
+  - **Key finding**: The suspend point handler at 0xffffffffd8f66ff0 uses
+    the SAME credential check (0xd8e70400) and the SAME magic triple
+    (0xaf1e80b7, 0x8b4cdd90, 0x99f68d6c) as the queue create handler.
+    When credentials pass, the magic triple selects the SAME config table
+    (0xd9d5b360), mapping to the SAME slot (2,3,5) at ctx offset 0x158.
+    Non-magic values like (1,0,0) would compute a different slot (0x64)
+    and fail with 0x804C0001 (no queue at that slot).
+  - **field3 constraint**: The tail-called function at 0xd8e57700 checks
+    `(field3 >> queue->shift_amount) == 0` where shift_amount is read from
+    queue+0x48. If field3 is non-zero and shift_amount is 0, returns EINVAL.
+    Passing field3=0 works.
+- **[9] _sceAgcDriverDestroyUserSpecialQueue()** — PASS
+  - Queue destroyed successfully after suspend point
+- **[10] sceAgcDriverBeginWorkload/EndWorkload** — PASS
+  - Sub-region carving from SceGnmDdid for workload tracking works
 
 ### Hardware-discovered bugs fixed
 - PS5 memory type constants differ from PS4:
@@ -297,22 +376,19 @@ Submit model:
 
 ## Next RE Tasks
 
-1. **Re-validate on hardware** — deploy the updated `agc_init.elf` with
-   the SPRX-confirmed fixes:
-   - 9 internal memory regions with correct sizes via
-     `sceKernelMapNamedSystemFlexibleMemory` (type=0x33)
-   - Queue create with correct 64-byte ioctl arg layout and ring buffer
-     carved from EOP FIFO base + 0x39000
-   - Suspend point with confirmed ioctl 0xc010811c
-2. **Fix SuspendPointSubmitDirect** — SPRX disassembly confirms the ioctl
-   command (0xc010811c) and 4-dword arg layout are correct. The
-   SUBMIT_FAILED error may be due to incorrect field values or missing
-   prior initialization (e.g., the suspend point may require the queue
-   to be created first, or specific GPU state).
+1. **PA debug ioctl** — `sceAgcDriverGetPaDebugInterfaceVersion` still
+   returns EPERM (errno=1). This is a separate kernel permission check
+   (not the cr_sceAuthId check at 0xd8e70400). Needs further kernel RE
+   to identify the required capability.
+2. **FRAME_OPEN ioctl** — `sce_agc_initialize` calls FRAME_OPEN
+   (0xC0088100) which returns EINVAL. This may need additional context
+   setup or credentials. Currently non-blocking — init succeeds without it.
 3. **Validate default state blobs** — confirm the primary/internal
-   register-defaults blobs are accepted by the kernel.
-4. **Async-compute queue setup** — implement real queue submission path
-   now that the queue create ioctl arg layout is confirmed.
+   register-defaults blobs are accepted by the kernel and produce the
+   expected GPU state.
+4. **Full GPU command submission** — now that queue create, suspend point,
+   and DCB submit all work, the next step is to submit actual rendering
+   commands (draw calls, state setup) via the compute queue.
 5. **Game compatibility** — continue analyzing game binaries to identify
    and implement remaining missing AGC functions. See
    `analysis/game_agc_usage.md` for the Joe & Mac analysis.

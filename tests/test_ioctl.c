@@ -125,10 +125,10 @@ static void test_queue_create_struct_layout(void) {
     TEST_ASSERT_EQ(offsetof(AgcGcQueueCreateArg, magic2),    0x04u, "QueueCreateArg magic2");
     TEST_ASSERT_EQ(offsetof(AgcGcQueueCreateArg, magic3),    0x08u, "QueueCreateArg magic3");
     TEST_ASSERT_EQ(offsetof(AgcGcQueueCreateArg, token),     0x0Cu, "QueueCreateArg token");
-    TEST_ASSERT_EQ(offsetof(AgcGcQueueCreateArg, pipe_id),   0x10u, "QueueCreateArg pipe_id");
+    TEST_ASSERT_EQ(offsetof(AgcGcQueueCreateArg, read_ptr_addr), 0x10u, "QueueCreateArg read_ptr_addr");
     TEST_ASSERT_EQ(offsetof(AgcGcQueueCreateArg, caller_arg),0x18u, "QueueCreateArg caller_arg");
     TEST_ASSERT_EQ(offsetof(AgcGcQueueCreateArg, mmio_base), 0x20u, "QueueCreateArg mmio_base");
-    TEST_ASSERT_EQ(offsetof(AgcGcQueueCreateArg, queue_id),  0x28u, "QueueCreateArg queue_id");
+    TEST_ASSERT_EQ(offsetof(AgcGcQueueCreateArg, pipe_id),   0x28u, "QueueCreateArg pipe_id");
     TEST_ASSERT_EQ(offsetof(AgcGcQueueCreateArg, ring_addr), 0x30u, "QueueCreateArg ring_addr");
     TEST_ASSERT_EQ(offsetof(AgcGcQueueCreateArg, ring_size), 0x38u, "QueueCreateArg ring_size");
 }

@@ -37,12 +37,16 @@
 
 /* WC Garlic memory type (same as PS4) */
 #define SCE_KERNEL_WC_GARLIC 3
+/* WB Onion memory type (write-back coherent) */
+#define SCE_KERNEL_WB_ONION  1
 
 /* PS5-proven constants from PS5_DEV_HOMEBREW/examples/ps5_sdk/hello_square.c */
 #define PS5_DIRECT_MEM_SEARCH_END  0x300000000ULL
 #define PS5_DIRECT_MEM_ALIGNMENT   0x200000  /* 2 MB */
 
 /* Kernel functions from libkernel.so stub */
+int sceKernelUsleep(unsigned int microseconds);
+void thr_exit(long *state);
 int sceKernelAllocateDirectMemory(
     off_t searchStart, off_t searchEnd, size_t len, size_t alignment,
     int memoryType, off_t *directMemoryStart);
@@ -63,7 +67,8 @@ int sceKernelWaitEqueue(SceKernelEqueue equeue, SceKernelEvent *events,
 enum {
     BUFFER_COUNT = 2,
     BYTES_PER_PIXEL = 4,
-    DIRECT_MEMORY_ALIGNMENT = PS5_DIRECT_MEM_ALIGNMENT,
+    /* PS5 tiled buffers require 2MB alignment */
+    DIRECT_MEMORY_ALIGNMENT = 0x200000,
 };
 
 typedef struct {
@@ -100,20 +105,24 @@ static uint32_t color_bar(unsigned index, uint64_t frame) {
 
 static void fill_pattern(uint8_t *buffer, uint32_t width, uint32_t height,
                          uint32_t pitch_pixels, uint64_t frame) {
-    const unsigned bar_count = 8;
-    for (uint32_t y = 0; y < height; y++) {
-        uint32_t *row = (uint32_t *)(buffer +
-            (size_t)y * pitch_pixels * BYTES_PER_PIXEL);
-        for (uint32_t x = 0; x < width; x++) {
-            const unsigned bar = (unsigned)(((uint64_t)x * bar_count) / width);
-            uint32_t color = color_bar(bar, frame);
-            if (y < height / 12) {
-                const uint8_t phase = (uint8_t)((x + frame * 8) & 0xff);
-                color = pack_a8r8g8b8(phase, 255 - phase, 0x40, 0xff);
-            }
-            row[x] = color;
-        }
-    }
+    /* Fill the entire buffer with a single solid color.
+     * In tiled mode, a uniform fill displays correctly regardless of
+     * the tile layout because every pixel has the same value.
+     * Cycle through red, green, blue, white every 60 frames. */
+    static const uint32_t solid_colors[] = {
+        0xff0000ff,  /* red */
+        0xff00ff00,  /* green */
+        0xffff0000,  /* blue */
+        0xffffffff,  /* white */
+    };
+    const unsigned ci = (unsigned)(frame / 60) % 4;
+    const uint32_t color = solid_colors[ci];
+    const size_t total = (size_t)pitch_pixels * height * BYTES_PER_PIXEL;
+    /* Fast memset-style fill using 32-bit writes */
+    uint32_t *p = (uint32_t *)buffer;
+    const size_t count = total / 4;
+    for (size_t i = 0; i < count; i++)
+        p[i] = color;
 }
 
 static bool allocate_buffers(VideoOutTest *test) {
@@ -122,6 +131,7 @@ static bool allocate_buffers(VideoOutTest *test) {
     test->buffer_stride = align_up(buffer_size, DIRECT_MEMORY_ALIGNMENT);
     test->mapped_size = test->buffer_stride * BUFFER_COUNT;
 
+    /* GARLIC (type=3, WC) — same as PS5_DEV_HOMEBREW examples */
     int res = sceKernelAllocateDirectMemory(
         0, (off_t)PS5_DIRECT_MEM_SEARCH_END, test->mapped_size,
         DIRECT_MEMORY_ALIGNMENT, SCE_KERNEL_WC_GARLIC, &test->direct_memory
@@ -131,8 +141,8 @@ static bool allocate_buffers(VideoOutTest *test) {
         return false;
     }
 
-    const int prot = SCE_KERNEL_PROT_CPU_READ | SCE_KERNEL_PROT_CPU_RW |
-                     SCE_KERNEL_PROT_GPU_READ | SCE_KERNEL_PROT_GPU_WRITE;
+    /* prot 0x33 = CPU_RW | GPU_RW — same as PS5_DEV_HOMEBREW examples */
+    const int prot = 0x33;
     res = sceKernelMapDirectMemory(
         &test->mapped, test->mapped_size, prot, 0,
         test->direct_memory, DIRECT_MEMORY_ALIGNMENT
@@ -150,10 +160,19 @@ static bool allocate_buffers(VideoOutTest *test) {
 }
 
 static bool init_video(VideoOutTest *test) {
-    /* PS5 uses userId=0xFF (system/user default), not 0 like PS4 */
-    test->handle = sceVideoOutOpen(0xFF, SCE_VIDEO_OUT_BUS_TYPE_MAIN, 0, NULL);
+    /* PS5 uses userId=0xFF (system/user default), not 0 like PS4.
+     * Try multiple userIds like the PS5_DEV_HOMEBREW takeover_open. */
+    int32_t user_ids[] = { 0xFF, 0, 1, 2 };
+    test->handle = -1;
+    for (int i = 0; i < 4; i++) {
+        test->handle = sceVideoOutOpen(user_ids[i], SCE_VIDEO_OUT_BUS_TYPE_MAIN, 0, NULL);
+        if (test->handle >= 0) {
+            printf("sceVideoOutOpen(userId=0x%x) = %d\n", user_ids[i], test->handle);
+            break;
+        }
+    }
     if (test->handle < 0) {
-        printf("sceVideoOutOpen failed: 0x%x\n", test->handle);
+        printf("sceVideoOutOpen failed for all userIds: 0x%x\n", test->handle);
         return false;
     }
 
@@ -163,26 +182,38 @@ static bool init_video(VideoOutTest *test) {
         printf("sceVideoOutGetResolutionStatus failed: 0x%x\n", res);
         return false;
     }
-    test->width = status.full_width ? status.full_width : 1920;
-    test->height = status.full_height ? status.full_height : 1080;
+    printf("Resolution: full=%dx%d pane=%dx%d\n",
+           status.full_width, status.full_height,
+           status.pane_width, status.pane_height);
+    /* Use 1920x1080 like the working PS5_DEV_HOMEBREW examples */
+    test->width = 1920;
+    test->height = 1080;
     test->pitch_pixels = test->width;
 
     if (!allocate_buffers(test)) {
         return false;
     }
 
+    /* Sleep to allow external patching of libSceVideoOut.
+     * The patch script patches the linear tiling check in libSceVideoOut.sprx
+     * at offset 0x7e61 (NOP the je to the linear rejection). */
+    printf("Sleeping 10s for external patch — run patch_videoout.py now!\n");
+    sceKernelUsleep(10 * 1000 * 1000);
+    printf("Woke up, proceeding with RegisterBuffers...\n");
+
+    /* Use linear tiling — the patch removes the unconditional rejection */
     SceVideoOutBufferAttribute attr = {0};
-    /* PS5 requires tiled mode unless "Enhanced Display Buffer Attribute"
-     * is enabled in debug settings. Use tiled mode for compatibility. */
     sceVideoOutSetBufferAttribute(
         &attr, SCE_VIDEO_OUT_PIXEL_FORMAT_A8R8G8B8_SRGB,
-        SCE_VIDEO_OUT_TILING_MODE_TILE, SCE_VIDEO_OUT_ASPECT_RATIO_16_9,
+        SCE_VIDEO_OUT_TILING_MODE_LINEAR, SCE_VIDEO_OUT_ASPECT_RATIO_16_9,
         test->width, test->height, test->pitch_pixels
     );
 
     void *addresses[BUFFER_COUNT] = {test->buffers[0], test->buffers[1]};
     res = sceVideoOutRegisterBuffers(
         test->handle, 0, addresses, BUFFER_COUNT, &attr);
+    printf("sceVideoOutRegisterBuffers (linear): 0x%x\n", res);
+
     if (res < 0) {
         printf("sceVideoOutRegisterBuffers failed: 0x%x\n", res);
         return false;
@@ -227,8 +258,11 @@ int main(void) {
     printf("=== openagc VideoOut linear smoke test ===\n");
 
     if (!init_video(&test)) {
-        shutdown_video(&test);
-        return 1;
+        /* Don't call shutdown_video or return — just exit the thread
+         * to avoid disrupting the host process when injected. */
+        long state = 0;
+        thr_exit(&state);
+        __builtin_unreachable();
     }
 
     printf("Display initialized, starting flip loop...\n");
@@ -260,6 +294,8 @@ int main(void) {
         }
     }
 
-    shutdown_video(&test);
-    return 1;
+    /* Don't shutdown — just exit the thread to keep the host process alive */
+    long state = 0;
+    thr_exit(&state);
+    __builtin_unreachable();
 }

@@ -17,7 +17,7 @@
 
 /* === libSceAgc.sprx === */
 
-#define AGC_NID_SCE_AGC_INIT                         "23LRUSvYu1M"
+#define AGC_NID_SCE_AGC_INIT                         "kW3GLb7QfPg"
 #define AGC_NID_SCE_AGC_GET_REGISTER_DEFAULTS2       "2JtWUUiYBXs"
 #define AGC_NID_SCE_AGC_GET_REGISTER_DEFAULTS2_INT   "wRbq6ZjNop4"
 #define AGC_NID_SCE_AGC_CREATE_SHADER                "f3dg2CSgRKY"
@@ -92,7 +92,9 @@
 #define AGC_NID_SCE_AGC_DCB_SET_SH_REG_DIRECT         "UZbQjYAwwXM"
 #define AGC_NID_SCE_AGC_DCB_SET_UCONFIG_REG           "MDLD5Ly94Xk"
 #define AGC_NID_SCE_AGC_DCB_RELEASE_MEM               "wr23dPKyWc0"
-#define AGC_NID_SCE_AGC_DCB_SET_WORKLOAD              "1-gUn1PI4Sw"
+/* NID "1-gUn1PI4Sw" is sceAgcDcbAtomicMem (SPRX-confirmed), not SET_WORKLOAD.
+ * The workload begin/end functions use driver ordinals UM9b9NunSrE/i6bfTi13ApA. */
+#define AGC_NID_SCE_AGC_DCB_ATOMIC_MEM               "1-gUn1PI4Sw"
 #define AGC_NID_SCE_AGC_DCB_DRAW_INDIRECT             "1rZSWUv1IRc"
 #define AGC_NID_SCE_AGC_DCB_DRAW_INDEX_2              "q88lQ+GP5Yk"
 #define AGC_NID_SCE_AGC_DCB_DRAW_INDIRECT_MULTI       "kUlvghKs-mA"
@@ -139,7 +141,7 @@
 #define AGC_NID_SCE_AGC_DRIVER_SET_TARGET_RING_DIAG  "l0Jxfl0DEdo"
 #define AGC_NID_SCE_AGC_DRIVER_IS_SUSPEND_IN_FLIGHT  "I6elAJxk6Jo"
 #define AGC_NID_SCE_AGC_DRIVER_SET_TF_RING_DIRECT    "16IjQxB-Heo"
-#define AGC_NID_SCE_AGC_DRIVER_SET_HS_OFFCHIP_PARAM  "DPcAnsOlTQs"
+#define AGC_NID_SCE_AGC_DRIVER_SET_HS_OFFCHIP_PARAM  "MM4IZSEYytQ"
 #define AGC_NID_SCE_AGC_DRIVER_SDMA_COPY_LINEAR_BLOCK "bQ+En9GY3PM"
 #define AGC_NID_SCE_AGC_DRIVER_REGISTER_CAPTURE_INTF "oz3Yd--lAEE"
 #define AGC_NID_SCE_AGC_DRIVER_DEREGISTER_CAPTURE_INTF "qR+S4WqJvUM"
@@ -187,16 +189,51 @@
 #define AGC_NID_SCE_AGC_CREATE_PRIM_STATE            "D9sr1xGUriE"
 
 /* libSceAgc.sprx — init/suspend wrappers */
-#define AGC_NID_SCE_AGC_INIT                         "kW3GLb7QfPg"
 #define AGC_NID_SCE_AGC_SUSPEND_POINT_WRAPPER        "h9z6+0hEydk"
 
 /* libSceAgcDriver.sprx — non-Direct variants */
 #define AGC_NID_SCE_AGC_DRIVER_AGR_SUBMIT_DCB        "AhGvpITrf4M"
 #define AGC_NID_SCE_AGC_DRIVER_SET_TF_RING           "XlNp7jzGiPo"
-#define AGC_NID_SCE_AGC_DRIVER_SET_HS_OFFCHIP_PARAM  "MM4IZSEYytQ"
 #define AGC_NID_SCE_AGC_DRIVER_GET_EQ_CONTEXT_ID     "Zw7uUVPulbw"
 #define AGC_NID_SCE_AGC_DRIVER_ADD_EQ_EVENT_DRV      "w2rJhmD+dsE"
 #define AGC_NID_SCE_AGC_DRIVER_REGISTER_OWNER        "X-Nm5KLREeg"
 #define AGC_NID_SCE_AGC_DRIVER_REGISTER_RESOURCE     "W5z4eZrjEas"
+
+/* === Newly identified from SPRX disassembly (FW 5.50) — batch 2 === */
+
+/* libSceAgc.sprx — DCB packet builders */
+#define AGC_NID_SCE_AGC_DCB_CLEAR_STATE              "PxEFhy0d5v8"
+#define AGC_NID_SCE_AGC_DCB_REWIND                   "zfcxg-ewMK8"
+#define AGC_NID_SCE_AGC_DCB_COND_EXEC                "BIPexNBSGog"
+#define AGC_NID_SCE_AGC_DCB_ATOMIC_GDS               "pH3-dfRpfA0"
+#define AGC_NID_SCE_AGC_DCB_MEM_SEMAPHORE            "G0jrLdvEqDw"
+#define AGC_NID_SCE_AGC_DCB_PRIME_UTCL2              "jt3pl7EN17o"
+#define AGC_NID_SCE_AGC_DCB_SET_INDEX_INDIRECT_ARGS  "0o3VDdtA6nM"
+#define AGC_NID_SCE_AGC_DCB_DRAW_INDEX_MULTI_INST    "Rlx+bykm0r0"
+#define AGC_NID_SCE_AGC_DCB_SET_MARKER               "QhCbS4X9Rl8"
+#define AGC_NID_SCE_AGC_DCB_CONTEXT_STATE_OP         "HabmgqPwPw0"
+#define AGC_NID_SCE_AGC_DCB_SET_WORKLOADS_ACTIVE     "LFSPFmGc9Hg"
+#define AGC_NID_SCE_AGC_DCB_SET_WORKLOAD_COMPLETE    "hEK26Wdny6s"
+#define AGC_NID_SCE_AGC_DCB_SET_WORKLOAD_STREAM_INACT "FneFypEDRgY"
+
+/* libSceAgc.sprx — DCB register direct setters */
+#define AGC_NID_SCE_AGC_DCB_SET_CF_REG_DIRECT        "73ZZdojLIgs"
+#define AGC_NID_SCE_AGC_DCB_SET_CX_REG_DIRECT        "LHFXRrlTPD8"
+/* Note: "pFLArOT53+w" is the single-register DCB variant.
+ * "UZbQjYAwwXM" (defined above) is the CB multi-register variant. */
+#define AGC_NID_SCE_AGC_DCB_SET_SH_REG_DIRECT_SINGLE "pFLArOT53+w"
+#define AGC_NID_SCE_AGC_DCB_SET_UC_REG_DIRECT        "w4-d0n60hdo"
+#define AGC_NID_SCE_AGC_DCB_SET_CF_REG_RANGE_DIRECT  "BVFg3CWU6Eo"
+#define AGC_NID_SCE_AGC_CB_SET_UC_REG_RANGE_DIRECT   "MDLD5Ly94Xk"
+
+/* libSceAgc.sprx — CB builders */
+#define AGC_NID_SCE_AGC_CB_BRANCH                    "w1KFAHVqpaU"
+#define AGC_NID_SCE_AGC_CB_COND_WRITE                "7toV+elXqNM"
+#define AGC_NID_SCE_AGC_CB_MEM_SEMAPHORE             "vHX9guneRBY"
+
+/* libSceAgc.sprx — WaitRegMem patchers */
+#define AGC_NID_SCE_AGC_WAIT_REG_MEM_PATCH_CMP_FUNC  "n485EBnIWmk"
+#define AGC_NID_SCE_AGC_WAIT_REG_MEM_PATCH_MASK      "hXAnLgDHCoI"
+#define AGC_NID_SCE_AGC_WAIT_REG_MEM_PATCH_REF       "7nOoijNPvEU"
 
 #endif /* _AGC_NIDS_H_ */

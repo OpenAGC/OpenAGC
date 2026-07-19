@@ -16,13 +16,20 @@
 typedef enum AgcPm4Opcode {
     AGC_PM4_OP_NOP                       = 0x10,
     AGC_PM4_OP_SET_BASE                  = 0x11,
+    /* AGC-custom clear-state opcode (not standard AMD 0x14).
+     * RE: SPRX sceAgcDcbClearState emits header 0xc0001200. */
+    AGC_PM4_OP_CLEAR_STATE_AGC           = 0x12,
     AGC_PM4_OP_CLEAR_STATE               = 0x14,
     AGC_PM4_OP_INDEX_BUFFER_SIZE         = 0x13,
     AGC_PM4_OP_DISPATCH_DIRECT           = 0x15,
     AGC_PM4_OP_DISPATCH_INDIRECT         = 0x16,
     AGC_PM4_OP_ATOMIC_MEM                = 0x1B,
     AGC_PM4_OP_ATOMIC_GDS                = 0x1D,
+    /* Opcode 0x1E is used for both ATOMIC_MEM (sub=0, 9 dwords) and
+     * SET_WORKLOAD (sub=0x20/0x21, 3 dwords) on AGC. The SPRX function
+     * sceAgcDcbAtomicMem uses 0x1E with sub=0. */
     AGC_PM4_OP_SET_WORKLOAD              = 0x1E,
+    AGC_PM4_OP_ATOMIC_MEM_AGC            = 0x1E,  /* alias */
     AGC_PM4_OP_SET_PREDICATION           = 0x20,
     AGC_PM4_OP_COND_EXEC                 = 0x22,
     AGC_PM4_OP_DRAW_INDIRECT             = 0x24,
@@ -34,6 +41,9 @@ typedef enum AgcPm4Opcode {
     AGC_PM4_OP_DRAW_INDEX_AUTO           = 0x2D,
     AGC_PM4_OP_DRAW_INDEX_INDIRECT_MULTI = 0x38,
     AGC_PM4_OP_NUM_INSTANCES             = 0x2F,
+    /* AGC-custom multi-instanced indexed draw.
+     * RE: SPRX sceAgcDcbDrawIndexMultiInstanced emits 0xc0073a00. */
+    AGC_PM4_OP_DRAW_INDEX_MULTI_INSTANCED = 0x3A,
     AGC_PM4_OP_INDIRECT_BUFFER_CNST      = 0x33,
     AGC_PM4_OP_DRAW_INDEX_OFFSET_2       = 0x35,
     AGC_PM4_OP_WRITE_DATA                = 0x37,
@@ -41,6 +51,9 @@ typedef enum AgcPm4Opcode {
     AGC_PM4_OP_WAIT_REG_MEM              = 0x3C,
     AGC_PM4_OP_INDIRECT_BUFFER           = 0x3F,
     AGC_PM4_OP_COPY_DATA                 = 0x40,
+    /* AGC-custom conditional write (CB only).
+     * RE: SPRX sceAgcCbCondWrite emits 0xc0074500. */
+    AGC_PM4_OP_COND_WRITE                = 0x45,
     AGC_PM4_OP_EVENT_WRITE               = 0x46,
     AGC_PM4_OP_EVENT_WRITE_EOP           = 0x47,
     AGC_PM4_OP_EVENT_WRITE_EOS           = 0x48,
@@ -58,6 +71,9 @@ typedef enum AgcPm4Opcode {
     AGC_PM4_OP_DISPATCH_DRAW_PREAMBLE    = 0x8C,
     AGC_PM4_OP_DISPATCH_DRAW             = 0x8D,
     AGC_PM4_OP_GET_LOD_STATS             = 0x8E,
+    /* AGC-custom set index indirect args.
+     * RE: SPRX sceAgcDcbSetIndexIndirectArgs emits 0xc0029100. */
+    AGC_PM4_OP_SET_INDEX_INDIRECT_ARGS   = 0x91,
     AGC_PM4_OP_WAIT_REG_MEM64            = 0x93,
     AGC_PM4_OP_SUSPEND_POINT_MARKER      = 0x93,  /* kernel-side preemption marker */
     AGC_PM4_OP_PRIME_UTCL2               = 0x5D,
@@ -74,10 +90,23 @@ typedef enum AgcPm4Opcode {
     AGC_PM4_OP_WAIT_FLIP_EOS          = 0x4F,
     AGC_PM4_OP_WAIT_FLIP              = 0x51,
     AGC_PM4_OP_INSERT_WAIT_FLIP_DONE  = 0x54,
+    /* AGC-custom indirect register write opcodes.
+     * RE source: SPRX disassembly of libSceAgc.sprx (FW 5.50).
+     * These are not NOP-wrapped subcommands — they are direct type-3
+     * opcodes used by sceAgcDcbSet{Sh,Cx,Uc}RegistersIndirect and
+     * validated by the corresponding patchers. */
+    AGC_PM4_OP_SET_SH_REG_INDIRECT    = 0x63,
+    AGC_PM4_OP_SET_UC_REG_INDIRECT    = 0x64,
+    AGC_PM4_OP_STALL_PARSER           = 0x42,
+    AGC_PM4_OP_SET_INDEX_SIZE         = 0x7A,
+    AGC_PM4_OP_SET_CX_REG_INDIRECT    = 0x9F,
 } AgcPm4Opcode;
 
 typedef enum AgcPm4Subcommand {
     AGC_PM4_SUB_ZERO             = 0x00,
+    /* DEPRECATED: DrawIndexAuto now uses IT_DRAW_INDEX_AUTO (0x2D) directly
+     * (KytyPS5-confirmed). This NOP subcommand is retained for reference
+     * only — do not use in new packet builders. */
     AGC_PM4_SUB_DRAW_INDEX_AUTO  = 0x04,
     AGC_PM4_SUB_DRAW_RESET       = 0x05,
     AGC_PM4_SUB_WAIT_FLIP_DONE   = 0x06,

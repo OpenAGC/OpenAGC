@@ -204,11 +204,14 @@ static void test_game_compat_dcb_jump(void) {
     SceAgcCb cb;
     agcCbInit(&cb, buffer, sizeof(buffer));
 
-    uint32_t *cmd = sceAgcDcbJump(&cb, 0x12345678ULL);
+    /* RE: opcode 0x3F (INDIRECT_BUFFER), 5 params */
+    uint32_t *cmd = sceAgcDcbJump(&cb, 0, 0, 0x12345678ULL, 0);
     TEST_ASSERT(cmd != NULL, "Jump should return non-NULL");
-    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_INDIRECT_BUFFER_CNST, "Jump opcode");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_INDIRECT_BUFFER, "Jump opcode 0x3F");
     TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 4, "Jump length");
-    TEST_ASSERT_EQ(cmd[1], 0x12345678u, "Jump target lo");
+    TEST_ASSERT_EQ(cmd[1], 0x12345678u, "Jump target lo (& ~3)");
+    TEST_ASSERT_EQ(cmd[2], 0u, "Jump target hi");
+    TEST_ASSERT_EQ(cmd[3] & 0x0F200000u, 0x0F200000u, "Jump cmd[3] has constant bits");
 }
 
 static void test_game_compat_dcb_reset_queue(void) {
@@ -227,11 +230,18 @@ static void test_game_compat_dcb_set_index_count(void) {
     SceAgcCb cb;
     agcCbInit(&cb, buffer, sizeof(buffer));
 
+    /* RE: 2 dwords (not 3), clamps to max(count, 1) */
     uint32_t *cmd = sceAgcDcbSetIndexCount(&cb, 1024);
     TEST_ASSERT(cmd != NULL, "SetIndexCount should return non-NULL");
     TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_INDEX_BUFFER_SIZE, "SetIndexCount opcode");
-    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 3, "SetIndexCount length");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 2, "SetIndexCount length 2 dwords");
     TEST_ASSERT_EQ(cmd[1], 1024u, "SetIndexCount value");
+
+    /* Test clamp: count=0 → 1 */
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    cmd = sceAgcDcbSetIndexCount(&cb, 0);
+    TEST_ASSERT(cmd != NULL, "SetIndexCount(0) should return non-NULL");
+    TEST_ASSERT_EQ(cmd[1], 1u, "SetIndexCount clamps 0 to 1");
 }
 
 static void test_game_compat_dcb_set_index_size(void) {
@@ -239,11 +249,18 @@ static void test_game_compat_dcb_set_index_size(void) {
     SceAgcCb cb;
     agcCbInit(&cb, buffer, sizeof(buffer));
 
+    /* RE: opcode 0x7A, cmd[1]=0x20000243, cmd[2]=(type&3)|(swap<<6)|0x400 */
     uint32_t *cmd = sceAgcDcbSetIndexSize(&cb, 1, 0);
     TEST_ASSERT(cmd != NULL, "SetIndexSize should return non-NULL");
-    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_INDEX_TYPE, "SetIndexSize opcode");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_SET_INDEX_SIZE, "SetIndexSize opcode 0x7A");
     TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 3, "SetIndexSize length");
-    TEST_ASSERT_EQ(cmd[1], 1u, "SetIndexSize index_type");
+    TEST_ASSERT_EQ(cmd[1], 0x20000243u, "SetIndexSize constant cmd[1]");
+    TEST_ASSERT_EQ(cmd[2], 0x401u, "SetIndexSize (1&3)|(0<<6)|0x400");
+
+    /* Test swap=1 */
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    cmd = sceAgcDcbSetIndexSize(&cb, 2, 1);
+    TEST_ASSERT_EQ(cmd[2], 0x442u, "SetIndexSize (2&3)|(1<<6)|0x400");
 }
 
 static void test_game_compat_dcb_set_num_instances(void) {
@@ -263,12 +280,21 @@ static void test_game_compat_dcb_draw_index(void) {
     SceAgcCb cb;
     agcCbInit(&cb, buffer, sizeof(buffer));
 
+    /* RE: cmd[1]=max(count,1), cmd[4]=count, cmd[5]=draw_initiator */
     uint32_t *cmd = sceAgcDcbDrawIndex(&cb, 100, 0x40000, 0x1234);
     TEST_ASSERT(cmd != NULL, "DrawIndex should return non-NULL");
     TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_DRAW_INDEX_2, "DrawIndex opcode");
     TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 6, "DrawIndex length");
-    TEST_ASSERT_EQ(cmd[1], 100u, "DrawIndex index_count");
+    TEST_ASSERT_EQ(cmd[1], 100u, "DrawIndex cmd[1]=max(count,1)");
     TEST_ASSERT_EQ(cmd[2], 0x40000u, "DrawIndex base lo");
+    TEST_ASSERT_EQ(cmd[4], 100u, "DrawIndex cmd[4]=index_count");
+    TEST_ASSERT_EQ(cmd[5], 0x1234u, "DrawIndex cmd[5]=draw_initiator");
+
+    /* Test clamp: count=0 → cmd[1]=1 */
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    cmd = sceAgcDcbDrawIndex(&cb, 0, 0x40000, 0x1234);
+    TEST_ASSERT_EQ(cmd[1], 1u, "DrawIndex clamps 0 to 1");
+    TEST_ASSERT_EQ(cmd[4], 0u, "DrawIndex cmd[4] preserves original 0");
 }
 
 static void test_game_compat_dcb_stall(void) {
@@ -276,9 +302,12 @@ static void test_game_compat_dcb_stall(void) {
     SceAgcCb cb;
     agcCbInit(&cb, buffer, sizeof(buffer));
 
+    /* RE: opcode 0x42 (not NOP+sub) */
     uint32_t *cmd = sceAgcDcbStallCommandBufferParser(&cb);
     TEST_ASSERT(cmd != NULL, "Stall should return non-NULL");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_STALL_PARSER, "Stall opcode 0x42");
     TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 2, "Stall length");
+    TEST_ASSERT_EQ(cmd[1], 0u, "Stall cmd[1]=0");
 }
 
 static void test_game_compat_cb_set_sh_reg_range(void) {
@@ -297,42 +326,71 @@ static void test_game_compat_cb_set_sh_reg_range(void) {
 }
 
 static void test_game_compat_set_nop(void) {
-    uint32_t cmd[4] = {0};
-    uint32_t *ret = sceAgcSetNop(cmd, 4);
-    TEST_ASSERT(ret != NULL, "SetNop should return non-NULL");
-    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_NOP, "SetNop opcode");
-    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 4, "SetNop length");
+    /* RE: sceAgcSetNop takes 1 param, patches byte at offset 1 to 0x10,
+     * returns NULL */
+    uint32_t cmd[4] = {0xC0036300, 0, 0, 0};  /* some non-NOP packet */
+    uint32_t *ret = sceAgcSetNop(cmd);
+    TEST_ASSERT(ret == NULL, "SetNop returns NULL");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_NOP, "SetNop patches opcode to NOP");
 }
 
 static void test_game_compat_patchers(void) {
-    /* Simulate an indirect register write packet:
-     *   [0] header, [1] addr_lo, [2] addr_hi, [3] count */
-    uint32_t cmd[4] = {0, 0, 0, 5};
+    /* RE: Indirect register write packets use 5 dwords:
+     *   [0] header (opcode 0x63/0x9F/0x64), [1] addr_lo, [2] addr_hi,
+     *   [3] 0x80000000, [4] count (bits 13:0)
+     * SetAddress patches cmd[1..2], preserving low 2 bits of cmd[1].
+     * AddRegisters patches cmd[4] bits 13:0, preserving bits 31:14.
+     * Wrong opcode → returns 0x8a6c000c. */
+
+    /* Sh patcher (opcode 0x63) */
+    uint32_t cmd[5] = {0};
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_SH_REG_INDIRECT, 5);
+    cmd[1] = 0x43u;  /* addr_lo with low 2 bits set */
+    cmd[2] = 0x0u;
+    cmd[3] = 0x80000000u;
+    cmd[4] = 5u;
 
     int32_t r = sceAgcSetShRegIndirectPatchSetAddress(cmd, 0x12345678ABCDEF00ULL);
-    TEST_ASSERT_EQ(r, AGC_OK, "PatchSetAddress returns OK");
-    TEST_ASSERT_EQ(cmd[1], 0xABCDEF00u, "PatchSetAddress lo");
-    TEST_ASSERT_EQ(cmd[2], 0x12345678u, "PatchSetAddress hi");
+    TEST_ASSERT_EQ(r, AGC_OK, "Sh PatchSetAddress returns OK");
+    TEST_ASSERT_EQ(cmd[1], 0xABCDEF03u, "Sh PatchSetAddress lo (preserves low 2 bits)");
+    TEST_ASSERT_EQ(cmd[2], 0x12345678u, "Sh PatchSetAddress hi");
 
     r = sceAgcSetShRegIndirectPatchAddRegisters(cmd, 3);
-    TEST_ASSERT_EQ(r, AGC_OK, "PatchAddRegisters returns OK");
-    TEST_ASSERT_EQ(cmd[3], 8u, "PatchAddRegisters adds to count");
+    TEST_ASSERT_EQ(r, AGC_OK, "Sh PatchAddRegisters returns OK");
+    TEST_ASSERT_EQ(cmd[4], 8u, "Sh PatchAddRegisters adds to cmd[4]");
 
-    /* Test Cx and Uc variants */
-    cmd[1] = cmd[2] = 0; cmd[3] = 5;
-    sceAgcSetCxRegIndirectPatchSetAddress(cmd, 0xDEAD);
-    TEST_ASSERT_EQ(cmd[1], 0xDEADu, "Cx patch addr lo");
+    /* Wrong opcode → 0x8a6c000c */
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_CX_REG_INDIRECT, 5);
+    r = sceAgcSetShRegIndirectPatchSetAddress(cmd, 0xDEAD);
+    TEST_ASSERT_EQ((uint32_t)r, 0x8a6c000cu, "Sh patcher rejects wrong opcode");
 
-    cmd[3] = 0;
-    sceAgcSetCxRegIndirectPatchAddRegisters(cmd, 10);
-    TEST_ASSERT_EQ(cmd[3], 10u, "Cx patch add regs");
+    /* Cx patcher (opcode 0x9F) */
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_CX_REG_INDIRECT, 5);
+    cmd[1] = 0; cmd[2] = 0; cmd[4] = 0;
+    r = sceAgcSetCxRegIndirectPatchSetAddress(cmd, 0xDEAD);
+    TEST_ASSERT_EQ(r, AGC_OK, "Cx PatchSetAddress returns OK");
+    TEST_ASSERT_EQ(cmd[1], 0xDEACu, "Cx patch addr lo (aligned to 4)");
 
-    cmd[1] = cmd[2] = 0; cmd[3] = 0;
-    sceAgcSetUcRegIndirectPatchSetAddress(cmd, 0xBEEF);
-    TEST_ASSERT_EQ(cmd[1], 0xBEEFu, "Uc patch addr lo");
+    r = sceAgcSetCxRegIndirectPatchAddRegisters(cmd, 10);
+    TEST_ASSERT_EQ(r, AGC_OK, "Cx PatchAddRegisters returns OK");
+    TEST_ASSERT_EQ(cmd[4], 10u, "Cx patch add regs to cmd[4]");
 
-    sceAgcSetUcRegIndirectPatchAddRegisters(cmd, 7);
-    TEST_ASSERT_EQ(cmd[3], 7u, "Uc patch add regs");
+    /* Uc patcher (opcode 0x64) */
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_UC_REG_INDIRECT, 5);
+    cmd[1] = 0; cmd[2] = 0; cmd[4] = 0;
+    r = sceAgcSetUcRegIndirectPatchSetAddress(cmd, 0xBEEF);
+    TEST_ASSERT_EQ(r, AGC_OK, "Uc PatchSetAddress returns OK");
+    TEST_ASSERT_EQ(cmd[1], 0xBEECu, "Uc patch addr lo (aligned to 4)");
+
+    r = sceAgcSetUcRegIndirectPatchAddRegisters(cmd, 7);
+    TEST_ASSERT_EQ(r, AGC_OK, "Uc PatchAddRegisters returns OK");
+    TEST_ASSERT_EQ(cmd[4], 7u, "Uc patch add regs to cmd[4]");
+
+    /* Wrong opcode → 0x8a6c000c */
+    r = sceAgcSetUcRegIndirectPatchAddRegisters(cmd, 1);
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_SH_REG_INDIRECT, 5);
+    r = sceAgcSetUcRegIndirectPatchSetAddress(cmd, 0xCAFE);
+    TEST_ASSERT_EQ((uint32_t)r, 0x8a6c000cu, "Uc patcher rejects wrong opcode");
 }
 
 static void test_game_compat_driver_stubs(void) {
@@ -375,19 +433,353 @@ static void test_game_compat_init(void) {
     r = sceAgcSuspendPoint(0, 0, 0, 0);
     TEST_ASSERT_EQ(r, AGC_OK, "sceAgcSuspendPoint returns OK");
 
-    /* CreatePrimState with valid type */
+    /* CreatePrimState with 5 params (out_state, out_state2, param3, param4, prim_type) */
     uint8_t state[64] = {0xFF};
-    r = sceAgcCreatePrimState(state, 5);
+    r = sceAgcCreatePrimState(state, NULL, NULL, NULL, 5);
     TEST_ASSERT_EQ(r, AGC_OK, "CreatePrimState returns OK");
     TEST_ASSERT_EQ(state[0], 0u, "CreatePrimState zeroes output");
-
-    /* CreatePrimState with invalid type */
-    r = sceAgcCreatePrimState(state, 11);
-    TEST_ASSERT(r < 0, "CreatePrimState invalid type fails");
 
     /* CreateShader with NULL fails */
     r = sceAgcCreateShader(NULL, 0);
     TEST_ASSERT(r < 0, "CreateShader NULL fails");
+}
+
+/* ===================================================================== */
+/* Batch 2 tests — SPRX disassembly-derived packet builders              */
+/* ===================================================================== */
+
+static void test_batch2_dcb_clear_state(void) {
+    SceAgcCb cb;
+    uint32_t buf[16];
+    agcCbInit(&cb, buf, sizeof(buf));
+
+    uint32_t *cmd = sceAgcDcbClearState(&cb, 0x5);
+    TEST_ASSERT(cmd != 0, "ClearState returns non-NULL");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_CLEAR_STATE_AGC, "ClearState opcode 0x12");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 2u, "ClearState length 2");
+    TEST_ASSERT_EQ(cmd[1], 0x5u, "ClearState flags&0xf");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 2u, "ClearState cursor advance");
+}
+
+static void test_batch2_dcb_rewind(void) {
+    SceAgcCb cb;
+    uint32_t buf[16];
+    agcCbInit(&cb, buf, sizeof(buf));
+
+    uint32_t *cmd = sceAgcDcbRewind(&cb, 1);
+    TEST_ASSERT(cmd != 0, "Rewind returns non-NULL");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_REWIND, "Rewind opcode 0x59");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 2u, "Rewind length 2");
+    TEST_ASSERT_EQ(cmd[1], 0x80000000u, "Rewind flags<<31");
+}
+
+static void test_batch2_dcb_cond_exec(void) {
+    SceAgcCb cb;
+    uint32_t buf[32];
+    agcCbInit(&cb, buf, sizeof(buf));
+
+    uint32_t *cmd = sceAgcDcbCondExec(&cb, 0x1000, 42);
+    TEST_ASSERT(cmd != 0, "CondExec returns non-NULL");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_COND_EXEC, "CondExec opcode 0x22");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 5u, "CondExec length 5");
+    TEST_ASSERT_EQ(cmd[1], 0x1000u, "CondExec addr_lo aligned");
+    TEST_ASSERT_EQ(cmd[4], 42u, "CondExec count&0x3fff");
+}
+
+static void test_batch2_dcb_set_index_indirect_args(void) {
+    SceAgcCb cb;
+    uint32_t buf[32];
+    agcCbInit(&cb, buf, sizeof(buf));
+
+    uint32_t *cmd = sceAgcDcbSetIndexIndirectArgs(&cb, 0x12340, 0x100);
+    TEST_ASSERT(cmd != 0, "SetIndexIndirectArgs returns non-NULL");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_SET_INDEX_INDIRECT_ARGS, "SetIndexIndirectArgs opcode 0x91");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 4u, "SetIndexIndirectArgs length 4");
+    TEST_ASSERT_EQ(cmd[1] & 0xFu, 0u, "SetIndexIndirectArgs addr aligned to 16");
+    TEST_ASSERT_EQ(cmd[3], 0x100u, "SetIndexIndirectArgs offset&0xffff");
+}
+
+static void test_batch2_dcb_atomic_mem(void) {
+    SceAgcCb cb;
+    uint32_t buf[32];
+    agcCbInit(&cb, buf, sizeof(buf));
+
+    uint32_t *cmd = sceAgcDcbAtomicMem(&cb, 1, 5, 3, 0x4000, 0xDEAD, 0xBEEF);
+    TEST_ASSERT(cmd != 0, "AtomicMem returns non-NULL");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_ATOMIC_MEM_AGC, "AtomicMem opcode 0x1E");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 9u, "AtomicMem length 9");
+    TEST_ASSERT_EQ(cmd[2], 0x4000u, "AtomicMem addr_lo");
+    TEST_ASSERT_EQ(cmd[4], 0xDEADu, "AtomicMem data_lo");
+    TEST_ASSERT_EQ(cmd[6], 0xBEEFu, "AtomicMem cmp_lo");
+}
+
+static void test_batch2_dcb_atomic_gds(void) {
+    SceAgcCb cb;
+    uint32_t buf[32];
+    agcCbInit(&cb, buf, sizeof(buf));
+
+    uint32_t *cmd = sceAgcDcbAtomicGds(&cb, 1, 0, 0x10, 0xAA, 0x100, 0x200, 3, 0xBEEF, 0xFF);
+    TEST_ASSERT(cmd != 0, "AtomicGds returns non-NULL");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_ATOMIC_GDS, "AtomicGds opcode 0x1D");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 11u, "AtomicGds length 11");
+}
+
+static void test_batch2_dcb_mem_semaphore(void) {
+    SceAgcCb cb;
+    uint32_t buf[32];
+    agcCbInit(&cb, buf, sizeof(buf));
+
+    uint32_t *cmd = sceAgcDcbMemSemaphore(&cb, 0x1008, 1, 0, 2);
+    TEST_ASSERT(cmd != 0, "MemSemaphore returns non-NULL");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_MEM_SEMAPHORE, "MemSemaphore opcode 0x39");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 4u, "MemSemaphore length 4");
+    TEST_ASSERT_EQ(cmd[1] & 0x7u, 0u, "MemSemaphore addr aligned to 8");
+    TEST_ASSERT_EQ((cmd[3] >> 29) & 0x7u, 2u, "MemSemaphore op in bits 31:29");
+}
+
+static void test_batch2_dcb_prime_utcl2(void) {
+    SceAgcCb cb;
+    uint32_t buf[32];
+    agcCbInit(&cb, buf, sizeof(buf));
+
+    uint32_t *cmd = sceAgcDcbPrimeUtcl2(&cb, 2, 1, 0x4000, 0x100);
+    TEST_ASSERT(cmd != 0, "PrimeUtcl2 returns non-NULL");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_PRIME_UTCL2, "PrimeUtcl2 opcode 0x5D");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 5u, "PrimeUtcl2 length 5");
+    TEST_ASSERT_EQ(cmd[1] & 0x7u, 2u, "PrimeUtcl2 cache_policy");
+}
+
+static void test_batch2_dcb_reg_direct_setters(void) {
+    SceAgcCb cb;
+    uint32_t buf[64];
+    agcCbInit(&cb, buf, sizeof(buf));
+
+    /* CfRegisterDirect: opcode 0x68
+     * 64-bit param: low 16 bits = reg_offset, high 32 bits = value */
+    uint32_t *cmd = sceAgcDcbSetCfRegisterDirect(&cb, 0x55AA00001234ULL);
+    TEST_ASSERT(cmd != 0, "CfRegDirect returns non-NULL");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_SET_CONFIG_REG, "CfRegDirect opcode 0x68");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 3u, "CfRegDirect length 3");
+    TEST_ASSERT_EQ(cmd[1], 0x1234u, "CfRegDirect offset");
+    TEST_ASSERT_EQ(cmd[2], 0x55AAu, "CfRegDirect value");
+
+    /* CxRegisterDirect: opcode 0x69 */
+    cmd = sceAgcDcbSetCxRegisterDirect(&cb, 0xDEAD000000FFULL);
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_SET_CONTEXT_REG, "CxRegDirect opcode 0x69");
+    TEST_ASSERT_EQ(cmd[1], 0x00FFu, "CxRegDirect offset");
+
+    /* ShRegisterDirect: opcode 0x76 */
+    cmd = sceAgcDcbSetShRegisterDirect(&cb, 0x12340000ABCDULL);
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_SET_SH_REG, "ShRegDirect opcode 0x76");
+    TEST_ASSERT_EQ(cmd[1], 0xABCDu, "ShRegDirect offset");
+
+    /* UcRegisterDirect: opcode 0x79 */
+    cmd = sceAgcDcbSetUcRegisterDirect(&cb, 0xBEEF00000001ULL);
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_SET_UCONFIG_REG, "UcRegDirect opcode 0x79");
+    TEST_ASSERT_EQ(cmd[1], 0x0001u, "UcRegDirect offset");
+}
+
+static void test_batch2_dcb_cf_reg_range_direct(void) {
+    SceAgcCb cb;
+    uint32_t buf[64];
+    agcCbInit(&cb, buf, sizeof(buf));
+
+    uint32_t values[] = {0x10, 0x20, 0x30};
+    uint32_t *cmd = sceAgcDcbSetCfRegisterRangeDirect(&cb, 0x100, values, 3);
+    TEST_ASSERT(cmd != 0, "CfRegRangeDirect returns non-NULL");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_SET_CONFIG_REG, "CfRegRangeDirect opcode 0x68");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 5u, "CfRegRangeDirect length 2+3");
+    TEST_ASSERT_EQ(cmd[1], 0x100u, "CfRegRangeDirect offset");
+    TEST_ASSERT_EQ(cmd[2], 0x10u, "CfRegRangeDirect value[0]");
+    TEST_ASSERT_EQ(cmd[4], 0x30u, "CfRegRangeDirect value[2]");
+}
+
+static void test_batch2_cb_uc_reg_range_direct(void) {
+    SceAgcCb cb;
+    uint32_t buf[64];
+    agcCbInit(&cb, buf, sizeof(buf));
+
+    uint32_t values[] = {0xAA, 0xBB};
+    uint32_t *cmd = sceAgcCbSetUcRegisterRangeDirect(&cb, 0x20, values, 2);
+    TEST_ASSERT(cmd != 0, "UcRegRangeDirect returns non-NULL");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_SET_UCONFIG_REG, "UcRegRangeDirect opcode 0x79");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 4u, "UcRegRangeDirect length 2+2");
+    TEST_ASSERT_EQ(cmd[1], 0x20u, "UcRegRangeDirect offset");
+    TEST_ASSERT_EQ(cmd[3], 0xBBu, "UcRegRangeDirect value[1]");
+}
+
+static void test_batch2_cb_branch(void) {
+    SceAgcCb cb;
+    uint32_t buf[32];
+    agcCbInit(&cb, buf, sizeof(buf));
+
+    /* 12-arg signature per SPRX disassembly */
+    uint32_t *cmd = sceAgcCbBranch(&cb, 1, 2, 0x1000, 0x2000, 0x3000,
+                                    1, 0x4000, 256, 0, 0x5000, 128);
+    TEST_ASSERT(cmd != 0, "CbBranch returns non-NULL");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_INDIRECT_BUFFER, "CbBranch opcode 0x3F");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 14u, "CbBranch length 14");
+    TEST_ASSERT_EQ(cmd[1], ((2u & 7u) << 8) | (1u & 3u), "CbBranch control word");
+    TEST_ASSERT_EQ(cmd[2], 0x1000u & ~7u, "CbBranch target_addr_lo & ~7");
+    TEST_ASSERT_EQ(cmd[10] >> 28, 1u, "CbBranch dst_engine in bits 31:28");
+    TEST_ASSERT_EQ(cmd[13] >> 28, 0u, "CbBranch src_engine in bits 31:28");
+    TEST_ASSERT_EQ(cmd[10] & 0xFFFFFu, 256u, "CbBranch size1 in bits 19:0");
+    TEST_ASSERT_EQ(cmd[13] & 0xFFFFFu, 128u, "CbBranch size2 in bits 19:0");
+}
+
+static void test_batch2_cb_cond_write(void) {
+    SceAgcCb cb;
+    uint32_t buf[32];
+    agcCbInit(&cb, buf, sizeof(buf));
+
+    /* 8-arg signature per SPRX: (cb, cmp_func, write_enable, address, write_data, ref, mask, reserved) */
+    uint32_t *cmd = sceAgcCbCondWrite(&cb, 2, 1, 0x4000, 0x5678, 0x1234, 0xFF, 0);
+    TEST_ASSERT(cmd != 0, "CbCondWrite returns non-NULL");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_COND_WRITE, "CbCondWrite opcode 0x45");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 9u, "CbCondWrite length 9");
+    TEST_ASSERT_EQ(cmd[1] & 0x7u, 2u, "CbCondWrite compare_function");
+    TEST_ASSERT_EQ((cmd[1] >> 8) & 0x3u, 1u, "CbCondWrite write_enable");
+    TEST_ASSERT_EQ(cmd[1] & 0x10u, 0x10u, "CbCondWrite fixed 0x10 bit");
+    TEST_ASSERT_EQ(cmd[2], 0x1234u, "CbCondWrite ref_lo");
+    TEST_ASSERT_EQ(cmd[4], 0xFFu, "CbCondWrite mask");
+    TEST_ASSERT_EQ(cmd[6], 0x4000u, "CbCondWrite address_lo");
+    TEST_ASSERT_EQ(cmd[8], 0x5678u, "CbCondWrite write_data");
+}
+
+static void test_batch2_cb_mem_semaphore(void) {
+    SceAgcCb cb;
+    uint32_t buf[32];
+    agcCbInit(&cb, buf, sizeof(buf));
+
+    uint32_t *cmd = sceAgcCbMemSemaphore(&cb, 0x2000, 1, 1, 0);
+    TEST_ASSERT(cmd != 0, "CbMemSemaphore returns non-NULL");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_MEM_SEMAPHORE, "CbMemSemaphore opcode 0x39");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 4u, "CbMemSemaphore length 4");
+}
+
+static void test_batch2_wait_reg_mem_patchers(void) {
+    /* The SPRX patchers require a 0x79 (SET_UCONFIG_REG) wrapper packet
+     * followed by a real WAIT_REG_MEM (0x3C) packet. The patcher finds
+     * the WAIT_REG_MEM by skipping past the 0x79 wrapper. */
+    uint32_t buf[32];
+    memset(buf, 0, sizeof(buf));
+
+    /* Build a 0x79 wrapper (2 dwords) + WAIT_REG_MEM (7 dwords) = 9 dwords */
+    uint32_t *cmd = buf;
+    /* 0x79 wrapper: type-3, opcode 0x79, length 0 (2 dwords total) */
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_UCONFIG_REG, 2);
+    cmd[1] = 0;  /* wrapper data */
+
+    /* Real WAIT_REG_MEM at cmd[2] (adjusted pointer) */
+    uint32_t *wrm = &cmd[2];
+    wrm[0] = agcPm4Header3(AGC_PM4_OP_WAIT_REG_MEM, 7);
+    wrm[1] = 0;  /* compare_function | (operation << 8) */
+    wrm[2] = 0x4000;  /* address_lo */
+    wrm[3] = 0;        /* address_hi */
+    wrm[4] = 0x1234;   /* reference */
+    wrm[5] = 0xFF;     /* mask */
+    wrm[6] = 0;        /* poll_cycles */
+
+    /* Patch compare function (bits 2:0 of adjusted[1] = wrm[1]) */
+    int32_t r = sceAgcWaitRegMemPatchCompareFunction(cmd, 5);
+    TEST_ASSERT_EQ(r, AGC_OK, "PatchCmpFunc returns OK");
+    TEST_ASSERT_EQ(wrm[1] & 0x7u, 5u, "PatchCmpFunc sets wrm[1] bits 2:0");
+
+    /* Patch reference (adjusted[4] = wrm[4]) */
+    r = sceAgcWaitRegMemPatchReference(cmd, 0xDEAD);
+    TEST_ASSERT_EQ(r, AGC_OK, "PatchRef returns OK");
+    TEST_ASSERT_EQ(wrm[4], 0xDEADu, "PatchRef sets wrm[4]");
+
+    /* Patch mask (adjusted[5] = wrm[5] for 32-bit 0x3C) */
+    r = sceAgcWaitRegMemPatchMask(cmd, 0xFFFF);
+    TEST_ASSERT_EQ(r, AGC_OK, "PatchMask returns OK");
+    TEST_ASSERT_EQ(wrm[5], 0xFFFFu, "PatchMask sets wrm[5] for 32-bit");
+
+    /* Wrong opcode (not 0x79) → 0x8a6c000c */
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_NOP, 2);
+    r = sceAgcWaitRegMemPatchCompareFunction(cmd, 0);
+    TEST_ASSERT_EQ((uint32_t)r, 0x8a6c000cu, "PatchCmpFunc rejects non-0x79 opcode");
+
+    /* NULL cmd → 0x8a6c000c */
+    r = sceAgcWaitRegMemPatchCompareFunction(NULL, 0);
+    TEST_ASSERT_EQ((uint32_t)r, 0x8a6c000cu, "PatchCmpFunc rejects NULL");
+}
+
+static void test_batch2_dcb_draw_index_multi_instanced(void) {
+    SceAgcCb cb;
+    uint32_t buf[64];
+    agcCbInit(&cb, buf, sizeof(buf));
+
+    uint32_t inst_data[] = {0x10, 0x20, 0x30};
+    uint32_t *cmd = sceAgcDcbDrawIndexMultiInstanced(
+        &cb, 100, 0x4000, 3, 0xFF, inst_data, 3);
+    TEST_ASSERT(cmd != 0, "DrawIndexMultiInstanced returns non-NULL");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_DRAW_INDEX_MULTI_INSTANCED, "DrawIndexMultiInstanced opcode 0x3A");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 12u, "DrawIndexMultiInstanced length 9+3");
+    TEST_ASSERT_EQ(cmd[1], 100u, "DrawIndexMultiInstanced index_count");
+    TEST_ASSERT_EQ(cmd[9], 0x10u, "DrawIndexMultiInstanced inst_data[0]");
+}
+
+static void test_batch2_dcb_set_marker(void) {
+    SceAgcCb cb;
+    uint32_t buf[64];
+    agcCbInit(&cb, buf, sizeof(buf));
+
+    uint32_t *cmd = sceAgcDcbSetMarker(&cb, "test", 0);
+    TEST_ASSERT(cmd != 0, "SetMarker returns non-NULL");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_NOP, "SetMarker uses NOP wrapper");
+}
+
+static void test_batch2_dcb_context_state_op(void) {
+    SceAgcCb cb;
+    uint32_t buf[64];
+    agcCbInit(&cb, buf, sizeof(buf));
+
+    /* op 0: CLEAR_STATE */
+    uint32_t *cmd = sceAgcDcbContextStateOp(&cb, 0, 0, 0, 0, NULL);
+    TEST_ASSERT(cmd != 0, "ContextStateOp op=0 returns non-NULL");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_CLEAR_STATE_AGC, "ContextStateOp op=0 uses CLEAR_STATE");
+
+    /* op 1: SET_CONTEXT_REG */
+    cmd = sceAgcDcbContextStateOp(&cb, 1, 0, 0x100, 0x42, NULL);
+    TEST_ASSERT(cmd != 0, "ContextStateOp op=1 returns non-NULL");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_SET_CONTEXT_REG, "ContextStateOp op=1 uses SET_CONTEXT_REG");
+
+    /* op 2: SET_CX_REG_INDIRECT */
+    cmd = sceAgcDcbContextStateOp(&cb, 2, 0, 0x200, 4, NULL);
+    TEST_ASSERT(cmd != 0, "ContextStateOp op=2 returns non-NULL");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_SET_CX_REG_INDIRECT, "ContextStateOp op=2 uses SET_CX_REG_INDIRECT");
+
+    /* op 3: CLEAR_STATE + SET_CX_REG_INDIRECT */
+    cmd = sceAgcDcbContextStateOp(&cb, 3, 0, 0x300, 8, NULL);
+    TEST_ASSERT(cmd != 0, "ContextStateOp op=3 returns non-NULL");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_CLEAR_STATE_AGC, "ContextStateOp op=3 starts with CLEAR_STATE");
+
+    /* Invalid op */
+    cmd = sceAgcDcbContextStateOp(&cb, 99, 0, 0, 0, NULL);
+    TEST_ASSERT(cmd == 0, "ContextStateOp invalid op returns NULL");
+}
+
+static void test_batch2_dcb_workload_helpers(void) {
+    SceAgcCb cb;
+    uint32_t buf[64];
+    agcCbInit(&cb, buf, sizeof(buf));
+
+    /* SetWorkloadsActive */
+    uint32_t *cmd = sceAgcDcbSetWorkloadsActive(&cb, 0x1234, NULL, 0);
+    TEST_ASSERT(cmd != 0, "DcbSetWorkloadsActive returns non-NULL");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_SET_WORKLOAD, "DcbSetWorkloadsActive opcode 0x1E");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 8u, "DcbSetWorkloadsActive length 8");
+
+    /* SetWorkloadComplete */
+    cmd = sceAgcDcbSetWorkloadComplete(&cb, 0x42, 0);
+    TEST_ASSERT(cmd != 0, "DcbSetWorkloadComplete returns non-NULL");
+    TEST_ASSERT_EQ(cmd[1], 0x42u, "DcbSetWorkloadComplete workload_id");
+
+    /* SetWorkloadStreamInactive */
+    cmd = sceAgcDcbSetWorkloadStreamInactive(&cb, 0x99);
+    TEST_ASSERT(cmd != 0, "DcbSetWorkloadStreamInactive returns non-NULL");
+    TEST_ASSERT_EQ(cmd[1], 0x99u, "DcbSetWorkloadStreamInactive workload_id");
 }
 
 void test_suite_dcb(void) {
@@ -423,4 +815,23 @@ void test_suite_dcb(void) {
     TEST_RUN(test_game_compat_patchers);
     TEST_RUN(test_game_compat_driver_stubs);
     TEST_RUN(test_game_compat_init);
+    TEST_RUN(test_batch2_dcb_clear_state);
+    TEST_RUN(test_batch2_dcb_rewind);
+    TEST_RUN(test_batch2_dcb_cond_exec);
+    TEST_RUN(test_batch2_dcb_set_index_indirect_args);
+    TEST_RUN(test_batch2_dcb_atomic_mem);
+    TEST_RUN(test_batch2_dcb_atomic_gds);
+    TEST_RUN(test_batch2_dcb_mem_semaphore);
+    TEST_RUN(test_batch2_dcb_prime_utcl2);
+    TEST_RUN(test_batch2_dcb_reg_direct_setters);
+    TEST_RUN(test_batch2_dcb_cf_reg_range_direct);
+    TEST_RUN(test_batch2_cb_uc_reg_range_direct);
+    TEST_RUN(test_batch2_cb_branch);
+    TEST_RUN(test_batch2_cb_cond_write);
+    TEST_RUN(test_batch2_cb_mem_semaphore);
+    TEST_RUN(test_batch2_wait_reg_mem_patchers);
+    TEST_RUN(test_batch2_dcb_draw_index_multi_instanced);
+    TEST_RUN(test_batch2_dcb_set_marker);
+    TEST_RUN(test_batch2_dcb_context_state_op);
+    TEST_RUN(test_batch2_dcb_workload_helpers);
 }

@@ -102,9 +102,42 @@ void sceVideoOutSetBufferAttribute(SceVideoOutBufferAttribute *attribute,
                                    uint32_t pixelFormat, uint32_t tilingMode,
                                    uint32_t aspectRatio, uint32_t width,
                                    uint32_t height, uint32_t pitchInPixel);
+
+/* PS5 extended buffer attribute (0x50 bytes) */
+typedef struct SceVideoOutBufferAttribute2 {
+    uint32_t reserved0;        /* 0x00 */
+    uint32_t tiling_mode;      /* 0x04 */
+    uint32_t reserved1;        /* 0x08 */
+    uint32_t width;            /* 0x0C */
+    uint32_t height;           /* 0x10 */
+    uint32_t reserved2;        /* 0x14 */
+    uint64_t option;           /* 0x18 */
+    uint64_t pixel_format;     /* 0x20 */
+    uint64_t dcc_clear_color;  /* 0x28 */
+    uint32_t dcc_control;      /* 0x30 */
+    uint32_t reserved3[7];     /* 0x34 - 0x4F */
+} SceVideoOutBufferAttribute2;
+
+/* sceVideoOutSetBufferAttribute2 — PS5 extended attribute setter.
+ * NID: PjS5uASwcV8. Takes extra option, dccControl, dccClearColor params. */
+void sceVideoOutSetBufferAttribute2(SceVideoOutBufferAttribute2 *attribute,
+                                    uint64_t pixelFormat, uint32_t tilingMode,
+                                    uint32_t width, uint32_t height,
+                                    uint64_t option, uint32_t dccControl,
+                                    uint64_t dccClearColor);
+
 int32_t sceVideoOutRegisterBuffers(int32_t handle, int32_t startIndex,
                                    void *const *addresses, int32_t bufferNum,
                                    const SceVideoOutBufferAttribute *attribute);
+
+/* sceVideoOutRegisterBuffers2 — PS5 extended register.
+ * NID: rKBUtgRrtbk. Buffers are 0x20-byte entries {void* addr; uint64_t pad;}.
+ * category and option must be 0. */
+int32_t sceVideoOutRegisterBuffers2(int32_t handle, int32_t setIndex,
+                                    int32_t bufferIndexStart,
+                                    const void *buffers, int32_t bufferNum,
+                                    const void *attribute,
+                                    uint64_t category, uint64_t option);
 
 /* --- Flip --- */
 int32_t sceVideoOutSubmitFlip(int32_t handle, int32_t bufferIndex,
