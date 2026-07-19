@@ -1,274 +1,168 @@
-library	export	nid	source
-libSceAgc	sceAgcInit	23LRUSvYu1M	AgcExports.cs
-libSceAgc	sceAgcGetRegisterDefaults2	2JtWUUiYBXs	AgcExports.cs
-libSceAgc	sceAgcGetRegisterDefaults2Internal	wRbq6ZjNop4	AgcExports.cs
-libSceAgc	sceAgcCreateShader	f3dg2CSgRKY	AgcExports.cs
-libSceAgc	sceAgcGetDataPacketPayloadAddress	V++UgBtQhn0	AgcExports.cs
-libSceAgc	sceAgcCbNop	LtTouSCZjHM	AgcExports.cs
-libSceAgc	sceAgcCbDispatch	k3GhuSNmBLU	AgcExports.cs
-libSceAgc	sceAgcCbSetShRegistersDirect	UZbQjYAwwXM	AgcExports.cs
-libSceAgc	sceAgcAcbAtomicMem	XKKuA6VkSRc	ps5-openagc agc_nid.h
+# libSceAgc / libSceAgcDriver NID table for PS5 FW 5.50
+# Only includes NIDs that exist in the FW 5.50 SPRX exports.
+# For NIDs from other firmware versions, see agc_nids_version_variants.tsv
+#
+library	name	nid	source
 libSceAgc	sceAgcAcbAcquireMem	KT-hTp-Ch14	AgcExports.cs
+libSceAgc	sceAgcAcbAcquireMemGetSize	ewobAQeMo5k	KytyPS5 libGraphicsDriver.cpp
+libSceAgc	sceAgcAcbAtomicGds	gQkqkLttcpw	ps5-openagc agc_nid.h
+libSceAgc	sceAgcAcbAtomicGds_pre0090	cduV1f0dcGQ	ps5-openagc agc_nid.h
+libSceAgc	sceAgcAcbAtomicMem	XKKuA6VkSRc	ps5-openagc agc_nid.h
 libSceAgc	sceAgcAcbCondExec	qyM2bxYFPAk	ps5-openagc agc_nid.h
+libSceAgc	sceAgcAcbCondExecGetSize	ozKzBP4aki4	libGraphicsDriver.cpp
 libSceAgc	sceAgcAcbCopyData	qzMN2XKGA4k	ps5-openagc agc_nid.h
 libSceAgc	sceAgcAcbDispatchIndirect	j3EtxFkSIhQ	AgcExports.cs
 libSceAgc	sceAgcAcbDmaData	-RnpfpxIhec	ps5-openagc agc_nid.h
 libSceAgc	sceAgcAcbEventWrite	cFazmnXpJOE	AgcExports.cs
 libSceAgc	sceAgcAcbInitializeDefaultHardwareState_pre0090	rPtseVo5ToI	ps5-openagc agc_nid.h
-libSceAgc	sceAgcAcbResetQueue	JrtiDtKeS38	AgcExports.cs
 libSceAgc	sceAgcAcbJump	e1DFTg+Sd8U	ps5-openagc agc_nid.h
-libSceAgc	sceAgcAcbWriteData	eZ4+17OQz4Q	AgcExports.cs
-libSceAgc	sceAgcAcbWaitRegMem	htn36gPnBk4	AgcExports.cs
-libSceAgc	sceAgcAcbRewind	DwICrVxerkY	ps5-openagc agc_nid.h
-libSceAgc	sceAgcAcbPrimeUtcl2	szG7hz2yEhA	ps5-openagc agc_nid.h
-libSceAgc	sceAgcAcbAtomicGds_pre0090	cduV1f0dcGQ	ps5-openagc agc_nid.h
-libSceAgc	sceAgcAcbAtomicGds	gQkqkLttcpw	ps5-openagc agc_nid.h
-libSceAgc	sceAgcAcbSetMarker	xAeBOa0A3kk	ps5-openagc agc_nid.h
-libSceAgc	sceAgcAcbPushMarker	cpCILPya5Zk	ps5-openagc agc_nid.h
-libSceAgc	sceAgcAcbPopMarker	6mFxkVqdmbQ	ps5-openagc agc_nid.h
-libSceAgc	sceAgcAcbSetFlip	ebixW91gpPw	ps5-openagc agc_nid.h
 libSceAgc	sceAgcAcbMemSemaphore	q4VuU-QsLOE	ps5-openagc agc_nid.h
-libSceAgc	sceAgcAcbWaitUntilSafeForRendering	GPbUp9jXQa8	ps5-openagc agc_nid.h
-libSceAgc	sceAgcAcbSetWorkloadsActive	rVOmPz2RBlg	ps5-openagc agc_nid.h
+libSceAgc	sceAgcAcbPopMarker	6mFxkVqdmbQ	ps5-openagc agc_nid.h
+libSceAgc	sceAgcAcbPrimeUtcl2	szG7hz2yEhA	ps5-openagc agc_nid.h
+libSceAgc	sceAgcAcbPushMarker	cpCILPya5Zk	ps5-openagc agc_nid.h
+libSceAgc	sceAgcAcbResetQueue	JrtiDtKeS38	AgcExports.cs
+libSceAgc	sceAgcAcbRewind	DwICrVxerkY	ps5-openagc agc_nid.h
+libSceAgc	sceAgcAcbSetFlip	ebixW91gpPw	ps5-openagc agc_nid.h
+libSceAgc	sceAgcAcbSetMarker	xAeBOa0A3kk	ps5-openagc agc_nid.h
 libSceAgc	sceAgcAcbSetWorkloadComplete	opR1JeJZCBU	ps5-openagc agc_nid.h
 libSceAgc	sceAgcAcbSetWorkloadStreamInactive	FcgdDM3MB+k	ps5-openagc agc_nid.h
-libSceAgc	sceAgcVshCbMemSemaphore	vHX9guneRBY	ps5-openagc agc_nid.h
-libSceAgc	sceAgcVshDcbContextStateOp	qj7QZpgr9Uw	ps5-openagc agc_nid.h
-libSceAgc	sceAgcVshDcbContextStateOp_pre0100	HabmgqPwPw0	ps5-openagc agc_nid.h
-libSceAgc	sceAgcVshDcbInitializeDefaultHardwareState_pre0090	Xvcgh9xNNkY	ps5-openagc agc_nid.h
-libSceAgc	sceAgcVshDcbResetQueue	TRO721eVt4g	ps5-openagc agc_nid.h
-libSceAgc	sceAgcVshDcbAtomicGds_pre0090	pH3-dfRpfA0	ps5-openagc agc_nid.h
-libSceAgc	sceAgcVshDcbAtomicGds	zARR5aCmkoY	ps5-openagc agc_nid.h
-libSceAgc	sceAgcVshDcbSetFlip	YUeqkyT7mEQ	ps5-openagc agc_nid.h
-libSceAgc	sceAgcVshDcbWaitUntilSafeForRendering	MWiElSNE8j8	ps5-openagc agc_nid.h
-libSceAgc	sceAgcVshDcbMemSemaphore	G0jrLdvEqDw	ps5-openagc agc_nid.h
-libSceAgc	sceAgcVshDcbSetWorkloadsActive	LFSPFmGc9Hg	ps5-openagc agc_nid.h
-libSceAgc	sceAgcVshDcbSetWorkloadComplete	hEK26Wdny6s	ps5-openagc agc_nid.h
-libSceAgc	sceAgcVshDcbSetWorkloadStreamInactive	FneFypEDRgY	ps5-openagc agc_nid.h
-libSceAgc	sceAgcDcbWriteData	i1jyy49AjXU	AgcExports.cs
-libSceAgc	sceAgcDcbWaitRegMem	VmW0Tdpy420	AgcExports.cs
-libSceAgc	sceAgcDcbDmaData	WmAc2MEj6Io	AgcExports.cs
-libSceAgc	sceAgcDcbGetLodStatsGetSize	rUuVjyR+Rd4	AgcExports.cs
-libSceAgc	sceAgcDcbGetLodStats	vuSXe69VILM	AgcExports.cs
-libSceAgc	sceAgcDcbSetBaseIndirectArgs	RmaJwLtc8rY	AgcExports.cs
+libSceAgc	sceAgcAcbSetWorkloadsActive	rVOmPz2RBlg	ps5-openagc agc_nid.h
+libSceAgc	sceAgcAcbWaitOnAddressGetSize	idlaArvdXEs	3.20 stub (libSceAgcVsh)
+libSceAgc	sceAgcAcbWaitRegMem	htn36gPnBk4	AgcExports.cs
+libSceAgc	sceAgcAcbWaitUntilSafeForRendering	GPbUp9jXQa8	ps5-openagc agc_nid.h
+libSceAgc	sceAgcAcbWriteData	eZ4+17OQz4Q	AgcExports.cs
+libSceAgc	sceAgcAsyncRewindPatchSetRewindState	eWaWyFegzgQ	3.20 stub (libSceAgcVsh)
+libSceAgc	sceAgcBranchPatchSetCompareAddress	GXBlM-ekzrI	3.20 stub (libSceAgcVsh)
+libSceAgc	sceAgcBranchPatchSetElseTarget	QmfvaYpsOcI	3.20 stub (libSceAgcVsh)
+libSceAgc	sceAgcBranchPatchSetThenTarget	xb8VgcXQhvI	3.20 stub (libSceAgcVsh)
+libSceAgc	sceAgcCbBranch	w1KFAHVqpaU	agc_nids.h
+libSceAgc	sceAgcCbCondWrite	7toV+elXqNM	agc_nids.h
+libSceAgc	sceAgcCbDispatch	k3GhuSNmBLU	AgcExports.cs
+libSceAgc	sceAgcCbDispatchGetSize	Abendgtz+3o	KytyPS5 libGraphicsDriver.cpp
+libSceAgc	sceAgcCbNop	LtTouSCZjHM	AgcExports.cs
+libSceAgc	sceAgcCbNopGetSize	t7PlZ9nt5Lc	KytyPS5 libGraphicsDriver.cpp
+libSceAgc	sceAgcCbQueueEndOfPipeActionGetSize	hL7C0IRpWZI	libGraphicsDriver.cpp SPRX
+libSceAgc	sceAgcCbSetShRegRangeDirect	n2fD4A+pb+g	agc_nids.h
+libSceAgc	sceAgcCbSetShRegisterRangeDirectGetSize	bxGoVxpdSPQ	KytyPS5 libGraphicsDriver.cpp
+libSceAgc	sceAgcCbSetShRegistersDirect	UZbQjYAwwXM	AgcExports.cs
+libSceAgc	sceAgcCbSetShRegistersDirectGetSize	yUBESvCCJ4I	3.20 stub (libSceAgcVsh)
+libSceAgc	sceAgcCbSetUcRegRangeDirect	MDLD5Ly94Xk	agc_nids.h
+libSceAgc	sceAgcCbSetUcRegisterRangeDirectGetSize	JOWmDrl+j20	3.20 stub (libSceAgcVsh)
+libSceAgc	sceAgcCbSetUcRegistersDirect	03RZmELWWzw	agc_nids.h
+libSceAgc	sceAgcCbSetUcRegistersDirectGetSize	TGEZzUWLbrc	3.20 stub (libSceAgcVsh)
+libSceAgc	sceAgcCbValidatePm4Header	3KDcnM3lrcU	agc_nids.h
+libSceAgc	sceAgcCondExecPatchSetCommandAddress	YWTKOju587o	libGraphicsDriver.cpp
+libSceAgc	sceAgcCondExecPatchSetCommandAddress	3ZWa3AoyWZQ	KytyPS5 libGraphicsDriver.cpp
+libSceAgc	sceAgcCondExecPatchSetEnd	ORWsxIbk4TE	libGraphicsDriver.cpp
+libSceAgc	sceAgcCondExecPatchSetEnd	k-JpyR2dYAM	KytyPS5 libGraphicsDriver.cpp
+libSceAgc	sceAgcCreateInterpolantMapping	HV4j+E0MBHE	KytyPS5 libGraphicsDriver.cpp
+libSceAgc	sceAgcCreatePrimState	D9sr1xGUriE	agc_nids.h
+libSceAgc	sceAgcCreateShader	f3dg2CSgRKY	AgcExports.cs
+libSceAgc	sceAgcDcbAcquireMem	57labkp+rSQ	agc_nids.h
+libSceAgc	sceAgcDcbAcquireMemGetSize	-vnlTPPXPrw	KytyPS5 libGraphicsDriver.cpp
+libSceAgc	sceAgcDcbAtomicMem	1-gUn1PI4Sw	agc_nids.h
+libSceAgc	sceAgcDcbBeginOcclusionQueryGetSize	ms1xVoZ-Vwc	3.20 stub (libSceAgcVsh)
+libSceAgc	sceAgcDcbClearState	PxEFhy0d5v8	agc_nids.h
+libSceAgc	sceAgcDcbCondExec	BIPexNBSGog	agc_nids.h
+libSceAgc	sceAgcDcbCondExecGetSize	ou16V5hh5sg	libGraphicsDriver.cpp
+libSceAgc	sceAgcDcbContextStateOpGetSize	H6vHS5cidSA	3.20 stub (libSceAgcVsh)
+libSceAgc	sceAgcDcbCopyData	1rZSWUv1IRc	agc_nids.h
 libSceAgc	sceAgcDcbDispatchIndirect	CtB+A9-VxO0	AgcExports.cs
-libSceAgc	sceAgcDcbPushMarker	+kSrjIVxKFE	AgcExports.cs
-libSceAgc	sceAgcDcbPopMarker	H7uZqCoNuWk	AgcExports.cs
+libSceAgc	sceAgcDcbDispatchIndirectGetSize	w8HVkEeXPv8	KytyPS5 libGraphicsDriver.cpp
+libSceAgc	sceAgcDcbDmaData	WmAc2MEj6Io	AgcExports.cs
+libSceAgc	sceAgcDcbDrawIndex	q88lQ+GP5Yk	agc_nids.h
 libSceAgc	sceAgcDcbDrawIndexAuto	Yw0jKSqop+E	AgcExports.cs; agc.cpp
-libSceAgc	sceAgcDcbSetIndexBuffer	l4fM9K-Lyks	AgcExports.cs
+libSceAgc	sceAgcDcbDrawIndexAutoGetSize	WrdP9Zxx3lQ	KytyPS5 libGraphicsDriver.cpp
+libSceAgc	sceAgcDcbDrawIndexGetSize	6ee9Hd3EWXQ	KytyPS5 libGraphicsDriver.cpp
+libSceAgc	sceAgcDcbDrawIndexIndirect	t1vNu082-jM	agc_nids.h
+libSceAgc	sceAgcDcbDrawIndexIndirectCountMulti	Rlx+bykm0r0	agc_nids.h
+libSceAgc	sceAgcDcbDrawIndexIndirectMulti	ypVBz4uPKcQ	agc_nids.h
+libSceAgc	sceAgcDcbDrawIndexIndirectMultiGetSize	r98I08t+LOg	3.20 stub (libSceAgcVsh)
+libSceAgc	sceAgcDcbDrawIndexMultiInstancedGetSize	mR9j7+SfM34	KytyPS5 libGraphicsDriver.cpp
 libSceAgc	sceAgcDcbDrawIndexOffset	B+aG9DUnTKA	AgcExports.cs
+libSceAgc	sceAgcDcbDrawIndexOffsetGetSize	qMlfB1ZhMDc	KytyPS5 libGraphicsDriver.cpp
+libSceAgc	sceAgcDcbDrawIndirectCountMulti	1q1titRBL6o	agc_nids.h
+libSceAgc	sceAgcDcbDrawIndirectGetSize	cxPZ4Wgvdj8	KytyPS5 libGraphicsDriver.cpp
+libSceAgc	sceAgcDcbDrawIndirectMulti	kUlvghKs-mA	agc_nids.h
+libSceAgc	sceAgcDcbDrawIndirectMultiGetSize	pYoKs3lPy88	3.20 stub (libSceAgcVsh)
+libSceAgc	sceAgcDcbEventWrite	aJf+j5yntiU	agc_nids.h
+libSceAgc	sceAgcDcbEventWriteGetSize	C4l9fB17t8w	3.20 stub (libSceAgcVsh)
+libSceAgc	sceAgcDcbGetLodStats	vuSXe69VILM	AgcExports.cs
+libSceAgc	sceAgcDcbGetLodStatsGetSize	rUuVjyR+Rd4	AgcExports.cs
+libSceAgc	sceAgcDcbIndirectBufferConst	xSAR0LTcRKM	agc_nids.h
+libSceAgc	sceAgcDcbInsertWaitFlipDone	k0E7vkgqAuE	agc_nids.h
+libSceAgc	sceAgcDcbJumpGetSize	VEGu4dixjUg	libGraphicsDriver.cpp
+libSceAgc	sceAgcDcbPopMarker	H7uZqCoNuWk	AgcExports.cs
+libSceAgc	sceAgcDcbPrimeUtcl2	jt3pl7EN17o	agc_nids.h
+libSceAgc	sceAgcDcbPushMarker	+kSrjIVxKFE	AgcExports.cs
+libSceAgc	sceAgcDcbReleaseMem	wr23dPKyWc0	agc_nids.h
+libSceAgc	sceAgcDcbRewind	zfcxg-ewMK8	agc_nids.h
+libSceAgc	sceAgcDcbRewindGetSize	QIXCsbipds0	libGraphicsDriver.cpp
+libSceAgc	sceAgcDcbSetBaseIndirectArgs	RmaJwLtc8rY	AgcExports.cs
+libSceAgc	sceAgcDcbSetCfRegDirect	73ZZdojLIgs	agc_nids.h
+libSceAgc	sceAgcDcbSetCfRegRangeDirect	BVFg3CWU6Eo	agc_nids.h
+libSceAgc	sceAgcDcbSetCxRegDirect	LHFXRrlTPD8	agc_nids.h
+libSceAgc	sceAgcDcbSetCxRegisterDirectGetSize	1DeUNpRIDDA	KytyPS5 libGraphicsDriver.cpp
+libSceAgc	sceAgcDcbSetCxRegistersIndirect	ZvwO9euwYzc	KytyPS5 libGraphicsDriver.cpp
+libSceAgc	sceAgcDcbSetIndexBuffer	l4fM9K-Lyks	AgcExports.cs
+libSceAgc	sceAgcDcbSetIndexCount	8N2tmT3jmC8	agc_nids.h
+libSceAgc	sceAgcDcbSetIndexIndirectArgs	0o3VDdtA6nM	agc_nids.h
+libSceAgc	sceAgcDcbSetIndexSize	GIIW2J37e70	agc_nids.h
+libSceAgc	sceAgcDcbSetMarker	QhCbS4X9Rl8	agc_nids.h
+libSceAgc	sceAgcDcbSetNumInstances	tSBxhAPyytQ	agc_nids.h
+libSceAgc	sceAgcDcbSetNumInstancesGetSize	6DFuRKT4C9w	KytyPS5 libGraphicsDriver.cpp
+libSceAgc	sceAgcDcbSetPredication	bbFueFP+J4k	agc_nids.h
+libSceAgc	sceAgcDcbSetShRegDirectSingle	pFLArOT53+w	agc_nids.h
+libSceAgc	sceAgcDcbSetShRegistersIndirect	-HOOCn0JY48	KytyPS5 libGraphicsDriver.cpp
+libSceAgc	sceAgcDcbSetUcRegDirect	w4-d0n60hdo	agc_nids.h
+libSceAgc	sceAgcDcbSetVgtControl	hvUfkUIQcOE	agc_nids.h
+libSceAgc	sceAgcDcbStallCbParser	u2T2DiA5hRI	agc_nids.h
+libSceAgc	sceAgcDcbWaitFlip	pdEV7bI6COI	agc_nids.h
+libSceAgc	sceAgcDcbWaitFlipEos	SbuY2jN+axQ	agc_nids.h
+libSceAgc	sceAgcDcbWaitOnAddressGetSize	43WJ08sSugE	libGraphicsDriver.cpp
+libSceAgc	sceAgcDcbWaitRegMem	VmW0Tdpy420	AgcExports.cs
+libSceAgc	sceAgcDcbWriteData	i1jyy49AjXU	AgcExports.cs
+libSceAgc	sceAgcDcbWriteDataGetSize	p9tI+yTvx68	libGraphicsDriver.cpp
+libSceAgc	sceAgcDebugRaiseException	T6xuVw0KUJo	agc_nids.h
+libSceAgc	sceAgcDmaDataPatchSetDstAddressOrOffset	IxYiarKlXxM	KytyPS5 libGraphicsDriver.cpp
+libSceAgc	sceAgcDmaDataPatchSetSrc	cdDRpqcFGbU	agc_nids.h
+libSceAgc	sceAgcFuseShaderHalves	fd5Bp5tGTgo	libGraphicsDriver.cpp
+libSceAgc	sceAgcFuseShaderHalves	nApJjpKNBl4	3.20 NID (5.50 uses fd5Bp5tGTgo)
+libSceAgc	sceAgcGetDataPacketPayloadAddress	V++UgBtQhn0	AgcExports.cs
+libSceAgc	sceAgcGetDataPacketPayloadAddress	CQsSq6l6+kA	3.20 NID (5.50 uses V++UgBtQhn0)
+libSceAgc	sceAgcGetDataPacketPayloadRange	s+VGAMDQ0AQ	KytyPS5 libGraphicsDriver.cpp
 libSceAgc	sceAgcGetDefaultCxStateFlat	AAeX-U5-P3M	ps5-openagc agc_nid.h
-libSceAgc	sceAgcSuspendPointAndCheckStatus	h9z6+0hEydk	ps5-openagc agc_nid.h
-libSceAgc	sceAgcSuspendPointAndCheckStatus_alt	b+fis+WZ3Ig	ps5-openagc agc_nid.h
+libSceAgc	sceAgcGetFusedShaderSize	dolOmWH+huQ	libGraphicsDriver.cpp
+libSceAgc	sceAgcGetFusedShaderSize	nQT5kYLv0cg	3.20 NID (5.50 uses dolOmWH+huQ)
 libSceAgc	sceAgcGetGameDefaultState	Wi82ArQtAwg	ps5-openagc agc_nid.h
 libSceAgc	sceAgcGetGameDefaultState_alt	uIwxsqDlHRc	ps5-openagc agc_nid.h
-libSceAgcDriver	sceAgcDriverSubmitDcb	UglJIZjGssM	AgcExports.cs
-libSceAgcDriver	sceAgcDriverSubmitAcb	gSRnr79F8tQ	AgcExports.cs
-libSceAgcDriver	sceAgcDriverAddEqEvent	w2rJhmD+dsE	AgcExports.cs
-libSceAgcDriver	sceAgcDriverDeleteEqEvent	DL2RXaXOy88	AgcExports.cs
-libSceAgcDriver	sceAgcDriverGetPaDebugInterfaceVersion	Pqxglq1oKec	ps5-openagc agc_nid.h
-libSceAgcDriver	sceAgcDriverSubmitMultiCommandBuffersDirect	xmWi73o1BR0	ps5-openagc agc_nid.h
-libSceAgcDriver	sceAgcDriverSuspendPointSubmitDirect	ZV04pRl7cWU	ps5-openagc agc_nid.h
-libSceAgcDriver	sceAgcDriverAcquireRazorACQ	MetMOQVd8HY	ps5-openagc agc_nid.h
-libSceAgcDriver	sceAgcDriverReleaseRazorACQ	TEOAw-eLjNo	ps5-openagc agc_nid.h
-libSceAgcDriver	sceAgcDriverSubmitToRazorACQ	jJyVJyhi5h8	ps5-openagc agc_nid.h
-libSceAgcDriver	_sceAgcDriverCreateUserSpecialQueue	dwoD-LJDQy8	ps5-openagc agc_nid.h
-libSceAgcDriver	_sceAgcDriverDestroyUserSpecialQueue	NRO47jBXLiI	ps5-openagc agc_nid.h
-libSceAgcDriver	sceAgcDriverSubmitToHDRScopesACQ	lOYHtoUcJD4	ps5-openagc agc_nid.h
-libSceAgcDriver	sceAgcDriverNotifyDefaultStates	nR6xhiFsOoc	ps5-openagc agc_nid.h
-libSceAgcDriver	sceAgcDriverSetupAsyncGraphics	Vlaj1gwmIFA	ps5-openagc agc_nid.h
-libSceAgcDriver	sceAgcDriverSetTargetRingForDiag	l0Jxfl0DEdo	ps5-openagc agc_nid.h
-libSceAgcDriver	sceAgcDriverIsSuspendPointInFlightDirect	I6elAJxk6Jo	ps5-openagc agc_nid.h
-libSceAgcDriver	sceAgcDriverSetTFRingDirect	16IjQxB-Heo	ps5-openagc agc_nid.h
-libSceAgcDriver	sceAgcDriverSetHsOffchipParamDirect	DPcAnsOlTQs	ps5-openagc agc_nid.h
-libSceAgcDriver	sceAgcDriverSdmaCopyLinearBlocking	bQ+En9GY3PM	ps5-openagc agc_nid.h
-libSceAgcDriver	sceAgcDriverRegisterCaptureInterface	oz3Yd--lAEE	ps5-openagc agc_nid.h
-libSceAgcDriver	sceAgcDriverDeregisterCaptureInterface	qR+S4WqJvUM	ps5-openagc agc_nid.h
 libSceAgc	sceAgcGetPacketSize	Lkf86B98qPc	libGraphicsDriver.cpp
-libSceAgc	sceAgcSetPacketPredication	w6Dj1VJt5qY	libGraphicsDriver.cpp
-libSceAgc	sceAgcSetRangePredication	n8vgpaQg6dA	libGraphicsDriver.cpp
-libSceAgc	sceAgcCondExecPatchSetEnd	ORWsxIbk4TE	libGraphicsDriver.cpp
-libSceAgc	sceAgcCondExecPatchSetCommandAddress	YWTKOju587o	libGraphicsDriver.cpp
-libSceAgcDriver	sceAgcWriteDataPatchSetAddressOrOffset	fPSCdQxgpSw	libGraphicsDriver.cpp
+libSceAgc	sceAgcGetRegisterDefaults2	2JtWUUiYBXs	AgcExports.cs
+libSceAgc	sceAgcGetRegisterDefaults2Internal	wRbq6ZjNop4	AgcExports.cs
+libSceAgc	sceAgcInit	23LRUSvYu1M	AgcExports.cs
+libSceAgc	sceAgcInit	kW3GLb7QfPg	agc_nids.h
 libSceAgc	sceAgcJumpPatchSetTarget	2BS4EtAaF28	libGraphicsDriver.cpp
+libSceAgc	sceAgcLinkShaders	MqAdbRMdNz4	3.20 stub (libSceAgcVsh)
 libSceAgc	sceAgcQueueEndOfPipeActionPatchAddress	0fWWK5uG9rQ	libGraphicsDriver.cpp SPRX
 libSceAgc	sceAgcQueueEndOfPipeActionPatchData	MlEw1feXcjg	libGraphicsDriver.cpp SPRX
-libSceAgc	sceAgcCbQueueEndOfPipeActionGetSize	hL7C0IRpWZI	libGraphicsDriver.cpp SPRX
-libSceAgc	sceAgcSetCxRegIndirectPatchSetNumRegisters	whb1RL7K4Ss	libGraphicsDriver.cpp
-libSceAgc	sceAgcSetShRegIndirectPatchSetNumRegisters	nCUgItdN2ms	libGraphicsDriver.cpp
-libSceAgc	sceAgcSetUcRegIndirectPatchSetNumRegisters	fRG-JOH5+sI	libGraphicsDriver.cpp
-libSceAgc	sceAgcDcbWriteDataGetSize	p9tI+yTvx68	libGraphicsDriver.cpp
-libSceAgc	sceAgcDcbJumpGetSize	VEGu4dixjUg	libGraphicsDriver.cpp
-libSceAgc	sceAgcDcbRewindGetSize	QIXCsbipds0	libGraphicsDriver.cpp
-libSceAgc	sceAgcDcbCondExecGetSize	ou16V5hh5sg	libGraphicsDriver.cpp
-libSceAgc	sceAgcAcbCondExecGetSize	ozKzBP4aki4	libGraphicsDriver.cpp
-libSceAgc	sceAgcDcbWaitOnAddressGetSize	43WJ08sSugE	libGraphicsDriver.cpp
-libSceAgcDriver	sceAgcDriverIsCaptureInProgress	Ddwk4gLT5j0	libGraphicsDriver.cpp
-libSceAgcDriver	sceAgcDriverDeleteEqEvent	DL2RXaXOy88	libGraphicsDriver.cpp
-libSceAgcDriver	sceAgcDriverGetEqEventType	5CdQTZIQPxM	libGraphicsDriver.cpp
-libSceAgcDriver	sceAgcDriverGetDefaultOwner	F0ZXt5q0ZTA	libGraphicsDriver.cpp
-libSceAgcDriver	sceAgcDriverInitResourceRegistration	F0Y42t-3e18	libGraphicsDriver.cpp
-libSceAgcDriver	sceAgcDriverQueryResourceRegistrationUserMemoryRequirements	AOLcoIkQDgM	libGraphicsDriver.cpp
-libSceAgcDriver	sceAgcDriverGetResourceRegistrationMaxNameLength	uJziRsODk1c	libGraphicsDriver.cpp
-libSceAgcDriver	sceAgcDriverUnregisterResource	pWLG7WOpVcw	libGraphicsDriver.cpp
-libSceAgcDriver	sceAgcDriverRegisterWorkloadStream	3AyTaWcF-H8	libGraphicsDriver.cpp
-libSceAgc	sceAgcGetFusedShaderSize	dolOmWH+huQ	libGraphicsDriver.cpp
-libSceAgc	sceAgcFuseShaderHalves	fd5Bp5tGTgo	libGraphicsDriver.cpp
-libSceAgcDriver	sceAgcDriverSubmitMultiDcbs	6UzEidRZwkg	libGraphicsDriver.cpp
-libSceAgcDriver	sceAgcDriverSubmitCommandBuffer	b4fpgH5ZXxQ	libGraphicsDriver.cpp
-libSceAgcDriver	sceAgcDriverSubmitMultiCommandBuffers	Fj7r9EHzF38	libGraphicsDriver.cpp
-libSceAgcDriver	sceAgcDriverSubmitMultiAcbs	HF3YllT3mXU	libGraphicsDriver.cpp
-libSceAgcDriver	sceAgcDriverSetContextReg	+b34-CLWc0s	agc_nids.h
-libSceAgcDriver	sceAgcDriverSetConfigReg	-vc-xL+G8u0	agc_nids.h
-libSceAgc	sceAgcCbSetUcRegistersDirect	03RZmELWWzw	agc_nids.h
-libSceAgc	sceAgcDcbSetIndexIndirectArgs	0o3VDdtA6nM	agc_nids.h
-libSceAgc	sceAgcDcbAtomicMem	1-gUn1PI4Sw	agc_nids.h
-libSceAgc	sceAgcDcbDrawIndirectCountMulti	1q1titRBL6o	agc_nids.h
-libSceAgc	sceAgcDcbCopyData	1rZSWUv1IRc	agc_nids.h
-libSceAgc	sceAgcDcbDrawIndirect	1rZSWUv1IRc	agc_nids.h
-libSceAgc	sceAgcCbValidatePm4Header	3KDcnM3lrcU	agc_nids.h
-libSceAgc	sceAgcDcbAcquireMem	57labkp+rSQ	agc_nids.h
-libSceAgc	sceAgcSetUcRegIndPatchSetAddr	6lNcCp+fxi4	agc_nids.h
-libSceAgc	sceAgcDcbSetCfRegDirect	73ZZdojLIgs	agc_nids.h
-libSceAgc	sceAgcWaitRegMemPatchRef	7nOoijNPvEU	agc_nids.h
-libSceAgc	sceAgcCbCondWrite	7toV+elXqNM	agc_nids.h
-libSceAgc	sceAgcDcbSetContextReg	7toV+elXqNM	agc_nids.h
-libSceAgc	sceAgcDcbSetIndexCount	8N2tmT3jmC8	agc_nids.h
-libSceAgcDriver	sceAgcDriverAgrSubmitDcb	AhGvpITrf4M	agc_nids.h
-libSceAgc	sceAgcDcbCondExecEx	Aozdh0bCcO0	agc_nids.h
-libSceAgc	sceAgcDcbCondExec	BIPexNBSGog	agc_nids.h
-libSceAgc	sceAgcDcbSetCfRegRangeDirect	BVFg3CWU6Eo	agc_nids.h
-libSceAgc	sceAgcDcbSetConfigReg	BVFg3CWU6Eo	agc_nids.h
-libSceAgc	sceAgcCreatePrimState	D9sr1xGUriE	agc_nids.h
-libSceAgc	sceAgcGetShaderRegisterDefaults	D9sr1xGUriE	agc_nids.h
-libSceAgc	sceAgcDcbSetIndexSize	GIIW2J37e70	agc_nids.h
-libSceAgcDriver	sceAgcDriverSubmitCommandBuffers	Hj4eWnDektQ	agc_nids.h
-libSceAgc	sceAgcSetNop	K2mciNVxUCE	agc_nids.h
-libSceAgc	sceAgcDcbSetCxRegDirect	LHFXRrlTPD8	agc_nids.h
-libSceAgc	sceAgcCbSetUcRegRangeDirect	MDLD5Ly94Xk	agc_nids.h
-libSceAgc	sceAgcDcbSetUconfigReg	MDLD5Ly94Xk	agc_nids.h
-libSceAgcDriver	sceAgcDriverSetHsOffchipParam	MM4IZSEYytQ	agc_nids.h
-libSceAgc	sceAgcDcbClearState	PxEFhy0d5v8	agc_nids.h
-libSceAgc	sceAgcDcbSetMarker	QhCbS4X9Rl8	agc_nids.h
-libSceAgc	sceAgcSetShRegIndPatchSetAddr	Qrj4c+61z4A	agc_nids.h
-libSceAgc	sceAgcDcbDrawIndexIndirectCountMulti	Rlx+bykm0r0	agc_nids.h
-libSceAgc	sceAgcDcbDrawIndexMultiInst	Rlx+bykm0r0	agc_nids.h
-libSceAgc	sceAgcDcbWaitFlipEos	SbuY2jN+axQ	agc_nids.h
-libSceAgc	sceAgcDebugRaiseException	T6xuVw0KUJo	agc_nids.h
-libSceAgcDriver	sceAgcDriverBeginWorkload	UM9b9NunSrE	agc_nids.h
-libSceAgcDriver	sceAgcDriverRegisterResource	W5z4eZrjEas	agc_nids.h
-libSceAgcDriver	sceAgcDriverRegisterOwner	X-Nm5KLREeg	agc_nids.h
-libSceAgcDriver	sceAgcDriverMapComputeQueue	XNbrdwCsZ9A	agc_nids.h
-libSceAgcDriver	sceAgcDriverSetTfRing	XlNp7jzGiPo	agc_nids.h
-libSceAgcDriver	sceAgcDriverGetEqContextId	Zw7uUVPulbw	agc_nids.h
-libSceAgc	sceAgcDcbEventWrite	aJf+j5yntiU	agc_nids.h
-libSceAgc	sceAgcDcbSetPredication	bbFueFP+J4k	agc_nids.h
-libSceAgc	sceAgcDmaDataPatchSetSrc	cdDRpqcFGbU	agc_nids.h
+libSceAgc	sceAgcQueueEndOfPipeActionPatchGcrCntl	J8YCgfKAMQs	3.20 stub (libSceAgcVsh)
+libSceAgc	sceAgcQueueEndOfPipeActionPatchType	T9fjQIINoeE	3.20 stub (libSceAgcVsh)
+libSceAgc	sceAgcRewindPatchSetRewindState	ziVA3whp3p4	3.20 stub (libSceAgcVsh)
 libSceAgc	sceAgcSetCxRegIndPatchAddRegs	d-6uF9sZDIU	agc_nids.h
-libSceAgc	sceAgcWaitRegMemPatchMask	hXAnLgDHCoI	agc_nids.h
-libSceAgc	sceAgcDcbSetVgtControl	hvUfkUIQcOE	agc_nids.h
-libSceAgcDriver	sceAgcDriverEndWorkload	i6bfTi13ApA	agc_nids.h
-libSceAgc	sceAgcDcbPrimeUtcl2	jt3pl7EN17o	agc_nids.h
-libSceAgc	sceAgcDcbPrimeUtcl2	jt3pl7EN17o	agc_nids.h
-libSceAgc	sceAgcDcbInsertWaitFlipDone	k0E7vkgqAuE	agc_nids.h
-libSceAgc	sceAgcDcbDrawIndirectMulti	kUlvghKs-mA	agc_nids.h
-libSceAgc	sceAgcInit	kW3GLb7QfPg	agc_nids.h
-libSceAgc	sceAgcCbSetShRegRangeDirect	n2fD4A+pb+g	agc_nids.h
-libSceAgc	sceAgcDcbSetShReg	n2fD4A+pb+g	agc_nids.h
-libSceAgc	sceAgcWaitRegMemPatchCmpFunc	n485EBnIWmk	agc_nids.h
-libSceAgcDriver	sceAgcDriverWaitIdle	oFb2hMcoJa4	agc_nids.h
-libSceAgc	sceAgcDcbSetShRegDirectSingle	pFLArOT53+w	agc_nids.h
-libSceAgc	sceAgcDcbWaitFlip	pdEV7bI6COI	agc_nids.h
-libSceAgc	sceAgcDcbDrawIndex	q88lQ+GP5Yk	agc_nids.h
-libSceAgc	sceAgcDcbDrawIndex2	q88lQ+GP5Yk	agc_nids.h
-libSceAgc	sceAgcDcbDrawIndexIndirect	t1vNu082-jM	agc_nids.h
-libSceAgc	sceAgcDcbSetNumInstances	tSBxhAPyytQ	agc_nids.h
-libSceAgc	sceAgcDcbStallCbParser	u2T2DiA5hRI	agc_nids.h
-libSceAgc	sceAgcSetUcRegIndPatchAddRegs	vRoArM9zaIk	agc_nids.h
 libSceAgc	sceAgcSetCxRegIndPatchSetAddr	vcmNN+AAXnY	agc_nids.h
-libSceAgc	sceAgcCbBranch	w1KFAHVqpaU	agc_nids.h
-libSceAgc	sceAgcDcbIndirectBuffer	w1KFAHVqpaU	agc_nids.h
-libSceAgc	sceAgcDcbSetUcRegDirect	w4-d0n60hdo	agc_nids.h
-libSceAgc	sceAgcDcbReleaseMem	wr23dPKyWc0	agc_nids.h
-libSceAgc	sceAgcDcbIndirectBufferConst	xSAR0LTcRKM	agc_nids.h
-libSceAgc	sceAgcDcbJump	xSAR0LTcRKM	agc_nids.h
-libSceAgc	sceAgcDcbDrawIndexIndirectMulti	ypVBz4uPKcQ	agc_nids.h
+libSceAgc	sceAgcSetCxRegIndirectPatchSetNumRegisters	whb1RL7K4Ss	libGraphicsDriver.cpp
+libSceAgc	sceAgcSetNop	K2mciNVxUCE	agc_nids.h
+libSceAgc	sceAgcSetPacketPredication	w6Dj1VJt5qY	libGraphicsDriver.cpp
+libSceAgc	sceAgcSetRangePredication	n8vgpaQg6dA	libGraphicsDriver.cpp
 libSceAgc	sceAgcSetShRegIndPatchAddRegs	z2duB-hHQSM	agc_nids.h
-libSceAgc	sceAgcDcbRewind	zfcxg-ewMK8	agc_nids.h
-libSceAgcDriver	sceAgcDriverSetBase	zmw2uVSEj94	agc_nids.h
-libSceAgcDriver	sceAgcDriverSubmitMultiDcbs	+T8Xo6LtFJI	KytyPS5 libGraphicsDriver.cpp
-libSceAgc	sceAgcDcbSetShRegistersIndirect	-HOOCn0JY48	KytyPS5 libGraphicsDriver.cpp
-libSceAgc	sceAgcDcbAcquireMemGetSize	-vnlTPPXPrw	KytyPS5 libGraphicsDriver.cpp
-libSceAgc	sceAgcDcbSetCxRegisterDirectGetSize	1DeUNpRIDDA	KytyPS5 libGraphicsDriver.cpp
-libSceAgc	sceAgcCondExecPatchSetCommandAddress	3ZWa3AoyWZQ	KytyPS5 libGraphicsDriver.cpp
-libSceAgc	sceAgcDcbSetNumInstancesGetSize	6DFuRKT4C9w	KytyPS5 libGraphicsDriver.cpp
-libSceAgc	sceAgcDcbDrawIndexGetSize	6ee9Hd3EWXQ	KytyPS5 libGraphicsDriver.cpp
-libSceAgc	sceAgcCbDispatchGetSize	Abendgtz+3o	KytyPS5 libGraphicsDriver.cpp
-libSceAgc	sceAgcCreateInterpolantMapping	HV4j+E0MBHE	KytyPS5 libGraphicsDriver.cpp
-libSceAgc	sceAgcUnknownIkfdtRIqCE	Ikfdt-rIqCE	KytyPS5 libGraphicsDriver.cpp
-libSceAgc	sceAgcDmaDataPatchSetDstAddressOrOffset	IxYiarKlXxM	KytyPS5 libGraphicsDriver.cpp
-libSceAgcDriver	sceAgcDriverUnknownU9ueyEhSkF4	U9ueyEhSkF4	KytyPS5 libGraphicsDriver.cpp
-libSceAgc	sceAgcDcbDrawIndexAutoGetSize	WrdP9Zxx3lQ	KytyPS5 libGraphicsDriver.cpp
-libSceAgc	sceAgcUpdatePrimState	Y3ymLfZ1384	KytyPS5 libGraphicsDriver.cpp
-libSceAgc	sceAgcDcbSetCxRegistersIndirect	ZvwO9euwYzc	KytyPS5 libGraphicsDriver.cpp
-libSceAgc	sceAgcCbSetShRegisterRangeDirectGetSize	bxGoVxpdSPQ	KytyPS5 libGraphicsDriver.cpp
-libSceAgc	sceAgcDcbDrawIndirectGetSize	cxPZ4Wgvdj8	KytyPS5 libGraphicsDriver.cpp
-libSceAgc	sceAgcAcbAcquireMemGetSize	ewobAQeMo5k	KytyPS5 libGraphicsDriver.cpp
-libSceAgc	sceAgcCondExecPatchSetEnd	k-JpyR2dYAM	KytyPS5 libGraphicsDriver.cpp
-libSceAgc	sceAgcDcbDrawIndexMultiInstancedGetSize	mR9j7+SfM34	KytyPS5 libGraphicsDriver.cpp
-libSceAgc	sceAgcDcbDrawIndexOffsetGetSize	qMlfB1ZhMDc	KytyPS5 libGraphicsDriver.cpp
-libSceAgc	sceAgcGetDataPacketPayloadRange	s+VGAMDQ0AQ	KytyPS5 libGraphicsDriver.cpp
-libSceAgc	sceAgcCbNopGetSize	t7PlZ9nt5Lc	KytyPS5 libGraphicsDriver.cpp
-libSceAgc	sceAgcDcbDispatchIndirectGetSize	w8HVkEeXPv8	KytyPS5 libGraphicsDriver.cpp
-libSceAgcDriver	sceAgcDriverUnknown_-CSrlr1yY-o	-CSrlr1yY-o	SPRX stub (returns 0x8a6c9018 = not supported)
-libSceAgcDriver	sceAgcDriverUnknown_5l3IfCFJxBs	5l3IfCFJxBs	SPRX stub (returns 0x8a6c9018 = not supported)
-libSceAgcDriver	sceAgcDriverUnknown_DGN+IaHNR8o	DGN+IaHNR8o	SPRX stub (returns 0x8a6c9018 = not supported)
-libSceAgcDriver	sceAgcDriverUnknown_IGYqP+WKCgc	IGYqP+WKCgc	SPRX stub (returns 0x8a6c9018 = not supported)
-libSceAgcDriver	sceAgcDriverUnknown_LepGrgk77sM	LepGrgk77sM	SPRX stub (returns 0x8a6c9018 = not supported)
-libSceAgcDriver	sceAgcDriverUnknown_M9yBzRKkjPc	M9yBzRKkjPc	SPRX stub (returns 0x8a6c9018 = not supported)
-libSceAgcDriver	sceAgcDriverUnknown_NghWEUXp1qM	NghWEUXp1qM	SPRX stub (returns 0x8a6c9018 = not supported)
-libSceAgcDriver	sceAgcDriverUnknown_SCoAN5fYlUM	SCoAN5fYlUM	SPRX stub (returns 0x8a6c9018 = not supported)
-libSceAgcDriver	sceAgcDriverUnknown_VOMSpd9+vxU	VOMSpd9+vxU	SPRX stub (returns 0x8a6c9018 = not supported)
-libSceAgcDriver	sceAgcDriverUnknown_VerAUWCtrX0	VerAUWCtrX0	SPRX stub (returns 0x8a6c9018 = not supported)
-libSceAgcDriver	sceAgcDriverUnknown_ZLJk9r2+2Aw	ZLJk9r2+2Aw	SPRX stub (returns 0x8a6c9018 = not supported)
-libSceAgcDriver	sceAgcDriverUnknown_emP3ckeS2uo	emP3ckeS2uo	SPRX stub (returns 0x8a6c9018 = not supported)
-libSceAgcDriver	sceAgcDriverUnknown_ls4jfY576lw	ls4jfY576lw	SPRX stub (returns 0x8a6c9018 = not supported)
-libSceAgcDriver	sceAgcDriverUnknown_mXn+K9E-wOA	mXn+K9E-wOA	SPRX stub (returns 0x8a6c9018 = not supported)
-libSceAgcDriver	sceAgcDriverUnknown_mxyUaQfPgb8	mxyUaQfPgb8	SPRX stub (returns 0x8a6c9018 = not supported)
-libSceAgcDriver	sceAgcDriverUnknown_rI9lNAXPMIw	rI9lNAXPMIw	SPRX stub (returns 0x8a6c9018 = not supported)
-libSceAgcDriver	sceAgcDriverUnknown_1QTqF-hYqQE	1QTqF-hYqQE	SPRX stub (returns 0x8a6c1000)
-libSceAgcDriver	sceAgcDriverUnknown_FOwvmNlFLjM	FOwvmNlFLjM	SPRX stub (returns 0x8a6c1000)
-libSceAgcDriver	sceAgcDriverUnknown_SAfhzJPcjuk	SAfhzJPcjuk	SPRX stub (returns 0x8a6c1000)
-libSceAgcDriver	sceAgcDriverUnknown_Xq5WmbwPTnQ	Xq5WmbwPTnQ	SPRX stub (returns 0x8a6c1000)
-libSceAgcDriver	sceAgcDriverUnknown_sW7yp7NVlrk	sW7yp7NVlrk	SPRX stub (returns 0x8a6c1000)
-libSceAgcDriver	sceAgcDriverUnknown_9rDcI6cJb+8	9rDcI6cJb+8	SPRX stub (returns 0x8a6d0001)
-libSceAgcDriver	sceAgcDriverUnknown_Cia3HgY0WiY	Cia3HgY0WiY	SPRX stub (returns 0x8a6d0001)
-libSceAgcDriver	sceAgcDriverUnknown_Jkypw0U-HYo	Jkypw0U-HYo	SPRX stub (returns 0x8a6d0001)
-libSceAgcDriver	sceAgcDriverUnknown_K15VxhSJOfc	K15VxhSJOfc	SPRX stub (returns 0x8a6d0001)
-libSceAgcDriver	sceAgcDriverUnknown_V+rBNI2HzGA	V+rBNI2HzGA	SPRX stub (returns 0x8a6d0001)
-libSceAgcDriver	sceAgcDriverUnknown_g68eYcZS7PY	g68eYcZS7PY	SPRX stub (returns 0x8a6d0001)
-libSceAgcDriver	sceAgcDriverUnknown_gpF0LZ3+19c	gpF0LZ3+19c	SPRX stub (returns 0x8a6d0001)
-libSceAgcDriver	sceAgcDriverUnknown_kFiKcGagv5k	kFiKcGagv5k	SPRX stub (returns 0x8a6d0001)
-libSceAgcDriver	sceAgcDriverUnknown_+TN0oRTBxJQ	+TN0oRTBxJQ	SPRX stub (returns 0)
-libSceAgcDriver	sceAgcDriverUnknown_-JFkLpCDeHM	-JFkLpCDeHM	SPRX stub (returns 0)
-libSceAgcDriver	sceAgcDriverUnknown_-MqhSEVvAPw	-MqhSEVvAPw	SPRX stub (returns 0)
-libSceAgcDriver	sceAgcDriverUnknown_6WO4CscVnfM	6WO4CscVnfM	SPRX stub (returns 0)
-libSceAgcDriver	sceAgcDriverUnknown_6v-D6CQHA4Y	6v-D6CQHA4Y	SPRX stub (returns 0)
-libSceAgcDriver	sceAgcDriverUnknown_8CXPPlNmvIc	8CXPPlNmvIc	SPRX stub (returns 0)
-libSceAgcDriver	sceAgcDriverUnknown_BbI8si4o-fA	BbI8si4o-fA	SPRX stub (returns 0)
-libSceAgcDriver	sceAgcDriverUnknown_DDCQA2fPQj0	DDCQA2fPQj0	SPRX stub (returns 0)
-libSceAgcDriver	sceAgcDriverUnknown_HMnVBVUyajk	HMnVBVUyajk	SPRX stub (returns 0)
-libSceAgcDriver	sceAgcDriverUnknown_KtIXf8La96k	KtIXf8La96k	SPRX stub (returns 0)
-libSceAgcDriver	sceAgcDriverUnknown_NhnGMuunz0Y	NhnGMuunz0Y	SPRX stub (returns 0)
-libSceAgcDriver	sceAgcDriverUnknown_o2gvlIFMF1o	o2gvlIFMF1o	SPRX stub (returns 0)
-libSceAgcDriver	sceAgcDriverUnknown_qspAL8bgcBY	qspAL8bgcBY	SPRX stub (returns 0)
-libSceAgcDriver	sceAgcDriverUnknown_t30LG1ibIJE	t30LG1ibIJE	SPRX stub (returns 0)
-libSceAgcDriver	sceAgcDriverUnknown_tD2ECNSuTQQ	tD2ECNSuTQQ	SPRX stub (returns 0)
-libSceAgcDriver	sceAgcDriverUnknown_tLTma0k0U3E	tLTma0k0U3E	SPRX stub (returns 0)
-libSceAgcDriver	sceAgcDriverUnknown_wxdcyVqXJEY	wxdcyVqXJEY	SPRX stub (returns 0)
-libSceAgcDriver	sceAgcDriverUnknown_xDPdCurOujQ	xDPdCurOujQ	SPRX stub (returns 0)
-libSceAgcDriver	sceAgcDriverUnknown_NmE3PfE211o	NmE3PfE211o	SPRX stub (ret only)
-libSceAgcDriver	sceAgcDriverUnknown_O144kUYDSBo	O144kUYDSBo	SPRX stub (ret only)
+libSceAgc	sceAgcSetShRegIndPatchSetAddr	Qrj4c+61z4A	agc_nids.h
+libSceAgc	sceAgcSetShRegIndirectPatchSetNumRegisters	nCUgItdN2ms	libGraphicsDriver.cpp
+libSceAgc	sceAgcSetSubmitMode	-DtvmQ-tgEA	3.20 stub (libSceAgcVsh)
+libSceAgc	sceAgcSetUcRegIndPatchAddRegs	vRoArM9zaIk	agc_nids.h
+libSceAgc	sceAgcSetUcRegIndPatchSetAddr	6lNcCp+fxi4	agc_nids.h
+libSceAgc	sceAgcSetUcRegIndirectPatchSetNumRegisters	fRG-JOH5+sI	libGraphicsDriver.cpp
+libSceAgc	sceAgcSuspendPointAndCheckStatus	h9z6+0hEydk	ps5-openagc agc_nid.h
+libSceAgc	sceAgcSuspendPointAndCheckStatus_alt	b+fis+WZ3Ig	ps5-openagc agc_nid.h
 libSceAgc	sceAgcUnknownGetSize_+u6dKSLWM2o	+u6dKSLWM2o	SPRX GetSize stub (returns 0x8=8)
 libSceAgc	sceAgcUnknownGetSize_0ZOG0jc9nRg	0ZOG0jc9nRg	SPRX GetSize stub (returns 0x8=8)
 libSceAgc	sceAgcUnknownGetSize_1tB0xkLNjcw	1tB0xkLNjcw	SPRX GetSize stub (returns 0x2c=44)
@@ -304,52 +198,148 @@ libSceAgc	sceAgcUnknownGetSize_uZW-mqsxkrM	uZW-mqsxkrM	SPRX GetSize stub (return
 libSceAgc	sceAgcUnknownGetSize_vLrBL8DQiz8	vLrBL8DQiz8	SPRX GetSize stub (returns 0x10=16)
 libSceAgc	sceAgcUnknownGetSize_yheJGN-ay+A	yheJGN-ay+A	SPRX GetSize stub (returns 0x10=16)
 libSceAgc	sceAgcUnknownGetSize_zg6u-N6Otxs	zg6u-N6Otxs	SPRX GetSize stub (returns 0x20=32)
-libSceAgc	sceAgcSetSubmitMode	-DtvmQ-tgEA	3.20 stub (libSceAgcVsh)
-libSceAgcDriver	sceAgcDriverModuleRegistration	04JRU1Uf8Ms	3.20 stub (libSceAgcDriver)
-libSceAgcDriver	sceAgcDriverGetWaitRenderingPacketSizeInDwords	0MtUJ3BpGhE	3.20 stub (libSceAgcDriver)
-libSceAgcDriver	sceAgcDriverDebugHardwareStatus	1BUTwixUG5Y	3.20 stub (libSceAgcDriver)
-libSceAgcDriver	sceAgcDriverCwsrResumeAcq	1DXIHxWHZAQ	3.20 stub (libSceAgcDriver)
-libSceAgcDriver	sceAgcDriverGetSetFlipPacketSizeInDwords	2PrsbRYyZi4	3.20 stub (libSceAgcDriver)
-libSceAgcDriver	sceAgcDriverIDHSSubmit	C2yjkNdzbW4	3.20 stub (libSceAgcDriver)
-libSceAgc	sceAgcDcbEventWriteGetSize	C4l9fB17t8w	3.20 stub (libSceAgcVsh)
-libSceAgcDriver	sceAgcDriverGetRegShadowInfo	CP-kVAMmWVw	3.20 stub (libSceAgcDriver)
-libSceAgc	sceAgcBranchPatchSetCompareAddress	GXBlM-ekzrI	3.20 stub (libSceAgcVsh)
-libSceAgc	sceAgcDcbContextStateOpGetSize	H6vHS5cidSA	3.20 stub (libSceAgcVsh)
-libSceAgc	sceAgcQueueEndOfPipeActionPatchGcrCntl	J8YCgfKAMQs	3.20 stub (libSceAgcVsh)
-libSceAgc	sceAgcCbSetUcRegisterRangeDirectGetSize	JOWmDrl+j20	3.20 stub (libSceAgcVsh)
-libSceAgcDriver	sceAgcDriverUserDataWritePopMarker	LEnn-4ARRJM	3.20 stub (libSceAgcDriver)
-libSceAgcDriver	sceAgcDriverGetRegShadowInfoAgr	ME1eUot7+Qw	3.20 stub (libSceAgcDriver)
-libSceAgc	sceAgcLinkShaders	MqAdbRMdNz4	3.20 stub (libSceAgcVsh)
-libSceAgcDriver	sceAgcDriverSuspendPointSubmit	QcmHLO2n7mk	3.20 stub (libSceAgcDriver)
-libSceAgc	sceAgcBranchPatchSetElseTarget	QmfvaYpsOcI	3.20 stub (libSceAgcVsh)
-libSceAgcDriver	sceAgcDriverCwsrSuspendAcq	SOAMmdlyaIc	3.20 stub (libSceAgcDriver)
-libSceAgc	sceAgcQueueEndOfPipeActionPatchType	T9fjQIINoeE	3.20 stub (libSceAgcVsh)
-libSceAgc	sceAgcCbSetUcRegistersDirectGetSize	TGEZzUWLbrc	3.20 stub (libSceAgcVsh)
-libSceAgcDriver	sceAgcDriverTmpInitIdhs	UM8rn9hRWrY	3.20 stub (libSceAgcDriver)
-libSceAgcDriver	sceAgcDriverGetReservedDmemForAgc	Um-jkyDy9rI	3.20 stub (libSceAgcDriver)
-libSceAgcDriver	sceAgcDriverUserDataGetPacketSize	VhLnEiTuuWo	3.20 stub (libSceAgcDriver)
-libSceAgcDriver	sceAgcDriverGetSetWorkloadCompletePacketSize	WNyjOWq8-Vk	3.20 stub (libSceAgcDriver)
-libSceAgcDriver	sceAgcDriverPassInfoDownward	aCfbPzyjU90	3.20 stub (libSceAgcDriver)
-libSceAgcDriver	sceAgcDriverSetFlip	cwbxjPSJ7WQ	3.20 stub (libSceAgcDriver)
-libSceAgcDriver	sceAgcDriverGetTFRing	e-YMQ+2tj9M	3.20 stub (libSceAgcDriver)
-libSceAgc	sceAgcAsyncRewindPatchSetRewindState	eWaWyFegzgQ	3.20 stub (libSceAgcVsh)
-libSceAgcDriver	sceAgcDriverSysIsGameClosed	ftf-xlfBQpo	3.20 stub (libSceAgcDriver)
-libSceAgcDriver	sceAgcDriverGetSetWorkloadsActivePacketSize	gyVTZWyySpM	3.20 stub (libSceAgcDriver)
-libSceAgc	sceAgcAcbWaitOnAddressGetSize	idlaArvdXEs	3.20 stub (libSceAgcVsh)
-libSceAgcDriver	sceAgcDriverSysGetClientNumber	kuE1uTiWfuk	3.20 stub (libSceAgcDriver)
-libSceAgcDriver	sceAgcDriverPatchClearState	lYz7vbL4W4A	3.20 stub (libSceAgcDriver)
-libSceAgc	sceAgcDcbBeginOcclusionQueryGetSize	ms1xVoZ-Vwc	3.20 stub (libSceAgcVsh)
-libSceAgcDriver	sceAgcDriverUnregisterWorkloadStream	n5ElQVYsU1A	3.20 stub (libSceAgcDriver)
-libSceAgc	sceAgcDcbDrawIndirectMultiGetSize	pYoKs3lPy88	3.20 stub (libSceAgcVsh)
-libSceAgcDriver	sceAgcDriverGetHsOffchipParam	r28hEh6cNH0	3.20 stub (libSceAgcDriver)
-libSceAgc	sceAgcDcbDrawIndexIndirectMultiGetSize	r98I08t+LOg	3.20 stub (libSceAgcVsh)
-libSceAgcDriver	sceAgcDriverGetWorkloadStreamInfo	t8PLXbBCiRA	3.20 stub (libSceAgcDriver)
-libSceAgcDriver	sceAgcDriverWaitUntilSafeForRendering	u8BkdHb1+Po	3.20 stub (libSceAgcDriver)
-libSceAgcDriver	sceAgcDriverSysEnableSubmitDone45Exception	x3K61sY5m8Q	3.20 stub (libSceAgcDriver)
-libSceAgc	sceAgcBranchPatchSetThenTarget	xb8VgcXQhvI	3.20 stub (libSceAgcVsh)
-libSceAgc	sceAgcCbSetShRegistersDirectGetSize	yUBESvCCJ4I	3.20 stub (libSceAgcVsh)
+libSceAgc	sceAgcUnknownIkfdtRIqCE	Ikfdt-rIqCE	KytyPS5 libGraphicsDriver.cpp
+libSceAgc	sceAgcUpdatePrimState	Y3ymLfZ1384	KytyPS5 libGraphicsDriver.cpp
+libSceAgc	sceAgcVshCbMemSemaphore	vHX9guneRBY	ps5-openagc agc_nid.h
+libSceAgc	sceAgcVshDcbAtomicGds	zARR5aCmkoY	ps5-openagc agc_nid.h
+libSceAgc	sceAgcVshDcbAtomicGds_pre0090	pH3-dfRpfA0	ps5-openagc agc_nid.h
+libSceAgc	sceAgcVshDcbContextStateOp	qj7QZpgr9Uw	ps5-openagc agc_nid.h
+libSceAgc	sceAgcVshDcbContextStateOp_pre0100	HabmgqPwPw0	ps5-openagc agc_nid.h
+libSceAgc	sceAgcVshDcbInitializeDefaultHardwareState_pre0090	Xvcgh9xNNkY	ps5-openagc agc_nid.h
+libSceAgc	sceAgcVshDcbMemSemaphore	G0jrLdvEqDw	ps5-openagc agc_nid.h
+libSceAgc	sceAgcVshDcbResetQueue	TRO721eVt4g	ps5-openagc agc_nid.h
+libSceAgc	sceAgcVshDcbSetFlip	YUeqkyT7mEQ	ps5-openagc agc_nid.h
+libSceAgc	sceAgcVshDcbSetWorkloadComplete	hEK26Wdny6s	ps5-openagc agc_nid.h
+libSceAgc	sceAgcVshDcbSetWorkloadStreamInactive	FneFypEDRgY	ps5-openagc agc_nid.h
+libSceAgc	sceAgcVshDcbSetWorkloadsActive	LFSPFmGc9Hg	ps5-openagc agc_nid.h
+libSceAgc	sceAgcVshDcbWaitUntilSafeForRendering	MWiElSNE8j8	ps5-openagc agc_nid.h
+libSceAgc	sceAgcWaitRegMemPatchCmpFunc	n485EBnIWmk	agc_nids.h
+libSceAgc	sceAgcWaitRegMemPatchMask	hXAnLgDHCoI	agc_nids.h
+libSceAgc	sceAgcWaitRegMemPatchRef	7nOoijNPvEU	agc_nids.h
+libSceAgcDriver	_sceAgcDriverCreateUserSpecialQueue	dwoD-LJDQy8	ps5-openagc agc_nid.h
+libSceAgcDriver	_sceAgcDriverDestroyUserSpecialQueue	NRO47jBXLiI	ps5-openagc agc_nid.h
+libSceAgcDriver	sceAgcDriverAcquireRazorACQ	MetMOQVd8HY	ps5-openagc agc_nid.h
+libSceAgcDriver	sceAgcDriverAddEqEvent	w2rJhmD+dsE	AgcExports.cs
+libSceAgcDriver	sceAgcDriverAgrSubmitDcb	AhGvpITrf4M	agc_nids.h
+libSceAgcDriver	sceAgcDriverBeginWorkload	UM9b9NunSrE	agc_nids.h
 libSceAgcDriver	sceAgcDriverCreateQueue	zP4ZNlXLBVg	3.20 stub (libSceAgcDriver)
-libSceAgc	sceAgcRewindPatchSetRewindState	ziVA3whp3p4	3.20 stub (libSceAgcVsh)
-libSceAgc	sceAgcFuseShaderHalves	nApJjpKNBl4	3.20 NID (5.50 uses fd5Bp5tGTgo)
-libSceAgc	sceAgcGetFusedShaderSize	nQT5kYLv0cg	3.20 NID (5.50 uses dolOmWH+huQ)
-libSceAgc	sceAgcGetDataPacketPayloadAddress	CQsSq6l6+kA	3.20 NID (5.50 uses V++UgBtQhn0)
+libSceAgcDriver	sceAgcDriverCwsrResumeAcq	1DXIHxWHZAQ	3.20 stub (libSceAgcDriver)
+libSceAgcDriver	sceAgcDriverCwsrSuspendAcq	SOAMmdlyaIc	3.20 stub (libSceAgcDriver)
+libSceAgcDriver	sceAgcDriverDebugHardwareStatus	1BUTwixUG5Y	3.20 stub (libSceAgcDriver)
+libSceAgcDriver	sceAgcDriverDeleteEqEvent	DL2RXaXOy88	AgcExports.cs
+libSceAgcDriver	sceAgcDriverDeregisterCaptureInterface	qR+S4WqJvUM	ps5-openagc agc_nid.h
+libSceAgcDriver	sceAgcDriverEndWorkload	i6bfTi13ApA	agc_nids.h
+libSceAgcDriver	sceAgcDriverGetDefaultOwner	F0ZXt5q0ZTA	libGraphicsDriver.cpp
+libSceAgcDriver	sceAgcDriverGetEqContextId	Zw7uUVPulbw	agc_nids.h
+libSceAgcDriver	sceAgcDriverGetEqEventType	5CdQTZIQPxM	libGraphicsDriver.cpp
+libSceAgcDriver	sceAgcDriverGetHsOffchipParam	r28hEh6cNH0	3.20 stub (libSceAgcDriver)
+libSceAgcDriver	sceAgcDriverGetPaDebugInterfaceVersion	Pqxglq1oKec	ps5-openagc agc_nid.h
+libSceAgcDriver	sceAgcDriverGetRegShadowInfo	CP-kVAMmWVw	3.20 stub (libSceAgcDriver)
+libSceAgcDriver	sceAgcDriverGetRegShadowInfoAgr	ME1eUot7+Qw	3.20 stub (libSceAgcDriver)
+libSceAgcDriver	sceAgcDriverGetReservedDmemForAgc	Um-jkyDy9rI	3.20 stub (libSceAgcDriver)
+libSceAgcDriver	sceAgcDriverGetResourceRegistrationMaxNameLength	uJziRsODk1c	libGraphicsDriver.cpp
+libSceAgcDriver	sceAgcDriverGetSetFlipPacketSizeInDwords	2PrsbRYyZi4	3.20 stub (libSceAgcDriver)
+libSceAgcDriver	sceAgcDriverGetSetWorkloadCompletePacketSize	WNyjOWq8-Vk	3.20 stub (libSceAgcDriver)
+libSceAgcDriver	sceAgcDriverGetSetWorkloadsActivePacketSize	gyVTZWyySpM	3.20 stub (libSceAgcDriver)
+libSceAgcDriver	sceAgcDriverGetTFRing	e-YMQ+2tj9M	3.20 stub (libSceAgcDriver)
+libSceAgcDriver	sceAgcDriverGetWaitRenderingPacketSizeInDwords	0MtUJ3BpGhE	3.20 stub (libSceAgcDriver)
+libSceAgcDriver	sceAgcDriverGetWorkloadStreamInfo	t8PLXbBCiRA	3.20 stub (libSceAgcDriver)
+libSceAgcDriver	sceAgcDriverIDHSSubmit	C2yjkNdzbW4	3.20 stub (libSceAgcDriver)
+libSceAgcDriver	sceAgcDriverInitResourceRegistration	F0Y42t-3e18	libGraphicsDriver.cpp
+libSceAgcDriver	sceAgcDriverIsCaptureInProgress	Ddwk4gLT5j0	libGraphicsDriver.cpp
+libSceAgcDriver	sceAgcDriverIsSuspendPointInFlightDirect	I6elAJxk6Jo	ps5-openagc agc_nid.h
+libSceAgcDriver	sceAgcDriverMapComputeQueue	XNbrdwCsZ9A	agc_nids.h
+libSceAgcDriver	sceAgcDriverModuleRegistration	04JRU1Uf8Ms	3.20 stub (libSceAgcDriver)
+libSceAgcDriver	sceAgcDriverNotifyDefaultStates	nR6xhiFsOoc	ps5-openagc agc_nid.h
+libSceAgcDriver	sceAgcDriverPassInfoDownward	aCfbPzyjU90	3.20 stub (libSceAgcDriver)
+libSceAgcDriver	sceAgcDriverPatchClearState	lYz7vbL4W4A	3.20 stub (libSceAgcDriver)
+libSceAgcDriver	sceAgcDriverQueryResourceRegistrationUserMemoryRequirements	AOLcoIkQDgM	libGraphicsDriver.cpp
+libSceAgcDriver	sceAgcDriverRegisterCaptureInterface	oz3Yd--lAEE	ps5-openagc agc_nid.h
+libSceAgcDriver	sceAgcDriverRegisterOwner	X-Nm5KLREeg	agc_nids.h
+libSceAgcDriver	sceAgcDriverRegisterResource	W5z4eZrjEas	agc_nids.h
+libSceAgcDriver	sceAgcDriverRegisterWorkloadStream	3AyTaWcF-H8	libGraphicsDriver.cpp
+libSceAgcDriver	sceAgcDriverReleaseRazorACQ	TEOAw-eLjNo	ps5-openagc agc_nid.h
+libSceAgcDriver	sceAgcDriverSdmaCopyLinearBlocking	bQ+En9GY3PM	ps5-openagc agc_nid.h
+libSceAgcDriver	sceAgcDriverSetBase	zmw2uVSEj94	agc_nids.h
+libSceAgcDriver	sceAgcDriverSetConfigReg	-vc-xL+G8u0	agc_nids.h
+libSceAgcDriver	sceAgcDriverSetContextReg	+b34-CLWc0s	agc_nids.h
+libSceAgcDriver	sceAgcDriverSetFlip	cwbxjPSJ7WQ	3.20 stub (libSceAgcDriver)
+libSceAgcDriver	sceAgcDriverSetHsOffchipParam	MM4IZSEYytQ	agc_nids.h
+libSceAgcDriver	sceAgcDriverSetHsOffchipParamDirect	DPcAnsOlTQs	ps5-openagc agc_nid.h
+libSceAgcDriver	sceAgcDriverSetTFRingDirect	16IjQxB-Heo	ps5-openagc agc_nid.h
+libSceAgcDriver	sceAgcDriverSetTargetRingForDiag	l0Jxfl0DEdo	ps5-openagc agc_nid.h
+libSceAgcDriver	sceAgcDriverSetTfRing	XlNp7jzGiPo	agc_nids.h
+libSceAgcDriver	sceAgcDriverSetupAsyncGraphics	Vlaj1gwmIFA	ps5-openagc agc_nid.h
+libSceAgcDriver	sceAgcDriverSubmitAcb	gSRnr79F8tQ	AgcExports.cs
+libSceAgcDriver	sceAgcDriverSubmitCommandBuffer	b4fpgH5ZXxQ	libGraphicsDriver.cpp
+libSceAgcDriver	sceAgcDriverSubmitCommandBuffers	Hj4eWnDektQ	agc_nids.h
+libSceAgcDriver	sceAgcDriverSubmitDcb	UglJIZjGssM	AgcExports.cs
+libSceAgcDriver	sceAgcDriverSubmitMultiAcbs	HF3YllT3mXU	libGraphicsDriver.cpp
+libSceAgcDriver	sceAgcDriverSubmitMultiCommandBuffers	Fj7r9EHzF38	libGraphicsDriver.cpp
+libSceAgcDriver	sceAgcDriverSubmitMultiCommandBuffersDirect	xmWi73o1BR0	ps5-openagc agc_nid.h
+libSceAgcDriver	sceAgcDriverSubmitMultiDcbs	6UzEidRZwkg	libGraphicsDriver.cpp
+libSceAgcDriver	sceAgcDriverSubmitMultiDcbs	+T8Xo6LtFJI	KytyPS5 libGraphicsDriver.cpp
+libSceAgcDriver	sceAgcDriverSubmitToHDRScopesACQ	lOYHtoUcJD4	ps5-openagc agc_nid.h
+libSceAgcDriver	sceAgcDriverSubmitToRazorACQ	jJyVJyhi5h8	ps5-openagc agc_nid.h
+libSceAgcDriver	sceAgcDriverSuspendPointSubmit	QcmHLO2n7mk	3.20 stub (libSceAgcDriver)
+libSceAgcDriver	sceAgcDriverSuspendPointSubmitDirect	ZV04pRl7cWU	ps5-openagc agc_nid.h
+libSceAgcDriver	sceAgcDriverSysEnableSubmitDone45Exception	x3K61sY5m8Q	3.20 stub (libSceAgcDriver)
+libSceAgcDriver	sceAgcDriverSysGetClientNumber	kuE1uTiWfuk	3.20 stub (libSceAgcDriver)
+libSceAgcDriver	sceAgcDriverSysIsGameClosed	ftf-xlfBQpo	3.20 stub (libSceAgcDriver)
+libSceAgcDriver	sceAgcDriverTmpInitIdhs	UM8rn9hRWrY	3.20 stub (libSceAgcDriver)
+libSceAgcDriver	sceAgcDriverUnknownU9ueyEhSkF4	U9ueyEhSkF4	KytyPS5 libGraphicsDriver.cpp
+libSceAgcDriver	sceAgcDriverUnknown_+TN0oRTBxJQ	+TN0oRTBxJQ	SPRX stub (returns 0)
+libSceAgcDriver	sceAgcDriverUnknown_-CSrlr1yY-o	-CSrlr1yY-o	SPRX stub (returns 0x8a6c9018 = not supported)
+libSceAgcDriver	sceAgcDriverUnknown_-JFkLpCDeHM	-JFkLpCDeHM	SPRX stub (returns 0)
+libSceAgcDriver	sceAgcDriverUnknown_-MqhSEVvAPw	-MqhSEVvAPw	SPRX stub (returns 0)
+libSceAgcDriver	sceAgcDriverUnknown_1QTqF-hYqQE	1QTqF-hYqQE	SPRX stub (returns 0x8a6c1000)
+libSceAgcDriver	sceAgcDriverUnknown_5l3IfCFJxBs	5l3IfCFJxBs	SPRX stub (returns 0x8a6c9018 = not supported)
+libSceAgcDriver	sceAgcDriverUnknown_6WO4CscVnfM	6WO4CscVnfM	SPRX stub (returns 0)
+libSceAgcDriver	sceAgcDriverUnknown_6v-D6CQHA4Y	6v-D6CQHA4Y	SPRX stub (returns 0)
+libSceAgcDriver	sceAgcDriverUnknown_8CXPPlNmvIc	8CXPPlNmvIc	SPRX stub (returns 0)
+libSceAgcDriver	sceAgcDriverUnknown_9rDcI6cJb+8	9rDcI6cJb+8	SPRX stub (returns 0x8a6d0001)
+libSceAgcDriver	sceAgcDriverUnknown_BbI8si4o-fA	BbI8si4o-fA	SPRX stub (returns 0)
+libSceAgcDriver	sceAgcDriverUnknown_Cia3HgY0WiY	Cia3HgY0WiY	SPRX stub (returns 0x8a6d0001)
+libSceAgcDriver	sceAgcDriverUnknown_DDCQA2fPQj0	DDCQA2fPQj0	SPRX stub (returns 0)
+libSceAgcDriver	sceAgcDriverUnknown_DGN+IaHNR8o	DGN+IaHNR8o	SPRX stub (returns 0x8a6c9018 = not supported)
+libSceAgcDriver	sceAgcDriverUnknown_FOwvmNlFLjM	FOwvmNlFLjM	SPRX stub (returns 0x8a6c1000)
+libSceAgcDriver	sceAgcDriverUnknown_HMnVBVUyajk	HMnVBVUyajk	SPRX stub (returns 0)
+libSceAgcDriver	sceAgcDriverUnknown_IGYqP+WKCgc	IGYqP+WKCgc	SPRX stub (returns 0x8a6c9018 = not supported)
+libSceAgcDriver	sceAgcDriverUnknown_Jkypw0U-HYo	Jkypw0U-HYo	SPRX stub (returns 0x8a6d0001)
+libSceAgcDriver	sceAgcDriverUnknown_K15VxhSJOfc	K15VxhSJOfc	SPRX stub (returns 0x8a6d0001)
+libSceAgcDriver	sceAgcDriverUnknown_KtIXf8La96k	KtIXf8La96k	SPRX stub (returns 0)
+libSceAgcDriver	sceAgcDriverUnknown_LepGrgk77sM	LepGrgk77sM	SPRX stub (returns 0x8a6c9018 = not supported)
+libSceAgcDriver	sceAgcDriverUnknown_M9yBzRKkjPc	M9yBzRKkjPc	SPRX stub (returns 0x8a6c9018 = not supported)
+libSceAgcDriver	sceAgcDriverUnknown_NghWEUXp1qM	NghWEUXp1qM	SPRX stub (returns 0x8a6c9018 = not supported)
+libSceAgcDriver	sceAgcDriverUnknown_NhnGMuunz0Y	NhnGMuunz0Y	SPRX stub (returns 0)
+libSceAgcDriver	sceAgcDriverUnknown_NmE3PfE211o	NmE3PfE211o	SPRX stub (ret only)
+libSceAgcDriver	sceAgcDriverUnknown_O144kUYDSBo	O144kUYDSBo	SPRX stub (ret only)
+libSceAgcDriver	sceAgcDriverUnknown_SAfhzJPcjuk	SAfhzJPcjuk	SPRX stub (returns 0x8a6c1000)
+libSceAgcDriver	sceAgcDriverUnknown_SCoAN5fYlUM	SCoAN5fYlUM	SPRX stub (returns 0x8a6c9018 = not supported)
+libSceAgcDriver	sceAgcDriverUnknown_V+rBNI2HzGA	V+rBNI2HzGA	SPRX stub (returns 0x8a6d0001)
+libSceAgcDriver	sceAgcDriverUnknown_VOMSpd9+vxU	VOMSpd9+vxU	SPRX stub (returns 0x8a6c9018 = not supported)
+libSceAgcDriver	sceAgcDriverUnknown_VerAUWCtrX0	VerAUWCtrX0	SPRX stub (returns 0x8a6c9018 = not supported)
+libSceAgcDriver	sceAgcDriverUnknown_Xq5WmbwPTnQ	Xq5WmbwPTnQ	SPRX stub (returns 0x8a6c1000)
+libSceAgcDriver	sceAgcDriverUnknown_ZLJk9r2+2Aw	ZLJk9r2+2Aw	SPRX stub (returns 0x8a6c9018 = not supported)
+libSceAgcDriver	sceAgcDriverUnknown_emP3ckeS2uo	emP3ckeS2uo	SPRX stub (returns 0x8a6c9018 = not supported)
+libSceAgcDriver	sceAgcDriverUnknown_g68eYcZS7PY	g68eYcZS7PY	SPRX stub (returns 0x8a6d0001)
+libSceAgcDriver	sceAgcDriverUnknown_gpF0LZ3+19c	gpF0LZ3+19c	SPRX stub (returns 0x8a6d0001)
+libSceAgcDriver	sceAgcDriverUnknown_kFiKcGagv5k	kFiKcGagv5k	SPRX stub (returns 0x8a6d0001)
+libSceAgcDriver	sceAgcDriverUnknown_ls4jfY576lw	ls4jfY576lw	SPRX stub (returns 0x8a6c9018 = not supported)
+libSceAgcDriver	sceAgcDriverUnknown_mXn+K9E-wOA	mXn+K9E-wOA	SPRX stub (returns 0x8a6c9018 = not supported)
+libSceAgcDriver	sceAgcDriverUnknown_mxyUaQfPgb8	mxyUaQfPgb8	SPRX stub (returns 0x8a6c9018 = not supported)
+libSceAgcDriver	sceAgcDriverUnknown_o2gvlIFMF1o	o2gvlIFMF1o	SPRX stub (returns 0)
+libSceAgcDriver	sceAgcDriverUnknown_qspAL8bgcBY	qspAL8bgcBY	SPRX stub (returns 0)
+libSceAgcDriver	sceAgcDriverUnknown_rI9lNAXPMIw	rI9lNAXPMIw	SPRX stub (returns 0x8a6c9018 = not supported)
+libSceAgcDriver	sceAgcDriverUnknown_sW7yp7NVlrk	sW7yp7NVlrk	SPRX stub (returns 0x8a6c1000)
+libSceAgcDriver	sceAgcDriverUnknown_t30LG1ibIJE	t30LG1ibIJE	SPRX stub (returns 0)
+libSceAgcDriver	sceAgcDriverUnknown_tD2ECNSuTQQ	tD2ECNSuTQQ	SPRX stub (returns 0)
+libSceAgcDriver	sceAgcDriverUnknown_tLTma0k0U3E	tLTma0k0U3E	SPRX stub (returns 0)
+libSceAgcDriver	sceAgcDriverUnknown_wxdcyVqXJEY	wxdcyVqXJEY	SPRX stub (returns 0)
+libSceAgcDriver	sceAgcDriverUnknown_xDPdCurOujQ	xDPdCurOujQ	SPRX stub (returns 0)
+libSceAgcDriver	sceAgcDriverUnregisterResource	pWLG7WOpVcw	libGraphicsDriver.cpp
+libSceAgcDriver	sceAgcDriverUnregisterWorkloadStream	n5ElQVYsU1A	3.20 stub (libSceAgcDriver)
+libSceAgcDriver	sceAgcDriverUserDataGetPacketSize	VhLnEiTuuWo	3.20 stub (libSceAgcDriver)
+libSceAgcDriver	sceAgcDriverUserDataWritePopMarker	LEnn-4ARRJM	3.20 stub (libSceAgcDriver)
+libSceAgcDriver	sceAgcDriverWaitIdle	oFb2hMcoJa4	agc_nids.h
+libSceAgcDriver	sceAgcDriverWaitUntilSafeForRendering	u8BkdHb1+Po	3.20 stub (libSceAgcDriver)

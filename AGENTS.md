@@ -116,6 +116,14 @@ Before marking a task complete:
   Never copy, embed, or commit them. Constants recovered from RE go in
   `include/agc_re.h`, `include/agc_nids.h`, and `include/agc_ioctl.h`
   (kernel-side ioctl/submit/queue layouts for FW 5.50).
+- **NID table scope:** `analysis/agc_known_nids.tsv` and `include/agc_nids.h`
+  contain only NIDs that exist in the **FW 5.50 SPRX** (our primary target).
+  NIDs from other firmware versions (3.20-only, 11.60-only) are in
+  `analysis/agc_nids_version_variants.tsv` for cross-version reference.
+  NIDs are **not stable** across firmware versions — some functions have
+  different NIDs in 3.20 vs 5.50 (e.g. `sceAgcFuseShaderHalves`:
+  3.20=`nApJjpKNBl4`, 5.50=`fd5Bp5tGTgo`). Since OpenAGC is a static library,
+  NIDs are reference-only and not used at runtime.
 
 ## Reference Paths (host machine only — do not commit)
 

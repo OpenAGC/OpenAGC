@@ -1,0 +1,64 @@
+# NID version variants — NIDs from firmware versions other than 5.50
+# These NIDs do NOT exist in the FW 5.50 SPRX. Use for cross-version reference only.
+#
+# firmware	library	name	nid	source
+11.60	libSceAgc	sceAgcUnknown_11.60	BYcSvEsINWU	11.60 SPRX export
+11.60	libSceAgc	sceAgcUnknown_11.60	Eq7asRCcfMs	11.60 SPRX export
+11.60	libSceAgc	sceAgcUnknown_11.60	d4NZIlguzv0	11.60 SPRX export
+11.60	libSceAgc	sceAgcUnknown_11.60	-KRzWekV120	11.60 SPRX export
+11.60	libSceAgc	sceAgcUnknown_11.60	OQTgEXyihvA	11.60 SPRX export
+11.60	libSceAgc	sceAgcUnknown_11.60	fPSCdQxgpSw	11.60 SPRX export
+11.60	libSceAgc	sceAgcUnknown_11.60	NbiQSQ-UL+M	11.60 SPRX export
+11.60	libSceAgc	sceAgcUnknown_11.60	eAy8eGNsCuU	11.60 SPRX export
+11.60	libSceAgc	sceAgcUnknown_11.60	y5K5tPktiL8	11.60 SPRX export
+11.60	libSceAgc	sceAgcUnknown_11.60	SwI6QxqwAC0	11.60 SPRX export
+11.60	libSceAgc	sceAgcUnknown_11.60	dbOlWdppb4o	11.60 SPRX export
+11.60	libSceAgc	sceAgcUnknown_11.60	W0WEyog0f74	11.60 SPRX export
+11.60	libSceAgc	sceAgcUnknown_11.60	N7M3+N-sBCw	11.60 SPRX export
+11.60	libSceAgc	sceAgcUnknown_11.60	hFQ9pUxoLQ4	11.60 SPRX export
+11.60	libSceAgc	sceAgcUnknown_11.60	pRO4U9d0vaA	11.60 SPRX export
+11.60	libSceAgc	sceAgcUnknown_11.60	ICkECTBxrMw	11.60 SPRX export
+11.60	libSceAgc	sceAgcUnknown_11.60	EJBA4dbmvfg	11.60 SPRX export
+11.60	libSceAgc	sceAgcUnknown_11.60	pxx-GoOSdw4	11.60 SPRX export
+11.60	libSceAgc	sceAgcUnknown_11.60	h4h5EQ-Y20M	11.60 SPRX export
+11.60	libSceAgc	sceAgcUnknown_11.60	vieBRwlh1Lw	11.60 SPRX export
+11.60	libSceAgc	sceAgcUnknown_11.60	RTpj-tIlvZc	11.60 SPRX export
+11.60	libSceAgc	sceAgcUnknown_11.60	tmy-+rBpspY	11.60 SPRX export
+11.60	libSceAgc	sceAgcUnknown_11.60	86rJnbZUpr4	11.60 SPRX export
+11.60	libSceAgc	sceAgcUnknown_11.60	6nths4DHNrs	11.60 SPRX export
+11.60	libSceAgc	sceAgcUnknown_11.60	shuFv6ZAOsI	11.60 SPRX export
+11.60	libSceAgc	sceAgcUnknown_11.60	8Kly1JrJUlw	11.60 SPRX export
+11.60	libSceAgc	sceAgcUnknown_11.60	BfBDZGbti7A	11.60 SPRX export
+11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	J6S2TMmGWgA	11.60 SPRX export
+11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	kAPt2J4U3v8	11.60 SPRX export
+11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	1l15IdtXNWw	11.60 SPRX export
+11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	gtvWv7DEKD4	11.60 SPRX export
+11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	NQLvUnSDyBU	11.60 SPRX export
+11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	+ADiO6FQvEA	11.60 SPRX export
+11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	8F5j7U-Bq6s	11.60 SPRX export
+11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	m9n9wJC2D+4	11.60 SPRX export
+11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	nTwzz-6W9Jg	11.60 SPRX export
+11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	8j6-e3dPf4c	11.60 SPRX export
+11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	jwKQ1B98Q0g	11.60 SPRX export
+11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	nhzPF9s5WF0	11.60 SPRX export
+11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	38aK8XQj6Cg	11.60 SPRX export
+11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	SFB48L57OKQ	11.60 SPRX export
+11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	EcaEt4nv8No	11.60 SPRX export
+11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	chJWZcNSzjk	11.60 SPRX export
+11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	Hb3p8BJm2PI	11.60 SPRX export
+11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	mQfUoU5-d1g	11.60 SPRX export
+11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	WHIOMbb+iIU	11.60 SPRX export
+11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	ICaGtkEIXTk	11.60 SPRX export
+11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	+iAOE3jCnkk	11.60 SPRX export
+11.60	libSceAgcDriver	sceAgcWriteDataPatchSetAddressOrOffset	fPSCdQxgpSw	libGraphicsDriver.cpp
+3.20	libSceAgcDriver	sceAgcSdmaClose	OYBiWgeGpPo	3.20 stub (libSceAgcDriver)
+3.20	libSceAgcDriver	sceAgcSdmaConstFill	CmlLiND79W8	3.20 stub (libSceAgcDriver)
+3.20	libSceAgcDriver	sceAgcSdmaCopyLinear	7HmaD1MaWQs	3.20 stub (libSceAgcDriver)
+3.20	libSceAgcDriver	sceAgcSdmaCopyTiledBC	DBZMYLxXRYA	3.20 stub (libSceAgcDriver)
+3.20	libSceAgcDriver	sceAgcSdmaCopyTiledGen2	hBsEOmOR3qQ	3.20 stub (libSceAgcDriver)
+3.20	libSceAgcDriver	sceAgcSdmaCopyWindowBC	oWyZFLUVjcI	3.20 stub (libSceAgcDriver)
+3.20	libSceAgcDriver	sceAgcSdmaCopyWindowGen2	f4aTpX9UhD0	3.20 stub (libSceAgcDriver)
+3.20	libSceAgcDriver	sceAgcSdmaFlush	GOP1R6vumsg	3.20 stub (libSceAgcDriver)
+3.20	libSceAgcDriver	sceAgcSdmaOpen	aYySApdZmtE	3.20 stub (libSceAgcDriver)
+3.20	libSceAgcDriver	sceAgcSdmaSetTileModesBC	scA1QSh8cfE	3.20 stub (libSceAgcDriver)
+unknown	libSceAgc	sceAgcDcbCondExecEx	Aozdh0bCcO0	agc_nids.h
