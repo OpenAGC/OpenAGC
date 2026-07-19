@@ -28,6 +28,7 @@
  */
 
 #include "agc_cb.h"
+#include "agc_context.h"
 #include "agc_pm4.h"
 #include "agc_types.h"
 #include "agcdriver.h"
@@ -332,23 +333,138 @@ int32_t PS5_SYSV_ABI sceAgcSuspendPoint(
 }
 
 /* sceAgcGetRegisterDefaults2 (NID: 2JtWUUiYBXs)
- * SPRX: searches register defaults blob by init level.
- * Delegates to our existing sceAgcGetDefaultState. */
-int32_t PS5_SYSV_ABI sceAgcGetRegisterDefaults2(
-    uint32_t init_level, AgcContextState *out_state)
+ * SPRX-confirmed: takes a version number (0-12), returns a pointer to an
+ * AgcRegisterDefaults structure for that version. The structure is built
+ * on first call and cached. Version mapping: 0-3→v0, 4→v4, 5-6→v5, 7→v7,
+ * 8→v8, 9→v9, 10→v10, 11→v11, 12→v10. Versions > 12 fall back to v11. */
+
+/* Maximum groups across all versions (v0 has 150) */
+#define MAX_PRIMARY_GROUPS   160
+#define MAX_INTERNAL_GROUPS   32
+#define MAX_VERSIONS          13
+
+/* Per-version pointer tables: tbl_ptrs[space] is an array of pointers,
+ * one per group index in that table space. */
+static const AgcRegisterDefaultValue *s_primary_tbl0_ptrs[MAX_VERSIONS][MAX_PRIMARY_GROUPS];
+static const AgcRegisterDefaultValue *s_primary_tbl1_ptrs[MAX_VERSIONS][MAX_PRIMARY_GROUPS];
+static const AgcRegisterDefaultValue *s_primary_tbl2_ptrs[MAX_VERSIONS][MAX_PRIMARY_GROUPS];
+static const AgcRegisterDefaultValue *s_primary_tbl3_ptrs[MAX_VERSIONS][MAX_PRIMARY_GROUPS];
+
+/* Per-version types arrays */
+static uint32_t s_primary_types[MAX_VERSIONS][MAX_PRIMARY_GROUPS * 3];
+
+/* Per-version RegisterDefaults structures */
+static AgcRegisterDefaults s_primary_defaults[MAX_VERSIONS];
+static bool s_primary_built[MAX_VERSIONS];
+
+static void build_register_defaults(
+    AgcRegisterDefaults *out,
+    const AgcRegisterDefaultsGroup *groups, uint32_t group_count,
+    const AgcRegisterDefaultValue **tbl0_ptrs,
+    const AgcRegisterDefaultValue **tbl1_ptrs,
+    const AgcRegisterDefaultValue **tbl2_ptrs,
+    const AgcRegisterDefaultValue **tbl3_ptrs,
+    uint32_t *types_out)
 {
-    (void)init_level;
-    return sceAgcGetDefaultState(out_state);
+    uint32_t tbl0_count = 0, tbl1_count = 0, tbl2_count = 0;
+
+    for (uint32_t i = 0; i < group_count; i++) {
+        const AgcRegisterDefaultsGroup *g = &groups[i];
+        /* Build types entry */
+        types_out[i * 3 + 0] = g->type_hash;
+        types_out[i * 3 + 1] = (g->index * 4) + (uint32_t)g->space;
+        types_out[i * 3 + 2] = 0;
+
+        /* Set pointer table entry */
+        switch (g->space) {
+        case kAgcRegisterDefaultSpaceCx:
+            tbl0_ptrs[g->index] = g->registers;
+            if (g->index + 1 > tbl0_count) tbl0_count = g->index + 1;
+            break;
+        case kAgcRegisterDefaultSpaceSh:
+            tbl1_ptrs[g->index] = g->registers;
+            if (g->index + 1 > tbl1_count) tbl1_count = g->index + 1;
+            break;
+        case kAgcRegisterDefaultSpaceUc:
+            /* UC groups can go to tbl2 or tbl3 depending on context.
+             * For simplicity, use tbl2 for UC. */
+            tbl2_ptrs[g->index] = g->registers;
+            if (g->index + 1 > tbl2_count) tbl2_count = g->index + 1;
+            break;
+        }
+    }
+
+    out->tbl0 = (const AgcRegisterDefaultValue **)tbl0_ptrs;
+    out->tbl1 = (const AgcRegisterDefaultValue **)tbl1_ptrs;
+    out->tbl2 = (const AgcRegisterDefaultValue **)tbl2_ptrs;
+    out->tbl3 = NULL;
+    out->tbl0_register_count = 0; /* total regs in tbl0, not ptrs */
+    out->tbl1_register_count = 0;
+    out->tbl2_register_count = 0;
+    out->tbl3_register_count = 0;
+    out->types = types_out;
+    out->count = group_count;
+    (void)tbl3_ptrs;
+    (void)tbl0_count; (void)tbl1_count; (void)tbl2_count;
 }
 
-/* sceAgcGetRegisterDefaults2Internal (NID: wRbq6ZjNop4)
- * SPRX: searches internal register defaults blob by init level.
- * Delegates to our existing sceAgcGetDefaultCxStateFlat. */
-int32_t PS5_SYSV_ABI sceAgcGetRegisterDefaults2Internal(
-    uint32_t init_level, void *out_state, uint32_t size)
+void *PS5_SYSV_ABI sceAgcGetRegisterDefaults2(uint32_t version)
 {
-    (void)init_level;
-    return sceAgcGetDefaultCxStateFlat(out_state, size);
+    if (version > 12)
+        version = 11; /* fallback */
+
+    if (s_primary_built[version])
+        return &s_primary_defaults[version];
+
+    uint32_t group_count = 0;
+    const AgcRegisterDefaultsGroup *groups =
+        agcRegisterDefaultsGetPrimaryGroupsForVersion(version, &group_count);
+
+    if (group_count > MAX_PRIMARY_GROUPS)
+        return NULL;
+
+    build_register_defaults(
+        &s_primary_defaults[version], groups, group_count,
+        s_primary_tbl0_ptrs[version], s_primary_tbl1_ptrs[version],
+        s_primary_tbl2_ptrs[version], s_primary_tbl3_ptrs[version],
+        s_primary_types[version]);
+
+    s_primary_built[version] = true;
+    return &s_primary_defaults[version];
+}
+
+/* Per-version internal data */
+static const AgcRegisterDefaultValue *s_internal_tbl0_ptrs[MAX_VERSIONS][MAX_INTERNAL_GROUPS];
+static const AgcRegisterDefaultValue *s_internal_tbl1_ptrs[MAX_VERSIONS][MAX_INTERNAL_GROUPS];
+static const AgcRegisterDefaultValue *s_internal_tbl2_ptrs[MAX_VERSIONS][MAX_INTERNAL_GROUPS];
+static const AgcRegisterDefaultValue *s_internal_tbl3_ptrs[MAX_VERSIONS][MAX_INTERNAL_GROUPS];
+static uint32_t s_internal_types[MAX_VERSIONS][MAX_INTERNAL_GROUPS * 3];
+static AgcRegisterDefaults s_internal_defaults[MAX_VERSIONS];
+static bool s_internal_built[MAX_VERSIONS];
+
+void *PS5_SYSV_ABI sceAgcGetRegisterDefaults2Internal(uint32_t version)
+{
+    if (version > 12)
+        version = 11; /* fallback */
+
+    if (s_internal_built[version])
+        return &s_internal_defaults[version];
+
+    uint32_t group_count = 0;
+    const AgcRegisterDefaultsGroup *groups =
+        agcRegisterDefaultsGetInternalGroupsForVersion(version, &group_count);
+
+    if (group_count > MAX_INTERNAL_GROUPS)
+        return NULL;
+
+    build_register_defaults(
+        &s_internal_defaults[version], groups, group_count,
+        s_internal_tbl0_ptrs[version], s_internal_tbl1_ptrs[version],
+        s_internal_tbl2_ptrs[version], s_internal_tbl3_ptrs[version],
+        s_internal_types[version]);
+
+    s_internal_built[version] = true;
+    return &s_internal_defaults[version];
 }
 
 /* ===================================================================== */

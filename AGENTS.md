@@ -50,7 +50,7 @@ cmake --build build-prospero
 The prospero build compiles `driver_prospero.c` with native `/dev/gc` ioctl calls.
 It links against `kernel` and `SceAgcDriver` stubs from the SDK.
 
-Expected host test result: `1610 passed, 0 failed`. Any change that drops this
+Expected host test result: `1642 passed, 0 failed`. Any change that drops this
 count is a regression — fix it before declaring the task done.
 
 ## Verification Checklist

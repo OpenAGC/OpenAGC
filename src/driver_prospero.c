@@ -808,17 +808,22 @@ int32_t PS5_SYSV_ABI sceAgcDriverNotifyDefaultStates(uint32_t flags)
     (void)flags; /* flags meaning is still pending RE */
 
     /*
-     * Build the FW 5.50 primary and internal register-defaults blobs in
-     * GPU-visible memory. The blobs are then available to the driver for
-     * context-state loading. The actual submission path that consumes these
-     * blobs is still pending hardware validation.
+     * Build the primary and internal register-defaults blobs in GPU-visible
+     * memory. The blobs are then available to the driver for context-state
+     * loading. The actual submission path that consumes these blobs is still
+     * pending hardware validation.
+     *
+     * Version selection: FW 5.50 uses register defaults version 8. The
+     * version-selectable API (agcRegisterDefaultsGetPrimaryGroupsForVersion)
+     * supports versions 0-12 with proper fallback. We use version 8 here
+     * since this driver targets FW 5.50.
      */
     uint32_t primary_count = 0;
     uint32_t internal_count = 0;
     const AgcRegisterDefaultsGroup *primary_groups =
-        agcRegisterDefaultsGetPrimaryGroups(&primary_count);
+        agcRegisterDefaultsGetPrimaryGroupsForVersion(8, &primary_count);
     const AgcRegisterDefaultsGroup *internal_groups =
-        agcRegisterDefaultsGetInternalGroups(&internal_count);
+        agcRegisterDefaultsGetInternalGroupsForVersion(8, &internal_count);
 
     size_t primary_size = agcRegisterDefaultsComputeSize(
         primary_count, AGC_PRIMARY_CX_LENGTH, AGC_PRIMARY_SH_LENGTH, AGC_PRIMARY_UC_LENGTH);

@@ -25,7 +25,15 @@ set(OPENAGC_SOURCES
     src/cb_builders.c
     src/context_state.c
     src/register_defaults.c
+    src/register_defaults_v0.c
+    src/register_defaults_v4.c
+    src/register_defaults_v5.c
+    src/register_defaults_v7.c
     src/register_defaults_v8.c
+    src/register_defaults_v9.c
+    src/register_defaults_v10.c
+    src/register_defaults_v11.c
+    src/register_defaults_versions.c
     src/acb.c
     src/dcb.c
     src/texture.c

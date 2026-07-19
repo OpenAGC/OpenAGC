@@ -34,12 +34,12 @@ extern "C" {
  * and sceAgcGetRegisterDefaults2Internal return on PS5.
  *
  * Header size: 0x40 bytes.
- * Register block size: 128 bytes (16 * (offset:uint32, value:uint32)).
+ * Register block size: 2048 bytes (up to 256 * (offset:uint32, value:uint32)).
  */
 
 #define AGC_REGISTER_DEFAULTS_HEADER_SIZE  0x40u
-#define AGC_REGISTER_DEFAULTS_BLOCK_SIZE   128u
-#define AGC_REGISTER_DEFAULTS_BLOCK_REGISTERS 16u
+#define AGC_REGISTER_DEFAULTS_BLOCK_SIZE   2048u
+#define AGC_REGISTER_DEFAULTS_BLOCK_REGISTERS 256u
 #define AGC_REGISTER_DEFAULTS_VERSION_7    7u
 #define AGC_REGISTER_DEFAULTS_VERSION_8    8u
 #define AGC_REGISTER_DEFAULTS_VERSION_10   10u
@@ -98,6 +98,42 @@ typedef struct AgcRegisterDefaultValue {
 } AgcRegisterDefaultValue;
 
 /*
+ * RegisterDefaults structure — matches the SPRX RegisterDefaults layout.
+ * This is what sceAgcGetRegisterDefaults2 returns: a pointer to this
+ * structure, which contains pointers to per-table register arrays and
+ * pointer tables.
+ *
+ * SPRX layout (from KytyPS5 RegisterDefaults, offsetof(count)==0x38):
+ *   0x00: tbl0 (CX) — array of pointers to AgcRegisterDefaultValue arrays
+ *   0x08: tbl1 (SH) — array of pointers to AgcRegisterDefaultValue arrays
+ *   0x10: tbl2 (UC) — array of pointers (often NULL)
+ *   0x18: tbl3 (UC) — array of pointers (used for internal regs)
+ *   0x20: tbl0_register_count
+ *   0x24: tbl1_register_count
+ *   0x28: tbl2_register_count
+ *   0x2c: tbl3_register_count
+ *   0x30: types — array of uint32 triplets {hash, packed_index, reserved}
+ *   0x38: count — number of type entries (= number of groups)
+ */
+typedef struct AgcRegisterDefaults {
+    const AgcRegisterDefaultValue **tbl0;
+    const AgcRegisterDefaultValue **tbl1;
+    const AgcRegisterDefaultValue **tbl2;
+    const AgcRegisterDefaultValue **tbl3;
+    uint32_t tbl0_register_count;
+    uint32_t tbl1_register_count;
+    uint32_t tbl2_register_count;
+    uint32_t tbl3_register_count;
+    const uint32_t *types;
+    uint32_t count;
+} AgcRegisterDefaults;
+
+_Static_assert(sizeof(AgcRegisterDefaults) == 0x40,
+    "AgcRegisterDefaults size must be 0x40 (matches SPRX RegisterDefaults)");
+_Static_assert(offsetof(AgcRegisterDefaults, count) == 0x38,
+    "AgcRegisterDefaults.count offset must be 0x38");
+
+/*
  * Description of a single register default group used to build a blob.
  * The group occupies one register block (128 bytes) in the output blob.
  */
@@ -138,18 +174,43 @@ size_t agcRegisterDefaultsComputeSize(
     uint32_t uc_table_length);
 
 /*
- * FW 5.50 default group tables (from observation).
+ * Default group tables (uses the latest available version, currently v8).
  */
 const AgcRegisterDefaultsGroup *agcRegisterDefaultsGetPrimaryGroups(uint32_t *out_count);
 const AgcRegisterDefaultsGroup *agcRegisterDefaultsGetInternalGroups(uint32_t *out_count);
 
 /*
- * the reference version 8 default group tables.
- * These contain the full register set (703 public, 25 internal registers)
- * extracted from reference/src/libs/agcRegisterDefaults.inc.
+ * Version-selectable group tables.
+ * Version mapping (from reference):
+ *   0-3 → v0, 4 → v4, 5-6 → v5, 7 → v7, 8 → v8, 9 → v9,
+ *   10 → v10, 11 → v11, 12 → v10
+ * Versions > 12 fall back to v11.
  */
+const AgcRegisterDefaultsGroup *agcRegisterDefaultsGetPrimaryGroupsForVersion(
+    uint32_t version, uint32_t *out_count);
+const AgcRegisterDefaultsGroup *agcRegisterDefaultsGetInternalGroupsForVersion(
+    uint32_t version, uint32_t *out_count);
+
+/*
+ * Per-version accessor functions.
+ * Each returns the register defaults for that specific firmware version.
+ */
+const AgcRegisterDefaultsGroup *agcRegisterDefaultsV0GetPrimaryGroups(uint32_t *out_count);
+const AgcRegisterDefaultsGroup *agcRegisterDefaultsV0GetInternalGroups(uint32_t *out_count);
+const AgcRegisterDefaultsGroup *agcRegisterDefaultsV4GetPrimaryGroups(uint32_t *out_count);
+const AgcRegisterDefaultsGroup *agcRegisterDefaultsV4GetInternalGroups(uint32_t *out_count);
+const AgcRegisterDefaultsGroup *agcRegisterDefaultsV5GetPrimaryGroups(uint32_t *out_count);
+const AgcRegisterDefaultsGroup *agcRegisterDefaultsV5GetInternalGroups(uint32_t *out_count);
+const AgcRegisterDefaultsGroup *agcRegisterDefaultsV7GetPrimaryGroups(uint32_t *out_count);
+const AgcRegisterDefaultsGroup *agcRegisterDefaultsV7GetInternalGroups(uint32_t *out_count);
 const AgcRegisterDefaultsGroup *agcRegisterDefaultsV8GetPrimaryGroups(uint32_t *out_count);
 const AgcRegisterDefaultsGroup *agcRegisterDefaultsV8GetInternalGroups(uint32_t *out_count);
+const AgcRegisterDefaultsGroup *agcRegisterDefaultsV9GetPrimaryGroups(uint32_t *out_count);
+const AgcRegisterDefaultsGroup *agcRegisterDefaultsV9GetInternalGroups(uint32_t *out_count);
+const AgcRegisterDefaultsGroup *agcRegisterDefaultsV10GetPrimaryGroups(uint32_t *out_count);
+const AgcRegisterDefaultsGroup *agcRegisterDefaultsV10GetInternalGroups(uint32_t *out_count);
+const AgcRegisterDefaultsGroup *agcRegisterDefaultsV11GetPrimaryGroups(uint32_t *out_count);
+const AgcRegisterDefaultsGroup *agcRegisterDefaultsV11GetInternalGroups(uint32_t *out_count);
 
 /*
  * Read-only accessors over a built blob.

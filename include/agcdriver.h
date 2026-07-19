@@ -441,11 +441,11 @@ int32_t PS5_SYSV_ABI sceAgcInit(uint32_t init_level, uint32_t flags, uint32_t *o
 int32_t PS5_SYSV_ABI sceAgcSuspendPoint(
     uint32_t field0, uint32_t field1, uint32_t field2, uint32_t field3);
 
-/* Register defaults queries (different NIDs from our existing ones) */
-int32_t PS5_SYSV_ABI sceAgcGetRegisterDefaults2(
-    uint32_t init_level, AgcContextState *out_state);
-int32_t PS5_SYSV_ABI sceAgcGetRegisterDefaults2Internal(
-    uint32_t init_level, void *out_state, uint32_t size);
+/* Register defaults version queries (NID: 2JtWUUiYBXs / wRbq6ZjNop4)
+ * SPRX-confirmed: takes a version number, returns a pointer to the
+ * register-defaults blob for that version. */
+void *PS5_SYSV_ABI sceAgcGetRegisterDefaults2(uint32_t version);
+void *PS5_SYSV_ABI sceAgcGetRegisterDefaults2Internal(uint32_t version);
 
 /* DCB packet builders missing from our API */
 

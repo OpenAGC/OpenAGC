@@ -1,6 +1,7 @@
 #include "test.h"
 #include "agc_context.h"
 #include "agc_error.h"
+#include "agcdriver.h"
 
 #include <stdint.h>
 
@@ -87,15 +88,15 @@ static void test_register_defaults_build_invalid(void) {
 }
 
 static void test_register_defaults_build_too_many_regs(void) {
-    static AgcRegisterDefaultValue regs[17];
+    static AgcRegisterDefaultValue regs[257];
     static AgcRegisterDefaultsGroup group = {
-        kAgcRegisterDefaultSpaceCx, 0, 0x12345678, 17, regs
+        kAgcRegisterDefaultSpaceCx, 0, 0x12345678, 257, regs
     };
     size_t size = agcRegisterDefaultsComputeSize(1, 1, 1, 1);
     uint8_t *blob = (uint8_t *)malloc(size);
     TEST_ASSERT(blob != NULL, "Allocated blob");
     int32_t ret = agcRegisterDefaultsBuild(blob, size, (uint64_t)(uintptr_t)blob, &group, 1, 1, 1, 1);
-    TEST_ASSERT(ret != AGC_OK, "Group with >16 registers rejected");
+    TEST_ASSERT(ret != AGC_OK, "Group with >256 registers rejected");
     free(blob);
 }
 
@@ -157,6 +158,115 @@ static void test_register_defaults_v8(void) {
     TEST_ASSERT_EQ(internal[4].registers[0].value, 0xFFFFFFFFu, "v8 internal[4] reg value");
 }
 
+/* Version selection tests — verify all versions return valid data */
+static void test_register_defaults_version_selection(void) {
+    /* Version 0 (also used for 1, 2, 3) */
+    uint32_t pub_count = 0, int_count = 0;
+    const AgcRegisterDefaultsGroup *pub0 = agcRegisterDefaultsGetPrimaryGroupsForVersion(0, &pub_count);
+    const AgcRegisterDefaultsGroup *int0 = agcRegisterDefaultsGetInternalGroupsForVersion(0, &int_count);
+    TEST_ASSERT(pub0 != 0, "v0 primary groups returned");
+    TEST_ASSERT(int0 != 0, "v0 internal groups returned");
+    TEST_ASSERT(pub_count == 150, "v0 primary group count = 150");
+    TEST_ASSERT(int_count == 15, "v0 internal group count = 15");
+
+    /* Version 1, 2, 3 should map to v0 */
+    uint32_t pub1_count = 0;
+    agcRegisterDefaultsGetPrimaryGroupsForVersion(3, &pub1_count);
+    TEST_ASSERT(pub1_count == 150, "v3 maps to v0 (150 groups)");
+
+    /* Version 4 */
+    uint32_t pub4_count = 0, int4_count = 0;
+    agcRegisterDefaultsGetPrimaryGroupsForVersion(4, &pub4_count);
+    agcRegisterDefaultsGetInternalGroupsForVersion(4, &int4_count);
+    TEST_ASSERT(pub4_count == 150, "v4 primary group count = 150");
+    TEST_ASSERT(int4_count == 19, "v4 internal group count = 19");
+
+    /* Version 5 (also used for 6) */
+    uint32_t pub5_count = 0;
+    agcRegisterDefaultsGetPrimaryGroupsForVersion(5, &pub5_count);
+    TEST_ASSERT(pub5_count == 156, "v5 primary group count = 156");
+
+    /* Version 6 maps to v5 */
+    uint32_t pub6_count = 0;
+    agcRegisterDefaultsGetPrimaryGroupsForVersion(6, &pub6_count);
+    TEST_ASSERT(pub6_count == 156, "v6 maps to v5 (156 groups)");
+
+    /* Version 7 */
+    uint32_t pub7_count = 0, int7_count = 0;
+    agcRegisterDefaultsGetPrimaryGroupsForVersion(7, &pub7_count);
+    agcRegisterDefaultsGetInternalGroupsForVersion(7, &int7_count);
+    TEST_ASSERT(pub7_count == 127, "v7 primary group count = 127");
+    TEST_ASSERT(int7_count == 22, "v7 internal group count = 22");
+
+    /* Version 8 */
+    uint32_t pub8_count = 0, int8_count = 0;
+    agcRegisterDefaultsGetPrimaryGroupsForVersion(8, &pub8_count);
+    agcRegisterDefaultsGetInternalGroupsForVersion(8, &int8_count);
+    TEST_ASSERT(pub8_count == 127, "v8 primary group count = 127");
+    TEST_ASSERT(int8_count == 22, "v8 internal group count = 22");
+
+    /* Version 9 */
+    uint32_t pub9_count = 0;
+    agcRegisterDefaultsGetPrimaryGroupsForVersion(9, &pub9_count);
+    TEST_ASSERT(pub9_count == 127, "v9 primary group count = 127");
+
+    /* Version 10 */
+    uint32_t pub10_count = 0, int10_count = 0;
+    agcRegisterDefaultsGetPrimaryGroupsForVersion(10, &pub10_count);
+    agcRegisterDefaultsGetInternalGroupsForVersion(10, &int10_count);
+    TEST_ASSERT(pub10_count == 128, "v10 primary group count = 128");
+    TEST_ASSERT(int10_count == 28, "v10 internal group count = 28");
+
+    /* Version 11 */
+    uint32_t pub11_count = 0, int11_count = 0;
+    agcRegisterDefaultsGetPrimaryGroupsForVersion(11, &pub11_count);
+    agcRegisterDefaultsGetInternalGroupsForVersion(11, &int11_count);
+    TEST_ASSERT(pub11_count == 137, "v11 primary group count = 137");
+    TEST_ASSERT(int11_count == 24, "v11 internal group count = 24");
+
+    /* Version 12 maps to v10 */
+    uint32_t pub12_count = 0;
+    agcRegisterDefaultsGetPrimaryGroupsForVersion(12, &pub12_count);
+    TEST_ASSERT(pub12_count == 128, "v12 maps to v10 (128 groups)");
+
+    /* Version > 12 falls back to v11 */
+    uint32_t pub99_count = 0;
+    agcRegisterDefaultsGetPrimaryGroupsForVersion(99, &pub99_count);
+    TEST_ASSERT(pub99_count == 137, "v99 falls back to v11 (137 groups)");
+}
+
+/* sceAgcGetRegisterDefaults2 returns a pointer to an AgcRegisterDefaults structure */
+static void test_register_defaults_get_defaults2(void) {
+    /* Version 8 (FW 5.50) */
+    AgcRegisterDefaults *defaults8 = (AgcRegisterDefaults *)sceAgcGetRegisterDefaults2(8);
+    TEST_ASSERT(defaults8 != 0, "GetRegisterDefaults2(8) returns non-NULL");
+    TEST_ASSERT(defaults8->count == 127, "GetRegisterDefaults2(8) count = 127");
+    TEST_ASSERT(defaults8->types != 0, "GetRegisterDefaults2(8) types non-NULL");
+
+    /* Internal version */
+    AgcRegisterDefaults *int_defaults8 = (AgcRegisterDefaults *)sceAgcGetRegisterDefaults2Internal(8);
+    TEST_ASSERT(int_defaults8 != 0, "GetRegisterDefaults2Internal(8) returns non-NULL");
+    TEST_ASSERT(int_defaults8->count == 22, "GetRegisterDefaults2Internal(8) count = 22");
+
+    /* Version 0 */
+    AgcRegisterDefaults *defaults0 = (AgcRegisterDefaults *)sceAgcGetRegisterDefaults2(0);
+    TEST_ASSERT(defaults0 != 0, "GetRegisterDefaults2(0) returns non-NULL");
+    TEST_ASSERT(defaults0->count == 150, "GetRegisterDefaults2(0) count = 150");
+
+    /* Version > 12 falls back to v11 */
+    AgcRegisterDefaults *defaults99 = (AgcRegisterDefaults *)sceAgcGetRegisterDefaults2(99);
+    TEST_ASSERT(defaults99 != 0, "GetRegisterDefaults2(99) returns non-NULL (fallback to v11)");
+    TEST_ASSERT(defaults99->count == 137, "GetRegisterDefaults2(99) count = 137 (v11)");
+
+    /* Caching: second call returns same pointer */
+    AgcRegisterDefaults *defaults8_again = (AgcRegisterDefaults *)sceAgcGetRegisterDefaults2(8);
+    TEST_ASSERT(defaults8 == defaults8_again, "GetRegisterDefaults2(8) cached on second call");
+
+    /* Verify types array has correct format */
+    TEST_ASSERT(defaults8->types[0] != 0, "GetRegisterDefaults2(8) types[0] hash non-zero");
+    TEST_ASSERT(defaults8->types[2] == 0, "GetRegisterDefaults2(8) types[2] reserved = 0");
+}
+
 void test_suite_register_defaults(void) {
     TEST_SUITE("Register Defaults");
     TEST_RUN(test_register_defaults_compute_size);
@@ -165,4 +275,6 @@ void test_suite_register_defaults(void) {
     TEST_RUN(test_register_defaults_build_too_many_regs);
     TEST_RUN(test_register_defaults_fw550_tables);
     TEST_RUN(test_register_defaults_v8);
+    TEST_RUN(test_register_defaults_version_selection);
+    TEST_RUN(test_register_defaults_get_defaults2);
 }

@@ -153,7 +153,7 @@ Implemented and host-tested:
 Current expected host test result:
 
 ```text
-1610 passed, 0 failed
+1642 passed, 0 failed
 ```
 
 ## Phase 0: RE Groundwork
@@ -505,7 +505,7 @@ Completed:
 - [x] Switch from MIT to Apache 2.0 license (LICENSE file, SPDX headers)
 
 Pending:
-- [ ] Add version selection for register defaults (v0, v4, v5, v7, v8, v9, v10, v11)
+- [x] Add version selection for register defaults (v0, v4, v5, v7, v8, v9, v10, v11)
 
 ## Working Rules
 
