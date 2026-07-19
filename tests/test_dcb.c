@@ -786,6 +786,7 @@ static void test_batch2_dcb_workload_helpers(void) {
 static void test_batch3_ref_patchers(void);
 static void test_batch3_ref_getsize_helpers(void);
 static void test_batch3_ref_driver_stubs(void);
+static void test_batch3_submit_wrappers(void);
 
 void test_suite_dcb(void) {
     TEST_SUITE("DCB Commands");
@@ -842,6 +843,7 @@ void test_suite_dcb(void) {
     TEST_RUN(test_batch3_ref_patchers);
     TEST_RUN(test_batch3_ref_getsize_helpers);
     TEST_RUN(test_batch3_ref_driver_stubs);
+    TEST_RUN(test_batch3_submit_wrappers);
 }
 
 /* ===================================================================== */
@@ -1026,4 +1028,36 @@ static void test_batch3_ref_driver_stubs(void) {
     uint32_t wl_id = 0xDEAD;
     TEST_ASSERT_EQ(sceAgcDriverRegisterWorkloadStream(NULL, &wl_id), AGC_ERROR_NOT_SUPPORTED,
         "RegisterWorkloadStream returns NOT_SUPPORTED");
+}
+
+static void test_batch3_submit_wrappers(void) {
+    /* SubmitMultiDcbs with count=0 returns OK */
+    TEST_ASSERT_EQ(sceAgcDriverSubmitMultiDcbs(NULL, NULL, 0), AGC_OK,
+        "SubmitMultiDcbs count=0 returns OK");
+
+    /* SubmitMultiDcbs with null arrays returns INVALID_ARGUMENT */
+    TEST_ASSERT_EQ(sceAgcDriverSubmitMultiDcbs(NULL, NULL, 2), AGC_ERROR_INVALID_ARGUMENT,
+        "SubmitMultiDcbs null arrays returns INVALID_ARGUMENT");
+
+    /* SubmitCommandBuffer with null dcb returns OK (reference skips null) */
+    TEST_ASSERT_EQ(sceAgcDriverSubmitCommandBuffer(0, NULL, 0), AGC_OK,
+        "SubmitCommandBuffer null dcb returns OK");
+
+    /* SubmitMultiCommandBuffers with count=0 returns OK */
+    TEST_ASSERT_EQ(sceAgcDriverSubmitMultiCommandBuffers(0, NULL, NULL, 0), AGC_OK,
+        "SubmitMultiCommandBuffers count=0 returns OK");
+
+    /* SubmitMultiCommandBuffers with null arrays returns INVALID_ARGUMENT */
+    TEST_ASSERT_EQ(sceAgcDriverSubmitMultiCommandBuffers(0, NULL, NULL, 2),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "SubmitMultiCommandBuffers null arrays returns INVALID_ARGUMENT");
+
+    /* SubmitMultiAcbs with count=0 returns OK */
+    TEST_ASSERT_EQ(sceAgcDriverSubmitMultiAcbs(0, NULL, NULL, 0), AGC_OK,
+        "SubmitMultiAcbs count=0 returns OK");
+
+    /* SubmitMultiAcbs with null arrays returns INVALID_ARGUMENT */
+    TEST_ASSERT_EQ(sceAgcDriverSubmitMultiAcbs(0, NULL, NULL, 2),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "SubmitMultiAcbs null arrays returns INVALID_ARGUMENT");
 }

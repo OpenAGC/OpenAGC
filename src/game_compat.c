@@ -200,6 +200,94 @@ int32_t PS5_SYSV_ABI sceAgcDriverRegisterWorkloadStream(
 }
 
 /* ===================================================================== */
+/* Convenience submit wrappers (reference-confirmed)                     */
+/* ===================================================================== */
+
+/* sceAgcDriverSubmitMultiDcbs (NID: 6UzEidRZwkg)
+ * Loops over DCB arrays and submits each via sceAgcDriverSubmitDcb. */
+int32_t PS5_SYSV_ABI sceAgcDriverSubmitMultiDcbs(
+    void *const dcb_gpu_addrs[], const uint32_t *dcb_sizes_in_dwords,
+    uint32_t count)
+{
+    if (count == 0)
+        return AGC_OK;
+    if (!dcb_gpu_addrs || !dcb_sizes_in_dwords)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    for (uint32_t i = 0; i < count; i++) {
+        if (!dcb_gpu_addrs[i])
+            continue;
+        AgcCommandBufferSubmit pkt = {0};
+        pkt.command_address = (uint64_t)(uintptr_t)dcb_gpu_addrs[i];
+        pkt.dword_count = dcb_sizes_in_dwords[i];
+        int32_t ret = sceAgcDriverSubmitDcb(&pkt);
+        if (ret < 0)
+            return ret;
+    }
+    return AGC_OK;
+}
+
+/* sceAgcDriverSubmitCommandBuffer (NID: b4fpgH5ZXxQ)
+ * Submits a single DCB to the graphics queue. The queue parameter is
+ * unused in the reference implementation for DCB submission. */
+int32_t PS5_SYSV_ABI sceAgcDriverSubmitCommandBuffer(
+    uint32_t queue, void *dcb, uint32_t size_in_dwords)
+{
+    (void)queue;
+    if (!dcb || size_in_dwords == 0)
+        return AGC_OK;
+
+    AgcCommandBufferSubmit pkt = {0};
+    pkt.command_address = (uint64_t)(uintptr_t)dcb;
+    pkt.dword_count = size_in_dwords;
+    return sceAgcDriverSubmitDcb(&pkt);
+}
+
+/* sceAgcDriverSubmitMultiCommandBuffers (NID: Fj7r9EHzF38)
+ * Loops over DCB arrays and submits each via SubmitCommandBuffer. */
+int32_t PS5_SYSV_ABI sceAgcDriverSubmitMultiCommandBuffers(
+    uint32_t queue, void *const dcbs[], const uint32_t *sizes_in_dwords,
+    uint32_t count)
+{
+    if (count == 0)
+        return AGC_OK;
+    if (!dcbs || !sizes_in_dwords)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    for (uint32_t i = 0; i < count; i++) {
+        int32_t ret = sceAgcDriverSubmitCommandBuffer(
+            queue, dcbs[i], sizes_in_dwords[i]);
+        if (ret < 0)
+            return ret;
+    }
+    return AGC_OK;
+}
+
+/* sceAgcDriverSubmitMultiAcbs (NID: HF3YllT3mXU)
+ * Loops over ACB arrays and submits each via sceAgcDriverSubmitAcb. */
+int32_t PS5_SYSV_ABI sceAgcDriverSubmitMultiAcbs(
+    uint32_t queue, void *const acbs[], const uint32_t *sizes_in_dwords,
+    uint32_t count)
+{
+    if (count == 0)
+        return AGC_OK;
+    if (!acbs || !sizes_in_dwords)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    for (uint32_t i = 0; i < count; i++) {
+        if (!acbs[i])
+            continue;
+        AgcCommandBufferSubmit pkt = {0};
+        pkt.command_address = (uint64_t)(uintptr_t)acbs[i];
+        pkt.dword_count = sizes_in_dwords[i];
+        int32_t ret = sceAgcDriverSubmitAcb(queue, &pkt);
+        if (ret < 0)
+            return ret;
+    }
+    return AGC_OK;
+}
+
+/* ===================================================================== */
 /* libSceAgc user-facing wrappers                                        */
 /* ===================================================================== */
 

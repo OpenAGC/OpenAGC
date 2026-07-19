@@ -51,6 +51,23 @@ int32_t PS5_SYSV_ABI sceAgcDriverSubmitMultiCommandBuffersDirect(
 int32_t PS5_SYSV_ABI sceAgcDriverSubmitDcb(const AgcCommandBufferSubmit *packet);
 int32_t PS5_SYSV_ABI sceAgcDriverSubmitAcb(
     uint32_t owner_handle, const AgcCommandBufferSubmit *packet);
+
+/* Convenience submit wrappers (reference-confirmed).
+ * These loop over arrays and delegate to the core submit path.
+ * NIDs: SubmitMultiDcbs=6UzEidRZwkg, SubmitCommandBuffer=b4fpgH5ZXxQ,
+ *        SubmitMultiCommandBuffers=Fj7r9EHzF38,
+ *        SubmitMultiAcbs=HF3YllT3mXU */
+int32_t PS5_SYSV_ABI sceAgcDriverSubmitMultiDcbs(
+    void *const dcb_gpu_addrs[], const uint32_t *dcb_sizes_in_dwords,
+    uint32_t count);
+int32_t PS5_SYSV_ABI sceAgcDriverSubmitCommandBuffer(
+    uint32_t queue, void *dcb, uint32_t size_in_dwords);
+int32_t PS5_SYSV_ABI sceAgcDriverSubmitMultiCommandBuffers(
+    uint32_t queue, void *const dcbs[], const uint32_t *sizes_in_dwords,
+    uint32_t count);
+int32_t PS5_SYSV_ABI sceAgcDriverSubmitMultiAcbs(
+    uint32_t queue, void *const acbs[], const uint32_t *sizes_in_dwords,
+    uint32_t count);
 int32_t PS5_SYSV_ABI sceAgcDriverSuspendPointSubmitDirect(
     uint32_t field0, uint32_t field1, uint32_t field2, uint32_t field3);
 bool    PS5_SYSV_ABI sceAgcDriverIsSuspendPointInFlightDirect(uint32_t value);
