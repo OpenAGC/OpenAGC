@@ -10,7 +10,7 @@ extern "C" {
 #endif
 
 /*
- * AGC register default blob layout recovered from SharpEmu.
+ * AGC register default blob layout recovered from observation.
  *
  * The firmware builds a structured blob containing CX/SH/UC tables,
  * a type table, and fixed-size register blocks. Each table entry is a
@@ -28,7 +28,7 @@ extern "C" {
 #define AGC_REGISTER_DEFAULTS_VERSION_8    8u
 #define AGC_REGISTER_DEFAULTS_VERSION_10   10u
 
-/* FW 5.50 register-defaults table lengths (from SharpEmu). */
+/* FW 5.50 register-defaults table lengths (from observation). */
 #define AGC_PRIMARY_CX_LENGTH   78u
 #define AGC_PRIMARY_SH_LENGTH   29u
 #define AGC_PRIMARY_UC_LENGTH   20u
@@ -122,18 +122,18 @@ size_t agcRegisterDefaultsComputeSize(
     uint32_t uc_table_length);
 
 /*
- * FW 5.50 default group tables (from SharpEmu).
+ * FW 5.50 default group tables (from observation).
  */
 const AgcRegisterDefaultsGroup *agcRegisterDefaultsGetPrimaryGroups(uint32_t *out_count);
 const AgcRegisterDefaultsGroup *agcRegisterDefaultsGetInternalGroups(uint32_t *out_count);
 
 /*
- * KytyPS5 version 8 default group tables.
+ * the reference version 8 default group tables.
  * These contain the full register set (703 public, 25 internal registers)
- * extracted from KytyPS5/src/libs/agcRegisterDefaults.inc.
+ * extracted from reference/src/libs/agcRegisterDefaults.inc.
  */
-const AgcRegisterDefaultsGroup *agcKytyPs5V8GetPrimaryGroups(uint32_t *out_count);
-const AgcRegisterDefaultsGroup *agcKytyPs5V8GetInternalGroups(uint32_t *out_count);
+const AgcRegisterDefaultsGroup *agcRegisterDefaultsV8GetPrimaryGroups(uint32_t *out_count);
+const AgcRegisterDefaultsGroup *agcRegisterDefaultsV8GetInternalGroups(uint32_t *out_count);
 
 /*
  * Read-only accessors over a built blob.

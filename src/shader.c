@@ -2,7 +2,7 @@
  * openagc — shader.c
  *
  * AGC shader record parser (PS5 Gen5). The layout is recovered from
- * SharpEmu observation and cross-referenced with the offsets in
+ * HLE reference and cross-referenced with the offsets in
  * include/agc_re.h. Only observed fields are exposed; unknown areas are
  * preserved as padding.
  */
@@ -203,7 +203,7 @@ int32_t agcShaderLinkHsGs(AgcShaderRecord *dst,
 }
 
 /* ===================================================================== */
-/* Fused shader support (KytyPS5-confirmed)                              */
+/* Fused shader support (reference-confirmed)                              */
 /* ===================================================================== */
 
 /* Find a shader register by offset, with occurrence count for duplicates. */

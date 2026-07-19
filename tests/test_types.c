@@ -36,7 +36,7 @@ static void test_pm4_header(void) {
     TEST_ASSERT_EQ(agcPm4Length(hdr), 6, "PM4 length should decode from bits 29:16");
     TEST_ASSERT_EQ(agcPm4Opcode(hdr), AGC_PM4_OP_NOP, "opcode should be NOP");
     TEST_ASSERT_EQ(agcPm4Subcommand(hdr), AGC_PM4_SUB_FLIP, "subcommand should be flip");
-    TEST_ASSERT_EQ(hdr, 0xC004105Cu, "SharpEmu/RPCSX PM4 header layout");
+    TEST_ASSERT_EQ(hdr, 0xC004105Cu, "observation/RPCSX PM4 header layout");
 }
 
 static void test_known_nids(void) {

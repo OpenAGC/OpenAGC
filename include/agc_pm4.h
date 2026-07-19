@@ -6,8 +6,8 @@
 /*
  * PS5 Gen5 AGC/PM4 packet helpers.
  *
- * SharpEmu and RPCSX both decode type-3 packets with length stored in bits
- * 29:16 as (length_dwords - 2). SharpEmu also shows several AGC commands
+ * HLE reference and RPCSX both decode type-3 packets with length stored in bits
+ * 29:16 as (length_dwords - 2). HLE reference also shows several AGC commands
  * encoded as IT_NOP packets with an AGC subcommand in bits 7:2.
  */
 
@@ -43,9 +43,9 @@ typedef enum AgcPm4Opcode {
     AGC_PM4_OP_NUM_INSTANCES             = 0x2F,
     /* AGC-custom multi-instanced indexed draw / dispatch draw preamble.
      * RE: SPRX sceAgcDcbDrawIndexMultiInstanced emits 0xc0073a00.
-     * KytyPS5-confirmed: IT_DISPATCH_DRAW_PREAMBLE = 0x3A (same opcode). */
+     * reference-confirmed: IT_DISPATCH_DRAW_PREAMBLE = 0x3A (same opcode). */
     AGC_PM4_OP_DRAW_INDEX_MULTI_INSTANCED = 0x3A,
-    AGC_PM4_OP_DISPATCH_DRAW_PREAMBLE     = 0x3A,  /* alias, KytyPS5 name */
+    AGC_PM4_OP_DISPATCH_DRAW_PREAMBLE     = 0x3A,  /* alias, the reference name */
     AGC_PM4_OP_INDIRECT_BUFFER_CNST      = 0x33,
     AGC_PM4_OP_DRAW_INDEX_OFFSET_2       = 0x35,
     AGC_PM4_OP_WRITE_DATA                = 0x37,
@@ -65,7 +65,7 @@ typedef enum AgcPm4Opcode {
     AGC_PM4_OP_REWIND                    = 0x59,
     AGC_PM4_OP_SET_CONFIG_REG            = 0x68,
     AGC_PM4_OP_SET_CONTEXT_REG           = 0x69,
-    /* KytyPS5-confirmed: IT_SET_CONTEXT_REG_INDIRECT = 0x9F.
+    /* reference-confirmed: IT_SET_CONTEXT_REG_INDIRECT = 0x9F.
      * Alias for AGC_PM4_OP_SET_CX_REG_INDIRECT below. */
     AGC_PM4_OP_SET_CONTEXT_REG_INDIRECT  = 0x9F,
     AGC_PM4_OP_SET_SH_REG                = 0x76,
@@ -108,7 +108,7 @@ typedef enum AgcPm4Opcode {
 typedef enum AgcPm4Subcommand {
     AGC_PM4_SUB_ZERO             = 0x00,
     /* DEPRECATED: DrawIndexAuto now uses IT_DRAW_INDEX_AUTO (0x2D) directly
-     * (KytyPS5-confirmed). This NOP subcommand is retained for reference
+     * (reference-confirmed). This NOP subcommand is retained for reference
      * only — do not use in new packet builders. */
     AGC_PM4_SUB_DRAW_INDEX_AUTO  = 0x04,
     AGC_PM4_SUB_DRAW_RESET       = 0x05,

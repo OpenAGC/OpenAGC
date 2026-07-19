@@ -120,30 +120,30 @@ static void test_register_defaults_fw550_tables(void) {
     TEST_ASSERT_EQ(internal_size, 0xCF8u, "Internal blob size");
 }
 
-static void test_register_defaults_kytyps5_v8(void) {
+static void test_register_defaults_v8(void) {
     uint32_t primary_count = 0;
     uint32_t internal_count = 0;
-    const AgcRegisterDefaultsGroup *primary = agcKytyPs5V8GetPrimaryGroups(&primary_count);
-    const AgcRegisterDefaultsGroup *internal = agcKytyPs5V8GetInternalGroups(&internal_count);
+    const AgcRegisterDefaultsGroup *primary = agcRegisterDefaultsV8GetPrimaryGroups(&primary_count);
+    const AgcRegisterDefaultsGroup *internal = agcRegisterDefaultsV8GetInternalGroups(&internal_count);
 
-    TEST_ASSERT(primary != NULL, "KytyPS5 v8 primary table exists");
-    TEST_ASSERT(internal != NULL, "KytyPS5 v8 internal table exists");
-    TEST_ASSERT_EQ(primary_count, 127u, "KytyPS5 v8 primary group count");
-    TEST_ASSERT_EQ(internal_count, 22u, "KytyPS5 v8 internal group count");
+    TEST_ASSERT(primary != NULL, "the reference v8 primary table exists");
+    TEST_ASSERT(internal != NULL, "the reference v8 internal table exists");
+    TEST_ASSERT_EQ(primary_count, 127u, "the reference v8 primary group count");
+    TEST_ASSERT_EQ(internal_count, 22u, "the reference v8 internal group count");
 
     /* Count total registers across all primary groups */
     uint32_t total_primary_regs = 0;
     for (uint32_t i = 0; i < primary_count; i++)
         total_primary_regs += primary[i].register_count;
-    TEST_ASSERT_EQ(total_primary_regs, 703u, "KytyPS5 v8 primary total registers");
+    TEST_ASSERT_EQ(total_primary_regs, 703u, "the reference v8 primary total registers");
 
     /* Count total registers across all internal groups */
     uint32_t total_internal_regs = 0;
     for (uint32_t i = 0; i < internal_count; i++)
         total_internal_regs += internal[i].register_count;
-    TEST_ASSERT_EQ(total_internal_regs, 25u, "KytyPS5 v8 internal total registers");
+    TEST_ASSERT_EQ(total_internal_regs, 25u, "the reference v8 internal total registers");
 
-    /* Verify some known non-zero values from KytyPS5 */
+    /* Verify some known non-zero values from the reference */
     /* Internal CX group 0: offset 0x00E, value 0x00000002 */
     TEST_ASSERT_EQ(internal[0].space, kAgcRegisterDefaultSpaceCx, "v8 internal[0] space");
     TEST_ASSERT_EQ(internal[0].registers[0].offset, 0x00Eu, "v8 internal[0] reg offset");
@@ -162,5 +162,5 @@ void test_suite_register_defaults(void) {
     TEST_RUN(test_register_defaults_build_invalid);
     TEST_RUN(test_register_defaults_build_too_many_regs);
     TEST_RUN(test_register_defaults_fw550_tables);
-    TEST_RUN(test_register_defaults_kytyps5_v8);
+    TEST_RUN(test_register_defaults_v8);
 }

@@ -24,7 +24,7 @@ builds with ps5-payload-sdk; hardware validation is the remaining step.
   register-defaults blob builder, and `CLEAR_STATE` submission path
 - **Gen5 AGC/PM4 packet encoding** — PS5 packet header helpers and decoded
   opcode/subcommand constants (including kernel-side suspend-point marker)
-- **RE packet model** — SharpEmu/RPCSX-compatible type-3 packet length and
+- **RE packet model** — HLE reference/RPCSX-compatible type-3 packet length and
   AGC `IT_NOP` subcommand helpers
 - **Command-buffer cursor model** — recovered `SceAgcCb` cursor offsets and
   host allocation helpers
@@ -73,7 +73,7 @@ Completed and tested:
 - Reverse-engineering headers for packet layout, NIDs, shader offsets, and
   command-buffer offsets
 - Cursor-based command-buffer allocation using recovered `SceAgcCb` offsets
-- SharpEmu-confirmed `sceAgcCb*` and `sceAgcDcb*` packet builders for NOP,
+- HLE-reference-confirmed `sceAgcCb*` and `sceAgcDcb*` packet builders for NOP,
   dispatch, SH registers, release memory, indirect register sets, write-data,
   wait-reg-mem, DMA, indirect dispatch/base args, index buffer setup, indexed
   draw packets, markers, wait-safe, flip, and LOD stats helpers
@@ -113,7 +113,7 @@ Reference inputs used for the open implementation:
 - Incomplete reference project: `/Users/bizkut/Downloads/PS5/homebrew/ps5-openagc`
   — **NOT proven working.** Used for NID cross-reference only; contains known
   ioctl errors. See `analysis/ps5_openagc_audit.md`.
-- Emulator reference: `/Users/bizkut/Downloads/PS5/homebrew/sharpemu`
+- Emulator reference: `/Users/bizkut/Downloads/PS5/homebrew/hle reference`
 - GPU/PM4 reference: `/Users/bizkut/Downloads/PS5/homebrew/rpcsx`
 
 Firmware modules and microcode are used only as reverse-engineering references;
@@ -218,7 +218,7 @@ openagc/
 - Existing `ps5-openagc` notes for NID maps (ioctl tables and PM4 cataloging
   from ps5-openagc are NOT trusted — contains known errors; see
   `analysis/ps5_openagc_audit.md`)
-- `sharpemu` as a PS5 HLE/runtime behavior reference
+- `hle reference` as a PS5 HLE/runtime behavior reference
 - `rpcsx` as a GPU/PM4/GNM queue, packet, tiler, and shader reference
 
 ## License

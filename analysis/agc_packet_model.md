@@ -1,6 +1,6 @@
 # AGC Packet Model
 
-Current working model from SharpEmu and RPCSX:
+Current working model from HLE reference and RPCSX:
 
 ```c
 header =
@@ -23,18 +23,18 @@ Known AGC subcommands carried by `IT_NOP`:
 
 | Subcommand | Meaning | Status |
 |---:|---|---|
-| `0x04` | Draw index auto | **DEPRECATED** — use `IT_DRAW_INDEX_AUTO (0x2D)` directly (KytyPS5-confirmed) |
+| `0x04` | Draw index auto | **DEPRECATED** — use `IT_DRAW_INDEX_AUTO (0x2D)` directly (reference-confirmed) |
 | `0x05` | Draw reset | Active |
 | `0x06` | Wait flip done | Active |
 | `0x09` | ACB reset | Active |
 | `0x0A` | Wait memory 32-bit | Active |
 | `0x0B` | Push marker | Active |
 | `0x0C` | Pop marker | Active |
-| `0x11` | SH registers indirect | **DEPRECATED** — use `IT_SET_SH_REG_INDIRECT (0x63)` directly (SPRX+KytyPS5-confirmed) |
-| `0x12` | CX registers indirect | **DEPRECATED** — use `IT_SET_CONTEXT_REG_INDIRECT (0x9F)` directly (SPRX+KytyPS5-confirmed) |
-| `0x13` | UC registers indirect | **DEPRECATED** — use `IT_SET_UCONFIG_REG_INDIRECT (0x64)` directly (SPRX+KytyPS5-confirmed) |
+| `0x11` | SH registers indirect | **DEPRECATED** — use `IT_SET_SH_REG_INDIRECT (0x63)` directly (SPRX+reference-confirmed) |
+| `0x12` | CX registers indirect | **DEPRECATED** — use `IT_SET_CONTEXT_REG_INDIRECT (0x9F)` directly (SPRX+reference-confirmed) |
+| `0x13` | UC registers indirect | **DEPRECATED** — use `IT_SET_UCONFIG_REG_INDIRECT (0x64)` directly (SPRX+reference-confirmed) |
 | `0x14` | Acquire memory | Active |
-| `0x15` | Write data | Active (but `IT_WRITE_DATA (0x37)` is also valid — KytyPS5 uses the direct opcode) |
+| `0x15` | Write data | Active (but `IT_WRITE_DATA (0x37)` is also valid — the reference uses the direct opcode) |
 | `0x16` | Wait memory 64-bit | Active |
 | `0x17` | Flip | Active |
 | `0x18` | Release memory | Active |
@@ -46,7 +46,7 @@ Immediate implementation rule:
   `DRAW_INDEX_AUTO`, `DISPATCH_INDIRECT`, `EVENT_WRITE`, `SET_SH_REG`,
   `SET_SH_REG_INDIRECT`, `SET_CONTEXT_REG_INDIRECT`, `SET_UCONFIG_REG_INDIRECT`,
   `WRITE_DATA`, `PFP_SYNC_ME`, `SET_PREDICATION`, and `MEM_SEMAPHORE`.
-  These are confirmed by SPRX disassembly and/or KytyPS5 emulator.
+  These are confirmed by SPRX disassembly and/or the reference implementation.
 - Use `IT_NOP + subcommand` for AGC-custom wrapper packets that do not have
   standard PM4 opcode equivalents, such as flip, acquire memory, wait memory,
   release memory, DMA data, push/pop marker, and draw reset.
@@ -93,7 +93,7 @@ Implemented cursor-based builders:
 
 ## Submit Descriptor
 
-SharpEmu parses DCB/ACB submit packets as:
+HLE reference parses DCB/ACB submit packets as:
 
 | Offset | Field |
 |---:|---|

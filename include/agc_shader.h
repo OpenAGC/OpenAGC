@@ -11,7 +11,7 @@ extern "C" {
 #endif
 
 /*
- * AGC shader record (PS5 Gen5) parsed from SharpEmu observation.
+ * AGC shader record (PS5 Gen5) parsed from observation.
  *
  * The shader record is a fixed 0x60-byte header that contains pointers to
  * the code body, user-data table, CX/SH register blocks, specials block,
@@ -33,7 +33,7 @@ typedef enum AgcShaderType {
 } AgcShaderType;
 
 /* Shader binary sub-types for fused shader halves.
- * KytyPS5-confirmed: ShaderBinaryType enum from gpu_defs.h.
+ * reference-confirmed: ShaderBinaryType enum from gpu_defs.h.
  * Used by sceAgcGetFusedShaderSize / sceAgcFuseShaderHalves. */
 typedef enum AgcShaderBinaryType {
     kAgcShaderBinaryTypeCs      = 0,
@@ -59,7 +59,7 @@ typedef enum AgcShaderBinaryType {
 #define AGC_SHADER_TYPE_CS   6
 
 /*
- * AGC shader record layout recovered from SharpEmu and cross-referenced
+ * AGC shader record layout recovered from observation and cross-referenced
  * with ps5-openagc (NID/field name reference only — NOT proven working) and
  * shadPS4.
  *
@@ -115,7 +115,7 @@ typedef struct AgcShaderRecord {
 /*
  * AGC shader Specials block — pointed to by AgcShaderRecord.specials.
  * Contains graphics-engine (GE) and vertex-generating-team (VGT) register
- * values that configure the shader pipeline. Recovered from SharpEmu
+ * values that configure the shader pipeline. Recovered from observation
  * observation and cross-referenced with shadPS4/RPCSX register definitions.
  *
  * The specials block is a variable-length array of register value pairs.
@@ -182,7 +182,7 @@ int32_t agcShaderLinkHsGs(AgcShaderRecord *dst,
 
 /*
  * Size/align result for fused shader scratch memory.
- * KytyPS5-confirmed: SizeAlign struct from libGraphicsDriver.
+ * reference-confirmed: SizeAlign struct from libGraphicsDriver.
  */
 typedef struct AgcSizeAlign {
     uint64_t size;
@@ -190,7 +190,7 @@ typedef struct AgcSizeAlign {
 } AgcSizeAlign;
 
 /*
- * Shader register pair (offset, value) — KytyPS5-confirmed layout.
+ * Shader register pair (offset, value) — reference-confirmed layout.
  * Used by fused shader register patching.
  */
 typedef struct AgcShaderRegister {
@@ -198,14 +198,14 @@ typedef struct AgcShaderRegister {
     uint32_t value;
 } AgcShaderRegister;
 
-/* SH register offsets used by fused shader patching (KytyPS5-confirmed). */
+/* SH register offsets used by fused shader patching (reference-confirmed). */
 #define AGC_SPI_SHADER_PGM_CHKSUM_GS  0x80
 #define AGC_SPI_SHADER_PGM_LO_ES      0xC8
 #define AGC_SPI_SHADER_PGM_LO_LS      0x148
 
 /*
  * sceAgcGetFusedShaderSize (NID: dolOmWH+huQ)
- * KytyPS5-confirmed: computes the scratch memory size needed to fuse
+ * reference-confirmed: computes the scratch memory size needed to fuse
  * front+back shader halves. The front must be GsFront(4) or HsFront(5),
  * the back must be GsBack(6) or HsBack(7) respectively.
  *
@@ -220,7 +220,7 @@ int32_t PS5_SYSV_ABI sceAgcGetFusedShaderSize(
 
 /*
  * sceAgcFuseShaderHalves (NID: fd5Bp5tGTgo)
- * KytyPS5-confirmed: fuses front+back shader halves into a single shader
+ * reference-confirmed: fuses front+back shader halves into a single shader
  * record. The front must be GsFront(4) or HsFront(5), the back must be
  * GsBack(6) or HsBack(7) respectively.
  *

@@ -10,7 +10,7 @@ including Wave32, geometry, ray tracing, cache synchronization, and VRS targets.
 The host-generic implementation now has a tested model for:
 
 - Type-3 AGC/PM4 packet headers using `length_dwords - 2` in bits `29:16`
-- AGC `IT_NOP` subcommands recovered from SharpEmu
+- AGC `IT_NOP` subcommands recovered from HLE reference
 - Known Gen5 AGC NID constants for mapped exports
 - `SceAgcCb` cursor offsets and cursor allocation
 - `sceAgcCb*` and `sceAgcDcb*` cursor-based packet builders
@@ -26,7 +26,7 @@ The host-generic implementation now has a tested model for:
 - Typed sampler helpers: `SetClampMode`, `SetFilterMode`, `SetBorderColor`, `SetMaxAnisotropy` (hardware-correct SQ_IMG_SAMP_WORD0-3 bit layout)
 - Texture format encode/decode helpers: `agcTextureFormatEncode`, `agcTextureFormatGetDataFormat`, `agcTextureFormatGetNumberType`
 - Shader linking: `agcShaderLinkHsGs` — combines HS/LS + CS shader records into GS (matches SPRX ordinal 131)
-- Fused shader support: `sceAgcGetFusedShaderSize` (NID: dolOmWH+huQ) and `sceAgcFuseShaderHalves` (NID: fd5Bp5tGTgo) — KytyPS5-confirmed fusion of GS/HS front+back shader halves with register patching
+- Fused shader support: `sceAgcGetFusedShaderSize` (NID: dolOmWH+huQ) and `sceAgcFuseShaderHalves` (NID: fd5Bp5tGTgo) — reference-confirmed fusion of GS/HS front+back shader halves with register patching
 - EOP flip submit: `sceAgcDriverSubmitEopFlip` (prospero) + `sceAgcDcbSetEopFlip` DCB builder (IT_RELEASE_MEM 0x49)
 - NID table expanded to 148 identified exports (78 original + 36 from deep SPRX disassembly + 34 from batch 2 disassembly)
 - Async-compute queue submission: generic backend queue tracking (32 slots), ACB submit validates queue in-use, full create→submit→destroy flow tested
@@ -100,7 +100,7 @@ Cursor-based builders:
 - `sceAgcCbSetShRegistersDirect`
 - `sceAgcCbSetCxRegistersDirect`
 - `sceAgcDcbWriteData`
-- `sceAgcDcbWaitRegMem` — KytyPS5-confirmed: 32-bit variant now 7 dwords
+- `sceAgcDcbWaitRegMem` — reference-confirmed: 32-bit variant now 7 dwords
   (was 6) with proper control word (0x10 base, split op bits, cache_policy),
   address alignment masking, poll cycles field, and corrected field order
   (addr, mask, reference, control, poll)
@@ -110,7 +110,7 @@ Cursor-based builders:
 - `sceAgcDcbSetIndexBuffer`
 - `sceAgcDcbDrawIndexOffset`
 - `sceAgcDcbDrawIndexAuto` — now emits `IT_DRAW_INDEX_AUTO` (opcode 0x2D)
-  with 3-dword packet and proper draw initiator decoding (KytyPS5-confirmed;
+  with 3-dword packet and proper draw initiator decoding (reference-confirmed;
   was incorrectly NOP-wrapped 7-dword stub)
 - `sceAgcDcbWaitUntilSafeForRendering`
 - `sceAgcDcbPushMarker`
@@ -249,7 +249,7 @@ WaitRegMem patchers (SPRX-confirmed: require 0x79 wrapper, use adjusted pointer)
 - `sceAgcWaitRegMemPatchReference` — patches adjusted[4]
 - `sceAgcWaitRegMemPatchMask` — patches adjusted[5] (32-bit 0x3C) or adjusted[6] (64-bit 0x93)
 
-KytyPS5-confirmed patchers and helpers:
+reference-confirmed patchers and helpers:
 - `sceAgcGetPacketSize` — returns packet size in dwords from PM4 header
 - `sceAgcSetPacketPredication` — sets/clears bit 0 (predication) of packet header
 - `sceAgcSetRangePredication` — walks packet range setting predication bit
@@ -261,7 +261,7 @@ KytyPS5-confirmed patchers and helpers:
 - `sceAgcSetShRegIndirectPatchSetNumRegisters` — patches cmd[4] bits 13:0
 - `sceAgcSetUcRegIndirectPatchSetNumRegisters` — patches cmd[4] bits 13:0
 
-KytyPS5-confirmed GetSize helpers:
+reference-confirmed GetSize helpers:
 - `sceAgcDcbWriteDataGetSize` — returns 4*num_dwords + 16 bytes
 - `sceAgcDcbJumpGetSize` — returns 16 bytes
 - `sceAgcDcbRewindGetSize` — returns 8 bytes
@@ -295,11 +295,11 @@ Game-compat wrapper functions:
 - `sceAgcGetRegisterDefaults2` — register defaults query
 - `sceAgcGetRegisterDefaults2Internal` — internal register defaults query
 
-Register defaults (KytyPS5 v8, FW 5.50):
-- `agcKytyPs5V8GetPrimaryGroups` — 127 groups, 703 registers (489 CX, 159 SH, 55 UC)
-- `agcKytyPs5V8GetInternalGroups` — 22 groups, 25 registers (4 CX, 15 SH, 6 UC)
-- Extracted from KytyPS5 `agcRegisterDefaults.inc` `g_agc_public_reg_defaults_v8`
-  and `g_agc_internal_reg_defaults_v8`. Replaces incomplete SharpEmu-derived
+Register defaults (reference v8, FW 5.50):
+- `agcRegisterDefaultsV8GetPrimaryGroups` — 127 groups, 703 registers (489 CX, 159 SH, 55 UC)
+- `agcRegisterDefaultsV8GetInternalGroups` — 22 groups, 25 registers (4 CX, 15 SH, 6 UC)
+- Extracted from the reference `agcRegisterDefaults.inc` `g_agc_public_reg_defaults_v8`
+  and `g_agc_internal_reg_defaults_v8`. Replaces incomplete HLE-reference-derived
   data (which had only 38/703 public and 22/25 internal registers with many
   wrong zero-placeholder values).
 

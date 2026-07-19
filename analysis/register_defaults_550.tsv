@@ -1,6 +1,6 @@
 # PS5 FW 5.50 AGC register default groups
 #
-# Source: SharpEmu src/SharpEmu.Libs/Agc/AgcExports.cs
+# Source: HLE reference AgcExports.cs
 # Primary defaults table lengths: CX=78, SH=29, UC=20
 # Internal defaults table lengths: CX=4, SH=15, UC=3
 #
@@ -27,7 +27,7 @@
 #   set       : primary or internal
 #   space     : 0=CX, 1=SH, 2=UC
 #   index     : index into the per-space table
-#   type_hash : 32-bit group identifier (SharpEmu "Type")
+#   type_hash : 32-bit group identifier (HLE reference "Type")
 #   registers : comma-separated offset:value pairs
 set	space	index	type_hash	registers
 primary	0	3	0x0BC65DA4	0x08F:0

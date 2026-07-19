@@ -25,7 +25,7 @@ set(OPENAGC_SOURCES
     src/cb_builders.c
     src/context_state.c
     src/register_defaults.c
-    src/register_defaults_kytyps5_v8.c
+    src/register_defaults_v8.c
     src/acb.c
     src/dcb.c
     src/texture.c

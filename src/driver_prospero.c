@@ -15,7 +15,7 @@
  * - Sibling ps5-openagc project's agc_driver.c / agc_submit.c / agc_queue.c
  *   (NOT proven working — used for initial NID mapping only; ioctl layouts
  *   and queue structs were independently verified from SPRX disassembly)
- * - SharpEmu HLE for userspace ioctl call patterns
+ * - HLE reference for userspace ioctl call patterns
  *
  * openagc is a clean rewrite — it calls ioctls directly rather than
  * delegating to libSceAgcDriver.sprx firmware symbols.
@@ -513,7 +513,7 @@ int32_t PS5_SYSV_ABI sceAgcDriverSubmitMultiCommandBuffersDirect(
         uint32_t size_dwords = acb_sizes_in_bytes[i] / 4;
         uint32_t *acb = (uint32_t *)(uintptr_t)acb_gpu_addrs[i];
 
-        /* KytyPS5-confirmed: ACB descriptor indirection.
+        /* reference-confirmed: ACB descriptor indirection.
          * If the ACB starts with a descriptor header (magic 0x5533ccaa),
          * the actual ACB data is at the address pointed to by acb[0..1]. */
         if (size_dwords >= 5 && acb[3] == 0 && acb[4] == 0x5533ccaau) {
@@ -596,7 +596,7 @@ int32_t PS5_SYSV_ABI sceAgcDriverSubmitAcb(
     uint32_t size_dwords = packet->dword_count;
     uint32_t *acb = (uint32_t *)(uintptr_t)acb_addr;
 
-    /* KytyPS5-confirmed: ACB descriptor indirection.
+    /* reference-confirmed: ACB descriptor indirection.
      * If the ACB starts with a descriptor header (magic 0x5533ccaa),
      * the actual ACB data is at the address pointed to by acb[0..1]. */
     if (size_dwords >= 5 && acb[3] == 0 && acb[4] == 0x5533ccaau) {

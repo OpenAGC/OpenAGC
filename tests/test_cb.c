@@ -130,7 +130,7 @@ static void test_sce_agc_dcb_wait_reg_mem(void) {
     SceAgcCb cb;
     agcCbInit(&cb, buffer, sizeof(buffer));
 
-    /* KytyPS5-confirmed: 32-bit NOP-wrapped, 7 dwords.
+    /* reference-confirmed: 32-bit NOP-wrapped, 7 dwords.
      * size=0, cmp=3, op=0, cache=0, addr=0x100000020, ref=0x55, mask=0xFF, poll=400
      * control = 0x10 | (3&7) | ((0&3)<<8) | ((0&0xC)<<4) | ((0&3)<<25) = 0x13
      * poll = (400 >> 4) & 0xFFFF = 25
@@ -140,7 +140,7 @@ static void test_sce_agc_dcb_wait_reg_mem(void) {
     TEST_ASSERT(cmd == buffer, "WaitRegMem returns allocated packet");
     TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_NOP, "WaitRegMem wrapper opcode");
     TEST_ASSERT_EQ(agcPm4Subcommand(cmd[0]), AGC_PM4_SUB_WAIT_MEM32, "WaitRegMem32 subcommand");
-    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 7, "WaitRegMem32 length (KytyPS5: 7 dwords)");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 7, "WaitRegMem32 length (reference: 7 dwords)");
     TEST_ASSERT_EQ(cmd[1], 0x20u, "WaitRegMem32 addr_lo aligned");
     TEST_ASSERT_EQ(cmd[2], 0x1u, "WaitRegMem32 addr_hi masked");
     TEST_ASSERT_EQ(cmd[3], 0xFFu, "WaitRegMem32 mask");
@@ -249,7 +249,7 @@ static void test_sce_agc_dcb_draw_packets(void) {
     TEST_ASSERT_EQ(offset[2], 4, "DrawIndexOffset offset");
     TEST_ASSERT_EQ(offset[4], 0xE0000001u, "DrawIndexOffset flag mask");
 
-    /* KytyPS5-confirmed: IT_DRAW_INDEX_AUTO (0x2D), 3 dwords.
+    /* reference-confirmed: IT_DRAW_INDEX_AUTO (0x2D), 3 dwords.
      * modifier 0x40000000 → initiator = ((0x40000000 >> 3) & 0x20) | 0x2 = 0x2 */
     uint32_t* auto_draw = sceAgcDcbDrawIndexAuto(&cb, 6, 0x40000000u);
     TEST_ASSERT(auto_draw != NULL, "DrawIndexAuto returns allocated packet");

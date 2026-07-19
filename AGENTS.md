@@ -1,6 +1,6 @@
 # AGENTS.md — openagc
 
-Guidance for AI agents (Devin, Claude, etc.) working in this repository.
+Guidance for AI agents (Claude, etc.) working in this repository.
 
 ## Project
 
@@ -126,7 +126,6 @@ Before marking a task complete:
   Use for NID mapping cross-reference only. Do NOT trust its ioctl layouts
   or memory region sizes without independent SPRX verification.
   See `analysis/ps5_openagc_audit.md` for the full audit.
-- Emulator reference: `/Users/bizkut/Downloads/PS5/homebrew/sharpemu`
 - GPU/PM4 reference: `/Users/bizkut/Downloads/PS5/homebrew/rpcsx`
 
 These are for cross-referencing ABI only. Do not copy code from them verbatim

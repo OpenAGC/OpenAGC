@@ -105,7 +105,7 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbWaitRegMem(
     uint32_t cache_policy, uint64_t address, uint64_t reference,
     uint64_t mask, uint32_t poll_cycles)
 {
-    /* KytyPS5-confirmed encoding for NOP-wrapped WaitRegMem.
+    /* reference-confirmed encoding for NOP-wrapped WaitRegMem.
      *
      * 32-bit (size=0): 7 dwords, IT_NOP + R_WAIT_MEM32
      *   [0] header
@@ -128,7 +128,7 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbWaitRegMem(
      *   [8] poll = min(poll_cycles >> 4, 0xFFFF)
      *
      * The standard_wait path (operation 2/3) uses IT_WAIT_REG_MEM (0x3C)
-     * and is SharpEmu-derived (not in KytyPS5). Kept for game compatibility. */
+     * and is HLE reference-derived (not in reference). Kept for game compatibility. */
     if (size > 1 || compare_function > 7 || operation > 4 || cache_policy > 3)
         return 0;
 
@@ -289,7 +289,7 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndexOffset(
 uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndexAuto(
     SceAgcCb *cb, uint32_t index_count, uint64_t modifier)
 {
-    /* KytyPS5-confirmed: uses IT_DRAW_INDEX_AUTO (0x2D) directly, 3 dwords.
+    /* reference-confirmed: uses IT_DRAW_INDEX_AUTO (0x2D) directly, 3 dwords.
      * The previous NOP-wrapped 7-dword encoding was a stub that would fail
      * on real PS5 hardware. The draw initiator is decoded from the modifier:
      * if bit 32 is set, initiator base is 0; otherwise bits 8:3 of the
@@ -361,7 +361,7 @@ uint32_t *PS5_SYSV_ABI sceAgcCbReleaseMem(
     uint32_t interrupt_context_id)
 {
     /*
-     * RE source: SharpEmu sceAgcCbReleaseMem (NID wr23dPKyWc0).
+     * RE source: HLE reference sceAgcCbReleaseMem (NID wr23dPKyWc0).
      * 8-dword IT_NOP packet, subcommand 0x18 (AGC_PM4_SUB_RELEASE_MEM).
      * Layout:
      *   [0] header
@@ -371,7 +371,7 @@ uint32_t *PS5_SYSV_ABI sceAgcCbReleaseMem(
      *   [5..6] data (lo/hi)
      *   [7] interrupt_context_id
      * gds_offset/gds_size are accepted but gds_offset must be 0 and
-     * gds_size <= 2 (SharpEmu rejects otherwise); they are not currently
+     * gds_size <= 2 (HLE reference rejects otherwise); they are not currently
      * encoded into the packet because the GDS path is unused on Gen5 AGC.
      */
     if (destination > 1 || data_selection > 3 || gds_offset != 0 ||
@@ -396,7 +396,7 @@ uint32_t *PS5_SYSV_ABI sceAgcCbReleaseMem(
 }
 
 /*
- * RE source: SharpEmu DcbSetRegistersIndirect (sceAgcDcbSet{Sh,Cx,Uc}RegistersIndirect).
+ * RE source: HLE reference DcbSetRegistersIndirect (sceAgcDcbSet{Sh,Cx,Uc}RegistersIndirect).
  * Three exports share an identical 4-dword IT_NOP packet, differing only by
  * subcommand (0x11 SH / 0x12 CX / 0x13 UC). Layout:
  *   [0] header
@@ -568,7 +568,7 @@ int32_t PS5_SYSV_ABI sceAgcQueueEndOfPipeActionPatchAddress(
 }
 
 /*
- * RE source: SharpEmu sceAgcDcbGetLodStats / sceAgcDcbGetLodStatsGetSize.
+ * RE source: HLE reference sceAgcDcbGetLodStats / sceAgcDcbGetLodStatsGetSize.
  * GetLodStats emits a 5-dword IT_GET_LOD_STATS packet (op 0x8E, sub 0):
  *   [0] header
  *   [1] control

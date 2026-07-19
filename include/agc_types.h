@@ -110,7 +110,7 @@ typedef struct {
 
 /*
  * Sony-style command buffer control block shape recovered from Gen5 AGC HLE.
- * Cursor-up and cursor-down offsets match SharpEmu's command allocation path.
+ * Cursor-up and cursor-down offsets match HLE reference's command allocation path.
  */
 typedef struct {
     uintptr_t reserved0;

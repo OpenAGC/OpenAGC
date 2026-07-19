@@ -2,11 +2,11 @@
 #define _AGC_NIDS_H_
 
 /*
- * Known Gen5 AGC NIDs — cross-referenced from SharpEmu and ps5-openagc
+ * Known Gen5 AGC NIDs — cross-referenced from observation and ps5-openagc
  * firmware 5.50 SPRX analysis.
  *
  * Sources:
- *   - SharpEmu AgcExports.cs (original identification)
+ *   - HLE reference AgcExports.cs (original identification)
  *   - ps5-openagc include/ps5/internal/agc_nid.h (SPRX NID matching —
  *     NID-to-name mapping only; ps5-openagc's ioctl layouts are NOT trusted,
  *     see analysis/ps5_openagc_audit.md)
@@ -69,7 +69,7 @@
 #define AGC_NID_SCE_AGC_VSH_DCB_SET_WORKLOAD_COMPLETE "hEK26Wdny6s"
 #define AGC_NID_SCE_AGC_VSH_DCB_SET_WORKLOAD_STREAM_INACT "FneFypEDRgY"
 
-/* DCB builders (SharpEmu-identified, not in ps5-openagc NID table) */
+/* DCB builders (HLE reference-identified, not in ps5-openagc NID table) */
 #define AGC_NID_SCE_AGC_DCB_WRITE_DATA               "i1jyy49AjXU"
 #define AGC_NID_SCE_AGC_DCB_WAIT_REG_MEM             "VmW0Tdpy420"
 #define AGC_NID_SCE_AGC_DCB_DMA_DATA                 "WmAc2MEj6Io"

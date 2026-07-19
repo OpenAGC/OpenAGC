@@ -112,7 +112,7 @@ int32_t PS5_SYSV_ABI sceAgcDriverAddEqEvent(void *eq, uint32_t type, void *event
 }
 
 /* sceAgcDriverDeleteEqEvent (NID: DL2RXaXOy88)
- * KytyPS5-confirmed: stub, not supported. */
+ * reference-confirmed: stub, not supported. */
 int32_t PS5_SYSV_ABI sceAgcDriverDeleteEqEvent(void *event)
 {
     (void)event;
@@ -120,7 +120,7 @@ int32_t PS5_SYSV_ABI sceAgcDriverDeleteEqEvent(void *event)
 }
 
 /* sceAgcDriverGetEqEventType (NID: 5CdQTZIQPxM)
- * KytyPS5-confirmed: stub, not supported. */
+ * reference-confirmed: stub, not supported. */
 int32_t PS5_SYSV_ABI sceAgcDriverGetEqEventType(void *event, uint32_t *type)
 {
     (void)event;
@@ -129,28 +129,28 @@ int32_t PS5_SYSV_ABI sceAgcDriverGetEqEventType(void *event, uint32_t *type)
 }
 
 /* sceAgcDriverIsCaptureInProgress (NID: Ddwk4gLT5j0)
- * KytyPS5-confirmed: returns 0 (no capture in progress). */
+ * reference-confirmed: returns 0 (no capture in progress). */
 int32_t PS5_SYSV_ABI sceAgcDriverIsCaptureInProgress(void)
 {
     return 0;
 }
 
 /* sceAgcDriverGetDefaultOwner (NID: F0ZXt5q0ZTA)
- * KytyPS5-confirmed: returns 0 (default owner handle). */
+ * reference-confirmed: returns 0 (default owner handle). */
 uint32_t PS5_SYSV_ABI sceAgcDriverGetDefaultOwner(void)
 {
     return 0;
 }
 
 /* sceAgcDriverInitResourceRegistration (NID: F0Y42t-3e18)
- * KytyPS5-confirmed: stub, returns AGC_ERROR_NOT_SUPPORTED. */
+ * reference-confirmed: stub, returns AGC_ERROR_NOT_SUPPORTED. */
 int32_t PS5_SYSV_ABI sceAgcDriverInitResourceRegistration(void)
 {
     return AGC_ERROR_NOT_SUPPORTED;
 }
 
 /* sceAgcDriverQueryResourceRegistrationUserMemoryRequirements (NID: AOLcoIkQDgM)
- * KytyPS5-confirmed: stub, returns AGC_ERROR_NOT_SUPPORTED. */
+ * reference-confirmed: stub, returns AGC_ERROR_NOT_SUPPORTED. */
 int32_t PS5_SYSV_ABI sceAgcDriverQueryResourceRegistrationUserMemoryRequirements(
     void *out_info)
 {
@@ -159,14 +159,14 @@ int32_t PS5_SYSV_ABI sceAgcDriverQueryResourceRegistrationUserMemoryRequirements
 }
 
 /* sceAgcDriverGetResourceRegistrationMaxNameLength (NID: uJziRsODk1c)
- * KytyPS5-confirmed: returns 32. */
+ * reference-confirmed: returns 32. */
 uint32_t PS5_SYSV_ABI sceAgcDriverGetResourceRegistrationMaxNameLength(void)
 {
     return 32;
 }
 
 /* sceAgcDriverUnregisterResource (NID: pWLG7WOpVcw)
- * KytyPS5-confirmed: stub, returns AGC_ERROR_NOT_SUPPORTED. */
+ * reference-confirmed: stub, returns AGC_ERROR_NOT_SUPPORTED. */
 int32_t PS5_SYSV_ABI sceAgcDriverUnregisterResource(uint32_t resource_id)
 {
     (void)resource_id;
@@ -174,7 +174,7 @@ int32_t PS5_SYSV_ABI sceAgcDriverUnregisterResource(uint32_t resource_id)
 }
 
 /* sceAgcDriverRegisterWorkloadStream (NID: 3AyTaWcF-H8)
- * KytyPS5-confirmed: stub, returns AGC_ERROR_NOT_SUPPORTED. */
+ * reference-confirmed: stub, returns AGC_ERROR_NOT_SUPPORTED. */
 int32_t PS5_SYSV_ABI sceAgcDriverRegisterWorkloadStream(
     const char *name, uint32_t *out_id)
 {
@@ -1310,7 +1310,7 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbSetWorkloadStreamInactive(
 }
 
 /* ===================================================================== */
-/* KytyPS5-confirmed patchers and helpers                               */
+/* reference-confirmed patchers and helpers                               */
 /* ===================================================================== */
 
 /* sceAgcGetPacketSize (NID: Lkf86B98qPc)
@@ -1485,7 +1485,7 @@ int32_t PS5_SYSV_ABI sceAgcSetUcRegIndirectPatchSetNumRegisters(
 }
 
 /* ===================================================================== */
-/* GetSize helpers — KytyPS5-confirmed                                    */
+/* GetSize helpers — reference-confirmed                                    */
 /* ===================================================================== */
 
 uint32_t PS5_SYSV_ABI sceAgcDcbWriteDataGetSize(uint32_t num_dwords)

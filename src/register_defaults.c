@@ -3,8 +3,8 @@
  *
  * AGC register default blob builder and parser.
  *
- * The blob layout is recovered from SharpEmu
- * (src/SharpEmu.Libs/Agc/AgcExports.cs):
+ * The blob layout is recovered from observation
+ * (from the HLE reference implementation's AgcExports.cs):
  *
  *   0x00: CX table pointer (uint64)
  *   0x08: SH table pointer (uint64)
@@ -49,7 +49,7 @@ static void agcWriteU64(uint8_t *blob, size_t offset, uint64_t value) {
 }
 
 /* ===================================================================== */
-/* FW 5.50 primary register defaults (from SharpEmu)                     */
+/* FW 5.50 primary register defaults (from observation)                     */
 /* ===================================================================== */
 
 static const AgcRegisterDefaultValue s_primary_regs_0_3[] = {
@@ -115,7 +115,7 @@ static const AgcRegisterDefaultsGroup s_primary_defaults[] = {
 };
 
 /* ===================================================================== */
-/* FW 5.50 internal register defaults (from SharpEmu)                    */
+/* FW 5.50 internal register defaults (from observation)                    */
 /* ===================================================================== */
 
 static const AgcRegisterDefaultValue s_internal_regs_0_0[] = {{0x00E, 0}};

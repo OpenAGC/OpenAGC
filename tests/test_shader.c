@@ -315,7 +315,7 @@ static void test_shader_type_macros_match_enum(void) {
 }
 
 /* ===================================================================== */
-/* Fused shader tests (KytyPS5-confirmed)                                */
+/* Fused shader tests (reference-confirmed)                                */
 /* ===================================================================== */
 
 static void test_fused_shader_get_size_gs(void) {

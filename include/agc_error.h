@@ -45,7 +45,7 @@
  * type is not HS(4)/LS(5) or the CS shader type is not CS(6). */
 #define AGC_ERROR_SHADER_INVALID_TYPE   ((int32_t)0x8a6c0008)
 /* Shader halves don't form a valid front/back pair during fusion.
- * KytyPS5-confirmed: GRAPHICS5_ERROR_INVALID_SHADER_HALVES. */
+ * reference-confirmed: GRAPHICS5_ERROR_INVALID_SHADER_HALVES. */
 #define AGC_ERROR_SHADER_INVALID_HALVES ((int32_t)0x8a6c000a)
 
 /* Resource errors */

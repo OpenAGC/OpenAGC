@@ -35,7 +35,7 @@ static void test_dcb_mem_semaphore(void) {
 static void test_dcb_flip(void) {
     uint32_t buf[64];
     int32_t r = sceAgcVshDcbSetFlip(buf, 64, 0, 0);
-    TEST_ASSERT_EQ(r, 6, "SetFlip should write SharpEmu-sized packet");
+    TEST_ASSERT_EQ(r, 6, "SetFlip should write observation-sized packet");
     TEST_ASSERT_EQ(agcPm4Type(buf[0]), AGC_PM4_TYPE3, "SetFlip should emit PM4 type 3");
     TEST_ASSERT_EQ(agcPm4Opcode(buf[0]), AGC_PM4_OP_NOP, "SetFlip uses NOP wrapper");
     TEST_ASSERT_EQ(agcPm4Subcommand(buf[0]), AGC_PM4_SUB_FLIP, "SetFlip subcommand");
@@ -783,9 +783,9 @@ static void test_batch2_dcb_workload_helpers(void) {
 }
 
 /* Forward declarations for batch 3 tests (defined after test_suite_dcb). */
-static void test_batch3_kytyps5_patchers(void);
-static void test_batch3_kytyps5_getsize_helpers(void);
-static void test_batch3_kytyps5_driver_stubs(void);
+static void test_batch3_ref_patchers(void);
+static void test_batch3_ref_getsize_helpers(void);
+static void test_batch3_ref_driver_stubs(void);
 
 void test_suite_dcb(void) {
     TEST_SUITE("DCB Commands");
@@ -839,16 +839,16 @@ void test_suite_dcb(void) {
     TEST_RUN(test_batch2_dcb_set_marker);
     TEST_RUN(test_batch2_dcb_context_state_op);
     TEST_RUN(test_batch2_dcb_workload_helpers);
-    TEST_RUN(test_batch3_kytyps5_patchers);
-    TEST_RUN(test_batch3_kytyps5_getsize_helpers);
-    TEST_RUN(test_batch3_kytyps5_driver_stubs);
+    TEST_RUN(test_batch3_ref_patchers);
+    TEST_RUN(test_batch3_ref_getsize_helpers);
+    TEST_RUN(test_batch3_ref_driver_stubs);
 }
 
 /* ===================================================================== */
-/* Batch 3: KytyPS5-confirmed patchers and helpers                      */
+/* Batch 3: reference-confirmed patchers and helpers                      */
 /* ===================================================================== */
 
-static void test_batch3_kytyps5_patchers(void) {
+static void test_batch3_ref_patchers(void) {
     /* GetPacketSize: normal type-3 packet with length=5 -> 5 dwords */
     uint32_t pkt[8];
     pkt[0] = agcPm4Header3(AGC_PM4_OP_COND_EXEC, 5);
@@ -966,7 +966,7 @@ static void test_batch3_kytyps5_patchers(void) {
         "SetCxNumRegs rejects wrong opcode");
 }
 
-static void test_batch3_kytyps5_getsize_helpers(void) {
+static void test_batch3_ref_getsize_helpers(void) {
     /* WriteDataGetSize: 4*num_dwords + 16 */
     TEST_ASSERT_EQ(sceAgcDcbWriteDataGetSize(0), 16u, "WriteDataGetSize(0)");
     TEST_ASSERT_EQ(sceAgcDcbWriteDataGetSize(4), 32u, "WriteDataGetSize(4)");
@@ -990,7 +990,7 @@ static void test_batch3_kytyps5_getsize_helpers(void) {
     TEST_ASSERT_EQ(sceAgcDcbWaitOnAddressGetSize(2), 0u, "WaitOnAddressGetSize(invalid)");
 }
 
-static void test_batch3_kytyps5_driver_stubs(void) {
+static void test_batch3_ref_driver_stubs(void) {
     /* IsCaptureInProgress: returns 0 */
     TEST_ASSERT_EQ(sceAgcDriverIsCaptureInProgress(), 0, "IsCaptureInProgress returns 0");
 

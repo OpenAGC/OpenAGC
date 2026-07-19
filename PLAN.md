@@ -17,24 +17,24 @@ AMD PM4 packet ancestry overlap in useful ways.
 ## Target Priority
 
 Games built with openagc must run on **real PS5 hardware first**, then on
-emulators (KytyPS5, SharpEmu) as secondary dev/testing targets on PC.
+emulators (reference implementation, HLE reference) as secondary dev/testing targets on PC.
 
 This priority determines the trust hierarchy for packet encodings:
 
 1. **SPRX disassembly (ground truth)** — the actual SDK functions that run on
    real PS5 hardware. openagc's SPRX-confirmed encodings are authoritative.
-2. **KytyPS5** — best secondary reference. Its packet builders reproduce what
+2. **The reference implementation** — best secondary reference. Its packet builders reproduce what
    the SDK outputs (real opcodes like `IT_DRAW_INDEX_AUTO`,
    `IT_SET_UCONFIG_REG_INDEX`), and its full PM4 command processor validates
-   them. Games run through KytyPS5, so its encodings are empirically tested
+   them. Games run through the reference implementation, so its encodings are empirically tested
    against game expectations.
-3. **openagc** — this project. SPRX RE-confirmed encodings match KytyPS5. Some
+3. **openagc** — this project. SPRX RE-confirmed encodings match the reference. Some
    builders still use NOP-wrapped stubs that need switching to real opcodes.
-4. **SharpEmu** — useful for NID discovery and cross-reference, but many of its
+4. **HLE reference** — useful for NID discovery and cross-reference, but many of its
    packet encodings would fail on real PS5 hardware. Its NOP-wrapped stubs work
-   only because SharpEmu's inline interpreter doesn't validate packet format.
-   Do NOT adopt SharpEmu's packet encodings without independent SPRX or KytyPS5
-   confirmation. SharpEmu's NID discoveries are safe to adopt regardless of
+   only because the HLE reference's inline interpreter doesn't validate packet format.
+   Do NOT adopt the HLE reference's packet encodings without independent SPRX or reference
+   confirmation. The HLE reference's NID discoveries are safe to adopt regardless of
    encoding correctness.
 
 ## Evidence Levels
@@ -44,13 +44,13 @@ Use these labels in docs, analysis notes, and code comments:
 - **Implemented**: present in openagc, covered by host tests.
 - **SPRX-confirmed**: verified against firmware 5.50 SPRX disassembly — highest
   confidence for real-PS5 correctness.
-- **KytyPS5-confirmed**: verified against KytyPS5 emulator (working PS5 emulator
+- **reference-confirmed**: verified against the reference implementation (working PS5 emulator
   with full PM4 command processor). High confidence for real-PS5 correctness.
-- **Observed**: found in SharpEmu, RPCSX, ps5-openagc notes (NID mapping only —
+- **Observed**: found in HLE reference, RPCSX, ps5-openagc notes (NID mapping only —
   ps5-openagc is NOT proven working and contains known ioctl errors; see
   `analysis/ps5_openagc_audit.md`), firmware strings, or local analysis, but
-  not implemented yet. SharpEmu packet encodings are NOT trusted without
-  independent SPRX or KytyPS5 confirmation.
+  not implemented yet. HLE reference packet encodings are NOT trusted without
+  independent SPRX or reference confirmation.
 - **Inferred**: likely from AMD/RDNA2 behavior or reference projects, but not
   confirmed in AGC firmware paths yet.
 - **Speculative**: plausible roadmap item with no local implementation evidence
@@ -73,15 +73,15 @@ Practical rule:
 
 - Use GNM/RPCSX/opengnm for packet ancestry, descriptor patterns, tiling, and
   queue interpretation.
-- Use KytyPS5 as the highest-priority emulator reference for PS5 AGC packet
-  encodings, register defaults, and PM4 command processing. KytyPS5 is a
+- Use the reference implementation as the highest-priority emulator reference for PS5 AGC packet
+  encodings, register defaults, and PM4 command processing. The reference implementation is a
   working emulator with a full PM4 command processor — its packet builders
   use real AMD/AGC opcodes and are empirically validated against real games.
 - Use firmware 5.50 SPRX disassembly as ground truth for real-PS5 correctness.
   SPRX-confirmed encodings are authoritative.
-- Use SharpEmu for NID discovery and cross-reference only. SharpEmu's packet
+- Use HLE reference for NID discovery and cross-reference only. The HLE reference's packet
   encodings are NOT trusted — many use NOP-wrapped stubs that would fail on
-  real PS5 hardware. SharpEmu's NID findings are safe to adopt.
+  real PS5 hardware. The HLE reference's NID findings are safe to adopt.
 - Avoid assuming a PS4 GNM packet is valid AGC behavior unless AGC evidence
   confirms it.
 
@@ -103,7 +103,7 @@ Implemented and host-tested:
 
 - Gen5 AGC/PM4 type-3 packet header helpers.
 - AGC `IT_NOP` subcommand constants.
-- Known NID table for mapped SharpEmu exports.
+- Known NID table for mapped HLE reference exports.
 - `SceAgcCb` cursor layout and allocation.
 - Cursor-based `sceAgcCb*` and `sceAgcDcb*` packet builders:
   - `sceAgcCbNop`
@@ -162,7 +162,7 @@ measurable.
 
 Done:
 
-- Packet header model from SharpEmu/RPCSX:
+- Packet header model from HLE reference/RPCSX:
 
 ```c
 0xC0000000u |
@@ -198,7 +198,7 @@ Status: implemented.
 
 Purpose:
 
-Cover the SharpEmu-confirmed AGC packet builders before implementing hardware
+Cover the HLE-reference-confirmed AGC packet builders before implementing hardware
 submission.
 
 Already implemented:
@@ -243,7 +243,7 @@ interpretation.
 
 Current evidence:
 
-- SharpEmu records shader header offsets:
+- HLE reference records shader header offsets:
   - user data
   - code pointer
   - CX/SH registers
@@ -285,8 +285,8 @@ Recover AGC default register state and state-construction helpers.
 
 Current evidence:
 
-- SharpEmu has primary/internal register default groups.
-- openagc embeds the 13 primary and 22 internal groups from SharpEmu in
+- HLE reference has primary/internal register default groups.
+- openagc embeds the 13 primary and 22 internal groups from HLE reference in
   `src/register_defaults.c` and exposes them via `analysis/register_defaults_550.tsv`.
 - openagc implements the `AgcRegisterDefaults` blob builder/parser with
   `_Static_assert` verified layout and tests.
@@ -452,21 +452,18 @@ No placeholder VRS enums in public headers until evidence is found.
 - Firmware dump: `/Users/bizkut/Downloads/PS5/FIRMWARE_FILES/5.50`
 - Existing open AGC notes: `/Users/bizkut/Downloads/PS5/homebrew/ps5-openagc`
   (NOT proven working — NID mapping only; see `analysis/ps5_openagc_audit.md`)
-- SharpEmu AGC HLE: `/Users/bizkut/Downloads/PS5/homebrew/sharpemu`
 - RPCSX GPU/PM4/GNM reference: `/Users/bizkut/Downloads/PS5/homebrew/rpcsx`
-- **KytyPS5 emulator**: `/Users/bizkut/Downloads/PS5/homebrew/KytyPS5`
-  (best secondary reference for packet builders and PM4 command processing)
 - PS4 GNM clean rewrite reference: `../opengnm`
 
-## KytyPS5 Action Items
+## Reference Alignment Action Items
 
 Completed:
 - [x] Fix `sceAgcDcbDrawIndexAuto` to use `IT_DRAW_INDEX_AUTO (0x2D)` directly
 - [x] Fix `sceAgcDcbWaitRegMem` 32-bit variant to 7 dwords with proper control word
-- [x] Add KytyPS5-confirmed patchers (GetPacketSize, SetPacketPredication,
+- [x] Add reference-confirmed patchers (GetPacketSize, SetPacketPredication,
       SetRangePredication, CondExecPatch*, WriteDataPatchSetAddressOrOffset,
       JumpPatchSetTarget, SetNumRegisters variants)
-- [x] Add KytyPS5-confirmed GetSize helpers (WriteData, Jump, Rewind, CondExec,
+- [x] Add reference-confirmed GetSize helpers (WriteData, Jump, Rewind, CondExec,
       WaitOnAddress)
 - [x] Add missing driver functions (IsCaptureInProgress, DeleteEqEvent,
       GetEqEventType, GetDefaultOwner, InitResourceRegistration, etc.)
@@ -474,15 +471,15 @@ Completed:
 - [x] Fix PM4 opcodes (DISPATCH_DRAW_PREAMBLE 0x3A, SET_CONTEXT_REG_INDIRECT 0x9F)
 
 In progress:
-- [ ] **Update register defaults from KytyPS5 v8** (CRITICAL: openagc has only
+- [ ] **Update register defaults from reference v8** (CRITICAL: openagc has only
       38/703 public registers and 22/25 internal registers. Many values are
-      wrong (zero placeholders from SharpEmu). Must replace with KytyPS5
+      wrong (zero placeholders from HLE reference). Must replace with the reference
       `g_agc_public_reg_defaults_v8` and `g_agc_internal_reg_defaults_v8`.)
 
 Pending:
 - [ ] Add fused shader support (GetFusedShaderSize / FuseShaderHalves)
 - [ ] Add SubmitMultiDcbs, SubmitMultiAcbs, SubmitCommandBuffer wrappers
-- [ ] Cross-check remaining builder encodings against KytyPS5
+- [ ] Cross-check remaining builder encodings against the reference
 - [ ] Add version selection for register defaults (v0, v4, v5, v7, v8, v9, v10, v11)
 
 ## Working Rules

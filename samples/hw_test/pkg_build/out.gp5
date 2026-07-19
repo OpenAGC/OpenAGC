@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<psproject fmt="gp5" version="1000">
+  <volume>
+    <volume_type>prospero_app</volume_type>
+    <package passcode="00000000000000000000000000000000" />
+    <chunk_info chunk_count="1" scenario_count="1">
+      <chunks>
+        <chunk id="0" label="Chunk #0" />
+      </chunks>
+      <scenarios default_id="0">
+        <scenario id="0" type="playmode" initial_chunk_count="1" label="Scenario #0">0</scenario>
+      </scenarios>
+    </chunk_info>
+  </volume>
+  <files>
+    <file dst_path="eboot.bin" src_path="/Users/bizkut/Downloads/PS5/homebrew/ps4-freegnm/openagc/samples/hw_test/pkg_build/app/eboot.bin" />
+    <file dst_path="sce_sys\param.json" src_path="/Users/bizkut/Downloads/PS5/homebrew/ps4-freegnm/openagc/samples/hw_test/pkg_build/app/sce_sys/param.json" />
+  </files>
+</psproject>

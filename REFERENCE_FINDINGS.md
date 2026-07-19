@@ -3,23 +3,23 @@
 This document records findings from local PS5 emulator/reference projects used
 to guide openagc development.
 
-## SharpEmu
+## HLE reference
 
 Reference path:
 
-`/Users/bizkut/Downloads/PS5/homebrew/sharpemu`
+`/Users/bizkut/Downloads/PS5/homebrew/hle reference`
 
 Relevant files:
 
-- `src/SharpEmu.Libs/Agc/AgcExports.cs`
-- `src/SharpEmu.Libs/Agc/Gen5ShaderTranslator.cs`
-- `src/SharpEmu.Libs/VideoOut/VideoOutExports.cs`
-- `src/SharpEmu.Libs/VideoOut/VulkanVideoPresenter.cs`
-- `src/SharpEmu.Core/Cpu/Native/DirectExecutionBackend.Imports.cs`
+- `src/HLE reference.Libs/Agc/AgcExports.cs`
+- `src/HLE reference.Libs/Agc/Gen5ShaderTranslator.cs`
+- `src/HLE reference.Libs/VideoOut/VideoOutExports.cs`
+- `src/HLE reference.Libs/VideoOut/VulkanVideoPresenter.cs`
+- `src/HLE reference.Core/Cpu/Native/DirectExecutionBackend.Imports.cs`
 
 Key findings:
 
-- SharpEmu has the most directly useful PS5 AGC HLE material found so far.
+- HLE reference has the most directly useful PS5 AGC HLE material found so far.
 - It maps concrete NIDs to AGC functions including:
   - `sceAgcCbNop`
   - `sceAgcCbDispatch`
@@ -37,7 +37,7 @@ Key findings:
   - `sceAgcDcbSetFlip`
   - `sceAgcDriverSubmitDcb`
   - `sceAgcDriverSubmitAcb`
-- SharpEmu models many Gen5 AGC command-buffer functions as type-3 PM4
+- HLE reference models many Gen5 AGC command-buffer functions as type-3 PM4
   packets with AGC-specific subcommands stored in the low register/subfield
   bits.
 - Its packet helper uses this layout:
@@ -57,8 +57,8 @@ Key findings:
 
 - This differs from the first openagc scaffold, which used a simpler
   `count - 1` low-bit AMD packet helper. openagc should be corrected to use
-  the SharpEmu/RPCSX length-field layout.
-- SharpEmu has concrete command encodings for:
+  the HLE reference/RPCSX length-field layout.
+- HLE reference has concrete command encodings for:
   - DCB flip packets
   - DCB/ACB write-data packets
   - DCB/ACB wait-reg-mem packets
@@ -67,7 +67,7 @@ Key findings:
   - DCB draw/index packets
   - marker push/pop packets
   - submit packet parsing
-- SharpEmu tracks submitted GPU state enough to observe:
+- HLE reference tracks submitted GPU state enough to observe:
   - SH/CX/UC register writes
   - texture descriptors used for presentation
   - release-mem/write-data/DMA side effects
@@ -78,7 +78,7 @@ Key findings:
 
 Licensing note:
 
-SharpEmu is GPL-2.0-or-later. Treat it as a behavioral/reference source unless
+HLE reference is GPL-2.0-or-later. Treat it as a behavioral/reference source unless
 openagc licensing is changed. Do not copy implementation code directly into the
 current MIT openagc tree.
 
@@ -104,7 +104,7 @@ Key findings:
 - RPCSX is useful mainly as a GPU/PM4/GNM reference, not as a direct AGC HLE
   implementation.
 - Its PM4 parser and submit paths confirm the same type-3 packet length layout
-  used by SharpEmu:
+  used by HLE reference:
 
 ```c
 type = header >> 30;
@@ -154,7 +154,7 @@ into the current MIT openagc tree unless licensing is intentionally changed.
 
 Completed:
 
-- Done: replaced `agcPm4Header3()` with an AGC/RPCSX/SharpEmu-compatible
+- Done: replaced `agcPm4Header3()` with an AGC/RPCSX/HLE reference-compatible
   type-3 packet helper using bits `29:16` for `lengthDwords - 2`.
 - Done: added explicit helpers for:
   - `agcPm4Header3(op, length_dwords)`
@@ -175,10 +175,10 @@ Done in the next pass:
   - cursor-down: `0x18`
   - callback: `0x20`
   - reserved dwords: `0x30`
-- Added SharpEmu-confirmed `sceAgcCb*` and `sceAgcDcb*` declarations/builders
+- Added HLE-reference-confirmed `sceAgcCb*` and `sceAgcDcb*` declarations/builders
   for NOP, dispatch, SH registers, write-data, wait-reg-mem, push/pop marker,
   and flip.
-- Added additional SharpEmu-confirmed DCB builders for DMA data, base indirect
+- Added additional HLE-reference-confirmed DCB builders for DMA data, base indirect
   args, indirect dispatch, index buffer setup, draw index offset, draw index
   auto, and wait-until-safe-for-rendering.
 - Added recovered submit descriptor layout and generic
@@ -188,14 +188,14 @@ Done in the next pass:
 Remaining corrections:
 
 - Cover any ACB/DCB packet variants recovered from firmware that are not in
-  SharpEmu.
+  HLE reference.
 - Keep native `/dev/gc` submission separate from host packet construction until
   hardware validation is complete.
 
 Longer-term references to mine:
 
-- SharpEmu register default groups and shader header offsets.
-- SharpEmu DCB flip and VideoOut integration behavior.
+- HLE reference register default groups and shader header offsets.
+- HLE reference DCB flip and VideoOut integration behavior.
 - RPCSX queue/ring submission model and VMID patching.
 - RPCSX AMD tiler for surface size/layout validation.
 - RPCSX GCN shader resource analysis for future shader tooling.
@@ -306,7 +306,7 @@ Relevant openagc implementation files:
 - `src/acb.c` — old-style ACB builders (some still stubs)
 
 Key findings recovered from the ps5-openagc native-PM4 reference and AMD RDNA2
-PM4 convention (PM4 opcodes cross-verified against SharpEmu and SPRX):
+PM4 convention (PM4 opcodes cross-verified against HLE reference and SPRX):
 
 - `sceAgcAcbEventWrite` (ACB) emits `IT_EVENT_WRITE_EOP` (AGC opcode 0x47)
   with a 5-dword packet:
@@ -426,13 +426,13 @@ SPRX symbol tables. The NID-to-name mapping is reliable; ps5-openagc's
 ioctl layouts and implementation code are NOT (see
 `analysis/ps5_openagc_audit.md`).
 
-- Cross-referenced our SharpEmu-derived NID identifications with
+- Cross-referenced our HLE reference-derived NID identifications with
   `ps5-openagc/include/ps5/internal/agc_nid.h` (auto-generated from FW 5.50
   SPRX NID matching).
 - FW 5.50 export counts: libSceAgc=222, libSceAgcDriver=145, libSceAgcVsh=219.
 - ps5-openagc identified: 43/222 (libSceAgc), 19/145 (libSceAgcDriver),
   43/219 (libSceAgcVsh).
-- Combined with our SharpEmu identifications, openagc now has 78 identified
+- Combined with our HLE reference identifications, openagc now has 78 identified
   NIDs in `include/agc_nids.h` and `analysis/agc_known_nids.tsv`.
 - Key new identifications from ps5-openagc:
   - All 22 ACB builders (sceAgcAcb* functions)
