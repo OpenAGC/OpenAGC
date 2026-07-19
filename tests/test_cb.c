@@ -114,11 +114,16 @@ static void test_sce_agc_dcb_write_data(void) {
     SceAgcCb cb;
     agcCbInit(&cb, buffer, sizeof(buffer));
 
+    /* reference-confirmed: uses IT_WRITE_DATA (0x37) directly, not NOP-wrapped.
+     * dst=1 cache=2 increment=1 write_confirm=0 addr=0x100000020
+     * cmd[1] = (1&1)<<30 | (1&0x1e)<<7 | 1<<16 | 0<<20 | (2&3)<<25
+     *        = 0x40000000 | 0 | 0x10000 | 0 | 0x4000000 = 0x44010000 */
     uint32_t* cmd = sceAgcDcbWriteData(&cb, 1, 2, 0x100000020ULL, data, 2, 1, 0);
     TEST_ASSERT(cmd == buffer, "WriteData returns allocated packet");
-    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_NOP, "WriteData opcode");
-    TEST_ASSERT_EQ(agcPm4Subcommand(cmd[0]), AGC_PM4_SUB_WRITE_DATA, "WriteData subcommand");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_WRITE_DATA, "WriteData opcode (IT_WRITE_DATA 0x37)");
+    TEST_ASSERT_EQ(agcPm4Subcommand(cmd[0]), AGC_PM4_SUB_ZERO, "WriteData no subcommand");
     TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 6, "WriteData length");
+    TEST_ASSERT_EQ(cmd[1], 0x44010000u, "WriteData control (dst|incr|cache bit fields)");
     TEST_ASSERT_EQ(cmd[2], 0x20, "WriteData address lo");
     TEST_ASSERT_EQ(cmd[3], 0x1, "WriteData address hi");
     TEST_ASSERT_EQ(cmd[4], data[0], "WriteData payload 0");
@@ -241,13 +246,30 @@ static void test_sce_agc_dcb_draw_packets(void) {
     SceAgcCb cb;
     agcCbInit(&cb, buffer, sizeof(buffer));
 
-    uint32_t* offset = sceAgcDcbDrawIndexOffset(&cb, 4, 12, 0xFFFFFFFFu);
+    /* reference-confirmed: cmd[4] = decode_draw_index_initiator(modifier):
+     *   if modifier bit 32 set → 0, else (modifier >> 3) & 0x20
+     * modifier 0xFFFFFFFF: bit 32 not set, (0xFFFFFFFF >> 3) & 0x20 = 0x20 */
+    uint32_t* offset = sceAgcDcbDrawIndexOffset(&cb, 4, 12, 0xFFFFFFFFull);
     TEST_ASSERT(offset == buffer, "DrawIndexOffset returns allocated packet");
     TEST_ASSERT_EQ(agcPm4Opcode(offset[0]), AGC_PM4_OP_DRAW_INDEX_OFFSET_2, "DrawIndexOffset opcode");
     TEST_ASSERT_EQ(agcPm4Length(offset[0]), 5, "DrawIndexOffset length");
     TEST_ASSERT_EQ(offset[1], 12, "DrawIndexOffset count 0");
     TEST_ASSERT_EQ(offset[2], 4, "DrawIndexOffset offset");
-    TEST_ASSERT_EQ(offset[4], 0xE0000001u, "DrawIndexOffset flag mask");
+    TEST_ASSERT_EQ(offset[4], 0x20u, "DrawIndexOffset initiator (modifier 0xFFFFFFFF, bit 5 set)");
+
+    /* modifier with bit 5 set (0x20 << 3 = 0x100) → initiator = (0x100 >> 3) & 0x20 = 0x20 */
+    uint32_t buffer2[64];
+    agcCbInit(&cb, buffer2, sizeof(buffer2));
+    uint32_t* offset2 = sceAgcDcbDrawIndexOffset(&cb, 8, 16, 0x100ull);
+    TEST_ASSERT(offset2 != NULL, "DrawIndexOffset (modifier 0x100) returns allocated packet");
+    TEST_ASSERT_EQ(offset2[4], 0x20u, "DrawIndexOffset initiator (modifier 0x100, bit 5 set)");
+
+    /* modifier with bit 32 set → initiator = 0 */
+    uint32_t buffer3[64];
+    agcCbInit(&cb, buffer3, sizeof(buffer3));
+    uint32_t* offset3 = sceAgcDcbDrawIndexOffset(&cb, 12, 20, (1ull << 32));
+    TEST_ASSERT(offset3 != NULL, "DrawIndexOffset (bit 32 set) returns allocated packet");
+    TEST_ASSERT_EQ(offset3[4], 0u, "DrawIndexOffset initiator (bit 32 set → 0)");
 
     /* reference-confirmed: IT_DRAW_INDEX_AUTO (0x2D), 3 dwords.
      * modifier 0x40000000 → initiator = ((0x40000000 >> 3) & 0x20) | 0x2 = 0x2 */
@@ -289,8 +311,10 @@ static void test_sce_agc_cb_release_mem(void) {
 
     /* action=0x12 cache_policy=0x07 gcr=0x3456 data_sel=3 interrupt=2
      * dst=0x1_0000_0020 data=0xAABBCCDD_11223344 ctx_id=0xCAFE
-     * → [1]=0x0712 [2]=0x02033456 [3]=0x20 [4]=0x1
-     *   [5]=0x11223344 [6]=0xAABBCCDD [7]=0xCAFE */
+     * event_index=5 (action 0x12 < 0x2f), gcr&0x300=0x300 (not 0x100, no bit 9)
+     * cmd[1] = 0x12 | (5<<8) | (0x456<<12) | (3<<25) = 0x6456512
+     * cmd[2] = (1<<16) | (2<<24) | (3<<29) = 0x62010000
+     *   [3]=0x20 [4]=0x1 [5]=0x11223344 [6]=0xAABBCCDD [7]=0xCAFE */
     uint32_t* cmd = sceAgcCbReleaseMem(
         &cb, 0x12, 0x3456, 1, 0x07, 0x100000020ULL, 3,
         0xAABBCCDD11223344ULL, 0, 1, 2, 0xCAFE);
@@ -299,8 +323,8 @@ static void test_sce_agc_cb_release_mem(void) {
     TEST_ASSERT_EQ(agcPm4Subcommand(cmd[0]), AGC_PM4_SUB_RELEASE_MEM, "ReleaseMem subcommand");
     TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 8, "ReleaseMem length");
     TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 8, "ReleaseMem advances cursor");
-    TEST_ASSERT_EQ(cmd[1], 0x0712u, "ReleaseMem action|cache_policy");
-    TEST_ASSERT_EQ(cmd[2], 0x02033456u, "ReleaseMem gcr|data_sel|interrupt");
+    TEST_ASSERT_EQ(cmd[1], 0x6456512u, "ReleaseMem action|event_index|gcr_cntl|cache_policy");
+    TEST_ASSERT_EQ(cmd[2], 0x62010000u, "ReleaseMem dst|interrupt|data_sel");
     TEST_ASSERT_EQ(cmd[3], 0x20u, "ReleaseMem dst lo");
     TEST_ASSERT_EQ(cmd[4], 0x1u, "ReleaseMem dst hi");
     TEST_ASSERT_EQ(cmd[5], 0x11223344u, "ReleaseMem data lo");
@@ -316,14 +340,26 @@ static void test_sce_agc_cb_release_mem_rejects_invalid(void) {
     TEST_ASSERT(sceAgcCbReleaseMem(&cb, 0, 0, 2, 0, 0x100, 0, 0, 0, 0, 0, 0) == 0,
         "ReleaseMem rejects destination > 1");
     TEST_ASSERT(sceAgcCbReleaseMem(&cb, 0, 0, 0, 0, 0x100, 4, 0, 0, 0, 0, 0) == 0,
-        "ReleaseMem rejects data_selection > 3");
-    TEST_ASSERT(sceAgcCbReleaseMem(&cb, 0, 0, 0, 0, 0x100, 0, 0, 1, 0, 0, 0) == 0,
-        "ReleaseMem rejects gds_offset != 0");
-    TEST_ASSERT(sceAgcCbReleaseMem(&cb, 0, 0, 0, 0, 0x100, 0, 0, 0, 3, 0, 0) == 0,
-        "ReleaseMem rejects gds_size > 2");
-    TEST_ASSERT(sceAgcCbReleaseMem(&cb, 0, 0, 0, 0, 0x100, 0, 0, 0, 0, 4, 0) == 0,
-        "ReleaseMem rejects interrupt > 3");
+        "ReleaseMem rejects data_selection 4 (not in {0,1,2,3,5})");
+    TEST_ASSERT(sceAgcCbReleaseMem(&cb, 0, 0, 0, 0, 0x100, 0, 0, 0, 0, 5, 0) == 0,
+        "ReleaseMem rejects interrupt > 4");
     TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0, "ReleaseMem rejects do not advance cursor");
+
+    /* reference-confirmed: gds_offset != 0 and gds_size > 2 are now accepted
+     * when data_sel == 5 (data = gds_offset | (gds_size << 16)). */
+    uint32_t buffer2[16];
+    agcCbInit(&cb, buffer2, sizeof(buffer2));
+    uint32_t* cmd = sceAgcCbReleaseMem(
+        &cb, 0x2f, 0, 0, 0, 0x100, 5, 0, 0x10, 4, 0, 0);
+    TEST_ASSERT(cmd != NULL, "ReleaseMem accepts gds_offset != 0 when data_sel == 5");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 8, "ReleaseMem gds_offset accepted advances cursor");
+
+    uint32_t buffer3[16];
+    agcCbInit(&cb, buffer3, sizeof(buffer3));
+    uint32_t* cmd2 = sceAgcCbReleaseMem(
+        &cb, 0x2f, 0, 0, 0, 0x100, 5, 0, 0, 8, 0, 0);
+    TEST_ASSERT(cmd2 != NULL, "ReleaseMem accepts gds_size > 2 when data_sel == 5");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 8, "ReleaseMem gds_size accepted advances cursor");
 }
 
 /* All three *RegistersIndirect builders share a 4-dword IT_NOP packet,

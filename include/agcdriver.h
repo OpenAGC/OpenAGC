@@ -186,7 +186,7 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbDispatchIndirect(
 uint32_t *PS5_SYSV_ABI sceAgcDcbSetIndexBuffer(
     SceAgcCb *cb, uint64_t index_buffer_address, uint32_t index_count);
 uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndexOffset(
-    SceAgcCb *cb, uint32_t index_offset, uint32_t index_count, uint32_t flags);
+    SceAgcCb *cb, uint32_t index_offset, uint32_t index_count, uint64_t modifier);
 uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndexAuto(
     SceAgcCb *cb, uint32_t index_count, uint64_t modifier);
 uint32_t *PS5_SYSV_ABI sceAgcDcbWaitUntilSafeForRendering(

@@ -176,22 +176,24 @@ int32_t PS5_SYSV_ABI sceAgcAcbAtomicMem(
 int32_t PS5_SYSV_ABI sceAgcAcbCondExec(
     uint32_t *acb, uint32_t size_dw, uint64_t addr, uint32_t count)
 {
-    if (!acb || size_dw < 4)
+    if (!acb || size_dw < 5)
         return AGC_ERROR_CB_INVALID_SIZE;
 
     /*
-     * IT_COND_EXEC (opcode 0x22) on AMD/Ariel.
-     * Packet layout (4 dwords):
+     * reference-confirmed: IT_COND_EXEC (opcode 0x22), 5 dwords.
+     * Packet layout:
      *   [0] header
-     *   [1] addr_lo
+     *   [1] addr_lo (masked to 0xfffffffc)
      *   [2] addr_hi
-     *   [3] count (number of dwords to execute if condition is non-zero)
+     *   [3] 0 (reserved)
+     *   [4] count & 0x3fff (number of dwords to execute if condition is non-zero)
      */
-    acb[0] = agcPm4Header3(AGC_PM4_OP_COND_EXEC, 4);
-    acb[1] = (uint32_t)(addr & 0xFFFFFFFFu);
+    acb[0] = agcPm4Header3(AGC_PM4_OP_COND_EXEC, 5);
+    acb[1] = (uint32_t)(addr & 0xFFFFFFFCu);
     acb[2] = (uint32_t)(addr >> 32);
-    acb[3] = count;
-    return 4;
+    acb[3] = 0;
+    acb[4] = count & 0x3FFFu;
+    return 5;
 }
 
 int32_t PS5_SYSV_ABI sceAgcAcbCopyData(
@@ -266,29 +268,40 @@ int32_t PS5_SYSV_ABI sceAgcAcbEventWrite(
     uint32_t *acb, uint32_t size_dw, uint32_t event_type,
     uint64_t gpu_addr, uint32_t data, uint32_t int_ctx)
 {
-    if (!acb || size_dw < 5)
+    /*
+     * reference-confirmed: uses IT_EVENT_WRITE (0x46), not EVENT_WRITE_EOP.
+     * Variable length: 2 dwords for non-addressed, 4 for addressed events.
+     * Addressed event: (event_type & 0xfe) == 0x38
+     * Special: event_type 7, 15, 16 → cmd[1] = 0x400 | event_type
+     * Addressed: cmd[1] = 0x100 | event_type, cmd[2-3] = addr
+     * Non-addressed: cmd[1] = event_type & 0x3f
+     * data and int_ctx parameters are accepted but not used in the
+     * reference encoding (reserved for future EOP variant).
+     */
+    (void)data;
+    (void)int_ctx;
+
+    if (!acb)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    bool addressed = ((event_type & 0xFEu) == 0x38u);
+    uint32_t needed = addressed ? 4 : 2;
+    if (size_dw < needed)
         return AGC_ERROR_CB_INVALID_SIZE;
 
-    /*
-     * IT_EVENT_WRITE_EOP (opcode 0x47 in AGC naming) on PS5/Ariel.
-     * Packet layout (5 dwords):
-     *   [0] header
-     *   [1] event_info: event_type[5:0] | gen_int[21] | int_ctx[24]
-     *   [2] addr_lo
-     *   [3] addr_hi
-     *   [4] data
-     *
-     * RE'd from ps5-openagc reference and AMD PM4 EVENT_WRITE_EOP.
-     */
-    uint32_t event_info = (event_type & 0x3Fu) | (1u << 21) |
-                          ((int_ctx & 0x1u) << 24);
+    acb[0] = agcPm4Header3(AGC_PM4_OP_EVENT_WRITE, needed);
 
-    acb[0] = agcPm4Header3(AGC_PM4_OP_EVENT_WRITE_EOP, 5);
-    acb[1] = event_info;
-    acb[2] = (uint32_t)(gpu_addr & 0xFFFFFFFFu);
-    acb[3] = (uint32_t)(gpu_addr >> 32);
-    acb[4] = data;
-    return 5;
+    if (event_type == 7u || event_type == 15u || event_type == 16u) {
+        acb[1] = 0x400u | event_type;
+    } else if (addressed) {
+        acb[1] = 0x100u | event_type;
+        acb[2] = (uint32_t)(gpu_addr & 0xFFFFFFF8u);
+        acb[3] = (uint32_t)(gpu_addr >> 32);
+    } else {
+        acb[1] = event_type & 0x3Fu;
+    }
+
+    return (int32_t)needed;
 }
 
 int32_t PS5_SYSV_ABI sceAgcAcbJump(uint32_t *acb, uint32_t size_dw, uintptr_t target)

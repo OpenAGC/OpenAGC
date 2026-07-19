@@ -61,14 +61,24 @@ static void test_acb_pop_marker(void) {
 
 static void test_acb_event_write(void) {
     uint32_t buf[64];
+    /* non-addressed event: 0x12 & 0xfe != 0x38 → 2 dwords */
     int32_t r = sceAgcAcbEventWrite(buf, 64, 0x12u, 0x1234567890ABCDEFu, 0xA5A5A5A5u, 1u);
-    TEST_ASSERT_EQ(r, 5, "Event write should write 5 dwords");
-    TEST_ASSERT_EQ(agcPm4Opcode(buf[0]), AGC_PM4_OP_EVENT_WRITE_EOP, "Event write opcode");
-    TEST_ASSERT_EQ(agcPm4Length(buf[0]), 5, "Event write length");
-    TEST_ASSERT_EQ(buf[1], 0x1200012u, "Event info: type=0x12 gen_int=1 int_ctx=1");
-    TEST_ASSERT_EQ(buf[2], 0x90ABCDEFu, "Event write addr_lo");
-    TEST_ASSERT_EQ(buf[3], 0x12345678u, "Event write addr_hi");
-    TEST_ASSERT_EQ(buf[4], 0xA5A5A5A5u, "Event write data");
+    TEST_ASSERT_EQ(r, 2, "Non-addressed event write should write 2 dwords");
+    TEST_ASSERT_EQ(agcPm4Opcode(buf[0]), AGC_PM4_OP_EVENT_WRITE, "Event write opcode");
+    TEST_ASSERT_EQ(agcPm4Length(buf[0]), 2, "Event write length");
+    TEST_ASSERT_EQ(buf[1], 0x12u, "Event write cmd[1] = event_type & 0x3f");
+}
+
+static void test_acb_event_write_addressed(void) {
+    uint32_t buf[64];
+    /* addressed event: 0x38 & 0xfe == 0x38 → 4 dwords */
+    int32_t r = sceAgcAcbEventWrite(buf, 64, 0x38u, 0x1234567890ABCDEFu, 0xA5A5A5A5u, 1u);
+    TEST_ASSERT_EQ(r, 4, "Addressed event write should write 4 dwords");
+    TEST_ASSERT_EQ(agcPm4Opcode(buf[0]), AGC_PM4_OP_EVENT_WRITE, "Addressed event write opcode");
+    TEST_ASSERT_EQ(agcPm4Length(buf[0]), 4, "Addressed event write length");
+    TEST_ASSERT_EQ(buf[1], 0x138u, "Addressed event cmd[1] = 0x100 | event_type");
+    TEST_ASSERT_EQ(buf[2], (uint32_t)(0x1234567890ABCDEFu & 0xFFFFFFF8u), "Addressed event addr_lo");
+    TEST_ASSERT_EQ(buf[3], (uint32_t)(0x1234567890ABCDEFu >> 32), "Addressed event addr_hi");
 }
 
 static void test_acb_atomic_mem(void) {
@@ -86,12 +96,13 @@ static void test_acb_atomic_mem(void) {
 static void test_acb_cond_exec(void) {
     uint32_t buf[64];
     int32_t r = sceAgcAcbCondExec(buf, 64, 0x1122334455667788u, 0x20u);
-    TEST_ASSERT_EQ(r, 4, "Cond exec should write 4 dwords");
+    TEST_ASSERT_EQ(r, 5, "Cond exec should write 5 dwords");
     TEST_ASSERT_EQ(agcPm4Opcode(buf[0]), AGC_PM4_OP_COND_EXEC, "Cond exec opcode");
-    TEST_ASSERT_EQ(agcPm4Length(buf[0]), 4, "Cond exec length");
+    TEST_ASSERT_EQ(agcPm4Length(buf[0]), 5, "Cond exec length");
     TEST_ASSERT_EQ(buf[1], 0x55667788u, "Cond exec addr_lo");
     TEST_ASSERT_EQ(buf[2], 0x11223344u, "Cond exec addr_hi");
-    TEST_ASSERT_EQ(buf[3], 0x20u, "Cond exec count");
+    TEST_ASSERT_EQ(buf[3], 0x0u, "Cond exec reserved");
+    TEST_ASSERT_EQ(buf[4], 0x20u, "Cond exec count");
 }
 
 static void test_acb_wait_reg_mem(void) {
@@ -263,6 +274,7 @@ void test_suite_acb(void) {
     TEST_RUN(test_acb_push_marker);
     TEST_RUN(test_acb_pop_marker);
     TEST_RUN(test_acb_event_write);
+    TEST_RUN(test_acb_event_write_addressed);
     TEST_RUN(test_acb_atomic_mem);
     TEST_RUN(test_acb_cond_exec);
     TEST_RUN(test_acb_wait_reg_mem);

@@ -105,12 +105,19 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbWriteData(
     if (!cmd)
         return 0;
 
-    cmd[0] = agcPm4Header3Sub(AGC_PM4_OP_NOP, AGC_PM4_SUB_WRITE_DATA, packet_dwords);
-    cmd[1] = (destination & 0xFFu) |
-        ((cache_policy & 0xFFu) << 8) |
-        ((increment & 0xFFu) << 16) |
-        ((write_confirm & 0xFFu) << 24);
-    cmd[2] = (uint32_t)destination_address;
+    /* reference-confirmed: uses IT_WRITE_DATA (0x37) directly, not NOP-wrapped.
+     * cmd[1] = (dst & 1) << 30 | (dst & 0x1e) << 7 | increment << 16 |
+     *          write_confirm << 20 | cache_policy << 25
+     * write_confirm is only encoded when dst != 0. */
+    uint32_t dst_val = destination & 0x1Fu;
+    uint32_t wc_val = (dst_val == 0) ? 0u : (write_confirm & 1u);
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_WRITE_DATA, packet_dwords);
+    cmd[1] = ((dst_val & 0x1u) << 30u) |
+        ((dst_val & 0x1Eu) << 7u) |
+        ((increment & 0x1u) << 16u) |
+        (wc_val << 20u) |
+        ((cache_policy & 0x3u) << 25u);
+    cmd[2] = (uint32_t)destination_address & ~0x3u;
     cmd[3] = (uint32_t)(destination_address >> 32);
     memcpy(&cmd[4], data, dword_count * sizeof(uint32_t));
     return cmd;
@@ -288,17 +295,26 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbSetIndexBuffer(
 }
 
 uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndexOffset(
-    SceAgcCb *cb, uint32_t index_offset, uint32_t index_count, uint32_t flags)
+    SceAgcCb *cb, uint32_t index_offset, uint32_t index_count, uint64_t modifier)
 {
     uint32_t *cmd = agcCbAllocDwords(cb, 5);
     if (!cmd)
         return 0;
 
+    /* reference-confirmed: cmd[1] is 1 if index_count == 0.
+     * cmd[4] = decode_draw_index_initiator(modifier):
+     *   if modifier bit 32 set → 0, else (modifier >> 3) & 0x20 */
+    uint32_t initiator;
+    if (modifier & (1ull << 32u))
+        initiator = 0;
+    else
+        initiator = (uint32_t)(modifier >> 3) & 0x20u;
+
     cmd[0] = agcPm4Header3(AGC_PM4_OP_DRAW_INDEX_OFFSET_2, 5);
-    cmd[1] = index_count;
+    cmd[1] = (index_count == 0) ? 1u : index_count;
     cmd[2] = index_offset;
     cmd[3] = index_count;
-    cmd[4] = flags & 0xE0000001u;
+    cmd[4] = initiator;
     return cmd;
 }
 
@@ -377,37 +393,60 @@ uint32_t *PS5_SYSV_ABI sceAgcCbReleaseMem(
     uint32_t interrupt_context_id)
 {
     /*
-     * RE source: HLE reference sceAgcCbReleaseMem (NID wr23dPKyWc0).
-     * 8-dword IT_NOP packet, subcommand 0x18 (AGC_PM4_SUB_RELEASE_MEM).
+     * reference-confirmed: 8-dword IT_NOP packet, subcommand 0x18.
      * Layout:
      *   [0] header
-     *   [1] action[7:0] | cache_policy[15:8]
-     *   [2] gcr_control[15:0] | data_selection[23:16] | interrupt[31:24]
-     *   [3..4] destination_address (lo/hi)
+     *   [1] action[5:0] | event_index[11:8] | gcr_cntl[23:12] | cache_policy[26:25]
+     *   [2] dst[17:16] | interrupt[26:24] | data_sel[31:29]
+     *   [3..4] address (lo/hi), masked to 0xfffffffc
      *   [5..6] data (lo/hi)
-     *   [7] interrupt_context_id
-     * gds_offset/gds_size are accepted but gds_offset must be 0 and
-     * gds_size <= 2 (HLE reference rejects otherwise); they are not currently
-     * encoded into the packet because the GDS path is unused on Gen5 AGC.
+     *   [7] interrupt_ctx_id & 0x07ffffff
+     * event_index = 6 if action >= 0x2f, else 5.
+     * gcr_cntl: if (gcr_cntl & 0x300) == 0x100, set bit 9 (|= 0x200).
+     * If interrupt == 4, address and data are zeroed.
+     * If data_sel == 5, data = gds_offset | (gds_size << 16).
      */
-    if (destination > 1 || data_selection > 3 || gds_offset != 0 ||
-        gds_size > 2 || interrupt > 3)
+    if (destination > 1)
+        return 0;
+    if (data_selection != 0 && data_selection != 1 &&
+        data_selection != 2 && data_selection != 3 && data_selection != 5)
+        return 0;
+    if (interrupt > 4)
         return 0;
 
     uint32_t *cmd = agcCbAllocDwords(cb, 8);
     if (!cmd)
         return 0;
 
+    uint32_t packet_gcr = gcr_control;
+    if ((packet_gcr & 0x300u) == 0x100u)
+        packet_gcr |= 0x200u;
+
+    uint64_t addr_val = destination_address;
+    uint64_t data_val = data;
+    if ((interrupt & 0x7u) == 4u) {
+        addr_val = 0;
+        data_val = 0;
+    } else if ((data_selection & 0x7u) == 5u) {
+        data_val = (uint64_t)gds_offset | ((uint64_t)gds_size << 16);
+    }
+
+    uint32_t packet_action = action & 0x3Fu;
+    uint32_t event_index = (action >= 0x2Fu) ? 6u : 5u;
+
     cmd[0] = agcPm4Header3Sub(AGC_PM4_OP_NOP, AGC_PM4_SUB_RELEASE_MEM, 8);
-    cmd[1] = (action & 0xFFu) | ((cache_policy & 0xFFu) << 8);
-    cmd[2] = (gcr_control & 0xFFFFu) |
-        ((data_selection & 0xFFu) << 16) |
-        ((interrupt & 0xFFu) << 24);
-    cmd[3] = (uint32_t)destination_address;
-    cmd[4] = (uint32_t)(destination_address >> 32);
-    cmd[5] = (uint32_t)data;
-    cmd[6] = (uint32_t)(data >> 32);
-    cmd[7] = interrupt_context_id;
+    cmd[1] = packet_action |
+        (event_index << 8u) |
+        ((packet_gcr & 0xFFFu) << 12u) |
+        ((cache_policy & 0x3u) << 25u);
+    cmd[2] = ((destination & 0x3u) << 16u) |
+        ((interrupt & 0x7u) << 24u) |
+        ((data_selection & 0x7u) << 29u);
+    cmd[3] = (uint32_t)addr_val & 0xFFFFFFFCu;
+    cmd[4] = (uint32_t)(addr_val >> 32);
+    cmd[5] = (uint32_t)data_val;
+    cmd[6] = (uint32_t)(data_val >> 32);
+    cmd[7] = interrupt_context_id & 0x07FFFFFFu;
     return cmd;
 }
 
