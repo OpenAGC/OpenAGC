@@ -128,6 +128,14 @@ const AgcRegisterDefaultsGroup *agcRegisterDefaultsGetPrimaryGroups(uint32_t *ou
 const AgcRegisterDefaultsGroup *agcRegisterDefaultsGetInternalGroups(uint32_t *out_count);
 
 /*
+ * KytyPS5 version 8 default group tables.
+ * These contain the full register set (703 public, 25 internal registers)
+ * extracted from KytyPS5/src/libs/agcRegisterDefaults.inc.
+ */
+const AgcRegisterDefaultsGroup *agcKytyPs5V8GetPrimaryGroups(uint32_t *out_count);
+const AgcRegisterDefaultsGroup *agcKytyPs5V8GetInternalGroups(uint32_t *out_count);
+
+/*
  * Read-only accessors over a built blob.
  */
 const AgcRegisterDefaultsHeader *agcRegisterDefaultsGetHeader(const void *blob);

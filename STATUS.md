@@ -294,6 +294,14 @@ Game-compat wrapper functions:
 - `sceAgcGetRegisterDefaults2` — register defaults query
 - `sceAgcGetRegisterDefaults2Internal` — internal register defaults query
 
+Register defaults (KytyPS5 v8, FW 5.50):
+- `agcKytyPs5V8GetPrimaryGroups` — 127 groups, 703 registers (489 CX, 159 SH, 55 UC)
+- `agcKytyPs5V8GetInternalGroups` — 22 groups, 25 registers (4 CX, 15 SH, 6 UC)
+- Extracted from KytyPS5 `agcRegisterDefaults.inc` `g_agc_public_reg_defaults_v8`
+  and `g_agc_internal_reg_defaults_v8`. Replaces incomplete SharpEmu-derived
+  data (which had only 38/703 public and 22/25 internal registers with many
+  wrong zero-placeholder values).
+
 LOD stats helpers:
 
 - `sceAgcDcbGetLodStatsGetSize`
