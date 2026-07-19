@@ -61,24 +61,20 @@ static void test_acb_pop_marker(void) {
 
 static void test_acb_event_write(void) {
     uint32_t buf[64];
-    /* non-addressed event: 0x12 & 0xfe != 0x38 → 2 dwords */
+    /* SPRX-confirmed: always 2 dwords, cmd[1] = (type==7 ? 0x400 : 0) | (type & 0x3f) */
     int32_t r = sceAgcAcbEventWrite(buf, 64, 0x12u, 0x1234567890ABCDEFu, 0xA5A5A5A5u, 1u);
-    TEST_ASSERT_EQ(r, 2, "Non-addressed event write should write 2 dwords");
+    TEST_ASSERT_EQ(r, 2, "Event write should write 2 dwords");
     TEST_ASSERT_EQ(agcPm4Opcode(buf[0]), AGC_PM4_OP_EVENT_WRITE, "Event write opcode");
     TEST_ASSERT_EQ(agcPm4Length(buf[0]), 2, "Event write length");
     TEST_ASSERT_EQ(buf[1], 0x12u, "Event write cmd[1] = event_type & 0x3f");
 }
 
-static void test_acb_event_write_addressed(void) {
+static void test_acb_event_write_special_type7(void) {
     uint32_t buf[64];
-    /* addressed event: 0x38 & 0xfe == 0x38 → 4 dwords */
-    int32_t r = sceAgcAcbEventWrite(buf, 64, 0x38u, 0x1234567890ABCDEFu, 0xA5A5A5A5u, 1u);
-    TEST_ASSERT_EQ(r, 4, "Addressed event write should write 4 dwords");
-    TEST_ASSERT_EQ(agcPm4Opcode(buf[0]), AGC_PM4_OP_EVENT_WRITE, "Addressed event write opcode");
-    TEST_ASSERT_EQ(agcPm4Length(buf[0]), 4, "Addressed event write length");
-    TEST_ASSERT_EQ(buf[1], 0x138u, "Addressed event cmd[1] = 0x100 | event_type");
-    TEST_ASSERT_EQ(buf[2], (uint32_t)(0x1234567890ABCDEFu & 0xFFFFFFF8u), "Addressed event addr_lo");
-    TEST_ASSERT_EQ(buf[3], (uint32_t)(0x1234567890ABCDEFu >> 32), "Addressed event addr_hi");
+    /* SPRX-confirmed: event_type 7 gets 0x400 prefix */
+    int32_t r = sceAgcAcbEventWrite(buf, 64, 0x07u, 0, 0, 0);
+    TEST_ASSERT_EQ(r, 2, "Event type 7 should write 2 dwords");
+    TEST_ASSERT_EQ(buf[1], 0x407u, "Event type 7 cmd[1] = 0x400 | 7");
 }
 
 static void test_acb_atomic_mem(void) {
@@ -274,7 +270,7 @@ void test_suite_acb(void) {
     TEST_RUN(test_acb_push_marker);
     TEST_RUN(test_acb_pop_marker);
     TEST_RUN(test_acb_event_write);
-    TEST_RUN(test_acb_event_write_addressed);
+    TEST_RUN(test_acb_event_write_special_type7);
     TEST_RUN(test_acb_atomic_mem);
     TEST_RUN(test_acb_cond_exec);
     TEST_RUN(test_acb_wait_reg_mem);

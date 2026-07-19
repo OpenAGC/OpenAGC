@@ -319,8 +319,8 @@ static void test_sce_agc_cb_release_mem(void) {
         &cb, 0x12, 0x3456, 1, 0x07, 0x100000020ULL, 3,
         0xAABBCCDD11223344ULL, 0, 1, 2, 0xCAFE);
     TEST_ASSERT(cmd == buffer, "ReleaseMem returns allocated packet");
-    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_NOP, "ReleaseMem wrapper opcode");
-    TEST_ASSERT_EQ(agcPm4Subcommand(cmd[0]), AGC_PM4_SUB_RELEASE_MEM, "ReleaseMem subcommand");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_RELEASE_MEM, "ReleaseMem opcode (SPRX-confirmed IT_RELEASE_MEM 0x49)");
+    TEST_ASSERT_EQ(agcPm4Subcommand(cmd[0]), AGC_PM4_SUB_ZERO, "ReleaseMem no subcommand");
     TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 8, "ReleaseMem length");
     TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 8, "ReleaseMem advances cursor");
     TEST_ASSERT_EQ(cmd[1], 0x6456512u, "ReleaseMem action|event_index|gcr_cntl|cache_policy");

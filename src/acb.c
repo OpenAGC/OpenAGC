@@ -269,39 +269,20 @@ int32_t PS5_SYSV_ABI sceAgcAcbEventWrite(
     uint64_t gpu_addr, uint32_t data, uint32_t int_ctx)
 {
     /*
-     * reference-confirmed: uses IT_EVENT_WRITE (0x46), not EVENT_WRITE_EOP.
-     * Variable length: 2 dwords for non-addressed, 4 for addressed events.
-     * Addressed event: (event_type & 0xfe) == 0x38
-     * Special: event_type 7, 15, 16 → cmd[1] = 0x400 | event_type
-     * Addressed: cmd[1] = 0x100 | event_type, cmd[2-3] = addr
-     * Non-addressed: cmd[1] = event_type & 0x3f
-     * data and int_ctx parameters are accepted but not used in the
-     * reference encoding (reserved for future EOP variant).
+     * SPRX-confirmed (FW 5.50 and 11.60): IT_EVENT_WRITE (0x46), always 2 dwords.
+     * cmd[1] = (event_type == 7 ? 0x400 : 0) | (event_type & 0x3f)
+     * gpu_addr, data, int_ctx parameters are accepted but not encoded.
      */
+    (void)gpu_addr;
     (void)data;
     (void)int_ctx;
 
-    if (!acb)
-        return AGC_ERROR_INVALID_ARGUMENT;
-
-    bool addressed = ((event_type & 0xFEu) == 0x38u);
-    uint32_t needed = addressed ? 4 : 2;
-    if (size_dw < needed)
+    if (!acb || size_dw < 2)
         return AGC_ERROR_CB_INVALID_SIZE;
 
-    acb[0] = agcPm4Header3(AGC_PM4_OP_EVENT_WRITE, needed);
-
-    if (event_type == 7u || event_type == 15u || event_type == 16u) {
-        acb[1] = 0x400u | event_type;
-    } else if (addressed) {
-        acb[1] = 0x100u | event_type;
-        acb[2] = (uint32_t)(gpu_addr & 0xFFFFFFF8u);
-        acb[3] = (uint32_t)(gpu_addr >> 32);
-    } else {
-        acb[1] = event_type & 0x3Fu;
-    }
-
-    return (int32_t)needed;
+    acb[0] = agcPm4Header3(AGC_PM4_OP_EVENT_WRITE, 2);
+    acb[1] = (event_type == 7u ? 0x400u : 0u) | (event_type & 0x3Fu);
+    return 2;
 }
 
 int32_t PS5_SYSV_ABI sceAgcAcbJump(uint32_t *acb, uint32_t size_dw, uintptr_t target)

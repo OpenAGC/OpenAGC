@@ -105,17 +105,16 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbWriteData(
     if (!cmd)
         return 0;
 
-    /* reference-confirmed: uses IT_WRITE_DATA (0x37) directly, not NOP-wrapped.
-     * cmd[1] = (dst & 1) << 30 | (dst & 0x1e) << 7 | increment << 16 |
-     *          write_confirm << 20 | cache_policy << 25
-     * write_confirm is only encoded when dst != 0. */
+    /* SPRX-confirmed: uses IT_WRITE_DATA (0x37) directly, not NOP-wrapped.
+     * cmd[1] = (dst & 1) << 30 | (dst & 0x1e) << 7 | (increment & 1) << 16 |
+     *          (write_confirm & 1) << 20 | (cache_policy & 3) << 25
+     * write_confirm is always encoded (no conditional on dst). */
     uint32_t dst_val = destination & 0x1Fu;
-    uint32_t wc_val = (dst_val == 0) ? 0u : (write_confirm & 1u);
     cmd[0] = agcPm4Header3(AGC_PM4_OP_WRITE_DATA, packet_dwords);
     cmd[1] = ((dst_val & 0x1u) << 30u) |
         ((dst_val & 0x1Eu) << 7u) |
         ((increment & 0x1u) << 16u) |
-        (wc_val << 20u) |
+        ((write_confirm & 0x1u) << 20u) |
         ((cache_policy & 0x3u) << 25u);
     cmd[2] = (uint32_t)destination_address & ~0x3u;
     cmd[3] = (uint32_t)(destination_address >> 32);
@@ -393,16 +392,15 @@ uint32_t *PS5_SYSV_ABI sceAgcCbReleaseMem(
     uint32_t interrupt_context_id)
 {
     /*
-     * reference-confirmed: 8-dword IT_NOP packet, subcommand 0x18.
+     * SPRX-confirmed: 8-dword IT_RELEASE_MEM (0x49) packet, direct opcode.
      * Layout:
-     *   [0] header
+     *   [0] header (opcode 0x49, not NOP-wrapped)
      *   [1] action[5:0] | event_index[11:8] | gcr_cntl[23:12] | cache_policy[26:25]
      *   [2] dst[17:16] | interrupt[26:24] | data_sel[31:29]
      *   [3..4] address (lo/hi), masked to 0xfffffffc
      *   [5..6] data (lo/hi)
      *   [7] interrupt_ctx_id & 0x07ffffff
-     * event_index = 6 if action >= 0x2f, else 5.
-     * gcr_cntl: if (gcr_cntl & 0x300) == 0x100, set bit 9 (|= 0x200).
+     * event_index = 5 + (action >= 0x2f ? 1 : 0) = 5 or 6.
      * If interrupt == 4, address and data are zeroed.
      * If data_sel == 5, data = gds_offset | (gds_size << 16).
      */
@@ -418,10 +416,6 @@ uint32_t *PS5_SYSV_ABI sceAgcCbReleaseMem(
     if (!cmd)
         return 0;
 
-    uint32_t packet_gcr = gcr_control;
-    if ((packet_gcr & 0x300u) == 0x100u)
-        packet_gcr |= 0x200u;
-
     uint64_t addr_val = destination_address;
     uint64_t data_val = data;
     if ((interrupt & 0x7u) == 4u) {
@@ -434,10 +428,10 @@ uint32_t *PS5_SYSV_ABI sceAgcCbReleaseMem(
     uint32_t packet_action = action & 0x3Fu;
     uint32_t event_index = (action >= 0x2Fu) ? 6u : 5u;
 
-    cmd[0] = agcPm4Header3Sub(AGC_PM4_OP_NOP, AGC_PM4_SUB_RELEASE_MEM, 8);
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_RELEASE_MEM, 8);
     cmd[1] = packet_action |
         (event_index << 8u) |
-        ((packet_gcr & 0xFFFu) << 12u) |
+        ((gcr_control & 0xFFFu) << 12u) |
         ((cache_policy & 0x3u) << 25u);
     cmd[2] = ((destination & 0x3u) << 16u) |
         ((interrupt & 0x7u) << 24u) |
@@ -612,9 +606,13 @@ int32_t PS5_SYSV_ABI sceAgcQueueEndOfPipeActionPatchAddress(
     if (!cmd)
         return AGC_ERROR_INVALID_ARGUMENT;
 
+    /* Accept both direct IT_RELEASE_MEM (0x49, SPRX-confirmed) and the
+     * legacy NOP-wrapped form (op 0x10, sub 0x18). */
     uint32_t opcode = agcPm4Opcode(cmd[0]);
     uint32_t sub = agcPm4Subcommand(cmd[0]);
-    if (opcode != AGC_PM4_OP_NOP || sub != AGC_PM4_SUB_RELEASE_MEM)
+    bool is_release_mem = (opcode == AGC_PM4_OP_RELEASE_MEM) ||
+        (opcode == AGC_PM4_OP_NOP && sub == AGC_PM4_SUB_RELEASE_MEM);
+    if (!is_release_mem)
         return AGC_ERROR_INVALID_ARGUMENT;
 
     cmd[3] = (uint32_t)address;
