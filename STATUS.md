@@ -28,7 +28,7 @@ The host-generic implementation now has a tested model for:
 - Shader linking: `agcShaderLinkHsGs` — combines HS/LS + CS shader records into GS (matches SPRX ordinal 131)
 - Fused shader support: `sceAgcGetFusedShaderSize` (NID: dolOmWH+huQ) and `sceAgcFuseShaderHalves` (NID: fd5Bp5tGTgo) — reference-confirmed fusion of GS/HS front+back shader halves with register patching
 - EOP flip submit: `sceAgcDriverSubmitEopFlip` (prospero) + `sceAgcDcbSetEopFlip` DCB builder (IT_RELEASE_MEM 0x49)
-- NID table expanded to 305 identified exports (204 libSceAgc + 101 libSceAgcDriver) out of 367 total SPRX exports (83% coverage). Includes 49 driver stubs (return error codes) and 35 GetSize stubs (return constant packet sizes).
+- NID table expanded to 354 identified exports (225 libSceAgc + 129 libSceAgcDriver) out of 366 total SPRX exports (92% coverage). Sources: KytyPS5 LIB_FUNC, ps5-openagc agc_nid.h, FW 3.20 genstub stub files, SPRX disassembly, and version-specific NID mappings. Remaining 26 unknown NIDs are functions new in FW 5.50 (not in 3.20 stubs).
 - Async-compute queue submission: generic backend queue tracking (32 slots), ACB submit validates queue in-use, full create→submit→destroy flow tested
 - 13 new DCB builders from SPRX disassembly: ReleaseMem, IndirectBuffer, IndirectBufferConst, DrawIndirect, DrawIndex2, DrawIndexIndirect, DrawIndirectMulti, DrawIndexIndirectMulti, SetPredication, EventWrite, SetConfigReg, SetShReg, SetUconfigReg
 - 4 AGC-custom flip builders: WaitFlipDone (0x4C), WaitFlip (0x51), InsertWaitFlipDone (0x54), WaitFlipEos (0x4F+0x4E)
