@@ -3,3 +3,4 @@ build-prospero/
 *.o
 *.a
 openagc_tests
+.serena/
