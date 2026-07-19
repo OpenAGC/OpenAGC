@@ -1236,3 +1236,216 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbSetWorkloadStreamInactive(
     cmd[7] = 0;
     return cmd;
 }
+
+/* ===================================================================== */
+/* KytyPS5-confirmed patchers and helpers                               */
+/* ===================================================================== */
+
+/* sceAgcGetPacketSize (NID: Lkf86B98qPc)
+ * Returns packet size in dwords from PM4 header.
+ * Special case: NOP packets with (header & 0x3FFFFF00) == 0x3FFF1000
+ * are 1 dword (padding/filler). */
+uint32_t PS5_SYSV_ABI sceAgcGetPacketSize(uint32_t *packet)
+{
+    if (!packet)
+        return 0;
+    uint32_t cmd_id = packet[0];
+    if ((cmd_id & 0x3FFFFF00u) == 0x3FFF1000u)
+        return 1;
+    return ((cmd_id >> 16) & 0x3FFFu) + 2u;
+}
+
+/* sceAgcSetPacketPredication (NID: w6Dj1VJt5qY)
+ * Sets/clears bit 0 (predication) of a packet header. */
+int32_t PS5_SYSV_ABI sceAgcSetPacketPredication(
+    uint32_t *packet, uint32_t predication)
+{
+    if (!packet)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    packet[0] = (packet[0] & ~1u) | ((predication & 1u) ? 1u : 0u);
+    return AGC_OK;
+}
+
+/* sceAgcSetRangePredication (NID: n8vgpaQg6dA)
+ * Walks packets from start to end, setting predication bit on each. */
+int32_t PS5_SYSV_ABI sceAgcSetRangePredication(
+    uint32_t *start, const uint32_t *end, uint32_t predication)
+{
+    if (!start || !end)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    uintptr_t packet_va = (uintptr_t)start;
+    uintptr_t end_va = (uintptr_t)end;
+    if (packet_va >= end_va)
+        return AGC_OK;
+
+    uint32_t pred_bit = (predication & 1u) ? 1u : 0u;
+    uint32_t *packet = start;
+    while (packet_va < end_va) {
+        uint32_t cmd_id = packet[0];
+        packet[0] = (cmd_id & ~1u) | pred_bit;
+
+        uint32_t size = ((cmd_id >> 16) & 0x3FFFu) + 2u;
+        if ((cmd_id & 0x3FFFFF00u) == 0x3FFF1000u)
+            size = 1;
+
+        packet_va += size * sizeof(uint32_t);
+        packet = (uint32_t *)packet_va;
+    }
+    return AGC_OK;
+}
+
+/* sceAgcCondExecPatchSetEnd (NID: ORWsxIbk4TE)
+ * Patches cmd[4] bits 13:0 with dword count between packet end and buffer end. */
+int32_t PS5_SYSV_ABI sceAgcCondExecPatchSetEnd(
+    uint32_t *cmd, const uint32_t *end)
+{
+    if (!cmd || !end)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    uint32_t op = (cmd[0] >> 8) & 0xFFu;
+    if (op != AGC_PM4_OP_COND_EXEC)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    uint32_t *packet_end = cmd + 5;
+    if (end < packet_end)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    uint32_t num_dwords = (uint32_t)(end - packet_end);
+    if (num_dwords > 0x3FFFu)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    cmd[4] = (cmd[4] & ~0x3FFFu) | num_dwords;
+    return AGC_OK;
+}
+
+/* sceAgcCondExecPatchSetCommandAddress (NID: YWTKOju587o)
+ * Patches cmd[1] lo and cmd[2] hi with command address, preserving cmd[1] bits 1:0. */
+int32_t PS5_SYSV_ABI sceAgcCondExecPatchSetCommandAddress(
+    uint32_t *cmd, const uint32_t *command)
+{
+    if (!cmd || !command)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    uint32_t op = (cmd[0] >> 8) & 0xFFu;
+    if (op != AGC_PM4_OP_COND_EXEC)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    /* Command address must be 4-byte aligned */
+    if (((uintptr_t)command & 0x3u) != 0)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    uint64_t addr = (uint64_t)(uintptr_t)command;
+    cmd[1] = (cmd[1] & 0x3u) | ((uint32_t)addr & 0xFFFFFFFCu);
+    cmd[2] = (uint32_t)(addr >> 32);
+    return AGC_OK;
+}
+
+/* sceAgcWriteDataPatchSetAddressOrOffset (NID: fPSCdQxgpSw)
+ * Patches cmd[2] lo and cmd[3] hi for IT_WRITE_DATA packets. */
+int32_t PS5_SYSV_ABI sceAgcWriteDataPatchSetAddressOrOffset(
+    uint32_t *cmd, uint64_t address_or_offset)
+{
+    if (!cmd)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    uint32_t op = (cmd[0] >> 8) & 0xFFu;
+    if (op != AGC_PM4_OP_WRITE_DATA)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    cmd[2] = (uint32_t)address_or_offset;
+    cmd[3] = (uint32_t)(address_or_offset >> 32);
+    return AGC_OK;
+}
+
+/* sceAgcJumpPatchSetTarget (NID: 2BS4EtAaF28)
+ * Patches IT_INDIRECT_BUFFER cmd[1] lo, cmd[2] hi (bits 15:0),
+ * cmd[3] size (bits 19:0). */
+int32_t PS5_SYSV_ABI sceAgcJumpPatchSetTarget(
+    uint32_t *cmd, const uint32_t *target, uint32_t size_in_dwords)
+{
+    if (!cmd || !target)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    uint32_t op = (cmd[0] >> 8) & 0xFFu;
+    if (op != AGC_PM4_OP_INDIRECT_BUFFER)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    uint64_t vaddr = (uint64_t)(uintptr_t)target;
+    cmd[1] = (uint32_t)vaddr;
+    cmd[2] = (cmd[2] & 0xFFFF0000u) | ((uint32_t)(vaddr >> 32) & 0xFFFFu);
+    cmd[3] = (cmd[3] & 0xFFF00000u) | (size_in_dwords & 0xFFFFFu);
+    return AGC_OK;
+}
+
+/* SetNumRegisters patchers — patch cmd[4] bits 13:0 of indirect register packets.
+ * Each checks the opcode matches the expected register type. */
+static int32_t agcRegIndirectPatchSetNumRegisters(
+    uint32_t *cmd, uint32_t num_regs, uint32_t expected_op)
+{
+    if (!cmd)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    uint32_t op = (cmd[0] >> 8) & 0xFFu;
+    if (op != expected_op)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    cmd[4] = (cmd[4] & ~0x3FFFu) | (num_regs & 0x3FFFu);
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI sceAgcSetCxRegIndirectPatchSetNumRegisters(
+    uint32_t *cmd, uint32_t num_regs)
+{
+    return agcRegIndirectPatchSetNumRegisters(cmd, num_regs, AGC_PM4_OP_SET_CX_REG_INDIRECT);
+}
+
+int32_t PS5_SYSV_ABI sceAgcSetShRegIndirectPatchSetNumRegisters(
+    uint32_t *cmd, uint32_t num_regs)
+{
+    return agcRegIndirectPatchSetNumRegisters(cmd, num_regs, AGC_PM4_OP_SET_SH_REG_INDIRECT);
+}
+
+int32_t PS5_SYSV_ABI sceAgcSetUcRegIndirectPatchSetNumRegisters(
+    uint32_t *cmd, uint32_t num_regs)
+{
+    return agcRegIndirectPatchSetNumRegisters(cmd, num_regs, AGC_PM4_OP_SET_UC_REG_INDIRECT);
+}
+
+/* ===================================================================== */
+/* GetSize helpers — KytyPS5-confirmed                                    */
+/* ===================================================================== */
+
+uint32_t PS5_SYSV_ABI sceAgcDcbWriteDataGetSize(uint32_t num_dwords)
+{
+    return 4u * num_dwords + 16u;
+}
+
+uint32_t PS5_SYSV_ABI sceAgcDcbJumpGetSize(void)
+{
+    return 16u;
+}
+
+uint32_t PS5_SYSV_ABI sceAgcDcbRewindGetSize(void)
+{
+    return 8u;
+}
+
+uint32_t PS5_SYSV_ABI sceAgcDcbCondExecGetSize(void)
+{
+    return 20u;
+}
+
+uint32_t PS5_SYSV_ABI sceAgcAcbCondExecGetSize(void)
+{
+    return 20u;
+}
+
+uint32_t PS5_SYSV_ABI sceAgcDcbWaitOnAddressGetSize(uint32_t size)
+{
+    switch (size) {
+    case 0:  return 14u * 4u;
+    case 1:  return 16u * 4u;
+    default: return 0;
+    }
+}

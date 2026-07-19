@@ -248,6 +248,26 @@ WaitRegMem patchers (SPRX-confirmed: require 0x79 wrapper, use adjusted pointer)
 - `sceAgcWaitRegMemPatchReference` — patches adjusted[4]
 - `sceAgcWaitRegMemPatchMask` — patches adjusted[5] (32-bit 0x3C) or adjusted[6] (64-bit 0x93)
 
+KytyPS5-confirmed patchers and helpers:
+- `sceAgcGetPacketSize` — returns packet size in dwords from PM4 header
+- `sceAgcSetPacketPredication` — sets/clears bit 0 (predication) of packet header
+- `sceAgcSetRangePredication` — walks packet range setting predication bit
+- `sceAgcCondExecPatchSetEnd` — patches cmd[4] bits 13:0 with dword count
+- `sceAgcCondExecPatchSetCommandAddress` — patches cmd[1..2] with command address
+- `sceAgcWriteDataPatchSetAddressOrOffset` — patches cmd[2..3] for IT_WRITE_DATA
+- `sceAgcJumpPatchSetTarget` — patches cmd[1..3] for IT_INDIRECT_BUFFER
+- `sceAgcSetCxRegIndirectPatchSetNumRegisters` — patches cmd[4] bits 13:0
+- `sceAgcSetShRegIndirectPatchSetNumRegisters` — patches cmd[4] bits 13:0
+- `sceAgcSetUcRegIndirectPatchSetNumRegisters` — patches cmd[4] bits 13:0
+
+KytyPS5-confirmed GetSize helpers:
+- `sceAgcDcbWriteDataGetSize` — returns 4*num_dwords + 16 bytes
+- `sceAgcDcbJumpGetSize` — returns 16 bytes
+- `sceAgcDcbRewindGetSize` — returns 8 bytes
+- `sceAgcDcbCondExecGetSize` — returns 20 bytes
+- `sceAgcAcbCondExecGetSize` — returns 20 bytes
+- `sceAgcDcbWaitOnAddressGetSize` — returns 56 (32-bit) or 64 (64-bit) bytes
+
 Game-compat driver functions:
 
 - `sceAgcDriverRegisterOwner` — stub (returns 0x8a6c9018, matches SPRX)

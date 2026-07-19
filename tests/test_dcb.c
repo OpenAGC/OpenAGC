@@ -782,6 +782,10 @@ static void test_batch2_dcb_workload_helpers(void) {
     TEST_ASSERT_EQ(cmd[1], 0x99u, "DcbSetWorkloadStreamInactive workload_id");
 }
 
+/* Forward declarations for batch 3 tests (defined after test_suite_dcb). */
+static void test_batch3_kytyps5_patchers(void);
+static void test_batch3_kytyps5_getsize_helpers(void);
+
 void test_suite_dcb(void) {
     TEST_SUITE("DCB Commands");
     TEST_RUN(test_dcb_init_null);
@@ -834,4 +838,152 @@ void test_suite_dcb(void) {
     TEST_RUN(test_batch2_dcb_set_marker);
     TEST_RUN(test_batch2_dcb_context_state_op);
     TEST_RUN(test_batch2_dcb_workload_helpers);
+    TEST_RUN(test_batch3_kytyps5_patchers);
+    TEST_RUN(test_batch3_kytyps5_getsize_helpers);
+}
+
+/* ===================================================================== */
+/* Batch 3: KytyPS5-confirmed patchers and helpers                      */
+/* ===================================================================== */
+
+static void test_batch3_kytyps5_patchers(void) {
+    /* GetPacketSize: normal type-3 packet with length=5 -> 5 dwords */
+    uint32_t pkt[8];
+    pkt[0] = agcPm4Header3(AGC_PM4_OP_COND_EXEC, 5);
+    TEST_ASSERT_EQ(sceAgcGetPacketSize(pkt), 5u, "GetPacketSize normal");
+
+    /* GetPacketSize: special NOP filler (0x3FFF1000 mask) -> 1 dword */
+    pkt[0] = 0xC0001000u | 0x3FFF0000u;  /* matches 0x3FFF1000 mask */
+    TEST_ASSERT_EQ(sceAgcGetPacketSize(pkt), 1u, "GetPacketSize NOP filler");
+
+    /* SetPacketPredication: set bit 0 */
+    pkt[0] = agcPm4Header3(AGC_PM4_OP_NOP, 2);
+    uint32_t orig = pkt[0];
+    TEST_ASSERT_EQ(sceAgcSetPacketPredication(pkt, 1), AGC_OK, "SetPred OK");
+    TEST_ASSERT_EQ(pkt[0], orig | 1u, "SetPred sets bit 0");
+
+    /* SetPacketPredication: clear bit 0 */
+    pkt[0] = orig | 1u;
+    TEST_ASSERT_EQ(sceAgcSetPacketPredication(pkt, 0), AGC_OK, "ClearPred OK");
+    TEST_ASSERT_EQ(pkt[0], orig & ~1u, "ClearPred clears bit 0");
+
+    /* SetPacketPredication: NULL -> error */
+    TEST_ASSERT_EQ(sceAgcSetPacketPredication(NULL, 1), AGC_ERROR_INVALID_ARGUMENT,
+        "SetPred rejects NULL");
+
+    /* SetRangePredication: set predication on a 2-packet range */
+    uint32_t range[10];
+    range[0] = agcPm4Header3(AGC_PM4_OP_NOP, 3);  /* 3 dwords */
+    range[3] = agcPm4Header3(AGC_PM4_OP_NOP, 2);  /* 2 dwords */
+    uint32_t *end = &range[5];
+    TEST_ASSERT_EQ(sceAgcSetRangePredication(range, end, 1), AGC_OK, "SetRangePred OK");
+    TEST_ASSERT_EQ(range[0] & 1u, 1u, "SetRangePred pkt0 bit0 set");
+    TEST_ASSERT_EQ(range[3] & 1u, 1u, "SetRangePred pkt1 bit0 set");
+
+    /* CondExecPatchSetEnd: patch cmd[4] with dword count */
+    uint32_t condexec[10];
+    condexec[0] = agcPm4Header3(AGC_PM4_OP_COND_EXEC, 5);
+    condexec[4] = 0;
+    uint32_t *ce_end = &condexec[8];  /* 3 dwords after packet end (cmd+5) */
+    TEST_ASSERT_EQ(sceAgcCondExecPatchSetEnd(condexec, ce_end), AGC_OK, "CondExecPatchEnd OK");
+    TEST_ASSERT_EQ(condexec[4], 3u, "CondExecPatchEnd sets 3 dwords");
+
+    /* CondExecPatchSetEnd: wrong opcode -> error */
+    condexec[0] = agcPm4Header3(AGC_PM4_OP_NOP, 5);
+    TEST_ASSERT_EQ(sceAgcCondExecPatchSetEnd(condexec, ce_end), AGC_ERROR_INVALID_ARGUMENT,
+        "CondExecPatchEnd rejects wrong opcode");
+
+    /* CondExecPatchSetCommandAddress: patch cmd[1..2] */
+    condexec[0] = agcPm4Header3(AGC_PM4_OP_COND_EXEC, 5);
+    condexec[1] = 0x2;  /* preserve bits 1:0 */
+    condexec[2] = 0;
+    uint32_t target_cmd[4] __attribute__((aligned(4)));
+    uint64_t target_va = (uint64_t)(uintptr_t)target_cmd;
+    TEST_ASSERT_EQ(sceAgcCondExecPatchSetCommandAddress(condexec, target_cmd), AGC_OK,
+        "CondExecPatchCmdAddr OK");
+    TEST_ASSERT_EQ(condexec[1] & 0x3u, 0x2u, "CondExecPatchCmdAddr preserves bits 1:0");
+    TEST_ASSERT_EQ((uint32_t)condexec[1] & 0xFFFFFFFCu, (uint32_t)target_va & 0xFFFFFFFCu,
+        "CondExecPatchCmdAddr lo matches target");
+    TEST_ASSERT_EQ(condexec[2], (uint32_t)(target_va >> 32), "CondExecPatchCmdAddr hi matches");
+
+    /* WriteDataPatchSetAddressOrOffset: patch cmd[2..3] */
+    uint32_t wd[8];
+    wd[0] = agcPm4Header3(AGC_PM4_OP_WRITE_DATA, 8);
+    wd[2] = 0;
+    wd[3] = 0;
+    uint64_t wd_addr = 0x123456789ABCULL;
+    TEST_ASSERT_EQ(sceAgcWriteDataPatchSetAddressOrOffset(wd, wd_addr), AGC_OK,
+        "WriteDataPatchAddr OK");
+    TEST_ASSERT_EQ(wd[2], (uint32_t)wd_addr, "WriteDataPatchAddr lo");
+    TEST_ASSERT_EQ(wd[3], (uint32_t)(wd_addr >> 32), "WriteDataPatchAddr hi");
+
+    /* WriteDataPatchSetAddressOrOffset: wrong opcode -> error */
+    wd[0] = agcPm4Header3(AGC_PM4_OP_NOP, 8);
+    TEST_ASSERT_EQ(sceAgcWriteDataPatchSetAddressOrOffset(wd, 0), AGC_ERROR_INVALID_ARGUMENT,
+        "WriteDataPatchAddr rejects wrong opcode");
+
+    /* JumpPatchSetTarget: patch cmd[1..3] for IT_INDIRECT_BUFFER */
+    uint32_t jump[4];
+    jump[0] = agcPm4Header3(AGC_PM4_OP_INDIRECT_BUFFER, 4);
+    jump[1] = 0;
+    jump[2] = 0xFFFF0000u;  /* preserve upper bits */
+    jump[3] = 0xFFF00000u;  /* preserve upper bits */
+    uint32_t jump_target[4] __attribute__((aligned(4)));
+    uint64_t jt_va = (uint64_t)(uintptr_t)jump_target;
+    TEST_ASSERT_EQ(sceAgcJumpPatchSetTarget(jump, jump_target, 256), AGC_OK, "JumpPatch OK");
+    TEST_ASSERT_EQ(jump[1], (uint32_t)jt_va, "JumpPatch lo matches target");
+    TEST_ASSERT_EQ(jump[2] & 0xFFFFu, (uint32_t)(jt_va >> 32) & 0xFFFFu, "JumpPatch hi matches");
+    TEST_ASSERT_EQ(jump[3] & 0xFFFFFu, 256u, "JumpPatch size");
+
+    /* JumpPatchSetTarget: wrong opcode -> error */
+    jump[0] = agcPm4Header3(AGC_PM4_OP_NOP, 4);
+    TEST_ASSERT_EQ(sceAgcJumpPatchSetTarget(jump, jump_target, 0), AGC_ERROR_INVALID_ARGUMENT,
+        "JumpPatch rejects wrong opcode");
+
+    /* SetNumRegisters patchers */
+    uint32_t ind[5];
+    ind[0] = agcPm4Header3(AGC_PM4_OP_SET_CX_REG_INDIRECT, 5);
+    ind[4] = 0;
+    TEST_ASSERT_EQ(sceAgcSetCxRegIndirectPatchSetNumRegisters(ind, 42), AGC_OK,
+        "SetCxNumRegs OK");
+    TEST_ASSERT_EQ(ind[4] & 0x3FFFu, 42u, "SetCxNumRegs value");
+
+    ind[0] = agcPm4Header3(AGC_PM4_OP_SET_SH_REG_INDIRECT, 5);
+    TEST_ASSERT_EQ(sceAgcSetShRegIndirectPatchSetNumRegisters(ind, 7), AGC_OK,
+        "SetShNumRegs OK");
+    TEST_ASSERT_EQ(ind[4] & 0x3FFFu, 7u, "SetShNumRegs value");
+
+    ind[0] = agcPm4Header3(AGC_PM4_OP_SET_UC_REG_INDIRECT, 5);
+    TEST_ASSERT_EQ(sceAgcSetUcRegIndirectPatchSetNumRegisters(ind, 15), AGC_OK,
+        "SetUcNumRegs OK");
+    TEST_ASSERT_EQ(ind[4] & 0x3FFFu, 15u, "SetUcNumRegs value");
+
+    /* SetNumRegisters: wrong opcode -> error */
+    ind[0] = agcPm4Header3(AGC_PM4_OP_NOP, 5);
+    TEST_ASSERT_EQ(sceAgcSetCxRegIndirectPatchSetNumRegisters(ind, 1), AGC_ERROR_INVALID_ARGUMENT,
+        "SetCxNumRegs rejects wrong opcode");
+}
+
+static void test_batch3_kytyps5_getsize_helpers(void) {
+    /* WriteDataGetSize: 4*num_dwords + 16 */
+    TEST_ASSERT_EQ(sceAgcDcbWriteDataGetSize(0), 16u, "WriteDataGetSize(0)");
+    TEST_ASSERT_EQ(sceAgcDcbWriteDataGetSize(4), 32u, "WriteDataGetSize(4)");
+    TEST_ASSERT_EQ(sceAgcDcbWriteDataGetSize(16), 80u, "WriteDataGetSize(16)");
+
+    /* JumpGetSize: 16 bytes (4 dwords) */
+    TEST_ASSERT_EQ(sceAgcDcbJumpGetSize(), 16u, "JumpGetSize");
+
+    /* RewindGetSize: 8 bytes (2 dwords) */
+    TEST_ASSERT_EQ(sceAgcDcbRewindGetSize(), 8u, "RewindGetSize");
+
+    /* CondExecGetSize: 20 bytes (5 dwords) */
+    TEST_ASSERT_EQ(sceAgcDcbCondExecGetSize(), 20u, "CondExecGetSize");
+
+    /* AcbCondExecGetSize: 20 bytes (5 dwords) */
+    TEST_ASSERT_EQ(sceAgcAcbCondExecGetSize(), 20u, "AcbCondExecGetSize");
+
+    /* WaitOnAddressGetSize: 14*4 (32-bit) or 16*4 (64-bit) */
+    TEST_ASSERT_EQ(sceAgcDcbWaitOnAddressGetSize(0), 56u, "WaitOnAddressGetSize(0)");
+    TEST_ASSERT_EQ(sceAgcDcbWaitOnAddressGetSize(1), 64u, "WaitOnAddressGetSize(1)");
+    TEST_ASSERT_EQ(sceAgcDcbWaitOnAddressGetSize(2), 0u, "WaitOnAddressGetSize(invalid)");
 }

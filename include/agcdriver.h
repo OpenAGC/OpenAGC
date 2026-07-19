@@ -610,6 +610,81 @@ int32_t PS5_SYSV_ABI sceAgcWaitRegMemPatchMask(
 int32_t PS5_SYSV_ABI sceAgcWaitRegMemPatchReference(
     uint32_t *cmd, uint32_t reference);
 
+/* ===================================================================== */
+/* KytyPS5-confirmed patchers and helpers                               */
+/* ===================================================================== */
+
+/* Get packet size in dwords from a PM4 header. NID: Lkf86B98qPc
+ * KytyPS5-confirmed: returns ((header >> 16) & 0x3FFF) + 2, except
+ * for special NOP packets (header & 0x3FFFFF00 == 0x3FFF1000) which
+ * return 1. */
+uint32_t PS5_SYSV_ABI sceAgcGetPacketSize(uint32_t *packet);
+
+/* Set predication bit (bit 0) on a packet header. NID: w6Dj1VJt5qY
+ * KytyPS5-confirmed: sets/clears bit 0 of cmd[0]. */
+int32_t PS5_SYSV_ABI sceAgcSetPacketPredication(
+    uint32_t *packet, uint32_t predication);
+
+/* Set predication bit across a range of packets. NID: n8vgpaQg6dA
+ * KytyPS5-confirmed: walks packets from start to end, setting bit 0
+ * of each packet header. */
+int32_t PS5_SYSV_ABI sceAgcSetRangePredication(
+    uint32_t *start, const uint32_t *end, uint32_t predication);
+
+/* Patch CondExec end address (cmd[4] bits 13:0 = dword count). NID: ORWsxIbk4TE
+ * KytyPS5-confirmed: patches cmd[4] with (end - cmd - 5) dwords. */
+int32_t PS5_SYSV_ABI sceAgcCondExecPatchSetEnd(
+    uint32_t *cmd, const uint32_t *end);
+
+/* Patch CondExec command address (cmd[1..2]). NID: YWTKOju587o
+ * KytyPS5-confirmed: patches cmd[1] lo and cmd[2] hi, preserving
+ * cmd[1] bits 1:0. */
+int32_t PS5_SYSV_ABI sceAgcCondExecPatchSetCommandAddress(
+    uint32_t *cmd, const uint32_t *command);
+
+/* Patch WriteData address (cmd[2..3]). NID: fPSCdQxgpSw
+ * KytyPS5-confirmed: patches cmd[2] lo and cmd[3] hi for IT_WRITE_DATA. */
+int32_t PS5_SYSV_ABI sceAgcWriteDataPatchSetAddressOrOffset(
+    uint32_t *cmd, uint64_t address_or_offset);
+
+/* Patch Jump target address and size (cmd[1..3]). NID: 2BS4EtAaF28
+ * KytyPS5-confirmed: patches IT_INDIRECT_BUFFER cmd[1] lo,
+ * cmd[2] hi (bits 15:0), cmd[3] size (bits 19:0). */
+int32_t PS5_SYSV_ABI sceAgcJumpPatchSetTarget(
+    uint32_t *cmd, const uint32_t *target, uint32_t size_in_dwords);
+
+/* SetNumRegisters patchers for indirect register packets. NIDs:
+ * Cx: whb1RL7K4Ss, Sh: nCUgItdN2ms, Uc: fRG-JOH5+sI
+ * KytyPS5-confirmed: patches cmd[4] bits 13:0 with num_regs. */
+int32_t PS5_SYSV_ABI sceAgcSetCxRegIndirectPatchSetNumRegisters(
+    uint32_t *cmd, uint32_t num_regs);
+int32_t PS5_SYSV_ABI sceAgcSetShRegIndirectPatchSetNumRegisters(
+    uint32_t *cmd, uint32_t num_regs);
+int32_t PS5_SYSV_ABI sceAgcSetUcRegIndirectPatchSetNumRegisters(
+    uint32_t *cmd, uint32_t num_regs);
+
+/* ===================================================================== */
+/* GetSize helpers — KytyPS5-confirmed packet sizes                      */
+/* ===================================================================== */
+
+/* NID: p9tI+yTvx68 — returns 4*num_dwords + 16 (bytes) */
+uint32_t PS5_SYSV_ABI sceAgcDcbWriteDataGetSize(uint32_t num_dwords);
+
+/* NID: VEGu4dixjUg — returns 16 (bytes, = 4 dwords) */
+uint32_t PS5_SYSV_ABI sceAgcDcbJumpGetSize(void);
+
+/* NID: QIXCsbipds0 — returns 8 (bytes, = 2 dwords) */
+uint32_t PS5_SYSV_ABI sceAgcDcbRewindGetSize(void);
+
+/* NID: ou16V5hh5sg — returns 20 (bytes, = 5 dwords) */
+uint32_t PS5_SYSV_ABI sceAgcDcbCondExecGetSize(void);
+
+/* NID: ozKzBP4aki4 — returns 20 (bytes, = 5 dwords) */
+uint32_t PS5_SYSV_ABI sceAgcAcbCondExecGetSize(void);
+
+/* NID: 43WJ08sSugE — returns 14*4 (32-bit) or 16*4 (64-bit) bytes */
+uint32_t PS5_SYSV_ABI sceAgcDcbWaitOnAddressGetSize(uint32_t size);
+
 #ifdef __cplusplus
 }
 #endif
