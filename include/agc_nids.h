@@ -27,7 +27,8 @@
  *     NID-to-name mapping only; ps5-openagc's ioctl layouts are NOT trusted,
  *     see analysis/ps5_openagc_audit.md)
  *
- * Total identified: 114 NIDs across libSceAgc, libSceAgcDriver, libSceAgcVsh.
+ * Total identified: 221 NIDs across libSceAgc (169) and libSceAgcDriver (52),
+ * out of 367 total SPRX exports (60% coverage).
  * FW 5.50 export counts: libSceAgc=222, libSceAgcDriver=145, libSceAgcVsh=219.
  */
 
