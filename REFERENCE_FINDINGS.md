@@ -11,7 +11,7 @@ Reference path:
 
 Relevant files:
 
-- `src/HLE reference.Libs/Agc/AgcExports.cs`
+- `src/HLE reference.Libs/Agc/HLE reference`
 - `src/HLE reference.Libs/Agc/Gen5ShaderTranslator.cs`
 - `src/HLE reference.Libs/VideoOut/VideoOutExports.cs`
 - `src/HLE reference.Libs/VideoOut/VulkanVideoPresenter.cs`

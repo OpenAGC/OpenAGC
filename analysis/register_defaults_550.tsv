@@ -1,6 +1,6 @@
 # PS5 FW 5.50 AGC register default groups
 #
-# Source: HLE reference AgcExports.cs
+# Source: HLE reference HLE reference
 # Primary defaults table lengths: CX=78, SH=29, UC=20
 # Internal defaults table lengths: CX=4, SH=15, UC=3
 #

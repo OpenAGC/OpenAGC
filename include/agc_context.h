@@ -103,7 +103,7 @@ typedef struct AgcRegisterDefaultValue {
  * structure, which contains pointers to per-table register arrays and
  * pointer tables.
  *
- * SPRX layout (from KytyPS5 RegisterDefaults, offsetof(count)==0x38):
+ * SPRX layout (from reference emulator RegisterDefaults, offsetof(count)==0x38):
  *   0x00: tbl0 (CX) — array of pointers to AgcRegisterDefaultValue arrays
  *   0x08: tbl1 (SH) — array of pointers to AgcRegisterDefaultValue arrays
  *   0x10: tbl2 (UC) — array of pointers (often NULL)

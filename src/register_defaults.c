@@ -20,7 +20,7 @@
  * AGC register default blob builder and parser.
  *
  * The blob layout is recovered from observation
- * (from the HLE reference implementation's AgcExports.cs):
+ * (from the HLE reference implementation's HLE reference):
  *
  *   0x00: CX table pointer (uint64)
  *   0x08: SH table pointer (uint64)

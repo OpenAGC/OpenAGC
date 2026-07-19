@@ -607,7 +607,7 @@ int32_t PS5_SYSV_ABI sceAgcQueueEndOfPipeActionPatchAddress(
         return AGC_ERROR_INVALID_ARGUMENT;
 
     /* SPRX-confirmed: accepts direct IT_RELEASE_MEM (0x49) and NOP-wrapped
-     * (op 0x10, sub 0x18) for KytyPS5 compatibility. Rejects interrupt==4
+     * (op 0x10, sub 0x18) for reference emulator compatibility. Rejects interrupt==4
      * (address is zeroed in that case). */
     uint32_t opcode = agcPm4Opcode(cmd[0]);
     uint32_t sub = agcPm4Subcommand(cmd[0]);
@@ -648,7 +648,7 @@ int32_t PS5_SYSV_ABI sceAgcQueueEndOfPipeActionPatchData(
     if (interrupt == 4u || packet_data_sel == 5u)
         return AGC_ERROR_INVALID_ARGUMENT;
 
-    /* KytyPS5: for NOP-wrapped ReleaseMem with context_id > 1 and data_sel==1,
+    /* reference emulator: for NOP-wrapped ReleaseMem with context_id > 1 and data_sel==1,
      * pack the segment generation into bits 24..31 of the data. */
     uint64_t packet_data = data;
     if (opcode == AGC_PM4_OP_NOP && sub == AGC_PM4_SUB_RELEASE_MEM &&

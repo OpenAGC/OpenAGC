@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-convert_register_defaults.py — Convert KytyPS5 agcRegisterDefaults.inc
+convert_register_defaults.py — Convert reference emulator agcRegisterDefaults.inc
 into openagc register_defaults_v{N}.c source files.
 
-The KytyPS5 CompactRegisterDefaults format uses:
+The reference emulator CompactRegisterDefaults format uses:
   - tbl[0..3]_regs: arrays of {offset, value} pairs (ShaderRegister)
   - tbl[0..3]_pointer_offsets: uint16 indices into the regs arrays
   - types[]: uint32 triplets {hash, packed_index, reserved}
@@ -35,7 +35,7 @@ import sys
 import os
 from pathlib import Path
 
-# Version mapping from KytyPS5
+# Version mapping from reference emulator
 VERSION_MAP = {
     0: 0, 1: 0, 2: 0, 3: 0,
     4: 4, 5: 5, 6: 5,
@@ -262,7 +262,7 @@ def generate_c_file(version, public_groups, internal_groups):
 
 def main():
     inc_path = sys.argv[1] if len(sys.argv) > 1 else \
-        '/Users/bizkut/Downloads/PS5/homebrew/KytyPS5/src/libs/agcRegisterDefaults.inc'
+        '/Users/bizkut/Downloads/PS5/homebrew/reference emulator/src/libs/agcRegisterDefaults.inc'
     out_dir = sys.argv[2] if len(sys.argv) > 2 else \
         '/Users/bizkut/Downloads/PS5/homebrew/ps4-freegnm/OpenAGC/src'
 
