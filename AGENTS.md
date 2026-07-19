@@ -291,21 +291,26 @@ Files:
 
 ## Current Roadmap
 
-See `STATUS.md` and `PLAN.md`. Next RE tasks, in order:
+See `STATUS.md` and `PLAN.md`. Next RE tasks, by priority:
 
-1. **PA debug ioctl** — `sceAgcDriverGetPaDebugInterfaceVersion` still
-   returns EPERM. This is a separate kernel permission check, not the
-   cr_sceAuthId check. Needs further kernel RE.
-2. **FRAME_OPEN ioctl** — returns EINVAL during init. May need additional
-   context setup. Currently non-blocking (init succeeds without it).
-3. **Validate default state blobs** — confirm the primary/internal
-   register-defaults blobs built by `sceAgcDriverNotifyDefaultStates` are
-   accepted by the kernel and produce the expected GPU state.
-4. **Full GPU command submission** — now that queue create, suspend point,
-   and DCB submit all work, the next step is to submit actual rendering
-   commands (draw calls, state setup) via the compute queue.
-5. **Game compatibility** — continue analyzing game binaries to identify
-   and implement remaining missing AGC functions.
+1. **Full GPU command submission** (Priority 1) — now that queue create,
+   suspend point, DCB submit, and default-state submission all work on
+   hardware, the next milestone is submitting actual rendering commands
+   (draw calls, state setup) via the compute queue. This is the critical
+   path to making openagc useful for real homebrew.
+2. **PA debug ioctl** (Priority 2, low) — `sceAgcDriverGetPaDebugInterfaceVersion`
+   returns EPERM. Separate kernel permission check, not the cr_sceAuthId
+   check. Non-blocking for rendering.
+3. **FRAME_OPEN ioctl** (Priority 3, low) — returns EINVAL during init.
+   Non-blocking — init succeeds without it.
+4. **Validate default state blobs** (Priority 4) — confirm register-defaults
+   blobs are accepted by the kernel. Part of Priority 1.
+5. **Game compatibility** (Priority 5) — continue analyzing game binaries.
+   Current: 3 games, 72 unique AGC functions, 100% implemented.
+
+NID table status: 354/366 FW 5.50 SPRX exports identified (96.7%), 322
+algorithm-verified. 12+32 unknown NIDs blocked on new external data sources.
+All function names in source code match NID-verified correct names.
 
 All userspace packet builders, patchers, LOD stats helpers, the FW 5.50
 ioctl/submit/queue RE layer, the shader record parser, the register-defaults

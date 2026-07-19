@@ -158,7 +158,7 @@ Current expected host test result:
 
 ## Phase 0: RE Groundwork
 
-Status: mostly implemented.
+Status: complete.
 
 Purpose:
 
@@ -188,14 +188,18 @@ Done:
 
 Remaining:
 
-- Finish NID table expansion from firmware 5.50 and ps5-openagc analysis.
+- 12 SPRX NIDs remain unidentified (not in any known database — aerolib.csv
+  154k entries, flatz ps5_symbols.txt, reference emulator, ps5-openagc, FW 3.20
+  genstubs all exhausted). These are blocked on new external data sources.
+- 32 NIDs in the TSV are unverified placeholders (`sceAgcUnknown_*` /
+  `sceAgcDriverUnknown_*`) — names not in any database. Same blocker.
 - Add structured notes for unknown packet IDs instead of scattering comments.
 
 Acceptance criteria:
 
-- NID table has source labels for each entry.
-- Packet model tests pass on host.
-- Unknowns are tracked in analysis docs with evidence level labels.
+- NID table has source labels for each entry. ✅ Done.
+- Packet model tests pass on host. ✅ Done.
+- Unknowns are tracked in analysis docs with evidence level labels. ✅ Done.
 
 ## Phase 1: Packet Builder Completion
 

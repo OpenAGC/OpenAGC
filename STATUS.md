@@ -28,11 +28,11 @@ The host-generic implementation now has a tested model for:
 - Shader linking: `agcShaderLinkHsGs` — combines HS/LS + CS shader records into GS (matches SPRX ordinal 131)
 - Fused shader support: `sceAgcGetFusedShaderSize` (NID: dolOmWH+huQ) and `sceAgcFuseShaderHalves` (NID: fd5Bp5tGTgo) — reference-confirmed fusion of GS/HS front+back shader halves with register patching
 - EOP flip submit: `sceAgcDriverSubmitEopFlip` (prospero) + `sceAgcDcbSetEopFlip` DCB builder (IT_RELEASE_MEM 0x49)
-- NID table (FW 5.50): 354 identified exports (216 libSceAgc + 138 libSceAgcDriver) out of 366 total FW 5.50 SPRX exports (96.7% coverage). Sources: reference emulator LIB_FUNC, ps5-openagc agc_nid.h, FW 3.20 genstub files, aerolib.csv (154k entries), flatz ps5_symbols.txt, NID computation via SHA1(name+salt) (prospero-nid algorithm — 67 placeholder names resolved). Remaining 12 unknown NIDs are not in any known database. 9 functions have two NIDs in 5.50 SPRX (old+new version exports), disambiguated with _<NID> suffix. Version-specific NIDs (3.20-only, 11.60-only) are in `analysis/agc_nids_version_variants.tsv`.
+- NID table (FW 5.50): 354 identified exports (216 libSceAgc + 138 libSceAgcDriver) out of 366 total FW 5.50 SPRX exports (96.7% coverage). 322 NIDs algorithm-verified via SHA1(name+salt) prospero-nid computation. Sources: reference emulator LIB_FUNC, ps5-openagc agc_nid.h, FW 3.20 genstub files, aerolib.csv (154k entries), flatz ps5_symbols.txt, NID computation (67 placeholder names resolved). Remaining 12 unknown NIDs are not in any known database. 32 TSV entries are unverified placeholders (`sceAgcUnknown_*`). 9 functions have two NIDs in 5.50 SPRX (old+new version exports), disambiguated with _<NID> suffix. Version-specific NIDs (3.20-only, 11.60-only) are in `analysis/agc_nids_version_variants.tsv`. All 354 TSV NIDs confirmed present in 5.50 SPRX. All function names in source code match their NID-verified correct names (Vsh-prefixed duplicates removed, wrong-function renames fixed).
 - Async-compute queue submission: generic backend queue tracking (32 slots), ACB submit validates queue in-use, full create→submit→destroy flow tested
-- 13 new DCB builders from SPRX disassembly: ReleaseMem, IndirectBuffer, IndirectBufferConst, DrawIndirect, DrawIndex2, DrawIndexIndirect, DrawIndirectMulti, DrawIndexIndirectMulti, SetPredication, EventWrite, SetConfigReg, SetShReg, SetUconfigReg
+- 13 new DCB builders from SPRX disassembly: ReleaseMem, IndirectBuffer, DrawIndirect, DrawIndex2, DrawIndexIndirect, DrawIndirectMulti, DrawIndexIndirectMulti, SetPredication, EventWrite, SetConfigReg, SetShReg, SetUconfigReg
 - 4 AGC-custom flip builders: WaitFlipDone (0x4C), WaitFlip (0x51), InsertWaitFlipDone (0x54), WaitFlipEos (0x4F+0x4E)
-- Workload tracking: sceAgcDriverSetWorkloadsActive / EndWorkload with SET_WORKLOAD (0x1E) submit on prospero
+- Workload tracking: sceAgcDriverSetWorkloadsActive / SetWorkloadComplete with SET_WORKLOAD (0x1E) submit on prospero
 - FW 5.50 register-defaults blob builder/parser with embedded primary/internal tables
 
 ## Verified
@@ -124,7 +124,7 @@ Cursor-based builders:
 - `sceAgcDcbSetCxRegistersIndirect` — opcode 0x9F, 5 dwords (SPRX-confirmed)
 - `sceAgcDcbSetUcRegistersIndirect` — opcode 0x64, 5 dwords (SPRX-confirmed)
 
-Old-style ACB stubs (from `src/acb.c`):
+Old-style ACB stubs (from `src/acb.c`) and DCB raw-buffer variants (from `src/dcb.c`):
 
 - `sceAgcAcbInitializeDefaultHardwareState_pre0090`
 - `sceAgcAcbDispatchIndirect`
@@ -417,22 +417,54 @@ Submit model:
 
 ## Next RE Tasks
 
-1. **PA debug ioctl** — `sceAgcDriverGetPaDebugInterfaceVersion` still
-   returns EPERM (errno=1). This is a separate kernel permission check
-   (not the cr_sceAuthId check at 0xd8e70400). Needs further kernel RE
-   to identify the required capability.
-2. **FRAME_OPEN ioctl** — `sce_agc_initialize` calls FRAME_OPEN
-   (0xC0088100) which returns EINVAL. This may need additional context
-   setup or credentials. Currently non-blocking — init succeeds without it.
-3. **Validate default state blobs** — confirm the primary/internal
-   register-defaults blobs are accepted by the kernel and produce the
-   expected GPU state.
-4. **Full GPU command submission** — now that queue create, suspend point,
-   and DCB submit all work, the next step is to submit actual rendering
-   commands (draw calls, state setup) via the compute queue.
-5. **Game compatibility** — continue analyzing game binaries to identify
-   and implement remaining missing AGC functions. See
-   `analysis/game_agc_usage.md` for the Joe & Mac analysis.
+### Priority 1: Full GPU command submission (hardware validation)
+
+Now that queue create, suspend point, DCB submit, and default-state
+submission all work on PS5 hardware, the next major milestone is submitting
+actual rendering commands (draw calls, state setup) via the compute queue.
+This is the critical path to making openagc useful for real homebrew.
+
+Subtasks:
+1. Submit a compute dispatch (already have `sceAgcCbDispatch`) and verify
+   the GPU executes it.
+2. Submit a graphics draw call with state setup (shader, render target,
+   viewport, blend state).
+3. Verify render output (readback or flip display).
+
+### Priority 2: PA debug ioctl (kernel RE)
+
+`sceAgcDriverGetPaDebugInterfaceVersion` still returns EPERM (errno=1).
+This is a separate kernel permission check (not the cr_sceAuthId check
+at 0xd8e70400). Needs further kernel RE to identify the required
+capability. Low priority — non-blocking for rendering.
+
+### Priority 3: FRAME_OPEN ioctl (kernel RE)
+
+`sce_agc_initialize` calls FRAME_OPEN (0xC0088100) which returns EINVAL.
+This may need additional context setup or credentials. Currently
+non-blocking — init succeeds without it. Low priority.
+
+### Priority 4: Validate default state blobs on hardware
+
+Confirm the primary/internal register-defaults blobs built by
+`sceAgcDriverNotifyDefaultStates` are accepted by the kernel and produce
+the expected GPU state. This is part of Priority 1 (rendering requires
+correct default state).
+
+### Priority 5: Game compatibility expansion
+
+Continue analyzing game binaries to identify and implement remaining
+missing AGC functions. See `analysis/game_agc_usage.md` for the Joe & Mac
+analysis. Current coverage: 3 games, 72 unique AGC functions, 100%
+implemented. Analyzing more games will surface new function requirements.
+
+### Blocked: Remaining 12+32 unknown NIDs
+
+12 SPRX NIDs are not in any known database (aerolib.csv 154k entries,
+flatz ps5_symbols.txt, reference emulator, ps5-openagc, FW 3.20 genstubs
+all exhausted). 32 TSV entries are unverified placeholders. These are
+blocked on new external data sources — no actionable work without new
+NID databases or firmware dumps.
 
 ## Game Compatibility
 
