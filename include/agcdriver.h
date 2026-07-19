@@ -89,6 +89,35 @@ int32_t  PS5_SYSV_ABI sceAgcDriverSubmitToRazorACQ(void);
 int32_t  PS5_SYSV_ABI sceAgcDriverSubmitToHDRScopesACQ(void);
 uint32_t PS5_SYSV_ABI sceAgcDriverGetPaDebugInterfaceVersion(void);
 
+/* Capture status query. NID: Ddwk4gLT5j0
+ * KytyPS5-confirmed: returns 0 (no capture in progress). */
+int32_t PS5_SYSV_ABI sceAgcDriverIsCaptureInProgress(void);
+
+/* Event queue management. NIDs:
+ * DeleteEqEvent: DL2RXaXOy88
+ * GetEqEventType: 5CdQTZIQPxM
+ * KytyPS5-confirmed: stubs that return AGC_ERROR_NOT_SUPPORTED. */
+int32_t PS5_SYSV_ABI sceAgcDriverDeleteEqEvent(void *event);
+int32_t PS5_SYSV_ABI sceAgcDriverGetEqEventType(void *event, uint32_t *type);
+
+/* Resource registration system. NIDs:
+ * GetDefaultOwner: F0ZXt5q0ZTA
+ * InitResourceRegistration: F0Y42t-3e18
+ * QueryResourceRegistrationUserMemoryRequirements: AOLcoIkQDgM
+ * GetResourceRegistrationMaxNameLength: uJziRsODk1c
+ * UnregisterResource: pWLG7WOpVcw
+ * RegisterWorkloadStream: 3AyTaWcF-H8
+ * KytyPS5-confirmed: stubs. GetDefaultOwner returns 0 (default owner).
+ * GetResourceRegistrationMaxNameLength returns 32. */
+uint32_t PS5_SYSV_ABI sceAgcDriverGetDefaultOwner(void);
+int32_t  PS5_SYSV_ABI sceAgcDriverInitResourceRegistration(void);
+int32_t  PS5_SYSV_ABI sceAgcDriverQueryResourceRegistrationUserMemoryRequirements(
+    void *out_info);
+uint32_t PS5_SYSV_ABI sceAgcDriverGetResourceRegistrationMaxNameLength(void);
+int32_t  PS5_SYSV_ABI sceAgcDriverUnregisterResource(uint32_t resource_id);
+int32_t  PS5_SYSV_ABI sceAgcDriverRegisterWorkloadStream(
+    const char *name, uint32_t *out_id);
+
 /* Default state queries */
 int32_t PS5_SYSV_ABI sceAgcGetDefaultState(AgcContextState *out_state);
 int32_t PS5_SYSV_ABI sceAgcGetGameDefaultState(AgcContextState *out_state);

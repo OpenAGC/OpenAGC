@@ -277,6 +277,15 @@ Game-compat driver functions:
 - `sceAgcDriverSetHsOffchipParam` — non-Direct HS offchip param
 - `sceAgcDriverAgrSubmitDcb` — AGR submit (returns 0x8a6d0003 if not initialized)
 - `sceAgcDriverAddEqEvent` — EQ event registration
+- `sceAgcDriverDeleteEqEvent` — EQ event deletion (stub, NOT_SUPPORTED)
+- `sceAgcDriverGetEqEventType` — EQ event type query (stub, NOT_SUPPORTED)
+- `sceAgcDriverIsCaptureInProgress` — capture status (returns 0)
+- `sceAgcDriverGetDefaultOwner` — default owner handle (returns 0)
+- `sceAgcDriverInitResourceRegistration` — resource reg init (stub, NOT_SUPPORTED)
+- `sceAgcDriverQueryResourceRegistrationUserMemoryRequirements` — (stub, NOT_SUPPORTED)
+- `sceAgcDriverGetResourceRegistrationMaxNameLength` — returns 32
+- `sceAgcDriverUnregisterResource` — resource unregister (stub, NOT_SUPPORTED)
+- `sceAgcDriverRegisterWorkloadStream` — workload stream reg (stub, NOT_SUPPORTED)
 
 Game-compat wrapper functions:
 

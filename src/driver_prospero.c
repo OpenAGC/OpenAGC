@@ -511,9 +511,23 @@ int32_t PS5_SYSV_ABI sceAgcDriverSubmitMultiCommandBuffersDirect(
         if (acb_sizes_in_bytes[i] & 0x3)
             return AGC_ERROR_CB_INVALID_SIZE;
         uint32_t size_dwords = acb_sizes_in_bytes[i] / 4;
+        uint32_t *acb = (uint32_t *)(uintptr_t)acb_gpu_addrs[i];
+
+        /* KytyPS5-confirmed: ACB descriptor indirection.
+         * If the ACB starts with a descriptor header (magic 0x5533ccaa),
+         * the actual ACB data is at the address pointed to by acb[0..1]. */
+        if (size_dwords >= 5 && acb[3] == 0 && acb[4] == 0x5533ccaau) {
+            uint64_t desc_addr = (uint64_t)acb[0] | ((uint64_t)acb[1] << 32);
+            uint32_t desc_size = acb[2];
+            if (desc_addr != 0 && desc_size != 0) {
+                acb = (uint32_t *)(uintptr_t)desc_addr;
+                size_dwords = desc_size;
+            }
+        }
+
         /* ACBs use the const IB type */
         agcProsperoBuildCbDescriptor(&cb_descs[cb_idx],
-                                   (uint64_t)(uintptr_t)acb_gpu_addrs[i],
+                                   (uint64_t)(uintptr_t)acb,
                                    size_dwords, true);
         cb_idx++;
     }
@@ -578,10 +592,24 @@ int32_t PS5_SYSV_ABI sceAgcDriverSubmitAcb(
     if (!g_prospero.queues[owner_handle].in_use)
         return AGC_ERROR_CB_INVALID_QUEUE;
 
+    uint64_t acb_addr = packet->command_address;
+    uint32_t size_dwords = packet->dword_count;
+    uint32_t *acb = (uint32_t *)(uintptr_t)acb_addr;
+
+    /* KytyPS5-confirmed: ACB descriptor indirection.
+     * If the ACB starts with a descriptor header (magic 0x5533ccaa),
+     * the actual ACB data is at the address pointed to by acb[0..1]. */
+    if (size_dwords >= 5 && acb[3] == 0 && acb[4] == 0x5533ccaau) {
+        uint64_t desc_addr = (uint64_t)acb[0] | ((uint64_t)acb[1] << 32);
+        uint32_t desc_size = acb[2];
+        if (desc_addr != 0 && desc_size != 0) {
+            acb_addr = desc_addr;
+            size_dwords = desc_size;
+        }
+    }
+
     AgcGcCommandBuffer cb_desc;
-    agcProsperoBuildCbDescriptor(&cb_desc,
-                               (uint64_t)packet->command_address,
-                               packet->dword_count, true);
+    agcProsperoBuildCbDescriptor(&cb_desc, acb_addr, size_dwords, true);
 
     AgcGcSubmitArgs submit_arg = {0};
     submit_arg.pid = 0;

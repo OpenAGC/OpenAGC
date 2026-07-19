@@ -785,6 +785,7 @@ static void test_batch2_dcb_workload_helpers(void) {
 /* Forward declarations for batch 3 tests (defined after test_suite_dcb). */
 static void test_batch3_kytyps5_patchers(void);
 static void test_batch3_kytyps5_getsize_helpers(void);
+static void test_batch3_kytyps5_driver_stubs(void);
 
 void test_suite_dcb(void) {
     TEST_SUITE("DCB Commands");
@@ -840,6 +841,7 @@ void test_suite_dcb(void) {
     TEST_RUN(test_batch2_dcb_workload_helpers);
     TEST_RUN(test_batch3_kytyps5_patchers);
     TEST_RUN(test_batch3_kytyps5_getsize_helpers);
+    TEST_RUN(test_batch3_kytyps5_driver_stubs);
 }
 
 /* ===================================================================== */
@@ -986,4 +988,42 @@ static void test_batch3_kytyps5_getsize_helpers(void) {
     TEST_ASSERT_EQ(sceAgcDcbWaitOnAddressGetSize(0), 56u, "WaitOnAddressGetSize(0)");
     TEST_ASSERT_EQ(sceAgcDcbWaitOnAddressGetSize(1), 64u, "WaitOnAddressGetSize(1)");
     TEST_ASSERT_EQ(sceAgcDcbWaitOnAddressGetSize(2), 0u, "WaitOnAddressGetSize(invalid)");
+}
+
+static void test_batch3_kytyps5_driver_stubs(void) {
+    /* IsCaptureInProgress: returns 0 */
+    TEST_ASSERT_EQ(sceAgcDriverIsCaptureInProgress(), 0, "IsCaptureInProgress returns 0");
+
+    /* GetDefaultOwner: returns 0 */
+    TEST_ASSERT_EQ(sceAgcDriverGetDefaultOwner(), 0u, "GetDefaultOwner returns 0");
+
+    /* GetResourceRegistrationMaxNameLength: returns 32 */
+    TEST_ASSERT_EQ(sceAgcDriverGetResourceRegistrationMaxNameLength(), 32u,
+        "GetResourceRegistrationMaxNameLength returns 32");
+
+    /* DeleteEqEvent: stub returns NOT_SUPPORTED */
+    TEST_ASSERT_EQ(sceAgcDriverDeleteEqEvent(NULL), AGC_ERROR_NOT_SUPPORTED,
+        "DeleteEqEvent returns NOT_SUPPORTED");
+
+    /* GetEqEventType: stub returns NOT_SUPPORTED */
+    uint32_t eq_type = 0xDEAD;
+    TEST_ASSERT_EQ(sceAgcDriverGetEqEventType(NULL, &eq_type), AGC_ERROR_NOT_SUPPORTED,
+        "GetEqEventType returns NOT_SUPPORTED");
+
+    /* InitResourceRegistration: stub returns NOT_SUPPORTED */
+    TEST_ASSERT_EQ(sceAgcDriverInitResourceRegistration(), AGC_ERROR_NOT_SUPPORTED,
+        "InitResourceRegistration returns NOT_SUPPORTED");
+
+    /* QueryResourceRegistrationUserMemoryRequirements: stub returns NOT_SUPPORTED */
+    TEST_ASSERT_EQ(sceAgcDriverQueryResourceRegistrationUserMemoryRequirements(NULL),
+        AGC_ERROR_NOT_SUPPORTED, "QueryResourceRegistration returns NOT_SUPPORTED");
+
+    /* UnregisterResource: stub returns NOT_SUPPORTED */
+    TEST_ASSERT_EQ(sceAgcDriverUnregisterResource(0), AGC_ERROR_NOT_SUPPORTED,
+        "UnregisterResource returns NOT_SUPPORTED");
+
+    /* RegisterWorkloadStream: stub returns NOT_SUPPORTED */
+    uint32_t wl_id = 0xDEAD;
+    TEST_ASSERT_EQ(sceAgcDriverRegisterWorkloadStream(NULL, &wl_id), AGC_ERROR_NOT_SUPPORTED,
+        "RegisterWorkloadStream returns NOT_SUPPORTED");
 }
