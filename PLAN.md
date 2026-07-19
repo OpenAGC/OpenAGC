@@ -454,7 +454,36 @@ No placeholder VRS enums in public headers until evidence is found.
   (NOT proven working — NID mapping only; see `analysis/ps5_openagc_audit.md`)
 - SharpEmu AGC HLE: `/Users/bizkut/Downloads/PS5/homebrew/sharpemu`
 - RPCSX GPU/PM4/GNM reference: `/Users/bizkut/Downloads/PS5/homebrew/rpcsx`
+- **KytyPS5 emulator**: `/Users/bizkut/Downloads/PS5/homebrew/KytyPS5`
+  (best secondary reference for packet builders and PM4 command processing)
 - PS4 GNM clean rewrite reference: `../opengnm`
+
+## KytyPS5 Action Items
+
+Completed:
+- [x] Fix `sceAgcDcbDrawIndexAuto` to use `IT_DRAW_INDEX_AUTO (0x2D)` directly
+- [x] Fix `sceAgcDcbWaitRegMem` 32-bit variant to 7 dwords with proper control word
+- [x] Add KytyPS5-confirmed patchers (GetPacketSize, SetPacketPredication,
+      SetRangePredication, CondExecPatch*, WriteDataPatchSetAddressOrOffset,
+      JumpPatchSetTarget, SetNumRegisters variants)
+- [x] Add KytyPS5-confirmed GetSize helpers (WriteData, Jump, Rewind, CondExec,
+      WaitOnAddress)
+- [x] Add missing driver functions (IsCaptureInProgress, DeleteEqEvent,
+      GetEqEventType, GetDefaultOwner, InitResourceRegistration, etc.)
+- [x] Add ACB descriptor indirection (magic 0x5533ccaa) to prospero backend
+- [x] Fix PM4 opcodes (DISPATCH_DRAW_PREAMBLE 0x3A, SET_CONTEXT_REG_INDIRECT 0x9F)
+
+In progress:
+- [ ] **Update register defaults from KytyPS5 v8** (CRITICAL: openagc has only
+      38/703 public registers and 22/25 internal registers. Many values are
+      wrong (zero placeholders from SharpEmu). Must replace with KytyPS5
+      `g_agc_public_reg_defaults_v8` and `g_agc_internal_reg_defaults_v8`.)
+
+Pending:
+- [ ] Add fused shader support (GetFusedShaderSize / FuseShaderHalves)
+- [ ] Add SubmitMultiDcbs, SubmitMultiAcbs, SubmitCommandBuffer wrappers
+- [ ] Cross-check remaining builder encodings against KytyPS5
+- [ ] Add version selection for register defaults (v0, v4, v5, v7, v8, v9, v10, v11)
 
 ## Working Rules
 
