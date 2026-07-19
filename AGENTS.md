@@ -118,12 +118,16 @@ Before marking a task complete:
   (kernel-side ioctl/submit/queue layouts for FW 5.50).
 - **NID table scope:** `analysis/agc_known_nids.tsv` and `include/agc_nids.h`
   contain only NIDs that exist in the **FW 5.50 SPRX** (our primary target).
+  354 NIDs mapped (96.7% of 366 exports), 12 remain unidentified.
   NIDs from other firmware versions (3.20-only, 11.60-only) are in
   `analysis/agc_nids_version_variants.tsv` for cross-version reference.
   NIDs are **not stable** across firmware versions — some functions have
   different NIDs in 3.20 vs 5.50 (e.g. `sceAgcFuseShaderHalves`:
-  3.20=`nApJjpKNBl4`, 5.50=`fd5Bp5tGTgo`). Since OpenAGC is a static library,
-  NIDs are reference-only and not used at runtime.
+  3.20=`nApJjpKNBl4`, 5.50=`fd5Bp5tGTgo`). 9 functions have two NIDs in 5.50
+  SPRX (old+new version exports), disambiguated with `_<NID>` suffix in the
+  name. NID computation uses SHA1(name+salt) via the prospero-nid algorithm
+  (see `/Users/bizkut/Downloads/PS5/sdk/host/bin/prospero-nid.c`).
+  Since OpenAGC is a static library, NIDs are reference-only and not used at runtime.
 
 ## Reference Paths (host machine only — do not commit)
 

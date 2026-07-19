@@ -1,3 +1,4 @@
+firmware	library	name	nid	notes
 # NID version variants — NIDs from firmware versions other than 5.50
 # These NIDs do NOT exist in the FW 5.50 SPRX. Use for cross-version reference only.
 #

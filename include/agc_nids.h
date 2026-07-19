@@ -18,386 +18,387 @@
 #define _AGC_NIDS_H_
 
 /*
- * Known Gen5 AGC NIDs — cross-referenced from observation and ps5-openagc
- * firmware 5.50 SPRX analysis.
+ * Known Gen5 AGC NIDs — FW 5.50 SPRX analysis.
  *
  * Sources:
  *   - HLE reference AgcExports.cs (original identification)
- *   - ps5-openagc include/ps5/internal/agc_nid.h (SPRX NID matching —
- *     NID-to-name mapping only; ps5-openagc's ioctl layouts are NOT trusted,
- *     see analysis/ps5_openagc_audit.md)
+ *   - ps5-openagc include/ps5/internal/agc_nid.h (SPRX NID matching)
+ *   - KytyPS5 LIB_FUNC declarations
+ *   - FW 3.20 genstub files
+ *   - aerolib.csv NID database (154k entries, PS4+PS5)
+ *   - flatz ps5_symbols.txt (IDA plugin symbol list)
+ *   - NID computation via SHA1(name + salt) — prospero-nid algorithm
+ *     (verified: 67 placeholder names resolved by computing NIDs
+ *     from known symbol names and matching against SPRX exports)
  *
- * Total identified: 340 NIDs across libSceAgc (213) and libSceAgcDriver (127),
- * out of 366 total FW 5.50 SPRX exports (92.9% coverage).
- * Sources: KytyPS5 LIB_FUNC, ps5-openagc agc_nid.h, FW 3.20 genstub files,
- * SPRX disassembly (GetSize stubs, error-code stubs).
+ * Total identified: 354 NIDs across libSceAgc (216)
+ * and libSceAgcDriver (138),
+ * out of 366 total FW 5.50 SPRX exports (96.7% coverage).
+ * 12 NIDs remain unidentified (not in any known database).
+ * 9 functions have two NIDs in 5.50 SPRX (old+new version exports);
+ * these are disambiguated with a _<NID> suffix in the name.
  * For NIDs from other firmware versions, see agc_nids_version_variants.tsv
- * FW 5.50 export counts: libSceAgc=222, libSceAgcDriver=145, libSceAgcVsh=219.
+ * FW 5.50 export counts: libSceAgc=222, libSceAgcDriver=144.
  */
 
 /* === libSceAgc.sprx === */
 
-#define AGC_NID_SCE_AGC_INIT                         "kW3GLb7QfPg"
-#define AGC_NID_SCE_AGC_GET_REGISTER_DEFAULTS2       "2JtWUUiYBXs"
-#define AGC_NID_SCE_AGC_GET_REGISTER_DEFAULTS2_INT   "wRbq6ZjNop4"
-#define AGC_NID_SCE_AGC_CREATE_SHADER                "f3dg2CSgRKY"
-#define AGC_NID_SCE_AGC_GET_DATA_PACKET_PAYLOAD      "V++UgBtQhn0"
-#define AGC_NID_SCE_AGC_CB_NOP                       "LtTouSCZjHM"
-#define AGC_NID_SCE_AGC_CB_DISPATCH                  "k3GhuSNmBLU"
-#define AGC_NID_SCE_AGC_CB_SET_SH_REGISTERS_DIRECT   "UZbQjYAwwXM"
-
-/* ACB builders */
-#define AGC_NID_SCE_AGC_ACB_ATOMIC_MEM               "XKKuA6VkSRc"
-#define AGC_NID_SCE_AGC_ACB_ACQUIRE_MEM              "KT-hTp-Ch14"
-#define AGC_NID_SCE_AGC_ACB_COND_EXEC                "qyM2bxYFPAk"
-#define AGC_NID_SCE_AGC_ACB_COPY_DATA                "qzMN2XKGA4k"
-#define AGC_NID_SCE_AGC_ACB_DISPATCH_INDIRECT        "j3EtxFkSIhQ"
-#define AGC_NID_SCE_AGC_ACB_DMA_DATA                 "-RnpfpxIhec"
-#define AGC_NID_SCE_AGC_ACB_EVENT_WRITE              "cFazmnXpJOE"
-#define AGC_NID_SCE_AGC_ACB_INIT_DEFAULT_HW_PRE0090  "rPtseVo5ToI"
-#define AGC_NID_SCE_AGC_ACB_RESET_QUEUE              "JrtiDtKeS38"
-#define AGC_NID_SCE_AGC_ACB_JUMP                     "e1DFTg+Sd8U"
-#define AGC_NID_SCE_AGC_ACB_WRITE_DATA               "eZ4+17OQz4Q"
-#define AGC_NID_SCE_AGC_ACB_WAIT_REG_MEM             "htn36gPnBk4"
-#define AGC_NID_SCE_AGC_ACB_REWIND                   "DwICrVxerkY"
-#define AGC_NID_SCE_AGC_ACB_PRIME_UTCL2              "szG7hz2yEhA"
-#define AGC_NID_SCE_AGC_ACB_ATOMIC_GDS_PRE0090       "cduV1f0dcGQ"
-#define AGC_NID_SCE_AGC_ACB_ATOMIC_GDS               "gQkqkLttcpw"
-#define AGC_NID_SCE_AGC_ACB_SET_MARKER               "xAeBOa0A3kk"
-#define AGC_NID_SCE_AGC_ACB_PUSH_MARKER              "cpCILPya5Zk"
-#define AGC_NID_SCE_AGC_ACB_POP_MARKER               "6mFxkVqdmbQ"
-#define AGC_NID_SCE_AGC_ACB_SET_FLIP                 "ebixW91gpPw"
-#define AGC_NID_SCE_AGC_ACB_MEM_SEMAPHORE            "q4VuU-QsLOE"
-#define AGC_NID_SCE_AGC_ACB_WAIT_SAFE_RENDERING      "GPbUp9jXQa8"
-#define AGC_NID_SCE_AGC_ACB_SET_WORKLOADS_ACTIVE     "rVOmPz2RBlg"
-#define AGC_NID_SCE_AGC_ACB_SET_WORKLOAD_COMPLETE    "opR1JeJZCBU"
-#define AGC_NID_SCE_AGC_ACB_SET_WORKLOAD_STREAM_INACT "FcgdDM3MB+k"
-
-/* Vsh DCB builders */
-#define AGC_NID_SCE_AGC_VSH_CB_MEM_SEMAPHORE         "vHX9guneRBY"
-#define AGC_NID_SCE_AGC_VSH_DCB_CONTEXT_STATE_OP     "qj7QZpgr9Uw"
-#define AGC_NID_SCE_AGC_VSH_DCB_CONTEXT_STATE_OP_PRE0100 "HabmgqPwPw0"
-#define AGC_NID_SCE_AGC_VSH_DCB_INIT_HW_PRE0090      "Xvcgh9xNNkY"
-#define AGC_NID_SCE_AGC_VSH_DCB_RESET_QUEUE          "TRO721eVt4g"
-#define AGC_NID_SCE_AGC_VSH_DCB_ATOMIC_GDS_PRE0090   "pH3-dfRpfA0"
-#define AGC_NID_SCE_AGC_VSH_DCB_ATOMIC_GDS           "zARR5aCmkoY"
-#define AGC_NID_SCE_AGC_VSH_DCB_SET_FLIP             "YUeqkyT7mEQ"
-#define AGC_NID_SCE_AGC_DCB_SET_FLIP                 AGC_NID_SCE_AGC_VSH_DCB_SET_FLIP
-#define AGC_NID_SCE_AGC_VSH_DCB_WAIT_SAFE_RENDERING  "MWiElSNE8j8"
-#define AGC_NID_SCE_AGC_VSH_DCB_MEM_SEMAPHORE        "G0jrLdvEqDw"
-#define AGC_NID_SCE_AGC_VSH_DCB_SET_WORKLOADS_ACTIVE "LFSPFmGc9Hg"
-#define AGC_NID_SCE_AGC_VSH_DCB_SET_WORKLOAD_COMPLETE "hEK26Wdny6s"
-#define AGC_NID_SCE_AGC_VSH_DCB_SET_WORKLOAD_STREAM_INACT "FneFypEDRgY"
-
-/* DCB builders (HLE reference-identified, not in ps5-openagc NID table) */
-#define AGC_NID_SCE_AGC_DCB_WRITE_DATA               "i1jyy49AjXU"
-#define AGC_NID_SCE_AGC_DCB_WAIT_REG_MEM             "VmW0Tdpy420"
-#define AGC_NID_SCE_AGC_DCB_DMA_DATA                 "WmAc2MEj6Io"
-#define AGC_NID_SCE_AGC_DCB_GET_LOD_STATS_SIZE       "rUuVjyR+Rd4"
-#define AGC_NID_SCE_AGC_DCB_GET_LOD_STATS            "vuSXe69VILM"
-#define AGC_NID_SCE_AGC_DCB_SET_BASE_INDIRECT_ARGS   "RmaJwLtc8rY"
-#define AGC_NID_SCE_AGC_DCB_DISPATCH_INDIRECT        "CtB+A9-VxO0"
-#define AGC_NID_SCE_AGC_DCB_PUSH_MARKER              "+kSrjIVxKFE"
-#define AGC_NID_SCE_AGC_DCB_POP_MARKER               "H7uZqCoNuWk"
-#define AGC_NID_SCE_AGC_DCB_DRAW_INDEX_AUTO          "Yw0jKSqop+E"
-#define AGC_NID_SCE_AGC_DCB_SET_INDEX_BUFFER         "l4fM9K-Lyks"
-#define AGC_NID_SCE_AGC_DCB_DRAW_INDEX_OFFSET        "B+aG9DUnTKA"
-
-/* DCB builders — newly identified from SPRX disassembly (FW 5.50) */
-#define AGC_NID_SCE_AGC_DCB_INDIRECT_BUFFER          "w1KFAHVqpaU"
-#define AGC_NID_SCE_AGC_DCB_INDIRECT_BUFFER_CONST     "xSAR0LTcRKM"
-#define AGC_NID_SCE_AGC_DCB_SET_CONTEXT_REG           "7toV+elXqNM"
-#define AGC_NID_SCE_AGC_DCB_SET_CONFIG_REG            "BVFg3CWU6Eo"
-#define AGC_NID_SCE_AGC_DCB_SET_SH_REG                "n2fD4A+pb+g"
-#define AGC_NID_SCE_AGC_DCB_SET_SH_REG_DIRECT         "UZbQjYAwwXM"
-#define AGC_NID_SCE_AGC_DCB_SET_UCONFIG_REG           "MDLD5Ly94Xk"
-#define AGC_NID_SCE_AGC_DCB_RELEASE_MEM               "wr23dPKyWc0"
-/* NID "1-gUn1PI4Sw" is sceAgcDcbAtomicMem (SPRX-confirmed), not SET_WORKLOAD.
- * The workload begin/end functions use driver ordinals UM9b9NunSrE/i6bfTi13ApA. */
-#define AGC_NID_SCE_AGC_DCB_ATOMIC_MEM               "1-gUn1PI4Sw"
-#define AGC_NID_SCE_AGC_DCB_DRAW_INDIRECT             "1rZSWUv1IRc"
-#define AGC_NID_SCE_AGC_DCB_DRAW_INDEX_2              "q88lQ+GP5Yk"
-#define AGC_NID_SCE_AGC_DCB_DRAW_INDIRECT_MULTI       "kUlvghKs-mA"
-#define AGC_NID_SCE_AGC_DCB_DRAW_INDEX_INDIRECT       "t1vNu082-jM"
-#define AGC_NID_SCE_AGC_DCB_DRAW_INDEX_INDIRECT_MULTI  "ypVBz4uPKcQ"
-#define AGC_NID_SCE_AGC_DCB_DRAW_INDIRECT_COUNT_MULTI  "1q1titRBL6o"
-#define AGC_NID_SCE_AGC_DCB_DRAW_INDEX_INDIRECT_COUNT_MULTI "Rlx+bykm0r0"
-#define AGC_NID_SCE_AGC_DCB_SET_PREDICATION           "bbFueFP+J4k"
-#define AGC_NID_SCE_AGC_DCB_EVENT_WRITE               "aJf+j5yntiU"
-#define AGC_NID_SCE_AGC_DCB_PRIME_UTCL2               "jt3pl7EN17o"
-#define AGC_NID_SCE_AGC_DCB_SET_VGT_CONTROL           "hvUfkUIQcOE"
-#define AGC_NID_SCE_AGC_DCB_COND_EXEC_EX              "Aozdh0bCcO0"
-#define AGC_NID_SCE_AGC_DCB_WAIT_FLIP                 "pdEV7bI6COI"
-#define AGC_NID_SCE_AGC_DCB_WAIT_FLIP_EOS             "SbuY2jN+axQ"
-#define AGC_NID_SCE_AGC_DCB_INSERT_WAIT_FLIP_DONE     "k0E7vkgqAuE"
-#define AGC_NID_SCE_AGC_CB_VALIDATE_PM4_HEADER        "3KDcnM3lrcU"
-#define AGC_NID_SCE_AGC_CREATE_SHADER                 "f3dg2CSgRKY"
-#define AGC_NID_SCE_AGC_GET_SHADER_REGISTER_DEFAULTS  "D9sr1xGUriE"
-
-/* State queries */
-#define AGC_NID_SCE_AGC_GET_DEFAULT_CX_STATE_FLAT    "AAeX-U5-P3M"
-#define AGC_NID_SCE_AGC_SUSPEND_POINT                "h9z6+0hEydk"
-#define AGC_NID_SCE_AGC_SUSPEND_POINT_CHECK_STATUS   "b+fis+WZ3Ig"
-#define AGC_NID_SCE_AGC_GET_GAME_DEFAULT_STATE_1     "Wi82ArQtAwg"
-#define AGC_NID_SCE_AGC_GET_GAME_DEFAULT_STATE_2     "uIwxsqDlHRc"
-
-
-/* --- Additional NIDs from 3.20 stubs and SPRX analysis (5.50 verified) --- */
-
-#define AGC_NID_AGCACBACQUIREMEMGETSIZE                    "ewobAQeMo5k"    /* sceAgcAcbAcquireMemGetSize */
-#define AGC_NID_AGCACBCONDEXECGETSIZE                      "ozKzBP4aki4"    /* sceAgcAcbCondExecGetSize */
-#define AGC_NID_AGCACBWAITONADDRESSGETSIZE                 "idlaArvdXEs"    /* sceAgcAcbWaitOnAddressGetSize */
-#define AGC_NID_AGCASYNCREWINDPATCHSETREWINDSTATE          "eWaWyFegzgQ"    /* sceAgcAsyncRewindPatchSetRewindState */
-#define AGC_NID_AGCBRANCHPATCHSETCOMPAREADDRESS            "GXBlM-ekzrI"    /* sceAgcBranchPatchSetCompareAddress */
-#define AGC_NID_AGCBRANCHPATCHSETELSETARGET                "QmfvaYpsOcI"    /* sceAgcBranchPatchSetElseTarget */
-#define AGC_NID_AGCBRANCHPATCHSETTHENTARGET                "xb8VgcXQhvI"    /* sceAgcBranchPatchSetThenTarget */
-#define AGC_NID_AGCCBDISPATCHGETSIZE                       "Abendgtz+3o"    /* sceAgcCbDispatchGetSize */
-#define AGC_NID_AGCCBNOPGETSIZE                            "t7PlZ9nt5Lc"    /* sceAgcCbNopGetSize */
-#define AGC_NID_AGCCBQUEUEENDOFPIPEACTIONGETSIZE           "hL7C0IRpWZI"    /* sceAgcCbQueueEndOfPipeActionGetSize */
-#define AGC_NID_AGCCBSETSHREGISTERRANGEDIRECTGETSIZE       "bxGoVxpdSPQ"    /* sceAgcCbSetShRegisterRangeDirectGetSize */
-#define AGC_NID_AGCCBSETSHREGISTERSDIRECTGETSIZE           "yUBESvCCJ4I"    /* sceAgcCbSetShRegistersDirectGetSize */
-#define AGC_NID_AGCCBSETUCREGISTERRANGEDIRECTGETSIZE       "JOWmDrl+j20"    /* sceAgcCbSetUcRegisterRangeDirectGetSize */
-#define AGC_NID_AGCCBSETUCREGISTERSDIRECTGETSIZE           "TGEZzUWLbrc"    /* sceAgcCbSetUcRegistersDirectGetSize */
-#define AGC_NID_AGCCONDEXECPATCHSETCOMMANDADDRESS          "YWTKOju587o"    /* sceAgcCondExecPatchSetCommandAddress */
-#define AGC_NID_AGCCONDEXECPATCHSETEND                     "ORWsxIbk4TE"    /* sceAgcCondExecPatchSetEnd */
-#define AGC_NID_AGCCREATEINTERPOLANTMAPPING                "HV4j+E0MBHE"    /* sceAgcCreateInterpolantMapping */
-#define AGC_NID_AGCDCBACQUIREMEMGETSIZE                    "-vnlTPPXPrw"    /* sceAgcDcbAcquireMemGetSize */
-#define AGC_NID_AGCDCBBEGINOCCLUSIONQUERYGETSIZE           "ms1xVoZ-Vwc"    /* sceAgcDcbBeginOcclusionQueryGetSize */
-#define AGC_NID_AGCDCBCONDEXECGETSIZE                      "ou16V5hh5sg"    /* sceAgcDcbCondExecGetSize */
-#define AGC_NID_AGCDCBCONTEXTSTATEOPGETSIZE                "H6vHS5cidSA"    /* sceAgcDcbContextStateOpGetSize */
-#define AGC_NID_AGCDCBDISPATCHINDIRECTGETSIZE              "w8HVkEeXPv8"    /* sceAgcDcbDispatchIndirectGetSize */
-#define AGC_NID_AGCDCBDRAWINDEXAUTOGETSIZE                 "WrdP9Zxx3lQ"    /* sceAgcDcbDrawIndexAutoGetSize */
-#define AGC_NID_AGCDCBDRAWINDEXGETSIZE                     "6ee9Hd3EWXQ"    /* sceAgcDcbDrawIndexGetSize */
-#define AGC_NID_AGCDCBDRAWINDEXINDIRECTMULTIGETSIZE        "r98I08t+LOg"    /* sceAgcDcbDrawIndexIndirectMultiGetSize */
-#define AGC_NID_AGCDCBDRAWINDEXMULTIINSTANCEDGETSIZE       "mR9j7+SfM34"    /* sceAgcDcbDrawIndexMultiInstancedGetSize */
-#define AGC_NID_AGCDCBDRAWINDEXOFFSETGETSIZE               "qMlfB1ZhMDc"    /* sceAgcDcbDrawIndexOffsetGetSize */
-#define AGC_NID_AGCDCBDRAWINDIRECTGETSIZE                  "cxPZ4Wgvdj8"    /* sceAgcDcbDrawIndirectGetSize */
-#define AGC_NID_AGCDCBDRAWINDIRECTMULTIGETSIZE             "pYoKs3lPy88"    /* sceAgcDcbDrawIndirectMultiGetSize */
-#define AGC_NID_AGCDCBEVENTWRITEGETSIZE                    "C4l9fB17t8w"    /* sceAgcDcbEventWriteGetSize */
-#define AGC_NID_AGCDCBJUMPGETSIZE                          "VEGu4dixjUg"    /* sceAgcDcbJumpGetSize */
-#define AGC_NID_AGCDCBREWINDGETSIZE                        "QIXCsbipds0"    /* sceAgcDcbRewindGetSize */
-#define AGC_NID_AGCDCBSETCXREGISTERDIRECTGETSIZE           "1DeUNpRIDDA"    /* sceAgcDcbSetCxRegisterDirectGetSize */
-#define AGC_NID_AGCDCBSETCXREGISTERSINDIRECT               "ZvwO9euwYzc"    /* sceAgcDcbSetCxRegistersIndirect */
-#define AGC_NID_AGCDCBSETNUMINSTANCESGETSIZE               "6DFuRKT4C9w"    /* sceAgcDcbSetNumInstancesGetSize */
-#define AGC_NID_AGCDCBSETSHREGISTERSINDIRECT               "-HOOCn0JY48"    /* sceAgcDcbSetShRegistersIndirect */
-#define AGC_NID_AGCDCBWAITONADDRESSGETSIZE                 "43WJ08sSugE"    /* sceAgcDcbWaitOnAddressGetSize */
-#define AGC_NID_AGCDCBWRITEDATAGETSIZE                     "p9tI+yTvx68"    /* sceAgcDcbWriteDataGetSize */
-#define AGC_NID_AGCDMADATAPATCHSETDSTADDRESSOROFFSET       "IxYiarKlXxM"    /* sceAgcDmaDataPatchSetDstAddressOrOffset */
-#define AGC_NID_AGCFUSESHADERHALVES                        "fd5Bp5tGTgo"    /* sceAgcFuseShaderHalves */
-#define AGC_NID_AGCGETDATAPACKETPAYLOADADDRESS             "CQsSq6l6+kA"    /* sceAgcGetDataPacketPayloadAddress */
-#define AGC_NID_AGCGETDATAPACKETPAYLOADRANGE               "s+VGAMDQ0AQ"    /* sceAgcGetDataPacketPayloadRange */
-#define AGC_NID_AGCGETFUSEDSHADERSIZE                      "dolOmWH+huQ"    /* sceAgcGetFusedShaderSize */
-#define AGC_NID_AGCGETPACKETSIZE                           "Lkf86B98qPc"    /* sceAgcGetPacketSize */
-#define AGC_NID_AGCINIT                                    "23LRUSvYu1M"    /* sceAgcInit */
-#define AGC_NID_AGCJUMPPATCHSETTARGET                      "2BS4EtAaF28"    /* sceAgcJumpPatchSetTarget */
-#define AGC_NID_AGCLINKSHADERS                             "MqAdbRMdNz4"    /* sceAgcLinkShaders */
-#define AGC_NID_AGCQUEUEENDOFPIPEACTIONPATCHADDRESS        "0fWWK5uG9rQ"    /* sceAgcQueueEndOfPipeActionPatchAddress */
-#define AGC_NID_AGCQUEUEENDOFPIPEACTIONPATCHDATA           "MlEw1feXcjg"    /* sceAgcQueueEndOfPipeActionPatchData */
-#define AGC_NID_AGCQUEUEENDOFPIPEACTIONPATCHGCRCNTL        "J8YCgfKAMQs"    /* sceAgcQueueEndOfPipeActionPatchGcrCntl */
-#define AGC_NID_AGCQUEUEENDOFPIPEACTIONPATCHTYPE           "T9fjQIINoeE"    /* sceAgcQueueEndOfPipeActionPatchType */
-#define AGC_NID_AGCREWINDPATCHSETREWINDSTATE               "ziVA3whp3p4"    /* sceAgcRewindPatchSetRewindState */
-#define AGC_NID_AGCSETCXREGINDIRECTPATCHSETNUMREGISTERS    "whb1RL7K4Ss"    /* sceAgcSetCxRegIndirectPatchSetNumRegisters */
-#define AGC_NID_AGCSETPACKETPREDICATION                    "w6Dj1VJt5qY"    /* sceAgcSetPacketPredication */
-#define AGC_NID_AGCSETRANGEPREDICATION                     "n8vgpaQg6dA"    /* sceAgcSetRangePredication */
-#define AGC_NID_AGCSETSHREGINDIRECTPATCHSETNUMREGISTERS    "nCUgItdN2ms"    /* sceAgcSetShRegIndirectPatchSetNumRegisters */
-#define AGC_NID_AGCSETSUBMITMODE                           "-DtvmQ-tgEA"    /* sceAgcSetSubmitMode */
-#define AGC_NID_AGCSETUCREGINDIRECTPATCHSETNUMREGISTERS    "fRG-JOH5+sI"    /* sceAgcSetUcRegIndirectPatchSetNumRegisters */
-#define AGC_NID_AGCUNKNOWNGETSIZE_U6DKSLWM2O               "+u6dKSLWM2o"    /* sceAgcUnknownGetSize_+u6dKSLWM2o */
-#define AGC_NID_AGCUNKNOWNGETSIZE_0ZOG0JC9NRG              "0ZOG0jc9nRg"    /* sceAgcUnknownGetSize_0ZOG0jc9nRg */
-#define AGC_NID_AGCUNKNOWNGETSIZE_1TB0XKLNJCW              "1tB0xkLNjcw"    /* sceAgcUnknownGetSize_1tB0xkLNjcw */
-#define AGC_NID_AGCUNKNOWNGETSIZE_2CCJZ9LQI_W              "2ccJz9LQI+w"    /* sceAgcUnknownGetSize_2ccJz9LQI+w */
-#define AGC_NID_AGCUNKNOWNGETSIZE_9S4NOWRUI0S              "9S4noWrUI0s"    /* sceAgcUnknownGetSize_9S4noWrUI0s */
-#define AGC_NID_AGCUNKNOWNGETSIZE_AFIH8SQKYLQ              "AFIh8SQkYlQ"    /* sceAgcUnknownGetSize_AFIh8SQkYlQ */
-#define AGC_NID_AGCUNKNOWNGETSIZE_CBQH3DKMSNO              "CbQh3DKMSno"    /* sceAgcUnknownGetSize_CbQh3DKMSno */
-#define AGC_NID_AGCUNKNOWNGETSIZE_F8NLHWVFEMI              "F8NLhWvFemI"    /* sceAgcUnknownGetSize_F8NLhWvFemI */
-#define AGC_NID_AGCUNKNOWNGETSIZE_FUVBKYKLF_S              "FuVbkyKlf+s"    /* sceAgcUnknownGetSize_FuVbkyKlf+s */
-#define AGC_NID_AGCUNKNOWNGETSIZE_GBCH3ZCIHOU              "GBCh3zCihoU"    /* sceAgcUnknownGetSize_GBCh3zCihoU */
-#define AGC_NID_AGCUNKNOWNGETSIZE_KJPEVDUZ6JU              "KjPeVduz6jU"    /* sceAgcUnknownGetSize_KjPeVduz6jU */
-#define AGC_NID_AGCUNKNOWNGETSIZE_M0TTM8H7SKA              "M0ttm8h7SKA"    /* sceAgcUnknownGetSize_M0ttm8h7SKA */
-#define AGC_NID_AGCUNKNOWNGETSIZE_MMLMJAL7N5W              "MMlmJAL7N5w"    /* sceAgcUnknownGetSize_MMlmJAL7N5w */
-#define AGC_NID_AGCUNKNOWNGETSIZE_P1CUGZ99UZC              "P1CugZ99Uzc"    /* sceAgcUnknownGetSize_P1CugZ99Uzc */
-#define AGC_NID_AGCUNKNOWNGETSIZE_PXKWV2FVAPS              "PxKWV2fVAps"    /* sceAgcUnknownGetSize_PxKWV2fVAps */
-#define AGC_NID_AGCUNKNOWNGETSIZE_QHPDD513V0W              "QhPDD513V0w"    /* sceAgcUnknownGetSize_QhPDD513V0w */
-#define AGC_NID_AGCUNKNOWNGETSIZE_UQGTW4XRLCM              "UQGTw4xRlcM"    /* sceAgcUnknownGetSize_UQGTw4xRlcM */
-#define AGC_NID_AGCUNKNOWNGETSIZE_XN_IUU7XSM8              "XN+Iuu7XsM8"    /* sceAgcUnknownGetSize_XN+Iuu7XsM8 */
-#define AGC_NID_AGCUNKNOWNGETSIZE_Y_5VNEIBTZK              "Y-5vneiBtzk"    /* sceAgcUnknownGetSize_Y-5vneiBtzk */
-#define AGC_NID_AGCUNKNOWNGETSIZE_AP1KI9G3_4               "aP1Ki9G3++4"    /* sceAgcUnknownGetSize_aP1Ki9G3++4 */
-#define AGC_NID_AGCUNKNOWNGETSIZE_B_OYSN_G2TE              "b-oySn+G2tE"    /* sceAgcUnknownGetSize_b-oySn+G2tE */
-#define AGC_NID_AGCUNKNOWNGETSIZE_B5U0JZM8TF8              "b5u0Jzm8TF8"    /* sceAgcUnknownGetSize_b5u0Jzm8TF8 */
-#define AGC_NID_AGCUNKNOWNGETSIZE_CA4KPVP0QLQ              "ca4KPvp0qLQ"    /* sceAgcUnknownGetSize_ca4KPvp0qLQ */
-#define AGC_NID_AGCUNKNOWNGETSIZE_DA1SM8_QDOU              "da1Sm8-QDoU"    /* sceAgcUnknownGetSize_da1Sm8-QDoU */
-#define AGC_NID_AGCUNKNOWNGETSIZE_ECJKAQEEQ5S              "eCjKaqeeQ5s"    /* sceAgcUnknownGetSize_eCjKaqeeQ5s */
-#define AGC_NID_AGCUNKNOWNGETSIZE_HCIXS8PMXF4              "hcIxS8pmXF4"    /* sceAgcUnknownGetSize_hcIxS8pmXF4 */
-#define AGC_NID_AGCUNKNOWNGETSIZE_J4EMHHNDCPY              "j4emHHndCPY"    /* sceAgcUnknownGetSize_j4emHHndCPY */
-#define AGC_NID_AGCUNKNOWNGETSIZE_MSTUVI0ZOTC              "mStuvI0zOtc"    /* sceAgcUnknownGetSize_mStuvI0zOtc */
-#define AGC_NID_AGCUNKNOWNGETSIZE_MLJZUGDZRQ4              "mljzuGDZRQ4"    /* sceAgcUnknownGetSize_mljzuGDZRQ4 */
-#define AGC_NID_AGCUNKNOWNGETSIZE_NNLUTDDDVZ0              "nNlUtdDDvZ0"    /* sceAgcUnknownGetSize_nNlUtdDDvZ0 */
-#define AGC_NID_AGCUNKNOWNGETSIZE_OZ6ZQQ1JWCE              "oz6zQq1JwCE"    /* sceAgcUnknownGetSize_oz6zQq1JwCE */
-#define AGC_NID_AGCUNKNOWNGETSIZE_UZW_MQSXKRM              "uZW-mqsxkrM"    /* sceAgcUnknownGetSize_uZW-mqsxkrM */
-#define AGC_NID_AGCUNKNOWNGETSIZE_VLRBL8DQIZ8              "vLrBL8DQiz8"    /* sceAgcUnknownGetSize_vLrBL8DQiz8 */
-#define AGC_NID_AGCUNKNOWNGETSIZE_YHEJGN_AY_A              "yheJGN-ay+A"    /* sceAgcUnknownGetSize_yheJGN-ay+A */
-#define AGC_NID_AGCUNKNOWNGETSIZE_ZG6U_N6OTXS              "zg6u-N6Otxs"    /* sceAgcUnknownGetSize_zg6u-N6Otxs */
-#define AGC_NID_AGCUNKNOWNIKFDTRIQCE                       "Ikfdt-rIqCE"    /* sceAgcUnknownIkfdtRIqCE */
-#define AGC_NID_AGCUPDATEPRIMSTATE                         "Y3ymLfZ1384"    /* sceAgcUpdatePrimState */
+#define AGC_NID_SCE_AGC_ACB_ACQUIRE_MEM                                             "KT-hTp-Ch14"
+#define AGC_NID_SCE_AGC_ACB_ACQUIRE_MEM_GET_SIZE                                    "ewobAQeMo5k"
+#define AGC_NID_SCE_AGC_ACB_ATOMIC_GDS_GET_SIZE                                     "hcIxS8pmXF4"
+#define AGC_NID_SCE_AGC_ACB_ATOMIC_GDS_CDU_V1F0DC_G_Q                               "cduV1f0dcGQ"
+#define AGC_NID_SCE_AGC_ACB_ATOMIC_GDS_G_QKQK_LTTCPW                                "gQkqkLttcpw"
+#define AGC_NID_SCE_AGC_ACB_ATOMIC_MEM                                              "XKKuA6VkSRc"
+#define AGC_NID_SCE_AGC_ACB_ATOMIC_MEM_GET_SIZE                                     "da1Sm8-QDoU"
+#define AGC_NID_SCE_AGC_ACB_COND_EXEC                                               "qyM2bxYFPAk"
+#define AGC_NID_SCE_AGC_ACB_COND_EXEC_GET_SIZE                                      "ozKzBP4aki4"
+#define AGC_NID_SCE_AGC_ACB_COPY_DATA                                               "qzMN2XKGA4k"
+#define AGC_NID_SCE_AGC_ACB_COPY_DATA_GET_SIZE                                      "CbQh3DKMSno"
+#define AGC_NID_SCE_AGC_ACB_DISPATCH_INDIRECT                                       "j3EtxFkSIhQ"
+#define AGC_NID_SCE_AGC_ACB_DISPATCH_INDIRECT_GET_SIZE                              "PxKWV2fVAps"
+#define AGC_NID_SCE_AGC_ACB_DMA_DATA                                                "-RnpfpxIhec"
+#define AGC_NID_SCE_AGC_ACB_DMA_DATA_GET_SIZE                                       "M0ttm8h7SKA"
+#define AGC_NID_SCE_AGC_ACB_EVENT_WRITE                                             "cFazmnXpJOE"
+#define AGC_NID_SCE_AGC_ACB_EVENT_WRITE_GET_SIZE                                    "Y-5vneiBtzk"
+#define AGC_NID_SCE_AGC_ACB_INITIALIZE_DEFAULT_HARDWARE_STATE                       "rPtseVo5ToI"
+#define AGC_NID_SCE_AGC_ACB_JUMP                                                    "e1DFTg+Sd8U"
+#define AGC_NID_SCE_AGC_ACB_JUMP_GET_SIZE                                           "b-oySn+G2tE"
+#define AGC_NID_SCE_AGC_ACB_MEM_SEMAPHORE                                           "q4VuU-QsLOE"
+#define AGC_NID_SCE_AGC_ACB_POP_MARKER                                              "6mFxkVqdmbQ"
+#define AGC_NID_SCE_AGC_ACB_PRIME_UTCL2                                             "szG7hz2yEhA"
+#define AGC_NID_SCE_AGC_ACB_PRIME_UTCL2_GET_SIZE                                    "eCjKaqeeQ5s"
+#define AGC_NID_SCE_AGC_ACB_PUSH_MARKER                                             "cpCILPya5Zk"
+#define AGC_NID_SCE_AGC_ACB_QUEUE_END_OF_SHADER_ACTION_GET_SIZE                     "F8NLhWvFemI"
+#define AGC_NID_SCE_AGC_ACB_RESET_QUEUE                                             "JrtiDtKeS38"
+#define AGC_NID_SCE_AGC_ACB_REWIND                                                  "DwICrVxerkY"
+#define AGC_NID_SCE_AGC_ACB_REWIND_GET_SIZE                                         "0ZOG0jc9nRg"
+#define AGC_NID_SCE_AGC_ACB_SET_FLIP                                                "ebixW91gpPw"
+#define AGC_NID_SCE_AGC_ACB_SET_MARKER                                              "xAeBOa0A3kk"
+#define AGC_NID_SCE_AGC_ACB_SET_WORKLOAD_COMPLETE                                   "opR1JeJZCBU"
+#define AGC_NID_SCE_AGC_ACB_SET_WORKLOAD_STREAM_INACTIVE                            "FcgdDM3MB+k"
+#define AGC_NID_SCE_AGC_ACB_SET_WORKLOADS_ACTIVE                                    "rVOmPz2RBlg"
+#define AGC_NID_SCE_AGC_ACB_WAIT_ON_ADDRESS_GET_SIZE                                "idlaArvdXEs"
+#define AGC_NID_SCE_AGC_ACB_WAIT_REG_MEM                                            "htn36gPnBk4"
+#define AGC_NID_SCE_AGC_ACB_WAIT_UNTIL_SAFE_FOR_RENDERING                           "GPbUp9jXQa8"
+#define AGC_NID_SCE_AGC_ACB_WRITE_DATA                                              "eZ4+17OQz4Q"
+#define AGC_NID_SCE_AGC_ASYNC_REWIND_PATCH_SET_REWIND_STATE                         "eWaWyFegzgQ"
+#define AGC_NID_SCE_AGC_BRANCH_PATCH_SET_COMPARE_ADDRESS                            "GXBlM-ekzrI"
+#define AGC_NID_SCE_AGC_BRANCH_PATCH_SET_ELSE_TARGET                                "QmfvaYpsOcI"
+#define AGC_NID_SCE_AGC_BRANCH_PATCH_SET_THEN_TARGET                                "xb8VgcXQhvI"
+#define AGC_NID_SCE_AGC_CB_BRANCH                                                   "w1KFAHVqpaU"
+#define AGC_NID_SCE_AGC_CB_BRANCH_GET_SIZE                                          "uZW-mqsxkrM"
+#define AGC_NID_SCE_AGC_CB_COND_WRITE                                               "7toV+elXqNM"
+#define AGC_NID_SCE_AGC_CB_COND_WRITE_GET_SIZE                                      "FuVbkyKlf+s"
+#define AGC_NID_SCE_AGC_CB_DISPATCH                                                 "k3GhuSNmBLU"
+#define AGC_NID_SCE_AGC_CB_DISPATCH_GET_SIZE                                        "Abendgtz+3o"
+#define AGC_NID_SCE_AGC_CB_NOP                                                      "LtTouSCZjHM"
+#define AGC_NID_SCE_AGC_CB_NOP_GET_SIZE                                             "t7PlZ9nt5Lc"
+#define AGC_NID_SCE_AGC_CB_QUEUE_END_OF_PIPE_ACTION_GET_SIZE                        "hL7C0IRpWZI"
+#define AGC_NID_SCE_AGC_CB_SET_SH_REG_RANGE_DIRECT                                  "n2fD4A+pb+g"
+#define AGC_NID_SCE_AGC_CB_SET_SH_REGISTER_RANGE_DIRECT_GET_SIZE                    "bxGoVxpdSPQ"
+#define AGC_NID_SCE_AGC_CB_SET_SH_REGISTERS_DIRECT                                  "UZbQjYAwwXM"
+#define AGC_NID_SCE_AGC_CB_SET_SH_REGISTERS_DIRECT_GET_SIZE                         "yUBESvCCJ4I"
+#define AGC_NID_SCE_AGC_CB_SET_UC_REG_RANGE_DIRECT                                  "MDLD5Ly94Xk"
+#define AGC_NID_SCE_AGC_CB_SET_UC_REGISTER_RANGE_DIRECT_GET_SIZE                    "JOWmDrl+j20"
+#define AGC_NID_SCE_AGC_CB_SET_UC_REGISTERS_DIRECT                                  "03RZmELWWzw"
+#define AGC_NID_SCE_AGC_CB_SET_UC_REGISTERS_DIRECT_GET_SIZE                         "TGEZzUWLbrc"
+#define AGC_NID_SCE_AGC_CB_VALIDATE_PM4_HEADER                                      "3KDcnM3lrcU"
+#define AGC_NID_SCE_AGC_COND_EXEC_PATCH_SET_COMMAND_ADDRESS_3_Z_WA3_AOY_W_Z_Q       "3ZWa3AoyWZQ"
+#define AGC_NID_SCE_AGC_COND_EXEC_PATCH_SET_COMMAND_ADDRESS_Y_W_T_K_OJU587O         "YWTKOju587o"
+#define AGC_NID_SCE_AGC_COND_EXEC_PATCH_SET_END_O_R_WSX_IBK4_T_E                    "ORWsxIbk4TE"
+#define AGC_NID_SCE_AGC_COND_EXEC_PATCH_SET_END_K__JPY_R2D_Y_A_M                    "k-JpyR2dYAM"
+#define AGC_NID_SCE_AGC_CREATE_INTERPOLANT_MAPPING                                  "HV4j+E0MBHE"
+#define AGC_NID_SCE_AGC_CREATE_PRIM_STATE                                           "D9sr1xGUriE"
+#define AGC_NID_SCE_AGC_CREATE_SHADER                                               "f3dg2CSgRKY"
+#define AGC_NID_SCE_AGC_DCB_ACQUIRE_MEM                                             "57labkp+rSQ"
+#define AGC_NID_SCE_AGC_DCB_ACQUIRE_MEM_GET_SIZE                                    "-vnlTPPXPrw"
+#define AGC_NID_SCE_AGC_DCB_ATOMIC_GDS                                              "pH3-dfRpfA0"
+#define AGC_NID_SCE_AGC_DCB_ATOMIC_GDS_GET_SIZE                                     "1tB0xkLNjcw"
+#define AGC_NID_SCE_AGC_DCB_ATOMIC_MEM                                              "1-gUn1PI4Sw"
+#define AGC_NID_SCE_AGC_DCB_ATOMIC_MEM_GET_SIZE                                     "oz6zQq1JwCE"
+#define AGC_NID_SCE_AGC_DCB_BEGIN_OCCLUSION_QUERY_GET_SIZE                          "ms1xVoZ-Vwc"
+#define AGC_NID_SCE_AGC_DCB_CLEAR_STATE                                             "PxEFhy0d5v8"
+#define AGC_NID_SCE_AGC_DCB_COND_EXEC                                               "BIPexNBSGog"
+#define AGC_NID_SCE_AGC_DCB_COND_EXEC_GET_SIZE                                      "ou16V5hh5sg"
+#define AGC_NID_SCE_AGC_DCB_CONTEXT_STATE_OP                                        "HabmgqPwPw0"
+#define AGC_NID_SCE_AGC_DCB_CONTEXT_STATE_OP_GET_SIZE                               "H6vHS5cidSA"
+#define AGC_NID_SCE_AGC_DCB_COPY_DATA                                               "1rZSWUv1IRc"
+#define AGC_NID_SCE_AGC_DCB_COPY_DATA_GET_SIZE                                      "b5u0Jzm8TF8"
+#define AGC_NID_SCE_AGC_DCB_DISPATCH_INDIRECT                                       "CtB+A9-VxO0"
+#define AGC_NID_SCE_AGC_DCB_DISPATCH_INDIRECT_GET_SIZE                              "w8HVkEeXPv8"
+#define AGC_NID_SCE_AGC_DCB_DMA_DATA                                                "WmAc2MEj6Io"
+#define AGC_NID_SCE_AGC_DCB_DMA_DATA_GET_SIZE                                       "2ccJz9LQI+w"
+#define AGC_NID_SCE_AGC_DCB_DRAW_INDEX                                              "q88lQ+GP5Yk"
+#define AGC_NID_SCE_AGC_DCB_DRAW_INDEX_AUTO                                         "Yw0jKSqop+E"
+#define AGC_NID_SCE_AGC_DCB_DRAW_INDEX_AUTO_GET_SIZE                                "WrdP9Zxx3lQ"
+#define AGC_NID_SCE_AGC_DCB_DRAW_INDEX_GET_SIZE                                     "6ee9Hd3EWXQ"
+#define AGC_NID_SCE_AGC_DCB_DRAW_INDEX_INDIRECT                                     "t1vNu082-jM"
+#define AGC_NID_SCE_AGC_DCB_DRAW_INDEX_INDIRECT_COUNT_MULTI                         "Rlx+bykm0r0"
+#define AGC_NID_SCE_AGC_DCB_DRAW_INDEX_INDIRECT_GET_SIZE                            "mStuvI0zOtc"
+#define AGC_NID_SCE_AGC_DCB_DRAW_INDEX_INDIRECT_MULTI                               "ypVBz4uPKcQ"
+#define AGC_NID_SCE_AGC_DCB_DRAW_INDEX_INDIRECT_MULTI_GET_SIZE                      "r98I08t+LOg"
+#define AGC_NID_SCE_AGC_DCB_DRAW_INDEX_MULTI_INSTANCED_GET_SIZE                     "mR9j7+SfM34"
+#define AGC_NID_SCE_AGC_DCB_DRAW_INDEX_OFFSET                                       "B+aG9DUnTKA"
+#define AGC_NID_SCE_AGC_DCB_DRAW_INDEX_OFFSET_GET_SIZE                              "qMlfB1ZhMDc"
+#define AGC_NID_SCE_AGC_DCB_DRAW_INDIRECT_COUNT_MULTI                               "1q1titRBL6o"
+#define AGC_NID_SCE_AGC_DCB_DRAW_INDIRECT_GET_SIZE                                  "cxPZ4Wgvdj8"
+#define AGC_NID_SCE_AGC_DCB_DRAW_INDIRECT_MULTI                                     "kUlvghKs-mA"
+#define AGC_NID_SCE_AGC_DCB_DRAW_INDIRECT_MULTI_GET_SIZE                            "pYoKs3lPy88"
+#define AGC_NID_SCE_AGC_DCB_END_OCCLUSION_QUERY_GET_SIZE                            "P1CugZ99Uzc"
+#define AGC_NID_SCE_AGC_DCB_EVENT_WRITE                                             "aJf+j5yntiU"
+#define AGC_NID_SCE_AGC_DCB_EVENT_WRITE_GET_SIZE                                    "C4l9fB17t8w"
+#define AGC_NID_SCE_AGC_DCB_GET_LOD_STATS                                           "vuSXe69VILM"
+#define AGC_NID_SCE_AGC_DCB_GET_LOD_STATS_GET_SIZE                                  "rUuVjyR+Rd4"
+#define AGC_NID_SCE_AGC_DCB_INDIRECT_BUFFER_CONST                                   "xSAR0LTcRKM"
+#define AGC_NID_SCE_AGC_DCB_INSERT_WAIT_FLIP_DONE                                   "k0E7vkgqAuE"
+#define AGC_NID_SCE_AGC_DCB_JUMP_GET_SIZE                                           "VEGu4dixjUg"
+#define AGC_NID_SCE_AGC_DCB_POP_MARKER                                              "H7uZqCoNuWk"
+#define AGC_NID_SCE_AGC_DCB_PRIME_UTCL2                                             "jt3pl7EN17o"
+#define AGC_NID_SCE_AGC_DCB_PRIME_UTCL2_GET_SIZE                                    "KjPeVduz6jU"
+#define AGC_NID_SCE_AGC_DCB_PUSH_MARKER                                             "+kSrjIVxKFE"
+#define AGC_NID_SCE_AGC_DCB_QUEUE_END_OF_SHADER_ACTION_GET_SIZE                     "zg6u-N6Otxs"
+#define AGC_NID_SCE_AGC_DCB_RELEASE_MEM                                             "wr23dPKyWc0"
+#define AGC_NID_SCE_AGC_DCB_REWIND                                                  "zfcxg-ewMK8"
+#define AGC_NID_SCE_AGC_DCB_REWIND_GET_SIZE                                         "QIXCsbipds0"
+#define AGC_NID_SCE_AGC_DCB_SET_BASE_DISPATCH_INDIRECT_ARGS_GET_SIZE                "9S4noWrUI0s"
+#define AGC_NID_SCE_AGC_DCB_SET_BASE_DRAW_INDIRECT_ARGS_GET_SIZE                    "MMlmJAL7N5w"
+#define AGC_NID_SCE_AGC_DCB_SET_BASE_INDIRECT_ARGS                                  "RmaJwLtc8rY"
+#define AGC_NID_SCE_AGC_DCB_SET_BOOL_PREDICATION_ENABLE_GET_SIZE                    "yheJGN-ay+A"
+#define AGC_NID_SCE_AGC_DCB_SET_CF_REG_DIRECT                                       "73ZZdojLIgs"
+#define AGC_NID_SCE_AGC_DCB_SET_CF_REG_RANGE_DIRECT                                 "BVFg3CWU6Eo"
+#define AGC_NID_SCE_AGC_DCB_SET_CX_REG_DIRECT                                       "LHFXRrlTPD8"
+#define AGC_NID_SCE_AGC_DCB_SET_CX_REGISTER_DIRECT_GET_SIZE                         "1DeUNpRIDDA"
+#define AGC_NID_SCE_AGC_DCB_SET_CX_REGISTERS_INDIRECT                               "ZvwO9euwYzc"
+#define AGC_NID_SCE_AGC_DCB_SET_CX_REGISTERS_INDIRECT_GET_SIZE                      "GBCh3zCihoU"
+#define AGC_NID_SCE_AGC_DCB_SET_INDEX_BUFFER                                        "l4fM9K-Lyks"
+#define AGC_NID_SCE_AGC_DCB_SET_INDEX_BUFFER_GET_SIZE                               "j4emHHndCPY"
+#define AGC_NID_SCE_AGC_DCB_SET_INDEX_COUNT                                         "8N2tmT3jmC8"
+#define AGC_NID_SCE_AGC_DCB_SET_INDEX_COUNT_GET_SIZE                                "mljzuGDZRQ4"
+#define AGC_NID_SCE_AGC_DCB_SET_INDEX_INDIRECT_ARGS                                 "0o3VDdtA6nM"
+#define AGC_NID_SCE_AGC_DCB_SET_INDEX_INDIRECT_ARGS_GET_SIZE                        "AFIh8SQkYlQ"
+#define AGC_NID_SCE_AGC_DCB_SET_INDEX_SIZE                                          "GIIW2J37e70"
+#define AGC_NID_SCE_AGC_DCB_SET_INDEX_SIZE_GET_SIZE                                 "ca4KPvp0qLQ"
+#define AGC_NID_SCE_AGC_DCB_SET_MARKER                                              "QhCbS4X9Rl8"
+#define AGC_NID_SCE_AGC_DCB_SET_NUM_INSTANCES                                       "tSBxhAPyytQ"
+#define AGC_NID_SCE_AGC_DCB_SET_NUM_INSTANCES_GET_SIZE                              "6DFuRKT4C9w"
+#define AGC_NID_SCE_AGC_DCB_SET_PREDICATION                                         "bbFueFP+J4k"
+#define AGC_NID_SCE_AGC_DCB_SET_PREDICATION_DISABLE_GET_SIZE                        "vLrBL8DQiz8"
+#define AGC_NID_SCE_AGC_DCB_SET_SH_REG_DIRECT_SINGLE                                "pFLArOT53+w"
+#define AGC_NID_SCE_AGC_DCB_SET_SH_REGISTER_DIRECT_GET_SIZE                         "QhPDD513V0w"
+#define AGC_NID_SCE_AGC_DCB_SET_SH_REGISTERS_INDIRECT                               "-HOOCn0JY48"
+#define AGC_NID_SCE_AGC_DCB_SET_SH_REGISTERS_INDIRECT_GET_SIZE                      "nNlUtdDDvZ0"
+#define AGC_NID_SCE_AGC_DCB_SET_UC_REG_DIRECT                                       "w4-d0n60hdo"
+#define AGC_NID_SCE_AGC_DCB_SET_UC_REGISTER_DIRECT_GET_SIZE                         "aP1Ki9G3++4"
+#define AGC_NID_SCE_AGC_DCB_SET_UC_REGISTERS_INDIRECT_GET_SIZE                      "UQGTw4xRlcM"
+#define AGC_NID_SCE_AGC_DCB_SET_VGT_CONTROL                                         "hvUfkUIQcOE"
+#define AGC_NID_SCE_AGC_DCB_SET_Z_PASS_PREDICATION_ENABLE_GET_SIZE                  "XN+Iuu7XsM8"
+#define AGC_NID_SCE_AGC_DCB_STALL_CB_PARSER                                         "u2T2DiA5hRI"
+#define AGC_NID_SCE_AGC_DCB_STALL_COMMAND_BUFFER_PARSER_GET_SIZE                    "+u6dKSLWM2o"
+#define AGC_NID_SCE_AGC_DCB_WAIT_FLIP                                               "pdEV7bI6COI"
+#define AGC_NID_SCE_AGC_DCB_WAIT_FLIP_EOS                                           "SbuY2jN+axQ"
+#define AGC_NID_SCE_AGC_DCB_WAIT_ON_ADDRESS_GET_SIZE                                "43WJ08sSugE"
+#define AGC_NID_SCE_AGC_DCB_WAIT_REG_MEM                                            "VmW0Tdpy420"
+#define AGC_NID_SCE_AGC_DCB_WRITE_DATA                                              "i1jyy49AjXU"
+#define AGC_NID_SCE_AGC_DCB_WRITE_DATA_GET_SIZE                                     "p9tI+yTvx68"
+#define AGC_NID_SCE_AGC_DEBUG_RAISE_EXCEPTION                                       "T6xuVw0KUJo"
+#define AGC_NID_SCE_AGC_DMA_DATA_PATCH_SET_DST_ADDRESS_OR_OFFSET                    "IxYiarKlXxM"
+#define AGC_NID_SCE_AGC_DMA_DATA_PATCH_SET_SRC                                      "cdDRpqcFGbU"
+#define AGC_NID_SCE_AGC_FUSE_SHADER_HALVES_FD5_BP5T_G_TGO                           "fd5Bp5tGTgo"
+#define AGC_NID_SCE_AGC_FUSE_SHADER_HALVES_N_AP_JJP_K_N_BL4                         "nApJjpKNBl4"
+#define AGC_NID_SCE_AGC_GET_DATA_PACKET_PAYLOAD_ADDRESS_C_QS_SQ6L6_K_A              "CQsSq6l6+kA"
+#define AGC_NID_SCE_AGC_GET_DATA_PACKET_PAYLOAD_ADDRESS_V___UG_BT_QHN0              "V++UgBtQhn0"
+#define AGC_NID_SCE_AGC_GET_DATA_PACKET_PAYLOAD_RANGE                               "s+VGAMDQ0AQ"
+#define AGC_NID_SCE_AGC_GET_DEFAULT_CX_STATE_FLAT                                   "AAeX-U5-P3M"
+#define AGC_NID_SCE_AGC_GET_FUSED_SHADER_SIZE_DOL_OM_W_H_HU_Q                       "dolOmWH+huQ"
+#define AGC_NID_SCE_AGC_GET_FUSED_SHADER_SIZE_N_Q_T5K_Y_LV0CG                       "nQT5kYLv0cg"
+#define AGC_NID_SCE_AGC_GET_GAME_DEFAULT_STATE                                      "Wi82ArQtAwg"
+#define AGC_NID_SCE_AGC_GET_GS_OVERSUBSCRIPTION                                     "NKIzURsgV7I"
+#define AGC_NID_SCE_AGC_GET_PACKET_SIZE                                             "Lkf86B98qPc"
+#define AGC_NID_SCE_AGC_GET_REGISTER_DEFAULTS2                                      "2JtWUUiYBXs"
+#define AGC_NID_SCE_AGC_GET_REGISTER_DEFAULTS2_INTERNAL                             "wRbq6ZjNop4"
+#define AGC_NID_SCE_AGC_GET_REGISTER_DEFAULTS_INTERNAL                              "uIwxsqDlHRc"
+#define AGC_NID_SCE_AGC_GET_STATIC_BUFFER                                           "OXDc0KCnUhs"
+#define AGC_NID_SCE_AGC_INIT_23_L_R_U_SV_YU1_M                                      "23LRUSvYu1M"
+#define AGC_NID_SCE_AGC_INIT_K_W3_G_LB7_QF_PG                                       "kW3GLb7QfPg"
+#define AGC_NID_SCE_AGC_JUMP_PATCH_SET_TARGET                                       "2BS4EtAaF28"
+#define AGC_NID_SCE_AGC_LINK_SHADERS                                                "MqAdbRMdNz4"
+#define AGC_NID_SCE_AGC_QUEUE_END_OF_PIPE_ACTION_PATCH_ADDRESS                      "0fWWK5uG9rQ"
+#define AGC_NID_SCE_AGC_QUEUE_END_OF_PIPE_ACTION_PATCH_DATA                         "MlEw1feXcjg"
+#define AGC_NID_SCE_AGC_QUEUE_END_OF_PIPE_ACTION_PATCH_GCR_CNTL                     "J8YCgfKAMQs"
+#define AGC_NID_SCE_AGC_QUEUE_END_OF_PIPE_ACTION_PATCH_TYPE                         "T9fjQIINoeE"
+#define AGC_NID_SCE_AGC_REWIND_PATCH_SET_REWIND_STATE                               "ziVA3whp3p4"
+#define AGC_NID_SCE_AGC_SET_CX_REG_IND_PATCH_ADD_REGS                               "d-6uF9sZDIU"
+#define AGC_NID_SCE_AGC_SET_CX_REG_IND_PATCH_SET_ADDR                               "vcmNN+AAXnY"
+#define AGC_NID_SCE_AGC_SET_CX_REG_INDIRECT_PATCH_SET_NUM_REGISTERS                 "whb1RL7K4Ss"
+#define AGC_NID_SCE_AGC_SET_NOP                                                     "K2mciNVxUCE"
+#define AGC_NID_SCE_AGC_SET_PACKET_PREDICATION                                      "w6Dj1VJt5qY"
+#define AGC_NID_SCE_AGC_SET_RANGE_PREDICATION                                       "n8vgpaQg6dA"
+#define AGC_NID_SCE_AGC_SET_SH_REG_IND_PATCH_ADD_REGS                               "z2duB-hHQSM"
+#define AGC_NID_SCE_AGC_SET_SH_REG_IND_PATCH_SET_ADDR                               "Qrj4c+61z4A"
+#define AGC_NID_SCE_AGC_SET_SH_REG_INDIRECT_PATCH_SET_NUM_REGISTERS                 "nCUgItdN2ms"
+#define AGC_NID_SCE_AGC_SET_STATIC_BUFFER                                           "-pjHhph0ZUc"
+#define AGC_NID_SCE_AGC_SET_SUBMIT_MODE                                             "-DtvmQ-tgEA"
+#define AGC_NID_SCE_AGC_SET_UC_REG_IND_PATCH_ADD_REGS                               "vRoArM9zaIk"
+#define AGC_NID_SCE_AGC_SET_UC_REG_IND_PATCH_SET_ADDR                               "6lNcCp+fxi4"
+#define AGC_NID_SCE_AGC_SET_UC_REG_INDIRECT_PATCH_SET_NUM_REGISTERS                 "fRG-JOH5+sI"
+#define AGC_NID_SCE_AGC_SUSPEND_POINT_AND_CHECK_STATUS_B_FIS__W_Z3_IG               "b+fis+WZ3Ig"
+#define AGC_NID_SCE_AGC_SUSPEND_POINT_AND_CHECK_STATUS_H9Z6_0H_EYDK                 "h9z6+0hEydk"
+#define AGC_NID_SCE_AGC_UNKNOWN_IKFDT_R_IQ_C_E                                      "Ikfdt-rIqCE"
+#define AGC_NID_SCE_AGC_UPDATE_PRIM_STATE                                           "Y3ymLfZ1384"
+#define AGC_NID_SCE_AGC_VSH_CB_MEM_SEMAPHORE                                        "vHX9guneRBY"
+#define AGC_NID_SCE_AGC_VSH_DCB_ATOMIC_GDS                                          "zARR5aCmkoY"
+#define AGC_NID_SCE_AGC_VSH_DCB_CONTEXT_STATE_OP                                    "qj7QZpgr9Uw"
+#define AGC_NID_SCE_AGC_VSH_DCB_INITIALIZE_DEFAULT_HARDWARE_STATE_PRE0090           "Xvcgh9xNNkY"
+#define AGC_NID_SCE_AGC_VSH_DCB_MEM_SEMAPHORE                                       "G0jrLdvEqDw"
+#define AGC_NID_SCE_AGC_VSH_DCB_RESET_QUEUE                                         "TRO721eVt4g"
+#define AGC_NID_SCE_AGC_VSH_DCB_SET_FLIP                                            "YUeqkyT7mEQ"
+#define AGC_NID_SCE_AGC_VSH_DCB_SET_WORKLOAD_COMPLETE                               "hEK26Wdny6s"
+#define AGC_NID_SCE_AGC_VSH_DCB_SET_WORKLOAD_STREAM_INACTIVE                        "FneFypEDRgY"
+#define AGC_NID_SCE_AGC_VSH_DCB_SET_WORKLOADS_ACTIVE                                "LFSPFmGc9Hg"
+#define AGC_NID_SCE_AGC_VSH_DCB_WAIT_UNTIL_SAFE_FOR_RENDERING                       "MWiElSNE8j8"
+#define AGC_NID_SCE_AGC_WAIT_REG_MEM_PATCH_CMP_FUNC                                 "n485EBnIWmk"
+#define AGC_NID_SCE_AGC_WAIT_REG_MEM_PATCH_MASK                                     "hXAnLgDHCoI"
+#define AGC_NID_SCE_AGC_WAIT_REG_MEM_PATCH_REF                                      "7nOoijNPvEU"
 
 /* === libSceAgcDriver.sprx === */
 
-#define AGC_NID_SCE_AGC_DRIVER_SUBMIT_DCB            "UglJIZjGssM"
-#define AGC_NID_SCE_AGC_DRIVER_SUBMIT_ACB            "gSRnr79F8tQ"
-#define AGC_NID_SCE_AGC_DRIVER_ADD_EQ_EVENT          "w2rJhmD+dsE"
-#define AGC_NID_SCE_AGC_DRIVER_DELETE_EQ_EVENT       "DL2RXaXOy88"
-#define AGC_NID_SCE_AGC_DRIVER_GET_PA_DEBUG_VERSION  "Pqxglq1oKec"
-#define AGC_NID_SCE_AGC_DRIVER_SUBMIT_MULTI_CB_DIRECT "xmWi73o1BR0"
-#define AGC_NID_SCE_AGC_DRIVER_SUSPEND_POINT_SUBMIT  "ZV04pRl7cWU"
-#define AGC_NID_SCE_AGC_DRIVER_ACQUIRE_RAZOR_ACQ     "MetMOQVd8HY"
-#define AGC_NID_SCE_AGC_DRIVER_RELEASE_RAZOR_ACQ     "TEOAw-eLjNo"
-#define AGC_NID_SCE_AGC_DRIVER_SUBMIT_TO_RAZOR_ACQ   "jJyVJyhi5h8"
-#define AGC_NID_SCE_AGC_DRIVER_CREATE_USER_SPECIAL_Q "dwoD-LJDQy8"
-#define AGC_NID_SCE_AGC_DRIVER_DESTROY_USER_SPECIAL_Q "NRO47jBXLiI"
-#define AGC_NID_SCE_AGC_DRIVER_SUBMIT_TO_HDR_SCOPES "lOYHtoUcJD4"
-#define AGC_NID_SCE_AGC_DRIVER_NOTIFY_DEFAULT_STATES "nR6xhiFsOoc"
-#define AGC_NID_SCE_AGC_DRIVER_SETUP_ASYNC_GRAPHICS  "Vlaj1gwmIFA"
-#define AGC_NID_SCE_AGC_DRIVER_SET_TARGET_RING_DIAG  "l0Jxfl0DEdo"
-#define AGC_NID_SCE_AGC_DRIVER_IS_SUSPEND_IN_FLIGHT  "I6elAJxk6Jo"
-#define AGC_NID_SCE_AGC_DRIVER_SET_TF_RING_DIRECT    "16IjQxB-Heo"
-#define AGC_NID_SCE_AGC_DRIVER_SET_HS_OFFCHIP_PARAM  "MM4IZSEYytQ"
-#define AGC_NID_SCE_AGC_DRIVER_SDMA_COPY_LINEAR_BLOCK "bQ+En9GY3PM"
-#define AGC_NID_SCE_AGC_DRIVER_REGISTER_CAPTURE_INTF "oz3Yd--lAEE"
-#define AGC_NID_SCE_AGC_DRIVER_DEREGISTER_CAPTURE_INTF "qR+S4WqJvUM"
-
-/* Driver functions — newly identified from SPRX disassembly (FW 5.50) */
-#define AGC_NID_SCE_AGC_DRIVER_BEGIN_WORKLOAD          "UM9b9NunSrE"
-#define AGC_NID_SCE_AGC_DRIVER_END_WORKLOAD            "i6bfTi13ApA"
-#define AGC_NID_SCE_AGC_DRIVER_INITIALIZE_QUEUE        "b4fpgH5ZXxQ"
-#define AGC_NID_SCE_AGC_DRIVER_MAP_COMPUTE_QUEUE       "XNbrdwCsZ9A"
-#define AGC_NID_SCE_AGC_DRIVER_SUBMIT_COMMAND_BUFFERS  "Hj4eWnDektQ"
-#define AGC_NID_SCE_AGC_DRIVER_WAIT_IDLE               "oFb2hMcoJa4"
-#define AGC_NID_SCE_AGC_DRIVER_SET_CONFIG_REG          "-vc-xL+G8u0"
-#define AGC_NID_SCE_AGC_DRIVER_SET_BASE                "zmw2uVSEj94"
-#define AGC_NID_SCE_AGC_DRIVER_SET_CONTEXT_REG         "+b34-CLWc0s"
-
-/* Game-critical NIDs (from Joe & Mac game binary analysis) */
-
-/* libSceAgc.sprx — packet builders missing from original table */
-#define AGC_NID_SCE_AGC_DCB_ACQUIRE_MEM              "57labkp+rSQ"
-#define AGC_NID_SCE_AGC_DCB_COPY_DATA                "1rZSWUv1IRc"
-#define AGC_NID_SCE_AGC_DCB_JUMP                     "xSAR0LTcRKM"
-#define AGC_NID_SCE_AGC_DCB_RESET_QUEUE              "TRO721eVt4g"
-#define AGC_NID_SCE_AGC_DCB_SET_INDEX_COUNT          "8N2tmT3jmC8"
-#define AGC_NID_SCE_AGC_DCB_SET_INDEX_SIZE           "GIIW2J37e70"
-#define AGC_NID_SCE_AGC_DCB_SET_NUM_INSTANCES        "tSBxhAPyytQ"
-#define AGC_NID_SCE_AGC_DCB_STALL_CB_PARSER          "u2T2DiA5hRI"
-#define AGC_NID_SCE_AGC_DCB_DRAW_INDEX               "q88lQ+GP5Yk"
-#define AGC_NID_SCE_AGC_CB_SET_SH_REG_RANGE_DIRECT   "n2fD4A+pb+g"
-#define AGC_NID_SCE_AGC_CB_SET_UC_REGISTERS_DIRECT   "03RZmELWWzw"
-
-/* libSceAgc.sprx — patchers */
-#define AGC_NID_SCE_AGC_SET_SH_REG_IND_PATCH_SET_ADDR    "Qrj4c+61z4A"
-#define AGC_NID_SCE_AGC_SET_SH_REG_IND_PATCH_ADD_REGS    "z2duB-hHQSM"
-#define AGC_NID_SCE_AGC_SET_CX_REG_IND_PATCH_SET_ADDR    "vcmNN+AAXnY"
-#define AGC_NID_SCE_AGC_SET_CX_REG_IND_PATCH_ADD_REGS    "d-6uF9sZDIU"
-#define AGC_NID_SCE_AGC_SET_UC_REG_IND_PATCH_SET_ADDR    "6lNcCp+fxi4"
-#define AGC_NID_SCE_AGC_SET_UC_REG_IND_PATCH_ADD_REGS    "vRoArM9zaIk"
-
-/* libSceAgc.sprx — additional patcher */
-#define AGC_NID_SCE_AGC_DMA_DATA_PATCH_SET_SRC           "cdDRpqcFGbU"
-
-/* libSceAgc.sprx — utility */
-#define AGC_NID_SCE_AGC_SET_NOP                      "K2mciNVxUCE"
-#define AGC_NID_SCE_AGC_DEBUG_RAISE_EXCEPTION        "T6xuVw0KUJo"
-#define AGC_NID_SCE_AGC_CREATE_PRIM_STATE            "D9sr1xGUriE"
-
-/* libSceAgc.sprx — init/suspend wrappers */
-#define AGC_NID_SCE_AGC_SUSPEND_POINT_WRAPPER        "h9z6+0hEydk"
-
-/* libSceAgcDriver.sprx — non-Direct variants */
-#define AGC_NID_SCE_AGC_DRIVER_AGR_SUBMIT_DCB        "AhGvpITrf4M"
-#define AGC_NID_SCE_AGC_DRIVER_SET_TF_RING           "XlNp7jzGiPo"
-#define AGC_NID_SCE_AGC_DRIVER_GET_EQ_CONTEXT_ID     "Zw7uUVPulbw"
-#define AGC_NID_SCE_AGC_DRIVER_ADD_EQ_EVENT_DRV      "w2rJhmD+dsE"
-#define AGC_NID_SCE_AGC_DRIVER_REGISTER_OWNER        "X-Nm5KLREeg"
-#define AGC_NID_SCE_AGC_DRIVER_REGISTER_RESOURCE     "W5z4eZrjEas"
-
-/* === Newly identified from SPRX disassembly (FW 5.50) — batch 2 === */
-
-/* libSceAgc.sprx — DCB packet builders */
-#define AGC_NID_SCE_AGC_DCB_CLEAR_STATE              "PxEFhy0d5v8"
-#define AGC_NID_SCE_AGC_DCB_REWIND                   "zfcxg-ewMK8"
-#define AGC_NID_SCE_AGC_DCB_COND_EXEC                "BIPexNBSGog"
-#define AGC_NID_SCE_AGC_DCB_ATOMIC_GDS               "pH3-dfRpfA0"
-#define AGC_NID_SCE_AGC_DCB_MEM_SEMAPHORE            "G0jrLdvEqDw"
-#define AGC_NID_SCE_AGC_DCB_PRIME_UTCL2              "jt3pl7EN17o"
-#define AGC_NID_SCE_AGC_DCB_SET_INDEX_INDIRECT_ARGS  "0o3VDdtA6nM"
-#define AGC_NID_SCE_AGC_DCB_DRAW_INDEX_MULTI_INST    "Rlx+bykm0r0"
-#define AGC_NID_SCE_AGC_DCB_SET_MARKER               "QhCbS4X9Rl8"
-#define AGC_NID_SCE_AGC_DCB_CONTEXT_STATE_OP         "HabmgqPwPw0"
-#define AGC_NID_SCE_AGC_DCB_SET_WORKLOADS_ACTIVE     "LFSPFmGc9Hg"
-#define AGC_NID_SCE_AGC_DCB_SET_WORKLOAD_COMPLETE    "hEK26Wdny6s"
-#define AGC_NID_SCE_AGC_DCB_SET_WORKLOAD_STREAM_INACT "FneFypEDRgY"
-
-/* libSceAgc.sprx — DCB register direct setters */
-#define AGC_NID_SCE_AGC_DCB_SET_CF_REG_DIRECT        "73ZZdojLIgs"
-#define AGC_NID_SCE_AGC_DCB_SET_CX_REG_DIRECT        "LHFXRrlTPD8"
-/* Note: "pFLArOT53+w" is the single-register DCB variant.
- * "UZbQjYAwwXM" (defined above) is the CB multi-register variant. */
-#define AGC_NID_SCE_AGC_DCB_SET_SH_REG_DIRECT_SINGLE "pFLArOT53+w"
-#define AGC_NID_SCE_AGC_DCB_SET_UC_REG_DIRECT        "w4-d0n60hdo"
-#define AGC_NID_SCE_AGC_DCB_SET_CF_REG_RANGE_DIRECT  "BVFg3CWU6Eo"
-#define AGC_NID_SCE_AGC_CB_SET_UC_REG_RANGE_DIRECT   "MDLD5Ly94Xk"
-
-/* libSceAgc.sprx — CB builders */
-#define AGC_NID_SCE_AGC_CB_BRANCH                    "w1KFAHVqpaU"
-#define AGC_NID_SCE_AGC_CB_COND_WRITE                "7toV+elXqNM"
-#define AGC_NID_SCE_AGC_CB_MEM_SEMAPHORE             "vHX9guneRBY"
-
-/* libSceAgc.sprx — WaitRegMem patchers */
-#define AGC_NID_SCE_AGC_WAIT_REG_MEM_PATCH_CMP_FUNC  "n485EBnIWmk"
-#define AGC_NID_SCE_AGC_WAIT_REG_MEM_PATCH_MASK      "hXAnLgDHCoI"
-#define AGC_NID_SCE_AGC_WAIT_REG_MEM_PATCH_REF       "7nOoijNPvEU"
-
-
-/* --- Additional driver NIDs from 3.20 stubs and SPRX analysis (5.50 verified) --- */
-
-#define AGC_NID_AGCDRIVERCREATEQUEUE                       "zP4ZNlXLBVg"    /* sceAgcDriverCreateQueue */
-#define AGC_NID_AGCDRIVERCWSRRESUMEACQ                     "1DXIHxWHZAQ"    /* sceAgcDriverCwsrResumeAcq */
-#define AGC_NID_AGCDRIVERCWSRSUSPENDACQ                    "SOAMmdlyaIc"    /* sceAgcDriverCwsrSuspendAcq */
-#define AGC_NID_AGCDRIVERDEBUGHARDWARESTATUS               "1BUTwixUG5Y"    /* sceAgcDriverDebugHardwareStatus */
-#define AGC_NID_AGCDRIVERGETDEFAULTOWNER                   "F0ZXt5q0ZTA"    /* sceAgcDriverGetDefaultOwner */
-#define AGC_NID_AGCDRIVERGETEQEVENTTYPE                    "5CdQTZIQPxM"    /* sceAgcDriverGetEqEventType */
-#define AGC_NID_AGCDRIVERGETHSOFFCHIPPARAM                 "r28hEh6cNH0"    /* sceAgcDriverGetHsOffchipParam */
-#define AGC_NID_AGCDRIVERGETREGSHADOWINFO                  "CP-kVAMmWVw"    /* sceAgcDriverGetRegShadowInfo */
-#define AGC_NID_AGCDRIVERGETREGSHADOWINFOAGR               "ME1eUot7+Qw"    /* sceAgcDriverGetRegShadowInfoAgr */
-#define AGC_NID_AGCDRIVERGETRESERVEDDMEMFORAGC             "Um-jkyDy9rI"    /* sceAgcDriverGetReservedDmemForAgc */
-#define AGC_NID_AGCDRIVERGETRESOURCEREGISTRATIONMAXNAMELENGTH "uJziRsODk1c"    /* sceAgcDriverGetResourceRegistrationMaxNameLength */
-#define AGC_NID_AGCDRIVERGETSETFLIPPACKETSIZEINDWORDS      "2PrsbRYyZi4"    /* sceAgcDriverGetSetFlipPacketSizeInDwords */
-#define AGC_NID_AGCDRIVERGETSETWORKLOADCOMPLETEPACKETSIZE  "WNyjOWq8-Vk"    /* sceAgcDriverGetSetWorkloadCompletePacketSize */
-#define AGC_NID_AGCDRIVERGETSETWORKLOADSACTIVEPACKETSIZE   "gyVTZWyySpM"    /* sceAgcDriverGetSetWorkloadsActivePacketSize */
-#define AGC_NID_AGCDRIVERGETTFRING                         "e-YMQ+2tj9M"    /* sceAgcDriverGetTFRing */
-#define AGC_NID_AGCDRIVERGETWAITRENDERINGPACKETSIZEINDWORDS "0MtUJ3BpGhE"    /* sceAgcDriverGetWaitRenderingPacketSizeInDwords */
-#define AGC_NID_AGCDRIVERGETWORKLOADSTREAMINFO             "t8PLXbBCiRA"    /* sceAgcDriverGetWorkloadStreamInfo */
-#define AGC_NID_AGCDRIVERIDHSSUBMIT                        "C2yjkNdzbW4"    /* sceAgcDriverIDHSSubmit */
-#define AGC_NID_AGCDRIVERINITRESOURCEREGISTRATION          "F0Y42t-3e18"    /* sceAgcDriverInitResourceRegistration */
-#define AGC_NID_AGCDRIVERISCAPTUREINPROGRESS               "Ddwk4gLT5j0"    /* sceAgcDriverIsCaptureInProgress */
-#define AGC_NID_AGCDRIVERMODULEREGISTRATION                "04JRU1Uf8Ms"    /* sceAgcDriverModuleRegistration */
-#define AGC_NID_AGCDRIVERPASSINFODOWNWARD                  "aCfbPzyjU90"    /* sceAgcDriverPassInfoDownward */
-#define AGC_NID_AGCDRIVERPATCHCLEARSTATE                   "lYz7vbL4W4A"    /* sceAgcDriverPatchClearState */
-#define AGC_NID_AGCDRIVERQUERYRESOURCEREGISTRATIONUSERMEMORYREQUIREMENTS "AOLcoIkQDgM"    /* sceAgcDriverQueryResourceRegistrationUserMemoryRequirements */
-#define AGC_NID_AGCDRIVERREGISTERWORKLOADSTREAM            "3AyTaWcF-H8"    /* sceAgcDriverRegisterWorkloadStream */
-#define AGC_NID_AGCDRIVERSETFLIP                           "cwbxjPSJ7WQ"    /* sceAgcDriverSetFlip */
-#define AGC_NID_AGCDRIVERSETHSOFFCHIPPARAMDIRECT           "DPcAnsOlTQs"    /* sceAgcDriverSetHsOffchipParamDirect */
-#define AGC_NID_AGCDRIVERSUBMITMULTIACBS                   "HF3YllT3mXU"    /* sceAgcDriverSubmitMultiAcbs */
-#define AGC_NID_AGCDRIVERSUBMITMULTICOMMANDBUFFERS         "Fj7r9EHzF38"    /* sceAgcDriverSubmitMultiCommandBuffers */
-#define AGC_NID_AGCDRIVERSUBMITMULTIDCBS                   "6UzEidRZwkg"    /* sceAgcDriverSubmitMultiDcbs */
-#define AGC_NID_AGCDRIVERSUSPENDPOINTSUBMIT                "QcmHLO2n7mk"    /* sceAgcDriverSuspendPointSubmit */
-#define AGC_NID_AGCDRIVERSYSENABLESUBMITDONE45EXCEPTION    "x3K61sY5m8Q"    /* sceAgcDriverSysEnableSubmitDone45Exception */
-#define AGC_NID_AGCDRIVERSYSGETCLIENTNUMBER                "kuE1uTiWfuk"    /* sceAgcDriverSysGetClientNumber */
-#define AGC_NID_AGCDRIVERSYSISGAMECLOSED                   "ftf-xlfBQpo"    /* sceAgcDriverSysIsGameClosed */
-#define AGC_NID_AGCDRIVERTMPINITIDHS                       "UM8rn9hRWrY"    /* sceAgcDriverTmpInitIdhs */
-#define AGC_NID_AGCDRIVERUNKNOWNU9UEYEHSKF4                "U9ueyEhSkF4"    /* sceAgcDriverUnknownU9ueyEhSkF4 */
-#define AGC_NID_AGCDRIVERUNREGISTERRESOURCE                "pWLG7WOpVcw"    /* sceAgcDriverUnregisterResource */
-#define AGC_NID_AGCDRIVERUNREGISTERWORKLOADSTREAM          "n5ElQVYsU1A"    /* sceAgcDriverUnregisterWorkloadStream */
-#define AGC_NID_AGCDRIVERUSERDATAGETPACKETSIZE             "VhLnEiTuuWo"    /* sceAgcDriverUserDataGetPacketSize */
-#define AGC_NID_AGCDRIVERUSERDATAWRITEPOPMARKER            "LEnn-4ARRJM"    /* sceAgcDriverUserDataWritePopMarker */
-#define AGC_NID_AGCDRIVERWAITUNTILSAFEFORRENDERING         "u8BkdHb1+Po"    /* sceAgcDriverWaitUntilSafeForRendering */
+#define AGC_NID_SCE_AGC_DRIVER_CREATE_USER_SPECIAL_QUEUE                            "dwoD-LJDQy8"
+#define AGC_NID_SCE_AGC_DRIVER_DESTROY_USER_SPECIAL_QUEUE                           "NRO47jBXLiI"
+#define AGC_NID_SCE_AGC_DRIVER_ACQUIRE_RAZOR_A_C_Q                                  "MetMOQVd8HY"
+#define AGC_NID_SCE_AGC_DRIVER_ADD_EQ_EVENT                                         "w2rJhmD+dsE"
+#define AGC_NID_SCE_AGC_DRIVER_AGR_SUBMIT_DCB                                       "AhGvpITrf4M"
+#define AGC_NID_SCE_AGC_DRIVER_ALLOCATE_TOOL_MEMORY_FOR_GPU_RESET                   "T8xEHO2Y+XU"
+#define AGC_NID_SCE_AGC_DRIVER_BEGIN_WORKLOAD                                       "UM9b9NunSrE"
+#define AGC_NID_SCE_AGC_DRIVER_CREATE_QUEUE                                         "zP4ZNlXLBVg"
+#define AGC_NID_SCE_AGC_DRIVER_CWSR_RESUME_ACQ                                      "1DXIHxWHZAQ"
+#define AGC_NID_SCE_AGC_DRIVER_CWSR_SUSPEND_ACQ                                     "SOAMmdlyaIc"
+#define AGC_NID_SCE_AGC_DRIVER_DEBUG_HARDWARE_STATUS                                "1BUTwixUG5Y"
+#define AGC_NID_SCE_AGC_DRIVER_DELETE_EQ_EVENT                                      "DL2RXaXOy88"
+#define AGC_NID_SCE_AGC_DRIVER_DEREGISTER_CAPTURE_INTERFACE                         "qR+S4WqJvUM"
+#define AGC_NID_SCE_AGC_DRIVER_END_WORKLOAD                                         "i6bfTi13ApA"
+#define AGC_NID_SCE_AGC_DRIVER_FIND_RESOURCES_PUBLIC                                "5l3IfCFJxBs"
+#define AGC_NID_SCE_AGC_DRIVER_GET_ALLOCATED_TOOL_MEMORY_FOR_GPU_RESET              "4XJkjqVrJrs"
+#define AGC_NID_SCE_AGC_DRIVER_GET_DEFAULT_OWNER                                    "F0ZXt5q0ZTA"
+#define AGC_NID_SCE_AGC_DRIVER_GET_EQ_CONTEXT_ID                                    "Zw7uUVPulbw"
+#define AGC_NID_SCE_AGC_DRIVER_GET_EQ_EVENT_TYPE                                    "5CdQTZIQPxM"
+#define AGC_NID_SCE_AGC_DRIVER_GET_GPU_REF_CLKS                                     "g68eYcZS7PY"
+#define AGC_NID_SCE_AGC_DRIVER_GET_HS_OFFCHIP_PARAM                                 "r28hEh6cNH0"
+#define AGC_NID_SCE_AGC_DRIVER_GET_OWNER_NAME                                       "LepGrgk77sM"
+#define AGC_NID_SCE_AGC_DRIVER_GET_PA_DEBUG_INTERFACE_VERSION                       "Pqxglq1oKec"
+#define AGC_NID_SCE_AGC_DRIVER_GET_REG_SHADOW_INFO                                  "CP-kVAMmWVw"
+#define AGC_NID_SCE_AGC_DRIVER_GET_REG_SHADOW_INFO_AGR                              "ME1eUot7+Qw"
+#define AGC_NID_SCE_AGC_DRIVER_GET_RESERVED_DMEM_FOR_AGC                            "Um-jkyDy9rI"
+#define AGC_NID_SCE_AGC_DRIVER_GET_RESOURCE_BASE_ADDRESS_AND_SIZE_IN_BYTES          "NghWEUXp1qM"
+#define AGC_NID_SCE_AGC_DRIVER_GET_RESOURCE_NAME                                    "M9yBzRKkjPc"
+#define AGC_NID_SCE_AGC_DRIVER_GET_RESOURCE_REGISTRATION_MAX_NAME_LENGTH            "uJziRsODk1c"
+#define AGC_NID_SCE_AGC_DRIVER_GET_RESOURCE_SHADER_GUID                             "mXn+K9E-wOA"
+#define AGC_NID_SCE_AGC_DRIVER_GET_RESOURCE_TYPE                                    "rI9lNAXPMIw"
+#define AGC_NID_SCE_AGC_DRIVER_GET_RESOURCE_USER_DATA                               "ls4jfY576lw"
+#define AGC_NID_SCE_AGC_DRIVER_GET_SET_FLIP_PACKET_SIZE_IN_DWORDS                   "2PrsbRYyZi4"
+#define AGC_NID_SCE_AGC_DRIVER_GET_SET_WORKLOAD_COMPLETE_PACKET_SIZE                "WNyjOWq8-Vk"
+#define AGC_NID_SCE_AGC_DRIVER_GET_SET_WORKLOAD_STREAM_INACTIVE_PACKET_SIZE         "k8rLr8nq-hE"
+#define AGC_NID_SCE_AGC_DRIVER_GET_SET_WORKLOADS_ACTIVE_PACKET_SIZE                 "gyVTZWyySpM"
+#define AGC_NID_SCE_AGC_DRIVER_GET_SHADER_DEBUGGING_STATUS                          "rJUyMrDdxJg"
+#define AGC_NID_SCE_AGC_DRIVER_GET_T_F_RING                                         "e-YMQ+2tj9M"
+#define AGC_NID_SCE_AGC_DRIVER_GET_TRACE_INITIATOR                                  "xDPdCurOujQ"
+#define AGC_NID_SCE_AGC_DRIVER_GET_WAIT_RENDERING_PACKET_SIZE_IN_DWORDS             "0MtUJ3BpGhE"
+#define AGC_NID_SCE_AGC_DRIVER_GET_WORKLOAD_STREAM_INFO                             "t8PLXbBCiRA"
+#define AGC_NID_SCE_AGC_DRIVER_HP3D_LOCK_END                                        "u2g5VER9UnM"
+#define AGC_NID_SCE_AGC_DRIVER_HP3D_LOCK_START                                      "SOo3Lwyglfo"
+#define AGC_NID_SCE_AGC_DRIVER_I_D_H_S_SUBMIT                                       "C2yjkNdzbW4"
+#define AGC_NID_SCE_AGC_DRIVER_INIT_RESOURCE_REGISTRATION                           "F0Y42t-3e18"
+#define AGC_NID_SCE_AGC_DRIVER_IS_CAPTURE_IN_PROGRESS                               "Ddwk4gLT5j0"
+#define AGC_NID_SCE_AGC_DRIVER_IS_PA_DEBUG                                          "HMnVBVUyajk"
+#define AGC_NID_SCE_AGC_DRIVER_IS_SUBMIT_VALIDATION_ENABLED                         "qspAL8bgcBY"
+#define AGC_NID_SCE_AGC_DRIVER_IS_SUSPEND_POINT_IN_FLIGHT                           "K15VxhSJOfc"
+#define AGC_NID_SCE_AGC_DRIVER_IS_SUSPEND_POINT_IN_FLIGHT_DIRECT                    "I6elAJxk6Jo"
+#define AGC_NID_SCE_AGC_DRIVER_IS_TRACE_IN_PROGRESS                                 "+TN0oRTBxJQ"
+#define AGC_NID_SCE_AGC_DRIVER_MAP_COMPUTE_QUEUE                                    "XNbrdwCsZ9A"
+#define AGC_NID_SCE_AGC_DRIVER_MODULE_REGISTRATION                                  "04JRU1Uf8Ms"
+#define AGC_NID_SCE_AGC_DRIVER_NOTIFY_DEFAULT_STATES                                "nR6xhiFsOoc"
+#define AGC_NID_SCE_AGC_DRIVER_PASS_INFO_DOWNWARD                                   "aCfbPzyjU90"
+#define AGC_NID_SCE_AGC_DRIVER_PATCH_CLEAR_STATE                                    "lYz7vbL4W4A"
+#define AGC_NID_SCE_AGC_DRIVER_QUERY_RESOURCE_REGISTRATION_USER_MEMORY_REQUIREMENTS "AOLcoIkQDgM"
+#define AGC_NID_SCE_AGC_DRIVER_REGISTER_CAPTURE_INTERFACE                           "oz3Yd--lAEE"
+#define AGC_NID_SCE_AGC_DRIVER_REGISTER_DEFAULT_OWNER                               "U9ueyEhSkF4"
+#define AGC_NID_SCE_AGC_DRIVER_REGISTER_GDS_RESOURCE                                "emP3ckeS2uo"
+#define AGC_NID_SCE_AGC_DRIVER_REGISTER_GPU_RESET_CALLBACKS                         "KtIXf8La96k"
+#define AGC_NID_SCE_AGC_DRIVER_REGISTER_OWNER                                       "X-Nm5KLREeg"
+#define AGC_NID_SCE_AGC_DRIVER_REGISTER_RESOURCE                                    "W5z4eZrjEas"
+#define AGC_NID_SCE_AGC_DRIVER_REGISTER_WORKLOAD_STREAM                             "3AyTaWcF-H8"
+#define AGC_NID_SCE_AGC_DRIVER_RELEASE_RAZOR_A_C_Q                                  "TEOAw-eLjNo"
+#define AGC_NID_SCE_AGC_DRIVER_REQUEST_CAPTURE_START                                "SAfhzJPcjuk"
+#define AGC_NID_SCE_AGC_DRIVER_REQUEST_CAPTURE_STOP                                 "FOwvmNlFLjM"
+#define AGC_NID_SCE_AGC_DRIVER_SDMA_COPY_LINEAR_BLOCKING                            "bQ+En9GY3PM"
+#define AGC_NID_SCE_AGC_DRIVER_SET_BASE                                             "zmw2uVSEj94"
+#define AGC_NID_SCE_AGC_DRIVER_SET_CONFIG_REG                                       "-vc-xL+G8u0"
+#define AGC_NID_SCE_AGC_DRIVER_SET_CONTEXT_REG                                      "+b34-CLWc0s"
+#define AGC_NID_SCE_AGC_DRIVER_SET_FLIP                                             "cwbxjPSJ7WQ"
+#define AGC_NID_SCE_AGC_DRIVER_SET_HS_OFFCHIP_PARAM                                 "MM4IZSEYytQ"
+#define AGC_NID_SCE_AGC_DRIVER_SET_HS_OFFCHIP_PARAM_DIRECT                          "DPcAnsOlTQs"
+#define AGC_NID_SCE_AGC_DRIVER_SET_RESOURCE_USER_DATA                               "VOMSpd9+vxU"
+#define AGC_NID_SCE_AGC_DRIVER_SET_T_F_RING_DIRECT                                  "16IjQxB-Heo"
+#define AGC_NID_SCE_AGC_DRIVER_SET_TARGET_RING_FOR_DIAG                             "l0Jxfl0DEdo"
+#define AGC_NID_SCE_AGC_DRIVER_SET_TF_RING                                          "XlNp7jzGiPo"
+#define AGC_NID_SCE_AGC_DRIVER_SET_WORKLOAD_STREAM_INACTIVE                         "AU87qNukGi4"
+#define AGC_NID_SCE_AGC_DRIVER_SETUP_ASYNC_GRAPHICS                                 "Vlaj1gwmIFA"
+#define AGC_NID_SCE_AGC_DRIVER_SUBMIT_ACB                                           "gSRnr79F8tQ"
+#define AGC_NID_SCE_AGC_DRIVER_SUBMIT_COMMAND_BUFFER                                "b4fpgH5ZXxQ"
+#define AGC_NID_SCE_AGC_DRIVER_SUBMIT_COMMAND_BUFFERS                               "Hj4eWnDektQ"
+#define AGC_NID_SCE_AGC_DRIVER_SUBMIT_DCB                                           "UglJIZjGssM"
+#define AGC_NID_SCE_AGC_DRIVER_SUBMIT_MULTI_ACBS                                    "HF3YllT3mXU"
+#define AGC_NID_SCE_AGC_DRIVER_SUBMIT_MULTI_COMMAND_BUFFERS                         "Fj7r9EHzF38"
+#define AGC_NID_SCE_AGC_DRIVER_SUBMIT_MULTI_COMMAND_BUFFERS_DIRECT                  "xmWi73o1BR0"
+#define AGC_NID_SCE_AGC_DRIVER_SUBMIT_MULTI_DCBS___T8_XO6_LT_F_J_I                  "+T8Xo6LtFJI"
+#define AGC_NID_SCE_AGC_DRIVER_SUBMIT_MULTI_DCBS_6_UZ_EID_R_ZWKG                    "6UzEidRZwkg"
+#define AGC_NID_SCE_AGC_DRIVER_SUBMIT_TO_H_D_R_SCOPES_A_C_Q                         "lOYHtoUcJD4"
+#define AGC_NID_SCE_AGC_DRIVER_SUBMIT_TO_RAZOR_A_C_Q                                "jJyVJyhi5h8"
+#define AGC_NID_SCE_AGC_DRIVER_SUSPEND_POINT_SUBMIT                                 "QcmHLO2n7mk"
+#define AGC_NID_SCE_AGC_DRIVER_SUSPEND_POINT_SUBMIT_DIRECT                          "ZV04pRl7cWU"
+#define AGC_NID_SCE_AGC_DRIVER_SYS_ENABLE_SUBMIT_DONE45_EXCEPTION                   "x3K61sY5m8Q"
+#define AGC_NID_SCE_AGC_DRIVER_SYS_GET_CLIENT_NUMBER                                "kuE1uTiWfuk"
+#define AGC_NID_SCE_AGC_DRIVER_SYS_IS_GAME_CLOSED                                   "ftf-xlfBQpo"
+#define AGC_NID_SCE_AGC_DRIVER_SYS_SUBMIT_FLIP_HANDLE_PROXY                         "BbI8si4o-fA"
+#define AGC_NID_SCE_AGC_DRIVER_TMP_INIT_IDHS                                        "UM8rn9hRWrY"
+#define AGC_NID_SCE_AGC_DRIVER_TRIGGER_CAPTURE                                      "Xq5WmbwPTnQ"
+#define AGC_NID_SCE_AGC_DRIVER_UNKNOWN___C_SRLR1Y_Y_O                               "-CSrlr1yY-o"
+#define AGC_NID_SCE_AGC_DRIVER_UNKNOWN___J_FK_LP_C_DE_H_M                           "-JFkLpCDeHM"
+#define AGC_NID_SCE_AGC_DRIVER_UNKNOWN___MQH_S_E_VV_A_PW                            "-MqhSEVvAPw"
+#define AGC_NID_SCE_AGC_DRIVER_UNKNOWN_1_Q_TQ_F_H_YQ_Q_E                            "1QTqF-hYqQE"
+#define AGC_NID_SCE_AGC_DRIVER_UNKNOWN_6_W_O4_CSC_VNF_M                             "6WO4CscVnfM"
+#define AGC_NID_SCE_AGC_DRIVER_UNKNOWN_6V__D6_C_Q_H_A4_Y                            "6v-D6CQHA4Y"
+#define AGC_NID_SCE_AGC_DRIVER_UNKNOWN_8_C_X_P_PL_NMV_IC                            "8CXPPlNmvIc"
+#define AGC_NID_SCE_AGC_DRIVER_UNKNOWN_9R_DC_I6C_JB_8                               "9rDcI6cJb+8"
+#define AGC_NID_SCE_AGC_DRIVER_UNKNOWN_CIA3_HG_Y0_WI_Y                              "Cia3HgY0WiY"
+#define AGC_NID_SCE_AGC_DRIVER_UNKNOWN_D_G_N__IA_H_N_R8O                            "DGN+IaHNR8o"
+#define AGC_NID_SCE_AGC_DRIVER_UNKNOWN_I_G_YQ_P__W_K_CGC                            "IGYqP+WKCgc"
+#define AGC_NID_SCE_AGC_DRIVER_UNKNOWN_JKYPW0_U__H_YO                               "Jkypw0U-HYo"
+#define AGC_NID_SCE_AGC_DRIVER_UNKNOWN_NHN_G_MUUNZ0_Y                               "NhnGMuunz0Y"
+#define AGC_NID_SCE_AGC_DRIVER_UNKNOWN_NM_E3_PF_E211O                               "NmE3PfE211o"
+#define AGC_NID_SCE_AGC_DRIVER_UNKNOWN_O144K_U_Y_D_S_BO                             "O144kUYDSBo"
+#define AGC_NID_SCE_AGC_DRIVER_UNKNOWN_V_R_B_N_I2_HZ_G_A                            "V+rBNI2HzGA"
+#define AGC_NID_SCE_AGC_DRIVER_UNKNOWN_VER_A_U_W_CTR_X0                             "VerAUWCtrX0"
+#define AGC_NID_SCE_AGC_DRIVER_UNKNOWN_GP_F0_L_Z3_19C                               "gpF0LZ3+19c"
+#define AGC_NID_SCE_AGC_DRIVER_UNKNOWN_K_FI_KC_GAGV5K                               "kFiKcGagv5k"
+#define AGC_NID_SCE_AGC_DRIVER_UNKNOWN_MXY_UA_QF_PGB8                               "mxyUaQfPgb8"
+#define AGC_NID_SCE_AGC_DRIVER_UNKNOWN_O2GVL_I_F_M_F1O                              "o2gvlIFMF1o"
+#define AGC_NID_SCE_AGC_DRIVER_UNKNOWN_S_W7YP7_N_VLRK                               "sW7yp7NVlrk"
+#define AGC_NID_SCE_AGC_DRIVER_UNKNOWN_T_D2_E_C_N_SU_T_Q_Q                          "tD2ECNSuTQQ"
+#define AGC_NID_SCE_AGC_DRIVER_UNKNOWN_WXDCY_VQ_X_J_E_Y                             "wxdcyVqXJEY"
+#define AGC_NID_SCE_AGC_DRIVER_UNREGISTER_ALL_RESOURCES_FOR_OWNER                   "SCoAN5fYlUM"
+#define AGC_NID_SCE_AGC_DRIVER_UNREGISTER_GPU_RESET_CALLBACKS                       "DDCQA2fPQj0"
+#define AGC_NID_SCE_AGC_DRIVER_UNREGISTER_OWNER_AND_RESOURCES                       "ZLJk9r2+2Aw"
+#define AGC_NID_SCE_AGC_DRIVER_UNREGISTER_RESOURCE                                  "pWLG7WOpVcw"
+#define AGC_NID_SCE_AGC_DRIVER_UNREGISTER_WORKLOAD_STREAM                           "n5ElQVYsU1A"
+#define AGC_NID_SCE_AGC_DRIVER_USER_DATA_GET_PACKET_SIZE                            "VhLnEiTuuWo"
+#define AGC_NID_SCE_AGC_DRIVER_USER_DATA_IMMEDIATE_WRITE                            "t30LG1ibIJE"
+#define AGC_NID_SCE_AGC_DRIVER_USER_DATA_IMMEDIATE_WRITE_PACKET                     "tLTma0k0U3E"
+#define AGC_NID_SCE_AGC_DRIVER_USER_DATA_WRITE_POP_MARKER                           "LEnn-4ARRJM"
+#define AGC_NID_SCE_AGC_DRIVER_WAIT_IDLE                                            "oFb2hMcoJa4"
+#define AGC_NID_SCE_AGC_DRIVER_WAIT_UNTIL_SAFE_FOR_RENDERING                        "u8BkdHb1+Po"
+#define AGC_NID_SCE_AGD_GET_APPLICATION_GPU_DEBUG                                   "KKrEe-LWNG8"
+#define AGC_NID_SCE_AGD_GET_SYSTEM_GPU_DEBUG                                        "qDjJ+CgiMzs"
+#define AGC_NID_SCE_AGD_RESET_GPU                                                   "Dg-D0+2-m8g"
+#define AGC_NID_SCE_AGD_SET_APPLICATION_GPU_DEBUG                                   "4JOwdjYqMpU"
 
 #endif /* _AGC_NIDS_H_ */

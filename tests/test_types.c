@@ -41,7 +41,7 @@ static void test_pm4_header(void) {
 
 static void test_known_nids(void) {
     TEST_ASSERT(strcmp(AGC_NID_SCE_AGC_CB_NOP, "LtTouSCZjHM") == 0, "sceAgcCbNop NID");
-    TEST_ASSERT(strcmp(AGC_NID_SCE_AGC_DCB_SET_FLIP, "YUeqkyT7mEQ") == 0, "sceAgcDcbSetFlip NID");
+    TEST_ASSERT(strcmp(AGC_NID_SCE_AGC_VSH_DCB_SET_FLIP, "YUeqkyT7mEQ") == 0, "sceAgcVshDcbSetFlip NID");
     TEST_ASSERT(strcmp(AGC_NID_SCE_AGC_DRIVER_SUBMIT_DCB, "UglJIZjGssM") == 0, "submit DCB NID");
 }
 
