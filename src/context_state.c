@@ -22,11 +22,13 @@
  */
 
 #include "agcdriver.h"
+#include "agc_context.h"
 #include "agc_types.h"
 #include "agc_error.h"
 #include "agc_pm4.h"
 
 #include <string.h>
+#include <stdbool.h>
 
 /*
  * Default context state.
@@ -35,14 +37,36 @@
  * represents the default GPU state. This is loaded at the start
  * of each frame via LOAD_CONTEXT_REG or set inline.
  *
- * TODO: Populate with actual default register values from
- * firmware analysis of sceAgcVshDcbInitializeDefaultHardwareState.
+ * Populated from the v8 register defaults (FW 5.50) primary groups.
+ * Each group contains (offset, value) pairs for CX/SH/UC registers.
  */
-static const AgcContextState g_default_state = { .data = {0} };
+static AgcContextState g_default_state;
+static bool g_default_state_initialized;
+
+static void init_default_state(void) {
+    memset(&g_default_state, 0, sizeof(g_default_state));
+
+    uint32_t group_count = 0;
+    const AgcRegisterDefaultsGroup *groups =
+        agcRegisterDefaultsGetPrimaryGroupsForVersion(8, &group_count);
+
+    for (uint32_t i = 0; i < group_count; i++) {
+        const AgcRegisterDefaultsGroup *group = &groups[i];
+        for (uint32_t r = 0; r < group->register_count; r++) {
+            uint32_t offset = group->registers[r].offset;
+            uint32_t value = group->registers[r].value;
+            if (offset < sizeof(g_default_state.data))
+                g_default_state.data[offset] = value;
+        }
+    }
+    g_default_state_initialized = true;
+}
 
 int32_t PS5_SYSV_ABI sceAgcGetDefaultState(AgcContextState* out_state) {
     if (!out_state)
         return AGC_ERROR_INVALID_ARGUMENT;
+    if (!g_default_state_initialized)
+        init_default_state();
     memcpy(out_state, &g_default_state, sizeof(AgcContextState));
     return AGC_OK;
 }

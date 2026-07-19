@@ -1,6 +1,8 @@
 #include "test.h"
 #include "agc_driver_debug.h"
 #include "agcdriver.h"
+#include "agc_types.h"
+#include "agc_context.h"
 
 /* Debug helpers for queue state — defined in driver_generic.c, not public API.
  * Declared here as extern so tests can inspect internal queue tracking without
@@ -233,6 +235,36 @@ static void test_workload_begin_already_active(void) {
     TEST_ASSERT_EQ(r, AGC_OK, "EndWorkload 42 after rejected double-begin returns OK");
 }
 
+/* sceAgcGetDefaultState should return a populated context state (not all zeros) */
+static void test_default_state_populated(void) {
+    AgcContextState state;
+    int32_t r = sceAgcGetDefaultState(&state);
+    TEST_ASSERT_EQ(r, AGC_OK, "GetDefaultState returns OK");
+
+    /* Verify it's not all zeros (register defaults should populate some fields) */
+    uint32_t nonzero_count = 0;
+    for (uint32_t i = 0; i < 512; i++) {
+        if (state.data[i] != 0)
+            nonzero_count++;
+    }
+    TEST_ASSERT(nonzero_count > 0, "GetDefaultState has non-zero register values");
+
+    /* Verify consistency: second call returns same data */
+    AgcContextState state2;
+    r = sceAgcGetDefaultState(&state2);
+    TEST_ASSERT_EQ(r, AGC_OK, "GetDefaultState second call returns OK");
+    TEST_ASSERT(memcmp(&state, &state2, sizeof(state)) == 0, "GetDefaultState consistent");
+
+    /* GetDefaultCxStateFlat should also work */
+    uint32_t flat[64];
+    r = sceAgcGetDefaultCxStateFlat(flat, sizeof(flat));
+    TEST_ASSERT_EQ(r, AGC_OK, "GetDefaultCxStateFlat returns OK");
+
+    /* NULL check */
+    r = sceAgcGetDefaultState(NULL);
+    TEST_ASSERT(r != AGC_OK, "GetDefaultState rejects NULL");
+}
+
 void test_suite_driver(void) {
     TEST_SUITE("Driver Submit RE");
     TEST_RUN(test_submit_packet_layout);
@@ -253,4 +285,5 @@ void test_suite_driver(void) {
     TEST_RUN(test_workload_end_without_begin);
     TEST_RUN(test_workload_end_mismatched_id);
     TEST_RUN(test_workload_begin_already_active);
+    TEST_RUN(test_default_state_populated);
 }

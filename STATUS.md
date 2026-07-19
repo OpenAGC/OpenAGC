@@ -49,7 +49,7 @@ make -B test
 Expected result:
 
 ```text
-1642 passed, 0 failed
+1648 passed, 0 failed
 ```
 
 PS5 prospero backend (cross-compiled, no tests):
