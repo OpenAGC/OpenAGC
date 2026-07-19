@@ -12,7 +12,7 @@ buildable without proprietary SDK headers. Targets two backends:
 - `prospero` — native PS5 `/dev/gc` backend (implemented, awaiting hardware
   validation)
 
-The codebase is C (C99-ish), MIT licensed, and depends only on libc on the
+The codebase is C (C99-ish), Apache 2.0 licensed, and depends only on libc on the
 host. Do not introduce new dependencies without checking the build files first.
 
 ## Build & Test

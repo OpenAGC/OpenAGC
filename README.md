@@ -206,7 +206,7 @@ openagc/
 ├── STATUS.md                # Current milestone and roadmap
 ├── REFERENCE_FINDINGS.md    # Detailed RE notes and conclusions
 ├── AGENTS.md                # Agent guidance and conventions
-├── COPYING                  # MIT license
+├── LICENSE                  # Apache 2.0 license
 └── README.md                # This file
 ```
 
@@ -223,4 +223,4 @@ openagc/
 
 ## License
 
-MIT, see [COPYING](COPYING).
+Apache 2.0, see [LICENSE](LICENSE).
