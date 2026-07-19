@@ -130,13 +130,46 @@ static void test_sce_agc_dcb_wait_reg_mem(void) {
     SceAgcCb cb;
     agcCbInit(&cb, buffer, sizeof(buffer));
 
+    /* KytyPS5-confirmed: 32-bit NOP-wrapped, 7 dwords.
+     * size=0, cmp=3, op=0, cache=0, addr=0x100000020, ref=0x55, mask=0xFF, poll=400
+     * control = 0x10 | (3&7) | ((0&3)<<8) | ((0&0xC)<<4) | ((0&3)<<25) = 0x13
+     * poll = (400 >> 4) & 0xFFFF = 25
+     * addr_lo = 0x20 & ~0x3 = 0x20
+     * addr_hi = 0x1 & 0x3FFFF = 0x1 */
     uint32_t* cmd = sceAgcDcbWaitRegMem(&cb, 0, 3, 0, 0, 0x100000020ULL, 0x55, 0xFF, 400);
     TEST_ASSERT(cmd == buffer, "WaitRegMem returns allocated packet");
     TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_NOP, "WaitRegMem wrapper opcode");
     TEST_ASSERT_EQ(agcPm4Subcommand(cmd[0]), AGC_PM4_SUB_WAIT_MEM32, "WaitRegMem32 subcommand");
-    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 6, "WaitRegMem32 length");
-    TEST_ASSERT_EQ(cmd[4], 3, "WaitRegMem compare/op control");
-    TEST_ASSERT_EQ(cmd[5], 0x55, "WaitRegMem reference");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 7, "WaitRegMem32 length (KytyPS5: 7 dwords)");
+    TEST_ASSERT_EQ(cmd[1], 0x20u, "WaitRegMem32 addr_lo aligned");
+    TEST_ASSERT_EQ(cmd[2], 0x1u, "WaitRegMem32 addr_hi masked");
+    TEST_ASSERT_EQ(cmd[3], 0xFFu, "WaitRegMem32 mask");
+    TEST_ASSERT_EQ(cmd[4], 0x55u, "WaitRegMem32 reference");
+    TEST_ASSERT_EQ(cmd[5], 0x13u, "WaitRegMem32 control (0x10|cmp=3)");
+    TEST_ASSERT_EQ(cmd[6], 25u, "WaitRegMem32 poll (400>>4)");
+
+    /* 64-bit variant: 9 dwords.
+     * size=1, cmp=5, op=1, cache=2, addr=0x200000040, ref=0xAABB, mask=0xFFFF, poll=800
+     * control = 0x10 | (5&7) | ((1&1)<<8) | ((1&6)<<5) | ((2&3)<<25)
+     *   = 0x10 | 5 | 0x100 | 0 | 0x4000000 = 0x4000115
+     *   (note: (1&0x6)=0, so the <<5 term is 0)
+     * poll = (800 >> 4) & 0xFFFF = 50
+     * addr_lo = 0x40 & ~0x7 = 0x40
+     * addr_hi = 0x2 & 0x3FFFF = 0x2 */
+    uint32_t buffer2[32];
+    agcCbInit(&cb, buffer2, sizeof(buffer2));
+    uint32_t* cmd64 = sceAgcDcbWaitRegMem(&cb, 1, 5, 1, 2, 0x200000040ULL, 0xAABB, 0xFFFF, 800);
+    TEST_ASSERT(cmd64 != NULL, "WaitRegMem64 returns allocated packet");
+    TEST_ASSERT_EQ(agcPm4Subcommand(cmd64[0]), AGC_PM4_SUB_WAIT_MEM64, "WaitRegMem64 subcommand");
+    TEST_ASSERT_EQ(agcPm4Length(cmd64[0]), 9, "WaitRegMem64 length");
+    TEST_ASSERT_EQ(cmd64[1], 0x40u, "WaitRegMem64 addr_lo aligned");
+    TEST_ASSERT_EQ(cmd64[2], 0x2u, "WaitRegMem64 addr_hi masked");
+    TEST_ASSERT_EQ(cmd64[3], 0xFFFFu, "WaitRegMem64 mask_lo");
+    TEST_ASSERT_EQ(cmd64[4], 0u, "WaitRegMem64 mask_hi");
+    TEST_ASSERT_EQ(cmd64[5], 0xAABBu, "WaitRegMem64 reference_lo");
+    TEST_ASSERT_EQ(cmd64[6], 0u, "WaitRegMem64 reference_hi");
+    TEST_ASSERT_EQ(cmd64[7], 0x4000115u, "WaitRegMem64 control (0x10|5|op1|cache2)");
+    TEST_ASSERT_EQ(cmd64[8], 50u, "WaitRegMem64 poll (800>>4)");
 }
 
 static void test_sce_agc_dcb_markers_and_flip(void) {

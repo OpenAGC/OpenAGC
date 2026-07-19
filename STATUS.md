@@ -99,7 +99,10 @@ Cursor-based builders:
 - `sceAgcCbSetShRegistersDirect`
 - `sceAgcCbSetCxRegistersDirect`
 - `sceAgcDcbWriteData`
-- `sceAgcDcbWaitRegMem`
+- `sceAgcDcbWaitRegMem` — KytyPS5-confirmed: 32-bit variant now 7 dwords
+  (was 6) with proper control word (0x10 base, split op bits, cache_policy),
+  address alignment masking, poll cycles field, and corrected field order
+  (addr, mask, reference, control, poll)
 - `sceAgcDcbDmaData`
 - `sceAgcDcbSetBaseIndirectArgs`
 - `sceAgcDcbDispatchIndirect`

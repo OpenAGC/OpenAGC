@@ -105,12 +105,35 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbWaitRegMem(
     uint32_t cache_policy, uint64_t address, uint64_t reference,
     uint64_t mask, uint32_t poll_cycles)
 {
-    (void)cache_policy;
-    if (size > 1 || compare_function > 7 || operation > 4)
+    /* KytyPS5-confirmed encoding for NOP-wrapped WaitRegMem.
+     *
+     * 32-bit (size=0): 7 dwords, IT_NOP + R_WAIT_MEM32
+     *   [0] header
+     *   [1] address_lo & ~0x3
+     *   [2] (address >> 32) & 0x3FFFF
+     *   [3] mask_lo
+     *   [4] reference_lo
+     *   [5] control = 0x10 | (cmp&7) | ((op&3)<<8) | ((op&0xC)<<4) | ((cache&3)<<25)
+     *   [6] poll = min(poll_cycles >> 4, 0xFFFF)
+     *
+     * 64-bit (size=1): 9 dwords, IT_NOP + R_WAIT_MEM64
+     *   [0] header
+     *   [1] address_lo & ~0x7
+     *   [2] (address >> 32) & 0x3FFFF
+     *   [3] mask_lo
+     *   [4] mask_hi
+     *   [5] reference_lo
+     *   [6] reference_hi
+     *   [7] control = 0x10 | (cmp&7) | ((op&1)<<8) | ((op&6)<<5) | ((cache&3)<<25)
+     *   [8] poll = min(poll_cycles >> 4, 0xFFFF)
+     *
+     * The standard_wait path (operation 2/3) uses IT_WAIT_REG_MEM (0x3C)
+     * and is SharpEmu-derived (not in KytyPS5). Kept for game compatibility. */
+    if (size > 1 || compare_function > 7 || operation > 4 || cache_policy > 3)
         return 0;
 
     uint32_t standard_wait = operation == 2 || operation == 3;
-    uint32_t packet_dwords = standard_wait ? 7u : (size == 0 ? 6u : 9u);
+    uint32_t packet_dwords = standard_wait ? 7u : (size == 0 ? 7u : 9u);
     uint32_t *cmd = agcCbAllocDwords(cb, packet_dwords);
     if (!cmd)
         return 0;
@@ -126,22 +149,30 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbWaitRegMem(
         return cmd;
     }
 
-    cmd[0] = agcPm4Header3Sub(
-        AGC_PM4_OP_NOP,
-        size == 0 ? AGC_PM4_SUB_WAIT_MEM32 : AGC_PM4_SUB_WAIT_MEM64,
-        packet_dwords);
-    cmd[1] = (uint32_t)address;
-    cmd[2] = (uint32_t)(address >> 32);
-    cmd[3] = (uint32_t)mask;
+    uint32_t poll = (poll_cycles >> 4u) & 0xFFFFu;
+
     if (size == 0) {
-        cmd[4] = compare_function | (operation << 8);
-        cmd[5] = (uint32_t)reference;
+        cmd[0] = agcPm4Header3Sub(AGC_PM4_OP_NOP, AGC_PM4_SUB_WAIT_MEM32, 7);
+        cmd[1] = (uint32_t)address & ~0x3u;
+        cmd[2] = (uint32_t)(address >> 32) & 0x3FFFFu;
+        cmd[3] = (uint32_t)mask;
+        cmd[4] = (uint32_t)reference;
+        cmd[5] = 0x10u | (compare_function & 0x7u) |
+                 ((operation & 0x3u) << 8u) | ((operation & 0xCu) << 4u) |
+                 ((cache_policy & 0x3u) << 25u);
+        cmd[6] = poll;
     } else {
+        cmd[0] = agcPm4Header3Sub(AGC_PM4_OP_NOP, AGC_PM4_SUB_WAIT_MEM64, 9);
+        cmd[1] = (uint32_t)address & ~0x7u;
+        cmd[2] = (uint32_t)(address >> 32) & 0x3FFFFu;
+        cmd[3] = (uint32_t)mask;
         cmd[4] = (uint32_t)(mask >> 32);
         cmd[5] = (uint32_t)reference;
         cmd[6] = (uint32_t)(reference >> 32);
-        cmd[7] = compare_function | (operation << 8);
-        cmd[8] = poll_cycles / 40u;
+        cmd[7] = 0x10u | (compare_function & 0x7u) |
+                 ((operation & 0x1u) << 8u) | ((operation & 0x6u) << 5u) |
+                 ((cache_policy & 0x3u) << 25u);
+        cmd[8] = poll;
     }
     return cmd;
 }
