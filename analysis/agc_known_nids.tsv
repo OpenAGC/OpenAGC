@@ -1,12 +1,9 @@
 # libSceAgc / libSceAgcDriver NID table for PS5 FW 5.50
-libSceAgcDriver	_sceAgcDriverCreateUserSpecialQueue	dwoD-LJDQy8	unverified (name guess)
-libSceAgcDriver	_sceAgcDriverDestroyUserSpecialQueue	NRO47jBXLiI	unverified (name guess)
-library	name	nid	unverified (name guess)
 libSceAgc	sceAgcAcbAcquireMem	KT-hTp-Ch14	HLE reference
 libSceAgc	sceAgcAcbAcquireMemGetSize	ewobAQeMo5k	reference emulator
+libSceAgc	sceAgcAcbAtomicGds	cduV1f0dcGQ	NID computation verified (SHA1)
 libSceAgc	sceAgcAcbAtomicGdsGetSize	hcIxS8pmXF4	SPRX GetSize stub (returns 0x2c=44)
-libSceAgc	sceAgcAcbAtomicGds_cduV1f0dcGQ	cduV1f0dcGQ	ps5-openagc agc_nid.h
-libSceAgc	sceAgcAcbAtomicGds_gQkqkLttcpw	gQkqkLttcpw	ps5-openagc agc_nid.h
+libSceAgc	sceAgcAcbAtomicGds_0900	gQkqkLttcpw	NID computation verified (SHA1)
 libSceAgc	sceAgcAcbAtomicMem	XKKuA6VkSRc	ps5-openagc agc_nid.h
 libSceAgc	sceAgcAcbAtomicMemGetSize	da1Sm8-QDoU	SPRX GetSize stub (returns 0x24=36)
 libSceAgc	sceAgcAcbCondExec	qyM2bxYFPAk	ps5-openagc agc_nid.h
@@ -40,6 +37,8 @@ libSceAgc	sceAgcAcbWaitOnAddressGetSize	idlaArvdXEs	3.20 stub (libSceAgcVsh)
 libSceAgc	sceAgcAcbWaitRegMem	htn36gPnBk4	HLE reference
 libSceAgc	sceAgcAcbWaitUntilSafeForRendering	GPbUp9jXQa8	ps5-openagc agc_nid.h
 libSceAgc	sceAgcAcbWriteData	eZ4+17OQz4Q	HLE reference
+libSceAgc	sceAgcAsyncCondExecPatchSetCommandAddress	3ZWa3AoyWZQ	NID computation verified (SHA1)
+libSceAgc	sceAgcAsyncCondExecPatchSetEnd	k-JpyR2dYAM	NID computation verified (SHA1)
 libSceAgc	sceAgcAsyncRewindPatchSetRewindState	eWaWyFegzgQ	3.20 stub (libSceAgcVsh)
 libSceAgc	sceAgcBranchPatchSetCompareAddress	GXBlM-ekzrI	3.20 stub (libSceAgcVsh)
 libSceAgc	sceAgcBranchPatchSetElseTarget	QmfvaYpsOcI	3.20 stub (libSceAgcVsh)
@@ -63,10 +62,8 @@ libSceAgc	sceAgcCbSetUcRegisterRangeDirect	MDLD5Ly94Xk	NID computation verified 
 libSceAgc	sceAgcCbSetUcRegisterRangeDirectGetSize	JOWmDrl+j20	3.20 stub (libSceAgcVsh)
 libSceAgc	sceAgcCbSetUcRegistersDirect	03RZmELWWzw	agc_nids.h
 libSceAgc	sceAgcCbSetUcRegistersDirectGetSize	TGEZzUWLbrc	3.20 stub (libSceAgcVsh)
-libSceAgc	sceAgcCondExecPatchSetCommandAddress_3ZWa3AoyWZQ	3ZWa3AoyWZQ	reference emulator
-libSceAgc	sceAgcCondExecPatchSetCommandAddress_YWTKOju587o	YWTKOju587o	libGraphicsDriver.cpp
-libSceAgc	sceAgcCondExecPatchSetEnd_ORWsxIbk4TE	ORWsxIbk4TE	libGraphicsDriver.cpp
-libSceAgc	sceAgcCondExecPatchSetEnd_k-JpyR2dYAM	k-JpyR2dYAM	reference emulator
+libSceAgc	sceAgcCondExecPatchSetCommandAddress	YWTKOju587o	NID computation verified (SHA1)
+libSceAgc	sceAgcCondExecPatchSetEnd	ORWsxIbk4TE	NID computation verified (SHA1)
 libSceAgc	sceAgcCreateInterpolantMapping	pdEV7bI6COI	NID computation verified (SHA1)
 libSceAgc	sceAgcCreatePrimState	D9sr1xGUriE	agc_nids.h
 libSceAgc	sceAgcCreateShader	f3dg2CSgRKY	HLE reference
@@ -110,7 +107,6 @@ libSceAgc	sceAgcDcbEventWriteGetSize	C4l9fB17t8w	3.20 stub (libSceAgcVsh)
 libSceAgc	sceAgcDcbGetLodStats	vuSXe69VILM	HLE reference
 libSceAgc	sceAgcDcbGetLodStatsGetSize	rUuVjyR+Rd4	HLE reference
 libSceAgc	sceAgcDcbInitializeDefaultHardwareState	Xvcgh9xNNkY	NID computation verified (SHA1)
-libSceAgc	sceAgcDcbInsertWaitFlipDone	k0E7vkgqAuE	unverified (name guess)
 libSceAgc	sceAgcDcbJump	xSAR0LTcRKM	NID computation verified (SHA1)
 libSceAgc	sceAgcDcbJumpGetSize	VEGu4dixjUg	libGraphicsDriver.cpp
 libSceAgc	sceAgcDcbMemSemaphore	G0jrLdvEqDw	NID computation verified (SHA1)
@@ -171,6 +167,7 @@ libSceAgc	sceAgcDmaDataPatchSetSrcAddressOrOffsetOrImmediate	cdDRpqcFGbU	NID com
 libSceAgcDriver	sceAgcDriverAcquireRazorACQ	MetMOQVd8HY	ps5-openagc agc_nid.h
 libSceAgcDriver	sceAgcDriverAddEqEvent	w2rJhmD+dsE	HLE reference
 libSceAgcDriver	sceAgcDriverAgrSubmitDcb	AhGvpITrf4M	agc_nids.h
+libSceAgcDriver	sceAgcDriverAgrSubmitMultiDcbs	+T8Xo6LtFJI	NID computation verified (SHA1)
 libSceAgcDriver	sceAgcDriverAllocateToolMemoryForGpuReset	T8xEHO2Y+XU	5.50	verified via aerolib.csv + NID computation
 libSceAgcDriver	sceAgcDriverCreateQueue	zP4ZNlXLBVg	3.20 stub (libSceAgcDriver)
 libSceAgcDriver	sceAgcDriverCwsrResumeAcq	1DXIHxWHZAQ	3.20 stub (libSceAgcDriver)
@@ -250,8 +247,7 @@ libSceAgcDriver	sceAgcDriverSubmitDcb	UglJIZjGssM	HLE reference
 libSceAgcDriver	sceAgcDriverSubmitMultiAcbs	HF3YllT3mXU	libGraphicsDriver.cpp
 libSceAgcDriver	sceAgcDriverSubmitMultiCommandBuffers	Fj7r9EHzF38	libGraphicsDriver.cpp
 libSceAgcDriver	sceAgcDriverSubmitMultiCommandBuffersDirect	xmWi73o1BR0	ps5-openagc agc_nid.h
-libSceAgcDriver	sceAgcDriverSubmitMultiDcbs_+T8Xo6LtFJI	+T8Xo6LtFJI	reference emulator
-libSceAgcDriver	sceAgcDriverSubmitMultiDcbs_6UzEidRZwkg	6UzEidRZwkg	libGraphicsDriver.cpp
+libSceAgcDriver	sceAgcDriverSubmitMultiDcbs	6UzEidRZwkg	NID computation verified (SHA1)
 libSceAgcDriver	sceAgcDriverSubmitToHDRScopesACQ	lOYHtoUcJD4	ps5-openagc agc_nid.h
 libSceAgcDriver	sceAgcDriverSubmitToRazorACQ	jJyVJyhi5h8	ps5-openagc agc_nid.h
 libSceAgcDriver	sceAgcDriverSuspendPointSubmit	QcmHLO2n7mk	3.20 stub (libSceAgcDriver)
@@ -298,16 +294,15 @@ libSceAgcDriver	sceAgcDriverUserDataWritePacket	-vc-xL+G8u0	NID computation veri
 libSceAgcDriver	sceAgcDriverUserDataWritePopMarker	LEnn-4ARRJM	3.20 stub (libSceAgcDriver)
 libSceAgcDriver	sceAgcDriverUserDataWritePushMarker	+b34-CLWc0s	NID computation verified (SHA1)
 libSceAgcDriver	sceAgcDriverUserDataWriteSetMarker	zmw2uVSEj94	NID computation verified (SHA1)
-libSceAgcDriver	sceAgcDriverWaitIdle	oFb2hMcoJa4	unverified (name guess)
 libSceAgcDriver	sceAgcDriverWaitUntilSafeForRendering	u8BkdHb1+Po	3.20 stub (libSceAgcDriver)
-libSceAgc	sceAgcFuseShaderHalves_fd5Bp5tGTgo	fd5Bp5tGTgo	libGraphicsDriver.cpp
-libSceAgc	sceAgcFuseShaderHalves_nApJjpKNBl4	nApJjpKNBl4	3.20 NID (5.50 uses fd5Bp5tGTgo)
-libSceAgc	sceAgcGetDataPacketPayloadAddress_CQsSq6l6+kA	CQsSq6l6+kA	3.20 NID (5.50 uses V++UgBtQhn0)
-libSceAgc	sceAgcGetDataPacketPayloadAddress_V++UgBtQhn0	V++UgBtQhn0	HLE reference
+libSceAgc	sceAgcFuseShaderHalves	nApJjpKNBl4	NID computation verified (SHA1)
+libSceAgc	sceAgcFuseShaderHalves_0200	fd5Bp5tGTgo	NID computation verified (SHA1)
+libSceAgc	sceAgcGetDataPacketPayloadAddress	CQsSq6l6+kA	NID computation verified (SHA1)
+libSceAgc	sceAgcGetDataPacketPayloadAddress_0090	V++UgBtQhn0	NID computation verified (SHA1)
 libSceAgc	sceAgcGetDataPacketPayloadRange	s+VGAMDQ0AQ	reference emulator
 libSceAgc	sceAgcGetDefaultCxStateFlat	AAeX-U5-P3M	ps5-openagc agc_nid.h
-libSceAgc	sceAgcGetFusedShaderSize_dolOmWH+huQ	dolOmWH+huQ	libGraphicsDriver.cpp
-libSceAgc	sceAgcGetFusedShaderSize_nQT5kYLv0cg	nQT5kYLv0cg	3.20 NID (5.50 uses dolOmWH+huQ)
+libSceAgc	sceAgcGetFusedShaderSize	nQT5kYLv0cg	NID computation verified (SHA1)
+libSceAgc	sceAgcGetFusedShaderSize_0080	dolOmWH+huQ	NID computation verified (SHA1)
 libSceAgc	sceAgcGetGsOversubscription	NKIzURsgV7I	5.50	verified via aerolib.csv + NID computation
 libSceAgc	sceAgcGetPacketSize	Lkf86B98qPc	libGraphicsDriver.cpp
 libSceAgc	sceAgcGetRegisterDefaults	Wi82ArQtAwg	NID computation verified (SHA1)
@@ -315,8 +310,8 @@ libSceAgc	sceAgcGetRegisterDefaults2	2JtWUUiYBXs	HLE reference
 libSceAgc	sceAgcGetRegisterDefaults2Internal	wRbq6ZjNop4	HLE reference
 libSceAgc	sceAgcGetRegisterDefaultsInternal	uIwxsqDlHRc	ps5-openagc agc_nid.h
 libSceAgc	sceAgcGetStaticBuffer	OXDc0KCnUhs	5.50	verified via aerolib.csv + NID computation
-libSceAgc	sceAgcInit_23LRUSvYu1M	23LRUSvYu1M	HLE reference
-libSceAgc	sceAgcInit_kW3GLb7QfPg	kW3GLb7QfPg	agc_nids.h
+libSceAgc	sceAgcInit	kW3GLb7QfPg	NID computation verified (SHA1)
+libSceAgc	sceAgcInit_0090	23LRUSvYu1M	NID computation verified (SHA1)
 libSceAgc	sceAgcJumpPatchSetTarget	2BS4EtAaF28	libGraphicsDriver.cpp
 libSceAgc	sceAgcLinkShaders	MqAdbRMdNz4	3.20 stub (libSceAgcVsh)
 libSceAgc	sceAgcQueueEndOfPipeActionPatchAddress	0fWWK5uG9rQ	libGraphicsDriver.cpp SPRX
@@ -338,14 +333,18 @@ libSceAgc	sceAgcSetSubmitMode	-DtvmQ-tgEA	3.20 stub (libSceAgcVsh)
 libSceAgc	sceAgcSetUcRegIndirectPatchAddRegisters	vRoArM9zaIk	NID computation verified (SHA1)
 libSceAgc	sceAgcSetUcRegIndirectPatchSetAddress	6lNcCp+fxi4	NID computation verified (SHA1)
 libSceAgc	sceAgcSetUcRegIndirectPatchSetNumRegisters	fRG-JOH5+sI	libGraphicsDriver.cpp
-libSceAgc	sceAgcSuspendPointAndCheckStatus_b+fis+WZ3Ig	b+fis+WZ3Ig	ps5-openagc agc_nid.h
-libSceAgc	sceAgcSuspendPointAndCheckStatus_h9z6+0hEydk	h9z6+0hEydk	ps5-openagc agc_nid.h
+libSceAgc	sceAgcSuspendPoint	h9z6+0hEydk	NID computation verified (SHA1)
+libSceAgc	sceAgcSuspendPointAndCheckStatus	b+fis+WZ3Ig	NID computation verified (SHA1)
 libSceAgc	sceAgcUnknownIkfdtRIqCE	Ikfdt-rIqCE	unverified (name unknown)
 libSceAgc	sceAgcUnknown_HV4j+E0MBHE	HV4j+E0MBHE	unverified (name unknown)
+libSceAgcDriver	sceAgcUnknown_NRO47jBXLiI	NRO47jBXLiI	unverified (name unknown)
+libSceAgcDriver	sceAgcUnknown_dwoD-LJDQy8	dwoD-LJDQy8	unverified (name unknown)
+libSceAgc	sceAgcUnknown_k0E7vkgqAuE	k0E7vkgqAuE	unverified (name unknown)
+libSceAgcDriver	sceAgcUnknown_oFb2hMcoJa4	oFb2hMcoJa4	unverified (name unknown)
+libSceAgc	sceAgcUnknown_qj7QZpgr9Uw	qj7QZpgr9Uw	unverified (name unknown)
+libSceAgc	sceAgcUnknown_zARR5aCmkoY	zARR5aCmkoY	unverified (name unknown)
 libSceAgc	sceAgcUpdateInterpolantMapping	SbuY2jN+axQ	NID computation verified (SHA1)
 libSceAgc	sceAgcUpdatePrimState	Y3ymLfZ1384	reference emulator
-libSceAgc	sceAgcVshDcbAtomicGds	zARR5aCmkoY	unverified (name guess)
-libSceAgc	sceAgcVshDcbContextStateOp	qj7QZpgr9Uw	unverified (name guess)
 libSceAgc	sceAgcWaitRegMemPatchAddress	3KDcnM3lrcU	NID computation verified (SHA1)
 libSceAgc	sceAgcWaitRegMemPatchCompareFunction	n485EBnIWmk	NID computation verified (SHA1)
 libSceAgc	sceAgcWaitRegMemPatchMask	hXAnLgDHCoI	agc_nids.h

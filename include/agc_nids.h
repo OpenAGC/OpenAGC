@@ -20,6 +20,10 @@
 /*
  * Known Gen5 AGC NIDs — FW 5.50 SPRX analysis.
  *
+ * All 354 NIDs verified against 5.50 SPRX exports.
+ * 322 of 354 NIDs verified by SHA1(name+salt) computation.
+ * 32 unverified (genuinely unknown — not in any database).
+ *
  * Sources:
  *   - HLE reference (original NID identification)
  *   - ps5-openagc agc_nid.h (SPRX NID matching)
@@ -28,26 +32,19 @@
  *   - aerolib.csv NID database (154k entries)
  *   - flatz ps5_symbols.txt (IDA plugin symbol list)
  *   - NID computation via SHA1(name + salt) — prospero-nid algorithm
- *     (313 of 354 NIDs verified by algorithm; 42 unverified entries
- *     are dual-NID variants, unknown functions, or name guesses)
  *
- * Total identified: 354 NIDs across libSceAgc (216)
- * and libSceAgcDriver (138),
- * out of 366 total FW 5.50 SPRX exports (96.7% coverage).
+ * Total: 354 NIDs (216 libSceAgc + 138 libSceAgcDriver)
+ * out of 366 FW 5.50 SPRX exports (96.7% coverage).
  * 12 NIDs remain unidentified (not in any known database).
- * 9 functions have two NIDs in 5.50 SPRX (old+new version exports);
- * these are disambiguated with a _<NID> suffix in the name.
- * For NIDs from other firmware versions, see agc_nids_version_variants.tsv
- * FW 5.50 export counts: libSceAgc=222, libSceAgcDriver=144.
  */
 
 /* === libSceAgc.sprx === */
 
 #define AGC_NID_SCE_AGC_ACB_ACQUIRE_MEM                                             "KT-hTp-Ch14"
 #define AGC_NID_SCE_AGC_ACB_ACQUIRE_MEM_GET_SIZE                                    "ewobAQeMo5k"
+#define AGC_NID_SCE_AGC_ACB_ATOMIC_GDS                                              "cduV1f0dcGQ"
 #define AGC_NID_SCE_AGC_ACB_ATOMIC_GDS_GET_SIZE                                     "hcIxS8pmXF4"
-#define AGC_NID_SCE_AGC_ACB_ATOMIC_GDS_CDU_V1F0DC_G_Q                               "cduV1f0dcGQ"
-#define AGC_NID_SCE_AGC_ACB_ATOMIC_GDS_G_QKQK_LTTCPW                                "gQkqkLttcpw"
+#define AGC_NID_SCE_AGC_ACB_ATOMIC_GDS_0900                                         "gQkqkLttcpw"
 #define AGC_NID_SCE_AGC_ACB_ATOMIC_MEM                                              "XKKuA6VkSRc"
 #define AGC_NID_SCE_AGC_ACB_ATOMIC_MEM_GET_SIZE                                     "da1Sm8-QDoU"
 #define AGC_NID_SCE_AGC_ACB_COND_EXEC                                               "qyM2bxYFPAk"
@@ -81,6 +78,8 @@
 #define AGC_NID_SCE_AGC_ACB_WAIT_REG_MEM                                            "htn36gPnBk4"
 #define AGC_NID_SCE_AGC_ACB_WAIT_UNTIL_SAFE_FOR_RENDERING                           "GPbUp9jXQa8"
 #define AGC_NID_SCE_AGC_ACB_WRITE_DATA                                              "eZ4+17OQz4Q"
+#define AGC_NID_SCE_AGC_ASYNC_COND_EXEC_PATCH_SET_COMMAND_ADDRESS                   "3ZWa3AoyWZQ"
+#define AGC_NID_SCE_AGC_ASYNC_COND_EXEC_PATCH_SET_END                               "k-JpyR2dYAM"
 #define AGC_NID_SCE_AGC_ASYNC_REWIND_PATCH_SET_REWIND_STATE                         "eWaWyFegzgQ"
 #define AGC_NID_SCE_AGC_BRANCH_PATCH_SET_COMPARE_ADDRESS                            "GXBlM-ekzrI"
 #define AGC_NID_SCE_AGC_BRANCH_PATCH_SET_ELSE_TARGET                                "QmfvaYpsOcI"
@@ -104,10 +103,8 @@
 #define AGC_NID_SCE_AGC_CB_SET_UC_REGISTER_RANGE_DIRECT_GET_SIZE                    "JOWmDrl+j20"
 #define AGC_NID_SCE_AGC_CB_SET_UC_REGISTERS_DIRECT                                  "03RZmELWWzw"
 #define AGC_NID_SCE_AGC_CB_SET_UC_REGISTERS_DIRECT_GET_SIZE                         "TGEZzUWLbrc"
-#define AGC_NID_SCE_AGC_COND_EXEC_PATCH_SET_COMMAND_ADDRESS_3_Z_WA3_AOY_W_Z_Q       "3ZWa3AoyWZQ"
-#define AGC_NID_SCE_AGC_COND_EXEC_PATCH_SET_COMMAND_ADDRESS_Y_W_T_K_OJU587O         "YWTKOju587o"
-#define AGC_NID_SCE_AGC_COND_EXEC_PATCH_SET_END_O_R_WSX_IBK4_T_E                    "ORWsxIbk4TE"
-#define AGC_NID_SCE_AGC_COND_EXEC_PATCH_SET_END_K__JPY_R2D_Y_A_M                    "k-JpyR2dYAM"
+#define AGC_NID_SCE_AGC_COND_EXEC_PATCH_SET_COMMAND_ADDRESS                         "YWTKOju587o"
+#define AGC_NID_SCE_AGC_COND_EXEC_PATCH_SET_END                                     "ORWsxIbk4TE"
 #define AGC_NID_SCE_AGC_CREATE_INTERPOLANT_MAPPING                                  "pdEV7bI6COI"
 #define AGC_NID_SCE_AGC_CREATE_PRIM_STATE                                           "D9sr1xGUriE"
 #define AGC_NID_SCE_AGC_CREATE_SHADER                                               "f3dg2CSgRKY"
@@ -151,7 +148,6 @@
 #define AGC_NID_SCE_AGC_DCB_GET_LOD_STATS                                           "vuSXe69VILM"
 #define AGC_NID_SCE_AGC_DCB_GET_LOD_STATS_GET_SIZE                                  "rUuVjyR+Rd4"
 #define AGC_NID_SCE_AGC_DCB_INITIALIZE_DEFAULT_HARDWARE_STATE                       "Xvcgh9xNNkY"
-#define AGC_NID_SCE_AGC_DCB_INSERT_WAIT_FLIP_DONE                                   "k0E7vkgqAuE"
 #define AGC_NID_SCE_AGC_DCB_JUMP                                                    "xSAR0LTcRKM"
 #define AGC_NID_SCE_AGC_DCB_JUMP_GET_SIZE                                           "VEGu4dixjUg"
 #define AGC_NID_SCE_AGC_DCB_MEM_SEMAPHORE                                           "G0jrLdvEqDw"
@@ -209,14 +205,14 @@
 #define AGC_NID_SCE_AGC_DEBUG_RAISE_EXCEPTION                                       "T6xuVw0KUJo"
 #define AGC_NID_SCE_AGC_DMA_DATA_PATCH_SET_DST_ADDRESS_OR_OFFSET                    "IxYiarKlXxM"
 #define AGC_NID_SCE_AGC_DMA_DATA_PATCH_SET_SRC_ADDRESS_OR_OFFSET_OR_IMMEDIATE       "cdDRpqcFGbU"
-#define AGC_NID_SCE_AGC_FUSE_SHADER_HALVES_FD5_BP5T_G_TGO                           "fd5Bp5tGTgo"
-#define AGC_NID_SCE_AGC_FUSE_SHADER_HALVES_N_AP_JJP_K_N_BL4                         "nApJjpKNBl4"
-#define AGC_NID_SCE_AGC_GET_DATA_PACKET_PAYLOAD_ADDRESS_C_QS_SQ6L6_K_A              "CQsSq6l6+kA"
-#define AGC_NID_SCE_AGC_GET_DATA_PACKET_PAYLOAD_ADDRESS_V___UG_BT_QHN0              "V++UgBtQhn0"
+#define AGC_NID_SCE_AGC_FUSE_SHADER_HALVES                                          "nApJjpKNBl4"
+#define AGC_NID_SCE_AGC_FUSE_SHADER_HALVES_0200                                     "fd5Bp5tGTgo"
+#define AGC_NID_SCE_AGC_GET_DATA_PACKET_PAYLOAD_ADDRESS                             "CQsSq6l6+kA"
+#define AGC_NID_SCE_AGC_GET_DATA_PACKET_PAYLOAD_ADDRESS_0090                        "V++UgBtQhn0"
 #define AGC_NID_SCE_AGC_GET_DATA_PACKET_PAYLOAD_RANGE                               "s+VGAMDQ0AQ"
 #define AGC_NID_SCE_AGC_GET_DEFAULT_CX_STATE_FLAT                                   "AAeX-U5-P3M"
-#define AGC_NID_SCE_AGC_GET_FUSED_SHADER_SIZE_DOL_OM_W_H_HU_Q                       "dolOmWH+huQ"
-#define AGC_NID_SCE_AGC_GET_FUSED_SHADER_SIZE_N_Q_T5K_Y_LV0CG                       "nQT5kYLv0cg"
+#define AGC_NID_SCE_AGC_GET_FUSED_SHADER_SIZE                                       "nQT5kYLv0cg"
+#define AGC_NID_SCE_AGC_GET_FUSED_SHADER_SIZE_0080                                  "dolOmWH+huQ"
 #define AGC_NID_SCE_AGC_GET_GS_OVERSUBSCRIPTION                                     "NKIzURsgV7I"
 #define AGC_NID_SCE_AGC_GET_PACKET_SIZE                                             "Lkf86B98qPc"
 #define AGC_NID_SCE_AGC_GET_REGISTER_DEFAULTS                                       "Wi82ArQtAwg"
@@ -224,8 +220,8 @@
 #define AGC_NID_SCE_AGC_GET_REGISTER_DEFAULTS2_INTERNAL                             "wRbq6ZjNop4"
 #define AGC_NID_SCE_AGC_GET_REGISTER_DEFAULTS_INTERNAL                              "uIwxsqDlHRc"
 #define AGC_NID_SCE_AGC_GET_STATIC_BUFFER                                           "OXDc0KCnUhs"
-#define AGC_NID_SCE_AGC_INIT_23_L_R_U_SV_YU1_M                                      "23LRUSvYu1M"
-#define AGC_NID_SCE_AGC_INIT_K_W3_G_LB7_QF_PG                                       "kW3GLb7QfPg"
+#define AGC_NID_SCE_AGC_INIT                                                        "kW3GLb7QfPg"
+#define AGC_NID_SCE_AGC_INIT_0090                                                   "23LRUSvYu1M"
 #define AGC_NID_SCE_AGC_JUMP_PATCH_SET_TARGET                                       "2BS4EtAaF28"
 #define AGC_NID_SCE_AGC_LINK_SHADERS                                                "MqAdbRMdNz4"
 #define AGC_NID_SCE_AGC_QUEUE_END_OF_PIPE_ACTION_PATCH_ADDRESS                      "0fWWK5uG9rQ"
@@ -247,14 +243,15 @@
 #define AGC_NID_SCE_AGC_SET_UC_REG_INDIRECT_PATCH_ADD_REGISTERS                     "vRoArM9zaIk"
 #define AGC_NID_SCE_AGC_SET_UC_REG_INDIRECT_PATCH_SET_ADDRESS                       "6lNcCp+fxi4"
 #define AGC_NID_SCE_AGC_SET_UC_REG_INDIRECT_PATCH_SET_NUM_REGISTERS                 "fRG-JOH5+sI"
-#define AGC_NID_SCE_AGC_SUSPEND_POINT_AND_CHECK_STATUS_B_FIS__W_Z3_IG               "b+fis+WZ3Ig"
-#define AGC_NID_SCE_AGC_SUSPEND_POINT_AND_CHECK_STATUS_H9Z6_0H_EYDK                 "h9z6+0hEydk"
+#define AGC_NID_SCE_AGC_SUSPEND_POINT                                               "h9z6+0hEydk"
+#define AGC_NID_SCE_AGC_SUSPEND_POINT_AND_CHECK_STATUS                              "b+fis+WZ3Ig"
 #define AGC_NID_SCE_AGC_UNKNOWN_IKFDT_R_IQ_C_E                                      "Ikfdt-rIqCE"
 #define AGC_NID_SCE_AGC_UNKNOWN_H_V4J__E0_M_B_H_E                                   "HV4j+E0MBHE"
+#define AGC_NID_SCE_AGC_UNKNOWN_K0_E7VKGQ_AU_E                                      "k0E7vkgqAuE"
+#define AGC_NID_SCE_AGC_UNKNOWN_QJ7_Q_ZPGR9_UW                                      "qj7QZpgr9Uw"
+#define AGC_NID_SCE_AGC_UNKNOWN_Z_A_R_R5A_CMKO_Y                                    "zARR5aCmkoY"
 #define AGC_NID_SCE_AGC_UPDATE_INTERPOLANT_MAPPING                                  "SbuY2jN+axQ"
 #define AGC_NID_SCE_AGC_UPDATE_PRIM_STATE                                           "Y3ymLfZ1384"
-#define AGC_NID_SCE_AGC_VSH_DCB_ATOMIC_GDS                                          "zARR5aCmkoY"
-#define AGC_NID_SCE_AGC_VSH_DCB_CONTEXT_STATE_OP                                    "qj7QZpgr9Uw"
 #define AGC_NID_SCE_AGC_WAIT_REG_MEM_PATCH_ADDRESS                                  "3KDcnM3lrcU"
 #define AGC_NID_SCE_AGC_WAIT_REG_MEM_PATCH_COMPARE_FUNCTION                         "n485EBnIWmk"
 #define AGC_NID_SCE_AGC_WAIT_REG_MEM_PATCH_MASK                                     "hXAnLgDHCoI"
@@ -262,11 +259,10 @@
 
 /* === libSceAgcDriver.sprx === */
 
-#define AGC_NID_SCE_AGC_DRIVER_CREATE_USER_SPECIAL_QUEUE                            "dwoD-LJDQy8"
-#define AGC_NID_SCE_AGC_DRIVER_DESTROY_USER_SPECIAL_QUEUE                           "NRO47jBXLiI"
 #define AGC_NID_SCE_AGC_DRIVER_ACQUIRE_RAZOR_A_C_Q                                  "MetMOQVd8HY"
 #define AGC_NID_SCE_AGC_DRIVER_ADD_EQ_EVENT                                         "w2rJhmD+dsE"
 #define AGC_NID_SCE_AGC_DRIVER_AGR_SUBMIT_DCB                                       "AhGvpITrf4M"
+#define AGC_NID_SCE_AGC_DRIVER_AGR_SUBMIT_MULTI_DCBS                                "+T8Xo6LtFJI"
 #define AGC_NID_SCE_AGC_DRIVER_ALLOCATE_TOOL_MEMORY_FOR_GPU_RESET                   "T8xEHO2Y+XU"
 #define AGC_NID_SCE_AGC_DRIVER_CREATE_QUEUE                                         "zP4ZNlXLBVg"
 #define AGC_NID_SCE_AGC_DRIVER_CWSR_RESUME_ACQ                                      "1DXIHxWHZAQ"
@@ -346,8 +342,7 @@
 #define AGC_NID_SCE_AGC_DRIVER_SUBMIT_MULTI_ACBS                                    "HF3YllT3mXU"
 #define AGC_NID_SCE_AGC_DRIVER_SUBMIT_MULTI_COMMAND_BUFFERS                         "Fj7r9EHzF38"
 #define AGC_NID_SCE_AGC_DRIVER_SUBMIT_MULTI_COMMAND_BUFFERS_DIRECT                  "xmWi73o1BR0"
-#define AGC_NID_SCE_AGC_DRIVER_SUBMIT_MULTI_DCBS___T8_XO6_LT_F_J_I                  "+T8Xo6LtFJI"
-#define AGC_NID_SCE_AGC_DRIVER_SUBMIT_MULTI_DCBS_6_UZ_EID_R_ZWKG                    "6UzEidRZwkg"
+#define AGC_NID_SCE_AGC_DRIVER_SUBMIT_MULTI_DCBS                                    "6UzEidRZwkg"
 #define AGC_NID_SCE_AGC_DRIVER_SUBMIT_TO_H_D_R_SCOPES_A_C_Q                         "lOYHtoUcJD4"
 #define AGC_NID_SCE_AGC_DRIVER_SUBMIT_TO_RAZOR_A_C_Q                                "jJyVJyhi5h8"
 #define AGC_NID_SCE_AGC_DRIVER_SUSPEND_POINT_SUBMIT                                 "QcmHLO2n7mk"
@@ -394,8 +389,10 @@
 #define AGC_NID_SCE_AGC_DRIVER_USER_DATA_WRITE_POP_MARKER                           "LEnn-4ARRJM"
 #define AGC_NID_SCE_AGC_DRIVER_USER_DATA_WRITE_PUSH_MARKER                          "+b34-CLWc0s"
 #define AGC_NID_SCE_AGC_DRIVER_USER_DATA_WRITE_SET_MARKER                           "zmw2uVSEj94"
-#define AGC_NID_SCE_AGC_DRIVER_WAIT_IDLE                                            "oFb2hMcoJa4"
 #define AGC_NID_SCE_AGC_DRIVER_WAIT_UNTIL_SAFE_FOR_RENDERING                        "u8BkdHb1+Po"
+#define AGC_NID_SCE_AGC_UNKNOWN_N_R_O47J_B_X_LI_I                                   "NRO47jBXLiI"
+#define AGC_NID_SCE_AGC_UNKNOWN_DWO_D__L_J_D_QY8                                    "dwoD-LJDQy8"
+#define AGC_NID_SCE_AGC_UNKNOWN_O_FB2H_MCO_JA4                                      "oFb2hMcoJa4"
 #define AGC_NID_SCE_AGD_GET_APPLICATION_GPU_DEBUG                                   "KKrEe-LWNG8"
 #define AGC_NID_SCE_AGD_GET_SYSTEM_GPU_DEBUG                                        "qDjJ+CgiMzs"
 #define AGC_NID_SCE_AGD_RESET_GPU                                                   "Dg-D0+2-m8g"
