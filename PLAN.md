@@ -134,6 +134,11 @@ Implemented and host-tested:
 - DCB/ACB submit descriptor layout.
 - Generic submit validation and debug capture.
 - AGC shader record parser (magic, pointer fields, semantics counts, shader type).
+- Shader linking (`agcShaderLinkHsGs`) and fused shader support
+  (`sceAgcGetFusedShaderSize`, `sceAgcFuseShaderHalves` with register patching).
+- Complete version 8 register defaults (703 public, 25 internal registers)
+  from the reference implementation, replacing incomplete HLE-reference-derived data.
+- ACB descriptor indirection (magic 0x5533ccaa) in prospero ACB submit.
 - ACB packet builders for event write, atomic mem/GDS, cond exec, wait-reg-mem,
   write/copy/dma data, mem semaphore, acquire mem, queue reset, rewind, set
   flip, workload markers, and prime UTC L2.
@@ -148,7 +153,7 @@ Implemented and host-tested:
 Current expected host test result:
 
 ```text
-1483 passed, 0 failed
+1588 passed, 0 failed
 ```
 
 ## Phase 0: RE Groundwork
@@ -233,8 +238,8 @@ Acceptance criteria:
 
 ## Phase 2: Shader Records and Wavefront Metadata
 
-Status: partially implemented (shader record parser done; register-block/Wave
-parsing pending observed evidence).
+Status: mostly implemented (shader record parser done; fused shader support
+done; register-block/Wave parsing pending observed evidence).
 
 Purpose:
 
@@ -252,8 +257,14 @@ Current evidence:
   - shader type
   - SH register count
 - openagc stores these offsets in `agc_re.h`.
-- openagc now implements a read-only `AgcShaderRecord` parser with
+- openagc implements a read-only `AgcShaderRecord` parser with
   `_Static_assert` verified offsets and synthetic-record tests.
+- openagc implements `agcShaderLinkHsGs` (SPRX-confirmed HS/LS + CS → GS
+  shader record linking).
+- openagc implements fused shader support: `sceAgcGetFusedShaderSize` and
+  `sceAgcFuseShaderHalves` (reference-confirmed GS/HS front+back half fusion
+  with SH register copy, SPI_SHADER_PGM_CHKSUM_GS/LO_ES/LO_LS address
+  patching, and vgt_shader_stages_en mismatch validation).
 
 Work:
 
@@ -266,6 +277,8 @@ Work:
    No observed Wave32/Wave64 offset yet — keep as analysis-only.
 4. Add tests from synthetic records first, then captured records when available.
    ✅ Synthetic tests added.
+5. Add fused shader support (GetFusedShaderSize / FuseShaderHalves).
+   ✅ Done — reference-confirmed implementation with register patching.
 
 Acceptance criteria:
 
@@ -275,9 +288,10 @@ Acceptance criteria:
 
 ## Phase 3: Register Defaults and State Builders
 
-Status: implemented (FW 5.50 primary/internal groups embedded; prospero
-`NotifyDefaultStates` builds the blobs in GPU memory and submits a `CLEAR_STATE`
-DCB; hardware validation pending).
+Status: implemented (FW 5.50 primary/internal groups embedded; complete v8
+register defaults from reference implementation; prospero `NotifyDefaultStates`
+builds the blobs in GPU memory and submits a `CLEAR_STATE` DCB; hardware
+validation pending).
 
 Purpose:
 
@@ -285,9 +299,13 @@ Recover AGC default register state and state-construction helpers.
 
 Current evidence:
 
-- HLE reference has primary/internal register default groups.
-- openagc embeds the 13 primary and 22 internal groups from HLE reference in
-  `src/register_defaults.c` and exposes them via `analysis/register_defaults_550.tsv`.
+- HLE reference has primary/internal register default groups (incomplete: 38
+  public, 22 internal registers with many zero-placeholder values).
+- Complete version 8 register defaults extracted from the reference
+  implementation: 703 public registers across 127 groups, 25 internal
+  registers across 22 groups. Stored in `src/register_defaults_v8.c` and
+  exposed via `agcRegisterDefaultsV8GetPrimaryGroups()` /
+  `agcRegisterDefaultsV8GetInternalGroups()`.
 - openagc implements the `AgcRegisterDefaults` blob builder/parser with
   `_Static_assert` verified layout and tests.
 - openagc implements `sceAgcDriverNotifyDefaultStates` to allocate GPU memory
@@ -469,18 +487,21 @@ Completed:
       GetEqEventType, GetDefaultOwner, InitResourceRegistration, etc.)
 - [x] Add ACB descriptor indirection (magic 0x5533ccaa) to prospero backend
 - [x] Fix PM4 opcodes (DISPATCH_DRAW_PREAMBLE 0x3A, SET_CONTEXT_REG_INDIRECT 0x9F)
-
-In progress:
-- [ ] **Update register defaults from reference v8** (CRITICAL: openagc has only
-      38/703 public registers and 22/25 internal registers. Many values are
-      wrong (zero placeholders from HLE reference). Must replace with the reference
-      `g_agc_public_reg_defaults_v8` and `g_agc_internal_reg_defaults_v8`.)
+- [x] Update register defaults from reference v8 (703 public registers across
+      127 groups, 25 internal registers across 22 groups; replaces incomplete
+      HLE-reference-derived data that had only 38/703 public registers with
+      wrong zero-placeholder values)
+- [x] Add fused shader support (sceAgcGetFusedShaderSize / sceAgcFuseShaderHalves
+      with SH register patching, SPI_SHADER_PGM_CHKSUM_GS/LO_ES/LO_LS address
+      patching, and vgt_shader_stages_en mismatch validation)
 
 Pending:
-- [ ] Add fused shader support (GetFusedShaderSize / FuseShaderHalves)
 - [ ] Add SubmitMultiDcbs, SubmitMultiAcbs, SubmitCommandBuffer wrappers
 - [ ] Cross-check remaining builder encodings against the reference
 - [ ] Add version selection for register defaults (v0, v4, v5, v7, v8, v9, v10, v11)
+- [ ] Replace HLE-reference-derived `s_primary_defaults` / `s_internal_defaults`
+      with the complete v8 data as the default for `NotifyDefaultStates`
+- [ ] Add Apache 2.0 LICENSE file and update source headers
 
 ## Working Rules
 
