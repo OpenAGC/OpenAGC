@@ -405,7 +405,7 @@ static void test_sce_agc_dcb_set_registers_indirect(void) {
  * changed and non-target fields are intact; then verify rejection of the
  * wrong packet type. */
 static void test_sce_agc_dcb_patch_address(void) {
-    uint32_t buffer[64];
+    uint32_t buffer[128];
     SceAgcCb cb;
     agcCbInit(&cb, buffer, sizeof(buffer));
 
@@ -486,6 +486,36 @@ static void test_sce_agc_dcb_patch_address(void) {
     TEST_ASSERT_EQ(sceAgcQueueEndOfPipeActionPatchAddress(flip, 0x5000000A0ULL),
         AGC_ERROR_INVALID_ARGUMENT, "QueueEndOfPipeActionPatch rejects non-ReleaseMem packet");
 
+    /* QueueEndOfPipeActionPatchData: patches cmd[5..6] with data */
+    uint32_t* rel2 = sceAgcCbReleaseMem(
+        &cb, 0x12, 0x3456, 1, 0x07, 0x100000020ULL, 3,
+        0xAABBCCDD11223344ULL, 0, 1, 2, 0xCAFE);
+    TEST_ASSERT_EQ(sceAgcQueueEndOfPipeActionPatchData(rel2, 0, 3, 0xDEADBEEFCAFEULL), AGC_OK,
+        "QueueEndOfPipeActionPatchData returns OK on ReleaseMem packet");
+    TEST_ASSERT_EQ(rel2[5], 0xBEEFCAFEu, "QueueEndOfPipeActionPatchData data lo");
+    TEST_ASSERT_EQ(rel2[6], 0xDEADu, "QueueEndOfPipeActionPatchData data hi");
+    TEST_ASSERT_EQ(rel2[3], 0x20u, "QueueEndOfPipeActionPatchData addr unchanged");
+
+    /* QueueEndOfPipeActionPatchData rejects interrupt==4 */
+    uint32_t* rel3 = sceAgcCbReleaseMem(
+        &cb, 0x12, 0, 1, 0, 0x100, 0, 0, 0, 0, 4, 0);
+    TEST_ASSERT_EQ(sceAgcQueueEndOfPipeActionPatchData(rel3, 0, 0, 0x1234), AGC_ERROR_INVALID_ARGUMENT,
+        "QueueEndOfPipeActionPatchData rejects interrupt==4");
+
+    /* QueueEndOfPipeActionPatchData rejects data_sel==5 */
+    uint32_t* rel4 = sceAgcCbReleaseMem(
+        &cb, 0x12, 0, 1, 0, 0x100, 5, 0, 0x10, 4, 0, 0);
+    TEST_ASSERT_EQ(sceAgcQueueEndOfPipeActionPatchData(rel4, 0, 5, 0x1234), AGC_ERROR_INVALID_ARGUMENT,
+        "QueueEndOfPipeActionPatchData rejects data_sel==5");
+
+    /* QueueEndOfPipeActionPatchAddress rejects interrupt==4 */
+    TEST_ASSERT_EQ(sceAgcQueueEndOfPipeActionPatchAddress(rel3, 0x5000000A0ULL),
+        AGC_ERROR_INVALID_ARGUMENT, "QueueEndOfPipeActionPatch rejects interrupt==4");
+
+    /* QueueEndOfPipeActionGetSize returns 0x20 (32 bytes = 8 dwords) */
+    TEST_ASSERT_EQ(sceAgcCbQueueEndOfPipeActionGetSize(), 0x20u,
+        "QueueEndOfPipeActionGetSize returns 32");
+
     /* NULL cmd must fail for all patchers */
     TEST_ASSERT_EQ(sceAgcDmaDataPatchSetDstAddressOrOffset(0, 0), AGC_ERROR_INVALID_ARGUMENT,
         "DmaDataPatch rejects NULL");
@@ -495,6 +525,8 @@ static void test_sce_agc_dcb_patch_address(void) {
         "WaitRegMemPatch rejects NULL");
     TEST_ASSERT_EQ(sceAgcQueueEndOfPipeActionPatchAddress(0, 0), AGC_ERROR_INVALID_ARGUMENT,
         "QueueEndOfPipeActionPatch rejects NULL");
+    TEST_ASSERT_EQ(sceAgcQueueEndOfPipeActionPatchData(0, 0, 0, 0), AGC_ERROR_INVALID_ARGUMENT,
+        "QueueEndOfPipeActionPatchData rejects NULL");
 }
 
 /* GetLodStatsGetSize: pure helper, returns 0x10 + counterCount*4.

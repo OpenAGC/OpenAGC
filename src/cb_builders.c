@@ -606,8 +606,9 @@ int32_t PS5_SYSV_ABI sceAgcQueueEndOfPipeActionPatchAddress(
     if (!cmd)
         return AGC_ERROR_INVALID_ARGUMENT;
 
-    /* Accept both direct IT_RELEASE_MEM (0x49, SPRX-confirmed) and the
-     * legacy NOP-wrapped form (op 0x10, sub 0x18). */
+    /* SPRX-confirmed: accepts direct IT_RELEASE_MEM (0x49) and NOP-wrapped
+     * (op 0x10, sub 0x18) for KytyPS5 compatibility. Rejects interrupt==4
+     * (address is zeroed in that case). */
     uint32_t opcode = agcPm4Opcode(cmd[0]);
     uint32_t sub = agcPm4Subcommand(cmd[0]);
     bool is_release_mem = (opcode == AGC_PM4_OP_RELEASE_MEM) ||
@@ -615,9 +616,56 @@ int32_t PS5_SYSV_ABI sceAgcQueueEndOfPipeActionPatchAddress(
     if (!is_release_mem)
         return AGC_ERROR_INVALID_ARGUMENT;
 
-    cmd[3] = (uint32_t)address;
+    /* cmd[2] bits 26:24 = interrupt field. Reject if interrupt == 4. */
+    if (((cmd[2] >> 24) & 0x7u) == 4u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    cmd[3] = (uint32_t)address & 0xFFFFFFFCu;
     cmd[4] = (uint32_t)(address >> 32);
     return AGC_OK;
+}
+
+/* sceAgcQueueEndOfPipeActionPatchData (NID: MlEw1feXcjg)
+ * SPRX-confirmed: patches cmd[5..6] (data lo/hi) in a ReleaseMem packet.
+ * Rejects interrupt==4 (data is zeroed) and data_sel==5 (data is GDS-encoded). */
+int32_t PS5_SYSV_ABI sceAgcQueueEndOfPipeActionPatchData(
+    uint32_t *cmd, uint32_t context_id, uint32_t data_sel, uint64_t data)
+{
+    if (!cmd)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    uint32_t opcode = agcPm4Opcode(cmd[0]);
+    uint32_t sub = agcPm4Subcommand(cmd[0]);
+    bool is_release_mem = (opcode == AGC_PM4_OP_RELEASE_MEM) ||
+        (opcode == AGC_PM4_OP_NOP && sub == AGC_PM4_SUB_RELEASE_MEM);
+    if (!is_release_mem)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    /* cmd[2] bits 26:24 = interrupt, bits 31:29 = data_sel.
+     * Reject interrupt==4 or data_sel==5. */
+    uint32_t interrupt = (cmd[2] >> 24) & 0x7u;
+    uint32_t packet_data_sel = (cmd[2] >> 29) & 0x7u;
+    if (interrupt == 4u || packet_data_sel == 5u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    /* KytyPS5: for NOP-wrapped ReleaseMem with context_id > 1 and data_sel==1,
+     * pack the segment generation into bits 24..31 of the data. */
+    uint64_t packet_data = data;
+    if (opcode == AGC_PM4_OP_NOP && sub == AGC_PM4_SUB_RELEASE_MEM &&
+        context_id > 1 && data_sel == 1) {
+        packet_data = ((uint64_t)(context_id - 2u) << 24u) | (data & 0x00FFFFFFull);
+    }
+
+    cmd[5] = (uint32_t)packet_data;
+    cmd[6] = (uint32_t)(packet_data >> 32);
+    return AGC_OK;
+}
+
+/* sceAgcCbQueueEndOfPipeActionGetSize (NID: hL7C0IRpWZI)
+ * SPRX-confirmed: returns 0x20 (32 bytes = 8 dwords). */
+uint32_t PS5_SYSV_ABI sceAgcCbQueueEndOfPipeActionGetSize(void)
+{
+    return 0x20u;
 }
 
 /*

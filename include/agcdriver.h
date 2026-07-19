@@ -231,6 +231,9 @@ int32_t PS5_SYSV_ABI sceAgcWaitRegMemPatchAddress(
     uint32_t *cmd, uint64_t address);
 int32_t PS5_SYSV_ABI sceAgcQueueEndOfPipeActionPatchAddress(
     uint32_t *cmd, uint64_t address);
+int32_t PS5_SYSV_ABI sceAgcQueueEndOfPipeActionPatchData(
+    uint32_t *cmd, uint32_t context_id, uint32_t data_sel, uint64_t data);
+uint32_t PS5_SYSV_ABI sceAgcCbQueueEndOfPipeActionGetSize(void);
 
 /* LOD stats helpers */
 size_t PS5_SYSV_ABI sceAgcDcbGetLodStatsGetSize(uint32_t counter_count);
