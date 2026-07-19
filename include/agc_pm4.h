@@ -41,9 +41,11 @@ typedef enum AgcPm4Opcode {
     AGC_PM4_OP_DRAW_INDEX_AUTO           = 0x2D,
     AGC_PM4_OP_DRAW_INDEX_INDIRECT_MULTI = 0x38,
     AGC_PM4_OP_NUM_INSTANCES             = 0x2F,
-    /* AGC-custom multi-instanced indexed draw.
-     * RE: SPRX sceAgcDcbDrawIndexMultiInstanced emits 0xc0073a00. */
+    /* AGC-custom multi-instanced indexed draw / dispatch draw preamble.
+     * RE: SPRX sceAgcDcbDrawIndexMultiInstanced emits 0xc0073a00.
+     * KytyPS5-confirmed: IT_DISPATCH_DRAW_PREAMBLE = 0x3A (same opcode). */
     AGC_PM4_OP_DRAW_INDEX_MULTI_INSTANCED = 0x3A,
+    AGC_PM4_OP_DISPATCH_DRAW_PREAMBLE     = 0x3A,  /* alias, KytyPS5 name */
     AGC_PM4_OP_INDIRECT_BUFFER_CNST      = 0x33,
     AGC_PM4_OP_DRAW_INDEX_OFFSET_2       = 0x35,
     AGC_PM4_OP_WRITE_DATA                = 0x37,
@@ -63,12 +65,13 @@ typedef enum AgcPm4Opcode {
     AGC_PM4_OP_REWIND                    = 0x59,
     AGC_PM4_OP_SET_CONFIG_REG            = 0x68,
     AGC_PM4_OP_SET_CONTEXT_REG           = 0x69,
-    AGC_PM4_OP_SET_CONTEXT_REG_INDIRECT  = 0x73,
+    /* KytyPS5-confirmed: IT_SET_CONTEXT_REG_INDIRECT = 0x9F.
+     * Alias for AGC_PM4_OP_SET_CX_REG_INDIRECT below. */
+    AGC_PM4_OP_SET_CONTEXT_REG_INDIRECT  = 0x9F,
     AGC_PM4_OP_SET_SH_REG                = 0x76,
     AGC_PM4_OP_SET_SH_REG_OFFSET         = 0x77,
     AGC_PM4_OP_SET_QUEUE_REG             = 0x78,
     AGC_PM4_OP_SET_UCONFIG_REG           = 0x79,
-    AGC_PM4_OP_DISPATCH_DRAW_PREAMBLE    = 0x8C,
     AGC_PM4_OP_DISPATCH_DRAW             = 0x8D,
     AGC_PM4_OP_GET_LOD_STATS             = 0x8E,
     /* AGC-custom set index indirect args.
