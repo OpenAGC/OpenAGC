@@ -314,6 +314,150 @@ static void test_shader_type_macros_match_enum(void) {
         "AGC_SHADER_TYPE_CS == kAgcShaderTypeCs");
 }
 
+/* ===================================================================== */
+/* Fused shader tests (KytyPS5-confirmed)                                */
+/* ===================================================================== */
+
+static void test_fused_shader_get_size_gs(void) {
+    AgcShaderRecord front = {0};
+    front.magic = AGC_SHADER_RECORD_MAGIC;
+    front.version = AGC_SHADER_RECORD_VERSION_GEN5;
+    front.shader_type = kAgcShaderBinaryTypeGsFront;
+    front.num_sh_registers = 10;
+
+    AgcShaderRecord back = {0};
+    back.magic = AGC_SHADER_RECORD_MAGIC;
+    back.version = AGC_SHADER_RECORD_VERSION_GEN5;
+    back.shader_type = kAgcShaderBinaryTypeGsBack;
+    back.num_sh_registers = 10;
+
+    AgcSizeAlign sa = {0};
+    int32_t ret = sceAgcGetFusedShaderSize(&sa, &front, &back);
+    TEST_ASSERT_EQ(ret, AGC_OK, "GetFusedShaderSize GS returns OK");
+    TEST_ASSERT_EQ(sa.size, (uint64_t)(10 * sizeof(AgcShaderRegister)),
+        "GetFusedShaderSize GS size");
+    TEST_ASSERT_EQ(sa.align, 4u, "GetFusedShaderSize GS align");
+}
+
+static void test_fused_shader_get_size_hs(void) {
+    AgcShaderRecord front = {0};
+    front.magic = AGC_SHADER_RECORD_MAGIC;
+    front.version = AGC_SHADER_RECORD_VERSION_GEN5;
+    front.shader_type = kAgcShaderBinaryTypeHsFront;
+    front.num_sh_registers = 5;
+
+    AgcShaderRecord back = {0};
+    back.magic = AGC_SHADER_RECORD_MAGIC;
+    back.version = AGC_SHADER_RECORD_VERSION_GEN5;
+    back.shader_type = kAgcShaderBinaryTypeHsBack;
+    back.num_sh_registers = 5;
+
+    AgcSizeAlign sa = {0};
+    int32_t ret = sceAgcGetFusedShaderSize(&sa, &front, &back);
+    TEST_ASSERT_EQ(ret, AGC_OK, "GetFusedShaderSize HS returns OK");
+    TEST_ASSERT_EQ(sa.size, (uint64_t)(5 * sizeof(AgcShaderRegister)),
+        "GetFusedShaderSize HS size");
+    TEST_ASSERT_EQ(sa.align, 4u, "GetFusedShaderSize HS align");
+}
+
+static void test_fused_shader_get_size_invalid_types(void) {
+    AgcShaderRecord front = {0};
+    front.shader_type = kAgcShaderTypeCs;  /* Wrong: CS, not GsFront/HsFront */
+    AgcShaderRecord back = {0};
+    back.shader_type = kAgcShaderBinaryTypeGsBack;
+
+    AgcSizeAlign sa = {0};
+    int32_t ret = sceAgcGetFusedShaderSize(&sa, &front, &back);
+    TEST_ASSERT_EQ(ret, AGC_ERROR_SHADER_INVALID_HALVES,
+        "GetFusedShaderSize invalid front type returns INVALID_HALVES");
+
+    /* Also test mismatched front/back */
+    front.shader_type = kAgcShaderBinaryTypeGsFront;
+    back.shader_type = kAgcShaderBinaryTypeHsBack;  /* Wrong: HsBack with GsFront */
+    ret = sceAgcGetFusedShaderSize(&sa, &front, &back);
+    TEST_ASSERT_EQ(ret, AGC_ERROR_SHADER_INVALID_HALVES,
+        "GetFusedShaderSize mismatched pair returns INVALID_HALVES");
+}
+
+static void test_fused_shader_get_size_null(void) {
+    AgcShaderRecord rec = {0};
+    rec.shader_type = kAgcShaderBinaryTypeGsFront;
+    AgcSizeAlign sa = {0};
+    TEST_ASSERT_EQ(sceAgcGetFusedShaderSize(NULL, &rec, &rec),
+        AGC_ERROR_INVALID_ARGUMENT, "GetFusedShaderSize null dst");
+    TEST_ASSERT_EQ(sceAgcGetFusedShaderSize(&sa, NULL, &rec),
+        AGC_ERROR_INVALID_ARGUMENT, "GetFusedShaderSize null front");
+    TEST_ASSERT_EQ(sceAgcGetFusedShaderSize(&sa, &rec, NULL),
+        AGC_ERROR_INVALID_ARGUMENT, "GetFusedShaderSize null back");
+}
+
+static void test_fused_shader_fuse_gs(void) {
+    AgcShaderRecord front = {0};
+    front.magic = AGC_SHADER_RECORD_MAGIC;
+    front.version = AGC_SHADER_RECORD_VERSION_GEN5;
+    front.shader_type = kAgcShaderBinaryTypeGsFront;
+    front.code = 0x1000;
+
+    AgcShaderRecord back = {0};
+    back.magic = AGC_SHADER_RECORD_MAGIC;
+    back.version = AGC_SHADER_RECORD_VERSION_GEN5;
+    back.shader_type = kAgcShaderBinaryTypeGsBack;
+    back.num_sh_registers = 3;
+
+    AgcShaderRecord fused = {0};
+    int32_t ret = sceAgcFuseShaderHalves(&fused, &front, &back, NULL);
+    TEST_ASSERT_EQ(ret, AGC_OK, "FuseShaderHalves GS returns OK");
+    TEST_ASSERT_EQ((uint32_t)fused.shader_type, (uint32_t)kAgcShaderTypeGs,
+        "FuseShaderHalves GS sets type to Gs(2)");
+    TEST_ASSERT_EQ(fused.user_data, 0u, "FuseShaderHalves clears user_data");
+    TEST_ASSERT_EQ(fused.magic, AGC_SHADER_RECORD_MAGIC, "FuseShaderHalves copies magic");
+}
+
+static void test_fused_shader_fuse_hs(void) {
+    AgcShaderRecord front = {0};
+    front.magic = AGC_SHADER_RECORD_MAGIC;
+    front.version = AGC_SHADER_RECORD_VERSION_GEN5;
+    front.shader_type = kAgcShaderBinaryTypeHsFront;
+    front.code = 0x2000;
+
+    AgcShaderRecord back = {0};
+    back.magic = AGC_SHADER_RECORD_MAGIC;
+    back.version = AGC_SHADER_RECORD_VERSION_GEN5;
+    back.shader_type = kAgcShaderBinaryTypeHsBack;
+    back.num_sh_registers = 2;
+
+    AgcShaderRecord fused = {0};
+    int32_t ret = sceAgcFuseShaderHalves(&fused, &front, &back, NULL);
+    TEST_ASSERT_EQ(ret, AGC_OK, "FuseShaderHalves HS returns OK");
+    TEST_ASSERT_EQ((uint32_t)fused.shader_type, (uint32_t)kAgcShaderTypeHs,
+        "FuseShaderHalves HS sets type to Hs(3)");
+    TEST_ASSERT_EQ(fused.user_data, 0u, "FuseShaderHalves HS clears user_data");
+}
+
+static void test_fused_shader_fuse_invalid_types(void) {
+    AgcShaderRecord front = {0};
+    front.shader_type = kAgcShaderTypePs;  /* Wrong: PS, not GsFront/HsFront */
+    AgcShaderRecord back = {0};
+    back.shader_type = kAgcShaderBinaryTypeGsBack;
+
+    AgcShaderRecord fused = {0};
+    int32_t ret = sceAgcFuseShaderHalves(&fused, &front, &back, NULL);
+    TEST_ASSERT_EQ(ret, AGC_ERROR_SHADER_INVALID_HALVES,
+        "FuseShaderHalves invalid front type returns INVALID_HALVES");
+}
+
+static void test_fused_shader_fuse_null(void) {
+    AgcShaderRecord rec = {0};
+    rec.shader_type = kAgcShaderBinaryTypeGsFront;
+    AgcShaderRecord fused = {0};
+    TEST_ASSERT_EQ(sceAgcFuseShaderHalves(NULL, &rec, &rec, NULL),
+        AGC_ERROR_INVALID_ARGUMENT, "FuseShaderHalves null result");
+    TEST_ASSERT_EQ(sceAgcFuseShaderHalves(&fused, NULL, &rec, NULL),
+        AGC_ERROR_INVALID_ARGUMENT, "FuseShaderHalves null front");
+    TEST_ASSERT_EQ(sceAgcFuseShaderHalves(&fused, &rec, NULL, NULL),
+        AGC_ERROR_INVALID_ARGUMENT, "FuseShaderHalves null back");
+}
+
 void test_suite_shader(void) {
     TEST_SUITE("Shader Record");
     TEST_RUN(test_shader_record_invalid_null);
@@ -335,4 +479,13 @@ void test_suite_shader(void) {
     TEST_RUN(test_shader_link_null_pointers);
     TEST_RUN(test_shader_link_copy_exact);
     TEST_RUN(test_shader_type_macros_match_enum);
+    /* Fused shader support (sceAgcGetFusedShaderSize / sceAgcFuseShaderHalves) */
+    TEST_RUN(test_fused_shader_get_size_gs);
+    TEST_RUN(test_fused_shader_get_size_hs);
+    TEST_RUN(test_fused_shader_get_size_invalid_types);
+    TEST_RUN(test_fused_shader_get_size_null);
+    TEST_RUN(test_fused_shader_fuse_gs);
+    TEST_RUN(test_fused_shader_fuse_hs);
+    TEST_RUN(test_fused_shader_fuse_invalid_types);
+    TEST_RUN(test_fused_shader_fuse_null);
 }

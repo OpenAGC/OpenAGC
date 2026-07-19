@@ -26,6 +26,7 @@ The host-generic implementation now has a tested model for:
 - Typed sampler helpers: `SetClampMode`, `SetFilterMode`, `SetBorderColor`, `SetMaxAnisotropy` (hardware-correct SQ_IMG_SAMP_WORD0-3 bit layout)
 - Texture format encode/decode helpers: `agcTextureFormatEncode`, `agcTextureFormatGetDataFormat`, `agcTextureFormatGetNumberType`
 - Shader linking: `agcShaderLinkHsGs` — combines HS/LS + CS shader records into GS (matches SPRX ordinal 131)
+- Fused shader support: `sceAgcGetFusedShaderSize` (NID: dolOmWH+huQ) and `sceAgcFuseShaderHalves` (NID: fd5Bp5tGTgo) — KytyPS5-confirmed fusion of GS/HS front+back shader halves with register patching
 - EOP flip submit: `sceAgcDriverSubmitEopFlip` (prospero) + `sceAgcDcbSetEopFlip` DCB builder (IT_RELEASE_MEM 0x49)
 - NID table expanded to 148 identified exports (78 original + 36 from deep SPRX disassembly + 34 from batch 2 disassembly)
 - Async-compute queue submission: generic backend queue tracking (32 slots), ACB submit validates queue in-use, full create→submit→destroy flow tested

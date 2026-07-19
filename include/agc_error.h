@@ -44,6 +44,9 @@
  * observed in sceAgcShaderLinkHsGs (ordinal 131) when the source shader
  * type is not HS(4)/LS(5) or the CS shader type is not CS(6). */
 #define AGC_ERROR_SHADER_INVALID_TYPE   ((int32_t)0x8a6c0008)
+/* Shader halves don't form a valid front/back pair during fusion.
+ * KytyPS5-confirmed: GRAPHICS5_ERROR_INVALID_SHADER_HALVES. */
+#define AGC_ERROR_SHADER_INVALID_HALVES ((int32_t)0x8a6c000a)
 
 /* Resource errors */
 #define AGC_ERROR_RESOURCE_INVALID      ((int32_t)0x80890401)
@@ -74,6 +77,7 @@ static inline const char* agcErrorString(int32_t err) {
     case AGC_ERROR_SHADER_INVALID:      return "AGC_ERROR_SHADER_INVALID";
     case AGC_ERROR_SHADER_COMPILE:      return "AGC_ERROR_SHADER_COMPILE";
     case AGC_ERROR_SHADER_INVALID_TYPE: return "AGC_ERROR_SHADER_INVALID_TYPE";
+    case AGC_ERROR_SHADER_INVALID_HALVES: return "AGC_ERROR_SHADER_INVALID_HALVES";
     case AGC_ERROR_RESOURCE_INVALID:    return "AGC_ERROR_RESOURCE_INVALID";
     case AGC_ERROR_RESOURCE_NOT_BOUND:  return "AGC_ERROR_RESOURCE_NOT_BOUND";
     case AGC_ERROR_VALIDATION_FAILED:   return "AGC_ERROR_VALIDATION_FAILED";

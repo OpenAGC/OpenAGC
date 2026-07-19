@@ -32,6 +32,21 @@ typedef enum AgcShaderType {
     kAgcShaderTypeCs = 6,   /* Compute shader */
 } AgcShaderType;
 
+/* Shader binary sub-types for fused shader halves.
+ * KytyPS5-confirmed: ShaderBinaryType enum from gpu_defs.h.
+ * Used by sceAgcGetFusedShaderSize / sceAgcFuseShaderHalves. */
+typedef enum AgcShaderBinaryType {
+    kAgcShaderBinaryTypeCs      = 0,
+    kAgcShaderBinaryTypePs      = 1,
+    kAgcShaderBinaryTypeGs      = 2,
+    kAgcShaderBinaryTypeHs      = 3,
+    kAgcShaderBinaryTypeGsFront = 4,
+    kAgcShaderBinaryTypeHsFront = 5,
+    kAgcShaderBinaryTypeGsBack  = 6,
+    kAgcShaderBinaryTypeHsBack  = 7,
+    kAgcShaderBinaryTypeFs      = 8,
+} AgcShaderBinaryType;
+
 /* Shader type macro constants — mirror the AgcShaderType enum values for
  * use in preprocessor contexts and switch/case labels. Values match the
  * byte at offset 0x5A of the shader record (SPRX-confirmed). */
@@ -164,6 +179,67 @@ const uint32_t *agcShaderRecordGetCxRegisterValues(const AgcShaderRecord *record
  */
 int32_t agcShaderLinkHsGs(AgcShaderRecord *dst,
     const AgcShaderRecord *hs_or_ls, const AgcShaderRecord *cs);
+
+/*
+ * Size/align result for fused shader scratch memory.
+ * KytyPS5-confirmed: SizeAlign struct from libGraphicsDriver.
+ */
+typedef struct AgcSizeAlign {
+    uint64_t size;
+    uint32_t align;
+} AgcSizeAlign;
+
+/*
+ * Shader register pair (offset, value) — KytyPS5-confirmed layout.
+ * Used by fused shader register patching.
+ */
+typedef struct AgcShaderRegister {
+    uint32_t offset;
+    uint32_t value;
+} AgcShaderRegister;
+
+/* SH register offsets used by fused shader patching (KytyPS5-confirmed). */
+#define AGC_SPI_SHADER_PGM_CHKSUM_GS  0x80
+#define AGC_SPI_SHADER_PGM_LO_ES      0xC8
+#define AGC_SPI_SHADER_PGM_LO_LS      0x148
+
+/*
+ * sceAgcGetFusedShaderSize (NID: dolOmWH+huQ)
+ * KytyPS5-confirmed: computes the scratch memory size needed to fuse
+ * front+back shader halves. The front must be GsFront(4) or HsFront(5),
+ * the back must be GsBack(6) or HsBack(7) respectively.
+ *
+ * dst->size  = back->num_sh_registers * sizeof(AgcShaderRegister)
+ * dst->align = 4
+ *
+ * Returns AGC_OK on success, AGC_ERROR_SHADER_INVALID_HALVES (0x8a6c000a)
+ * if the shader types don't form a valid front/back pair.
+ */
+int32_t PS5_SYSV_ABI sceAgcGetFusedShaderSize(
+    AgcSizeAlign *dst, const AgcShaderRecord *front, const AgcShaderRecord *back);
+
+/*
+ * sceAgcFuseShaderHalves (NID: fd5Bp5tGTgo)
+ * KytyPS5-confirmed: fuses front+back shader halves into a single shader
+ * record. The front must be GsFront(4) or HsFront(5), the back must be
+ * GsBack(6) or HsBack(7) respectively.
+ *
+ * - Copies the back shader record to fused_result
+ * - Sets fused_result->shader_type to Gs(2) or Hs(3) depending on front type
+ * - If scratch_mem is provided, copies back's SH registers there and points
+ *   fused_result->sh_registers to the copy
+ * - For GS: patches SPI_SHADER_PGM_CHKSUM_GS from front, patches
+ *   SPI_SHADER_PGM_LO_ES with front->code address
+ * - For HS: patches SPI_SHADER_PGM_LO_LS with front->code address
+ * - Validates vgt_shader_stages_en mismatch bit (bit 22 for GS, bit 21 for HS)
+ *
+ * Returns AGC_OK on success, AGC_ERROR_SHADER_INVALID_HALVES (0x8a6c000a)
+ * if the shader types don't form a valid front/back pair or the stages_en
+ * mismatch bit differs.
+ */
+int32_t PS5_SYSV_ABI sceAgcFuseShaderHalves(
+    AgcShaderRecord *fused_result, const AgcShaderRecord *front,
+    const AgcShaderRecord *back, void *scratch_mem);
 
 #ifdef __cplusplus
 }
