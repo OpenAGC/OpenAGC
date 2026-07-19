@@ -208,7 +208,7 @@ int32_t PS5_SYSV_ABI sceAgcDriverSubmitEopFlip(
  * 0x8a6c0033 (mapped to AGC_ERROR_INVALID_ARGUMENT). EndWorkload
  * without a matching BeginWorkload returns an error.
  */
-int32_t PS5_SYSV_ABI sceAgcDriverBeginWorkload(uint32_t workload_id)
+int32_t PS5_SYSV_ABI sceAgcDriverSetWorkloadsActive(uint32_t workload_id)
 {
     if (!g_agc_initialized)
         return AGC_ERROR_NOT_INITIALIZED;
@@ -222,7 +222,7 @@ int32_t PS5_SYSV_ABI sceAgcDriverBeginWorkload(uint32_t workload_id)
     return AGC_OK;
 }
 
-int32_t PS5_SYSV_ABI sceAgcDriverEndWorkload(uint32_t workload_id)
+int32_t PS5_SYSV_ABI sceAgcDriverSetWorkloadComplete(uint32_t workload_id)
 {
     if (!g_agc_initialized)
         return AGC_ERROR_NOT_INITIALIZED;

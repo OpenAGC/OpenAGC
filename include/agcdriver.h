@@ -106,8 +106,8 @@ int32_t PS5_SYSV_ABI sceAgcDriverSubmitEopFlip(
  * (0x1E) PM4 packet with different subcommands.
  * \param workload_id  Workload ID (validated by SPRX; must be non-zero)
  * Returns 0 on success, AGC error code on failure. */
-int32_t PS5_SYSV_ABI sceAgcDriverBeginWorkload(uint32_t workload_id);
-int32_t PS5_SYSV_ABI sceAgcDriverEndWorkload(uint32_t workload_id);
+int32_t PS5_SYSV_ABI sceAgcDriverSetWorkloadsActive(uint32_t workload_id);
+int32_t PS5_SYSV_ABI sceAgcDriverSetWorkloadComplete(uint32_t workload_id);
 
 /* User special queue management */
 int32_t PS5_SYSV_ABI _sceAgcDriverCreateUserSpecialQueue(void);
@@ -153,7 +153,7 @@ int32_t  PS5_SYSV_ABI sceAgcDriverRegisterWorkloadStream(
 
 /* Default state queries */
 int32_t PS5_SYSV_ABI sceAgcGetDefaultState(AgcContextState *out_state);
-int32_t PS5_SYSV_ABI sceAgcGetGameDefaultState(AgcContextState *out_state);
+int32_t PS5_SYSV_ABI sceAgcGetRegisterDefaults(AgcContextState *out_state);
 int32_t PS5_SYSV_ABI sceAgcGetDefaultCxStateFlat(void *out_state, uint32_t size);
 
 /* Suspend point */
@@ -244,17 +244,8 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbGetLodStats(
 
 /* DCB draw/indirect/register packet builders (SPRX capstone disassembly) */
 
-/* IT_RELEASE_MEM (opcode 0x49) — 7-dword EOP signal write. NID: wr23dPKyWc0 */
-uint32_t *PS5_SYSV_ABI sceAgcDcbReleaseMem(
-    SceAgcCb *cb, uint32_t event_type, uint32_t event_index,
-    uint64_t dst_addr, uint32_t data);
-
 /* IT_INDIRECT_BUFFER (opcode 0x3F) — 4-dword IB chain. NID: w1KFAHVqpaU */
 uint32_t *PS5_SYSV_ABI sceAgcDcbIndirectBuffer(
-    SceAgcCb *cb, uint64_t gpu_addr, uint32_t size_dwords, uint32_t vmid);
-
-/* IT_INDIRECT_BUFFER_CNST (opcode 0x33) — 4-dword constant IB. NID: xSAR0LTcRKM */
-uint32_t *PS5_SYSV_ABI sceAgcDcbIndirectBufferConst(
     SceAgcCb *cb, uint64_t gpu_addr, uint32_t size_dwords, uint32_t vmid);
 
 /* IT_DRAW_INDIRECT (opcode 0x24) — 5-dword indirect draw. NID: 1rZSWUv1IRc */
@@ -377,41 +368,19 @@ int32_t PS5_SYSV_ABI sceAgcAcbPopMarker(uint32_t *acb, uint32_t size_dw);
 int32_t PS5_SYSV_ABI sceAgcAcbSetMarker(
     uint32_t *acb, uint32_t size_dw, const char *marker);
 
-/* VshDcb - VSH draw command buffer builders */
-int32_t PS5_SYSV_ABI sceAgcVshDcbInitializeDefaultHardwareState_pre0090(
+/* DCB raw-buffer variant functions (version variants and specials) */
+int32_t PS5_SYSV_ABI sceAgcDcbInitializeDefaultHardwareState(
     uint32_t *dcb, uint32_t size_dw);
-int32_t PS5_SYSV_ABI sceAgcVshDcbClearState(uint32_t *dcb, uint32_t size_dw);
-int32_t PS5_SYSV_ABI sceAgcVshDcbAtomicGds(
+int32_t PS5_SYSV_ABI sceAgcDcbAtomicGds_0900(
     uint32_t *dcb, uint32_t size_dw, uint32_t op, uint32_t gds_offset,
     uint32_t data, uint32_t src);
-int32_t PS5_SYSV_ABI sceAgcVshDcbAtomicGds_pre0090(
-    uint32_t *dcb, uint32_t size_dw, uint32_t op, uint32_t gds_offset,
-    uint32_t data, uint32_t src);
-int32_t PS5_SYSV_ABI sceAgcVshDcbContextStateOp(
+int32_t PS5_SYSV_ABI sceAgcDcbContextStateOp_pre0100(
     uint32_t *dcb, uint32_t size_dw, uint32_t op, uint32_t reg_type,
     uint32_t reg_offset, uint32_t reg_count, const void *reg_data);
-int32_t PS5_SYSV_ABI sceAgcVshDcbContextStateOp_pre0100(
-    uint32_t *dcb, uint32_t size_dw, uint32_t op, uint32_t reg_type,
-    uint32_t reg_offset, uint32_t reg_count, const void *reg_data);
-int32_t PS5_SYSV_ABI sceAgcVshDcbMemSemaphore(uint32_t *dcb, uint32_t size_dw);
-int32_t PS5_SYSV_ABI sceAgcVshDcbResetQueue(
+int32_t PS5_SYSV_ABI sceAgcDcbResetQueueInternal(
     uint32_t *dcb, uint32_t size_dw, uint32_t queue_id);
-int32_t PS5_SYSV_ABI sceAgcVshDcbResetQueueInternal(
-    uint32_t *dcb, uint32_t size_dw, uint32_t queue_id);
-int32_t PS5_SYSV_ABI sceAgcVshDcbSetPreemption(
+int32_t PS5_SYSV_ABI sceAgcDcbSetPreemption(
     uint32_t *dcb, uint32_t size_dw, uint32_t mode);
-int32_t PS5_SYSV_ABI sceAgcVshDcbWaitUntilSafeForRendering(uint32_t *dcb, uint32_t size_dw);
-int32_t PS5_SYSV_ABI sceAgcVshDcbSetFlip(
-    uint32_t *dcb, uint32_t size_dw, uint32_t vo_handle, uint32_t buf_idx);
-int32_t PS5_SYSV_ABI sceAgcVshDcbSetWorkloadComplete(
-    uint32_t *dcb, uint32_t size_dw, AgcWorkloadId workload);
-int32_t PS5_SYSV_ABI sceAgcVshDcbSetWorkloadStreamInactive(
-    uint32_t *dcb, uint32_t size_dw, AgcWorkloadId workload);
-int32_t PS5_SYSV_ABI sceAgcVshDcbSetWorkloadsActive(
-    uint32_t *dcb, uint32_t size_dw, uint32_t flags);
-
-/* VshCb - shared VSH command buffer helpers */
-int32_t PS5_SYSV_ABI sceAgcVshCbMemSemaphore(uint32_t *cb, uint32_t size_dw);
 
 /* ===================================================================== */
 /* Game-critical missing functions (from Joe & Mac game binary analysis)  */

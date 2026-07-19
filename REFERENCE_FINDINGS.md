@@ -353,19 +353,19 @@ PM4 convention (PM4 opcodes cross-verified against HLE reference and SPRX):
   - `sceAgcAcbSetFlip` — `IT_RELEASE_MEM` (0x49), 7 dwords
   - `sceAgcAcbJump` — `IT_INDIRECT_BUFFER` (0x3F), 4 dwords (already correct)
 - Implemented in `src/dcb.c` (VSH DCB helpers):
-  - `sceAgcVshDcbAtomicGds` — `IT_ATOMIC_GDS` (0x1D), 10 dwords
-  - `sceAgcVshDcbContextStateOp` — variable-length `IT_SET_*_REG` (op selects
+  - `sceAgcDcbAtomicGds` — `IT_ATOMIC_GDS` (0x1D), 10 dwords
+  - `sceAgcDcbContextStateOp` — variable-length `IT_SET_*_REG` (op selects
     register space), 1 header + 1 offset + `reg_count` data dwords
-  - `sceAgcVshDcbResetQueue` — `IT_AGC_0x79` (0x79), 3 dwords
-  - `sceAgcVshDcbSetWorkloadComplete` — `IT_SET_WORKLOAD` (0x1E), 8 dwords
-  - `sceAgcVshDcbSetWorkloadStreamInactive` — `IT_AGC_0x79` (0x79), 3 dwords
-  - `sceAgcVshDcbSetWorkloadsActive` — `IT_SET_WORKLOAD` (0x1E), 8 dwords
-  - `sceAgcVshDcbSetPreemption` — NOP placeholder (opcode pending), 2 dwords
-  - `sceAgcVshDcbWaitUntilSafeForRendering` — NOP with `WAIT_FLIP_DONE`
+  - `sceAgcDcbResetQueue` — `IT_AGC_0x79` (0x79), 3 dwords
+  - `sceAgcDcbSetWorkloadComplete` — `IT_SET_WORKLOAD` (0x1E), 8 dwords
+  - `sceAgcDcbSetWorkloadStreamInactive` — `IT_AGC_0x79` (0x79), 3 dwords
+  - `sceAgcDcbSetWorkloadsActive` — `IT_SET_WORKLOAD` (0x1E), 8 dwords
+  - `sceAgcDcbSetPreemption` — NOP placeholder (opcode pending), 2 dwords
+  - `sceAgcDcbWaitUntilSafeForRendering` — NOP with `WAIT_FLIP_DONE`
     subcommand, 7 dwords
 - All old-style ACB helpers in `include/agcdriver.h` are now implemented with
   real PM4 packets; no remaining NOP/placeholder stubs in that surface.
-- `sceAgcVshDcbContextStateOp` is the key DCB entry point for the
+- `sceAgcDcbContextStateOp` is the key DCB entry point for the
   `NotifyDefaultStates` / `CLEAR_STATE` / `CONTEXT_STATE` userspace submission
   path: it emits the actual `SET_CONTEXT_REG` / `SET_SH_REG` / `SET_UCONFIG_REG`
   packets that load the GPU-visible register-default blobs built earlier by
@@ -373,14 +373,14 @@ PM4 convention (PM4 opcodes cross-verified against HLE reference and SPRX):
 
 DCB builders (`sceAgcDcb*`) are implemented in `src/cb_builders.c` and
 follow the same Gen5 AGC type-3 PM4 header convention (`length_dwords - 2` in
-bits 29:16). VSH DCB shell functions (`sceAgcVshDcb*`) are implemented in
+bits 29:16). VSH DCB shell functions (`sceAgcDcb*`) are implemented in
 `src/dcb.c`; all are now mapped in `include/agcdriver.h` and emit real packets
-except `sceAgcVshDcbSetPreemption`, which is intentionally an unimplemented
+except `sceAgcDcbSetPreemption`, which is intentionally an unimplemented
 VSH-only stub.
 
-## `sceAgcVshDcbSetPreemption` — SPRX RE finding
+## `sceAgcDcbSetPreemption` — SPRX RE finding
 
-- `sceAgcVshDcbSetPreemption` in `libSceAgcVsh.sprx` (vaddr 0x4140) is a stub
+- `sceAgcDcbSetPreemption` in `libSceAgcVsh.sprx` (vaddr 0x4140) is a stub
   that prints `line %d: %s() is not allowed to be called from agc vsh.` and
   executes `int 0x41` (crash). It is not exported via the NID table and has no
   ordinal.
@@ -389,7 +389,7 @@ VSH-only stub.
   (kernel 0xb7eaf0), which emits `IT_AGC_0x93` (8-dword packet). This opcode
   is exposed as `AGC_PM4_OP_SUSPEND_POINT_MARKER` (alias of the existing
   `AGC_PM4_OP_WAIT_REG_MEM64 = 0x93`).
-- openagc `sceAgcVshDcbSetPreemption` returns `AGC_ERROR_INVALID_STATE` instead
+- openagc `sceAgcDcbSetPreemption` returns `AGC_ERROR_INVALID_STATE` instead
   of crashing.
 
 ## `sceAgcDriverNotifyDefaultStates` userspace submission path
@@ -402,7 +402,7 @@ VSH-only stub.
      it via `sceAgcDriverSubmitDcb()`.
   4. The kernel patches `CLEAR_STATE` via `gc_pm4_clearstate_patch` (0xb7dd20);
      the GPU consumes the GPU-visible blobs during context reset.
-- A new public helper `sceAgcVshDcbClearState()` emits a standalone
+- A new public helper `sceAgcDcbClearState()` emits a standalone
   `IT_CLEAR_STATE` (0x14) packet for applications that need to trigger the
   reset outside of `NotifyDefaultStates`.
 
@@ -436,9 +436,9 @@ ioctl layouts and implementation code are NOT (see
   NIDs in `include/agc_nids.h` and `analysis/agc_known_nids.tsv`.
 - Key new identifications from ps5-openagc:
   - All 22 ACB builders (sceAgcAcb* functions)
-  - All 13 Vsh DCB builders (sceAgcVshDcb* functions)
+  - All 13 Vsh DCB builders (sceAgcDcb* functions)
   - All 18 libSceAgcDriver exports (sceAgcDriver* functions)
-  - State queries: sceAgcGetDefaultCxStateFlat, sceAgcGetGameDefaultState,
+  - State queries: sceAgcGetDefaultCxStateFlat, sceAgcGetRegisterDefaults,
     sceAgcSuspendPointAndCheckStatus
 - The remaining ~514 UNKNOWN exports are mostly small stub functions (3-10
   bytes) that return error codes or constants. Size-based guessing is
@@ -572,9 +572,9 @@ identification only) at:
 
 | NID | SPRX | Identified Name | Evidence |
 |-----|------|-----------------|----------|
-| `wr23dPKyWc0` | AGC/VSH | `sceAgcDcbReleaseMem` | String "isReleaseMemValid", opcode 0x49 |
+| `wr23dPKyWc0` | AGC/VSH | `sceAgcCbReleaseMem` | String "isReleaseMemValid", opcode 0x49 |
 | `w1KFAHVqpaU` | AGC/VSH | `sceAgcDcbIndirectBuffer` | Opcode 0x3F, 14-dword IB |
-| `xSAR0LTcRKM` | AGC/VSH | `sceAgcDcbIndirectBufferConst` | Opcode 0x3F, 4-dword IB |
+| `xSAR0LTcRKM` | AGC/VSH | `sceAgcDcbJump` | Opcode 0x3F, 4-dword IB |
 | `1rZSWUv1IRc` | AGC/VSH | `sceAgcDcbDrawIndirect` | Opcode 0x24, VGT_INDEX_TYPE ref |
 | `q88lQ+GP5Yk` | AGC/VSH | `sceAgcDcbDrawIndex2` | Opcode 0x27 |
 | `t1vNu082-jM` | AGC/VSH | `sceAgcDcbDrawIndexIndirect` | Opcode 0x25 |
@@ -590,8 +590,8 @@ identification only) at:
 
 | NID | Identified Name | Evidence |
 |-----|-----------------|----------|
-| `UM9b9NunSrE` | `sceAgcDriverBeginWorkload` | SET_WORKLOAD 0x1E, errors 0x8a6c0033/34 |
-| `i6bfTi13ApA` | `sceAgcDriverEndWorkload` | SET_WORKLOAD 0x1E, calls 0x6bb0 |
+| `UM9b9NunSrE` | `sceAgcDriverSetWorkloadsActive` | SET_WORKLOAD 0x1E, errors 0x8a6c0033/34 |
+| `i6bfTi13ApA` | `sceAgcDriverSetWorkloadComplete` | SET_WORKLOAD 0x1E, calls 0x6bb0 |
 | `Hj4eWnDektQ` | `sceAgcDriverSubmitCommandBuffers` | INDIRECT_BUFFER 0x3F, error 0x8a6d0001 |
 | `XNbrdwCsZ9A` | `sceAgcDriverMapComputeQueue` | Error 0x8a6d0000, validation max 0x1f queues |
 | `b4fpgH5ZXxQ` | `sceAgcDriverInitializeQueue` | Atomic counter, "[AgcDriver" string |

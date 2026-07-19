@@ -676,39 +676,6 @@ static void test_sce_agc_dcb_wait_flip_eos(void) {
 
 /* === SPRX DCB builder tests (capstone disassembly) === */
 
-/* sceAgcDcbReleaseMem — IT_RELEASE_MEM (0x49), 7 dwords.
- * event_type=0x05 event_index=0x03 dst=0x1_0000_0020 data=0xDEADBEEF
- * → [1]=0x0305 [2]=0x20 [3]=0x1 [4]=0xDEADBEEF [5]=0 [6]=0 */
-static void test_sce_agc_dcb_release_mem(void) {
-    uint32_t buffer[16];
-    SceAgcCb cb;
-    agcCbInit(&cb, buffer, sizeof(buffer));
-
-    uint32_t* cmd = sceAgcDcbReleaseMem(&cb, 0x05, 0x03, 0x100000020ULL, 0xDEADBEEF);
-    TEST_ASSERT(cmd == buffer, "DcbReleaseMem returns allocated packet");
-    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_RELEASE_MEM, "DcbReleaseMem opcode");
-    TEST_ASSERT_EQ(agcPm4Subcommand(cmd[0]), AGC_PM4_SUB_ZERO, "DcbReleaseMem subcommand");
-    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 7, "DcbReleaseMem length");
-    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 7, "DcbReleaseMem advances cursor");
-    TEST_ASSERT_EQ(cmd[1], 0x0305u, "DcbReleaseMem event_control");
-    TEST_ASSERT_EQ(cmd[2], 0x20u, "DcbReleaseMem dst lo");
-    TEST_ASSERT_EQ(cmd[3], 0x1u, "DcbReleaseMem dst hi");
-    TEST_ASSERT_EQ(cmd[4], 0xDEADBEEFu, "DcbReleaseMem data");
-    TEST_ASSERT_EQ(cmd[5], 0u, "DcbReleaseMem reserved 5");
-    TEST_ASSERT_EQ(cmd[6], 0u, "DcbReleaseMem reserved 6");
-
-    /* NULL cb returns 0 */
-    TEST_ASSERT(sceAgcDcbReleaseMem(NULL, 0, 0, 0x100, 0) == 0,
-        "DcbReleaseMem rejects NULL cb");
-
-    /* overflow returns 0 */
-    SceAgcCb small;
-    uint32_t small_buf[6];
-    agcCbInit(&small, small_buf, sizeof(small_buf));
-    TEST_ASSERT(sceAgcDcbReleaseMem(&small, 0, 0, 0x100, 0) == 0,
-        "DcbReleaseMem rejects overflow");
-}
-
 /* sceAgcDcbIndirectBuffer — IT_INDIRECT_BUFFER (0x3F), 4 dwords.
  * gpu_addr=0x2_0000_0040 size=256 vmid=0xA
  * → [1]=0x40 [2]=0x2 [3]=(256&0xFFFFF)|((0xA)<<24)=0x0A000100 */
@@ -734,33 +701,6 @@ static void test_sce_agc_dcb_indirect_buffer(void) {
     agcCbInit(&small, small_buf, sizeof(small_buf));
     TEST_ASSERT(sceAgcDcbIndirectBuffer(&small, 0x100, 4, 0) == 0,
         "DcbIndirectBuffer rejects overflow");
-}
-
-/* sceAgcDcbIndirectBufferConst — IT_INDIRECT_BUFFER (0x3F), 4 dwords.
- * SPRX evidence: both IB variants use opcode 0x3F, not 0x33.
- * Same layout as IndirectBuffer. */
-static void test_sce_agc_dcb_indirect_buffer_const(void) {
-    uint32_t buffer[16];
-    SceAgcCb cb;
-    agcCbInit(&cb, buffer, sizeof(buffer));
-
-    uint32_t* cmd = sceAgcDcbIndirectBufferConst(&cb, 0x200000040ULL, 256, 0xA);
-    TEST_ASSERT(cmd == buffer, "DcbIndirectBufferConst returns allocated packet");
-    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_INDIRECT_BUFFER, "DcbIndirectBufferConst opcode 0x3F (same as IndirectBuffer)");
-    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 4, "DcbIndirectBufferConst length");
-    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 4, "DcbIndirectBufferConst advances cursor");
-    TEST_ASSERT_EQ(cmd[1], 0x40u, "DcbIndirectBufferConst ibase lo");
-    TEST_ASSERT_EQ(cmd[2], 0x2u, "DcbIndirectBufferConst ibase hi");
-    TEST_ASSERT_EQ(cmd[3], 0x0A000100u, "DcbIndirectBufferConst size|vmid");
-
-    TEST_ASSERT(sceAgcDcbIndirectBufferConst(NULL, 0x100, 4, 0) == 0,
-        "DcbIndirectBufferConst rejects NULL cb");
-
-    SceAgcCb small;
-    uint32_t small_buf[3];
-    agcCbInit(&small, small_buf, sizeof(small_buf));
-    TEST_ASSERT(sceAgcDcbIndirectBufferConst(&small, 0x100, 4, 0) == 0,
-        "DcbIndirectBufferConst rejects overflow");
 }
 
 /* sceAgcDcbDrawIndirect — IT_DRAW_INDIRECT (0x24), 5 dwords.
@@ -1103,9 +1043,7 @@ void test_suite_cb(void) {
     TEST_RUN(test_sce_agc_dcb_wait_flip);
     TEST_RUN(test_sce_agc_dcb_insert_wait_flip_done);
     TEST_RUN(test_sce_agc_dcb_wait_flip_eos);
-    TEST_RUN(test_sce_agc_dcb_release_mem);
     TEST_RUN(test_sce_agc_dcb_indirect_buffer);
-    TEST_RUN(test_sce_agc_dcb_indirect_buffer_const);
     TEST_RUN(test_sce_agc_dcb_draw_indirect);
     TEST_RUN(test_sce_agc_dcb_draw_index2);
     TEST_RUN(test_sce_agc_dcb_draw_index_indirect);

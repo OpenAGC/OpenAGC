@@ -142,8 +142,8 @@ typedef enum AgcPm4Subcommand {
     AGC_PM4_SUB_FLIP             = 0x17,
     AGC_PM4_SUB_RELEASE_MEM      = 0x18,
     AGC_PM4_SUB_DMA_DATA         = 0x19,
-    /* SET_WORKLOAD subcommands — used by sceAgcDriverBeginWorkload /
-     * sceAgcDriverEndWorkload (libSceAgcDriver.sprx ordinals 87/88).
+    /* SET_WORKLOAD subcommands — used by sceAgcDriverSetWorkloadsActive /
+     * sceAgcDriverSetWorkloadComplete (libSceAgcDriver.sprx ordinals 87/88).
      * The 0xcc / 0xcd prefix bits in the SPRX correspond to these
      * subcommand selectors within the SET_WORKLOAD opcode (0x1E). */
     AGC_PM4_SUB_WORKLOAD_BEGIN    = 0x20,

@@ -17,7 +17,7 @@ builds with ps5-payload-sdk; hardware validation is the remaining step.
   (event write, atomic mem/GDS, cond exec, wait-reg-mem, write/copy/dma data,
   mem semaphore, acquire mem, queue reset, rewind, set flip, workload
   markers, prime UTC L2)
-- **DCB command building** — `sceAgcVshDcb*` draw command buffer packets
+- **DCB command building** — `sceAgcDcb*` draw command buffer packets
   (clear state, atomic GDS, context state ops, reset queue, set flip, workload
   markers, wait-safe, preemption stub)
 - **Context state management** — default state queries, primary/internal

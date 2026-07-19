@@ -71,7 +71,7 @@ int32_t PS5_SYSV_ABI sceAgcGetDefaultState(AgcContextState* out_state) {
     return AGC_OK;
 }
 
-int32_t PS5_SYSV_ABI sceAgcGetGameDefaultState(AgcContextState* out_state) {
+int32_t PS5_SYSV_ABI sceAgcGetRegisterDefaults(AgcContextState* out_state) {
     if (!out_state)
         return AGC_ERROR_INVALID_ARGUMENT;
     /* Game default state is the same as default state for now.

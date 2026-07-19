@@ -32,7 +32,7 @@ The host-generic implementation now has a tested model for:
 - Async-compute queue submission: generic backend queue tracking (32 slots), ACB submit validates queue in-use, full create→submit→destroy flow tested
 - 13 new DCB builders from SPRX disassembly: ReleaseMem, IndirectBuffer, IndirectBufferConst, DrawIndirect, DrawIndex2, DrawIndexIndirect, DrawIndirectMulti, DrawIndexIndirectMulti, SetPredication, EventWrite, SetConfigReg, SetShReg, SetUconfigReg
 - 4 AGC-custom flip builders: WaitFlipDone (0x4C), WaitFlip (0x51), InsertWaitFlipDone (0x54), WaitFlipEos (0x4F+0x4E)
-- Workload tracking: sceAgcDriverBeginWorkload / EndWorkload with SET_WORKLOAD (0x1E) submit on prospero
+- Workload tracking: sceAgcDriverSetWorkloadsActive / EndWorkload with SET_WORKLOAD (0x1E) submit on prospero
 - FW 5.50 register-defaults blob builder/parser with embedded primary/internal tables
 
 ## Verified
@@ -49,7 +49,7 @@ make -B test
 Expected result:
 
 ```text
-1648 passed, 0 failed
+1625 passed, 0 failed
 ```
 
 PS5 prospero backend (cross-compiled, no tests):
@@ -147,11 +147,11 @@ Old-style ACB stubs (from `src/acb.c`):
 - `sceAgcAcbPrimeUtcl2` — now emits `IT_PRIME_UTCL2` (opcode 0x5D) with 4-dword packet
 - `sceAgcAcbJump`
 - `sceAgcAcbPushMarker` / `sceAgcAcbPopMarker` / `sceAgcAcbSetMarker`
-- `sceAgcVshDcbClearState` — now emits `IT_CLEAR_STATE` (opcode 0x14) with 2-dword packet
-- `sceAgcVshDcbAtomicGds` / `ContextStateOp` / `ResetQueue` /
+- `sceAgcDcbClearState` — now emits `IT_CLEAR_STATE` (opcode 0x14) with 2-dword packet
+- `sceAgcDcbAtomicGds` / `ContextStateOp` / `ResetQueue` /
   `SetWorkloadComplete` / `SetWorkloadStreamInactive` / `SetWorkloadsActive` /
   `WaitUntilSafeForRendering`
-- `sceAgcVshDcbSetPreemption` — SPRX RE shows it is an intentional VSH-only
+- `sceAgcDcbSetPreemption` — SPRX RE shows it is an intentional VSH-only
   stub that crashes; openagc returns `AGC_ERROR_INVALID_STATE`
 
 Default state submission:
@@ -403,7 +403,7 @@ Submit model:
     Passing field3=0 works.
 - **[9] _sceAgcDriverDestroyUserSpecialQueue()** — PASS
   - Queue destroyed successfully after suspend point
-- **[10] sceAgcDriverBeginWorkload/EndWorkload** — PASS
+- **[10] sceAgcDriverSetWorkloadsActive/EndWorkload** — PASS
   - Sub-region carving from SceGnmDdid for workload tracking works
 
 ### Hardware-discovered bugs fixed

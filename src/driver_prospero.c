@@ -1031,12 +1031,12 @@ static int32_t agcProsperoSubmitWorkload(uint32_t workload_id, uint32_t sub)
     return ret;
 }
 
-int32_t PS5_SYSV_ABI sceAgcDriverBeginWorkload(uint32_t workload_id)
+int32_t PS5_SYSV_ABI sceAgcDriverSetWorkloadsActive(uint32_t workload_id)
 {
     return agcProsperoSubmitWorkload(workload_id, AGC_PM4_SUB_WORKLOAD_BEGIN);
 }
 
-int32_t PS5_SYSV_ABI sceAgcDriverEndWorkload(uint32_t workload_id)
+int32_t PS5_SYSV_ABI sceAgcDriverSetWorkloadComplete(uint32_t workload_id)
 {
     return agcProsperoSubmitWorkload(workload_id, AGC_PM4_SUB_WORKLOAD_END);
 }

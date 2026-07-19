@@ -179,59 +179,59 @@ static void test_submit_eop_flip_generic_stub(void) {
 static void test_workload_begin_end(void) {
     sce_agc_initialize();
     /* Valid workload ID */
-    int32_t r = sceAgcDriverBeginWorkload(42);
+    int32_t r = sceAgcDriverSetWorkloadsActive(42);
     TEST_ASSERT_EQ(r, AGC_OK, "BeginWorkload with valid ID returns OK");
 
-    r = sceAgcDriverEndWorkload(42);
+    r = sceAgcDriverSetWorkloadComplete(42);
     TEST_ASSERT_EQ(r, AGC_OK, "EndWorkload with matching ID returns OK");
 }
 
 static void test_workload_begin_invalid_id(void) {
     sce_agc_initialize();
     /* workload_id == 0 is invalid */
-    int32_t r = sceAgcDriverBeginWorkload(0);
+    int32_t r = sceAgcDriverSetWorkloadsActive(0);
     TEST_ASSERT_EQ(r, AGC_ERROR_INVALID_ARGUMENT, "BeginWorkload with ID=0 returns error");
 }
 
 static void test_workload_end_invalid_id(void) {
     sce_agc_initialize();
     /* workload_id == 0 is invalid */
-    int32_t r = sceAgcDriverEndWorkload(0);
+    int32_t r = sceAgcDriverSetWorkloadComplete(0);
     TEST_ASSERT_EQ(r, AGC_ERROR_INVALID_ARGUMENT, "EndWorkload with ID=0 returns error");
 }
 
 static void test_workload_end_without_begin(void) {
     sce_agc_initialize();
     /* EndWorkload without a prior BeginWorkload */
-    int32_t r = sceAgcDriverEndWorkload(99);
+    int32_t r = sceAgcDriverSetWorkloadComplete(99);
     TEST_ASSERT_EQ(r, AGC_ERROR_INVALID_STATE, "EndWorkload without BeginWorkload returns error");
 }
 
 static void test_workload_end_mismatched_id(void) {
     sce_agc_initialize();
     /* Begin with one ID, end with a different ID */
-    int32_t r = sceAgcDriverBeginWorkload(10);
+    int32_t r = sceAgcDriverSetWorkloadsActive(10);
     TEST_ASSERT_EQ(r, AGC_OK, "BeginWorkload 10 returns OK");
 
-    r = sceAgcDriverEndWorkload(20);
+    r = sceAgcDriverSetWorkloadComplete(20);
     TEST_ASSERT_EQ(r, AGC_ERROR_INVALID_STATE, "EndWorkload with mismatched ID returns error");
 
     /* Clean up with the correct ID */
-    r = sceAgcDriverEndWorkload(10);
+    r = sceAgcDriverSetWorkloadComplete(10);
     TEST_ASSERT_EQ(r, AGC_OK, "EndWorkload with matching ID after mismatch returns OK");
 }
 
 static void test_workload_begin_already_active(void) {
     sce_agc_initialize();
     /* BeginWorkload should reject if a workload is already active */
-    int32_t r = sceAgcDriverBeginWorkload(42);
+    int32_t r = sceAgcDriverSetWorkloadsActive(42);
     TEST_ASSERT_EQ(r, AGC_OK, "BeginWorkload 42 returns OK");
 
-    r = sceAgcDriverBeginWorkload(99);
+    r = sceAgcDriverSetWorkloadsActive(99);
     TEST_ASSERT_EQ(r, AGC_ERROR_INVALID_STATE, "BeginWorkload while already active returns error");
 
     /* Original workload is still active — EndWorkload with original ID works */
-    r = sceAgcDriverEndWorkload(42);
+    r = sceAgcDriverSetWorkloadComplete(42);
     TEST_ASSERT_EQ(r, AGC_OK, "EndWorkload 42 after rejected double-begin returns OK");
 }
 

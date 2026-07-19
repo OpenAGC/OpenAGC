@@ -715,34 +715,6 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbGetLodStats(
  * agcCbAllocDwords → NULL check → write header + payload → return pointer.
  */
 
-/* sceAgcDcbReleaseMem (NID wr23dPKyWc0) — IT_RELEASE_MEM (0x49), 7 dwords.
- * SPRX evidence: "isReleaseMemValid", validation 0x2f/0x7/0x8.
- * Layout:
- *   [0] header
- *   [1] event_control = event_type[5:0] | (event_index[3:0] << 8)
- *   [2] dst_addr_lo
- *   [3] dst_addr_hi
- *   [4] data
- *   [5] reserved (0)
- *   [6] reserved (0) */
-uint32_t *PS5_SYSV_ABI sceAgcDcbReleaseMem(
-    SceAgcCb *cb, uint32_t event_type, uint32_t event_index,
-    uint64_t dst_addr, uint32_t data)
-{
-    uint32_t *cmd = agcCbAllocDwords(cb, 7);
-    if (!cmd)
-        return 0;
-
-    cmd[0] = agcPm4Header3(AGC_PM4_OP_RELEASE_MEM, 7);
-    cmd[1] = (event_type & 0x3Fu) | ((event_index & 0xFu) << 8);
-    cmd[2] = (uint32_t)dst_addr;
-    cmd[3] = (uint32_t)(dst_addr >> 32);
-    cmd[4] = data;
-    cmd[5] = 0;
-    cmd[6] = 0;
-    return cmd;
-}
-
 /* sceAgcDcbIndirectBuffer (NID w1KFAHVqpaU) — IT_INDIRECT_BUFFER (0x3F), 4 dwords.
  * SPRX evidence: 14-dword IB, vmid/addr packing, validation 0xd/0xe.
  * Layout (shadPS4 PM4CmdIndirectBuffer):
@@ -751,26 +723,6 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbReleaseMem(
  *   [2] ibase_hi[15:0]
  *   [3] ib_size[19:0] | (vmid[31:24]) */
 uint32_t *PS5_SYSV_ABI sceAgcDcbIndirectBuffer(
-    SceAgcCb *cb, uint64_t gpu_addr, uint32_t size_dwords, uint32_t vmid)
-{
-    uint32_t *cmd = agcCbAllocDwords(cb, 4);
-    if (!cmd)
-        return 0;
-
-    cmd[0] = agcPm4Header3(AGC_PM4_OP_INDIRECT_BUFFER, 4);
-    cmd[1] = (uint32_t)gpu_addr;
-    cmd[2] = (uint32_t)(gpu_addr >> 32) & 0xFFFFu;
-    cmd[3] = (size_dwords & 0xFFFFFu) | ((vmid & 0xFFu) << 24);
-    return cmd;
-}
-
-/* sceAgcDcbIndirectBufferConst (NID xSAR0LTcRKM) — IT_INDIRECT_BUFFER (0x3F), 4 dwords.
- * SPRX evidence: header 0xc00N3f00 (same opcode 0x3F as IndirectBuffer),
- * 4-dword IB, simpler addr, validation 0x3/0x4.
- * The PS5 AGC does not use the AMD IT_INDIRECT_BUFFER_CNST (0x33) opcode;
- * both IB variants use 0x3F. The "Const" variant is a simpler wrapper
- * with the same packet layout. */
-uint32_t *PS5_SYSV_ABI sceAgcDcbIndirectBufferConst(
     SceAgcCb *cb, uint64_t gpu_addr, uint32_t size_dwords, uint32_t vmid)
 {
     uint32_t *cmd = agcCbAllocDwords(cb, 4);

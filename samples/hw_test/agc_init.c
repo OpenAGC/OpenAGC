@@ -434,13 +434,13 @@ int main(void) {
     }
 
     /* --- Step 10: Workload tracking --- */
-    printf("[10] sceAgcDriverBeginWorkload(1)...\n");
-    err = sceAgcDriverBeginWorkload(1);
+    printf("[10] sceAgcDriverSetWorkloadsActive(1)...\n");
+    err = sceAgcDriverSetWorkloadsActive(1);
     printf("    result: 0x%08X (%s)\n", (unsigned)err, errstr(err));
     if (err == AGC_OK) {
         printf("    Workload begun\n");
-        printf("[10b] sceAgcDriverEndWorkload(1)...\n");
-        err = sceAgcDriverEndWorkload(1);
+        printf("[10b] sceAgcDriverSetWorkloadComplete(1)...\n");
+        err = sceAgcDriverSetWorkloadComplete(1);
         printf("    result: 0x%08X (%s)\n", (unsigned)err, errstr(err));
         if (err == AGC_OK)
             printf("    Workload ended\n");
