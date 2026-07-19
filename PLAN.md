@@ -153,7 +153,7 @@ Implemented and host-tested:
 Current expected host test result:
 
 ```text
-1601 passed, 0 failed
+1610 passed, 0 failed
 ```
 
 ## Phase 0: RE Groundwork
