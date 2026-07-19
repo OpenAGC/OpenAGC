@@ -153,7 +153,7 @@ Implemented and host-tested:
 Current expected host test result:
 
 ```text
-1588 passed, 0 failed
+1605 passed, 0 failed
 ```
 
 ## Phase 0: RE Groundwork
@@ -494,14 +494,18 @@ Completed:
 - [x] Add fused shader support (sceAgcGetFusedShaderSize / sceAgcFuseShaderHalves
       with SH register patching, SPI_SHADER_PGM_CHKSUM_GS/LO_ES/LO_LS address
       patching, and vgt_shader_stages_en mismatch validation)
+- [x] Replace HLE-reference-derived register defaults with complete v8 data
+      as default for NotifyDefaultStates
+- [x] Add SubmitMultiDcbs, SubmitCommandBuffer, SubmitMultiCommandBuffers,
+      SubmitMultiAcbs convenience wrappers
+- [x] Cross-check builder encodings against the reference — fixed 5 builders:
+      WriteData (direct IT_WRITE_DATA 0x37), ReleaseMem (cmd[1]/cmd[2] fields),
+      CondExec (5 dwords, count at cmd[4]), EventWrite (IT_EVENT_WRITE 0x46,
+      variable length), DrawIndexOffset (decode_draw_index_initiator)
+- [x] Switch from MIT to Apache 2.0 license (LICENSE file, SPDX headers)
 
 Pending:
-- [ ] Add SubmitMultiDcbs, SubmitMultiAcbs, SubmitCommandBuffer wrappers
-- [ ] Cross-check remaining builder encodings against the reference
 - [ ] Add version selection for register defaults (v0, v4, v5, v7, v8, v9, v10, v11)
-- [ ] Replace HLE-reference-derived `s_primary_defaults` / `s_internal_defaults`
-      with the complete v8 data as the default for `NotifyDefaultStates`
-- [ ] Add Apache 2.0 LICENSE file and update source headers
 
 ## Working Rules
 
