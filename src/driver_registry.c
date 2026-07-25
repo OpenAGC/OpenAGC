@@ -1,6 +1,7 @@
 #include "driver_registry.h"
 
 #include <stddef.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "agc_error.h"
@@ -8,6 +9,8 @@
 static const uint32_t g_legacy_v1_aliases[] = {
     0x01000000u
 };
+
+static uint32_t g_runtime_firmware_version;
 
 static const uint32_t g_legacy_v2_aliases[] = {
     0x02000000u, 0x02500000u
@@ -40,6 +43,11 @@ static uint16_t agcBcdByte(uint32_t value)
     return (uint16_t)(((value >> 4) & 0xfu) * 10u + (value & 0xfu));
 }
 
+static uint32_t agcFirmwareAbiKey(uint32_t raw_version)
+{
+    return raw_version & 0xffff0000u;
+}
+
 AgcFirmwareVersion agcFirmwareNormalize(uint32_t raw_version)
 {
     AgcFirmwareVersion version;
@@ -54,10 +62,11 @@ AgcFirmwareVersion agcFirmwareNormalize(uint32_t raw_version)
 bool agcProsperoStandardDirectAbiSupportsFirmware(uint32_t raw_version)
 {
     size_t i;
+    uint32_t abi_key = agcFirmwareAbiKey(raw_version);
 
     for (i = 0; i < sizeof(g_standard_direct_aliases) /
                     sizeof(g_standard_direct_aliases[0]); ++i) {
-        if (g_standard_direct_aliases[i] == raw_version)
+        if (g_standard_direct_aliases[i] == abi_key)
             return true;
     }
     return false;
@@ -77,15 +86,17 @@ static bool agcFirmwareAliasContains(const uint32_t *aliases,
 
 bool agcProsperoFirmwareSupported(uint32_t raw_version)
 {
+    uint32_t abi_key = agcFirmwareAbiKey(raw_version);
+
     return agcFirmwareAliasContains(g_legacy_v1_aliases,
                sizeof(g_legacy_v1_aliases) / sizeof(g_legacy_v1_aliases[0]),
-               raw_version) ||
+               abi_key) ||
            agcFirmwareAliasContains(g_legacy_v2_aliases,
                sizeof(g_legacy_v2_aliases) / sizeof(g_legacy_v2_aliases[0]),
-               raw_version) ||
+               abi_key) ||
            agcFirmwareAliasContains(g_legacy_v3_aliases,
                sizeof(g_legacy_v3_aliases) / sizeof(g_legacy_v3_aliases[0]),
-               raw_version) ||
+               abi_key) ||
            agcProsperoStandardDirectAbiSupportsFirmware(raw_version);
 }
 
@@ -93,24 +104,25 @@ bool agcProsperoBuildRuntimeProfile(uint32_t raw_version, bool is_trinity,
     AgcProsperoRuntimeProfile *profile_out)
 {
     AgcProsperoRuntimeProfile profile = {0};
+    uint32_t abi_key = agcFirmwareAbiKey(raw_version);
 
     if (!profile_out)
         return false;
 
     if (agcFirmwareAliasContains(g_legacy_v1_aliases,
             sizeof(g_legacy_v1_aliases) / sizeof(g_legacy_v1_aliases[0]),
-            raw_version)) {
+            abi_key)) {
         profile.family = AGC_PROSPERO_ABI_LEGACY_V1;
         profile.eop_ring_offset = 0x38000u;
     } else if (agcFirmwareAliasContains(g_legacy_v2_aliases,
             sizeof(g_legacy_v2_aliases) / sizeof(g_legacy_v2_aliases[0]),
-            raw_version)) {
+            abi_key)) {
         profile.family = AGC_PROSPERO_ABI_LEGACY_V2;
         profile.authenticated_special_queue = true;
         profile.eop_ring_offset = 0x39000u;
     } else if (agcFirmwareAliasContains(g_legacy_v3_aliases,
             sizeof(g_legacy_v3_aliases) / sizeof(g_legacy_v3_aliases[0]),
-            raw_version)) {
+            abi_key)) {
         profile.family = AGC_PROSPERO_ABI_LEGACY_V3;
         profile.authenticated_special_queue = true;
         profile.supports_tf_ring = true;
@@ -130,6 +142,33 @@ bool agcProsperoBuildRuntimeProfile(uint32_t raw_version, bool is_trinity,
     profile.cwsr_size = is_trinity ? 0x1600000u : 0x1000000u;
     *profile_out = profile;
     return true;
+}
+
+const char *PS5_SYSV_ABI agcProsperoAbiFamilyName(
+    AgcProsperoAbiFamily family)
+{
+    switch (family) {
+    case AGC_PROSPERO_ABI_LEGACY_V1: return "legacy-v1";
+    case AGC_PROSPERO_ABI_LEGACY_V2: return "legacy-v2";
+    case AGC_PROSPERO_ABI_LEGACY_V3: return "legacy-v3";
+    case AGC_PROSPERO_ABI_STANDARD:  return "standard";
+    default:                         return "unsupported";
+    }
+}
+
+int32_t PS5_SYSV_ABI agcDriverDebugRuntimeProfile(
+    AgcDriverRuntimeDiagnostics *diagnostics)
+{
+    if (!diagnostics)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    memset(diagnostics, 0, sizeof(*diagnostics));
+    diagnostics->firmware_version = g_runtime_firmware_version;
+    diagnostics->backend_name = agcDriverDebugBackendName();
+#ifdef OPENAGC_PROSPERO
+    return agcProsperoGetRuntimeProfile(&diagnostics->profile);
+#else
+    return AGC_ERROR_NOT_SUPPORTED;
+#endif
 }
 
 const AgcDriverRegistryEntry *agcDriverRegistryLookup(
@@ -212,6 +251,8 @@ static int32_t agcQueryProsperoFirmware(void *context, uint32_t *raw_version)
     if (sceKernelGetProsperoSystemSwVersion(&version) != 0)
         return AGC_ERROR_NOT_SUPPORTED;
     *raw_version = version.version;
+    printf("[openagc] system software raw=0x%08X string=%s\n",
+        version.version, version.version_string);
     return AGC_OK;
 }
 #endif
@@ -255,21 +296,30 @@ int32_t agcDriverSelectRuntime(AgcFirmwareVersion *version_out,
             &agcProsperoDriverOps
         }
     };
-    const AgcFirmwareDetector detector = {NULL, agcQueryProsperoFirmware};
-    AgcFirmwareVersion detected_version;
-    int32_t result = agcDriverSelectFromRegistry(&detector, registry,
-        sizeof(registry) / sizeof(registry[0]),
-        AGC_BACKEND_CAP_NATIVE_SUBMIT, &detected_version, ops_out);
+    const AgcDriverRegistryEntry *entry;
+    uint32_t raw_version;
+    int32_t result;
 
+    if (!ops_out)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    *ops_out = NULL;
+    result = agcQueryProsperoFirmware(NULL, &raw_version);
     if (result != AGC_OK)
-        return result;
-    result = agcProsperoConfigureRuntimeProfile(detected_version.raw);
+        return AGC_ERROR_NOT_SUPPORTED;
+    entry = agcDriverRegistryLookup(registry,
+        sizeof(registry) / sizeof(registry[0]), agcFirmwareAbiKey(raw_version),
+        AGC_BACKEND_CAP_NATIVE_SUBMIT);
+    if (!entry)
+        return AGC_ERROR_NOT_SUPPORTED;
+    *ops_out = entry->ops;
+    result = agcProsperoConfigureRuntimeProfile(raw_version);
     if (result != AGC_OK) {
         *ops_out = NULL;
         return result;
     }
+    g_runtime_firmware_version = raw_version;
     if (version_out)
-        *version_out = detected_version;
+        *version_out = agcFirmwareNormalize(raw_version);
     return AGC_OK;
 #else
     if (!ops_out)

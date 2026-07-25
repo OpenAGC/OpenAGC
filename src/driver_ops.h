@@ -9,6 +9,7 @@
 #define OPENAGC_DRIVER_OPS_H
 
 #include "agcdriver.h"
+#include "agc_runtime_diag.h"
 
 typedef struct AgcDriverOps {
     const char *name;
@@ -48,6 +49,7 @@ extern const AgcDriverOps agcProsperoDriverOps;
 
 #ifdef OPENAGC_PROSPERO
 int32_t agcProsperoConfigureRuntimeProfile(uint32_t raw_version);
+int32_t agcProsperoGetRuntimeProfile(AgcProsperoRuntimeProfile *profile_out);
 #endif
 
 const AgcDriverOps *agcDriverGetOps(void);

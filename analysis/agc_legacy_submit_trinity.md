@@ -47,7 +47,11 @@ avoids inferring the console model from firmware version.
 ## Validation status
 
 - ABI-specific SPRX verifier passes FW 1.00, 2.50, 3.20, and 11.60.
-- Host profile tests cover exact aliases, optional request guards, standard
+- Host profile tests cover four-digit ABI keys, optional request guards, standard
   sizing, Trinity sizing, and unknown-version rejection.
 - Generic and Prospero builds pass.
-- FW 5.50 standard PS5 remains the only hardware-tested firmware/model pair.
+- FW 5.500.008 (`0x05500008`, ABI key `0x0550`) standard PS5 remains the only
+  hardware-tested firmware/model pair. Runtime diagnostics, initialization,
+  allocation profiles, and optional operations pass. Repeated final runs of
+  the two-descriptor DCB regression execute only descriptor zero, despite one
+  earlier run writing both markers; that submission issue remains open.

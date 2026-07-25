@@ -24,6 +24,7 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <machine/cpufunc.h>
 
 #include <ps5/kernel.h>
 
@@ -31,6 +32,7 @@
 #include "agc_cb.h"
 #include "agc_error.h"
 #include "agc_pm4.h"
+#include "agc_runtime_diag.h"
 
 /* Private hardware-test diagnostic; not part of the installed public ABI. */
 extern const char *agcDriverDebugBackendName(void);
@@ -218,6 +220,8 @@ int main(void) {
     int32_t dcb_err = -1;  /* result of DCB submit (step 5) */
     int32_t cred_err = -1; /* result of credential bypass (step 0) */
     uint32_t version;
+    bool profile_ok = false;
+    AgcDriverRuntimeDiagnostics runtime_diag;
     SceAgcCb cb;
 
     printf("=== openagc AGC init + NOP submit test ===\n");
@@ -282,6 +286,33 @@ int main(void) {
         return 1;
     }
     printf("    backend: %s\n", agcDriverDebugBackendName());
+    err = agcDriverDebugRuntimeProfile(&runtime_diag);
+    if (err == AGC_OK) {
+        printf("    profile: fw=0x%08X family=%s model=%s\n",
+               runtime_diag.firmware_version,
+               agcProsperoAbiFamilyName(runtime_diag.profile.family),
+               runtime_diag.profile.is_trinity ? "trinity" : "standard-ps5");
+        printf("    capabilities: queue_auth=%u tf_ring=%u eop=0x%X\n",
+               runtime_diag.profile.authenticated_special_queue ? 1u : 0u,
+               runtime_diag.profile.supports_tf_ring ? 1u : 0u,
+               runtime_diag.profile.eop_ring_offset);
+        printf("    memory: gpu_info=0x%X cwsr_work=0x%X cwsr_size=0x%X\n",
+               runtime_diag.profile.gpu_info_span,
+               runtime_diag.profile.cwsr_work_offset,
+               runtime_diag.profile.cwsr_size);
+        profile_ok = runtime_diag.firmware_version == 0x05500008u &&
+            runtime_diag.profile.family == AGC_PROSPERO_ABI_STANDARD &&
+            !runtime_diag.profile.is_trinity &&
+            runtime_diag.profile.authenticated_special_queue &&
+            runtime_diag.profile.supports_tf_ring &&
+            runtime_diag.profile.eop_ring_offset == 0x39000u &&
+            runtime_diag.profile.gpu_info_span == 0x100000u &&
+            runtime_diag.profile.cwsr_work_offset == 0xa00000u &&
+            runtime_diag.profile.cwsr_size == 0x1000000u;
+    }
+    printf("    Runtime profile FW 5.50: %s\n", profile_ok ? "PASS" : "FAIL");
+    if (!profile_ok)
+        return 1;
 
     /* --- Step 2: Initialize internal memory --- */
     printf("[2] sce_agc_initialize_internal_memory()...\n");
@@ -333,6 +364,8 @@ int main(void) {
         (volatile uint32_t *)((uint8_t *)submit_memory + 0x2000u);
     submit_markers[0] = 0;
     submit_markers[1] = 0;
+    clflush((u_long)(uintptr_t)submit_markers);
+    mfence();
 
     for (uint32_t i = 0; i < 2; i++) {
         agcCbInit(&cb, cb_buffers[i], 0x1000u);
@@ -363,9 +396,20 @@ int main(void) {
     printf("    batched submit: 0x%08X (%s)\n",
            (unsigned)err, errstr(err));
 
-    usleep(500000);
-    printf("    markers: [0]=0x%08X [1]=0x%08X\n",
-           submit_markers[0], submit_markers[1]);
+    uint32_t marker_wait_ms = 0;
+    while (marker_wait_ms < 5000u) {
+        clflush((u_long)(uintptr_t)submit_markers);
+        mfence();
+        if (submit_markers[0] == expected_markers[0] &&
+            submit_markers[1] == expected_markers[1])
+            break;
+        usleep(50000);
+        marker_wait_ms += 50u;
+    }
+    clflush((u_long)(uintptr_t)submit_markers);
+    mfence();
+    printf("    markers after %u ms: [0]=0x%08X [1]=0x%08X\n",
+           marker_wait_ms, submit_markers[0], submit_markers[1]);
     if (dcb_err == AGC_OK &&
         submit_markers[0] == expected_markers[0] &&
         submit_markers[1] == expected_markers[1]) {
@@ -479,6 +523,7 @@ int main(void) {
     printf("  GPU credentials:   %s\n",
            cred_err == 0 ? "set (cr_sceAuthId)" : "FAILED");
     printf("  AGC init:          OK\n");
+    printf("  Runtime profile:   %s\n", profile_ok ? "FW 5.50 PASS" : "FAILED");
     printf("  Internal memory:   OK\n");
     printf("  Default states:    notified\n");
     printf("  PA debug version:  0x%08X\n", version);
@@ -491,5 +536,5 @@ int main(void) {
     printf("  Suspend point:     check step 8\n");
     printf("=== Done ===\n");
 
-    return 0;
+    return (profile_ok && dcb_err == AGC_OK && queue_handle >= 0) ? 0 : 1;
 }

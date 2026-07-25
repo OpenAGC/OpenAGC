@@ -10,6 +10,11 @@ numeric ranges.
   FW 1.00 through FW 12.70.
 - FW 5.50 is hardware-validated; the other aliases are RE-verified and await
   hardware validation on their corresponding firmware.
+- Runtime profile diagnostics are hardware-validated on FW 5.500.008
+  (`0x05500008`): family `standard`, model `standard-ps5`, submit16
+  `0xC0108102`, authenticated queues enabled, TF ring enabled, EOP offset
+  `0x39000`, GPU-info span `0x100000`, CWSR working offset `0xA00000`, and
+  CWSR allocation `0x1000000`.
 - FW 1.00-3.20 use dedicated legacy profiles around request `0xc0108102`.
   Optional requests absent from an early family return not-supported.
 - FW 9+ resolves `sceKernelHasTrinityMode`; PS5 Pro receives its firmware-
@@ -62,7 +67,7 @@ The host-generic implementation now has a tested model for:
 - Workload tracking: sceAgcDriverSetWorkloadsActive / SetWorkloadComplete with SET_WORKLOAD (0x1E) submit on prospero
 - FW 5.50 register-defaults blob builder/parser with embedded primary/internal tables
 - Runtime firmware/backend registry: PS5 system-version ABI validation,
-  BCD-normalized major/minor/patch fields, exact raw-version aliases,
+  four-digit major/minor ABI keys with complete raw-version diagnostics,
   capability filtering, and fail-closed selection before backend mutation
 
 ## Verified
@@ -393,7 +398,7 @@ Submit model:
 - `sceVideoOutRegisterBuffers` (A8R8G8B8_SRGB, tiled) — OK
 - Flip loop running at 60fps
 
-### agc_init.elf — PASS (SPRX-confirmed PA-debug behavior)
+### agc_init.elf — PROFILE/INIT PASS; multi-DCB regression open
 - **[1] sce_agc_initialize()** — PASS
   - /dev/gc opened (fd=7), CONTEXT_QUERY OK, mmap at 0xfe0200000
   - FRAME_OPEN correctly returns EINVAL (confirms ps5-openagc audit)
@@ -406,7 +411,11 @@ Submit model:
 - **[4] sceAgcDriverGetPaDebugInterfaceVersion()** — PASS
   - Returns the official FW 5.50 permission-stub value `0x8A6D0001`
   - SPRX disassembly confirms the export logs and returns without an ioctl
-- **[5] sceAgcDriverSubmitDcb(NOP)** — PASS (NOP submitted to GPU!)
+- **[5] sceAgcDriverSubmitMultiDcbs(two marker DCBs)** — OPEN
+  - One earlier run wrote both ordered markers.
+  - Repeated final runs write only descriptor-zero marker `0xD001CAFE`; the
+    second remains zero even with explicit CPU cache-line invalidation.
+  - The ioctl returns `AGC_OK`, and later AGC operations continue to pass.
 - **[6] sceAgcDriverSetupAsyncGraphics(1)** — PASS
   - Ioctl 0x80048126 with arg=1 succeeds
 - **[7] _sceAgcDriverCreateUserSpecialQueue()** — PASS (with credential bypass)
@@ -488,8 +497,8 @@ The internal `AgcDriverOps` dispatch layer is implemented. The stable public
 `sceAgc*` / `sceAgcDriver*` symbols now dispatch through a private operations
 table, with both the generic backend and the validated FW 5.50 direct Prospero
 backend registered behind it. Runtime selection now queries
-`sceKernelGetProsperoSystemSwVersion` before initialization and requires an
-exact raw-version alias plus the requested capability flags. FW 5.50 maps to
+`sceKernelGetProsperoSystemSwVersion` before initialization and requires a
+registered four-digit ABI key plus the requested capability flags. FW 5.50 maps to
 `prospero-fw550-direct`; detection failure and all unknown versions fail closed
 with `AGC_ERROR_NOT_SUPPORTED` before `/dev/gc` or a Sony module is touched.
 Host tests cover callback routing, aliases, capability rejection, unknown

@@ -25,7 +25,9 @@ Current backend coverage:
 - Standard PS5 FW 1.00 through 12.70: exact inspected builds are registered
   through submit16 ABI profiles. OpenAGC's hardware-proven submission request
   is `0xc0108102`; the later PID request is not required.
-- FW 5.50: RE-verified and fully hardware-validated on a standard PS5.
+- FW 5.50: RE-verified and fully hardware-validated on a standard PS5. The
+  console reports raw build `0x05500008` (`5.500.008`); profile selection uses
+  its four-digit `0x0550` ABI key while diagnostics retain the complete value.
 - Other registered FW 4.00-12.70 builds: RE-verified, awaiting per-firmware
   hardware validation.
 - FW 1.00-3.20: implemented as three explicit profiles. FW 1.00 rejects its
@@ -862,12 +864,11 @@ After interpolants pass, proceed in this order:
    zero components outside `[0,1]`, and a live completion marker. The 1:1
    RGBA8 preview was visually confirmed as a centered, smoothly textured
    equilateral triangle.
-7. ✅ Fix multiple DCB submission in one process. FW 5.50 consumes related
-   DCBs correctly when their 16-byte IB descriptors are passed as one kernel
-   frame. The public multi-DCB wrappers now issue one descriptor-array submit;
-   real hardware wrote both ordered markers and completed all following AGC
-   operations. Standalone-submit loops and automatic per-submit `SUBMITDONE`
-   are not used.
+7. Investigate nondeterministic multiple-DCB execution. The public wrappers
+   issue one descriptor-array submit and one hardware run wrote both ordered
+   markers, but repeated cache-correct FW 5.50 runs execute only descriptor
+   zero while the ioctl returns `AGC_OK`. Do not narrow the regression or mark
+   this complete until both descriptors execute reliably.
 8. Expand to tessellation, geometry shaders, Wave32 graphics, VRS, and ray
    tracing where supported by gfx1013 and the PS5 AGC ABI.
 9. ✅ Close PA-debug and FRAME_OPEN RE for FW 5.50. The PA-debug version

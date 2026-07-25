@@ -1,5 +1,7 @@
 #include "test.h"
 
+#include <string.h>
+
 #include "agc_error.h"
 #include "driver_ops.h"
 #include "driver_registry.h"
@@ -36,6 +38,12 @@ static void test_standard_direct_firmware_aliases(void)
         "oldest independently inspected direct-submit firmware supported");
     TEST_ASSERT(agcProsperoStandardDirectAbiSupportsFirmware(0x05500000u),
         "hardware-validated firmware supported");
+    TEST_ASSERT(agcProsperoStandardDirectAbiSupportsFirmware(0x05500008u),
+        "hardware-reported FW 5.500.008 alias supported");
+    TEST_ASSERT(agcProsperoStandardDirectAbiSupportsFirmware(0x0403ffffu),
+        "unknown FW 4.03 build suffix uses the 0x0403 ABI key");
+    TEST_ASSERT(!agcProsperoStandardDirectAbiSupportsFirmware(0x04040000u),
+        "unregistered FW 4.04 ABI key remains unsupported");
     TEST_ASSERT(agcProsperoStandardDirectAbiSupportsFirmware(0x11600000u),
         "FW 11.60 independently inspected alias supported");
     TEST_ASSERT(agcProsperoStandardDirectAbiSupportsFirmware(0x12700000u),
@@ -113,6 +121,28 @@ static void test_trinity_runtime_profile(void)
         "unknown firmware profile fails closed");
     TEST_ASSERT(!agcProsperoBuildRuntimeProfile(0x11600000u, false, NULL),
         "NULL profile output rejected");
+}
+
+static void test_runtime_profile_diagnostic_labels(void)
+{
+    AgcDriverRuntimeDiagnostics diagnostics;
+
+    TEST_ASSERT(strcmp(agcProsperoAbiFamilyName(AGC_PROSPERO_ABI_LEGACY_V1),
+        "legacy-v1") == 0, "legacy v1 diagnostic label");
+    TEST_ASSERT(strcmp(agcProsperoAbiFamilyName(AGC_PROSPERO_ABI_LEGACY_V2),
+        "legacy-v2") == 0, "legacy v2 diagnostic label");
+    TEST_ASSERT(strcmp(agcProsperoAbiFamilyName(AGC_PROSPERO_ABI_LEGACY_V3),
+        "legacy-v3") == 0, "legacy v3 diagnostic label");
+    TEST_ASSERT(strcmp(agcProsperoAbiFamilyName(AGC_PROSPERO_ABI_STANDARD),
+        "standard") == 0, "standard diagnostic label");
+    TEST_ASSERT(strcmp(agcProsperoAbiFamilyName(AGC_PROSPERO_ABI_UNSUPPORTED),
+        "unsupported") == 0, "unsupported diagnostic label");
+    TEST_ASSERT_EQ(agcDriverDebugRuntimeProfile(NULL),
+        AGC_ERROR_INVALID_ARGUMENT, "NULL diagnostic output rejected");
+    TEST_ASSERT_EQ(agcDriverDebugRuntimeProfile(&diagnostics),
+        AGC_ERROR_NOT_SUPPORTED, "generic backend has no Prospero profile");
+    TEST_ASSERT(diagnostics.backend_name != NULL,
+        "generic diagnostic still reports selected backend name");
 }
 
 static void test_exact_alias_and_capability_selection(void)
@@ -193,6 +223,7 @@ void test_suite_driver_registry(void)
     TEST_RUN(test_standard_direct_firmware_aliases);
     TEST_RUN(test_legacy_submit16_firmware_profiles);
     TEST_RUN(test_trinity_runtime_profile);
+    TEST_RUN(test_runtime_profile_diagnostic_labels);
     TEST_RUN(test_exact_alias_and_capability_selection);
     TEST_RUN(test_unknown_and_detection_failure_fail_closed);
     TEST_RUN(test_invalid_registry_arguments);

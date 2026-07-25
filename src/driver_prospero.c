@@ -208,6 +208,28 @@ int32_t agcProsperoConfigureRuntimeProfile(uint32_t raw_version)
     if (!agcProsperoBuildRuntimeProfile(raw_version, is_trinity,
             &g_prospero.profile))
         return AGC_ERROR_NOT_SUPPORTED;
+    printf("[openagc] profile fw=0x%08X family=%s model=%s "
+           "submit=0x%08X queue_auth=%u tf_ring=%u eop=0x%X "
+           "gpu_info=0x%X cwsr_work=0x%X cwsr_size=0x%X\n",
+           raw_version, agcProsperoAbiFamilyName(g_prospero.profile.family),
+           g_prospero.profile.is_trinity ? "trinity" : "standard-ps5",
+           AGC_GC_IOCTL_SUBMIT_16,
+           g_prospero.profile.authenticated_special_queue ? 1u : 0u,
+           g_prospero.profile.supports_tf_ring ? 1u : 0u,
+           g_prospero.profile.eop_ring_offset,
+           g_prospero.profile.gpu_info_span,
+           g_prospero.profile.cwsr_work_offset,
+           g_prospero.profile.cwsr_size);
+    return AGC_OK;
+}
+
+int32_t agcProsperoGetRuntimeProfile(AgcProsperoRuntimeProfile *profile_out)
+{
+    if (!profile_out)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (g_prospero.profile.family == AGC_PROSPERO_ABI_UNSUPPORTED)
+        return AGC_ERROR_NOT_INITIALIZED;
+    *profile_out = g_prospero.profile;
     return AGC_OK;
 }
 
