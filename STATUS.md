@@ -398,12 +398,13 @@ Submit model:
 - `sceVideoOutRegisterBuffers` (A8R8G8B8_SRGB, tiled) — OK
 - Flip loop running at 60fps
 
-### agc_init.elf — PROFILE/INIT PASS; multi-DCB regression open
+### agc_init.elf — PASS
 - **[1] sce_agc_initialize()** — PASS
   - /dev/gc opened (fd=7), CONTEXT_QUERY OK, mmap at 0xfe0200000
   - FRAME_OPEN correctly returns EINVAL (confirms ps5-openagc audit)
 - **[2] sce_agc_initialize_internal_memory()** — PASS
-  - All 9 regions allocated with sceKernelMapNamedSystemFlexibleMemory (type=0x33)
+  - All 9 firmware regions plus the OpenAGC multi-submit NOP trailer allocated
+    with sceKernelMapNamedSystemFlexibleMemory (type=0x33)
   - GPU VAs: 0x200024000–0x20145C000
   - Region sizes match SPRX disassembly exactly
 - **[3] sceAgcDriverNotifyDefaultStates()** — PASS
@@ -411,11 +412,13 @@ Submit model:
 - **[4] sceAgcDriverGetPaDebugInterfaceVersion()** — PASS
   - Returns the official FW 5.50 permission-stub value `0x8A6D0001`
   - SPRX disassembly confirms the export logs and returns without an ioctl
-- **[5] sceAgcDriverSubmitMultiDcbs(two marker DCBs)** — OPEN
-  - One earlier run wrote both ordered markers.
-  - Repeated final runs write only descriptor-zero marker `0xD001CAFE`; the
-    second remains zero even with explicit CPU cache-line invalidation.
-  - The ioctl returns `AGC_OK`, and later AGC operations continue to pass.
+- **[5] sceAgcDriverSubmitMultiDcbs(two marker DCBs)** — PASS
+  - Unique per-iteration markers proved that the final descriptor was deferred
+    until the next submit, not lost or blocked by PM4 contents or IB alignment.
+  - The Prospero backend appends a dedicated GPU-visible 16-dword NOP IB as a
+    harmless trailer, so every caller-provided descriptor executes immediately.
+  - Two immediate FW 5.50 deployments each passed three repeated two-DCB
+    submissions with unique ordered markers and zero polling delay.
 - **[6] sceAgcDriverSetupAsyncGraphics(1)** — PASS
   - Ioctl 0x80048126 with arg=1 succeeds
 - **[7] _sceAgcDriverCreateUserSpecialQueue()** — PASS (with credential bypass)
@@ -573,9 +576,15 @@ only the first GPU marker. The correct contract for related DCBs is one
 descriptor-array frame through `sceAgcDriverSubmitMultiCommandBuffersDirect`.
 Both `sceAgcDriverSubmitMultiDcbs` and
 `sceAgcDriverSubmitMultiCommandBuffers` now preserve the array through that
-path instead of looping over standalone submits. The public wrapper test wrote
-the ordered markers `0xD001CAFE` and `0xD002CAFE`, then completed async setup,
-queue operations, suspend submission, and workload begin/end without a freeze.
+path instead of looping over standalone submits. The FW 5.50 exploited-
+payload-context graphics ring defers the final descriptor in each nr=0x02
+submit until a later submit advances the ring. The Prospero backend therefore
+appends a dedicated GPU-visible NOP IB trailer after all caller DCB/ACB
+descriptors; the deferred descriptor is harmless and all caller work executes
+in the current frame. Two immediate public-wrapper deployments each completed
+three unique-marker iterations with zero polling delay, then completed async
+setup, queue operations, suspend submission, and workload begin/end without a
+freeze.
 Automatic per-submit `SUBMITDONE` synchronization is intentionally not used;
 it froze the console during workload completion. See
 `analysis/multi_dcb_submission_550.md`.

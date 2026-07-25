@@ -864,11 +864,13 @@ After interpolants pass, proceed in this order:
    zero components outside `[0,1]`, and a live completion marker. The 1:1
    RGBA8 preview was visually confirmed as a centered, smoothly textured
    equilateral triangle.
-7. Investigate nondeterministic multiple-DCB execution. The public wrappers
-   issue one descriptor-array submit and one hardware run wrote both ordered
-   markers, but repeated cache-correct FW 5.50 runs execute only descriptor
-   zero while the ioctl returns `AGC_OK`. Do not narrow the regression or mark
-   this complete until both descriptors execute reliably.
+7. ✅ Resolve repeated multiple-DCB execution. The public wrappers issue one
+   descriptor-array submit after the SPRX-confirmed nr=1 frame-state ioctl.
+   Unique-marker runs proved the FW 5.50 exploited-payload graphics ring defers
+   the final descriptor until the next submit. The Prospero backend now appends
+   a dedicated GPU-visible NOP IB trailer, making the deferred descriptor
+   harmless. Two immediate deployments each passed three repeated two-DCB
+   iterations with unique ordered markers and zero polling delay.
 8. Expand to tessellation, geometry shaders, Wave32 graphics, VRS, and ray
    tracing where supported by gfx1013 and the PS5 AGC ABI.
 9. ✅ Close PA-debug and FRAME_OPEN RE for FW 5.50. The PA-debug version

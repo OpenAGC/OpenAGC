@@ -369,55 +369,62 @@ int main(void) {
 
     for (uint32_t i = 0; i < 2; i++) {
         agcCbInit(&cb, cb_buffers[i], 0x1000u);
-        uint32_t *wd = agcCbAllocDwords(&cb, 5);
-        if (!wd) {
-            printf("    ERROR: failed to allocate WRITE_DATA packet %u\n", i);
-            return 1;
-        }
         uint64_t marker_addr = (uint64_t)(uintptr_t)&submit_markers[i];
-        wd[0] = agcPm4Header3(AGC_PM4_OP_WRITE_DATA, 5);
-        wd[1] = (2u << 0) | (1u << 8); /* dst=memory, write-confirm */
-        wd[2] = (uint32_t)marker_addr;
-        wd[3] = (uint32_t)(marker_addr >> 32);
-        wd[4] = expected_markers[i];
-        if (!sceAgcCbNop(&cb, 2)) {
-            printf("    ERROR: failed to allocate trailer NOP %u\n", i);
+        if (!sceAgcDcbWriteData(&cb, 2, 0, marker_addr,
+                                &expected_markers[i], 1, 1, 1)) {
+            printf("    ERROR: failed to allocate WRITE_DATA packet %u\n", i);
             return 1;
         }
         used_dwords[i] = agcCbUsedDwords(&cb);
         printf("    DCB[%u]: %u dwords at %p -> marker %p\n",
                i, used_dwords[i], (void *)cb_buffers[i],
                (const void *)&submit_markers[i]);
+        clflush((u_long)(uintptr_t)cb_buffers[i]);
     }
+    mfence();
 
     void *dcb_addresses[2] = { cb_buffers[0], cb_buffers[1] };
-    err = sceAgcDriverSubmitMultiDcbs(dcb_addresses, used_dwords, 2);
-    dcb_err = err;
-    printf("    batched submit: 0x%08X (%s)\n",
-           (unsigned)err, errstr(err));
-
-    uint32_t marker_wait_ms = 0;
-    while (marker_wait_ms < 5000u) {
+    dcb_err = AGC_OK;
+    for (uint32_t run = 0; run < 3; run++) {
+        uint32_t run_markers[2] = {
+            expected_markers[0] + run * 0x00010000u,
+            expected_markers[1] + run * 0x00010000u,
+        };
+        cb_buffers[0][4] = run_markers[0];
+        cb_buffers[1][4] = run_markers[1];
+        clflush((u_long)(uintptr_t)cb_buffers[0]);
+        clflush((u_long)(uintptr_t)cb_buffers[1]);
+        submit_markers[0] = 0;
+        submit_markers[1] = 0;
         clflush((u_long)(uintptr_t)submit_markers);
         mfence();
-        if (submit_markers[0] == expected_markers[0] &&
-            submit_markers[1] == expected_markers[1])
-            break;
-        usleep(50000);
-        marker_wait_ms += 50u;
+
+        err = sceAgcDriverSubmitMultiDcbs(dcb_addresses, used_dwords, 2);
+        printf("    run %u submit: 0x%08X (%s)\n",
+               run + 1, (unsigned)err, errstr(err));
+
+        uint32_t marker_wait_ms = 0;
+        while (marker_wait_ms < 5000u) {
+            clflush((u_long)(uintptr_t)submit_markers);
+            mfence();
+            if (submit_markers[0] == run_markers[0] &&
+                submit_markers[1] == run_markers[1])
+                break;
+            usleep(50000);
+            marker_wait_ms += 50u;
+        }
+        clflush((u_long)(uintptr_t)submit_markers);
+        mfence();
+        printf("    run %u markers after %u ms: [0]=0x%08X [1]=0x%08X\n",
+               run + 1, marker_wait_ms,
+               submit_markers[0], submit_markers[1]);
+        if (err != AGC_OK ||
+            submit_markers[0] != run_markers[0] ||
+            submit_markers[1] != run_markers[1])
+            dcb_err = AGC_ERROR_SUBMIT_FAILED;
     }
-    clflush((u_long)(uintptr_t)submit_markers);
-    mfence();
-    printf("    markers after %u ms: [0]=0x%08X [1]=0x%08X\n",
-           marker_wait_ms, submit_markers[0], submit_markers[1]);
-    if (dcb_err == AGC_OK &&
-        submit_markers[0] == expected_markers[0] &&
-        submit_markers[1] == expected_markers[1]) {
-        printf("    Batched DCB execution: PASS\n");
-    } else {
-        printf("    Batched DCB execution: FAIL\n");
-        dcb_err = AGC_ERROR_SUBMIT_FAILED;
-    }
+    printf("    Batched DCB execution: %s\n",
+           dcb_err == AGC_OK ? "PASS" : "FAIL");
 
     /* --- Step 6: Setup async graphics (needed before queue create) --- */
     printf("[6] sceAgcDriverSetupAsyncGraphics(1)...\n");

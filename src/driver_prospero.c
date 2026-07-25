@@ -53,6 +53,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <errno.h>
+#include <machine/cpufunc.h>
 
 #ifdef OPENAGC_PROSPERO
 
@@ -164,6 +165,7 @@ typedef struct {
     AgcProsperoRegion   cwsr;        /* SceGnmCwsr:      0x1000000 (16 MB) */
     AgcProsperoRegion   misc;        /* SceGnmMisc:      0x4000   (16 KB) */
     AgcProsperoRegion   acqrb;       /* SceGnmACQRB:     0x1E0000 (1920 KB) */
+    AgcProsperoRegion   multi_trailer; /* payload-context deferred-IB trailer */
     AgcProsperoRegion   primary_defaults;
     AgcProsperoRegion   internal_defaults;
 } AgcProsperoContext;
@@ -501,6 +503,7 @@ int32_t PS5_SYSV_ABI agcProsperoInitializeInternalMemory(void)
           AGC_FLEX_TYPE_GPU, "SceGnmCwsr" },
         { &g_prospero.misc,       0x4000,    AGC_FLEX_TYPE_GPU,  "SceGnmMisc"      },
         { &g_prospero.acqrb,      0x1E0000,  AGC_FLEX_TYPE_GPU,  "SceGnmACQRB"     },
+        { &g_prospero.multi_trailer, 0x4000, AGC_FLEX_TYPE_GPU,  "OpenAgcMultiTrailer" },
     };
 
     for (int i = 0; i < (int)(sizeof(regions) / sizeof(regions[0])); i++) {
@@ -520,6 +523,12 @@ int32_t PS5_SYSV_ABI agcProsperoInitializeInternalMemory(void)
         printf("OK (addr=%p)\n", regions[i].region->cpu_addr);
     }
 
+    uint32_t *trailer = (uint32_t *)g_prospero.multi_trailer.cpu_addr;
+    trailer[0] = agcPm4Header3(AGC_PM4_OP_NOP, 16);
+    memset(&trailer[1], 0, 15 * sizeof(*trailer));
+    clflush((u_long)(uintptr_t)trailer);
+    mfence();
+
     g_prospero.mem_initialized = true;
     return AGC_OK;
 }
@@ -531,11 +540,11 @@ int32_t PS5_SYSV_ABI agcProsperoInitializeInternalMemory(void)
 /*
  * Submit multiple command buffers (DCB + ACB) to the GPU.
  *
- * Builds CB descriptors for each DCB and ACB, then calls the submit
- * ioctl (nr=0x3b) to send them to the GPU via gc_submit_with_pid.
+ * Builds CB descriptors for each DCB and ACB, issues the FW 5.50 frame-state
+ * ioctl (nr=0x01), then submits the complete array with ioctl nr=0x02.
  *
  * The kernel path:
- *   gc_submit_with_pid → gc_frame_submit_internal
+ *   gc_submit_with_pid → common graphics-ring submit
  *     - validates num_cbs in [1, 0xFFF]
  *     - copyin CB array into ring buffer
  *     - per CB: checks header opcode, masks ib_base, ORs in VMID<<52
@@ -571,13 +580,18 @@ int32_t PS5_SYSV_ABI agcProsperoSubmitMultiCommandBuffersDirect(
     }
 
     uint32_t total_cbs = num_dcbs + num_acbs;
-    if (total_cbs == 0 || total_cbs > AGC_GC_NUM_CBS_MAX)
+    if (total_cbs == 0 || total_cbs >= AGC_GC_NUM_CBS_MAX)
         return AGC_ERROR_INVALID_ARGUMENT;
+    if (!g_prospero.mem_initialized ||
+        g_prospero.multi_trailer.gpu_addr == 0)
+        return AGC_ERROR_NOT_INITIALIZED;
 
     /* Build CB descriptor array on stack (max 0xFFF = 4095 CBs, but
      * practically we use a small stack array) */
-    AgcGcCommandBuffer cb_descs[64];
-    if (total_cbs > 64)
+    AgcGcCommandBuffer cb_desc_storage[65];
+    AgcGcCommandBuffer *cb_descs = (AgcGcCommandBuffer *)
+        (((uintptr_t)cb_desc_storage + 15u) & ~(uintptr_t)15u);
+    if (total_cbs > 63)
         return AGC_ERROR_INVALID_ARGUMENT;
 
     uint32_t cb_idx = 0;
@@ -620,11 +634,26 @@ int32_t PS5_SYSV_ABI agcProsperoSubmitMultiCommandBuffersDirect(
         cb_idx++;
     }
 
+    /* In the FW 5.50 exploited-payload context, the graphics ring defers the
+     * final descriptor until the next submit. Append a harmless GPU-visible
+     * NOP IB so every caller-provided DCB/ACB executes in the current frame. */
+    agcProsperoBuildCbDescriptor(&cb_descs[cb_idx],
+        g_prospero.multi_trailer.gpu_addr, 16, false);
+    cb_idx++;
+
     /* Build submit ioctl arg */
     AgcGcSubmitArgs submit_arg = {0};
     submit_arg.queue_type = 3;  /* 3 = graphics queue (SPRX-confirmed) */
-    submit_arg.num_cbs = total_cbs;
+    submit_arg.num_cbs = cb_idx;
     submit_arg.cb_array = (uint64_t)(uintptr_t)cb_descs;
+
+    /* FW 5.50 sceAgcDriverSubmitMultiDcbs issues this 8-byte frame-state
+     * ioctl with queue type 3 immediately before submitting the descriptor
+     * array. The single-DCB path does not use it. */
+    uint32_t frame_arg[2] = {3u, 0u};
+    int frame_ret = agcProsperoIoctl(AGC_GC_IOCTL_CLOSE, frame_arg);
+    if (frame_ret < 0)
+        return AGC_ERROR_SUBMIT_FAILED;
 
     int ret = agcProsperoIoctl(AGC_GC_IOCTL_SUBMIT_16, &submit_arg);
     if (ret < 0)
