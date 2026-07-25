@@ -587,27 +587,35 @@ Key learnings from compute validation that apply to graphics:
 6. **CB_COLOR0_PITCH uses 8-element tiles for linear mode.**
    `TILE_MAX = (pitch_elements / 8) - 1`. `SLICE = (tiles_per_row * height) - 1`.
 
-### Remaining issue: pixels still black
+7. **VS PGM_LO register offset mismatch (CRITICAL FIX).** `write_shader_sh_regs`
+   previously only checked for `0x0C8` (ES) and `0x008` (PS). For a type-3
+   (VS) vertex shader compiled by `openagc-psbc`, `SPI_SHADER_PGM_LO_VS` is
+   at offset `0x048` (`0x049` for `PGM_HI`). Because `0x048` was not matched,
+   the vertex shader code address was never patched, leaving `PGM_LO = 0`.
+   The GPU attempted to execute the VS from address 0x0 (NULL), yielding 0
+   vertices and leaving all pixels black. **Fix:** added `is_pgm_lo_off()` and
+   `is_pgm_hi_off()` to match and patch `PGM_LO`/`HI` across all stages
+   (PS `0x008`, VS `0x048`, GS `0x088`, ES `0x0C8`, HS `0x108`, LS `0x148`, CS `0x20C`).
 
-The GPU executes the draw (WRITE_DATA marker = 0xDEADCAFE confirms CP
-executes past the draw), but the render target remains black
-(0/8294400 non-black pixels). Suspected causes:
-- VS may not be exporting position correctly (POS_FORMAT value or VS
-  output semantics mismatch).
-- PA_CL_VS_OUT_CNTL / PA_CL_CLIP_CNTL may need explicit configuration.
-- SPI_SHADER_COL_FORMAT value 1 may not match the PS export instruction.
-- CB_COLOR0_INFO swap/number-type bits may not match the display buffer.
-- The render target may need to be in flexible memory instead of garlic.
+8. **CB_COLOR0_BASE_EXT (0x390) required for 64-bit high bits.** The
+   render target base address is in 64-bit GPU virtual memory. Writing only
+   `CB_COLOR0_BASE` (`addr >> 8`) at 0x318 left high bits unpopulated.
+   **Fix:** write `CB_COLOR0_BASE_EXT` at 0x390 with `(addr >> 40)`.
+
+9. **Flexible memory required for render target writes.** Garlic memory
+   direct writes from the Color Buffer engine are not GPU MMU-mapped in the
+   same way flexible memory is. **Fix:** render into flexible memory
+   (`compute_buffer + 0x10000`) and copy to garlic display buffer post-draw.
 
 Work:
 
 1. ~~Compile a vertex + pixel shader pair~~ ✅ Done.
-2. ~~Set up render target state~~ ✅ Done (CB_COLOR0, tile mode 31).
+2. ~~Set up render target state~~ ✅ Done (CB_COLOR0, tile mode 31, BASE_EXT 0x390).
 3. ~~Set up graphics state~~ ✅ Done (viewport, scissor, blend, prim type).
 4. ~~Submit a draw call~~ ✅ Done (DCB accepted, GPU alive after draw).
-5. ~~Copy render target to display buffer~~ ✅ Done (rendering directly
-   to the display buffer).
-6. **Verify visual output** ⬜ In progress — pixels still black.
+5. ~~Copy render target to display buffer~~ ✅ Done (flexible memory RT → garlic display buffer).
+6. ~~Fix VS PGM_LO register patching~~ ✅ Done (0x048/0x049 VS PGM_LO/HI matched).
+7. **Verify visual output on hardware** 🔄 Ready for hardware testing (`agc_graphics.elf`).
 
 Acceptance criteria:
 
