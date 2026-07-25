@@ -413,7 +413,7 @@ static void apply_sh_defaults_graphics(SceAgcCb *cb) {
         if (pgroups[i].space == kAgcRegisterDefaultSpaceSh && pgroups[i].register_count > 0) {
             for (uint32_t j = 0; j < pgroups[i].register_count; j++) {
                 sceAgcCbSetShRegistersDirect(cb,
-                    &pgroups[i].registers[j], 1);
+                    (const AgcRegisterValue *)&pgroups[i].registers[j], 1);
                 applied++;
             }
         }
@@ -423,7 +423,7 @@ static void apply_sh_defaults_graphics(SceAgcCb *cb) {
         if (igroups[i].space == kAgcRegisterDefaultSpaceSh && igroups[i].register_count > 0) {
             for (uint32_t j = 0; j < igroups[i].register_count; j++) {
                 sceAgcCbSetShRegistersDirect(cb,
-                    &igroups[i].registers[j], 1);
+                    (const AgcRegisterValue *)&igroups[i].registers[j], 1);
                 applied++;
             }
         }
@@ -442,7 +442,7 @@ static void apply_cx_defaults(SceAgcCb *cb) {
         if (pgroups[i].space == kAgcRegisterDefaultSpaceCx && pgroups[i].register_count > 0) {
             for (uint32_t j = 0; j < pgroups[i].register_count; j++) {
                 sceAgcCbSetCxRegistersDirect(cb,
-                    &pgroups[i].registers[j], 1);
+                    (const AgcRegisterValue *)&pgroups[i].registers[j], 1);
                 applied++;
             }
         }
@@ -452,12 +452,25 @@ static void apply_cx_defaults(SceAgcCb *cb) {
         if (igroups[i].space == kAgcRegisterDefaultSpaceCx && igroups[i].register_count > 0) {
             for (uint32_t j = 0; j < igroups[i].register_count; j++) {
                 sceAgcCbSetCxRegistersDirect(cb,
-                    &igroups[i].registers[j], 1);
+                    (const AgcRegisterValue *)&igroups[i].registers[j], 1);
                 applied++;
             }
         }
     }
     printf("[Dispatch] Applied %u CX register defaults (individual)\n", applied);
+}
+
+/* Helper to identify PGM_LO and PGM_HI register offsets across all stages:
+ * PS: 0x008, VS: 0x048, GS: 0x088, ES: 0x0C8, HS: 0x108, LS: 0x148, CS: 0x20C
+ */
+static bool is_pgm_lo_off(uint32_t off) {
+    return off == 0x008 || off == 0x048 || off == 0x088 ||
+           off == 0x0C8 || off == 0x108 || off == 0x148 || off == 0x20C;
+}
+
+static bool is_pgm_hi_off(uint32_t off) {
+    return off == 0x009 || off == 0x049 || off == 0x089 ||
+           off == 0x0C9 || off == 0x109 || off == 0x149 || off == 0x20D;
 }
 
 /* Write shader SH registers (PGM_LO/HI patched with code address) */
@@ -473,20 +486,21 @@ static void write_shader_sh_regs(SceAgcCb *cb,
     bool found_lo = false, found_hi = false;
     for (uint32_t i = 0; i < shader->num_sh_regs; i++) {
         uint32_t off = shader->sh_regs[i].offset;
-        /* PGM_LO is the first register with value 0 that's at a PGM_LO offset */
-        if (!found_lo) {
-            /* VS uses ES: 0x0C8, PS uses 0x008 */
-            if (off == 0x0C8 || off == 0x008) {
-                pgm_lo_off = off;
-                found_lo = true;
-            }
+        if (!found_lo && is_pgm_lo_off(off)) {
+            pgm_lo_off = off;
+            found_lo = true;
         }
-        if (!found_hi) {
-            if (off == 0x0C9 || off == 0x009) {
-                pgm_hi_off = off;
-                found_hi = true;
-            }
+        if (!found_hi && is_pgm_hi_off(off)) {
+            pgm_hi_off = off;
+            found_hi = true;
         }
+    }
+
+    if (found_lo) {
+        printf("[Shader] Patched PGM_LO (0x%03X) = 0x%08X (code %p)\n",
+               pgm_lo_off, pgm_lo_val, code_addr);
+    } else {
+        printf("[Shader] WARNING: PGM_LO not found in shader SH registers!\n");
     }
 
     /* Write all SH registers, patching PGM_LO/HI values */
@@ -498,9 +512,7 @@ static void write_shader_sh_regs(SceAgcCb *cb,
         if (found_hi && off == pgm_hi_off) val = pgm_hi_val;
 
         AgcRegisterValue reg = { off, val };
-        uint32_t *cmd = sceAgcCbSetShRegistersDirect(cb, &reg, 1);
-        /* Graphics: bit 0 = 0 (no need to set it) */
-        (void)cmd;
+        sceAgcCbSetShRegistersDirect(cb, &reg, 1);
     }
 }
 
@@ -581,8 +593,14 @@ static void setup_render_target(SceAgcCb *cb, void *rt_addr,
             cmd[2 + i] = rt_regs[i];
         }
     }
-    printf("[RT] CB_COLOR0_BASE=0x%08x PITCH=0x%08x SLICE=0x%08x INFO=0x%08x ATTRIB=0x%08x\n",
-           rt_regs[0], rt_regs[1], rt_regs[2], rt_regs[4], rt_regs[5]);
+
+    /* CRITICAL: Set CB_COLOR0_BASE_EXT (0x390 CX space) for 64-bit high bits! */
+    AgcRegisterValue base_ext = { AGC_REG_CB_COLOR0_BASE_EXT,
+                                  (uint32_t)((uintptr_t)rt_addr >> 40) };
+    sceAgcCbSetCxRegistersDirect(cb, &base_ext, 1);
+
+    printf("[RT] CB_COLOR0_BASE=0x%08x EXT=0x%08x PITCH=0x%08x SLICE=0x%08x INFO=0x%08x ATTRIB=0x%08x\n",
+           rt_regs[0], base_ext.value, rt_regs[1], rt_regs[2], rt_regs[4], rt_regs[5]);
 }
 
 /* Set up viewport (scale + offset + zmin/zmax) */
@@ -674,13 +692,13 @@ static bool dispatch_graphics(GraphicsTest *test,
     printf("VS code at %p (%zu bytes)\n", vs_code, vs->code_size);
     printf("PS code at %p (%zu bytes)\n", ps_code, ps->code_size);
 
-    /* Render directly to display buffer 0 (garlic memory).
-     * This eliminates the need for a separate render target + copy step.
-     * The CB hardware can write to garlic memory directly. */
-    void *rt_addr = test->buffers[0];
-    printf("Render target (display buffer 0) at %p (garlic)\n", rt_addr);
+    /* Render to flexible memory (GPU MMU-mapped).
+     * The Color Buffer hardware writes to flexible memory reliably.
+     * CPU will copy from flexible memory to garlic display buffer after draw. */
+    void *rt_addr = (uint8_t *)test->compute_buffer + 0x10000;
+    printf("Render target at %p (flexible memory)\n", rt_addr);
 
-    /* Clear display buffer to black (CPU fill) */
+    /* Clear render target to black (CPU fill) */
     uint32_t *rt = (uint32_t *)rt_addr;
     for (uint32_t i = 0; i < test->width * test->height; i++) {
         rt[i] = 0xFF000000;  /* black with full alpha */
@@ -704,7 +722,7 @@ static bool dispatch_graphics(GraphicsTest *test,
     apply_sh_defaults_graphics(&cb);
     apply_cx_defaults(&cb);
 
-    /* 2. Set up render target (directly in display buffer) */
+    /* 2. Set up render target */
     setup_render_target(&cb, rt_addr, test->width, test->height);
 
     /* 2b. Explicitly disable depth buffer (DB_Z_INFO = 0) */
@@ -798,23 +816,26 @@ static bool dispatch_graphics(GraphicsTest *test,
     uint32_t *marker = (uint32_t *)((uintptr_t)cb_buffer + 0x1000);
     printf("[Marker] WRITE_DATA marker = 0x%08x (expected 0xDEADCAFE)\n", *marker);
 
-    /* Verify pixels — since we rendered directly to the display buffer,
-     * no copy is needed. */
-    uint32_t *buf0 = (uint32_t *)test->buffers[0];
-    printf("[Readback] Sample pixels from display buffer:\n");
+    /* Verify pixels in flexible render target */
+    uint32_t *rt_buf = (uint32_t *)rt_addr;
+    printf("[Readback] Sample pixels from flexible render target:\n");
     uint32_t sample_indices[] = {0, 1, 100, 1000, 1920, 10000, 100000, 500000, 1000000, 2073599};
     for (int i = 0; i < (int)(sizeof(sample_indices)/sizeof(sample_indices[0])); i++) {
         uint32_t idx = sample_indices[i];
         if (idx >= test->width * test->height) continue;
-        printf("  pixel[%u] = 0x%08x\n", idx, buf0[idx]);
+        printf("  pixel[%u] = 0x%08x\n", idx, rt_buf[idx]);
     }
 
     /* Count non-black pixels to see if GPU rendered anything */
     uint32_t non_black = 0;
     for (uint32_t i = 0; i < test->width * test->height; i++) {
-        if (buf0[i] != 0xFF000000) non_black++;
+        if (rt_buf[i] != 0xFF000000) non_black++;
     }
     printf("[Readback] Non-black pixels: %u / %u\n", non_black, test->width * test->height);
+
+    /* Copy rendered image from flexible memory to garlic display buffer */
+    memcpy(test->buffers[0], rt_addr, test->width * test->height * 4);
+    printf("[Copy] Copied flexible render target to garlic display buffer 0\n");
 
     return true;
 }
