@@ -28,6 +28,7 @@
 #include "agc_context.h"
 #include "agc_registers.h"
 #include "agc_shader.h"
+#include "agc_texture.h"
 #include "agc_cb.h"
 #include "agc_pm4.h"
 #include "agc_error.h"
@@ -91,10 +92,38 @@ int sceKernelWaitEqueue(SceKernelEqueue equeue, SceKernelEvent *events,
 #define DIRECT_MEMORY_ALIGNMENT  0x200000  /* 2MB */
 #define PS5_DIRECT_MEM_SEARCH_END  0x1000000000ULL
 
-#define CB_BUFFER_DWORDS   16384
+#define DCB_CAPACITY_BYTES 0x4000u
+#define DCB_MAPPING_BYTES  0x10000u
+#define DCB_SECOND_OFFSET  0x8000u
+#define VERTEX_DATA_OFFSET 0x8000u
+#define VERTEX_DESC_OFFSET 0x9000u
+#define INDEX_DATA_OFFSET  0xA000u
+#define TEXTURE_DATA_OFFSET 0xB000u
+#define TEXTURE_DESC_OFFSET 0xC000u
+#define INDEX_TYPE_16      0u
+
+#define TEXTURE_WIDTH       2u
+#define TEXTURE_HEIGHT      2u
+#define GFX10_FORMAT_RGBA8_UNORM 56u
+#define GFX10_SQ_RSRC_IMG_2D     9u
+#define DIAGNOSTIC_CLEAR_COLOR    0xFF202020u
+#define FP16_TARGET_WIDTH          1536u
+#define FP16_TARGET_HEIGHT         1536u
+#define FP16_PREVIEW_SCALE         1u
+#define FP16_CLEAR_SENTINEL        UINT64_C(0x3555355535553555)
+
+#ifndef AGC_VALIDATE_RGBA8_REFERENCE
+#define AGC_VALIDATE_RGBA8_REFERENCE 0
+#endif
+
+/* RADV's static GFX10 VBO descriptor word 3: identity DST_SEL,
+ * FORMAT=32_UINT, RESOURCE_LEVEL=1, OOB_SELECT=structured. Attribute formats
+ * and byte offsets are encoded in the shader's typed buffer loads. */
+#define GFX10_VBO_DESC_WORD3 0x11014FACu
 
 /* CB_COLOR0_INFO format values (AMD surface format enum) */
 #define COLOR_8_8_8_8              0x0Au
+#define COLOR_16_16_16_16          0x0Cu
 
 /* CB_COLOR0_INFO bit fields */
 #define CB_INFO_FORMAT(f)      ((f) << AGC_REG_CB_COLOR0_INFO_FORMAT_SHIFT)
@@ -103,6 +132,7 @@ int sceKernelWaitEqueue(SceKernelEqueue equeue, SceKernelEvent *events,
 
 /* GnmSurfaceNumber: 0=unsigned norm, 1=signed norm, ... */
 #define SURF_NUMBER_UNORM      0
+#define SURF_NUMBER_FLOAT      7
 /* GnmSurfaceSwap: 0=standard (RGBA), 1=alt (BGRA) */
 #define SURF_SWAP_STD          0
 #define SURF_SWAP_ALT          1
@@ -120,6 +150,14 @@ int sceKernelWaitEqueue(SceKernelEqueue equeue, SceKernelEvent *events,
 /* ======================================================================== */
 /* Types                                                                     */
 /* ======================================================================== */
+
+typedef struct {
+    float position[2];
+    float color[3];
+} GraphicsVertex;
+
+_Static_assert(sizeof(GraphicsVertex) == 20,
+    "interleaved graphics vertex must have a 20-byte stride");
 
 typedef struct {
     int32_t handle;
@@ -151,6 +189,17 @@ typedef struct {
     const AgcShaderSemantic *output_semantics;
     uint32_t num_output_semantics;
 } ParsedGraphicsShader;
+
+typedef struct {
+    void *address;
+    uint32_t width;
+    uint32_t height;
+    uint32_t color_format;
+    uint32_t number_type;
+    uint32_t component_swap;
+    bool fp16;
+    const char *name;
+} RenderTargetConfig;
 
 /* ======================================================================== */
 /* VideoOut linear tiling patch                                              */
@@ -231,7 +280,7 @@ static bool allocate_display_buffers(GraphicsTest *test) {
     }
 
     /* Allocate flexible memory for command buffer + render target + shader code */
-    size_t cb_size = CB_BUFFER_DWORDS * 4;  /* 64KB for CB */
+    size_t cb_size = DCB_MAPPING_BYTES;  /* two distinct DCB regions */
     void *cb_addr = NULL;
     int cb_ret = sceKernelMapNamedSystemFlexibleMemory(
         &cb_addr, cb_size, 0x33, 0, "agc_graphics_cb");
@@ -643,7 +692,10 @@ static void write_shader_cx_regs(SceAgcCb *cb,
 
 /* Set up render target (CB_COLOR0 registers, 14 contiguous dwords) */
 static void setup_render_target(SceAgcCb *cb, void *rt_addr,
-                                 uint32_t width, uint32_t height) {
+                                 uint32_t width, uint32_t height,
+                                 uint32_t color_format,
+                                 uint32_t number_type,
+                                 uint32_t component_swap) {
     /* Build the 14-dword CB_COLOR0 register block.
      * Registers 0x318-0x325 (14 contiguous CX registers):
      *   0x318: BASE      0x319: PITCH     0x31A: SLICE
@@ -672,13 +724,12 @@ static void setup_render_target(SceAgcCb *cb, void *rt_addr,
     /* reg 3: CB_COLOR0_VIEW — no slice view */
     rt_regs[3] = 0;
 
-    /* reg 4: CB_COLOR0_INFO — format + number type + swap
-     * Format = COLOR_8_8_8_8 (0x02) at bits [6:2]
-     * Number type = UNORM (0) at bits [10:8]
-     * Swap = ALT (1) at bits [12:11] to match A8B8G8R8 display buffer */
-    rt_regs[4] = CB_INFO_FORMAT(COLOR_8_8_8_8) |
-                 CB_INFO_NUM_TYPE(SURF_NUMBER_UNORM) |
-                 CB_INFO_SWAP(SURF_SWAP_ALT) |
+    /* reg 4: CB_COLOR0_INFO — caller-selected format, number type, and
+     * component swap. RGBA8 display memory uses ALT; the offscreen FP16
+     * surface uses standard RGBA ordering. */
+    rt_regs[4] = CB_INFO_FORMAT(color_format) |
+                 CB_INFO_NUM_TYPE(number_type) |
+                 CB_INFO_SWAP(component_swap) |
                  (1u << 16);  /* CB_INFO_BLEND_BYPASS: bypass blend state */
 
     /* reg 5: CB_COLOR0_ATTRIB — tile mode + num_samples + num_fragments
@@ -923,7 +974,8 @@ static void dump_launch_registers(const uint32_t *dcb, uint32_t dword_count)
 static bool dispatch_graphics(GraphicsTest *test,
                                const ParsedGraphicsShader *front,
                                const ParsedGraphicsShader *back,
-                               const ParsedGraphicsShader *ps) {
+                               const ParsedGraphicsShader *ps,
+                               const RenderTargetConfig *target) {
 #ifndef AGC_NGG_ENTRY_PROBE
 #define AGC_NGG_ENTRY_PROBE 0
 #endif
@@ -975,19 +1027,134 @@ static bool dispatch_graphics(GraphicsTest *test,
     ngg.sh_regs = fused_regs;
     ngg.num_sh_regs = fused_record.num_sh_registers;
 
-    /* Color-buffer traffic uses the registered garlic display surface. */
-    void *rt_addr = test->buffers[0];
-    printf("Render target at %p (garlic display buffer 0)\n", rt_addr);
+    void *rt_addr = target->address;
+    printf("Render target %s at %p (%ux%u, %s)\n",
+           target->name, rt_addr, target->width, target->height,
+           target->fp16 ? "RGBA16_FLOAT" : "RGBA8_UNORM");
 
-    /* Use a diagnostic sentinel so even a black shader write is detectable. */
-    uint32_t *rt = (uint32_t *)rt_addr;
-    for (uint32_t i = 0; i < test->width * test->height; i++) {
-        rt[i] = 0xFF00FF00u;
+    /* Use a diagnostic sentinel absent from the texture so every rasterized
+     * pixel contributes to the exact indexed-triangle coverage count. */
+    const uint32_t target_pixels = target->width * target->height;
+    if (target->fp16) {
+        uint64_t *rt = (uint64_t *)rt_addr;
+        for (uint32_t i = 0; i < target_pixels; i++)
+            rt[i] = FP16_CLEAR_SENTINEL;
+    } else {
+        uint32_t *rt = (uint32_t *)rt_addr;
+        for (uint32_t i = 0; i < target_pixels; i++)
+            rt[i] = DIAGNOSTIC_CLEAR_COLOR;
     }
+
+    /* Upload one interleaved binding: float2 position + float3 color. The
+     * compiler uses a single static binding descriptor for both attributes. */
+    static const GraphicsVertex vertices[4] = {
+        /* Deliberate decoy: indexed draw must skip vertex 0. */
+        {{ 2.0f,  2.0f}, {1.0f, 0.0f, 1.0f}},
+        {{-0.5f, -0.4330127f}, {1.0f, 0.0f, 0.0f}},
+        {{ 0.5f, -0.4330127f}, {0.0f, 1.0f, 0.0f}},
+        {{ 0.0f,  0.4330127f}, {0.0f, 0.0f, 1.0f}},
+    };
+    static const uint16_t indices[3] = {1, 2, 3};
+    GraphicsVertex *gpu_vertices = (GraphicsVertex *)
+        ((uint8_t *)test->compute_buffer + VERTEX_DATA_OFFSET);
+    uint32_t *vertex_desc = (uint32_t *)
+        ((uint8_t *)test->compute_buffer + VERTEX_DESC_OFFSET);
+    uint16_t *gpu_indices = (uint16_t *)
+        ((uint8_t *)test->compute_buffer + INDEX_DATA_OFFSET);
+    uint32_t *gpu_texture = (uint32_t *)
+        ((uint8_t *)test->compute_buffer + TEXTURE_DATA_OFFSET);
+    uint32_t *texture_desc = (uint32_t *)
+        ((uint8_t *)test->compute_buffer + TEXTURE_DESC_OFFSET);
+    memcpy(gpu_vertices, vertices, sizeof(vertices));
+    memcpy(gpu_indices, indices, sizeof(indices));
+    /* RGBA8 texels: red, green / blue, white. Bilinear sampling produces a
+     * visibly distinct two-dimensional gradient inside the triangle. */
+    static const uint32_t texture_pixels[4] = {
+        0xFF0000FFu, 0xFF00FF00u,
+        0xFFFF0000u, 0xFFFFFFFFu,
+    };
+    memcpy(gpu_texture, texture_pixels, sizeof(texture_pixels));
+    const uintptr_t vertex_addr = (uintptr_t)gpu_vertices;
+    vertex_desc[0] = (uint32_t)vertex_addr;
+    vertex_desc[1] = (uint32_t)(vertex_addr >> 32) |
+                     ((uint32_t)sizeof(GraphicsVertex) << 16);
+    vertex_desc[2] = 4u;
+    vertex_desc[3] = GFX10_VBO_DESC_WORD3;
+
+    /* RADV combined-image-sampler layout for set 0, binding 0:
+     * image resource at dwords 0..7, sampler at dwords 8..11, 64-byte stride.
+     * These are GFX10.3 SQ_IMG_RSRC fields; RESOURCE_LEVEL must be one. */
+    memset(texture_desc, 0, 64u);
+    const uintptr_t texture_addr = (uintptr_t)gpu_texture;
+    const uint32_t tex_width_m1 = TEXTURE_WIDTH - 1u;
+    texture_desc[0] = (uint32_t)(texture_addr >> 8);
+    texture_desc[1] = ((uint32_t)(texture_addr >> 40) & 0xffu) |
+                      (GFX10_FORMAT_RGBA8_UNORM << 20) |
+                      ((tex_width_m1 & 0x3u) << 30);
+    texture_desc[2] = ((tex_width_m1 >> 2) & 0xfffu) |
+                      ((TEXTURE_HEIGHT - 1u) << 14) |
+                      (1u << 31);
+    texture_desc[3] = (4u << 0) | (5u << 3) | (6u << 6) | (7u << 9) |
+                      (GFX10_SQ_RSRC_IMG_2D << 28);
+    AgcSamplerDescriptor sampler;
+    agcSamplerDescriptorInit(&sampler);
+    agcSamplerDescriptorSetClampMode(
+        &sampler, kAgcClampClamp, kAgcClampClamp, kAgcClampClamp);
+    agcSamplerDescriptorSetFilterMode(
+        &sampler, kAgcFilterBilinear, kAgcFilterBilinear,
+        kAgcMipFilterNone);
+    memcpy(&texture_desc[8], sampler.words, sizeof(sampler.words));
+
+    uint32_t vertex_table_reg = 0;
+    bool found_vertex_table_reg = false;
+    for (uint32_t i = 0; i < ngg.num_sh_regs; i++) {
+        if (ngg.sh_regs[i].value ==
+                OPENAGC_VERTEX_BUFFER_TABLE_PLACEHOLDER) {
+            vertex_table_reg = ngg.sh_regs[i].offset;
+            found_vertex_table_reg = true;
+            break;
+        }
+    }
+    if (!found_vertex_table_reg) {
+        printf("[Vertex] shader record has no VBO descriptor-table SGPR\n");
+        return false;
+    }
+    printf("[Vertex] data=%p stride=%zu records=4 table=%p sh_reg=0x%03x\n",
+           gpu_vertices, sizeof(GraphicsVertex), vertex_desc,
+           vertex_table_reg);
+    printf("[Vertex] descriptor=%08x %08x %08x %08x\n",
+           vertex_desc[0], vertex_desc[1], vertex_desc[2], vertex_desc[3]);
+    printf("[Index] data=%p type=u16 count=3 values={%u,%u,%u}\n",
+           gpu_indices, indices[0], indices[1], indices[2]);
+    uint32_t texture_table_reg = 0;
+    bool found_texture_table_reg = false;
+    for (uint32_t i = 0; i < ps->num_sh_regs; i++) {
+        if (ps->sh_regs[i].value ==
+                OPENAGC_DESCRIPTOR_SET_PLACEHOLDER(0)) {
+            texture_table_reg = ps->sh_regs[i].offset;
+            found_texture_table_reg = true;
+            break;
+        }
+    }
+    if (!found_texture_table_reg) {
+        printf("[Texture] PS record has no descriptor-set-0 SGPR\n");
+        return false;
+    }
+    printf("[Texture] data=%p 2x2 RGBA8 table=%p sh_reg=0x%03x\n",
+           gpu_texture, texture_desc, texture_table_reg);
+    printf("[Texture] image=%08x %08x %08x %08x sampler=%08x %08x %08x %08x\n",
+           texture_desc[0], texture_desc[1], texture_desc[2], texture_desc[3],
+           texture_desc[8], texture_desc[9], texture_desc[10], texture_desc[11]);
+
+    /* Use a distinct command-buffer address for each hardware submission.
+     * Reusing the first IB address immediately can leave the second direct
+     * submit indistinguishable from the prior work in the native queue. */
+    uint32_t *dispatch_cb = (uint32_t *)((uint8_t *)cb_buffer +
+        (target->fp16 ? DCB_SECOND_OFFSET : 0u));
 
     /* Build DCB */
     SceAgcCb cb;
-    agcCbInit(&cb, cb_buffer, CB_BUFFER_DWORDS);
+    agcCbInit(&cb, dispatch_cb, DCB_CAPACITY_BYTES);
 
     /* 0. CONTEXT_CONTROL — notify CP to load context state.
      * Same as compute sample: opcode 0x28, 3 dwords. */
@@ -1014,14 +1181,16 @@ static bool dispatch_graphics(GraphicsTest *test,
     apply_uc_defaults(&cb);
 
     /* 2. Set up render target */
-    setup_render_target(&cb, rt_addr, test->width, test->height);
+    setup_render_target(&cb, rt_addr, target->width, target->height,
+                        target->color_format, target->number_type,
+                        target->component_swap);
 
     /* 2b. Disable depth-buffer state after applying the shader CX block. */
     /* (moved to after PS CX registers below) */
 
     /* 3. Set up viewport, scissor, target mask */
-    setup_viewport(&cb, test->width, test->height);
-    setup_scissor(&cb, test->width, test->height);
+    setup_viewport(&cb, target->width, target->height);
+    setup_scissor(&cb, target->width, target->height);
     setup_target_mask(&cb);
     AgcRegisterValue ia_multi_vgt = {0x2aa, 0x0070007fu};
     sceAgcCbSetCxRegistersDirect(&cb, &ia_multi_vgt, 1);
@@ -1057,6 +1226,10 @@ static bool dispatch_graphics(GraphicsTest *test,
      * remains a state-container program address. */
     write_shader_sh_regs(&cb, &ngg, back_code);
     write_shader_cx_regs(&cb, &ngg);
+    AgcRegisterValue vertex_table = {
+        vertex_table_reg, (uint32_t)(uintptr_t)vertex_desc
+    };
+    sceAgcCbSetShRegistersDirect(&cb, &vertex_table, 1);
     volatile uint32_t *shader_marker =
         (volatile uint32_t *)test->buffers[1];
     *shader_marker = 0;
@@ -1076,6 +1249,10 @@ static bool dispatch_graphics(GraphicsTest *test,
     /* 6. Write PS shader SH + CX registers */
     write_shader_sh_regs(&cb, ps, ps_code);
     write_shader_cx_regs(&cb, ps);
+    const AgcRegisterValue texture_table = {
+        texture_table_reg, (uint32_t)(uintptr_t)texture_desc
+    };
+    sceAgcCbSetShRegistersDirect(&cb, &texture_table, 1);
 
     /* 6b. Disable depth/stencil buffer state after the shader CX block, but
      * preserve the compiler's DB_SHADER_CONTROL=0x10 rasterization mode. */
@@ -1103,16 +1280,25 @@ static bool dispatch_graphics(GraphicsTest *test,
     };
     sceAgcCbSetCxRegistersDirect(&cb, &sc_mode, 1);
 
-    /* 7. Draw one instance with IT_DRAW_INDEX_AUTO. The draw packet does
-     * not carry an instance count; the firmware default is zero. */
+    /* 7. Bind a 16-bit index buffer and draw indices {1,2,3}. Vertex 0 is a
+     * decoy outside the intended triangle, so matching the known coverage
+     * proves that the CP used the bound index buffer. */
     sceAgcDcbSetNumInstances(&cb, 1);
     printf("[Draw] NumInstances(1)\n");
-    sceAgcDcbDrawIndexAuto(&cb, 3, 0);
-    printf("[Draw] DrawIndexAuto(3)\n");
+    if (!sceAgcDcbSetIndexSize(&cb, INDEX_TYPE_16, 0) ||
+        !sceAgcDcbSetIndexBuffer(
+            &cb, (uint64_t)(uintptr_t)gpu_indices, 3) ||
+        !sceAgcDcbDrawIndexOffset(&cb, 0, 3, 0)) {
+        printf("[Draw] indexed packet allocation failed\n");
+        return false;
+    }
+    printf("[Draw] IndexType(u16), IndexBuffer(%p, 3), "
+           "DrawIndexOffset(0, 3)\n", gpu_indices);
 
-    /* 8b. WRITE_DATA marker — verify GPU is alive after draw.
-     * Write a marker value to CB_BUFFER + 0x1000 (flexible memory). */
-    uint64_t marker_target = (uint64_t)(uintptr_t)cb_buffer + 0x1000;
+    /* 8b. WRITE_DATA marker — verify GPU is alive after draw. Keep it near
+     * the end of this 32 KiB allocation, outside the active command stream. */
+    uint64_t marker_target =
+        (uint64_t)(uintptr_t)dispatch_cb + 0x7000u;
     uint32_t *wd = agcCbAllocDwords(&cb, 5);
     if (wd) {
         wd[0] = agcPm4Header3(AGC_PM4_OP_WRITE_DATA, 5);
@@ -1139,11 +1325,11 @@ static bool dispatch_graphics(GraphicsTest *test,
 
     /* Submit DCB */
     AgcCommandBufferSubmit submit;
-    submit.command_address = (uintptr_t)cb_buffer;
+    submit.command_address = (uintptr_t)dispatch_cb;
     submit.dword_count = agcCbUsedDwords(&cb);
     submit.reserved = 0;
 
-    dump_launch_registers(cb_buffer, submit.dword_count);
+    dump_launch_registers(dispatch_cb, submit.dword_count);
 
     printf("[Draw] DCB: %u dwords, submitting...\n", submit.dword_count);
     int32_t err = sceAgcDriverSubmitDcb(&submit);
@@ -1155,31 +1341,152 @@ static bool dispatch_graphics(GraphicsTest *test,
     sceKernelUsleep(200000);
 
     /* Check WRITE_DATA marker — if present, GPU is alive after draw */
-    uint32_t *marker = (uint32_t *)((uintptr_t)cb_buffer + 0x1000);
+    uint32_t *marker = (uint32_t *)(uintptr_t)marker_target;
     printf("[Marker] WRITE_DATA marker = 0x%08x (expected 0xDEADCAFE)\n", *marker);
     if (use_entry_probe) {
         printf("[Marker] NGG front entry marker = 0x%08x "
                "(expected 0x4E474721)\n", *shader_marker);
     }
 
-    /* Verify pixels in the garlic render target. */
-    uint32_t *rt_buf = (uint32_t *)rt_addr;
-    printf("[Readback] Sample pixels from garlic render target:\n");
-    uint32_t sample_indices[] = {0, 1, 100, 1000, 1920, 10000, 100000, 500000, 1000000, 2073599};
-    for (int i = 0; i < (int)(sizeof(sample_indices)/sizeof(sample_indices[0])); i++) {
-        uint32_t idx = sample_indices[i];
-        if (idx >= test->width * test->height) continue;
-        printf("  pixel[%u] = 0x%08x\n", idx, rt_buf[idx]);
+    if (target->fp16) {
+        const uint64_t *rt = (const uint64_t *)rt_addr;
+        uint64_t unique_colors[8] = {0};
+        uint32_t unique_color_count = 0;
+        uint32_t changed = 0;
+        uint32_t opaque_samples = 0;
+        uint32_t out_of_range_components = 0;
+        for (uint32_t i = 0; i < target_pixels; i++) {
+            uint64_t color = rt[i];
+            if (color == FP16_CLEAR_SENTINEL)
+                continue;
+            changed++;
+            if ((uint16_t)(color >> 48) == 0x3c00u)
+                opaque_samples++;
+            for (uint32_t lane = 0; lane < 4u; lane++) {
+                uint16_t component = (uint16_t)(color >> (lane * 16u));
+                if ((component & 0x8000u) != 0u || component > 0x3c00u)
+                    out_of_range_components++;
+            }
+            if (unique_color_count < 8) {
+                bool seen = false;
+                for (uint32_t j = 0; j < unique_color_count; j++) {
+                    if (unique_colors[j] == color) {
+                        seen = true;
+                        break;
+                    }
+                }
+                if (!seen)
+                    unique_colors[unique_color_count++] = color;
+            }
+        }
+        /* Equilateral NDC triangle covers sqrt(3)/16 of a square target.
+         * 1774/16384 is a close integer approximation. */
+        const uint32_t expected_changed = (uint32_t)
+            (((uint64_t)target_pixels * 1774u) / 16384u);
+        const uint32_t coverage_tolerance = target->width;
+        printf("[FP16] Changed pixels: %u / %u (expected about %u)\n",
+               changed, target_pixels, expected_changed);
+        printf("[FP16] Distinct sampled colors: %u\n", unique_color_count);
+        for (uint32_t i = 0; i < unique_color_count; i++)
+            printf("  fp16_color[%u] = 0x%016llx\n", i,
+                   (unsigned long long)unique_colors[i]);
+        printf("[FP16] Opaque samples: %u; out-of-range components: %u\n",
+               opaque_samples, out_of_range_components);
+        const bool fp16_pass =
+                               changed + coverage_tolerance >= expected_changed &&
+                               changed <= expected_changed + coverage_tolerance &&
+                               unique_color_count >= 8u &&
+                               opaque_samples != 0u &&
+                               out_of_range_components == 0u;
+        printf("[FP16] GFX1013 R16G16B16A16_FLOAT target: %s\n",
+               fp16_pass ? "PASS" : "FAIL");
+        return fp16_pass;
     }
 
-    /* Count pixels changed by color-buffer writes. */
+    /* Preserve the exact validation for the registered RGBA8 display RT. */
+    uint32_t *rt = (uint32_t *)rt_addr;
     uint32_t changed = 0;
-    for (uint32_t i = 0; i < test->width * test->height; i++) {
-        if (rt_buf[i] != 0xFF00FF00u) changed++;
+    uint32_t unique_colors[8] = {0};
+    uint32_t unique_color_count = 0;
+    for (uint32_t i = 0; i < target_pixels; i++) {
+        uint32_t color = rt[i];
+        if (color == DIAGNOSTIC_CLEAR_COLOR)
+            continue;
+        changed++;
+        if (unique_color_count < 8) {
+            bool seen = false;
+            for (uint32_t j = 0; j < unique_color_count; j++) {
+                if (unique_colors[j] == color) {
+                    seen = true;
+                    break;
+                }
+            }
+            if (!seen)
+                unique_colors[unique_color_count++] = color;
+        }
     }
-    printf("[Readback] Changed pixels: %u / %u\n", changed, test->width * test->height);
+    printf("[Readback] Changed pixels: %u / %u\n", changed, target_pixels);
+    printf("[Texture] Distinct sampled colors: %u\n", unique_color_count);
+    for (uint32_t i = 0; i < unique_color_count; i++)
+        printf("  color[%u] = 0x%08x\n", i, unique_colors[i]);
+    const bool vertex_fetch_pass = changed != 0 && unique_color_count >= 3;
+    const bool indexed_draw_pass = changed >= 1036700u &&
+                                   changed <= 1036900u &&
+                                   unique_color_count >= 3;
+    const bool texture_sampler_pass = indexed_draw_pass &&
+                                      unique_color_count >= 8;
+    printf("[Vertex] Interleaved buffer fetch: %s\n",
+           vertex_fetch_pass ? "PASS" : "FAIL");
+    printf("[Index] Bound u16 indexed draw: %s\n",
+           indexed_draw_pass ? "PASS" : "FAIL");
+    printf("[Texture] GFX10.3 image + bilinear sampler: %s\n",
+           texture_sampler_pass ? "PASS" : "FAIL");
+    return vertex_fetch_pass && indexed_draw_pass && texture_sampler_pass;
+}
 
-    return true;
+static uint8_t half_to_unorm8(uint16_t half) {
+    uint32_t exponent = (half >> 10) & 0x1fu;
+    uint32_t mantissa = half & 0x3ffu;
+    if ((half & 0x8000u) != 0u)
+        return 0;
+    if (exponent == 0u)
+        return 0;
+    if (exponent >= 15u)
+        return 255;
+    uint32_t significand = 1024u + mantissa;
+    uint32_t shift = 25u - exponent;
+    uint32_t scaled = shift < 32u ? (significand * 255u) >> shift : 0u;
+    return scaled > 255u ? 255u : (uint8_t)scaled;
+}
+
+static void visualize_fp16(GraphicsTest *test) {
+    const uint64_t *source = (const uint64_t *)test->render_target;
+    uint32_t *display = (uint32_t *)test->buffers[0];
+    const uint32_t preview_width = FP16_TARGET_WIDTH * FP16_PREVIEW_SCALE;
+    const uint32_t preview_height = FP16_TARGET_HEIGHT * FP16_PREVIEW_SCALE;
+    const uint32_t origin_x = (test->width - preview_width) / 2u;
+    const uint32_t origin_y = (test->height - preview_height) / 2u;
+
+    for (uint32_t i = 0; i < test->width * test->height; i++)
+        display[i] = DIAGNOSTIC_CLEAR_COLOR;
+    for (uint32_t y = 0; y < preview_height; y++) {
+        const uint32_t source_y = y / FP16_PREVIEW_SCALE;
+        for (uint32_t x = 0; x < preview_width; x++) {
+            uint64_t pixel = source[source_y * FP16_TARGET_WIDTH +
+                                    x / FP16_PREVIEW_SCALE];
+            if (pixel == FP16_CLEAR_SENTINEL)
+                continue;
+            uint8_t r = half_to_unorm8((uint16_t)pixel);
+            uint8_t g = half_to_unorm8((uint16_t)(pixel >> 16));
+            uint8_t b = half_to_unorm8((uint16_t)(pixel >> 32));
+            uint8_t a = half_to_unorm8((uint16_t)(pixel >> 48));
+            display[(origin_y + y) * test->width + origin_x + x] =
+                ((uint32_t)a << 24) | ((uint32_t)b << 16) |
+                ((uint32_t)g << 8) | r;
+        }
+    }
+    printf("[FP16] CPU preview: %ux%u centered on RGBA8 display\n",
+           preview_width, preview_height);
 }
 
 /* ======================================================================== */
@@ -1187,12 +1494,10 @@ static bool dispatch_graphics(GraphicsTest *test,
 /* ======================================================================== */
 
 static void wait_for_flip(GraphicsTest *test) {
-    sceVideoOutSubmitFlip(test->handle, 0, SCE_VIDEO_OUT_FLIP_MODE_VSYNC, 0);
-    SceKernelEvent events[1];
-    for (;;) {
-        int ret = sceKernelWaitEqueue(test->flipqueue, events, 1, NULL, NULL);
-        if (ret == 0) break;
-    }
+    int ret = sceVideoOutSubmitFlip(
+        test->handle, 0, SCE_VIDEO_OUT_FLIP_MODE_VSYNC, 0);
+    printf("VideoOutSubmitFlip: 0x%08x\n", (unsigned)ret);
+    sceKernelUsleep(1000000);
 }
 
 /* ======================================================================== */
@@ -1233,13 +1538,33 @@ int main(void) {
         return 1;
     }
 
-    printf("\n--- Step 4: NGG graphics draw call ---\n");
-    if (!dispatch_graphics(&test, &front, &back, &ps)) {
-        printf("FATAL: draw call failed\n");
+    RenderTargetConfig fp16_target = {
+        test.render_target, FP16_TARGET_WIDTH, FP16_TARGET_HEIGHT,
+        COLOR_16_16_16_16, SURF_NUMBER_FLOAT, SURF_SWAP_STD,
+        true, "offscreen FP16"
+    };
+
+#if AGC_VALIDATE_RGBA8_REFERENCE
+    RenderTargetConfig rgba8_target = {
+        test.buffers[0], test.width, test.height,
+        COLOR_8_8_8_8, SURF_NUMBER_UNORM, SURF_SWAP_ALT,
+        false, "display RGBA8"
+    };
+    printf("\n--- Step 4: RGBA8 reference draw ---\n");
+    if (!dispatch_graphics(&test, &front, &back, &ps, &rgba8_target)) {
+        printf("FATAL: RGBA8 reference draw failed\n");
         return 1;
     }
+#endif
 
-    printf("\n--- Step 5: Display flip ---\n");
+    printf("\n--- Step 4: RGBA16F offscreen draw ---\n");
+    if (!dispatch_graphics(&test, &front, &back, &ps, &fp16_target)) {
+        printf("FATAL: RGBA16F render-target validation failed\n");
+        return 1;
+    }
+    visualize_fp16(&test);
+
+    printf("\n--- Step 5: Display FP16 preview ---\n");
     wait_for_flip(&test);
     printf("Flipped; the compiler-generated NGG triangle should be visible.\n");
 

@@ -3,6 +3,7 @@
 #include "agcdriver.h"
 #include "agc_types.h"
 #include "agc_context.h"
+#include "driver_ops.h"
 
 /* Debug helpers for queue state — defined in driver_generic.c, not public API.
  * Declared here as extern so tests can inspect internal queue tracking without
@@ -14,10 +15,58 @@ extern bool agcDriverDebugIsAsyncSetup(void);
 /* Must match AGC_GENERIC_MAX_QUEUES in driver_generic.c. */
 #define TEST_MAX_QUEUES 32
 
+static uint32_t g_fake_submit_count;
+
+static int32_t PS5_SYSV_ABI fake_submit_dcb(
+    const AgcCommandBufferSubmit *packet)
+{
+    if (!packet)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    g_fake_submit_count++;
+    return 1234;
+}
+
+static void test_internal_operations_dispatch(void) {
+    const AgcDriverOps fake_ops = {
+        .name = "test-fake",
+        .submit_dcb = fake_submit_dcb,
+    };
+    uint32_t command = 0;
+    AgcCommandBufferSubmit packet = {
+        .command_address = (uintptr_t)&command,
+        .dword_count = 1,
+    };
+
+    TEST_ASSERT(strcmp(agcDriverGetOps()->name, "generic") == 0,
+        "generic operations table selected by default");
+    TEST_ASSERT_EQ(agcDriverInstallOpsForTesting(NULL),
+        AGC_ERROR_INVALID_ARGUMENT, "reject NULL operations table");
+    TEST_ASSERT_EQ(agcDriverInstallOpsForTesting(&fake_ops), AGC_OK,
+        "install fake operations table");
+    TEST_ASSERT(agcDriverGetOps() == &fake_ops,
+        "active operations table is the fake table");
+    TEST_ASSERT_EQ(sceAgcDriverSubmitDcb(&packet), 1234,
+        "public submit dispatches through fake callback");
+    TEST_ASSERT_EQ(g_fake_submit_count, 1u,
+        "fake submit callback invoked exactly once");
+    TEST_ASSERT_EQ(sce_agc_initialize(), AGC_ERROR_NOT_SUPPORTED,
+        "missing callback fails safely");
+
+    agcDriverResetOpsForTesting();
+    TEST_ASSERT(strcmp(agcDriverGetOps()->name, "generic") == 0,
+        "reset restores generic operations table");
+}
+
 static void test_submit_packet_layout(void) {
     TEST_ASSERT_EQ(offsetof(AgcCommandBufferSubmit, command_address), 0, "submit address offset");
     TEST_ASSERT_EQ(offsetof(AgcCommandBufferSubmit, dword_count), 8, "submit dword count offset");
     TEST_ASSERT_EQ(sizeof(AgcCommandBufferSubmit), 0x10, "submit packet size");
+}
+
+static void test_pa_debug_permission_stub(void) {
+    TEST_ASSERT_EQ(sceAgcDriverGetPaDebugInterfaceVersion(),
+        AGC_DRIVER_ERROR_PERMISSION_INSUFFICIENT,
+        "FW 5.50 PA-debug interface is a permission stub");
 }
 
 static void test_submit_dcb_validation(void) {
@@ -37,6 +86,30 @@ static void test_submit_dcb_validation(void) {
     const AgcCommandBufferSubmit* last = agcDriverDebugLastDcbSubmit();
     TEST_ASSERT_EQ(last->command_address, packet.command_address, "last DCB address");
     TEST_ASSERT_EQ(last->dword_count, packet.dword_count, "last DCB dwords");
+}
+
+static void test_multi_dcb_submission(void) {
+    uint32_t dcb0[2] = {0};
+    uint32_t dcb1[3] = {0};
+    void *dcbs[2] = {dcb0, dcb1};
+    uint32_t sizes[2] = {2, 3};
+
+    TEST_ASSERT_EQ(sce_agc_initialize(), AGC_OK,
+        "initialize generic driver for multi DCB");
+    TEST_ASSERT_EQ(sceAgcDriverSubmitMultiDcbs(dcbs, sizes, 2), AGC_OK,
+        "SubmitMultiDcbs accepts a descriptor array");
+    TEST_ASSERT_EQ(
+        sceAgcDriverSubmitMultiCommandBuffers(3, dcbs, sizes, 2), AGC_OK,
+        "SubmitMultiCommandBuffers accepts a descriptor array");
+    TEST_ASSERT_EQ(sceAgcDriverSubmitMultiDcbs(NULL, sizes, 2),
+        AGC_ERROR_INVALID_ARGUMENT, "SubmitMultiDcbs rejects NULL addresses");
+
+    sizes[1] = 0;
+    TEST_ASSERT_EQ(sceAgcDriverSubmitMultiDcbs(dcbs, sizes, 2),
+        AGC_ERROR_CB_INVALID_SIZE, "SubmitMultiDcbs rejects empty DCB");
+    sizes[1] = UINT32_MAX;
+    TEST_ASSERT_EQ(sceAgcDriverSubmitMultiDcbs(dcbs, sizes, 2),
+        AGC_ERROR_CB_INVALID_SIZE, "SubmitMultiDcbs rejects byte overflow");
 }
 
 static void test_submit_acb_validation(void) {
@@ -267,8 +340,11 @@ static void test_default_state_populated(void) {
 
 void test_suite_driver(void) {
     TEST_SUITE("Driver Submit RE");
+    TEST_RUN(test_internal_operations_dispatch);
     TEST_RUN(test_submit_packet_layout);
+    TEST_RUN(test_pa_debug_permission_stub);
     TEST_RUN(test_submit_dcb_validation);
+    TEST_RUN(test_multi_dcb_submission);
     TEST_RUN(test_submit_acb_validation);
     TEST_RUN(test_queue_create_destroy);
     TEST_RUN(test_queue_destroy_no_queues);

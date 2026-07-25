@@ -101,9 +101,11 @@ SPRX or kernel disassembly. They could be wrong:
    - **Risk**: The exact patch list entry format is unknown
 
 5. **PADEBUG ioctl** (nr=0x38):
-   - Used for `sceAgcDriverGetPaDebugInterfaceVersion`
-   - **Source**: ps5-openagc NID mapping
-   - **Risk**: The return value format is assumed
+   - It is **not** used by FW 5.50 `sceAgcDriverGetPaDebugInterfaceVersion`.
+   - The export at VA 0x2b0 logs `permission insufficient` and returns the
+     constant `0x8a6d0001`; it performs no ioctl.
+   - `sceAgcDriverIsPaDebug` at VA 0x2e0 is a constant-zero stub.
+   - **Source**: independently disassembled FW 5.50 libSceAgcDriver.sprx.
 
 6. **Ioctl dispatch table entries** (from ps5-openagc's ioctl_dispatch.md):
    - Many ioctl handler addresses were copied from ps5-openagc

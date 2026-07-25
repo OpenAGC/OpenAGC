@@ -5,7 +5,7 @@
  * Tests the native /dev/gc backend:
  *   1. sce_agc_initialize() — open /dev/gc + CONTEXT_QUERY ioctl + mmap
  *   2. sceAgcDriverGetPaDebugInterfaceVersion() — PA debug query
- *   3. Build a NOP command buffer and submit via sceAgcDriverSubmitDcb()
+ *   3. Submit two marker DCBs as one descriptor-array frame
  *   4. Create + destroy a user special queue
  *
  * This is the GPU command submission validation step. Run after
@@ -30,6 +30,11 @@
 #include "agcdriver.h"
 #include "agc_cb.h"
 #include "agc_error.h"
+#include "agc_pm4.h"
+
+int sceKernelMapNamedSystemFlexibleMemory(
+    void **virtualAddress, size_t length, int protection, int flags,
+    const char *name);
 
 /*
  * GPU process credential bypass.
@@ -190,9 +195,6 @@ static int set_gpu_credentials(void) {
     return (authid & GPU_AUTHID_MASK) == GPU_AUTHID_REQUIRED ? 0 : -1;
 }
 
-/* Command buffer: 4 KB = 1024 dwords, page-aligned for GPU access */
-static uint32_t cb_buffer[1024] __attribute__((aligned(4096)));
-
 static const char *errstr(int32_t err) {
     switch (err) {
     case AGC_OK:                        return "OK";
@@ -214,7 +216,6 @@ int main(void) {
     int32_t cred_err = -1; /* result of credential bypass (step 0) */
     uint32_t version;
     SceAgcCb cb;
-    AgcCommandBufferSubmit submit;
 
     printf("=== openagc AGC init + NOP submit test ===\n");
 
@@ -268,13 +269,6 @@ int main(void) {
             }
         }
 
-        /* Try FRAME_OPEN — may still fail with EINVAL if args are wrong,
-         * or may succeed now that credentials are set. */
-        uint32_t frame_arg[2] = {0, 0};
-        ioret = ioctl(test_fd, 0xC0088100u, frame_arg);
-        printf("    DIAG: FRAME_OPEN 0xC0088100 returned %d (errno=%d)\n",
-               ioret, errno);
-
         close(test_fd);
     }
 
@@ -305,50 +299,76 @@ int main(void) {
     else
         printf("    Default states notified\n");
 
-    /* --- Step 4: Query PA debug interface version --- */
+    /* --- Step 4: Verify the official FW 5.50 PA-debug permission stub --- */
     printf("[4] sceAgcDriverGetPaDebugInterfaceVersion()...\n");
     version = sceAgcDriverGetPaDebugInterfaceVersion();
     printf("    version: 0x%08X\n", version);
-    if (version == 0)
-        printf("    WARNING: PADEBUG_4 returned 0 (may not be supported)\n");
+    if (version == AGC_DRIVER_ERROR_PERMISSION_INSUFFICIENT)
+        printf("    FW 5.50 permission stub: PASS\n");
     else
-        printf("    PA debug interface queried OK\n");
+        printf("    WARNING: unexpected PA debug result\n");
 
-    /* --- Step 5: Build and submit a NOP command buffer --- */
-    printf("[5] sceAgcDriverSubmitDcb() with NOP packet...\n");
-
-    /* Init command buffer cursor */
-    agcCbInit(&cb, cb_buffer, sizeof(cb_buffer));
-
-    /* Add a NOP packet (minimum 2 dwords for type-3 header) */
-    uint32_t *nop = sceAgcCbNop(&cb, 2);
-    if (!nop) {
-        printf("    ERROR: failed to build NOP packet\n");
+    /* --- Step 5: Submit two independent marker DCBs as one frame --- */
+    printf("[5] sceAgcDriverSubmitMultiDcbs() with two DCBs...\n");
+    static const uint32_t expected_markers[2] = {
+        0xD001CAFEu, 0xD002CAFEu
+    };
+    uint32_t used_dwords[2] = {0, 0};
+    void *submit_memory = NULL;
+    int map_err = sceKernelMapNamedSystemFlexibleMemory(
+        &submit_memory, 0x4000u, 0x33, 0, "agc_multi_submit");
+    if (map_err != 0 || !submit_memory) {
+        printf("    ERROR: flexible-memory allocation failed: %d\n", map_err);
         return 1;
     }
-    nop[0] = 0;  /* NOP data */
+    uint32_t *cb_buffers[2] = {
+        (uint32_t *)submit_memory,
+        (uint32_t *)((uint8_t *)submit_memory + 0x1000u),
+    };
+    volatile uint32_t *submit_markers =
+        (volatile uint32_t *)((uint8_t *)submit_memory + 0x2000u);
+    submit_markers[0] = 0;
+    submit_markers[1] = 0;
 
-    uint32_t used_dwords = agcCbUsedDwords(&cb);
-    printf("    CB built: %u dwords at %p\n", used_dwords, (void *)cb_buffer);
+    for (uint32_t i = 0; i < 2; i++) {
+        agcCbInit(&cb, cb_buffers[i], 0x1000u);
+        uint32_t *wd = agcCbAllocDwords(&cb, 5);
+        if (!wd) {
+            printf("    ERROR: failed to allocate WRITE_DATA packet %u\n", i);
+            return 1;
+        }
+        uint64_t marker_addr = (uint64_t)(uintptr_t)&submit_markers[i];
+        wd[0] = agcPm4Header3(AGC_PM4_OP_WRITE_DATA, 5);
+        wd[1] = (2u << 0) | (1u << 8); /* dst=memory, write-confirm */
+        wd[2] = (uint32_t)marker_addr;
+        wd[3] = (uint32_t)(marker_addr >> 32);
+        wd[4] = expected_markers[i];
+        if (!sceAgcCbNop(&cb, 2)) {
+            printf("    ERROR: failed to allocate trailer NOP %u\n", i);
+            return 1;
+        }
+        used_dwords[i] = agcCbUsedDwords(&cb);
+        printf("    DCB[%u]: %u dwords at %p -> marker %p\n",
+               i, used_dwords[i], (void *)cb_buffers[i],
+               (const void *)&submit_markers[i]);
+    }
 
-    /* Submit it.
-     * NOTE: On the prospero backend, command_address must be a GPU VA, not a
-     * CPU address. This sample passes a CPU static array which works on the
-     * generic backend but will FAIL on real hardware. To fix, the buffer
-     * must be allocated via sceKernelAllocateDirectMemory + MapDirectMemory +
-     * makesysmap ioctl, and the GPU VA passed here. */
-    submit.command_address = (uintptr_t)cb_buffer;
-    submit.dword_count = used_dwords;
-    submit.reserved = 0;
-
-    err = sceAgcDriverSubmitDcb(&submit);
+    void *dcb_addresses[2] = { cb_buffers[0], cb_buffers[1] };
+    err = sceAgcDriverSubmitMultiDcbs(dcb_addresses, used_dwords, 2);
     dcb_err = err;
-    printf("    result: 0x%08X (%s)\n", (unsigned)err, errstr(err));
-    if (err != AGC_OK) {
-        printf("    WARNING: DCB submit failed\n");
-        printf("    Check: CB header opcode, VMID, alignment\n");
+    printf("    batched submit: 0x%08X (%s)\n",
+           (unsigned)err, errstr(err));
+
+    usleep(500000);
+    printf("    markers: [0]=0x%08X [1]=0x%08X\n",
+           submit_markers[0], submit_markers[1]);
+    if (dcb_err == AGC_OK &&
+        submit_markers[0] == expected_markers[0] &&
+        submit_markers[1] == expected_markers[1]) {
+        printf("    Batched DCB execution: PASS\n");
     } else {
-        printf("    NOP packet submitted to GPU!\n");
+        printf("    Batched DCB execution: FAIL\n");
+        dcb_err = AGC_ERROR_SUBMIT_FAILED;
     }
 
     /* --- Step 6: Setup async graphics (needed before queue create) --- */
@@ -458,7 +478,7 @@ int main(void) {
     printf("  Internal memory:   OK\n");
     printf("  Default states:    notified\n");
     printf("  PA debug version:  0x%08X\n", version);
-    printf("  DCB submit (NOP):  %s\n",
+    printf("  Batched DCBs:      %s\n",
            dcb_err == AGC_OK ? "OK" : "check step 5");
     printf("  Async graphics:    %s\n",
            "check step 6");

@@ -23,6 +23,7 @@
 #include "agc_error.h"
 #include "agc_types.h"
 #include "agcdriver.h"
+#include "driver_ops.h"
 
 #include <string.h>
 
@@ -33,7 +34,7 @@ static uint32_t g_last_acb_owner;
 
 /* Async-compute queue tracking (mirrors the prospero backend's 32-slot array).
  * Each slot records whether a user special queue is active and the pipe_id
- * passed to sceAgcDriverSetupAsyncGraphics. */
+ * passed to agcGenericSetupAsyncGraphics. */
 #define AGC_GENERIC_MAX_QUEUES 32
 typedef struct {
     bool     in_use;
@@ -49,7 +50,7 @@ static uint32_t g_async_pipe_id = 0;
 static uint32_t g_active_workload_id = 0;
 static bool g_workload_active = false;
 
-int32_t PS5_SYSV_ABI sce_agc_initialize(void)
+int32_t PS5_SYSV_ABI agcGenericInitialize(void)
 {
     g_agc_initialized = true;
     /* Reset all backend state so re-initialize gives a clean slate. */
@@ -64,12 +65,12 @@ int32_t PS5_SYSV_ABI sce_agc_initialize(void)
     return AGC_OK;
 }
 
-int32_t PS5_SYSV_ABI sce_agc_initialize_internal_memory(void)
+int32_t PS5_SYSV_ABI agcGenericInitializeInternalMemory(void)
 {
     return AGC_OK;
 }
 
-int32_t PS5_SYSV_ABI sceAgcDriverSubmitMultiCommandBuffersDirect(
+int32_t PS5_SYSV_ABI agcGenericSubmitMultiCommandBuffersDirect(
     uint32_t count,
     void *const dcb_gpu_addrs[],
     uint32_t *dcb_sizes_in_bytes,
@@ -87,7 +88,7 @@ int32_t PS5_SYSV_ABI sceAgcDriverSubmitMultiCommandBuffersDirect(
     return AGC_OK;
 }
 
-int32_t PS5_SYSV_ABI sceAgcDriverSubmitDcb(const AgcCommandBufferSubmit *packet)
+int32_t PS5_SYSV_ABI agcGenericSubmitDcb(const AgcCommandBufferSubmit *packet)
 {
     if (!g_agc_initialized)
         return AGC_ERROR_NOT_INITIALIZED;
@@ -98,7 +99,7 @@ int32_t PS5_SYSV_ABI sceAgcDriverSubmitDcb(const AgcCommandBufferSubmit *packet)
     return AGC_OK;
 }
 
-int32_t PS5_SYSV_ABI sceAgcDriverSubmitAcb(
+int32_t PS5_SYSV_ABI agcGenericSubmitAcb(
     uint32_t owner_handle, const AgcCommandBufferSubmit *packet)
 {
     if (!g_agc_initialized)
@@ -113,7 +114,7 @@ int32_t PS5_SYSV_ABI sceAgcDriverSubmitAcb(
     return AGC_OK;
 }
 
-int32_t PS5_SYSV_ABI sceAgcDriverSuspendPointSubmitDirect(
+int32_t PS5_SYSV_ABI agcGenericSuspendPointSubmitDirect(
     uint32_t field0, uint32_t field1, uint32_t field2, uint32_t field3)
 {
     (void)field0;
@@ -123,13 +124,13 @@ int32_t PS5_SYSV_ABI sceAgcDriverSuspendPointSubmitDirect(
     return AGC_OK;
 }
 
-bool PS5_SYSV_ABI sceAgcDriverIsSuspendPointInFlightDirect(uint32_t value)
+bool PS5_SYSV_ABI agcGenericIsSuspendPointInFlightDirect(uint32_t value)
 {
     (void)value;
     return false;
 }
 
-int32_t PS5_SYSV_ABI sce_agc_internal_suspend_point_submit_final(
+int32_t PS5_SYSV_ABI agcGenericInternalSuspendPointSubmitFinal(
     uint32_t field0, uint32_t field1, uint32_t field2, uint32_t field3)
 {
     (void)field0;
@@ -139,7 +140,7 @@ int32_t PS5_SYSV_ABI sce_agc_internal_suspend_point_submit_final(
     return AGC_OK;
 }
 
-int32_t PS5_SYSV_ABI sceAgcDriverSetupAsyncGraphics(uint32_t pipe_id)
+int32_t PS5_SYSV_ABI agcGenericSetupAsyncGraphics(uint32_t pipe_id)
 {
     if (!g_agc_initialized)
         return AGC_ERROR_NOT_INITIALIZED;
@@ -149,12 +150,12 @@ int32_t PS5_SYSV_ABI sceAgcDriverSetupAsyncGraphics(uint32_t pipe_id)
     return AGC_OK;
 }
 
-int32_t PS5_SYSV_ABI sceAgcDriverSetTFRingDirect(void)
+int32_t PS5_SYSV_ABI agcGenericSetTFRingDirect(void)
 {
     return AGC_OK;
 }
 
-int32_t PS5_SYSV_ABI sceAgcDriverSetHsOffchipParamDirect(
+int32_t PS5_SYSV_ABI agcGenericSetHsOffchipParamDirect(
     uint64_t list_addr, uint32_t num_entries)
 {
     (void)list_addr;
@@ -162,18 +163,18 @@ int32_t PS5_SYSV_ABI sceAgcDriverSetHsOffchipParamDirect(
     return AGC_OK;
 }
 
-int32_t PS5_SYSV_ABI sceAgcDriverSetTargetRingForDiag(void)
+int32_t PS5_SYSV_ABI agcGenericSetTargetRingForDiag(void)
 {
     return AGC_OK;
 }
 
-int32_t PS5_SYSV_ABI sceAgcDriverNotifyDefaultStates(uint32_t flags)
+int32_t PS5_SYSV_ABI agcGenericNotifyDefaultStates(uint32_t flags)
 {
     (void)flags;
     return AGC_OK;
 }
 
-int32_t PS5_SYSV_ABI sceAgcDriverSdmaCopyLinearBlocking(
+int32_t PS5_SYSV_ABI agcGenericSdmaCopyLinearBlocking(
     void *dst, const void *src, size_t size)
 {
     if (!dst || !src)
@@ -182,7 +183,7 @@ int32_t PS5_SYSV_ABI sceAgcDriverSdmaCopyLinearBlocking(
     return AGC_OK;
 }
 
-int32_t PS5_SYSV_ABI sceAgcDriverSubmitEopFlip(
+int32_t PS5_SYSV_ABI agcGenericSubmitEopFlip(
     void *video_out_handle, uint32_t display_buf_index,
     uint32_t flip_mode, void *present_ptr)
 {
@@ -208,7 +209,7 @@ int32_t PS5_SYSV_ABI sceAgcDriverSubmitEopFlip(
  * 0x8a6c0033 (mapped to AGC_ERROR_INVALID_ARGUMENT). EndWorkload
  * without a matching BeginWorkload returns an error.
  */
-int32_t PS5_SYSV_ABI sceAgcDriverSetWorkloadsActive(uint32_t workload_id)
+int32_t PS5_SYSV_ABI agcGenericSetWorkloadsActive(uint32_t workload_id)
 {
     if (!g_agc_initialized)
         return AGC_ERROR_NOT_INITIALIZED;
@@ -222,7 +223,7 @@ int32_t PS5_SYSV_ABI sceAgcDriverSetWorkloadsActive(uint32_t workload_id)
     return AGC_OK;
 }
 
-int32_t PS5_SYSV_ABI sceAgcDriverSetWorkloadComplete(uint32_t workload_id)
+int32_t PS5_SYSV_ABI agcGenericSetWorkloadComplete(uint32_t workload_id)
 {
     if (!g_agc_initialized)
         return AGC_ERROR_NOT_INITIALIZED;
@@ -236,13 +237,13 @@ int32_t PS5_SYSV_ABI sceAgcDriverSetWorkloadComplete(uint32_t workload_id)
     return AGC_OK;
 }
 
-int32_t PS5_SYSV_ABI _sceAgcDriverCreateUserSpecialQueue(void)
+int32_t PS5_SYSV_ABI agcGenericCreateUserSpecialQueue(void)
 {
     if (!g_agc_initialized)
         return AGC_ERROR_NOT_INITIALIZED;
 
     /* Find a free queue slot and mark it in use. The queue index is
-     * returned as the handle so callers can pass it to sceAgcDriverSubmitAcb
+     * returned as the handle so callers can pass it to agcGenericSubmitAcb
      * as the owner_handle. */
     for (int i = 0; i < AGC_GENERIC_MAX_QUEUES; i++) {
         if (!g_queues[i].in_use) {
@@ -255,7 +256,7 @@ int32_t PS5_SYSV_ABI _sceAgcDriverCreateUserSpecialQueue(void)
     return AGC_ERROR_CB_INVALID_QUEUE;
 }
 
-int32_t PS5_SYSV_ABI _sceAgcDriverDestroyUserSpecialQueue(void)
+int32_t PS5_SYSV_ABI agcGenericDestroyUserSpecialQueue(void)
 {
     if (!g_agc_initialized)
         return AGC_ERROR_NOT_INITIALIZED;
@@ -273,39 +274,39 @@ int32_t PS5_SYSV_ABI _sceAgcDriverDestroyUserSpecialQueue(void)
     return AGC_ERROR_CB_INVALID_QUEUE;
 }
 
-int32_t PS5_SYSV_ABI sceAgcDriverRegisterCaptureInterface(void)
+int32_t PS5_SYSV_ABI agcGenericRegisterCaptureInterface(void)
 {
     return AGC_OK;
 }
 
-int32_t PS5_SYSV_ABI sceAgcDriverDeregisterCaptureInterface(void)
+int32_t PS5_SYSV_ABI agcGenericDeregisterCaptureInterface(void)
 {
     return AGC_OK;
 }
 
-int32_t PS5_SYSV_ABI sceAgcDriverAcquireRazorACQ(void)
+int32_t PS5_SYSV_ABI agcGenericAcquireRazorACQ(void)
 {
     return AGC_OK;
 }
 
-int32_t PS5_SYSV_ABI sceAgcDriverReleaseRazorACQ(void)
+int32_t PS5_SYSV_ABI agcGenericReleaseRazorACQ(void)
 {
     return AGC_OK;
 }
 
-int32_t PS5_SYSV_ABI sceAgcDriverSubmitToRazorACQ(void)
+int32_t PS5_SYSV_ABI agcGenericSubmitToRazorACQ(void)
 {
     return AGC_OK;
 }
 
-int32_t PS5_SYSV_ABI sceAgcDriverSubmitToHDRScopesACQ(void)
+int32_t PS5_SYSV_ABI agcGenericSubmitToHDRScopesACQ(void)
 {
     return AGC_OK;
 }
 
-uint32_t PS5_SYSV_ABI sceAgcDriverGetPaDebugInterfaceVersion(void)
+uint32_t PS5_SYSV_ABI agcGenericGetPaDebugInterfaceVersion(void)
 {
-    return 0;
+    return AGC_DRIVER_ERROR_PERMISSION_INSUFFICIENT;
 }
 
 const AgcCommandBufferSubmit *agcDriverDebugLastDcbSubmit(void)
@@ -342,3 +343,33 @@ bool agcDriverDebugIsAsyncSetup(void)
 {
     return g_async_setup_done;
 }
+
+const AgcDriverOps agcGenericDriverOps = {
+    .name = "generic",
+    .initialize = agcGenericInitialize,
+    .initialize_internal_memory = agcGenericInitializeInternalMemory,
+    .submit_multi_command_buffers_direct = agcGenericSubmitMultiCommandBuffersDirect,
+    .submit_dcb = agcGenericSubmitDcb,
+    .submit_acb = agcGenericSubmitAcb,
+    .suspend_point_submit_direct = agcGenericSuspendPointSubmitDirect,
+    .is_suspend_point_in_flight_direct = agcGenericIsSuspendPointInFlightDirect,
+    .internal_suspend_point_submit_final = agcGenericInternalSuspendPointSubmitFinal,
+    .setup_async_graphics = agcGenericSetupAsyncGraphics,
+    .set_tf_ring_direct = agcGenericSetTFRingDirect,
+    .set_hs_offchip_param_direct = agcGenericSetHsOffchipParamDirect,
+    .set_target_ring_for_diag = agcGenericSetTargetRingForDiag,
+    .notify_default_states = agcGenericNotifyDefaultStates,
+    .sdma_copy_linear_blocking = agcGenericSdmaCopyLinearBlocking,
+    .submit_eop_flip = agcGenericSubmitEopFlip,
+    .set_workloads_active = agcGenericSetWorkloadsActive,
+    .set_workload_complete = agcGenericSetWorkloadComplete,
+    .create_user_special_queue = agcGenericCreateUserSpecialQueue,
+    .destroy_user_special_queue = agcGenericDestroyUserSpecialQueue,
+    .register_capture_interface = agcGenericRegisterCaptureInterface,
+    .deregister_capture_interface = agcGenericDeregisterCaptureInterface,
+    .acquire_razor_acq = agcGenericAcquireRazorACQ,
+    .release_razor_acq = agcGenericReleaseRazorACQ,
+    .submit_to_razor_acq = agcGenericSubmitToRazorACQ,
+    .submit_to_hdr_scopes_acq = agcGenericSubmitToHDRScopesACQ,
+    .get_pa_debug_interface_version = agcGenericGetPaDebugInterfaceVersion,
+};

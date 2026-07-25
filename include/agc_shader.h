@@ -37,6 +37,17 @@ extern "C" {
 #define AGC_SHADER_RECORD_MAGIC       0x34333231u  /* "1234" little-endian */
 #define AGC_SHADER_RECORD_VERSION_GEN5 0x18u
 
+/* openagc-psbc writes this value into the SH user-data register that must be
+ * patched with the low 32 bits of the runtime vertex-buffer descriptor table.
+ * PS5 user allocations share the fixed high address32 value 0x2. */
+#define OPENAGC_VERTEX_BUFFER_TABLE_PLACEHOLDER 0x56424450u /* "VBDP" */
+
+/* openagc-psbc tags RADV address32 descriptor-set user SGPRs with these
+ * values. Applications replace the tag with the low 32 bits of the runtime
+ * descriptor table; PS5 user allocations share address32_hi=0x2. */
+#define OPENAGC_DESCRIPTOR_SET_PLACEHOLDER(set) \
+    (0x44530000u | ((uint32_t)(set) & 0xffu)) /* "DS" + set index */
+
 /* Shader stage/type values stored at byte offset 0x5A of the shader record.
  * Encoding confirmed by sharpemu (AgcExports.cs PatchShaderProgramRegisters)
  * which runs actual PS5 games and maps these to the correct PGM_LO/HI register

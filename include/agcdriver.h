@@ -54,7 +54,9 @@ int32_t PS5_SYSV_ABI sceAgcDriverSubmitAcb(
     uint32_t owner_handle, const AgcCommandBufferSubmit *packet);
 
 /* Convenience submit wrappers (reference-confirmed).
- * These loop over arrays and delegate to the core submit path.
+ * Multi-DCB wrappers preserve the array as one kernel frame and delegate to
+ * sceAgcDriverSubmitMultiCommandBuffersDirect. Multi-ACB submission remains
+ * queue-specific and delegates each entry through sceAgcDriverSubmitAcb.
  * NIDs: SubmitMultiDcbs=6UzEidRZwkg, SubmitCommandBuffer=b4fpgH5ZXxQ,
  *        SubmitMultiCommandBuffers=Fj7r9EHzF38,
  *        SubmitMultiAcbs=HF3YllT3mXU */
@@ -121,6 +123,8 @@ int32_t  PS5_SYSV_ABI sceAgcDriverAcquireRazorACQ(void);
 int32_t  PS5_SYSV_ABI sceAgcDriverReleaseRazorACQ(void);
 int32_t  PS5_SYSV_ABI sceAgcDriverSubmitToRazorACQ(void);
 int32_t  PS5_SYSV_ABI sceAgcDriverSubmitToHDRScopesACQ(void);
+/* FW 5.50 permission-stub result returned by PA-debug-only exports. */
+#define AGC_DRIVER_ERROR_PERMISSION_INSUFFICIENT 0x8A6D0001u
 uint32_t PS5_SYSV_ABI sceAgcDriverGetPaDebugInterfaceVersion(void);
 
 /* Capture status query. NID: Ddwk4gLT5j0

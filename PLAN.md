@@ -488,9 +488,10 @@ Work:
 5. Emit `AgcShaderRecord` with SH/CX register blocks. ✅ Done.
 6. Compute shader support. ✅ Done — `fill_color.comp` compiles to
    `fill_color.sb` and runs on PS5 hardware (100% pixel output verified).
-7. Graphics shader support (VS/PS/GS/HS/LS). ⬜ Not yet tested on hardware.
-   The RSRC1/2/3 offset functions are implemented for all shader types but
-   only compute has been hardware-validated.
+7. Graphics shader support (VS/PS/GS/HS/LS). ✅ VS+PS tested on hardware.
+   The gfx1013 no-GS NGG VS+PS path, RGB interpolants, and interleaved
+   position/color vertex fetch are validated; GS, HS, and LS execution remain
+   untested.
 
 Bugs found and fixed during compute shader validation:
 
@@ -521,14 +522,17 @@ Acceptance criteria:
   disassembly — 100% pixel output).
 - ✅ Graphics shaders (VS/PS) compile and execute on PS5 hardware.
   The gfx1013 NGG front-entry probe executes, and the real ACO VS+PS path
-  rasterizes the expected magenta triangle (1,036,800 changed pixels).
+  rasterizes an interpolated RGB triangle (1,036,796 changed pixels and eight
+  distinct colors sampled by readback).
 
 ## Phase 7: Graphics Pipeline (Draw Calls)
 
-Status: **complete on real PS5 hardware.** The DCB is accepted, the gfx1013
-NGG front program executes, the pixel shader emits constant magenta, and
-1,036,800 render-target pixels change, exactly matching the expected
-triangle area. The post-draw WRITE_DATA marker also confirms CP progress.
+Status: **complete on real PS5 hardware, including interpolants.** The DCB is
+accepted, the gfx1013 NGG front program executes, and the pixel shader consumes
+the vertex shader's `v_color` output to render a smooth RGB triangle. Readback
+finds 1,036,796 changed pixels and eight distinct colors; visual confirmation
+on the PS5 display matches the expected gradient. The post-draw WRITE_DATA
+marker also confirms CP progress.
 
 Purpose:
 
@@ -799,26 +803,50 @@ manual PM4 tuning before steps 1-4 are complete.
    `0x4E474721`; the real ACO path changed 1,036,800 pixels and produced the
    expected magenta triangle on PS5 hardware.
 
-The next bounded task is **interpolant validation**. Change the fragment
-shader from constant magenta to `vec4(v_color, 1.0)` and validate the RGB
-triangle on real PS5 hardware. This will prove that the compiler-generated
-ES/NGG output semantics, `sceAgcCreateInterpolantMapping`, PS input registers,
-and parameter exports work together rather than only proving position export
-and constant fragment color.
+**Interpolant validation is complete.** The fragment shader consumes
+`vec4(v_color, 1.0)` and renders an RGB gradient on real PS5 hardware. This
+proves that compiler-generated ES/NGG output semantics,
+`sceAgcCreateInterpolantMapping`, PS input registers, and parameter exports
+work together. The compiler fix assigns standalone vertex-stage user varyings
+to RADV parameter-export slots before NGG lowering; parameter 0 now exports
+all three `v_color` channels instead of falling back to constant ones.
 
 After interpolants pass, proceed in this order:
 
-1. Add compiler regression coverage that asserts executable ACO code is in
-   the GS-front record and the GS-back record remains the fused state/resource
-   container.
+1. Maintain compiler regression coverage for NGG record placement and
+   multi-component parameter exports.
 2. Keep `AGC_NGG_ENTRY_PROBE` as an optional diagnostic and reduce temporary
    PM4 audit output in the normal hardware sample.
-3. Validate vertex-buffer input and indexed drawing.
-4. Add texture/sampler and additional render-target-format coverage.
-5. Expand to tessellation, geometry shaders, Wave32 graphics, VRS, and ray
+3. ✅ Validate vertex-buffer input. A 20-byte interleaved `float2` position +
+   `float3` color binding executes on real gfx1013 hardware through RADV-style
+   buffer descriptors and the compiler-recorded descriptor-table user SGPR;
+   GPU readback and the displayed RGB-gradient triangle both pass.
+4. ✅ Validate index-buffer binding and indexed drawing. A bound 16-bit
+   `{1,2,3}` index buffer skips a decoy vertex 0 and reproduces the exact
+   1,036,796-pixel RGB triangle on real gfx1013 hardware using
+   `DRAW_INDEX_OFFSET_2`; GPU readback and the PS5 display both pass.
+5. ✅ Validate texture and sampler binding. A 2x2 linear RGBA8 image and
+   bilinear clamp sampler execute through a RADV combined descriptor on real
+   gfx1013 hardware; exact readback, sampled-color variation, and the PS5
+   display all pass.
+6. ✅ Validate an additional render-target format. A 1536x1536 linear
+   `R16G16B16A16_FLOAT` target executes on real gfx1013 hardware with CB
+   format `0x0c`, FLOAT number type `7`, and standard component swap. Readback
+   finds 255,744 covered pixels, eight distinct FP16 colors, opaque samples,
+   zero components outside `[0,1]`, and a live completion marker. The 1:1
+   RGBA8 preview was visually confirmed as a centered, smoothly textured
+   equilateral triangle.
+7. ✅ Fix multiple DCB submission in one process. FW 5.50 consumes related
+   DCBs correctly when their 16-byte IB descriptors are passed as one kernel
+   frame. The public multi-DCB wrappers now issue one descriptor-array submit;
+   real hardware wrote both ordered markers and completed all following AGC
+   operations. Standalone-submit loops and automatic per-submit `SUBMITDONE`
+   are not used.
+8. Expand to tessellation, geometry shaders, Wave32 graphics, VRS, and ray
    tracing where supported by gfx1013 and the PS5 AGC ABI.
-6. Continue PA-debug and FRAME_OPEN reverse engineering as non-blocking
-   driver work.
+9. ✅ Close PA-debug and FRAME_OPEN RE for FW 5.50. The PA-debug version
+   export is a userspace permission stub returning `0x8A6D0001` without an
+   ioctl, while `FRAME_OPEN` is absent from the kernel dispatcher.
 
 Work:
 
@@ -843,8 +871,9 @@ Acceptance criteria:
 
 - ✅ A triangle is visible on the PS5 display, rendered by the GPU.
 - ✅ The draw call DCB is accepted by `sceAgcDriverSubmitDcb` without error.
-- ✅ Vertex and pixel shaders execute correctly (correct position + magenta color).
-- Render target is written correctly by the GPU.
+- ✅ Vertex and pixel shaders execute correctly (correct position and RGB gradient).
+- ✅ Render target is written correctly by the GPU.
+- ✅ RGB vertex-to-pixel interpolation is confirmed by readback and display.
 
 ### Experimental approaches that caused a kernel panic (DO NOT RETRY)
 
@@ -873,8 +902,9 @@ reboot). Do not re-apply these changes without careful analysis:
 
 ## Phase 8: Firmware Forward Compatibility
 
-Status: planned; FW 5.50 direct backend is implemented, Sony-export forwarding
-and FW 11.60 validation are pending.
+Status: in progress. The internal operations table now owns the stable public
+driver ABI and both generic and FW 5.50 direct implementations are registered
+behind it. Sony-export forwarding and FW 11.60 validation remain pending.
 
 Purpose:
 
@@ -895,9 +925,9 @@ Game -> stable OpenAGC public ABI
 
 Work:
 
-1. Introduce an internal `AgcDriverOps` dispatch table without changing the
+1. ✅ Introduce an internal `AgcDriverOps` dispatch table without changing the
    public `sceAgc*` / `sceAgcDriver*` ABI.
-2. Refactor the generic and FW 5.50 Prospero implementations behind that
+2. ✅ Refactor the generic and FW 5.50 Prospero implementations behind that
    table, preserving current behavior and host-test coverage.
 3. Add `driver_sony_exports.c` to locate/load the installed
    `libSceAgcDriver.sprx`, resolve mandatory exports into privately named

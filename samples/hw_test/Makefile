@@ -34,6 +34,7 @@ PKG_TOOLS ?= /Users/bizkut/Downloads/PS5/homebrew/LibProsperoPKG-seregonwar/buil
 FSELF     := $(PKG_TOOLS)/prosperopkg-fself
 PKGBUILD  := $(PKG_TOOLS)/prosperopkg-pkg
 PSBC      ?= $(OPENAGC_ROOT)/../openagc-psbc/psbc
+GLSLANG   ?= glslangValidator
 
 PS4_SDK_VERSION ?= 0x07590001
 
@@ -69,11 +70,26 @@ agc_videoout.elf: agc_videoout.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB
 agc_compute.elf: agc_compute.c ps5_video_out.h gpu_credentials.h shaders/fill_color_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -o $@ agc_compute.c $(AGC_LDFLAGS)
 
+# Regenerate SPIR-V whenever the editable vertex shader changes.
+shaders/triangle_vert.spv: shaders/triangle.vert
+	$(GLSLANG) -V --target-env vulkan1.2 $< -o $@
+
+shaders/triangle_frag.spv: shaders/triangle.frag
+	$(GLSLANG) -V --target-env vulkan1.2 $< -o $@
+
+shaders/triangle_frag.sb: shaders/triangle_frag.spv
+	$(PSBC) -f $< -s fragment -o $@
+
+shaders/triangle_frag_sb.h: shaders/triangle_frag.sb
+	xxd -i -n triangle_frag_data $< $@
+
 # Regenerate the gfx1013 NGG GS-front/GS-back records and C headers.
 shaders_ngg: shaders/triangle_vert.spv
 	$(PSBC) -f $< -s vertex \
 	    -o shaders/triangle_ngg_back.sb \
-	    --ngg-front shaders/triangle_ngg_front.sb
+	    --ngg-front shaders/triangle_ngg_front.sb \
+	    --vertex-attribute 0:0:0:20:r32g32_float \
+	    --vertex-attribute 1:0:8:20:r32g32b32_float
 	xxd -i -n triangle_ngg_front_data \
 	    shaders/triangle_ngg_front.sb shaders/triangle_ngg_front_sb.h
 	xxd -i -n triangle_ngg_back_data \

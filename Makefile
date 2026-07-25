@@ -8,6 +8,7 @@ CFLAGS  += -I include -I src -DOPENAGC_GENERIC
 SRCS = \
 	src/cb.c \
 	src/cb_builders.c \
+	src/driver_ops.c \
 	src/driver_generic.c \
 	src/context_state.c \
 	src/register_defaults.c \

@@ -184,7 +184,7 @@ libSceAgcDriver	sceAgcDriverGetEqEventType	5CdQTZIQPxM	libGraphicsDriver.cpp
 libSceAgcDriver	sceAgcDriverGetGpuRefClks	g68eYcZS7PY	SPRX stub (returns 0x8a6d0001)
 libSceAgcDriver	sceAgcDriverGetHsOffchipParam	r28hEh6cNH0	3.20 stub (libSceAgcDriver)
 libSceAgcDriver	sceAgcDriverGetOwnerName	LepGrgk77sM	SPRX stub (returns 0x8a6c9018 = not supported)
-libSceAgcDriver	sceAgcDriverGetPaDebugInterfaceVersion	Pqxglq1oKec	ps5-openagc agc_nid.h
+libSceAgcDriver	sceAgcDriverGetPaDebugInterfaceVersion	Pqxglq1oKec	5.50 SPRX stub at VA 0x2b0 (returns 0x8a6d0001)
 libSceAgcDriver	sceAgcDriverGetRegShadowInfo	CP-kVAMmWVw	3.20 stub (libSceAgcDriver)
 libSceAgcDriver	sceAgcDriverGetRegShadowInfoAgr	ME1eUot7+Qw	3.20 stub (libSceAgcDriver)
 libSceAgcDriver	sceAgcDriverGetReservedDmemForAgc	Um-jkyDy9rI	3.20 stub (libSceAgcDriver)

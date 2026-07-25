@@ -33,6 +33,8 @@
 #include "agc_registers.h"
 #include "agc_shader.h"
 #include "agc_types.h"
+
+#include <stdlib.h>
 #include "agcdriver.h"
 
 #include <string.h>
@@ -206,9 +208,7 @@ int32_t PS5_SYSV_ABI sceAgcDriverRegisterWorkloadStream(
 /* Convenience submit wrappers (reference-confirmed)                     */
 /* ===================================================================== */
 
-/* sceAgcDriverSubmitMultiDcbs (NID: 6UzEidRZwkg)
- * Loops over DCB arrays and submits each via sceAgcDriverSubmitDcb. */
-int32_t PS5_SYSV_ABI sceAgcDriverSubmitMultiDcbs(
+static int32_t agcSubmitDcbArrayDirect(
     void *const dcb_gpu_addrs[], const uint32_t *dcb_sizes_in_dwords,
     uint32_t count)
 {
@@ -217,17 +217,35 @@ int32_t PS5_SYSV_ABI sceAgcDriverSubmitMultiDcbs(
     if (!dcb_gpu_addrs || !dcb_sizes_in_dwords)
         return AGC_ERROR_INVALID_ARGUMENT;
 
+    uint32_t *sizes_in_bytes = malloc((size_t)count * sizeof(*sizes_in_bytes));
+    if (!sizes_in_bytes)
+        return AGC_ERROR_OUT_OF_MEMORY;
+
     for (uint32_t i = 0; i < count; i++) {
-        if (!dcb_gpu_addrs[i])
-            continue;
-        AgcCommandBufferSubmit pkt = {0};
-        pkt.command_address = (uint64_t)(uintptr_t)dcb_gpu_addrs[i];
-        pkt.dword_count = dcb_sizes_in_dwords[i];
-        int32_t ret = sceAgcDriverSubmitDcb(&pkt);
-        if (ret < 0)
-            return ret;
+        if (dcb_gpu_addrs[i] &&
+            (dcb_sizes_in_dwords[i] == 0 ||
+             dcb_sizes_in_dwords[i] > UINT32_MAX / 4u)) {
+            free(sizes_in_bytes);
+            return AGC_ERROR_CB_INVALID_SIZE;
+        }
+        sizes_in_bytes[i] = dcb_sizes_in_dwords[i] * 4u;
     }
-    return AGC_OK;
+
+    int32_t ret = sceAgcDriverSubmitMultiCommandBuffersDirect(
+        count, dcb_gpu_addrs, sizes_in_bytes, NULL, NULL);
+    free(sizes_in_bytes);
+    return ret;
+}
+
+/* sceAgcDriverSubmitMultiDcbs (NID: 6UzEidRZwkg)
+ * Submit all DCB descriptors in one kernel frame. Separate SUBMIT_16 ioctls
+ * do not advance as independent frames on FW 5.50 without submit-done state. */
+int32_t PS5_SYSV_ABI sceAgcDriverSubmitMultiDcbs(
+    void *const dcb_gpu_addrs[], const uint32_t *dcb_sizes_in_dwords,
+    uint32_t count)
+{
+    return agcSubmitDcbArrayDirect(
+        dcb_gpu_addrs, dcb_sizes_in_dwords, count);
 }
 
 /* sceAgcDriverSubmitCommandBuffer (NID: b4fpgH5ZXxQ)
@@ -247,23 +265,14 @@ int32_t PS5_SYSV_ABI sceAgcDriverSubmitCommandBuffer(
 }
 
 /* sceAgcDriverSubmitMultiCommandBuffers (NID: Fj7r9EHzF38)
- * Loops over DCB arrays and submits each via SubmitCommandBuffer. */
+ * The queue selector is unused for graphics DCBs; preserve the DCB array as
+ * one kernel frame instead of issuing one standalone ioctl per element. */
 int32_t PS5_SYSV_ABI sceAgcDriverSubmitMultiCommandBuffers(
     uint32_t queue, void *const dcbs[], const uint32_t *sizes_in_dwords,
     uint32_t count)
 {
-    if (count == 0)
-        return AGC_OK;
-    if (!dcbs || !sizes_in_dwords)
-        return AGC_ERROR_INVALID_ARGUMENT;
-
-    for (uint32_t i = 0; i < count; i++) {
-        int32_t ret = sceAgcDriverSubmitCommandBuffer(
-            queue, dcbs[i], sizes_in_dwords[i]);
-        if (ret < 0)
-            return ret;
-    }
-    return AGC_OK;
+    (void)queue;
+    return agcSubmitDcbArrayDirect(dcbs, sizes_in_dwords, count);
 }
 
 /* sceAgcDriverSubmitMultiAcbs (NID: HF3YllT3mXU)

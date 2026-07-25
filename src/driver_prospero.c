@@ -38,6 +38,7 @@
  */
 
 #include "agcdriver.h"
+#include "driver_ops.h"
 #include "agc_types.h"
 #include "agc_error.h"
 #include "agc_ioctl.h"
@@ -119,7 +120,7 @@ extern int32_t sceKernelReleaseDirectMemory(off_t physicalAddr, size_t length);
 extern int32_t sceKernelMapNamedSystemFlexibleMemory(
     void **addr, size_t size, int type, int flags, const char *name);
 
-/* Named internal memory region allocated by sce_agc_initialize_internal_memory */
+/* Named internal memory region allocated by agcProsperoInitializeInternalMemory */
 typedef struct {
     void    *cpu_addr;
     off_t    physical_addr;
@@ -144,10 +145,10 @@ typedef struct {
  */
 typedef struct {
     int              gc_fd;          /* /dev/gc file descriptor */
-    bool             initialized;    /* sce_agc_initialize succeeded */
-    bool             mem_initialized;/* sce_agc_initialize_internal_memory succeeded */
-    bool             defaults_notified;/* sceAgcDriverNotifyDefaultStates succeeded */
-    bool             async_setup_done;/* sceAgcDriverSetupAsyncGraphics succeeded */
+    bool             initialized;    /* agcProsperoInitialize succeeded */
+    bool             mem_initialized;/* agcProsperoInitializeInternalMemory succeeded */
+    bool             defaults_notified;/* agcProsperoNotifyDefaultStates succeeded */
+    bool             async_setup_done;/* agcProsperoSetupAsyncGraphics succeeded */
     void            *mmio_base;      /* GPU register MMIO mapping (0xfe0200000) */
     uint32_t         ctx_capability; /* context query result from ioctl 0x2e */
     AgcProsperoQueue    queues[AGC_PROSPERO_MAX_QUEUES];
@@ -341,7 +342,7 @@ static int32_t agcProsperoCarveSubRegion(
  * exist in FW 5.50 — the kernel returns EINVAL for it. This was the
  * cause of the hardware validation failure.
  */
-int32_t PS5_SYSV_ABI sce_agc_initialize(void)
+int32_t PS5_SYSV_ABI agcProsperoInitialize(void)
 {
     if (g_prospero.initialized)
         return AGC_OK;
@@ -408,7 +409,7 @@ int32_t PS5_SYSV_ABI sce_agc_initialize(void)
  * for queue creation — the ring buffer is carved at offset 0x39000 from
  * the EOP FIFO base.
  */
-int32_t PS5_SYSV_ABI sce_agc_initialize_internal_memory(void)
+int32_t PS5_SYSV_ABI agcProsperoInitializeInternalMemory(void)
 {
     if (!g_prospero.initialized)
         return AGC_ERROR_NOT_INITIALIZED;
@@ -476,7 +477,7 @@ int32_t PS5_SYSV_ABI sce_agc_initialize_internal_memory(void)
  *     - per CB: checks header opcode, masks ib_base, ORs in VMID<<52
  *     - calls gc_insert_indirect_buffer per CB
  */
-int32_t PS5_SYSV_ABI sceAgcDriverSubmitMultiCommandBuffersDirect(
+int32_t PS5_SYSV_ABI agcProsperoSubmitMultiCommandBuffersDirect(
     uint32_t count,
     void *const dcb_gpu_addrs[],
     uint32_t *dcb_sizes_in_bytes,
@@ -573,7 +574,7 @@ int32_t PS5_SYSV_ABI sceAgcDriverSubmitMultiCommandBuffersDirect(
  *
  * Wraps the single CB in a submit ioctl call.
  */
-int32_t PS5_SYSV_ABI sceAgcDriverSubmitDcb(const AgcCommandBufferSubmit *packet)
+int32_t PS5_SYSV_ABI agcProsperoSubmitDcb(const AgcCommandBufferSubmit *packet)
 {
     if (!g_prospero.initialized)
         return AGC_ERROR_NOT_INITIALIZED;
@@ -603,7 +604,7 @@ int32_t PS5_SYSV_ABI sceAgcDriverSubmitDcb(const AgcCommandBufferSubmit *packet)
  * The owner_handle selects which compute queue to submit to.
  * ACBs use the IT_INDIRECT_BUFFER_CONST header type.
  */
-int32_t PS5_SYSV_ABI sceAgcDriverSubmitAcb(
+int32_t PS5_SYSV_ABI agcProsperoSubmitAcb(
     uint32_t owner_handle, const AgcCommandBufferSubmit *packet)
 {
     if (!g_prospero.initialized)
@@ -650,7 +651,7 @@ int32_t PS5_SYSV_ABI sceAgcDriverSubmitAcb(
 /* Public API — suspend points                                           */
 /* ===================================================================== */
 
-int32_t PS5_SYSV_ABI sceAgcDriverSuspendPointSubmitDirect(
+int32_t PS5_SYSV_ABI agcProsperoSuspendPointSubmitDirect(
     uint32_t field0, uint32_t field1, uint32_t field2, uint32_t field3)
 {
     if (!g_prospero.initialized)
@@ -677,7 +678,7 @@ int32_t PS5_SYSV_ABI sceAgcDriverSuspendPointSubmitDirect(
     return AGC_OK;
 }
 
-bool PS5_SYSV_ABI sceAgcDriverIsSuspendPointInFlightDirect(uint32_t value)
+bool PS5_SYSV_ABI agcProsperoIsSuspendPointInFlightDirect(uint32_t value)
 {
     (void)value;
     if (!g_prospero.initialized)
@@ -696,7 +697,7 @@ bool PS5_SYSV_ABI sceAgcDriverIsSuspendPointInFlightDirect(uint32_t value)
     return status != 0;
 }
 
-int32_t PS5_SYSV_ABI sce_agc_internal_suspend_point_submit_final(
+int32_t PS5_SYSV_ABI agcProsperoInternalSuspendPointSubmitFinal(
     uint32_t field0, uint32_t field1, uint32_t field2, uint32_t field3)
 {
     if (!g_prospero.initialized)
@@ -735,7 +736,7 @@ int32_t PS5_SYSV_ABI sce_agc_internal_suspend_point_submit_final(
  *
  * Ioctl command: 0x80048126 = IOC(READ, 0x81, 0x26, 4)
  */
-int32_t PS5_SYSV_ABI sceAgcDriverSetupAsyncGraphics(uint32_t pipe_id)
+int32_t PS5_SYSV_ABI agcProsperoSetupAsyncGraphics(uint32_t pipe_id)
 {
     if (!g_prospero.initialized)
         return AGC_ERROR_NOT_INITIALIZED;
@@ -761,7 +762,7 @@ int32_t PS5_SYSV_ABI sceAgcDriverSetupAsyncGraphics(uint32_t pipe_id)
  * Set tessellation factor ring.
  * Uses ioctl nr=0x20 (SET_TF_RING, 16-byte RW).
  */
-int32_t PS5_SYSV_ABI sceAgcDriverSetTFRingDirect(void)
+int32_t PS5_SYSV_ABI agcProsperoSetTFRingDirect(void)
 {
     if (!g_prospero.initialized)
         return AGC_ERROR_NOT_INITIALIZED;
@@ -778,7 +779,7 @@ int32_t PS5_SYSV_ABI sceAgcDriverSetTFRingDirect(void)
  * The FW 5.50 kernel handler at 0x6ee6d2 passes the argument directly to
  * gc_pm4_clearstate_patch (0xb7dd20) as a patch list pointer and count.
  */
-int32_t PS5_SYSV_ABI sceAgcDriverSetHsOffchipParamDirect(
+int32_t PS5_SYSV_ABI agcProsperoSetHsOffchipParamDirect(
     uint64_t list_addr, uint32_t num_entries)
 {
     if (!g_prospero.initialized)
@@ -792,7 +793,7 @@ int32_t PS5_SYSV_ABI sceAgcDriverSetHsOffchipParamDirect(
     return (ret < 0) ? AGC_ERROR_INTERNAL : AGC_OK;
 }
 
-int32_t PS5_SYSV_ABI sceAgcDriverSetTargetRingForDiag(void)
+int32_t PS5_SYSV_ABI agcProsperoSetTargetRingForDiag(void)
 {
     /* No direct ioctl mapping — diagnostic target ring setup.
      * The firmware uses a large-arg ioctl or direct register write. */
@@ -803,7 +804,7 @@ int32_t PS5_SYSV_ABI sceAgcDriverSetTargetRingForDiag(void)
 /* Public API — default states                                           */
 /* ===================================================================== */
 
-int32_t PS5_SYSV_ABI sceAgcDriverNotifyDefaultStates(uint32_t flags)
+int32_t PS5_SYSV_ABI agcProsperoNotifyDefaultStates(uint32_t flags)
 {
     if (!g_prospero.initialized)
         return AGC_ERROR_NOT_INITIALIZED;
@@ -919,7 +920,7 @@ int32_t PS5_SYSV_ABI sceAgcDriverNotifyDefaultStates(uint32_t flags)
     submit.command_address = (uintptr_t)dcb_region.gpu_addr;
     submit.dword_count = 2;
 
-    ret = sceAgcDriverSubmitDcb(&submit);
+    ret = agcProsperoSubmitDcb(&submit);
     /* dcb_region is a sub-region of ddid — don't munmap it, just clear */
     memset(&dcb_region, 0, sizeof(dcb_region));
     if (ret != AGC_OK)
@@ -941,7 +942,7 @@ int32_t PS5_SYSV_ABI sceAgcDriverNotifyDefaultStates(uint32_t flags)
  * ioctl or command buffer submission. For now, fall back to memcpy
  * since the command buffer data is in CPU-visible memory.
  */
-int32_t PS5_SYSV_ABI sceAgcDriverSdmaCopyLinearBlocking(
+int32_t PS5_SYSV_ABI agcProsperoSdmaCopyLinearBlocking(
     void *dst, const void *src, size_t size)
 {
     if (!dst || !src)
@@ -981,7 +982,7 @@ extern int32_t sceVideoOutSubmitEopFlip(
     int32_t videoOutHandle, int32_t bufferIndex,
     int32_t flipMode, int32_t presentPtr);
 
-int32_t PS5_SYSV_ABI sceAgcDriverSubmitEopFlip(
+int32_t PS5_SYSV_ABI agcProsperoSubmitEopFlip(
     void *video_out_handle, uint32_t display_buf_index,
     uint32_t flip_mode, void *present_ptr)
 {
@@ -1051,18 +1052,18 @@ static int32_t agcProsperoSubmitWorkload(uint32_t workload_id, uint32_t sub)
     submit.command_address = (uintptr_t)dcb_region.gpu_addr;
     submit.dword_count = 3;
 
-    ret = sceAgcDriverSubmitDcb(&submit);
+    ret = agcProsperoSubmitDcb(&submit);
     /* dcb_region is a sub-region — don't munmap, just clear */
     memset(&dcb_region, 0, sizeof(dcb_region));
     return ret;
 }
 
-int32_t PS5_SYSV_ABI sceAgcDriverSetWorkloadsActive(uint32_t workload_id)
+int32_t PS5_SYSV_ABI agcProsperoSetWorkloadsActive(uint32_t workload_id)
 {
     return agcProsperoSubmitWorkload(workload_id, AGC_PM4_SUB_WORKLOAD_BEGIN);
 }
 
-int32_t PS5_SYSV_ABI sceAgcDriverSetWorkloadComplete(uint32_t workload_id)
+int32_t PS5_SYSV_ABI agcProsperoSetWorkloadComplete(uint32_t workload_id)
 {
     return agcProsperoSubmitWorkload(workload_id, AGC_PM4_SUB_WORKLOAD_END);
 }
@@ -1093,7 +1094,7 @@ int32_t PS5_SYSV_ABI sceAgcDriverSetWorkloadComplete(uint32_t workload_id)
  *
  * Ioctl command: 0xc0408121 = IOC(RW, 0x81, 0x21, 64)
  */
-int32_t PS5_SYSV_ABI _sceAgcDriverCreateUserSpecialQueue(void)
+int32_t PS5_SYSV_ABI agcProsperoCreateUserSpecialQueue(void)
 {
     if (!g_prospero.initialized)
         return AGC_ERROR_NOT_INITIALIZED;
@@ -1138,7 +1139,7 @@ int32_t PS5_SYSV_ABI _sceAgcDriverCreateUserSpecialQueue(void)
     memset(&g_prospero.queues[index].ring_region, 0, sizeof(AgcProsperoRegion));
 
     /* Return the queue index as the handle so callers can pass it to
-     * sceAgcDriverSubmitAcb as the owner_handle. The generic backend
+     * agcProsperoSubmitAcb as the owner_handle. The generic backend
      * does the same. */
     return (int32_t)index;
 }
@@ -1153,7 +1154,7 @@ int32_t PS5_SYSV_ABI _sceAgcDriverCreateUserSpecialQueue(void)
  *
  * Ioctl command: 0xc00c810e = IOC(RW, 0x81, 0x0e, 12)
  */
-int32_t PS5_SYSV_ABI _sceAgcDriverDestroyUserSpecialQueue(void)
+int32_t PS5_SYSV_ABI agcProsperoDestroyUserSpecialQueue(void)
 {
     if (!g_prospero.initialized)
         return AGC_ERROR_NOT_INITIALIZED;
@@ -1183,47 +1184,43 @@ int32_t PS5_SYSV_ABI _sceAgcDriverDestroyUserSpecialQueue(void)
 /* Public API — capture / debug                                          */
 /* ===================================================================== */
 
-int32_t PS5_SYSV_ABI sceAgcDriverRegisterCaptureInterface(void)
+int32_t PS5_SYSV_ABI agcProsperoRegisterCaptureInterface(void)
 {
     /* TODO: Razor ACQ registration via WFDebug ioctls. */
     return AGC_OK;
 }
 
-int32_t PS5_SYSV_ABI sceAgcDriverDeregisterCaptureInterface(void)
+int32_t PS5_SYSV_ABI agcProsperoDeregisterCaptureInterface(void)
 {
     return AGC_OK;
 }
 
-int32_t PS5_SYSV_ABI sceAgcDriverAcquireRazorACQ(void)
+int32_t PS5_SYSV_ABI agcProsperoAcquireRazorACQ(void)
 {
     /* TODO: WFDebug ioctl nr=0x15. */
     return AGC_OK;
 }
 
-int32_t PS5_SYSV_ABI sceAgcDriverReleaseRazorACQ(void)
+int32_t PS5_SYSV_ABI agcProsperoReleaseRazorACQ(void)
 {
     return AGC_OK;
 }
 
-int32_t PS5_SYSV_ABI sceAgcDriverSubmitToRazorACQ(void)
+int32_t PS5_SYSV_ABI agcProsperoSubmitToRazorACQ(void)
 {
     return AGC_OK;
 }
 
-int32_t PS5_SYSV_ABI sceAgcDriverSubmitToHDRScopesACQ(void)
+int32_t PS5_SYSV_ABI agcProsperoSubmitToHDRScopesACQ(void)
 {
     return AGC_OK;
 }
 
-uint32_t PS5_SYSV_ABI sceAgcDriverGetPaDebugInterfaceVersion(void)
+uint32_t PS5_SYSV_ABI agcProsperoGetPaDebugInterfaceVersion(void)
 {
-    /* Query PA debug interface version via ioctl nr=0x38 (PADEBUG_4, 4-byte R). */
-    if (!g_prospero.initialized || g_prospero.gc_fd < 0)
-        return 0;
-
-    uint32_t version = 0;
-    agcProsperoIoctl(AGC_GC_IOCTL_PADEBUG_4, &version);
-    return version;
+    /* FW 5.50 SPRX Pqxglq1oKec at VA 0x2b0 is a permission stub: it logs
+     * "permission insufficient" and returns 0x8a6d0001 without an ioctl. */
+    return AGC_DRIVER_ERROR_PERMISSION_INSUFFICIENT;
 }
 
 /* ===================================================================== */
@@ -1255,5 +1252,35 @@ int agcProsperoMakeSysmap(void *cpu_addr, uint64_t *out_gpu_addr)
     *out_gpu_addr = arg.addr;
     return 0;
 }
+
+const AgcDriverOps agcProsperoDriverOps = {
+    .name = "prospero-fw550-direct",
+    .initialize = agcProsperoInitialize,
+    .initialize_internal_memory = agcProsperoInitializeInternalMemory,
+    .submit_multi_command_buffers_direct = agcProsperoSubmitMultiCommandBuffersDirect,
+    .submit_dcb = agcProsperoSubmitDcb,
+    .submit_acb = agcProsperoSubmitAcb,
+    .suspend_point_submit_direct = agcProsperoSuspendPointSubmitDirect,
+    .is_suspend_point_in_flight_direct = agcProsperoIsSuspendPointInFlightDirect,
+    .internal_suspend_point_submit_final = agcProsperoInternalSuspendPointSubmitFinal,
+    .setup_async_graphics = agcProsperoSetupAsyncGraphics,
+    .set_tf_ring_direct = agcProsperoSetTFRingDirect,
+    .set_hs_offchip_param_direct = agcProsperoSetHsOffchipParamDirect,
+    .set_target_ring_for_diag = agcProsperoSetTargetRingForDiag,
+    .notify_default_states = agcProsperoNotifyDefaultStates,
+    .sdma_copy_linear_blocking = agcProsperoSdmaCopyLinearBlocking,
+    .submit_eop_flip = agcProsperoSubmitEopFlip,
+    .set_workloads_active = agcProsperoSetWorkloadsActive,
+    .set_workload_complete = agcProsperoSetWorkloadComplete,
+    .create_user_special_queue = agcProsperoCreateUserSpecialQueue,
+    .destroy_user_special_queue = agcProsperoDestroyUserSpecialQueue,
+    .register_capture_interface = agcProsperoRegisterCaptureInterface,
+    .deregister_capture_interface = agcProsperoDeregisterCaptureInterface,
+    .acquire_razor_acq = agcProsperoAcquireRazorACQ,
+    .release_razor_acq = agcProsperoReleaseRazorACQ,
+    .submit_to_razor_acq = agcProsperoSubmitToRazorACQ,
+    .submit_to_hdr_scopes_acq = agcProsperoSubmitToHDRScopesACQ,
+    .get_pa_debug_interface_version = agcProsperoGetPaDebugInterfaceVersion,
+};
 
 #endif /* OPENAGC_PROSPERO */

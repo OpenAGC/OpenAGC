@@ -111,14 +111,14 @@ int main(void) {
     else
         printf("    Default states notified\n");
 
-    /* --- Step 4: Query PA debug interface version --- */
+    /* --- Step 4: Verify the official FW 5.50 PA-debug permission stub --- */
     printf("[4] sceAgcDriverGetPaDebugInterfaceVersion()...\n");
     version = sceAgcDriverGetPaDebugInterfaceVersion();
     printf("    version: 0x%08X\n", version);
-    if (version == 0)
-        printf("    WARNING: PADEBUG_4 returned 0 (may not be supported)\n");
+    if (version == AGC_DRIVER_ERROR_PERMISSION_INSUFFICIENT)
+        printf("    FW 5.50 permission stub: PASS\n");
     else
-        printf("    PA debug interface queried OK\n");
+        printf("    WARNING: unexpected PA debug result\n");
 
     /* --- Step 5: Build and submit a NOP command buffer --- */
     printf("[5] sceAgcDriverSubmitDcb() with NOP packet...\n");

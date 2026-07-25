@@ -292,7 +292,7 @@ native `/dev/gc` backend via `libopenagc.a`:
 - `sce_agc_initialize_internal_memory()` — allocate 8 named internal regions
 - `sceAgcDriverNotifyDefaultStates()` — build primary/internal register-defaults blobs
 - `sceAgcDriverSuspendPointSubmitDirect()` — submit a suspend point
-- `sceAgcDriverGetPaDebugInterfaceVersion()` — PA debug query
+- `sceAgcDriverGetPaDebugInterfaceVersion()` — FW 5.50 permission-stub check
 - `sceAgcDriverSubmitDcb()` — NOP packet submission
 - `_sceAgcDriverCreateUserSpecialQueue()` / `DestroyUserSpecialQueue()`
 
@@ -411,13 +411,14 @@ See `STATUS.md` and `PLAN.md`. Next RE tasks, by priority:
    execution is confirmed, the next milestone is a real graphics draw call:
    VS+PS shaders, render target binding, viewport/scissor, blend state, and
    `IT_DRAW_INDEX_AUTO`. See PLAN.md Phase 7.
-3. **PA debug ioctl** (Priority 3, low) — `sceAgcDriverGetPaDebugInterfaceVersion`
-   returns EPERM. Separate kernel permission check, not the cr_sceAuthId
-   check. Non-blocking for rendering.
-4. **FRAME_OPEN ioctl** (Priority 4, low) — returns EINVAL during init.
-   Non-blocking — init succeeds without it.
-5. **Game compatibility** (Priority 5) — continue analyzing game binaries.
+3. **Additional render-target formats** (Priority 3) — expand the validated
+   graphics path beyond the current RGBA8 render target.
+4. **Game compatibility** (Priority 4) — continue analyzing game binaries.
    Current: 3 games, 72 unique AGC functions, 100% implemented.
+
+Closed background RE: FW 5.50 `sceAgcDriverGetPaDebugInterfaceVersion` is a
+userspace permission stub returning `0x8A6D0001` without an ioctl, and
+`FRAME_OPEN` is absent from the FW 5.50 kernel dispatcher.
 
 ### Compute shader debugging status (Priority 1)
 
@@ -540,4 +541,3 @@ buffer (under active investigation).
   signatures without an explicit ABI reason.
 
 - Do not include AI assistant branding or automated co-author tags (e.g. Devin) in git commit messages.
-

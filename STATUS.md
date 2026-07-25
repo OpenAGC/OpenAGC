@@ -2,10 +2,14 @@
 
 ## Current Milestone
 
-**Graphics pipeline: first GPU draw call is hardware-validated.** The gfx1013
-ES+GS/NGG path executes compiler-generated ACO vertex code plus a pixel
-shader and rasterizes a magenta triangle on real PS5 hardware. Phase 7 is
-complete; see PLAN.md for the remaining production-hardening work.
+**Graphics pipeline: indexed drawing and FP16 render targets are
+hardware-validated.** The gfx1013
+ES+GS/NGG path fetches `float2` position plus `float3` color from a
+20-byte-stride GPU vertex buffer, consumes a bound 16-bit index buffer, and
+rasterizes an RGB triangle on real PS5 hardware. The same path also renders
+to a 1536x1536 linear `R16G16B16A16_FLOAT` offscreen color buffer and converts
+the readback to the registered RGBA8 display surface for inspection. Phase 7
+is complete; see PLAN.md for the remaining production-hardening work.
 
 See [PLAN.md](PLAN.md) for the broader GNM-to-AGC architecture roadmap,
 including Wave32, geometry, ray tracing, cache synchronization, and VRS targets.
@@ -339,7 +343,8 @@ Native prospero backend (`src/driver_prospero.c`, `#ifdef OPENAGC_PROSPERO`):
 - `sceAgcDriverSetupAsyncGraphics` — `QUEUE_STATUS` ioctl (nr=0x26, arg=1; SPRX-confirmed)
 - `sceAgcDriverSetTFRingDirect` — `SET_TF_RING` ioctl (user arg ignored on FW 5.50)
 - `sceAgcDriverSetHsOffchipParamDirect` — `SET_HS_OFFCHIP` ioctl with RE'd 16-byte patch-list argument
-- `sceAgcDriverGetPaDebugInterfaceVersion` — `PADEBUG_4` ioctl
+- `sceAgcDriverGetPaDebugInterfaceVersion` — FW 5.50 permission stub returning
+  `0x8A6D0001` without an ioctl (SPRX-confirmed)
 - `_sceAgcDriverCreateUserSpecialQueue` — `QUEUE_CREATE` ioctl (nr=0x21, 64-byte RW arg). Ring buffer address computed from EOP FIFO base + 0x39000 (SPRX-confirmed). Arg layout: magic tokens, pipe_id, mmio_base, queue_id, ring_addr, ring_size.
 - `_sceAgcDriverDestroyUserSpecialQueue` — `QUEUE_DESTROY` ioctl (nr=0x0e, 12-byte RW arg with magic auth tokens; SPRX-confirmed)
 - `sceAgcDriverNotifyDefaultStates` — takes `uint32_t flags`; builds FW 5.50 primary/internal register-defaults blobs in GPU-visible memory (kernel consumption path still pending RE)
@@ -365,7 +370,7 @@ Submit model:
 - `sceVideoOutRegisterBuffers` (A8R8G8B8_SRGB, tiled) — OK
 - Flip loop running at 60fps
 
-### agc_init.elf — PARTIAL PASS (post-SPRX-disassembly + kernel RE)
+### agc_init.elf — PASS (SPRX-confirmed PA-debug behavior)
 - **[1] sce_agc_initialize()** — PASS
   - /dev/gc opened (fd=7), CONTEXT_QUERY OK, mmap at 0xfe0200000
   - FRAME_OPEN correctly returns EINVAL (confirms ps5-openagc audit)
@@ -375,9 +380,9 @@ Submit model:
   - Region sizes match SPRX disassembly exactly
 - **[3] sceAgcDriverNotifyDefaultStates()** — PASS
   - Sub-region carving from SceGnmDdid (1008KB) works correctly
-- **[4] sceAgcDriverGetPaDebugInterfaceVersion()** — FAIL (errno=1, EPERM)
-  - Kernel returns EPERM — requires root/debug capabilities
-  - Not a bug in our implementation; kernel-level permission check
+- **[4] sceAgcDriverGetPaDebugInterfaceVersion()** — PASS
+  - Returns the official FW 5.50 permission-stub value `0x8A6D0001`
+  - SPRX disassembly confirms the export logs and returns without an ioctl
 - **[5] sceAgcDriverSubmitDcb(NOP)** — PASS (NOP submitted to GPU!)
 - **[6] sceAgcDriverSetupAsyncGraphics(1)** — PASS
   - Ioctl 0x80048126 with arg=1 succeeds
@@ -454,20 +459,82 @@ Submit model:
 - **Output verification**: 2073600 / 2073600 pixels match `0xFF00FF00` (100% GPU rendered on real hardware) — OK
 - Display flip — OK (GPU-rendered solid green frame visible on TV/display)
 
+## Firmware Forward Compatibility
+
+The internal `AgcDriverOps` dispatch layer is implemented. The stable public
+`sceAgc*` / `sceAgcDriver*` symbols now dispatch through a private operations
+table, with both the generic backend and the validated FW 5.50 direct Prospero
+backend registered behind it. Host tests can install a fake table to verify
+callback routing and safe `AGC_ERROR_NOT_SUPPORTED` behavior for missing
+operations. Sony SPRX export resolution and runtime firmware selection remain
+the next Phase 8 milestones.
+
 ## Next RE Tasks
 
-### Priority 1: Graphics draw call (hardware validated)
+### Priority 1: Indexed vertex-buffer draw (hardware validated)
 
-Compute dispatch and the first graphics draw are fully hardware-validated on
-real PS5 hardware. `agc_graphics.elf` executes the gfx1013 NGG front program,
-rasterizes the expected magenta triangle, and changes 1,036,800 of 8,294,400
-pixels, exactly matching the triangle's geometric area.
+Compute dispatch, the first graphics draw, and RGB interpolants are fully
+hardware-validated on real PS5 hardware. `agc_graphics.elf` executes the
+gfx1013 NGG front program, rasterizes a smooth RGB triangle, and changes
+1,036,796 of 8,294,400 pixels. Readback sampled eight distinct colors and
+reported `Spatial color variation: PASS`; the RGB gradient was also confirmed
+visually on the PS5 display.
 
-The immediate next hardware milestone is an interpolated RGB triangle. The
-fragment shader will consume `v_color` instead of returning constant magenta,
-validating the complete ES/NGG-to-PS semantic and interpolant path. Compiler
-front/back placement regression coverage, sample cleanup, vertex/index
-buffers, textures, and advanced graphics stages follow in that order.
+The vertex stage now consumes a real interleaved binding instead of procedural
+`gl_VertexIndex` arrays. The compiler lowers location 0 (`R32G32_FLOAT`, offset
+0) and location 1 (`R32G32B32_FLOAT`, offset 8) against binding 0 with stride
+20, then records the RADV vertex-descriptor-table user SGPR for runtime
+patching. On hardware the table was bound through SH register `0x08c`, the
+descriptor referenced three records at `0x205608000`, and the sample reported
+`Interleaved buffer fetch: PASS` with the same exact triangle coverage and RGB
+variation. The green background and RGB-gradient triangle were also confirmed
+visually on the PS5 display.
+
+Indexed drawing now uses a four-record vertex buffer with vertex 0 deliberately
+placed outside the intended geometry and a bound `uint16_t` index buffer
+containing `{1,2,3}`. The DCB programs `VGT_INDEX_TYPE`, `INDEX_BASE`, and
+`INDEX_BUFFER_SIZE`, then issues `DRAW_INDEX_OFFSET_2`. Real gfx1013 readback
+still reports exactly 1,036,796 changed pixels and eight sampled RGB colors,
+proving that the GPU skipped the decoy vertex and consumed the index buffer.
+The PS5 display visually confirms the indexed run as a green background with
+an RGB-gradient triangle.
+Texture and sampler binding are now hardware-validated on real gfx1013. The
+pixel shader samples a 2x2 linear RGBA8 image through a GFX10.3 image resource
+descriptor and a nonzero bilinear clamp sampler in RADV's 64-byte combined
+descriptor layout. Descriptor set 0 is supplied through PS user SGPR 2
+(`SPI_SHADER_USER_DATA_PS_2`, SH offset `0x00e`). Readback reports 1,036,800
+rasterized pixels, eight distinct sampled colors, bilinear spatial variation,
+and a live post-draw marker. The PS5 display visually confirms a dark-gray
+background with a smoothly color-textured triangle.
+
+Additional render-target format coverage is hardware-validated for linear
+`R16G16B16A16_FLOAT`. The sample programs CB format `0x0c`, FLOAT number type
+`7`, and standard component swap for a 1536x1536 offscreen target. Real PS5
+readback reports 255,744 changed pixels against 255,456 predicted for the
+equilateral triangle, eight distinct sampled FP16 colors, 112,198 opaque
+samples, zero components outside `[0,1]`, and a live post-draw marker. A 1:1
+CPU conversion to the registered RGBA8 display buffer was visually confirmed
+as a centered, smoothly color-textured triangle with equal sides on a
+dark-gray background.
+
+Multiple DCB submission in one process is hardware-validated on FW 5.50.
+Separate `sceAgcDriverSubmitDcb` ioctls accepted both buffers but advanced
+only the first GPU marker. The correct contract for related DCBs is one
+descriptor-array frame through `sceAgcDriverSubmitMultiCommandBuffersDirect`.
+Both `sceAgcDriverSubmitMultiDcbs` and
+`sceAgcDriverSubmitMultiCommandBuffers` now preserve the array through that
+path instead of looping over standalone submits. The public wrapper test wrote
+the ordered markers `0xD001CAFE` and `0xD002CAFE`, then completed async setup,
+queue operations, suspend submission, and workload begin/end without a freeze.
+Automatic per-submit `SUBMITDONE` synchronization is intentionally not used;
+it froze the console during workload completion. See
+`analysis/multi_dcb_submission_550.md`.
+
+The compiler now assigns standalone vertex-stage user varyings to RADV
+parameter-export slots before NGG lowering. The validated shader exports
+`v_color` through parameter 0 with the `xyz` channel mask; without that link
+metadata the pixel shader received constant ones and produced a white
+triangle. Vertex/index buffers, textures, and advanced graphics stages follow.
 
 Subtasks:
 1. ~~Submit a compute dispatch and verify the GPU executes it.~~ ✅ Done
@@ -614,7 +681,8 @@ and semantic maps. The graphics sample relocates and fuses those records,
 derives primitive/interpolant state through OpenAGC, binds executable ACO code
 through `SPI_SHADER_PGM_LO_ES`, and keeps the GS-back record as the fused
 state/resource container. Real-PS5 validation passes: the entry probe runs,
-the CP survives the draw, and the magenta triangle covers 1,036,800 pixels.
+the CP survives the draw, and an interpolated RGB triangle covers 1,036,796
+pixels with eight distinct colors sampled during readback.
 
 #### Experimental approaches that caused a kernel panic (DO NOT RETRY)
 
@@ -631,20 +699,14 @@ the CP survives the draw, and the magenta triangle covers 1,036,800 pixels.
    caused instability. Use a single active vertex-processing stage.
 
 
-### Priority 3: PA debug ioctl (kernel RE)
+### Closed background RE: PA debug and FRAME_OPEN
 
-`sceAgcDriverGetPaDebugInterfaceVersion` still returns EPERM (errno=1).
-This is a separate kernel permission check (not the cr_sceAuthId check
-at 0xd8e70400). Needs further kernel RE to identify the required
-capability. Low priority — non-blocking for rendering.
+Both questions are resolved for FW 5.50. `sceAgcDriverGetPaDebugInterfaceVersion`
+is an unconditional userspace permission stub returning `0x8A6D0001`, and
+`FRAME_OPEN` (`0xC0088100`) is absent from the kernel ioctl dispatcher. Neither
+is a missing initialization feature or a blocker for rendering.
 
-### Priority 4: FRAME_OPEN ioctl (kernel RE)
-
-`sce_agc_initialize` calls FRAME_OPEN (0xC0088100) which returns EINVAL.
-This may need additional context setup or credentials. Currently
-non-blocking — init succeeds without it. Low priority.
-
-### Priority 5: Game compatibility expansion
+### Priority 3: Game compatibility expansion
 
 Continue analyzing game binaries to identify and implement remaining
 missing AGC functions. See `analysis/game_agc_usage.md` for the Joe & Mac
@@ -747,6 +809,7 @@ verified from SPRX/kernel disassembly.
 
 - No firmware blobs or proprietary microcode are embedded.
 - No claim of official SDK drop-in completeness.
-- Graphics draw calls are hardware-validated for the current gfx1013
-  no-GS NGG VS+PS sample. This does not yet claim complete tessellation,
-  geometry-shader, mesh-shader, or game-wide graphics compatibility.
+- Graphics draw calls are hardware-validated for the current gfx1013 no-GS
+  NGG VS+PS sample with linear RGBA8 and `R16G16B16A16_FLOAT` color targets.
+  This does not yet claim all color/depth formats, compression, complete
+  tessellation, geometry-shader, mesh-shader, or game-wide compatibility.

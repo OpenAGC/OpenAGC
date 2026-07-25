@@ -280,11 +280,8 @@ The suspend point ioctl (`0xc010811c`) handler at `0xffffffffd8f665c0`:
 2. If NULL → returns `0x804C0001` (EPERM)
 3. If non-NULL → looks up process by field0, gets VMID, validates VMID in [2,14]
 
-The frame context at `[device_context + 0x10]` is set by `FRAME_OPEN`
-(ioctl `0xc0088100`). Since FRAME_OPEN returns EINVAL for our process
-(insufficient credentials), the frame context is never set, and the
-suspend point handler returns EPERM.
-
-This is also a **kernel-level permission check** — the suspend point
-requires a successfully opened frame context, which requires the same
-GPU process credentials as queue create.
+An earlier hypothesis attributed `[device_context + 0x10]` to a
+`FRAME_OPEN` ioctl. FW 5.50 dispatch RE disproves that hypothesis:
+`0xc0088100` has no handler and always reaches the `EINVAL` default path.
+The field is established through another driver lifecycle path; validated
+suspend-point submission does not depend on a nonexistent FRAME_OPEN call.

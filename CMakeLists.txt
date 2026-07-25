@@ -39,6 +39,7 @@ set(OPENAGC_SOURCES
     src/texture.c
     src/shader.c
     src/game_compat.c
+    src/driver_ops.c
 )
 
 # Platform-specific sources
