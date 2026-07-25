@@ -520,11 +520,14 @@ Acceptance criteria:
 - ✅ User data layout matches ACO's SGPR arg mapping (confirmed by RDNA2
   disassembly — 100% pixel output).
 - ⬜ Graphics shaders (VS/PS) compile and execute on PS5 hardware.
+  VS+PS compile via psbc and the GPU executes past the draw (WRITE_DATA
+  marker confirmed), but render target output is still black — see Phase 7.
 
 ## Phase 7: Graphics Pipeline (Draw Calls)
 
-Status: **not started.** This is the current critical-path milestone.
-All prerequisites are now met.
+Status: **in progress.** The DCB is accepted, the GPU executes past the
+draw (WRITE_DATA marker confirmed), but the render target remains black.
+This is the current critical-path milestone.
 
 Purpose:
 
@@ -537,63 +540,81 @@ Prerequisites:
 - ✅ Shader compiler produces valid compute binaries (Phase 6).
 - ✅ GPU MMU memory mapping understood (flexible memory for GPU writes).
 - ✅ `NotifyDefaultStates` returns `AGC_OK` on hardware.
-- ⬜ Graphics shader compilation (Phase 6) — needed.
+- ✅ Graphics shader compilation (Phase 6) — VS+PS compiled via psbc.
 
 Key learnings from compute validation that apply to graphics:
 
-- **Render targets must be in flexible memory**, not garlic memory. The
-  GPU's VMID address space only sees flexible memory mappings. Garlic
-  memory is for VideoOut display scanout, not GPU compute/graphics writes.
-  The render target should be a flexible memory buffer; copy to the garlic
-  display buffer for flip, or register the flexible buffer with VideoOut
-  directly (if supported).
+- **Render targets can be in garlic memory** — the compute sample writes
+  to garlic memory (display buffer) successfully. The graphics sample now
+  renders directly to the display buffer (garlic) to avoid a copy step.
 - **SET_SH_REG packets need the shader type bit** (bit 0): 0=graphics,
   1=compute. For VS/PS draw calls, use bit 0 = 0 (graphics engine).
 - **Apply FW 5.50 SH register defaults** in the command buffer before
   setting shader-specific state. This provides the baseline GPU state.
-- **COMPUTE_STATIC_THREAD_MGMT_SE0..SE3** is compute-specific, but
-  graphics may have analogous CU enable registers. Check if the default
-  state blobs already handle this for graphics.
+- **CONTEXT_CONTROL packet is required** — opcode 0x28, 3 dwords,
+  `LOAD_ENABLE_CONTEXT=0x80000000`. Same as compute.
+
+### Critical issues discovered during hardware validation
+
+1. **Non-contiguous register default groups corrupt GPU state.** Five
+   register-default groups in `register_defaults_v8.c` have non-contiguous
+   offsets but were being written as batch `SET_SH_REG`/`SET_CX_REG`
+   packets (which assume contiguous offsets). Group 72 (128 CB_COLOR0
+   registers) has offsets 0x318, 0x31b, 0x31c, 0x31d, 0x31e, 0x31f,
+   0x321, 0x323... — writing contiguously overwrites unrelated registers
+   and causes a GPU hang. **Fix:** write each register individually with
+   `register_count=1`. The 5 non-contiguous groups: `_64`, `_72`, `_76`,
+   `_90`, `internal_regs_21`.
+
+2. **Tile mode 0 is Depth_2DThin_64, NOT linear.** For a linear color
+   render target, use `kAgcTileDisplay_LinearGeneral` (31).
+   `CB_COLOR0_ATTRIB = 0x0000001F` (tile_mode_index=31).
+
+3. **SPI_SHADER_COL_FORMAT (0x1C5) and SPI_SHADER_POS_FORMAT (0x1C3) are
+   NOT in shader records or register defaults.** They default to 0 (no
+   export). Must set manually:
+   - `SPI_SHADER_POS_FORMAT (0x1C3) = 1` (vec4 position)
+   - `SPI_SHADER_Z_FORMAT (0x1C4) = 0` (no Z export)
+   - `SPI_SHADER_COL_FORMAT (0x1C5) = 1` (8_8_8_8 color)
+   - `CB_SHADER_MASK (0x08F) = 0x0F` (all RGBA to RT0)
+
+4. **VGT_SHADER_STAGES_EN should be 0 (default) for VS+PS.** Do NOT set
+   `ES_EN` — that routes VS through the ES stage, wrong for a type-3 VS.
+
+5. **DB_Z_INFO must be explicitly disabled.** Default is `0x80000000`
+   (depth enabled). Set `DB_Z_INFO = 0` and `DB_STENCIL_INFO = 0`.
+
+6. **CB_COLOR0_PITCH uses 8-element tiles for linear mode.**
+   `TILE_MAX = (pitch_elements / 8) - 1`. `SLICE = (tiles_per_row * height) - 1`.
+
+### Remaining issue: pixels still black
+
+The GPU executes the draw (WRITE_DATA marker = 0xDEADCAFE confirms CP
+executes past the draw), but the render target remains black
+(0/8294400 non-black pixels). Suspected causes:
+- VS may not be exporting position correctly (POS_FORMAT value or VS
+  output semantics mismatch).
+- PA_CL_VS_OUT_CNTL / PA_CL_CLIP_CNTL may need explicit configuration.
+- SPI_SHADER_COL_FORMAT value 1 may not match the PS export instruction.
+- CB_COLOR0_INFO swap/number-type bits may not match the display buffer.
+- The render target may need to be in flexible memory instead of garlic.
 
 Work:
 
-1. **Compile a vertex + pixel shader pair** — Write a minimal VS+PS in
-   GLSL, compile via psbc, and verify the shader records have correct
-   SH/CX register blocks. The RSRC offset functions are already implemented
-   for all shader types but need hardware validation.
-
-2. **Set up render target state** — Bind a flexible memory buffer as a
-   color render target via CB_COLOR0_BASE/INFO/ATTRIB registers. Use the
-   `AgcRenderTarget` struct and helpers already implemented in openagc.
-   **Important:** the render target buffer must be in flexible memory
-   (GPU MMU-mapped), not garlic memory.
-
-3. **Set up graphics state** — Viewport (PA_CL_VPORT_*), scissor
-   (PA_SC_WINDOW_SCISSOR_*), blend state (CB_BLEND0_CONTROL), primitive
-   type (VGT_PRIMITIVE_TYPE), and shader stage enable (VGT_SHADER_STAGES_EN).
-
-4. **Submit a draw call** — Build a DCB with:
-   - Apply SH register defaults (graphics type, bit 0 = 0)
-   - SET_SH_REG (VS/PS PGM_LO/HI, RSRC1/2/3, user data)
-   - SET_CX_REG (render target, viewport, scissor, blend)
-   - SET_UC_REG (VGT_PRIMITIVE_TYPE, CB_TARGET_MASK)
-   - IT_DRAW_INDEX_AUTO (draw a triangle)
-   Submit via `sceAgcDriverSubmitDcb`.
-
-5. **Copy render target to display buffer** — After the draw completes
-   (ACQUIRE_MEM flush), copy the flexible-memory render target to the
-   garlic-memory display buffer for VideoOut flip. Alternatively, register
-   the flexible buffer directly with VideoOut if the API supports it.
-
-6. **Verify visual output** — Flip the display buffer and confirm the
-   triangle is visible. Compare with CPU-rendered reference.
+1. ~~Compile a vertex + pixel shader pair~~ ✅ Done.
+2. ~~Set up render target state~~ ✅ Done (CB_COLOR0, tile mode 31).
+3. ~~Set up graphics state~~ ✅ Done (viewport, scissor, blend, prim type).
+4. ~~Submit a draw call~~ ✅ Done (DCB accepted, GPU alive after draw).
+5. ~~Copy render target to display buffer~~ ✅ Done (rendering directly
+   to the display buffer).
+6. **Verify visual output** ⬜ In progress — pixels still black.
 
 Acceptance criteria:
 
 - A triangle is visible on the PS5 display, rendered by the GPU.
 - The draw call DCB is accepted by `sceAgcDriverSubmitDcb` without error.
 - Vertex and pixel shaders execute correctly (correct position + color).
-- Render target in flexible memory is written correctly by the GPU.
+- Render target is written correctly by the GPU.
 
 ## Phase 8: Higher-Level AGC Features
 

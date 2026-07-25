@@ -464,15 +464,87 @@ Subtasks:
    (Fixed by correcting DDID allocation sizes: `AGC_DDID_PRIMARY_SIZE=0x41000`, `AGC_DDID_INTERNAL_SIZE=0xc000`. Returns `AGC_OK`).
 3. ~~Verify compute shader pixel output~~ ✅ Done
    (100% VERIFIED ON HARDWARE: 2073600 / 2073600 pixels match `0xFF00FF00`!).
+4. ~~Compile VS+PS via psbc~~ ✅ Done
+   (Minimal GLSL VS+PS compiled via glslc → SPIR-V → psbc → AgcShaderRecord).
+5. ~~Set up render target + graphics state~~ ✅ Done
+   (CB_COLOR0, viewport, scissor, blend, primitive type, SPI_SHADER_POS/COL_FORMAT).
+6. ~~Submit IT_DRAW_INDEX_AUTO~~ ✅ Done
+   (DCB accepted by `sceAgcDriverSubmitDcb`, returns AGC_OK).
+7. **Verify visual output** ⬜ In progress — GPU is alive after draw
+   (WRITE_DATA marker = 0xDEADCAFE confirms CP executes past the draw),
+   but render target pixels remain black (0/8294400 non-black).
 
-4. **Compile VS+PS via psbc** — Write minimal GLSL vertex + pixel shaders,
-   compile to AgcShaderRecord binaries, verify SH/CX register blocks.
-5. **Set up render target + graphics state** — CB_COLOR0_BASE/INFO,
-   PA_CL_VPORT, PA_SC_WINDOW_SCISSOR, CB_BLEND0_CONTROL,
-   VGT_PRIMITIVE_TYPE, VGT_SHADER_STAGES_EN.
-6. **Submit IT_DRAW_INDEX_AUTO** — Build a DCB with all state + draw
-   packet, submit via `sceAgcDriverSubmitDcb`, flip display.
-7. **Verify visual output** — Confirm triangle is visible and correct.
+#### Key findings from graphics draw call debugging (Phase 7)
+
+These issues were discovered and fixed during hardware validation of the
+graphics draw call. The GPU no longer hangs, but pixels are still black.
+
+1. **Non-contiguous register default groups corrupt GPU state.** Five
+   register-default groups in `register_defaults_v8.c` have non-contiguous
+   offsets but were being written as batch `SET_SH_REG`/`SET_CX_REG`
+   packets (which assume contiguous offsets). The worst offender is group
+   72 (128 CB_COLOR0 registers) with offsets like 0x318, 0x31b, 0x31c,
+   0x31d, 0x31e, 0x31f, 0x321, 0x323... — writing these contiguously
+   overwrites unrelated registers and causes a GPU hang. **Fix:** write
+   each register individually with `register_count=1` (see
+   `apply_sh_defaults_graphics` / `apply_cx_defaults` in `agc_graphics.c`).
+   The 5 non-contiguous groups are: `_64` (16 regs), `_72` (128 regs),
+   `_76` (160 regs), `_90` (3 regs), `internal_regs_21` (3 regs).
+
+2. **Tile mode 0 is Depth_2DThin_64, NOT linear.** The `AgcTileMode` enum
+   starts with depth tile modes (0-7). Tile mode 0 = `kAgcTileDepth_2DThin_64`.
+   For a linear color render target, use `kAgcTileDisplay_LinearGeneral` (31).
+   Setting `CB_COLOR0_ATTRIB.tile_mode_index = 0` for a color RT causes the
+   CB hardware to interpret the surface as a depth buffer and not write
+   color data. **Fix:** `CB_COLOR0_ATTRIB = 0x0000001F` (tile_mode_index=31).
+
+3. **SPI_SHADER_COL_FORMAT (0x1C5) and SPI_SHADER_POS_FORMAT (0x1C3) are
+   NOT in shader records or register defaults.** The AgcShaderRecord
+   produced by psbc does not include these registers, and the FW 5.50
+   register defaults do not set them. They default to 0 (no export),
+   which means the PS does not export color and the PA cannot process
+   vertex positions. **Fix:** set them manually in the DCB:
+   - `SPI_SHADER_POS_FORMAT (0x1C3) = 1` (4_32_32_32_32 — vec4 position)
+   - `SPI_SHADER_Z_FORMAT (0x1C4) = 0` (no Z export)
+   - `SPI_SHADER_COL_FORMAT (0x1C5) = 1` (8_8_8_8 — RGBA8 color)
+   - `CB_SHADER_MASK (0x08F) = 0x0F` (all RGBA channels to RT0)
+
+4. **VGT_SHADER_STAGES_EN should be 0 (default) for VS+PS.** Setting
+   `ES_EN` routes the vertex shader through the ES (export shader) stage,
+   which is wrong for a type-3 (VS) shader. The default (0) means VS runs
+   as VS. Do NOT set this register for a simple VS+PS pipeline.
+
+5. **CONTEXT_CONTROL packet is required.** Same as the compute sample:
+   opcode 0x28, 3 dwords, `LOAD_ENABLE_CONTEXT=0x80000000`. Without this,
+   the CP may not load the context state from the default-state blobs.
+
+6. **DB_Z_INFO must be explicitly disabled.** The default `DB_Z_INFO`
+   (0x010) is `0x80000000` (FORMAT=x8_24 with some bits set), which
+   enables the depth buffer. If no depth buffer memory is bound, the DB
+   may discard all pixels. **Fix:** set `DB_Z_INFO = 0` and
+   `DB_STENCIL_INFO = 0` to disable depth/stencil.
+
+7. **CB_COLOR0_PITCH uses 8-element tiles for linear mode.** The
+   `TILE_MAX` field (11 bits) is `(pitch_elements / 8) - 1`, not
+   `(pitch_elements - 1)`. For 1920px: `(1920/8)-1 = 239 = 0x000EF`.
+   The `SLICE` field (22 bits) is `(tiles_per_row * height) - 1`.
+
+#### Remaining issue: pixels still black
+
+Despite all the above fixes, the GPU executes the draw (confirmed by the
+WRITE_DATA marker) but the render target remains black. Suspected causes:
+- The VS may not be exporting position correctly (SPI_SHADER_POS_FORMAT
+  may need a different value, or the VS output semantics may not match).
+- The PA_CL_VS_OUT_CNTL / PA_CL_CLIP_CNTL may need explicit configuration
+  for the viewport transform.
+- The PS may not be receiving the color export correctly (the
+  SPI_SHADER_COL_FORMAT value 1 = 8_8_8_8 may not match the export
+  instruction in the compiled PS).
+- The CB_COLOR0_INFO swap/number-type bits may not match the display
+  buffer format exactly.
+- The render target in garlic memory (display buffer) may need to be in
+  flexible memory instead, despite the compute sample writing to garlic
+  successfully.
 
 
 ### Priority 3: PA debug ioctl (kernel RE)
@@ -591,5 +663,7 @@ verified from SPRX/kernel disassembly.
 
 - No firmware blobs or proprietary microcode are embedded.
 - No claim of official SDK drop-in completeness.
-- No claim that graphics draw calls work yet (compute dispatch is validated;
-  graphics pipeline is the next milestone — see PLAN.md Phase 7).
+- Graphics draw calls are in progress: the DCB is accepted, the GPU
+  executes past the draw (WRITE_DATA marker confirmed), but the render
+  target remains black. See PLAN.md Phase 7 and the "Key findings" section
+  above for the issues discovered and fixed so far.

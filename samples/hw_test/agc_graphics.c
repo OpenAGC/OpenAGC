@@ -90,7 +90,7 @@ int sceKernelWaitEqueue(SceKernelEqueue equeue, SceKernelEvent *events,
 #define DIRECT_MEMORY_ALIGNMENT  0x200000  /* 2MB */
 #define PS5_DIRECT_MEM_SEARCH_END  0x1000000000ULL
 
-#define CB_BUFFER_DWORDS   4096
+#define CB_BUFFER_DWORDS   16384
 
 /* CB_COLOR0_INFO format values (AMD surface format enum) */
 #define COLOR_8_8_8_8              0x02u
@@ -150,6 +150,34 @@ typedef struct {
 } ParsedGraphicsShader;
 
 /* ======================================================================== */
+/* VideoOut linear tiling patch                                              */
+/* ======================================================================== */
+
+int kernel_dynlib_handle(int pid, const char *name, uint32_t *handle);
+intptr_t kernel_dynlib_mapbase_addr(int pid, uint32_t handle);
+int kernel_mprotect(int pid, intptr_t addr, size_t size, int prot);
+
+/* Patch libSceVideoOut to allow linear tiling without debug setting */
+static void patch_videoout_linear(void) {
+    uint32_t vo_handle = 0;
+    if (kernel_dynlib_handle(-1, "libSceVideoOut.sprx", &vo_handle) == 0 && vo_handle) {
+        intptr_t vo_base = kernel_dynlib_mapbase_addr(-1, vo_handle);
+        if (vo_base) {
+            printf("  libSceVideoOut base: 0x%lx\n", (unsigned long)vo_base);
+            intptr_t patch_addr = vo_base + 0x7e61;
+            kernel_mprotect(-1, patch_addr & ~0xFFF, 0x2000,
+                            SCE_KERNEL_PROT_CPU_READ | SCE_KERNEL_PROT_CPU_RW | 0x4);
+            volatile uint8_t *p = (volatile uint8_t *)patch_addr;
+            p[0] = 0x90; p[1] = 0x90; p[2] = 0x90;
+            p[3] = 0x90; p[4] = 0x90; p[5] = 0x90;
+            kernel_mprotect(-1, patch_addr & ~0xFFF, 0x2000,
+                            SCE_KERNEL_PROT_CPU_READ | 0x4);
+            printf("  Patched je->nop at offset 0x7e61\n");
+        }
+    }
+}
+
+/* ======================================================================== */
 /* Helpers                                                                   */
 /* ======================================================================== */
 
@@ -200,7 +228,7 @@ static bool allocate_display_buffers(GraphicsTest *test) {
     }
 
     /* Allocate flexible memory for command buffer + render target + shader code */
-    size_t cb_size = CB_BUFFER_DWORDS * 4;
+    size_t cb_size = CB_BUFFER_DWORDS * 4;  /* 64KB for CB */
     void *cb_addr = NULL;
     int cb_ret = sceKernelMapNamedSystemFlexibleMemory(
         &cb_addr, cb_size, 0x33, 0, "agc_graphics_cb");
@@ -210,8 +238,11 @@ static bool allocate_display_buffers(GraphicsTest *test) {
     }
     cb_buffer = (uint32_t *)cb_addr;
 
-    /* 16MB flexible memory pool for render target + shader code */
-    size_t pool_size = 16 * 1024 * 1024;
+    /* Flexible memory pool for render target + shader code.
+     * Size must accommodate the render target (width*height*4) plus shader
+     * code and 64KB offset. For 4K (3840x2160*4 = ~33MB), use 64MB. */
+    size_t rt_size = (size_t)test->width * test->height * BYTES_PER_PIXEL;
+    size_t pool_size = align_up(rt_size + 0x100000, 1024 * 1024);  /* rt + 1MB slack */
     void *pool_addr = NULL;
     int pool_ret = sceKernelMapNamedSystemFlexibleMemory(
         &pool_addr, pool_size, 0x33, 0, "agc_graphics_pool");
@@ -258,6 +289,9 @@ static bool init_videoout(GraphicsTest *test) {
     printf("Resolution: %ux%u\n", test->width, test->height);
 
     if (!allocate_display_buffers(test)) return false;
+
+    /* Patch libSceVideoOut to allow linear tiling without debug setting */
+    patch_videoout_linear();
 
     /* Register display buffers with VideoOut (linear A8B8G8R8) */
     uint8_t attr_raw[64];
@@ -367,18 +401,19 @@ static void *upload_shader(const uint8_t *code, size_t code_size,
 /* DCB construction                                                          */
 /* ======================================================================== */
 
-/* Apply FW 5.50 SH register defaults (graphics type — bit 0 = 0) */
+/* Apply FW 5.50 SH register defaults (graphics type — bit 0 = 0).
+ * Writes each register INDIVIDUALLY because some groups have
+ * non-contiguous offsets — the batch SET_SH_REG packet assumes
+ * contiguous offsets and would corrupt state. */
 static void apply_sh_defaults_graphics(SceAgcCb *cb) {
     uint32_t count = 0;
     const AgcRegisterDefaultsGroup *pgroups = agcRegisterDefaultsV8GetPrimaryGroups(&count);
     uint32_t applied = 0;
     for (uint32_t i = 0; i < count; i++) {
         if (pgroups[i].space == kAgcRegisterDefaultSpaceSh && pgroups[i].register_count > 0) {
-            uint32_t *cmd = sceAgcCbSetShRegistersDirect(cb,
-                (const AgcRegisterValue *)pgroups[i].registers,
-                pgroups[i].register_count);
-            if (cmd) {
-                /* Graphics shader type: bit 0 = 0 (no need to set it) */
+            for (uint32_t j = 0; j < pgroups[i].register_count; j++) {
+                sceAgcCbSetShRegistersDirect(cb,
+                    &pgroups[i].registers[j], 1);
                 applied++;
             }
         }
@@ -386,40 +421,43 @@ static void apply_sh_defaults_graphics(SceAgcCb *cb) {
     const AgcRegisterDefaultsGroup *igroups = agcRegisterDefaultsV8GetInternalGroups(&count);
     for (uint32_t i = 0; i < count; i++) {
         if (igroups[i].space == kAgcRegisterDefaultSpaceSh && igroups[i].register_count > 0) {
-            uint32_t *cmd = sceAgcCbSetShRegistersDirect(cb,
-                (const AgcRegisterValue *)igroups[i].registers,
-                igroups[i].register_count);
-            if (cmd) {
+            for (uint32_t j = 0; j < igroups[i].register_count; j++) {
+                sceAgcCbSetShRegistersDirect(cb,
+                    &igroups[i].registers[j], 1);
                 applied++;
             }
         }
     }
-    printf("[Dispatch] Applied %u SH register default groups (graphics)\n", applied);
+    printf("[Dispatch] Applied %u SH register defaults (graphics, individual)\n", applied);
 }
 
-/* Apply FW 5.50 CX register defaults */
+/* Apply FW 5.50 CX register defaults.
+ * Writes each register INDIVIDUALLY because some groups (e.g. group 72
+ * with 128 CB_COLOR0 registers) have non-contiguous offsets. */
 static void apply_cx_defaults(SceAgcCb *cb) {
     uint32_t count = 0;
     const AgcRegisterDefaultsGroup *pgroups = agcRegisterDefaultsV8GetPrimaryGroups(&count);
     uint32_t applied = 0;
     for (uint32_t i = 0; i < count; i++) {
         if (pgroups[i].space == kAgcRegisterDefaultSpaceCx && pgroups[i].register_count > 0) {
-            uint32_t *cmd = sceAgcCbSetCxRegistersDirect(cb,
-                (const AgcRegisterValue *)pgroups[i].registers,
-                pgroups[i].register_count);
-            if (cmd) applied++;
+            for (uint32_t j = 0; j < pgroups[i].register_count; j++) {
+                sceAgcCbSetCxRegistersDirect(cb,
+                    &pgroups[i].registers[j], 1);
+                applied++;
+            }
         }
     }
     const AgcRegisterDefaultsGroup *igroups = agcRegisterDefaultsV8GetInternalGroups(&count);
     for (uint32_t i = 0; i < count; i++) {
         if (igroups[i].space == kAgcRegisterDefaultSpaceCx && igroups[i].register_count > 0) {
-            uint32_t *cmd = sceAgcCbSetCxRegistersDirect(cb,
-                (const AgcRegisterValue *)igroups[i].registers,
-                igroups[i].register_count);
-            if (cmd) applied++;
+            for (uint32_t j = 0; j < igroups[i].register_count; j++) {
+                sceAgcCbSetCxRegistersDirect(cb,
+                    &igroups[i].registers[j], 1);
+                applied++;
+            }
         }
     }
-    printf("[Dispatch] Applied %u CX register default groups\n", applied);
+    printf("[Dispatch] Applied %u CX register defaults (individual)\n", applied);
 }
 
 /* Write shader SH registers (PGM_LO/HI patched with code address) */
@@ -484,23 +522,31 @@ static void write_shader_cx_regs(SceAgcCb *cb,
 static void setup_render_target(SceAgcCb *cb, void *rt_addr,
                                  uint32_t width, uint32_t height) {
     /* Build the 14-dword CB_COLOR0 register block.
-     * Layout matches GnmRenderTarget registers 0-13. */
+     * Registers 0x318-0x325 (14 contiguous CX registers):
+     *   0x318: BASE      0x319: PITCH     0x31A: SLICE
+     *   0x31B: VIEW      0x31C: INFO      0x31D: ATTRIB
+     *   0x31E: DCC_CTRL  0x31F: CMASK_BASE 0x320: CMASK_SLICE
+     *   0x321: FMASK_BASE 0x322: FMASK_SLICE
+     *   0x323: CLEAR_WORD0  0x324: CLEAR_WORD1  0x325: DCC_BASE
+     */
     uint32_t rt_regs[14];
     memset(rt_regs, 0, sizeof(rt_regs));
 
     /* reg 0: CB_COLOR0_BASE — base address >> 8 */
     rt_regs[0] = (uint32_t)((uintptr_t)rt_addr >> 8);
 
-    /* reg 1: pitch — tilemax = pitch_pixels - 1 (for linear, pitch in tiles) */
-    /* For linear mode, this is (pitch_pixels / 8 - 1) for 8-pixel tiles.
-     * Actually for the AGC/GNM model, pitch.tilemax = (pitch_pixels - 1).
-     * But for linear surfaces, the pitch is in elements. */
-    rt_regs[1] = (width - 1) & 0x7FF;  /* tilemax (11 bits) */
+    /* reg 1: CB_COLOR0_PITCH — TILE_MAX (11 bits) + FMASK_TILE_MAX (11 bits)
+     * For linear mode, each tile is 8 elements wide.
+     * TILE_MAX = (pitch_elements / 8) - 1 */
+    uint32_t tiles_per_row = width / 8;
+    rt_regs[1] = (tiles_per_row - 1) & 0x7FF;  /* TILE_MAX (11 bits) */
 
-    /* reg 2: slice — tilemax = (height * pitch / tile_size) - 1 */
-    rt_regs[2] = ((height * width / 64) - 1) & 0x3FFFFF;  /* slice tilemax (22 bits) */
+    /* reg 2: CB_COLOR0_SLICE — TILE_MAX (22 bits)
+     * For linear mode: total tiles = tiles_per_row * height
+     * TILE_MAX = (tiles_per_row * height) - 1 */
+    rt_regs[2] = ((tiles_per_row * height) - 1) & 0x3FFFFF;
 
-    /* reg 3: view — no slice view */
+    /* reg 3: CB_COLOR0_VIEW — no slice view */
     rt_regs[3] = 0;
 
     /* reg 4: CB_COLOR0_INFO — format + number type + swap
@@ -511,10 +557,14 @@ static void setup_render_target(SceAgcCb *cb, void *rt_addr,
                  CB_INFO_NUM_TYPE(SURF_NUMBER_UNORM) |
                  CB_INFO_SWAP(SURF_SWAP_ALT);
 
-    /* reg 5: CB_COLOR0_ATTRIB — tile mode = linear (0), num_samples = 1, num_fragments = 1 */
-    rt_regs[5] = 0x00000000;  /* tilemode_index=0 (linear), fmask_tilemode=0, num_samples=1 */
-    /* Actually num_samples is at bits [12:10], value 1 means 1 sample */
-    rt_regs[5] = (1u << 10);  /* num_samples = 1 */
+    /* reg 5: CB_COLOR0_ATTRIB — tile mode + num_samples + num_fragments
+     * TILE_MODE_INDEX (5 bits at [4:0]) = 31 (kAgcTileDisplay_LinearGeneral)
+     *   This is CRITICAL — tile mode 0 is Depth_2DThin_64 (a depth tile mode),
+     *   not linear! Using it for a color RT causes the CB to write to wrong
+     *   addresses or not write at all.
+     * NUM_SAMPLES (3 bits at [14:12]) = 0 (1 sample)
+     * NUM_FRAGMENTS (2 bits at [16:15]) = 0 (1 fragment) */
+    rt_regs[5] = 0x0000001Fu;  /* tile_mode_index = 31 (LinearGeneral) */
 
     /* reg 6: DCC_CONTROL — disabled */
     rt_regs[6] = 0;
@@ -523,7 +573,6 @@ static void setup_render_target(SceAgcCb *cb, void *rt_addr,
     /* Already zeroed by memset */
 
     /* Write 14 contiguous CX registers starting at CB_COLOR0_BASE (0x318) */
-    /* Build SET_CONTEXT_REG packet manually for 14 contiguous registers */
     uint32_t *cmd = agcCbAllocDwords(cb, 14 + 2);
     if (cmd) {
         cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 14 + 2);
@@ -532,8 +581,8 @@ static void setup_render_target(SceAgcCb *cb, void *rt_addr,
             cmd[2 + i] = rt_regs[i];
         }
     }
-    printf("[RT] CB_COLOR0_BASE=0x%08x INFO=0x%08x ATTRIB=0x%08x\n",
-           rt_regs[0], rt_regs[4], rt_regs[5]);
+    printf("[RT] CB_COLOR0_BASE=0x%08x PITCH=0x%08x SLICE=0x%08x INFO=0x%08x ATTRIB=0x%08x\n",
+           rt_regs[0], rt_regs[1], rt_regs[2], rt_regs[4], rt_regs[5]);
 }
 
 /* Set up viewport (scale + offset + zmin/zmax) */
@@ -605,15 +654,10 @@ static void setup_primitive_type(SceAgcCb *cb) {
     sceAgcCbSetUcRegistersDirect(cb, &prim, 1);
 }
 
-/* Set VGT_SHADER_STAGES_EN — enable ES stage as VS */
-static void setup_shader_stages(SceAgcCb *cb) {
-    /* For VS+PS without tessellation: ES stage runs the vertex shader.
-     * VGT_SHADER_STAGES_EN at 0x2D5 (CX space).
-     * ES_EN = 1 at bits [11:8] enables ES as the vertex shader. */
-    AgcRegisterValue stages = { AGC_REG_VGT_SHADER_STAGES_EN,
-                                 VGT_SHADER_STAGES_ES_EN };
-    sceAgcCbSetCxRegistersDirect(cb, &stages, 1);
-}
+/* VGT_SHADER_STAGES_EN — NOT set. Default 0 means VS runs as VS (not ES).
+ * For a simple VS+PS pipeline without tessellation/geometry shaders,
+ * the default (0) is correct. Setting ES_EN would route the VS through
+ * the ES stage, which is wrong for a type-3 (VS) shader. */
 
 /* ======================================================================== */
 /* Main draw call dispatch                                                   */
@@ -630,8 +674,14 @@ static bool dispatch_graphics(GraphicsTest *test,
     printf("VS code at %p (%zu bytes)\n", vs_code, vs->code_size);
     printf("PS code at %p (%zu bytes)\n", ps_code, ps->code_size);
 
-    /* Clear render target to black (CPU fill) */
-    uint32_t *rt = (uint32_t *)test->render_target;
+    /* Render directly to display buffer 0 (garlic memory).
+     * This eliminates the need for a separate render target + copy step.
+     * The CB hardware can write to garlic memory directly. */
+    void *rt_addr = test->buffers[0];
+    printf("Render target (display buffer 0) at %p (garlic)\n", rt_addr);
+
+    /* Clear display buffer to black (CPU fill) */
+    uint32_t *rt = (uint32_t *)rt_addr;
     for (uint32_t i = 0; i < test->width * test->height; i++) {
         rt[i] = 0xFF000000;  /* black with full alpha */
     }
@@ -640,20 +690,35 @@ static bool dispatch_graphics(GraphicsTest *test,
     SceAgcCb cb;
     agcCbInit(&cb, cb_buffer, CB_BUFFER_DWORDS);
 
+    /* 0. CONTEXT_CONTROL — notify CP to load context state.
+     * Same as compute sample: opcode 0x28, 3 dwords. */
+    uint32_t *cc = agcCbAllocDwords(&cb, 3);
+    if (cc) {
+        cc[0] = agcPm4Header3(0x28, 3);  /* CONTEXT_CONTROL */
+        cc[1] = 0x80000000u;  /* LOAD_ENABLE_CONTEXT */
+        cc[2] = 0x80000000u;
+    }
+    printf("[Dispatch] CONTEXT_CONTROL: load enable\n");
+
     /* 1. Apply FW 5.50 register defaults */
     apply_sh_defaults_graphics(&cb);
     apply_cx_defaults(&cb);
 
-    /* 2. Set up render target */
-    setup_render_target(&cb, test->render_target, test->width, test->height);
+    /* 2. Set up render target (directly in display buffer) */
+    setup_render_target(&cb, rt_addr, test->width, test->height);
+
+    /* 2b. Explicitly disable depth buffer (DB_Z_INFO = 0) */
+    AgcRegisterValue db_z_info = { AGC_REG_DB_Z_INFO, 0 };
+    sceAgcCbSetCxRegistersDirect(&cb, &db_z_info, 1);
+    AgcRegisterValue db_stencil_info = { 0x011, 0 };
+    sceAgcCbSetCxRegistersDirect(&cb, &db_stencil_info, 1);
 
     /* 3. Set up viewport, scissor, target mask */
     setup_viewport(&cb, test->width, test->height);
     setup_scissor(&cb, test->width, test->height);
     setup_target_mask(&cb);
 
-    /* 4. Set up shader stages (ES as VS) */
-    setup_shader_stages(&cb);
+    /* 4. VGT_SHADER_STAGES_EN — default 0 (VS runs as VS, not ES) */
 
     /* 5. Write VS shader SH + CX registers */
     write_shader_sh_regs(&cb, vs, vs_code);
@@ -663,12 +728,42 @@ static bool dispatch_graphics(GraphicsTest *test,
     write_shader_sh_regs(&cb, ps, ps_code);
     write_shader_cx_regs(&cb, ps);
 
+    /* 6b. Set SPI_SHADER_COL_FORMAT and SPI_SHADER_POS_FORMAT — NOT in
+     * shader record or defaults! Without these, the PS doesn't export color
+     * and the PA can't process vertex positions.
+     * SPI_SHADER_POS_FORMAT (0x1C3): 1 = 4_32_32_32_32 (vec4 position)
+     * SPI_SHADER_Z_FORMAT (0x1C4): 0 = no Z export
+     * SPI_SHADER_COL_FORMAT (0x1C5): 1 = 8_8_8_8 (RGBA8 color) */
+    AgcRegisterValue pos_format = { AGC_REG_SPI_SHADER_POS_FORMAT, 0x1 };
+    sceAgcCbSetCxRegistersDirect(&cb, &pos_format, 1);
+    AgcRegisterValue z_format = { AGC_REG_SPI_SHADER_Z_FORMAT, 0 };
+    sceAgcCbSetCxRegistersDirect(&cb, &z_format, 1);
+    AgcRegisterValue col_format = { AGC_REG_SPI_SHADER_COL_FORMAT, 0x1 };
+    sceAgcCbSetCxRegistersDirect(&cb, &col_format, 1);
+    /* Also set CB_SHADER_MASK (0x08F) to 0x0F (all RGBA channels to RT0) */
+    AgcRegisterValue cb_shader_mask = { AGC_REG_CB_SHADER_MASK, 0x0F };
+    sceAgcCbSetCxRegistersDirect(&cb, &cb_shader_mask, 1);
+    printf("[SPI] POS_FORMAT=1, Z_FORMAT=0, COL_FORMAT=1, CB_SHADER_MASK=0x0F\n");
+
     /* 7. Set primitive type (TRILIST) */
     setup_primitive_type(&cb);
 
     /* 8. Draw — IT_DRAW_INDEX_AUTO with 3 vertices */
     sceAgcDcbDrawIndexAuto(&cb, 3, 0);
     printf("[Draw] DrawIndexAuto(3)\n");
+
+    /* 8b. WRITE_DATA marker — verify GPU is alive after draw.
+     * Write a marker value to CB_BUFFER + 0x1000 (flexible memory). */
+    uint64_t marker_target = (uint64_t)(uintptr_t)cb_buffer + 0x1000;
+    uint32_t *wd = agcCbAllocDwords(&cb, 5);
+    if (wd) {
+        wd[0] = agcPm4Header3(AGC_PM4_OP_WRITE_DATA, 5);
+        wd[1] = (2u << 0) | (0u << 2) | (1u << 8);  /* dst=memory, verify=1 */
+        wd[2] = (uint32_t)marker_target;
+        wd[3] = (uint32_t)(marker_target >> 32);
+        wd[4] = 0xDEADCAFEu;
+    }
+    printf("[Draw] WRITE_DATA marker at 0x%llx\n", (unsigned long long)marker_target);
 
     /* 9. ACQUIRE_MEM — flush GPU caches */
     uint32_t *am = agcCbAllocDwords(&cb, 6);
@@ -699,12 +794,12 @@ static bool dispatch_graphics(GraphicsTest *test,
     printf("[Draw] Waiting 200ms for GPU...\n");
     sceKernelUsleep(200000);
 
-    /* 10. Copy render target (flexible) to display buffer (garlic) */
-    printf("[Draw] Copying render target to display buffer...\n");
-    memcpy(test->buffers[0], test->render_target,
-           (size_t)test->width * test->height * BYTES_PER_PIXEL);
+    /* Check WRITE_DATA marker — if present, GPU is alive after draw */
+    uint32_t *marker = (uint32_t *)((uintptr_t)cb_buffer + 0x1000);
+    printf("[Marker] WRITE_DATA marker = 0x%08x (expected 0xDEADCAFE)\n", *marker);
 
-    /* Verify a few pixels */
+    /* Verify pixels — since we rendered directly to the display buffer,
+     * no copy is needed. */
     uint32_t *buf0 = (uint32_t *)test->buffers[0];
     printf("[Readback] Sample pixels from display buffer:\n");
     uint32_t sample_indices[] = {0, 1, 100, 1000, 1920, 10000, 100000, 500000, 1000000, 2073599};
@@ -713,6 +808,13 @@ static bool dispatch_graphics(GraphicsTest *test,
         if (idx >= test->width * test->height) continue;
         printf("  pixel[%u] = 0x%08x\n", idx, buf0[idx]);
     }
+
+    /* Count non-black pixels to see if GPU rendered anything */
+    uint32_t non_black = 0;
+    for (uint32_t i = 0; i < test->width * test->height; i++) {
+        if (buf0[i] != 0xFF000000) non_black++;
+    }
+    printf("[Readback] Non-black pixels: %u / %u\n", non_black, test->width * test->height);
 
     return true;
 }
