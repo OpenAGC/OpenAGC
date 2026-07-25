@@ -22,227 +22,283 @@
 
 #include <stdint.h>
 
+/* CB_COLOR_CONTROL */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_0[] = {
     {0x0202, 0x00cc0010},
 };
 
+/* CB_DCC_CONTROL */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_1[] = {
-    {0x0109, 0x00000008},
+    {0x0109, 0x00000000},
 };
 
+/* CB_RMI_GL2_CACHE_CONTROL */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_2[] = {
     {0x0104, 0x00000000},
 };
 
+/* CB_SHADER_MASK */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_3[] = {
     {0x008f, 0x00000000},
 };
 
+/* CB_TARGET_MASK */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_4[] = {
-    {0x008e, 0x00000000},
+    {0x008E, 0x0000000F},
 };
 
+/* DB_ALPHA_TO_MASK */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_5[] = {
     {0x02dc, 0x0000aa00},
 };
 
+/* DB_COUNT_CONTROL */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_6[] = {
-    {0x0001, 0x11000100},
+    {0x0001, 0x00000000},
 };
 
+/* DB_DEPTH_CONTROL */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_7[] = {
     {0x0200, 0x00000000},
 };
 
+/* DB_EQAA */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_8[] = {
     {0x0201, 0x00000000},
 };
 
+/* DB_RENDER_CONTROL */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_9[] = {
     {0x0000, 0x00000000},
 };
 
+/* PS_SHADER_SAMPLE_EXCLUSION_MASK */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_10[] = {
     {0x0006, 0x00000000},
 };
 
+/* DB_RMI_L2_CACHE_CONTROL */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_11[] = {
     {0x001f, 0x00000000},
 };
 
+/* DB_SHADER_CONTROL */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_12[] = {
     {0x0203, 0x00000000},
 };
 
+/* DB_SRESULTS_COMPARE_STATE0 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_13[] = {
     {0x02b0, 0x00000000},
 };
 
+/* DB_SRESULTS_COMPARE_STATE1 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_14[] = {
     {0x02b1, 0x00000000},
 };
 
+/* DB_STENCILREFMASK */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_15[] = {
     {0x010c, 0x00000000},
 };
 
+/* DB_STENCILREFMASK_BF */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_16[] = {
     {0x010d, 0x00000000},
 };
 
+/* DB_STENCIL_CONTROL */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_17[] = {
     {0x010b, 0x00000000},
 };
 
+/* GE_MAX_OUTPUT_PER_SUBGROUP */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_18[] = {
     {0x01ff, 0x00000000},
 };
 
+/* PA_CL_CLIP_CNTL */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_19[] = {
     {0x0204, 0x00000000},
 };
 
+/* PA_CL_OBJPRIM_ID_CNTL */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_20[] = {
     {0x020d, 0x00000000},
 };
 
+/* PA_CL_VTE_CNTL */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_21[] = {
     {0x0206, 0x0000043f},
 };
 
+/* PA_SC_AA_CONFIG */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_22[] = {
     {0x02f8, 0x00000000},
 };
 
+/* PA_SC_CLIPRECT_RULE */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_23[] = {
     {0x0083, 0x0000ffff},
 };
 
+/* PA_SC_CONSERVATIVE_RASTERIZATION_CNTL */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_24[] = {
-    {0x0313, 0x00006000},
+    {0x0313, 0x00000000},
 };
 
+/* PA_SC_FSR_ENABLE */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_25[] = {
     {0x00f0, 0x00000000},
 };
 
+/* PA_SC_HORIZ_GRID */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_26[] = {
     {0x00ea, 0x00000000},
 };
 
+/* PA_SC_LEFT_VERT_GRID */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_27[] = {
     {0x00e9, 0x00000000},
 };
 
+/* PA_SC_MODE_CNTL_0 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_28[] = {
     {0x0292, 0x00000002},
 };
 
+/* PA_SC_MODE_CNTL_1 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_29[] = {
-    {0x0293, 0x06020000},
+    {0x0293, 0x00000000},
 };
 
+/* PA_SC_RIGHT_VERT_GRID */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_30[] = {
     {0x00e8, 0x00000000},
 };
 
+/* PA_SC_WINDOW_OFFSET */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_31[] = {
     {0x0080, 0x00000000},
 };
 
+/* PA_STATE_STEREO_X */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_32[] = {
     {0x0211, 0x00000000},
 };
 
+/* PA_STEREO_CNTL */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_33[] = {
-    {0x0210, 0x04000000},
+    {0x0210, 0x00000000},
 };
 
+/* PA_SU_HARDWARE_SCREEN_OFFSET */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_34[] = {
     {0x008d, 0x00000000},
 };
 
+/* PA_SU_LINE_CNTL */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_35[] = {
     {0x0282, 0x00000008},
 };
 
+/* PA_SU_POINT_MINMAX */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_36[] = {
     {0x0281, 0xffff0000},
 };
 
+/* PA_SU_POINT_SIZE */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_37[] = {
     {0x0280, 0x00080008},
 };
 
+/* PA_SU_POLY_OFFSET_CLAMP */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_38[] = {
     {0x02df, 0x00000000},
 };
 
+/* PA_SU_POLY_OFFSET_DB_FMT_CNTL */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_39[] = {
     {0x02de, 0x000001e9},
 };
 
+/* PA_SU_SC_MODE_CNTL */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_40[] = {
     {0x0205, 0x00000240},
 };
 
+/* PA_SU_SMALL_PRIM_FILTER_CNTL */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_41[] = {
-    {0x020c, 0x00000021},
+    {0x020C, 0x00000001},
 };
 
+/* PA_SU_VTX_CNTL */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_42[] = {
     {0x02f9, 0x0000002d},
 };
 
+/* SPI_TMPRING_SIZE */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_43[] = {
     {0x01ba, 0x00000000},
 };
 
+/* VGT_DRAW_PAYLOAD_CNTL */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_44[] = {
     {0x02a6, 0x00000000},
 };
 
+/* VGT_GS_MAX_VERT_OUT */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_45[] = {
     {0x02ce, 0x00000400},
 };
 
+/* VGT_GS_OUT_PRIM_TYPE */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_46[] = {
     {0x029b, 0x00000002},
 };
 
+/* VGT_LS_HS_CONFIG */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_47[] = {
     {0x02d6, 0x00000000},
 };
 
+/* VGT_PRIMITIVEID_RESET */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_48[] = {
     {0x0103, 0xffffffff},
 };
 
+/* VGT_PRIMITIVEID_EN */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_49[] = {
     {0x02a1, 0x00000000},
 };
 
+/* VGT_REUSE_OFF */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_50[] = {
     {0x02ad, 0x00000000},
 };
 
+/* VGT_SHADER_STAGES_EN */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_51[] = {
-    {0x02d5, 0x00002000},
+    {0x02D5, 0x00000000},
 };
 
+/* VGT_TESS_DISTRIBUTION */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_52[] = {
     {0x02d4, 0x88101000},
 };
 
+/* VGT_TF_PARAM */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_53[] = {
     {0x02db, 0x00000000},
 };
 
+/* PA_SC_CENTROID_PRIORITY_0/1 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_54[] = {
     {0x02f5, 0x00000000},
     {0x02f6, 0x00000000},
 };
 
+/* PA_SC_AA_SAMPLE_LOCS_PIXEL_X0Y0_0 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_55[] = {
     {0x02fe, 0x00000000},
     {0x02ff, 0x00000000},
@@ -262,16 +318,19 @@ static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_55[] = {
     {0x030d, 0x00000000},
 };
 
+/* PA_SC_AA_MASK_X0Y0_X1Y0/X0Y1_X1Y1 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_56[] = {
     {0x030e, 0xffffffff},
     {0x030f, 0xffffffff},
 };
 
+/* PA_SC_BINNER_CNTL_0/1 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_57[] = {
-    {0x0311, 0x01fd2002},
+    {0x0311, 0x00000002},
     {0x0312, 0x03ff0080},
 };
 
+/* CB_BLEND_RED/GREEN/BLUE/ALPHA */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_58[] = {
     {0x0105, 0x00000000},
     {0x0106, 0x00000000},
@@ -279,6 +338,7 @@ static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_58[] = {
     {0x0108, 0x00000000},
 };
 
+/* CB_BLEND0_CONTROL */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_59[] = {
     {0x01e0, 0x20010001},
     {0x01e1, 0x20010001},
@@ -290,11 +350,13 @@ static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_59[] = {
     {0x01e7, 0x20010001},
 };
 
+/* TA_BC_BASE_ADDR/HI */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_60[] = {
     {0x0020, 0x00000000},
     {0x0021, 0x00000000},
 };
 
+/* PA_SC_CLIPRECT_0_TL/BR */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_61[] = {
     {0x0084, 0x00000000},
     {0x0085, 0x20002000},
@@ -306,17 +368,20 @@ static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_61[] = {
     {0x008b, 0x20002000},
 };
 
+/* CX_NOP */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_62[] = {
     {0x00db, 0x00000000},
 };
 
+/* DB_DEPTH_BOUNDS_MIN/MAX */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_63[] = {
     {0x0008, 0x00000000},
     {0x0009, 0x00000000},
 };
 
+/* DB_Z_INFO/STENCIL_INFO/READ_BASE/WRITE_BASE/HTILE/etc */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_64[] = {
-    {0x0010, 0x80000180},
+    {0x0010, 0x80000000},
     {0x0011, 0x20000180},
     {0x0012, 0x00000000},
     {0x0013, 0x00000000},
@@ -334,43 +399,51 @@ static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_64[] = {
     {0x000a, 0x00000000},
 };
 
+/* PA_SC_FOV_WINDOW_LR/TB */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_65[] = {
     {0x00eb, 0xff00ff00},
     {0x00ec, 0x00010000},
 };
 
+/* FSR_RECURSIONS0/1 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_66[] = {
     {0x00f1, 0x00000000},
     {0x00f2, 0x00000000},
 };
 
+/* PA_SC_GENERIC_SCISSOR_TL/BR */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_67[] = {
     {0x0090, 0x80000000},
     {0x0091, 0x40004000},
 };
 
+/* PA_CL_GB_VERT_CLIP/DISC_ADJ + HORZ_CLIP/DISC_ADJ */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_68[] = {
-    {0x02fa, 0x3f800000},
+    {0x02FA, 0x4E7E0000},
     {0x02fb, 0x3f800000},
     {0x02fc, 0x3f800000},
     {0x02fd, 0x3f800000},
 };
 
+/* PA_SU_POLY_OFFSET_BACK_SCALE/OFFSET */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_69[] = {
     {0x02e2, 0x00000000},
     {0x02e3, 0x00000000},
 };
 
+/* PA_SU_POLY_OFFSET_FRONT_SCALE/OFFSET */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_70[] = {
     {0x02e0, 0x00000000},
     {0x02e1, 0x00000000},
 };
 
+/* DB_RENDER_OVERRIDE/OVERRIDE2 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_71[] = {
     {0x0003, 0x00000000},
     {0x0004, 0x00000000},
 };
 
+/* CB_COLOR0_BASE/VIEW/INFO/ATTRIB/DCC_CONTROL/CMASK/FMASK/etc */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_72[] = {
     {0x0318, 0x00000000},
     {0x031b, 0x00000000},
@@ -502,11 +575,13 @@ static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_72[] = {
     {0x03bf, 0x08c6c000},
 };
 
+/* PA_SC_SCREEN_SCISSOR_TL/BR */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_73[] = {
     {0x000c, 0x00000000},
     {0x000d, 0x40004000},
 };
 
+/* SPI_PS_INPUT_CNTL_0 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_74[] = {
     {0x0191, 0x00000000},
     {0x0192, 0x00000000},
@@ -542,6 +617,7 @@ static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_74[] = {
     {0x01b0, 0x00000000},
 };
 
+/* PA_CL_UCP_0_X/Y/Z/W */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_75[] = {
     {0x016f, 0x00000000},
     {0x0170, 0x00000000},
@@ -577,8 +653,9 @@ static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_75[] = {
     {0x018e, 0x00000000},
 };
 
+/* PA_CL_VPORT_SCALE/OFFSET + PA_SC_VPORT_SCISSOR/ZMIN/ZMAX */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_76[] = {
-    {0x010f, 0x3f800000},
+    {0x010F, 0x4E7E0000},
     {0x0111, 0x3f800000},
     {0x0113, 0x3f800000},
     {0x0110, 0x00000000},
@@ -740,55 +817,68 @@ static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_76[] = {
     {0x00d3, 0x00000000},
 };
 
+/* PA_SC_WINDOW_SCISSOR_TL/BR */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_77[] = {
     {0x0081, 0x80000000},
     {0x0082, 0x40004000},
 };
 
+/* Group 78 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_78[] = {
     {0x0212, 0x00000000},
 };
 
+/* Group 79 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_79[] = {
     {0x0213, 0x00000000},
 };
 
+/* Group 80 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_80[] = {
     {0x0228, 0x00000000},
 };
 
+/* Group 81 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_81[] = {
     {0x0215, 0x00000000},
 };
 
+/* Group 82 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_82[] = {
     {0x0218, 0x00000000},
 };
 
+/* Group 83 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_83[] = {
     {0x008a, 0x00000000},
 };
 
+/* Group 84 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_84[] = {
     {0x010a, 0x00000000},
 };
 
+/* Group 85 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_85[] = {
     {0x000a, 0x00000000},
 };
 
+/* Group 86 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_86[] = {
     {0x008b, 0x00000000},
 };
 
+/* Group 87 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_87[] = {
     {0x010b, 0x00000000},
 };
 
+/* Group 88 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_88[] = {
     {0x000b, 0x00000000},
 };
 
+/* Group 89 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_89[] = {
     {0x0224, 0x00000000},
     {0x0225, 0x00000000},
@@ -796,46 +886,55 @@ static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_89[] = {
     {0x0227, 0x00000000},
 };
 
+/* Group 90 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_90[] = {
     {0x0107, 0xffff0000},
     {0x0087, 0x0000ffff},
     {0x0007, 0x0000ffff},
 };
 
+/* Group 91 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_91[] = {
     {0x020c, 0x00000000},
     {0x020d, 0x00000000},
 };
 
+/* Group 92 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_92[] = {
     {0x00c8, 0x00000000},
     {0x00c9, 0x00000000},
 };
 
+/* Group 93 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_93[] = {
     {0x0088, 0x00000000},
     {0x0089, 0x00000000},
 };
 
+/* Group 94 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_94[] = {
     {0x0108, 0x00000000},
     {0x0109, 0x00000000},
 };
 
+/* Group 95 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_95[] = {
     {0x0148, 0x00000000},
     {0x0149, 0x00000000},
 };
 
+/* Group 96 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_96[] = {
     {0x0008, 0x00000000},
     {0x0009, 0x00000000},
 };
 
+/* Group 97 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_97[] = {
     {0x0280, 0x00000000},
 };
 
+/* Group 98 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_98[] = {
     {0x00b2, 0x00000000},
     {0x00b3, 0x00000000},
@@ -843,6 +942,7 @@ static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_98[] = {
     {0x00b5, 0x00000000},
 };
 
+/* Group 99 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_99[] = {
     {0x0132, 0x00000000},
     {0x0133, 0x00000000},
@@ -850,6 +950,7 @@ static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_99[] = {
     {0x0135, 0x00000000},
 };
 
+/* Group 100 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_100[] = {
     {0x0032, 0x00000000},
     {0x0033, 0x00000000},
@@ -857,16 +958,19 @@ static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_100[] = {
     {0x0035, 0x00000000},
 };
 
+/* Group 101 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_101[] = {
     {0x0082, 0x00000000},
     {0x0083, 0x00000000},
 };
 
+/* Group 102 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_102[] = {
     {0x0102, 0x00000000},
     {0x0103, 0x00000000},
 };
 
+/* Group 103 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_103[] = {
     {0x0240, 0x00000000},
     {0x0241, 0x00000000},
@@ -886,6 +990,7 @@ static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_103[] = {
     {0x024f, 0x00000000},
 };
 
+/* Group 104 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_104[] = {
     {0x008c, 0x00000000},
     {0x008d, 0x00000000},
@@ -921,6 +1026,7 @@ static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_104[] = {
     {0x00ab, 0x00000000},
 };
 
+/* Group 105 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_105[] = {
     {0x010c, 0x00000000},
     {0x010d, 0x00000000},
@@ -956,6 +1062,7 @@ static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_105[] = {
     {0x012b, 0x00000000},
 };
 
+/* Group 106 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_106[] = {
     {0x000c, 0x00000000},
     {0x000d, 0x00000000},
@@ -991,63 +1098,78 @@ static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_106[] = {
     {0x002b, 0x00000000},
 };
 
+/* Group 107 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_107[] = {
     {0x041f, 0x00000000},
 };
 
+/* Group 108 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_108[] = {
     {0x041d, 0x00000000},
 };
 
+/* Group 109 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_109[] = {
     {0x041e, 0x00000000},
 };
 
+/* Group 110 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_110[] = {
     {0x025b, 0x00000000},
 };
 
+/* Group 111 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_111[] = {
     {0x024a, 0x00000000},
 };
 
+/* Group 112 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_112[] = {
     {0x024b, 0x00000000},
 };
 
+/* Group 113 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_113[] = {
     {0x025f, 0x00000000},
 };
 
+/* Group 114 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_114[] = {
     {0x0262, 0x00000000},
 };
 
+/* Group 115 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_115[] = {
     {0x02bb, 0x00000000},
 };
 
+/* Group 116 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_116[] = {
     {0x0384, 0x00000000},
 };
 
+/* Group 117 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_117[] = {
     {0x0383, 0x40000040},
 };
 
+/* Group 118 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_118[] = {
     {0x0248, 0x00000000},
 };
 
+/* Group 119 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_119[] = {
     {0x0242, 0x00000000},
 };
 
+/* Group 120 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_120[] = {
     {0x0380, 0x00000000},
     {0x0381, 0x00000000},
 };
 
+/* Group 121 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_121[] = {
     {0x02e4, 0x00000000},
     {0x02e5, 0x00000000},
@@ -1059,6 +1181,7 @@ static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_121[] = {
     {0x02eb, 0x00000000},
 };
 
+/* Group 122 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_122[] = {
     {0x02c4, 0x00000000},
     {0x02c5, 0x00000000},
@@ -1078,6 +1201,7 @@ static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_122[] = {
     {0x02d3, 0x00000000},
 };
 
+/* Group 123 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_123[] = {
     {0x02bc, 0x00000000},
     {0x02bd, 0x00000000},
@@ -1085,6 +1209,7 @@ static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_123[] = {
     {0x02bf, 0x00000000},
 };
 
+/* Group 124 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_124[] = {
     {0x0035, 0x00000000},
     {0x0036, 0x00000000},
@@ -1096,10 +1221,12 @@ static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_124[] = {
     {0x003c, 0x00000000},
 };
 
+/* Group 125 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_125[] = {
     {0x00a2, 0x00000000},
 };
 
+/* Group 126 */
 static const AgcRegisterDefaultValue s_regdef_v8_primary_regs_126[] = {
     {0x025c, 0x00000000},
     {0x025d, 0x00000000},

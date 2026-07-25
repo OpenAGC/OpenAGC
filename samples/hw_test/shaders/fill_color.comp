@@ -1,0 +1,34 @@
+#version 450
+#extension GL_EXT_buffer_reference : enable
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+/* Simple compute shader that fills a buffer with a solid color.
+ * Uses GL_EXT_buffer_reference to access the output buffer via a
+ * 64-bit pointer in push constants, avoiding the descriptor table
+ * indirection that SSBOs require.
+ *
+ * Push constant layout (inline push constants in user SGPRs):
+ *   s0-s1: ring_offsets (unused, set to 0 by runtime)
+ *   s2-s3: output buffer pointer (64-bit GPU virtual address)
+ *   s4: total pixels (width * height)
+ *   s5: fill color (RGBA8 packed)
+ */
+
+layout(buffer_reference, std430) buffer OutputBuffer {
+    uint data[];
+};
+
+layout(push_constant) uniform PushConstants {
+    OutputBuffer buf;
+    uint total_pixels;
+    uint color;
+} pc;
+
+void main() {
+    uint pixel_idx = gl_GlobalInvocationID.x;
+    if (pixel_idx >= pc.total_pixels)
+        return;
+
+    pc.buf.data[pixel_idx] = pc.color;
+}

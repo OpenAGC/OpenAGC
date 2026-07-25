@@ -44,10 +44,10 @@ static void test_ioctl_nr_enum(void) {
 }
 
 static void test_submit_struct_layout(void) {
-    TEST_ASSERT_EQ(sizeof(AgcGcSubmitArgs),    0x18u, "SubmitArgs size");
-    TEST_ASSERT_EQ(offsetof(AgcGcSubmitArgs, pid),      0x00u, "SubmitArgs pid");
-    TEST_ASSERT_EQ(offsetof(AgcGcSubmitArgs, num_cbs),  0x08u, "SubmitArgs num_cbs");
-    TEST_ASSERT_EQ(offsetof(AgcGcSubmitArgs, cb_array), 0x10u, "SubmitArgs cb_array");
+    TEST_ASSERT_EQ(sizeof(AgcGcSubmitArgs),    0x10u, "SubmitArgs size");
+    TEST_ASSERT_EQ(offsetof(AgcGcSubmitArgs, queue_type), 0x00u, "SubmitArgs queue_type");
+    TEST_ASSERT_EQ(offsetof(AgcGcSubmitArgs, num_cbs),    0x04u, "SubmitArgs num_cbs");
+    TEST_ASSERT_EQ(offsetof(AgcGcSubmitArgs, cb_array),   0x08u, "SubmitArgs cb_array");
 }
 
 static void test_command_buffer_struct_layout(void) {
@@ -62,12 +62,25 @@ static void test_cb_header_opcodes(void) {
 }
 
 static void test_ib_vmid_layout(void) {
-    /* VMID in bits [63:52], address in bits [51:0] */
-    uint64_t ib = 0x0000001234567890ULL;
-    uint64_t vmid = 5u;
-    uint64_t packed = (ib & AGC_GC_IB_VMASK) | (vmid << AGC_GC_IB_VSHIFT);
-    TEST_ASSERT_EQ((uint32_t)(packed >> AGC_GC_IB_VSHIFT), 5u, "VMID extracted");
-    TEST_ASSERT_EQ((uint32_t)packed, 0x34567890u, "addr lo preserved");
+    /* CB descriptor is an IT_INDIRECT_BUFFER PM4 packet (16 bytes):
+     *   qword 0 = (addr_lo << 32) | pm4_header
+     *   qword 1 = ((ib_size & 0xFFFFF) << 32) | (addr_hi & 0xFFFF)
+     * VMID is inserted by kernel into ib_base[63:52] after copyin. */
+    uint64_t gpu_addr = 0x0000001234567890ULL;
+    uint32_t ib_size = 100;
+    uint32_t addr_lo = (uint32_t)gpu_addr;
+    uint32_t addr_hi = (uint32_t)(gpu_addr >> 32);
+
+    uint64_t qword0 = ((uint64_t)addr_lo << 32) | AGC_GC_CB_HEADER_IB;
+    uint64_t qword1 = ((uint64_t)(ib_size & 0xFFFFF) << 32) | (addr_hi & 0xFFFF);
+
+    /* Qword 0: PM4 header in lower 32, addr_lo in upper 32 */
+    TEST_ASSERT_EQ((uint32_t)qword0, AGC_GC_CB_HEADER_IB, "PM4 header in qword0 lo");
+    TEST_ASSERT_EQ((uint32_t)(qword0 >> 32), addr_lo, "addr_lo in qword0 hi");
+
+    /* Qword 1: addr_hi in lower 16, ib_size in bits [51:32] */
+    TEST_ASSERT_EQ((uint32_t)qword1, (addr_hi & 0xFFFF), "addr_hi in qword1 lo");
+    TEST_ASSERT_EQ((uint32_t)(qword1 >> 32) & 0xFFFFF, ib_size, "ib_size in qword1 hi");
 }
 
 static void test_vmid_and_cbs_ranges(void) {

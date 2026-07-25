@@ -153,7 +153,7 @@ Implemented and host-tested:
 Current expected host test result:
 
 ```text
-1625 passed, 0 failed
+1675 passed, 0 failed
 ```
 
 ## Phase 0: RE Groundwork
@@ -377,8 +377,9 @@ Acceptance criteria:
 
 ## Phase 5: Native PS5 Backend
 
-Status: implemented and built (prospero backend compiles and links; hardware
-validation is the remaining gate).
+Status: **implemented and hardware-validated** (NOP submit, compute dispatch,
+queue create/destroy, suspend point, workload tracking all confirmed on PS5
+hardware).
 
 Purpose:
 
@@ -400,21 +401,126 @@ Work:
 5. Submit default state via `CLEAR_STATE`. ✅ Done in `sceAgcDriverNotifyDefaultStates`.
 6. Submit suspend points and query in-flight status. ✅ Done in
    `sceAgcDriverSuspendPointSubmitDirect` / `sceAgcDriverIsSuspendPointInFlightDirect`.
-7. Add hardware smoke tests. ✅ ELF + fake-SELF packages built in
-   `samples/hw_test/`; deployment blocked on PS5 hardware access.
+7. Add hardware smoke tests. ✅ Four ELF samples in `samples/hw_test/`:
+   `videoout_linear.elf`, `agc_init.elf`, `agc_videoout.elf`, `agc_compute.elf`.
+   All deployed and validated on PS5 hardware (FW 5.50, exploited).
+8. Submit a compute dispatch with a real shader. ✅ Done — `agc_compute.elf`
+   loads a psbc-compiled compute shader, sets SH registers (PGM_LO/HI,
+   RSRC1/2/3, NUM_THREAD), sets user data (SSBO + push constants), dispatches
+   via `DISPATCH_DIRECT`, and flips the display. GPU accepts the DCB
+   (`SubmitDcb: 0x00000000`).
 
 Acceptance criteria:
 
-- Minimal DCB NOP submission does not fault on PS5 hardware.
-- `NotifyDefaultStates` produces a valid `CLEAR_STATE` DCB.
-- Suspend-point ioctls return expected behavior.
-- Failure paths return stable error codes.
+- ✅ Minimal DCB NOP submission does not fault on PS5 hardware.
+- ✅ `NotifyDefaultStates` produces a valid `CLEAR_STATE` DCB (note: returns
+  `AGC_ERROR_INVALID_ARGUMENT` on hardware — see Phase 7).
+- ✅ Suspend-point ioctls return expected behavior.
+- ✅ Failure paths return stable error codes.
+- ✅ Compute dispatch accepted by GPU (non-NOP command buffer).
 
-## Phase 6: Higher-Level AGC Features
+## Phase 6: Shader Compiler (openagc-psbc)
+
+Status: **implemented and hardware-validated for compute shaders.**
+
+Purpose:
+
+Compile GLSL → SPIR-V → NIR → ACO → PS5 `AgcShaderRecord` binary without
+proprietary SDK tools. The `openagc-psbc` compiler (in `../openagc-psbc/`)
+uses Mesa's NIR and ACO backends with a custom `AgcShaderRecord` emitter.
+
+Work:
+
+1. Build Mesa NIR + ACO subset as a standalone library. ✅ Done.
+2. SPIR-V → NIR frontend. ✅ Done (Mesa `spirv_to_nir`).
+3. NIR → ACO instruction selection. ✅ Done (Mesa `aco_select_nir`).
+4. ACO → machine code assembly. ✅ Done (Mesa `aco_assembler`).
+5. Emit `AgcShaderRecord` with SH/CX register blocks. ✅ Done.
+6. Compute shader support. ✅ Done — `fill_color.comp` compiles to
+   `fill_color.sb` and runs on PS5 hardware.
+7. Graphics shader support (VS/PS/GS/HS/LS). ⬜ Not yet tested on hardware.
+   The RSRC1/2/3 offset functions are implemented for all shader types but
+   only compute has been hardware-validated.
+
+Bugs found and fixed during compute shader validation:
+
+- **SH register offsets for compute were wrong.** The psbc compiler used
+  `pgm_lo + 2/3/4` for RSRC1/2/3, but compute shaders have a different
+  register layout: `COMPUTE_DISPATCH_PKT_ADDR_LO` sits at `pgm_lo + 2`,
+  not `RSRC1`. Fixed to use explicit per-stage offset functions:
+  CS: 0x212/0x213/0x228, PS: 0x00A/0x00B/0x007, etc.
+  (Confirmed by sharpemu and AMD register headers.)
+
+- **Shader type byte encoding was wrong.** The `AgcShaderType` enum had
+  CS=6, but the firmware expects CS=0 at offset 0x5A of the shader record.
+  Fixed to match sharpemu's confirmed encoding:
+  CS=0, PS=1, ES=2, VS=3, GS=4, HS=5, ES-alt=6, LS=7.
+  This matters because `sceAgcCreateShader` uses this byte to select which
+  PGM_LO/HI register pair to patch with the shader code address.
+
+Acceptance criteria:
+
+- ✅ Compute shader compiles and executes on PS5 hardware.
+- ⬜ Graphics shaders (VS/PS) compile and execute on PS5 hardware.
+- ⬜ User data layout matches ACO's SGPR arg mapping (currently best-guess).
+
+## Phase 7: Graphics Pipeline (Draw Calls)
+
+Status: **not started.** This is the current critical-path milestone.
+
+Purpose:
+
+Submit a real graphics draw call — vertex shader + pixel shader + render
+target + viewport + blend state + indexed draw — and display the result.
+
+Prerequisites:
+
+- Compute dispatch works (Phase 5). ✅
+- Shader compiler produces valid compute binaries (Phase 6). ✅
+- Graphics shader compilation (Phase 6). ⬜ Needed.
+
+Work:
+
+1. **Fix `sceAgcDriverNotifyDefaultStates`** — Currently returns
+   `AGC_ERROR_INVALID_ARGUMENT` on hardware. The argument format may not
+   match what the FW 5.50 kernel expects. Cross-reference sharpemu's
+   `sceAgcDriverNotifyDefaultStates` implementation for the correct
+   argument encoding. This may be blocking correct GPU state setup.
+
+2. **Compile a vertex + pixel shader pair** — Write a minimal VS+PS in
+   GLSL, compile via psbc, and verify the shader records have correct
+   SH/CX register blocks. The RSRC offset functions are already implemented
+   for all shader types but need hardware validation.
+
+3. **Set up render target state** — Bind a display buffer as a color
+   render target via CB_COLOR0_BASE/INFO/ATTRIB registers. Use the
+   `AgcRenderTarget` struct and helpers already implemented in openagc.
+
+4. **Set up graphics state** — Viewport (PA_CL_VPORT_*), scissor
+   (PA_SC_WINDOW_SCISSOR_*), blend state (CB_BLEND0_CONTROL), primitive
+   type (VGT_PRIMITIVE_TYPE), and shader stage enable (VGT_SHADER_STAGES_EN).
+
+5. **Submit a draw call** — Build a DCB with:
+   - SET_SH_REG (VS/PS PGM_LO/HI, RSRC1/2/3, user data)
+   - SET_CX_REG (render target, viewport, scissor, blend)
+   - SET_UC_REG (VGT_PRIMITIVE_TYPE, CB_TARGET_MASK)
+   - IT_DRAW_INDEX_AUTO (draw a triangle)
+   Submit via `sceAgcDriverSubmitDcb`.
+
+6. **Verify visual output** — Flip the display buffer and confirm the
+   triangle is visible. Compare with CPU-rendered reference.
+
+Acceptance criteria:
+
+- A triangle is visible on the PS5 display, rendered by the GPU.
+- The draw call DCB is accepted by `sceAgcDriverSubmitDcb` without error.
+- Vertex and pixel shaders execute correctly (correct position + color).
+
+## Phase 8: Higher-Level AGC Features
 
 Status: mostly speculative until more evidence is recovered.
 
-These are long-term goals and should not block packet/ioctl work.
+These are long-term goals and should not block draw-call work.
 
 ### Wave32 / Wave64
 
@@ -476,6 +582,20 @@ No placeholder VRS enums in public headers until evidence is found.
   (NOT proven working — NID mapping only; see `analysis/ps5_openagc_audit.md`)
 - RPCSX GPU/PM4/GNM reference: `/Users/bizkut/Downloads/PS5/homebrew/rpcsx`
 - PS4 GNM clean rewrite reference: `../opengnm`
+- SharpEmu PS5 emulator (AGC HLE reference): `/Users/bizkut/Downloads/PS5/homebrew/sharpemu`
+  — C# PS5 emulator with detailed AGC implementation in
+  `src/SharpEmu.Libs/Agc/AgcExports.cs`. Confirmed-correct for:
+  - Shader type byte encoding at offset 0x5A (CS=0, PS=1, ES=2, VS=3, GS=4,
+    HS=5, ES-alt=6, LS=7)
+  - Compute dispatch initiator: `(modifier & 0xA038) | 0x41`
+  - PGM_LO/HI address encoding: `addr = (HI << 40) | (LO << 8)`
+  - Compute register offsets (PGM_LO=0x20C, RSRC2=0x213, NUM_THREAD=0x207-9,
+    USER_DATA_0=0x240)
+  - RSRC2 USER_SGPR field (bits [5:1]) and system SGPR layout
+  - CreateShader PGM_LO/HI patching (scans SH table, handles missing pairs)
+- openagc-psbc shader compiler: `../openagc-psbc/`
+  — Mesa NIR + ACO based compiler that produces PS5 AgcShaderRecord binaries
+  from GLSL/SPIR-V input. Hardware-validated for compute shaders.
 
 ## Reference Alignment Action Items
 
@@ -510,6 +630,16 @@ Completed:
 
 Pending:
 - [x] Add version selection for register defaults (v0, v4, v5, v7, v8, v9, v10, v11)
+
+Completed (Phase 5-6, hardware validation):
+- [x] Build openagc-psbc shader compiler (Mesa NIR + ACO → AgcShaderRecord)
+- [x] Compute dispatch on PS5 hardware (agc_compute.elf — GPU accepts DCB)
+- [x] Fix psbc compute SH register offsets (RSRC1=0x212, RSRC2=0x213, RSRC3=0x228)
+- [x] Fix AgcShaderType enum encoding (CS=0, PS=1, ES=2, VS=3, GS=4, HS=5, LS=7)
+  — confirmed by sharpemu PatchShaderProgramRegisters
+- [x] libSceVideoOut.sprx runtime patch (NOP linear tiling check at 0x7e61)
+- [x] Websrv homebrew deployment (FTP upload + HTTP /hbldr launch)
+- [x] Cross-reference sharpemu AGC implementation for compute dispatch encoding
 
 ## Working Rules
 

@@ -37,15 +37,20 @@ extern "C" {
 #define AGC_SHADER_RECORD_MAGIC       0x34333231u  /* "1234" little-endian */
 #define AGC_SHADER_RECORD_VERSION_GEN5 0x18u
 
-/* Shader stage/type values observed in firmware paths (byte at offset 0x5A). */
+/* Shader stage/type values stored at byte offset 0x5A of the shader record.
+ * Encoding confirmed by sharpemu (AgcExports.cs PatchShaderProgramRegisters)
+ * which runs actual PS5 games and maps these to the correct PGM_LO/HI register
+ * pairs. The previous encoding (PS=0,VS=1,GS=2,ES=3,HS=4,LS=5,CS=6) was wrong
+ * and would cause sceAgcCreateShader to patch the wrong register pair. */
 typedef enum AgcShaderType {
-    kAgcShaderTypePs = 0,   /* Pixel shader */
-    kAgcShaderTypeVs = 1,   /* Vertex shader */
-    kAgcShaderTypeGs = 2,   /* Geometry shader */
-    kAgcShaderTypeEs = 3,   /* Export shader */
-    kAgcShaderTypeHs = 4,   /* Hull shader */
-    kAgcShaderTypeLs = 5,   /* Local shader */
-    kAgcShaderTypeCs = 6,   /* Compute shader */
+    kAgcShaderTypeCs = 0,   /* Compute shader  → COMPUTE_PGM_LO/HI (0x20C/0x20D) */
+    kAgcShaderTypePs = 1,   /* Pixel shader    → SPI_SHADER_PGM_LO/HI_PS (0x08/0x09) */
+    kAgcShaderTypeEs = 2,   /* Export shader   → SPI_SHADER_PGM_LO/HI_ES (0xC8/0xC9) */
+    kAgcShaderTypeVs = 3,   /* Vertex shader   → SPI_SHADER_PGM_LO/HI_VS (0x48/0x49) */
+    kAgcShaderTypeGs = 4,   /* Geometry shader → SPI_SHADER_PGM_LO/HI_GS (0x8A/0x8B) */
+    kAgcShaderTypeHs = 5,   /* Hull shader     → SPI_SHADER_PGM_LO/HI_HS (0x108/0x109) */
+    kAgcShaderTypeEsAlt = 6,/* Export shader (alt encoding, same as ES) */
+    kAgcShaderTypeLs = 7,   /* Local shader    → SPI_SHADER_PGM_LO/HI_LS (0x148/0x149) */
 } AgcShaderType;
 
 /* Shader binary sub-types for fused shader halves.
@@ -65,14 +70,15 @@ typedef enum AgcShaderBinaryType {
 
 /* Shader type macro constants — mirror the AgcShaderType enum values for
  * use in preprocessor contexts and switch/case labels. Values match the
- * byte at offset 0x5A of the shader record (SPRX-confirmed). */
-#define AGC_SHADER_TYPE_PS   0
-#define AGC_SHADER_TYPE_VS   1
-#define AGC_SHADER_TYPE_GS   2
-#define AGC_SHADER_TYPE_DS   3
-#define AGC_SHADER_TYPE_HS   4
-#define AGC_SHADER_TYPE_LS   5
-#define AGC_SHADER_TYPE_CS   6
+ * byte at offset 0x5A of the shader record (firmware-confirmed via sharpemu). */
+#define AGC_SHADER_TYPE_CS   0
+#define AGC_SHADER_TYPE_PS   1
+#define AGC_SHADER_TYPE_ES   2
+#define AGC_SHADER_TYPE_VS   3
+#define AGC_SHADER_TYPE_GS   4
+#define AGC_SHADER_TYPE_HS   5
+#define AGC_SHADER_TYPE_DS   6  /* ES alt — kept as DS for backwards compat */
+#define AGC_SHADER_TYPE_LS   7
 
 /*
  * AGC shader record layout recovered from observation and cross-referenced

@@ -27,7 +27,7 @@ static const AgcRegisterDefaultValue s_regdef_v7_primary_regs_0[] = {
 };
 
 static const AgcRegisterDefaultValue s_regdef_v7_primary_regs_1[] = {
-    {0x0109, 0x00000008},
+    {0x0109, 0x00000000},
 };
 
 static const AgcRegisterDefaultValue s_regdef_v7_primary_regs_2[] = {
@@ -39,7 +39,7 @@ static const AgcRegisterDefaultValue s_regdef_v7_primary_regs_3[] = {
 };
 
 static const AgcRegisterDefaultValue s_regdef_v7_primary_regs_4[] = {
-    {0x008e, 0x00000000},
+    {0x008E, 0x0000000F},
 };
 
 static const AgcRegisterDefaultValue s_regdef_v7_primary_regs_5[] = {
@@ -47,7 +47,7 @@ static const AgcRegisterDefaultValue s_regdef_v7_primary_regs_5[] = {
 };
 
 static const AgcRegisterDefaultValue s_regdef_v7_primary_regs_6[] = {
-    {0x0001, 0x11000100},
+    {0x0001, 0x00000000},
 };
 
 static const AgcRegisterDefaultValue s_regdef_v7_primary_regs_7[] = {
@@ -119,7 +119,7 @@ static const AgcRegisterDefaultValue s_regdef_v7_primary_regs_23[] = {
 };
 
 static const AgcRegisterDefaultValue s_regdef_v7_primary_regs_24[] = {
-    {0x0313, 0x00006000},
+    {0x0313, 0x00000000},
 };
 
 static const AgcRegisterDefaultValue s_regdef_v7_primary_regs_25[] = {
@@ -139,7 +139,7 @@ static const AgcRegisterDefaultValue s_regdef_v7_primary_regs_28[] = {
 };
 
 static const AgcRegisterDefaultValue s_regdef_v7_primary_regs_29[] = {
-    {0x0293, 0x06020000},
+    {0x0293, 0x00000000},
 };
 
 static const AgcRegisterDefaultValue s_regdef_v7_primary_regs_30[] = {
@@ -155,7 +155,7 @@ static const AgcRegisterDefaultValue s_regdef_v7_primary_regs_32[] = {
 };
 
 static const AgcRegisterDefaultValue s_regdef_v7_primary_regs_33[] = {
-    {0x0210, 0x04000000},
+    {0x0210, 0x00000000},
 };
 
 static const AgcRegisterDefaultValue s_regdef_v7_primary_regs_34[] = {
@@ -187,7 +187,7 @@ static const AgcRegisterDefaultValue s_regdef_v7_primary_regs_40[] = {
 };
 
 static const AgcRegisterDefaultValue s_regdef_v7_primary_regs_41[] = {
-    {0x020c, 0x00000021},
+    {0x020C, 0x00000001},
 };
 
 static const AgcRegisterDefaultValue s_regdef_v7_primary_regs_42[] = {
@@ -227,7 +227,7 @@ static const AgcRegisterDefaultValue s_regdef_v7_primary_regs_50[] = {
 };
 
 static const AgcRegisterDefaultValue s_regdef_v7_primary_regs_51[] = {
-    {0x02d5, 0x00002000},
+    {0x02D5, 0x00000000},
 };
 
 static const AgcRegisterDefaultValue s_regdef_v7_primary_regs_52[] = {
@@ -268,7 +268,7 @@ static const AgcRegisterDefaultValue s_regdef_v7_primary_regs_56[] = {
 };
 
 static const AgcRegisterDefaultValue s_regdef_v7_primary_regs_57[] = {
-    {0x0311, 0x01fd2002},
+    {0x0311, 0x00000002},
     {0x0312, 0x03ff0080},
 };
 
@@ -316,7 +316,7 @@ static const AgcRegisterDefaultValue s_regdef_v7_primary_regs_63[] = {
 };
 
 static const AgcRegisterDefaultValue s_regdef_v7_primary_regs_64[] = {
-    {0x0010, 0x80000180},
+    {0x0010, 0x80000000},
     {0x0011, 0x20000180},
     {0x0012, 0x00000000},
     {0x0013, 0x00000000},
@@ -350,7 +350,7 @@ static const AgcRegisterDefaultValue s_regdef_v7_primary_regs_67[] = {
 };
 
 static const AgcRegisterDefaultValue s_regdef_v7_primary_regs_68[] = {
-    {0x02fa, 0x3f800000},
+    {0x02FA, 0x4E7E0000},
     {0x02fb, 0x3f800000},
     {0x02fc, 0x3f800000},
     {0x02fd, 0x3f800000},
@@ -578,7 +578,7 @@ static const AgcRegisterDefaultValue s_regdef_v7_primary_regs_75[] = {
 };
 
 static const AgcRegisterDefaultValue s_regdef_v7_primary_regs_76[] = {
-    {0x010f, 0x3f800000},
+    {0x010F, 0x4E7E0000},
     {0x0111, 0x3f800000},
     {0x0113, 0x3f800000},
     {0x0110, 0x00000000},

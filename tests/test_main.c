@@ -17,6 +17,7 @@ void test_suite_texture(void);
 void test_suite_shader(void);
 void test_suite_ioctl(void);
 void test_suite_register_defaults(void);
+void test_suite_registers(void);
 
 int main(void) {
     printf("openagc test suite\n");
@@ -30,6 +31,7 @@ int main(void) {
     test_suite_shader();
     test_suite_ioctl();
     test_suite_register_defaults();
+    test_suite_registers();
 
     TEST_SUMMARY();
     return 0;

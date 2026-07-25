@@ -2,7 +2,9 @@
 
 ## Current Milestone
 
-Reverse-engineering foundation for PS5 Gen5 AGC packet construction.
+**Graphics pipeline: first GPU draw call.** The compute dispatch pipeline is
+hardware-validated (Phase 5-6 complete). The next milestone is a real
+graphics draw call with vertex + pixel shaders — see PLAN.md Phase 7.
 
 See [PLAN.md](PLAN.md) for the broader GNM-to-AGC architecture roadmap,
 including Wave32, geometry, ray tracing, cache synchronization, and VRS targets.
@@ -49,7 +51,7 @@ make -B test
 Expected result:
 
 ```text
-1625 passed, 0 failed
+1675 passed, 0 failed
 ```
 
 PS5 prospero backend (cross-compiled, no tests):
@@ -412,44 +414,88 @@ Submit model:
   - PS5: WB_ONION=1, WC_GARLIC=3, WB_GARLIC=2 (type=1 fails on exploited PS5)
 - PS5 VideoOut requires userId=0xFF, not 0
 - PS5 VideoOut requires tiled mode (linear needs debug setting)
+  - **Workaround:** Runtime patch of `libSceVideoOut.sprx` at offset 0x7e61
+    (NOP the `je` instruction that rejects linear tiling without debug setting)
 - PS5 direct memory: garlic searchEnd=0x300000000, alignment=0x200000
 - `__ORBIS__` → `__PROSPERO__` (prospero toolchain defines __PROSPERO__)
+- **psbc compute SH register offsets were wrong** — RSRC1/2/3 for compute
+  shaders are at 0x212/0x213/0x228, NOT `pgm_lo + 2/3/4` (which are
+  COMPUTE_DISPATCH_PKT_ADDR_LO/HI). Fixed with per-stage offset functions.
+- **AgcShaderType enum encoding was wrong** — CS was 6, should be 0.
+  Firmware expects: CS=0, PS=1, ES=2, VS=3, GS=4, HS=5, ES-alt=6, LS=7.
+  Confirmed by sharpemu's `PatchShaderProgramRegisters`.
+
+### agc_videoout.elf — PASS
+- GPU credential bypass (cr_sceAuthId = 0x4801000000000000) — OK
+- `sce_agc_initialize()` + `sce_agc_initialize_internal_memory()` — OK
+- `sceAgcDriverNotifyDefaultStates(0)` — FAIL (0x80890001, non-blocking)
+- `sceAgcDriverSetupAsyncGraphics(1)` — OK
+- `sceVideoOutOpen(userId=0xFF)` — OK
+- `sceVideoOutRegisterBuffers` (linear, with libSceVideoOut patch) — OK
+- NOP DCB submission during flip loop — OK
+- CPU-rendered SMPTE color bars displayed for 600 frames — OK
+- Deployed via websrv (FTP upload + HTTP /hbldr launch) — OK
+
+### agc_compute.elf — PASS (first real GPU command execution)
+- GPU credential bypass + AGC init + VideoOut — OK (same as agc_videoout)
+- libSceVideoOut.sprx runtime patch (NOP at 0x7e61) — OK
+- Compute shader binary loaded (AgcShaderRecord magic=OK, type=CS(0)) — OK
+- Shader code uploaded to GPU garlic memory (gap in display buffer pool) — OK
+- SH registers set: PGM_LO/HI, RSRC1/2/3, NUM_THREAD_X/Y/Z — OK
+- User data set: SSBO descriptor + push constants (8 USER_DATA slots) — OK
+- `sceAgcDriverSubmitDcb` with SET_SH_REG + DISPATCH_DIRECT — OK (0x00000000)
+- Display flip — OK (GPU-rendered frame visible)
+- Deployed via websrv — OK
 
 ## Next RE Tasks
 
-### Priority 1: Full GPU command submission (hardware validation)
+### Priority 1: Graphics draw call (current critical path)
 
-Now that queue create, suspend point, DCB submit, and default-state
-submission all work on PS5 hardware, the next major milestone is submitting
-actual rendering commands (draw calls, state setup) via the compute queue.
-This is the critical path to making openagc useful for real homebrew.
+Compute dispatch is validated — the GPU accepts and executes non-NOP
+command buffers. The next milestone is a real graphics draw call with
+vertex + pixel shaders, render target binding, viewport/scissor state,
+and a visible triangle on the display. See PLAN.md Phase 7 for details.
 
 Subtasks:
-1. Submit a compute dispatch (already have `sceAgcCbDispatch`) and verify
-   the GPU executes it.
-2. Submit a graphics draw call with state setup (shader, render target,
-   viewport, blend state).
-3. Verify render output (readback or flip display).
+1. ~~Submit a compute dispatch and verify the GPU executes it.~~ ✅ Done
+   (agc_compute.elf — GPU accepts DISPATCH_DIRECT DCB).
+2. **Fix `sceAgcDriverNotifyDefaultStates`** — returns
+   `AGC_ERROR_INVALID_ARGUMENT` on hardware. Cross-reference sharpemu for
+   the correct argument encoding. May be blocking correct GPU state.
+3. **Compile VS+PS via psbc** — Write minimal GLSL vertex + pixel shaders,
+   compile to AgcShaderRecord binaries, verify SH/CX register blocks.
+4. **Set up render target + graphics state** — CB_COLOR0_BASE/INFO,
+   PA_CL_VPORT, PA_SC_WINDOW_SCISSOR, CB_BLEND0_CONTROL,
+   VGT_PRIMITIVE_TYPE, VGT_SHADER_STAGES_EN.
+5. **Submit IT_DRAW_INDEX_AUTO** — Build a DCB with all state + draw
+   packet, submit via `sceAgcDriverSubmitDcb`, flip display.
+6. **Verify visual output** — Confirm triangle is visible and correct.
 
-### Priority 2: PA debug ioctl (kernel RE)
+### Priority 2: Verify compute shader pixel output
+
+The compute dispatch DCB is accepted by the GPU, but we have not yet
+confirmed that the shader actually wrote the correct pixels to the
+display buffer. The user-data layout (SSBO descriptor + push constants)
+is a best guess based on ACO's arg mapping. Need to either:
+- Read back the display buffer via CPU after dispatch and check pixel values
+- Or visually confirm the screen shows the expected solid color
+
+If the output is wrong, the user-data SGPR layout needs to be corrected
+to match ACO's arg mapping (base=0 for SSBO descriptor, base=1+ for
+push constants). The RSRC2 USER_SGPR count may also need patching.
+
+### Priority 3: PA debug ioctl (kernel RE)
 
 `sceAgcDriverGetPaDebugInterfaceVersion` still returns EPERM (errno=1).
 This is a separate kernel permission check (not the cr_sceAuthId check
 at 0xd8e70400). Needs further kernel RE to identify the required
 capability. Low priority — non-blocking for rendering.
 
-### Priority 3: FRAME_OPEN ioctl (kernel RE)
+### Priority 4: FRAME_OPEN ioctl (kernel RE)
 
 `sce_agc_initialize` calls FRAME_OPEN (0xC0088100) which returns EINVAL.
 This may need additional context setup or credentials. Currently
 non-blocking — init succeeds without it. Low priority.
-
-### Priority 4: Validate default state blobs on hardware
-
-Confirm the primary/internal register-defaults blobs built by
-`sceAgcDriverNotifyDefaultStates` are accepted by the kernel and produce
-the expected GPU state. This is part of Priority 1 (rendering requires
-correct default state).
 
 ### Priority 5: Game compatibility expansion
 
@@ -553,5 +599,6 @@ verified from SPRX/kernel disassembly.
 ## Non-Goals For Current Milestone
 
 - No firmware blobs or proprietary microcode are embedded.
-- No native PS5 queue submission is treated as working yet.
 - No claim of official SDK drop-in completeness.
+- No claim that graphics draw calls work yet (compute dispatch is validated;
+  graphics pipeline is the next milestone — see PLAN.md Phase 7).

@@ -27,7 +27,7 @@ static const AgcRegisterDefaultValue s_regdef_v10_primary_regs_0[] = {
 };
 
 static const AgcRegisterDefaultValue s_regdef_v10_primary_regs_1[] = {
-    {0x0109, 0x00000010},
+    {0x0109, 0x00000000},
 };
 
 static const AgcRegisterDefaultValue s_regdef_v10_primary_regs_2[] = {

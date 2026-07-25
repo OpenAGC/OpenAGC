@@ -13,3 +13,7 @@ openagc_tests
 *.gp5
 build/
 build-*/
+
+# Generated output
+logs/
+samples/hw_test/pkg_out/

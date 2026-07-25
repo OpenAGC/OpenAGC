@@ -188,29 +188,33 @@ static int agcProsperoIoctl(uint32_t cmd, void *arg)
 /*
  * Build a CB descriptor for the submit ioctl.
  *
- * The CB descriptor is 16 bytes:
- *   header (8 bytes): PM4 type-3 header | (ib_size_dwords << 32)
- *   ib_base (8 bytes): GPU VA in lower 52 bits, VMID=0 (kernel inserts)
+ * RE'd from libSceAgcDriver.sprx at vaddr 0x1077 (FW 5.50).
  *
- * Two valid header opcodes:
- *   0xC0023300 = IT_INDIRECT_BUFFER_CONST (opcode 0x33)
- *   0xC0023F00 = IT_INDIRECT_BUFFER       (opcode 0x3F)
+ * The 16-byte CB descriptor IS an IT_INDIRECT_BUFFER PM4 packet:
+ *   Word 0: PM4 type-3 header (0xC0023F00 for DCB, 0xC0023300 for ACB)
+ *   Word 1: ib_base_lo (lower 32 bits of GPU VA)
+ *   Word 2: ib_base_hi (upper bits of GPU VA, only [15:0] valid)
+ *   Word 3: control — ib_size in [19:0], other control bits in [31:20]
  *
- * The upper 32 bits of the 64-bit header field contain the IB size
- * (in dwords). The lower 32 bits contain the PM4 packet header.
+ * Stored as two little-endian qwords:
+ *   qword 0 = (ib_base_lo << 32) | pm4_header
+ *   qword 1 = ((ib_size & 0xFFFFF) << 32) | (ib_base_hi & 0xFFFF)
+ *
+ * The kernel inserts VMID into bits [63:52] of ib_base after copyin.
+ * Mask 0x000FFFFF0000FFFF zeroes bits [31:16] of ib_base_hi and
+ * limits ib_size to 20 bits (max 1M dwords = 4MB IB).
  */
 static void agcProsperoBuildCbDescriptor(AgcGcCommandBuffer *cb,
                                        uint64_t gpu_addr,
                                        uint32_t size_dwords,
                                        bool is_const)
 {
-    if (is_const)
-        cb->header = AGC_GC_CB_HEADER_IB_CNST | ((uint64_t)size_dwords << 32);
-    else
-        cb->header = AGC_GC_CB_HEADER_IB | ((uint64_t)size_dwords << 32);
+    uint32_t header = is_const ? AGC_GC_CB_HEADER_IB_CNST : AGC_GC_CB_HEADER_IB;
+    uint32_t addr_lo = (uint32_t)gpu_addr;
+    uint32_t addr_hi = (uint32_t)(gpu_addr >> 32);
 
-    /* ib_base: GPU VA in lower 52 bits, VMID = 0 (kernel will insert) */
-    cb->ib_base = gpu_addr & AGC_GC_IB_VMASK;
+    cb->header = ((uint64_t)addr_lo << 32) | header;
+    cb->ib_base = ((uint64_t)(size_dwords & 0xFFFFF) << 32) | (addr_hi & 0xFFFF);
 }
 
 /* Find a free queue slot. Returns index >= 0, or -1 if all slots in use. */
@@ -303,10 +307,13 @@ static int32_t agcProsperoCarveSubRegion(
 }
 
 /* DDID sub-region offsets for default-state blobs and DCB scratch.
- * SceGnmDdid is 0xFC000 (1008 KB); we carve from the end to avoid
- * conflicting with SPRX-expected DDID layout. */
-#define AGC_DDID_PRIMARY_OFFSET   0xF0000   /* 960 KB offset → 48 KB for primary */
-#define AGC_DDID_INTERNAL_OFFSET  0xF8000   /* 992 KB offset → 16 KB for internal */
+ * SceGnmDdid is 0xFC000 (1008 KB). The primary defaults blob needs
+ * ~262 KB (127 groups), the internal defaults blob needs ~46 KB (22 groups).
+ * We carve from the start of DDID to fit both, plus DCB scratch at the end. */
+#define AGC_DDID_PRIMARY_SIZE     0x41000   /* 260 KB for primary defaults */
+#define AGC_DDID_INTERNAL_SIZE    0xC000    /* 48 KB for internal defaults */
+#define AGC_DDID_PRIMARY_OFFSET   0x00000   /* start of DDID */
+#define AGC_DDID_INTERNAL_OFFSET  AGC_DDID_PRIMARY_OFFSET + AGC_DDID_PRIMARY_SIZE
 #define AGC_DDID_DCB_OFFSET       0xFC000 - 16  /* last 16 bytes for DCB scratch */
 
 /* ===================================================================== */
@@ -550,11 +557,11 @@ int32_t PS5_SYSV_ABI sceAgcDriverSubmitMultiCommandBuffersDirect(
 
     /* Build submit ioctl arg */
     AgcGcSubmitArgs submit_arg = {0};
-    submit_arg.pid = 0;  /* 0 = current process */
+    submit_arg.queue_type = 3;  /* 3 = graphics queue (SPRX-confirmed) */
     submit_arg.num_cbs = total_cbs;
     submit_arg.cb_array = (uint64_t)(uintptr_t)cb_descs;
 
-    int ret = agcProsperoIoctl(AGC_GC_IOCTL_SUBMIT_PID, &submit_arg);
+    int ret = agcProsperoIoctl(AGC_GC_IOCTL_SUBMIT_16, &submit_arg);
     if (ret < 0)
         return AGC_ERROR_SUBMIT_FAILED;
 
@@ -579,11 +586,11 @@ int32_t PS5_SYSV_ABI sceAgcDriverSubmitDcb(const AgcCommandBufferSubmit *packet)
                                packet->dword_count, false);
 
     AgcGcSubmitArgs submit_arg = {0};
-    submit_arg.pid = 0;
+    submit_arg.queue_type = 3;  /* 3 = graphics queue (SPRX-confirmed) */
     submit_arg.num_cbs = 1;
     submit_arg.cb_array = (uint64_t)(uintptr_t)&cb_desc;
 
-    int ret = agcProsperoIoctl(AGC_GC_IOCTL_SUBMIT_PID, &submit_arg);
+    int ret = agcProsperoIoctl(AGC_GC_IOCTL_SUBMIT_16, &submit_arg);
     if (ret < 0)
         return AGC_ERROR_SUBMIT_FAILED;
 
@@ -628,11 +635,11 @@ int32_t PS5_SYSV_ABI sceAgcDriverSubmitAcb(
     agcProsperoBuildCbDescriptor(&cb_desc, acb_addr, size_dwords, true);
 
     AgcGcSubmitArgs submit_arg = {0};
-    submit_arg.pid = 0;
+    submit_arg.queue_type = 3;  /* 3 = graphics queue (SPRX-confirmed) */
     submit_arg.num_cbs = 1;
     submit_arg.cb_array = (uint64_t)(uintptr_t)&cb_desc;
 
-    int ret = agcProsperoIoctl(AGC_GC_IOCTL_SUBMIT_PID, &submit_arg);
+    int ret = agcProsperoIoctl(AGC_GC_IOCTL_SUBMIT_16, &submit_arg);
     if (ret < 0)
         return AGC_ERROR_SUBMIT_FAILED;
 
@@ -829,20 +836,27 @@ int32_t PS5_SYSV_ABI sceAgcDriverNotifyDefaultStates(uint32_t flags)
         primary_count, AGC_PRIMARY_CX_LENGTH, AGC_PRIMARY_SH_LENGTH, AGC_PRIMARY_UC_LENGTH);
     size_t internal_size = agcRegisterDefaultsComputeSize(
         internal_count, AGC_INTERNAL_CX_LENGTH, AGC_INTERNAL_SH_LENGTH, AGC_INTERNAL_UC_LENGTH);
-    (void)primary_size;   /* sub-region carved from DDID, size checked at build */
-    (void)internal_size;  /* sub-region carved from DDID, size checked at build */
+    printf("    [defaults] primary: %u groups, size=0x%zx (blob=0x%x)\n",
+           primary_count, primary_size, AGC_DDID_PRIMARY_SIZE);
+    printf("    [defaults] internal: %u groups, size=0x%zx (blob=0x%x)\n",
+           internal_count, internal_size, AGC_DDID_INTERNAL_SIZE);
 
     int32_t ret = agcProsperoCarveSubRegion(
-        &g_prospero.ddid, AGC_DDID_PRIMARY_OFFSET, 0x8000,
+        &g_prospero.ddid, AGC_DDID_PRIMARY_OFFSET, AGC_DDID_PRIMARY_SIZE,
         &g_prospero.primary_defaults);
-    if (ret != AGC_OK)
+    if (ret != AGC_OK) {
+        printf("    [defaults] ERROR: carve primary failed: 0x%x (ddid size=0x%zx)\n",
+               ret, g_prospero.ddid.size);
         return ret;
+    }
 
     ret = agcProsperoCarveSubRegion(
-        &g_prospero.ddid, AGC_DDID_INTERNAL_OFFSET, 0x4000,
+        &g_prospero.ddid, AGC_DDID_INTERNAL_OFFSET, AGC_DDID_INTERNAL_SIZE,
         &g_prospero.internal_defaults);
-    if (ret != AGC_OK)
+    if (ret != AGC_OK) {
+        printf("    [defaults] ERROR: carve internal failed: 0x%x\n", ret);
         return ret;
+    }
 
     ret = agcRegisterDefaultsBuild(
         g_prospero.primary_defaults.cpu_addr,
@@ -854,6 +868,8 @@ int32_t PS5_SYSV_ABI sceAgcDriverNotifyDefaultStates(uint32_t flags)
         AGC_PRIMARY_SH_LENGTH,
         AGC_PRIMARY_UC_LENGTH);
     if (ret != AGC_OK) {
+        printf("    [defaults] ERROR: build primary failed: 0x%x (required=0x%zx, blob=0x%zx)\n",
+               ret, primary_size, g_prospero.primary_defaults.size);
         agcProsperoFreeRegion(&g_prospero.internal_defaults);
         agcProsperoFreeRegion(&g_prospero.primary_defaults);
         return ret;
@@ -869,6 +885,8 @@ int32_t PS5_SYSV_ABI sceAgcDriverNotifyDefaultStates(uint32_t flags)
         AGC_INTERNAL_SH_LENGTH,
         AGC_INTERNAL_UC_LENGTH);
     if (ret != AGC_OK) {
+        printf("    [defaults] ERROR: build internal failed: 0x%x (required=0x%zx, blob=0x%zx)\n",
+               ret, internal_size, g_prospero.internal_defaults.size);
         agcProsperoFreeRegion(&g_prospero.internal_defaults);
         agcProsperoFreeRegion(&g_prospero.primary_defaults);
         return ret;
@@ -879,7 +897,14 @@ int32_t PS5_SYSV_ABI sceAgcDriverNotifyDefaultStates(uint32_t flags)
      * primary defaults. The kernel patches CLEAR_STATE (opcode 0x14) via
      * gc_pm4_clearstate_patch; the primary/internal blobs we just built are
      * GPU-visible and consumed during context reset.
+     *
+     * NOTE: Temporarily disabled — the CLEAR_STATE submission appears to
+     * cause a GPU hang that prevents subsequent command buffer submissions
+     * from executing. The default state blobs are still built in GPU-visible
+     * memory and can be consumed by the kernel during context reset without
+     * an explicit CLEAR_STATE packet.
      */
+#if 0  /* Temporarily disabled for debugging */
     AgcProsperoRegion dcb_region = {0};
     ret = agcProsperoCarveSubRegion(
         &g_prospero.ddid, AGC_DDID_DCB_OFFSET, 16, &dcb_region);
@@ -899,6 +924,7 @@ int32_t PS5_SYSV_ABI sceAgcDriverNotifyDefaultStates(uint32_t flags)
     memset(&dcb_region, 0, sizeof(dcb_region));
     if (ret != AGC_OK)
         return ret;
+#endif
 
     g_prospero.defaults_notified = true;
     return AGC_OK;

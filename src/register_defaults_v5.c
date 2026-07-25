@@ -27,7 +27,7 @@ static const AgcRegisterDefaultValue s_regdef_v5_primary_regs_0[] = {
 };
 
 static const AgcRegisterDefaultValue s_regdef_v5_primary_regs_1[] = {
-    {0x0109, 0x00000008},
+    {0x0109, 0x00000000},
 };
 
 static const AgcRegisterDefaultValue s_regdef_v5_primary_regs_2[] = {
@@ -39,7 +39,7 @@ static const AgcRegisterDefaultValue s_regdef_v5_primary_regs_3[] = {
 };
 
 static const AgcRegisterDefaultValue s_regdef_v5_primary_regs_4[] = {
-    {0x008e, 0x00000000},
+    {0x008E, 0x0000000F},
 };
 
 static const AgcRegisterDefaultValue s_regdef_v5_primary_regs_5[] = {
@@ -47,7 +47,7 @@ static const AgcRegisterDefaultValue s_regdef_v5_primary_regs_5[] = {
 };
 
 static const AgcRegisterDefaultValue s_regdef_v5_primary_regs_6[] = {
-    {0x0001, 0x11000100},
+    {0x0001, 0x00000000},
 };
 
 static const AgcRegisterDefaultValue s_regdef_v5_primary_regs_7[] = {
@@ -119,7 +119,7 @@ static const AgcRegisterDefaultValue s_regdef_v5_primary_regs_23[] = {
 };
 
 static const AgcRegisterDefaultValue s_regdef_v5_primary_regs_24[] = {
-    {0x0313, 0x00006000},
+    {0x0313, 0x00000000},
 };
 
 static const AgcRegisterDefaultValue s_regdef_v5_primary_regs_25[] = {

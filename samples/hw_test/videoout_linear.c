@@ -17,6 +17,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 #include <sys/types.h>
 
 #include "ps5_video_out.h"
@@ -194,24 +195,38 @@ static bool init_video(VideoOutTest *test) {
         return false;
     }
 
-    /* Sleep to allow external patching of libSceVideoOut.
-     * The patch script patches the linear tiling check in libSceVideoOut.sprx
-     * at offset 0x7e61 (NOP the je to the linear rejection). */
+    /* Use linear tiling mode (mode 1) with pixel format 0x80000000.
+     * This matches the pattern used by all working PS5_DEV_HOMEBREW examples.
+     * The buffer attribute struct is written as raw bytes to match the
+     * exact layout the kernel expects:
+     *   offset 0:  pixel_format (0x80000000 = A8B8G8R8_SRGB)
+     *   offset 4:  tiling_mode (1 = linear)
+     *   offset 8:  aspect_ratio (0 = 16:9)
+     *   offset 12: width
+     *   offset 16: height
+     *   offset 20: pitch_in_pixel
+     *
+     * NOTE: Linear mode requires "Enhanced Display Buffer Attribute" to be
+     * enabled in Debug Settings, OR a runtime patch to libSceVideoOut.sprx
+     * (NOP the je at offset 0x7e61 on FW 5.50). We sleep 10s to allow the
+     * patch to be applied externally via ps5debug-NG (port 744). */
     printf("Sleeping 10s for external patch — run patch_videoout.py now!\n");
     sceKernelUsleep(10 * 1000 * 1000);
     printf("Woke up, proceeding with RegisterBuffers...\n");
 
-    /* Use linear tiling — the patch removes the unconditional rejection */
-    SceVideoOutBufferAttribute attr = {0};
-    sceVideoOutSetBufferAttribute(
-        &attr, SCE_VIDEO_OUT_PIXEL_FORMAT_A8R8G8B8_SRGB,
-        SCE_VIDEO_OUT_TILING_MODE_LINEAR, SCE_VIDEO_OUT_ASPECT_RATIO_16_9,
-        test->width, test->height, test->pitch_pixels
-    );
+    uint8_t attr_raw[64];
+    memset(attr_raw, 0, sizeof(attr_raw));
+    *(uint32_t *)(attr_raw + 0)  = 0x80000000;  /* pixel format */
+    *(uint32_t *)(attr_raw + 4)  = 1;           /* tiling mode = linear */
+    *(uint32_t *)(attr_raw + 8)  = 0;           /* aspect ratio = 16:9 */
+    *(uint32_t *)(attr_raw + 12) = test->width;
+    *(uint32_t *)(attr_raw + 16) = test->height;
+    *(uint32_t *)(attr_raw + 20) = test->pitch_pixels;
 
     void *addresses[BUFFER_COUNT] = {test->buffers[0], test->buffers[1]};
     res = sceVideoOutRegisterBuffers(
-        test->handle, 0, addresses, BUFFER_COUNT, &attr);
+        test->handle, 0, addresses, BUFFER_COUNT,
+        (const SceVideoOutBufferAttribute *)attr_raw);
     printf("sceVideoOutRegisterBuffers (linear): 0x%x\n", res);
 
     if (res < 0) {
@@ -258,8 +273,8 @@ int main(void) {
     printf("=== openagc VideoOut linear smoke test ===\n");
 
     if (!init_video(&test)) {
-        /* Don't call shutdown_video or return — just exit the thread
-         * to avoid disrupting the host process when injected. */
+        /* Clean up VideoOut handle before exiting to avoid leaking it. */
+        shutdown_video(&test);
         long state = 0;
         thr_exit(&state);
         __builtin_unreachable();

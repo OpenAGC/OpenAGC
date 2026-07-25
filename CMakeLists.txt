@@ -89,6 +89,7 @@ if(OPENAGC_BUILD_TESTS)
         tests/test_shader.c
         tests/test_ioctl.c
         tests/test_register_defaults.c
+        tests/test_registers.c
     )
     target_link_libraries(openagc_tests PRIVATE openagc)
     target_include_directories(openagc_tests PRIVATE

@@ -192,59 +192,59 @@ enum AgcGcIoctlNr {
 #define AGC_GC_IOCTL_CWSR_INIT_4D   AGC_GC_IOC(1u, 0x3du, 4u)
 
 /*
- * Submit ioctl argument struct (nr=0x3b, dir=RW, size=16).
+ * Submit ioctl argument struct.
  *
- * The ioctl arg size field (16) only covers the first 16 bytes. The
- * cb_array pointer at offset 0x10 is accessed directly from user memory
- * by the kernel driver.
+ * RE'd from libSceAgcDriver.sprx at vaddr 0x86e0 (FW 5.50).
+ *
+ * The SPRX uses SUBMIT_16 (nr=0x02, cmd=0xC0108102) for DCB/ACB submission.
+ * The 16-byte struct is fully copyin'd by the kernel:
+ *   offset 0x00: uint32_t queue_type  (SPRX always passes 3 = graphics)
+ *   offset 0x04: uint32_t num_cbs     (number of CB descriptors, max 0xFFF)
+ *   offset 0x08: uint64_t cb_array    (user pointer to CB descriptor array)
  *
  * Kernel submit path:
  *   gc_submit_with_pid (0x6e65c0):
- *     - looks up proc by pid
- *     - gets VMID from [proc+0x200+0x1e4]
+ *     - gets VMID from process context
  *     - validates VMID in [2, 15]
  *     - tail-calls gc_frame_submit_internal
  *   gc_frame_submit_internal (0xb7da90):
  *     - validates num_cbs in [1, 0xFFF]
  *     - allocates ring space: num_cbs * 16 bytes
  *     - copyin(cb_array, ring_buf, num_cbs * 16)
- *     - per CB: checks header opcode, masks ib_base with 0x000FFFFFFFFFFFFF,
- *       ORs in VMID<<52, calls gc_insert_indirect_buffer
+ *     - per CB: checks header opcode, masks ib_base, ORs in VMID<<52,
+ *       calls gc_insert_indirect_buffer
  */
 typedef struct AgcGcSubmitArgs {
-    uint32_t pid;           /* offset 0x00: process ID (0 = current) */
-    uint32_t pad0;          /* offset 0x04: padding */
-    uint32_t num_cbs;       /* offset 0x08: number of CBs (max 0xFFF) */
-    uint32_t pad1;          /* offset 0x0C: padding */
-    uint64_t cb_array;      /* offset 0x10: user pointer to CB descriptor array */
+    uint32_t queue_type;    /* offset 0x00: 3 = graphics queue (SPRX-confirmed) */
+    uint32_t num_cbs;       /* offset 0x04: number of CBs (max 0xFFF) */
+    uint64_t cb_array;      /* offset 0x08: user pointer to CB descriptor array */
 } AgcGcSubmitArgs;
-_Static_assert(offsetof(AgcGcSubmitArgs, pid) == 0x00,
-    "AgcGcSubmitArgs pid offset mismatch");
-_Static_assert(offsetof(AgcGcSubmitArgs, num_cbs) == 0x08,
+_Static_assert(offsetof(AgcGcSubmitArgs, queue_type) == 0x00,
+    "AgcGcSubmitArgs queue_type offset mismatch");
+_Static_assert(offsetof(AgcGcSubmitArgs, num_cbs) == 0x04,
     "AgcGcSubmitArgs num_cbs offset mismatch");
-_Static_assert(offsetof(AgcGcSubmitArgs, cb_array) == 0x10,
+_Static_assert(offsetof(AgcGcSubmitArgs, cb_array) == 0x08,
     "AgcGcSubmitArgs cb_array offset mismatch");
-_Static_assert(sizeof(AgcGcSubmitArgs) == 0x18,
+_Static_assert(sizeof(AgcGcSubmitArgs) == 0x10,
     "AgcGcSubmitArgs size mismatch");
 
 /*
  * Command buffer descriptor (16 bytes each, copyin'd by kernel).
  *
- * The header is a PM4 type-3 packet header in the lower 32 bits:
- *   (3 << 30) | ((count - 2) << 16) | (opcode << 8)
- * The upper 32 bits contain the IB size in dwords.
+ * RE'd from libSceAgcDriver.sprx at vaddr 0x1077 (FW 5.50).
  *
- * Valid opcodes (see AGC_GC_CB_HEADER_* above):
- *   0xC0023300 = IT_INDIRECT_BUFFER_CNST (opcode 0x33) — for ACB
- *   0xC0023F00 = IT_INDIRECT_BUFFER      (opcode 0x3F) — for DCB
+ * The 16-byte descriptor IS an IT_INDIRECT_BUFFER PM4 packet:
+ *   Word 0 (header[31:0]):  PM4 type-3 header (opcode 0x3F or 0x33)
+ *   Word 1 (header[63:32]): ib_base_lo — lower 32 bits of GPU VA
+ *   Word 2 (ib_base[31:0]): ib_base_hi — upper bits of GPU VA (only [15:0])
+ *   Word 3 (ib_base[63:32]): control — ib_size in [19:0], VMID in [63:52]
  *
- * The ib_base field contains:
- *   bits [51:0]  = GPU virtual address of the indirect buffer
- *   bits [63:52] = VMID (inserted by kernel, originally 0 from user)
+ * The kernel inserts VMID into ib_base[63:52] after copyin.
+ * Mask 0x000FFFFF0000FFFF limits ib_size to 20 bits and ib_base_hi to 16 bits.
  */
 typedef struct AgcGcCommandBuffer {
-    uint64_t header;        /* offset 0x00: PM4 packet header (opcode + count) */
-    uint64_t ib_base;       /* offset 0x08: IB base address + VMID (bits 63:52) */
+    uint64_t header;        /* offset 0x00: [63:32]=ib_base_lo, [31:0]=PM4 header */
+    uint64_t ib_base;       /* offset 0x08: [63:32]=control(ib_size), [31:0]=ib_base_hi */
 } AgcGcCommandBuffer;
 _Static_assert(offsetof(AgcGcCommandBuffer, header) == 0x00,
     "AgcGcCommandBuffer header offset mismatch");
@@ -260,13 +260,13 @@ _Static_assert(sizeof(AgcGcCommandBuffer) == 0x10,
 #define AGC_GC_CB_HEADER_IB_CNST    0xC0023300u  /* opcode 0x33 = IT_INDIRECT_BUFFER_CNST */
 #define AGC_GC_CB_HEADER_IB         0xC0023F00u  /* opcode 0x3F = IT_INDIRECT_BUFFER */
 
-/* VMID is stored in bits [63:52] of ib_base; bits [51:0] are the GPU VA.
- * The kernel masks ib_base with 0x000FFFFFFFFFFFFF (52-bit address space)
- * before ORing in VMID<<52. Note: the sibling ps5-openagc project documented
- * this mask as 0x000FFFFF00000000, which only preserves bits [51:32] and
- * zeroes the low 32 bits — that is a transcription error; a 52-bit GPU VA
- * mask must preserve all of bits [51:0]. */
-#define AGC_GC_IB_VMASK             0x000FFFFFFFFFFFFFULL
+/* VMID is stored in bits [63:52] of the ib_base qword (word 3 of the
+ * IT_INDIRECT_BUFFER packet). The kernel inserts VMID after copyin.
+ * The SPRX masks ib_base with 0x000FFFFF0000FFFF before submit:
+ *   bits [51:32] = ib_size (20 bits, max 1M dwords)
+ *   bits [31:16] = 0 (zeroed)
+ *   bits [15:0]  = ib_base_hi (upper 16 bits of GPU VA) */
+#define AGC_GC_IB_VMASK             0x000FFFFF0000FFFFULL
 #define AGC_GC_IB_VSHIFT            52u
 
 /* VMID valid range (validated in gc_submit_with_pid) */

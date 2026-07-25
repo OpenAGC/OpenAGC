@@ -1,10 +1,14 @@
 {
-    "applicationCategoryType": 0,
-    "localizedParameters": {
-        "defaultLanguage": "en-US",
-        "en-US": {
-            "titleName": "openagc hw_test"
-        }
-    },
-    "titleId": "AGCT00001"
+  "applicationCategoryType": 0,
+  "attribute": 1,
+  "attribute2": 0,
+  "attribute3": 4,
+  "titleId": "AGCT00001",
+  "contentId": "UP9000-AGCT00001_00-OPENAGC000000000",
+  "localizedParameters": {
+    "defaultLanguage": "en-US",
+    "en-US": {
+      "titleName": "openagc hw_test"
+    }
+  }
 }

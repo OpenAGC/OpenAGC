@@ -71,7 +71,7 @@ bool agcShaderRecordIsValid(const AgcShaderRecord *record) {
         return false;
     if (record->version != AGC_SHADER_RECORD_VERSION_GEN5)
         return false;
-    if (record->shader_type > kAgcShaderTypeCs)
+    if (record->shader_type > kAgcShaderTypeLs)
         return false;
     return true;
 }

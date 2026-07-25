@@ -38,7 +38,8 @@ TEST_SRCS = \
 	tests/test_texture.c \
 	tests/test_shader.c \
 	tests/test_ioctl.c \
-	tests/test_register_defaults.c
+	tests/test_register_defaults.c \
+	tests/test_registers.c
 
 TEST_OBJS = $(TEST_SRCS:.c=.o)
 

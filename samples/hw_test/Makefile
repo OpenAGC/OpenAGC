@@ -1,8 +1,9 @@
 # openagc hardware validation samples — Makefile
 #
-# Two test programs adapted from freegnm-examples:
+# Three test programs adapted from freegnm-examples:
 #   videoout_linear.elf — VideoOut display pipeline smoke test (no GPU)
 #   agc_init.elf        — AGC init + NOP submit + queue test (GPU commands)
+#   agc_videoout.elf    — Combined AGC + VideoOut test (GPU + display)
 #
 # Prerequisites:
 #   export PS5_PAYLOAD_SDK=~/ps5-payload-sdk
@@ -28,11 +29,16 @@ OPENAGC_ROOT := $(abspath $(THIS_DIR)/../..)
 OPENAGC_LIB  := $(OPENAGC_ROOT)/build-prospero/libopenagc.a
 OPENAGC_INC  := $(OPENAGC_ROOT)/include
 
-# LibProsperoPkg tools (for eboot.bin)
+# LibProsperoPkg tools (for eboot.bin and .pkg packaging)
 PKG_TOOLS ?= /Users/bizkut/Downloads/PS5/homebrew/LibProsperoPKG-seregonwar/build
 FSELF     := $(PKG_TOOLS)/prosperopkg-fself
+PKGBUILD  := $(PKG_TOOLS)/prosperopkg-pkg
 
 PS4_SDK_VERSION ?= 0x07590001
+
+# PS5 packaging constants
+CONTENT_ID  := UP9000-AGCT00001_00-OPENAGC000000000
+PASSCODE    := 00000000000000000000000000000000
 
 CFLAGS  := -Wall -Wextra -g -I$(OPENAGC_INC) -I$(THIS_DIR)
 
@@ -44,7 +50,7 @@ AGC_LDFLAGS := $(OPENAGC_LIB) -lSceVideoOut -lkernel
 
 # === Targets ===
 
-all: videoout_linear.elf agc_init.elf
+all: videoout_linear.elf agc_init.elf agc_videoout.elf agc_compute.elf
 
 # VideoOut linear smoke test (no GPU commands)
 videoout_linear.elf: videoout_linear.c ps5_video_out.h
@@ -54,6 +60,14 @@ videoout_linear.elf: videoout_linear.c ps5_video_out.h
 agc_init.elf: agc_init.c ps5_video_out.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -o $@ agc_init.c $(AGC_LDFLAGS)
 
+# Combined AGC + VideoOut test (links libopenagc.a + VideoOut + kernel)
+agc_videoout.elf: agc_videoout.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -o $@ agc_videoout.c $(AGC_LDFLAGS)
+
+# Compute dispatch test (AGC + compute shader + VideoOut)
+agc_compute.elf: agc_compute.c ps5_video_out.h gpu_credentials.h shaders/fill_color_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -o $@ agc_compute.c $(AGC_LDFLAGS)
+
 # === eboot.bin versions (for debug-mode PS5) ===
 
 videoout_linear.bin: videoout_linear.elf
@@ -62,12 +76,55 @@ videoout_linear.bin: videoout_linear.elf
 agc_init.bin: agc_init.elf
 	$(FSELF) $< $@ $(PS4_SDK_VERSION) $(PS4_SDK_VERSION)
 
+agc_videoout.bin: agc_videoout.elf
+	$(FSELF) $< $@ $(PS4_SDK_VERSION) $(PS4_SDK_VERSION)
+
+# === .pkg packages (for debug-mode PS5 installation) ===
+# Each pkg_* target builds an app folder + .pkg from the corresponding .bin
+
+PKG_OUT := pkg_out
+
+pkg_videoout: videoout_linear.bin
+	rm -rf pkg_videoout_build $(PKG_OUT)/videoout
+	mkdir -p pkg_videoout_build/sce_sys
+	cp videoout_linear.bin pkg_videoout_build/eboot.bin
+	cp sce_sys/param.json pkg_videoout_build/sce_sys/
+	$(PKGBUILD) pkg_videoout_build $(PKG_OUT)/videoout \
+	    $(CONTENT_ID) $(PASSCODE) \
+	    --title "openagc VideoOut Linear" --title-id $(TITLE_ID)
+	rm -rf pkg_videoout_build
+
+pkg_agc: agc_init.bin
+	rm -rf pkg_agc_build $(PKG_OUT)/agc
+	mkdir -p pkg_agc_build/sce_sys
+	cp agc_init.bin pkg_agc_build/eboot.bin
+	cp sce_sys/param.json pkg_agc_build/sce_sys/
+	$(PKGBUILD) pkg_agc_build $(PKG_OUT)/agc \
+	    $(CONTENT_ID) $(PASSCODE) \
+	    --title "openagc AGC Init" --title-id $(TITLE_ID)
+	rm -rf pkg_agc_build
+
+pkg_agc_videoout: agc_videoout.bin
+	rm -rf pkg_agc_videoout_build $(PKG_OUT)/agc_videoout
+	mkdir -p pkg_agc_videoout_build/sce_sys
+	cp agc_videoout.bin pkg_agc_videoout_build/eboot.bin
+	cp sce_sys/param.json pkg_agc_videoout_build/sce_sys/
+	$(PKGBUILD) pkg_agc_videoout_build $(PKG_OUT)/agc_videoout \
+	    $(CONTENT_ID) $(PASSCODE) \
+	    --title "openagc AGC+VideoOut Test" --title-id $(TITLE_ID)
+	rm -rf pkg_agc_videoout_build
+
+pkg_all: pkg_videoout pkg_agc pkg_agc_videoout
+
 # === Deploy (exploited PS5 via ELF loader) ===
 
 deploy_videoout: videoout_linear.elf
 	$(PS5_DEPLOY) -h $(PS5_HOST) -p $(PS5_PORT) $<
 
 deploy_agc: agc_init.elf
+	$(PS5_DEPLOY) -h $(PS5_HOST) -p $(PS5_PORT) $<
+
+deploy_agc_videoout: agc_videoout.elf
 	$(PS5_DEPLOY) -h $(PS5_HOST) -p $(PS5_PORT) $<
 
 # === Install (debug-mode PS5 via FTP) ===
@@ -88,7 +145,52 @@ install_agc: agc_init.bin
 	curl -T "agc_init.bin"            "ftp://$(PS5_HOST):2121/system_ex/app/$(TITLE_ID)/eboot.bin"
 	curl -T "sce_sys/param.json"       "ftp://$(PS5_HOST):2121/user/app/$(TITLE_ID)/sce_sys/"
 
+install_agc_videoout: agc_videoout.bin
+	curl -Q "MKD /system_ex/app/$(TITLE_ID)"         "ftp://$(PS5_HOST):2121/" > /dev/null || true
+	curl -Q "MKD /system_ex/app/$(TITLE_ID)/sce_sys" "ftp://$(PS5_HOST):2121/" > /dev/null || true
+	curl -Q "MKD /user/app/$(TITLE_ID)"              "ftp://$(PS5_HOST):2121/" > /dev/null || true
+	curl -Q "MKD /user/app/$(TITLE_ID)/sce_sys"      "ftp://$(PS5_HOST):2121/" > /dev/null || true
+	curl -T "agc_videoout.bin"        "ftp://$(PS5_HOST):2121/system_ex/app/$(TITLE_ID)/eboot.bin"
+	curl -T "sce_sys/param.json"       "ftp://$(PS5_HOST):2121/user/app/$(TITLE_ID)/sce_sys/"
+
 # === Debug ===
+
+# === Emulator builds (KytyPS5 / SharpEmu) ===
+# These use a custom _start (crt_emu.c) that skips the ps5-payload-sdk CRT
+# bootstrap, which expects payload_args_t* with sys_dynlib_dlsym.
+# Emulators pass different args to _start, so we bypass the CRT entirely.
+EMU_CFLAGS  := $(CFLAGS) -nostartfiles
+EMU_LDFLAGS := -nostartfiles -lc -lkernel
+
+emu_videoout: videoout_linear.c ps5_video_out.h crt_emu.c
+	$(CC) $(EMU_CFLAGS) -o emu_videoout.elf crt_emu.c videoout_linear.c $(EMU_LDFLAGS) -lSceVideoOut
+
+emu_agc: agc_init.c ps5_video_out.h crt_emu.c $(OPENAGC_LIB)
+	$(CC) $(EMU_CFLAGS) -o emu_agc.elf crt_emu.c agc_init.c $(EMU_LDFLAGS) $(OPENAGC_LIB) -lSceVideoOut
+
+emu_agc_videoout: agc_videoout.c ps5_video_out.h crt_emu.c $(OPENAGC_LIB)
+	$(CC) $(EMU_CFLAGS) -o emu_agc_videoout.elf crt_emu.c agc_videoout.c $(EMU_LDFLAGS) $(OPENAGC_LIB) -lSceVideoOut
+
+emu_all: emu_videoout emu_agc emu_agc_videoout
+
+# SharpEmu HLE test — calls sceAgc* NID exports directly (no /dev/gc backend)
+# This test works with SharpEmu because it uses NID-based imports that
+# SharpEmu's HLE resolves. It does NOT use the prospero /dev/gc driver.
+emu_sharpemu: emu_sharpemu.c crt_emu.c
+	$(CC) $(EMU_CFLAGS) -o emu_sharpemu.elf crt_emu.c emu_sharpemu.c $(EMU_LDFLAGS) -lSceAgc -lSceAgcDriver
+
+# Build eboot.bin from emulator ELF for SharpEmu/KytyPS5
+emu_videoout.bin: emu_videoout.elf
+	$(FSELF) $< $@ $(PS4_SDK_VERSION) $(PS4_SDK_VERSION)
+
+emu_agc.bin: emu_agc.elf
+	$(FSELF) $< $@ $(PS4_SDK_VERSION) $(PS4_SDK_VERSION)
+
+emu_agc_videoout.bin: emu_agc_videoout.elf
+	$(FSELF) $< $@ $(PS4_SDK_VERSION) $(PS4_SDK_VERSION)
+
+emu_sharpemu.bin: emu_sharpemu.elf
+	$(FSELF) $< $@ $(PS4_SDK_VERSION) $(PS4_SDK_VERSION)
 
 debug_videoout: videoout_linear.elf
 	gdb-multiarch \
@@ -101,3 +203,4 @@ debug_videoout: videoout_linear.elf
 
 clean:
 	rm -f *.elf *.bin
+	rm -rf pkg_*_build pkg_out pkg_build

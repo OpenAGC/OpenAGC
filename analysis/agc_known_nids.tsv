@@ -336,7 +336,7 @@ libSceAgc	sceAgcSetUcRegIndirectPatchSetNumRegisters	fRG-JOH5+sI	libGraphicsDriv
 libSceAgc	sceAgcSuspendPoint	h9z6+0hEydk	NID computation verified (SHA1)
 libSceAgc	sceAgcSuspendPointAndCheckStatus	b+fis+WZ3Ig	NID computation verified (SHA1)
 libSceAgc	sceAgcUnknownIkfdtRIqCE	Ikfdt-rIqCE	unverified (name unknown)
-libSceAgc	sceAgcUnknown_HV4j+E0MBHE	HV4j+E0MBHE	unverified (name unknown)
+libSceAgc	sceAgcUnknown_HV4j+E0MBHE	HV4j+E0MBHE	unverified; sharpemu guesses sceAgcCreateInterpolantMapping but notes name collision with pdEV7bI6COI; OpenAGC RE says sceAgcDcbWaitFlip (ordinal 133, opcode 0x51)
 libSceAgcDriver	sceAgcUnknown_NRO47jBXLiI	NRO47jBXLiI	unverified (name unknown)
 libSceAgcDriver	sceAgcUnknown_dwoD-LJDQy8	dwoD-LJDQy8	unverified (name unknown)
 libSceAgc	sceAgcUnknown_k0E7vkgqAuE	k0E7vkgqAuE	unverified (name unknown)

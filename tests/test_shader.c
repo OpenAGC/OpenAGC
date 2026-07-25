@@ -297,21 +297,23 @@ static void test_shader_link_copy_exact(void) {
 }
 
 static void test_shader_type_macros_match_enum(void) {
-    /* The AGC_SHADER_TYPE_* macros must match the AgcShaderType enum. */
+    /* The AGC_SHADER_TYPE_* macros must match the AgcShaderType enum.
+     * Encoding confirmed by sharpemu: CS=0, PS=1, ES=2, VS=3, GS=4, HS=5,
+     * ES-alt=6 (DS for compat), LS=7. */
+    TEST_ASSERT_EQ((uint32_t)AGC_SHADER_TYPE_CS, (uint32_t)kAgcShaderTypeCs,
+        "AGC_SHADER_TYPE_CS == kAgcShaderTypeCs");
     TEST_ASSERT_EQ((uint32_t)AGC_SHADER_TYPE_PS, (uint32_t)kAgcShaderTypePs,
         "AGC_SHADER_TYPE_PS == kAgcShaderTypePs");
+    TEST_ASSERT_EQ((uint32_t)AGC_SHADER_TYPE_ES, (uint32_t)kAgcShaderTypeEs,
+        "AGC_SHADER_TYPE_ES == kAgcShaderTypeEs");
     TEST_ASSERT_EQ((uint32_t)AGC_SHADER_TYPE_VS, (uint32_t)kAgcShaderTypeVs,
         "AGC_SHADER_TYPE_VS == kAgcShaderTypeVs");
     TEST_ASSERT_EQ((uint32_t)AGC_SHADER_TYPE_GS, (uint32_t)kAgcShaderTypeGs,
         "AGC_SHADER_TYPE_GS == kAgcShaderTypeGs");
-    TEST_ASSERT_EQ((uint32_t)AGC_SHADER_TYPE_DS, (uint32_t)kAgcShaderTypeEs,
-        "AGC_SHADER_TYPE_DS == kAgcShaderTypeEs");
     TEST_ASSERT_EQ((uint32_t)AGC_SHADER_TYPE_HS, (uint32_t)kAgcShaderTypeHs,
         "AGC_SHADER_TYPE_HS == kAgcShaderTypeHs");
     TEST_ASSERT_EQ((uint32_t)AGC_SHADER_TYPE_LS, (uint32_t)kAgcShaderTypeLs,
         "AGC_SHADER_TYPE_LS == kAgcShaderTypeLs");
-    TEST_ASSERT_EQ((uint32_t)AGC_SHADER_TYPE_CS, (uint32_t)kAgcShaderTypeCs,
-        "AGC_SHADER_TYPE_CS == kAgcShaderTypeCs");
 }
 
 /* ===================================================================== */

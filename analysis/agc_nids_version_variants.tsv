@@ -8,9 +8,9 @@ firmware	library	name	nid	notes
 11.60	libSceAgc	sceAgcUnknown_11.60	d4NZIlguzv0	11.60 SPRX export
 11.60	libSceAgc	sceAgcUnknown_11.60	-KRzWekV120	11.60 SPRX export
 11.60	libSceAgc	sceAgcUnknown_11.60	OQTgEXyihvA	11.60 SPRX export
-11.60	libSceAgc	sceAgcUnknown_11.60	fPSCdQxgpSw	11.60 SPRX export
+11.60	libSceAgc	sceAgcWriteDataPatchSetAddressOrOffset	fPSCdQxgpSw	11.60 SPRX export; identified from sharpemu AgcExports.cs (also exported from libSceAgcDriver, see below)
 11.60	libSceAgc	sceAgcUnknown_11.60	NbiQSQ-UL+M	11.60 SPRX export
-11.60	libSceAgc	sceAgcUnknown_11.60	eAy8eGNsCuU	11.60 SPRX export
+11.60	libSceAgc	sceAgcWriteDataPatchSetCachePolicy	eAy8eGNsCuU	11.60 SPRX export; identified from sharpemu AgcExports.cs
 11.60	libSceAgc	sceAgcUnknown_11.60	y5K5tPktiL8	11.60 SPRX export
 11.60	libSceAgc	sceAgcUnknown_11.60	SwI6QxqwAC0	11.60 SPRX export
 11.60	libSceAgc	sceAgcUnknown_11.60	dbOlWdppb4o	11.60 SPRX export
@@ -24,12 +24,12 @@ firmware	library	name	nid	notes
 11.60	libSceAgc	sceAgcUnknown_11.60	h4h5EQ-Y20M	11.60 SPRX export
 11.60	libSceAgc	sceAgcUnknown_11.60	vieBRwlh1Lw	11.60 SPRX export
 11.60	libSceAgc	sceAgcUnknown_11.60	RTpj-tIlvZc	11.60 SPRX export
-11.60	libSceAgc	sceAgcUnknown_11.60	tmy-+rBpspY	11.60 SPRX export
+11.60	libSceAgc	sceAgcWriteDataPatchSetDst	tmy-+rBpspY	11.60 SPRX export; identified from sharpemu AgcExports.cs
 11.60	libSceAgc	sceAgcUnknown_11.60	86rJnbZUpr4	11.60 SPRX export
 11.60	libSceAgc	sceAgcUnknown_11.60	6nths4DHNrs	11.60 SPRX export
 11.60	libSceAgc	sceAgcUnknown_11.60	shuFv6ZAOsI	11.60 SPRX export
 11.60	libSceAgc	sceAgcUnknown_11.60	8Kly1JrJUlw	11.60 SPRX export
-11.60	libSceAgc	sceAgcUnknown_11.60	BfBDZGbti7A	11.60 SPRX export
+11.60	libSceAgc	sceAgcGetIsTrinityMode	BfBDZGbti7A	11.60 SPRX export; identified from sharpemu commit 0c467e8 (DOOM + DOOM II PPSA21444 import); returns 0 on base PS5, non-zero on PS5 Pro (Trinity)
 11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	J6S2TMmGWgA	11.60 SPRX export
 11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	kAPt2J4U3v8	11.60 SPRX export
 11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	1l15IdtXNWw	11.60 SPRX export
