@@ -39,6 +39,7 @@
 
 #include "agcdriver.h"
 #include "driver_ops.h"
+#include "driver_registry.h"
 #include "agc_types.h"
 #include "agc_error.h"
 #include "agc_ioctl.h"
@@ -151,6 +152,7 @@ typedef struct {
     bool             async_setup_done;/* agcProsperoSetupAsyncGraphics succeeded */
     void            *mmio_base;      /* GPU register MMIO mapping (0xfe0200000) */
     uint32_t         ctx_capability; /* context query result from ioctl 0x2e */
+    AgcProsperoRuntimeProfile profile; /* firmware and hardware ABI profile */
     AgcProsperoQueue    queues[AGC_PROSPERO_MAX_QUEUES];
     /* Internal memory regions — sizes from SPRX disassembly (FW 5.50) */
     AgcProsperoRegion   gpu_info;    /* SceGnmGpuInfo:   0x100000 (1 MB) */
@@ -169,6 +171,45 @@ typedef struct {
 static AgcProsperoContext g_prospero = {
     .gc_fd = -1,
 };
+
+typedef int (PS5_SYSV_ABI *AgcKernelHasTrinityModeFn)(void);
+
+extern int PS5_SYSV_ABI sceKernelDlsym(int handle, const char *name,
+    void *symbol_out);
+
+static int32_t agcProsperoQueryTrinityMode(bool *is_trinity)
+{
+    AgcKernelHasTrinityModeFn query = NULL;
+    void *symbol = NULL;
+
+    if (!is_trinity)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (sceKernelDlsym(0x2001, "sceKernelHasTrinityMode", &symbol) != 0 &&
+        sceKernelDlsym(1, "sceKernelHasTrinityMode", &symbol) != 0)
+        return AGC_ERROR_NOT_SUPPORTED;
+    if (!symbol || sizeof(query) != sizeof(symbol))
+        return AGC_ERROR_NOT_SUPPORTED;
+    memcpy(&query, &symbol, sizeof(query));
+    *is_trinity = query() != 0;
+    return AGC_OK;
+}
+
+int32_t agcProsperoConfigureRuntimeProfile(uint32_t raw_version)
+{
+    bool is_trinity = false;
+
+    /* sceKernelHasTrinityMode first appears in the inspected FW 9.00 driver. */
+    if (raw_version >= 0x09000000u) {
+        int32_t result = agcProsperoQueryTrinityMode(&is_trinity);
+
+        if (result != AGC_OK)
+            return result;
+    }
+    if (!agcProsperoBuildRuntimeProfile(raw_version, is_trinity,
+            &g_prospero.profile))
+        return AGC_ERROR_NOT_SUPPORTED;
+    return AGC_OK;
+}
 
 /*
  * Low-level ioctl wrapper.
@@ -401,7 +442,7 @@ int32_t PS5_SYSV_ABI agcProsperoInitialize(void)
  *   SceGnmDdid:      0xFC000   (1008 KB) type=0x33
  *   SceGnmEopFifo:   0x3C000   (240 KB)  type=0x33
  *   SceGnmShadowReg: 0x4000    (16 KB)   type=0x33
- *   SceGnmCwsr:      0x1000000 (16 MB)   type=0x33
+ *   SceGnmCwsr:      0x1000000 standard / 0x1600000 Trinity, type=0x33
  *   SceGnmMisc:      0x4000    (16 KB)   type=0x33
  *   SceGnmACQRB:     0x1E0000  (1920 KB) type=0x33
  *
@@ -434,7 +475,8 @@ int32_t PS5_SYSV_ABI agcProsperoInitializeInternalMemory(void)
         { &g_prospero.ddid,       0xFC000,   AGC_FLEX_TYPE_GPU,  "SceGnmDdid"      },
         { &g_prospero.eop_fifo,   0x3C000,   AGC_FLEX_TYPE_GPU,  "SceGnmEopFifo"   },
         { &g_prospero.shadow_reg, 0x4000,    AGC_FLEX_TYPE_GPU,  "SceGnmShadowReg" },
-        { &g_prospero.cwsr,       0x1000000, AGC_FLEX_TYPE_GPU,  "SceGnmCwsr"      },
+        { &g_prospero.cwsr,       g_prospero.profile.cwsr_size,
+          AGC_FLEX_TYPE_GPU, "SceGnmCwsr" },
         { &g_prospero.misc,       0x4000,    AGC_FLEX_TYPE_GPU,  "SceGnmMisc"      },
         { &g_prospero.acqrb,      0x1E0000,  AGC_FLEX_TYPE_GPU,  "SceGnmACQRB"     },
     };
@@ -766,6 +808,8 @@ int32_t PS5_SYSV_ABI agcProsperoSetTFRingDirect(void)
 {
     if (!g_prospero.initialized)
         return AGC_ERROR_NOT_INITIALIZED;
+    if (!g_prospero.profile.supports_tf_ring)
+        return AGC_ERROR_NOT_SUPPORTED;
 
     uint32_t arg[4] = {0};
     int ret = agcProsperoIoctl(AGC_GC_IOCTL_SET_TF_RING, arg);
@@ -1100,6 +1144,8 @@ int32_t PS5_SYSV_ABI agcProsperoCreateUserSpecialQueue(void)
         return AGC_ERROR_NOT_INITIALIZED;
     if (!g_prospero.mem_initialized)
         return AGC_ERROR_NOT_INITIALIZED;
+    if (!g_prospero.profile.authenticated_special_queue)
+        return AGC_ERROR_NOT_SUPPORTED;
 
     int index = agcProsperoFindFreeQueue();
     if (index < 0)
@@ -1108,7 +1154,8 @@ int32_t PS5_SYSV_ABI agcProsperoCreateUserSpecialQueue(void)
     /* Compute ring buffer address from EOP FIFO base + 0x39000.
      * The EOP FIFO region is 0x3C000 (240 KB), so offset 0x39000
      * (228 KB) is within bounds. */
-    uint64_t ring_addr = g_prospero.eop_fifo.gpu_addr + 0x39000;
+    uint64_t ring_addr = g_prospero.eop_fifo.gpu_addr +
+        g_prospero.profile.eop_ring_offset;
 
     /* Compute read_ptr and queue metadata addresses from ACQRB base.
      * SPRX: read_ptr = acqrb_base + 0x1C8000, metadata = acqrb_base + 0x1CC000
@@ -1254,7 +1301,7 @@ int agcProsperoMakeSysmap(void *cpu_addr, uint64_t *out_gpu_addr)
 }
 
 const AgcDriverOps agcProsperoDriverOps = {
-.name = "prospero-gcabi-v4-standard-direct",
+.name = "prospero-gc-submit16",
     .initialize = agcProsperoInitialize,
     .initialize_internal_memory = agcProsperoInitializeInternalMemory,
     .submit_multi_command_buffers_direct = agcProsperoSubmitMultiCommandBuffersDirect,

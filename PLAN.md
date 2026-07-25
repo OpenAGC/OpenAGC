@@ -22,19 +22,21 @@ aliases, never by assuming that every version in a numeric range is compatible.
 
 Current backend coverage:
 
-- Standard PS5 FW 4.00 through 12.70: the current PID/direct-submit ABI is
-  present on every inspected full driver. Exact inspected builds are registered
-  under `prospero-gcabi-v4-standard-direct`.
+- Standard PS5 FW 1.00 through 12.70: exact inspected builds are registered
+  through submit16 ABI profiles. OpenAGC's hardware-proven submission request
+  is `0xc0108102`; the later PID request is not required.
 - FW 5.50: RE-verified and fully hardware-validated on a standard PS5.
 - Other registered FW 4.00-12.70 builds: RE-verified, awaiting per-firmware
   hardware validation.
-- FW 1.00-3.20: the PID/direct-submit request is absent. Add a separate legacy
-  backend around the older 16-byte submit path before enabling these builds.
-- PS5 Pro: excluded from the standard backend contract until hardware-model
-  detection and its 22 MiB CWSR profile are implemented and tested.
+- FW 1.00-3.20: implemented as three explicit profiles. FW 1.00 rejects its
+  unrecovered legacy special-queue helper; FW 1.x and 2.x reject TF-ring setup
+  because the request is absent. Core initialize and submit remain enabled.
+- PS5 Pro: FW 9+ resolves `sceKernelHasTrinityMode` and selects the firmware-
+  proven 22 MiB CWSR allocation and related offsets. Hardware validation is
+  still required on a PS5 Pro.
 
-The next compatibility work is the legacy FW 1.00-3.20 backend, followed by
-model-aware PS5 Pro support and per-family hardware tests. Evidence and exact
+The next compatibility work is per-family hardware validation and recovery of
+the FW 1.00 special-queue helper. Evidence and exact
 aliases are tracked in `analysis/agc_driver_abi_families.tsv` and
 `analysis/agc_driver_abi_1160.md`.
 

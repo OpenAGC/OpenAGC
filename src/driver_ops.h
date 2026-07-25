@@ -46,6 +46,10 @@ typedef struct AgcDriverOps {
 extern const AgcDriverOps agcGenericDriverOps;
 extern const AgcDriverOps agcProsperoDriverOps;
 
+#ifdef OPENAGC_PROSPERO
+int32_t agcProsperoConfigureRuntimeProfile(uint32_t raw_version);
+#endif
+
 const AgcDriverOps *agcDriverGetOps(void);
 const char *agcDriverDebugBackendName(void);
 

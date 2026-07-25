@@ -56,17 +56,18 @@ offset `0x1c8000`; and ACQRB metadata offset `0x1cc000`.
 
 ## Compatibility boundary
 
-FW 4.00 is the oldest inspected driver with the PID/direct-submit request used
-by the current backend. FW 1.00 through 3.20 need a separate backend around
-the older `0xc0108102` submission path. The critical direct-backend requests
-and standard-console allocation profile remain present in every inspected
-full driver from FW 4.00 through 12.70.
+OpenAGC's hardware-validated path uses the 16-byte `0xc0108102` submit request,
+not the later PID request. Its `{queue_type, count, descriptor_pointer}` layout
+is identical in representative FW 1.00, 2.50, 3.20, and 11.60 drivers. Exact
+inspected FW 1.00-3.20 builds therefore have dedicated submit16 profiles.
+FW 1.00 predates the later authenticated special-queue layout, while FW 1.x
+and 2.x lack the TF-ring request; those optional operations fail explicitly.
 
-Later drivers contain a hardware-model branch that allocates `0x1600000`
-bytes for CWSR on PS5 Pro instead of the standard PS5's `0x1000000`. The
-current backend is therefore explicitly a standard-PS5 backend. PS5 Pro must
-not be claimed until the model predicate and its complete allocation profile
-are implemented.
+FW 9.00 and later inspected drivers import `sceKernelHasTrinityMode` at NID
+`yu17wG8L5FI`. OpenAGC resolves that predicate at runtime and fails closed if
+it is unavailable. Standard PS5 uses a `0x1000000` CWSR allocation, a
+`0xa00000` CWSR working offset, and a `0x100000` GPU-info span. Trinity/PS5 Pro
+uses `0x1600000`, `0x1000000`, and `0x180000`, respectively.
 
 Only FW 5.50 has been exercised on real hardware. Other registered builds are
 RE-verified aliases and must remain documented as awaiting per-firmware

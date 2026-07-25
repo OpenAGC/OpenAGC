@@ -14,6 +14,25 @@ typedef struct AgcFirmwareVersion {
     uint16_t patch;
 } AgcFirmwareVersion;
 
+typedef enum AgcProsperoAbiFamily {
+    AGC_PROSPERO_ABI_UNSUPPORTED = 0,
+    AGC_PROSPERO_ABI_LEGACY_V1,
+    AGC_PROSPERO_ABI_LEGACY_V2,
+    AGC_PROSPERO_ABI_LEGACY_V3,
+    AGC_PROSPERO_ABI_STANDARD
+} AgcProsperoAbiFamily;
+
+typedef struct AgcProsperoRuntimeProfile {
+    AgcProsperoAbiFamily family;
+    bool is_trinity;
+    bool authenticated_special_queue;
+    bool supports_tf_ring;
+    uint32_t eop_ring_offset;
+    uint32_t gpu_info_span;
+    uint32_t cwsr_work_offset;
+    uint32_t cwsr_size;
+} AgcProsperoRuntimeProfile;
+
 typedef int32_t (*AgcFirmwareQueryFn)(void *context, uint32_t *raw_version);
 
 typedef struct AgcFirmwareDetector {
@@ -36,7 +55,10 @@ typedef struct AgcDriverRegistryEntry {
 } AgcDriverRegistryEntry;
 
 AgcFirmwareVersion agcFirmwareNormalize(uint32_t raw_version);
+bool agcProsperoFirmwareSupported(uint32_t raw_version);
 bool agcProsperoStandardDirectAbiSupportsFirmware(uint32_t raw_version);
+bool agcProsperoBuildRuntimeProfile(uint32_t raw_version, bool is_trinity,
+    AgcProsperoRuntimeProfile *profile_out);
 const AgcDriverRegistryEntry *agcDriverRegistryLookup(
     const AgcDriverRegistryEntry *entries, size_t entry_count,
     uint32_t raw_version, uint32_t required_capabilities);

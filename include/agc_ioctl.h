@@ -24,8 +24,8 @@
  * /dev/gc ioctl command table and submit/queue structures for the standard
  * PS5 direct-submit ABI family independently observed on exact FW builds from
  * 4.00 through 12.70. OpenAGC does not infer compatibility from a range.
- * FW 5.50 remains the primary hardware-validated target. PS5 Pro is excluded
- * because its CWSR allocation profile differs.
+ * FW 5.50 remains the primary hardware-validated target. Runtime profiles
+ * account for early submit16 families and the PS5 Pro CWSR allocation branch.
  *
  * RE source: kernel dump gc_ioctl_internal at 0x6ed39c (BST + 4 jump tables),
  * gc_submit_with_pid at 0x6e65c0, gc_frame_submit_internal at 0xb7da90.

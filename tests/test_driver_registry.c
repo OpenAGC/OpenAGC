@@ -46,6 +46,75 @@ static void test_standard_direct_firmware_aliases(void)
         "uninspected nearby firmware rejected");
 }
 
+static void test_legacy_submit16_firmware_profiles(void)
+{
+    AgcProsperoRuntimeProfile profile;
+
+    TEST_ASSERT(agcProsperoFirmwareSupported(0x01000000u),
+        "FW 1.00 submit16 profile supported");
+    TEST_ASSERT(agcProsperoFirmwareSupported(0x02500000u),
+        "FW 2.50 submit16 profile supported");
+    TEST_ASSERT(agcProsperoFirmwareSupported(0x03200000u),
+        "FW 3.20 submit16 profile supported");
+    TEST_ASSERT(!agcProsperoFirmwareSupported(0x03100000u),
+        "uninspected legacy firmware fails closed");
+
+    TEST_ASSERT(agcProsperoBuildRuntimeProfile(0x01000000u, false, &profile),
+        "FW 1.00 profile builds");
+    TEST_ASSERT_EQ(profile.family, AGC_PROSPERO_ABI_LEGACY_V1,
+        "FW 1.00 family selected");
+    TEST_ASSERT_EQ(profile.eop_ring_offset, 0x38000u,
+        "FW 1.00 EOP offset retained");
+    TEST_ASSERT(!profile.authenticated_special_queue,
+        "FW 1.00 does not use later queue authentication layout");
+    TEST_ASSERT(!profile.supports_tf_ring,
+        "FW 1.00 has no TF-ring ioctl");
+
+    TEST_ASSERT(agcProsperoBuildRuntimeProfile(0x02500000u, false, &profile),
+        "FW 2.50 profile builds");
+    TEST_ASSERT_EQ(profile.family, AGC_PROSPERO_ABI_LEGACY_V2,
+        "FW 2.50 family selected");
+    TEST_ASSERT(profile.authenticated_special_queue,
+        "FW 2.50 authenticated queue layout selected");
+    TEST_ASSERT(!profile.supports_tf_ring,
+        "FW 2.50 has no TF-ring ioctl");
+
+    TEST_ASSERT(agcProsperoBuildRuntimeProfile(0x03200000u, false, &profile),
+        "FW 3.20 profile builds");
+    TEST_ASSERT_EQ(profile.family, AGC_PROSPERO_ABI_LEGACY_V3,
+        "FW 3.20 family selected");
+    TEST_ASSERT(profile.supports_tf_ring,
+        "FW 3.20 TF-ring ioctl selected");
+}
+
+static void test_trinity_runtime_profile(void)
+{
+    AgcProsperoRuntimeProfile profile;
+
+    TEST_ASSERT(agcProsperoBuildRuntimeProfile(0x11600000u, true, &profile),
+        "Trinity profile builds for inspected later firmware");
+    TEST_ASSERT(profile.is_trinity, "Trinity hardware recorded");
+    TEST_ASSERT_EQ(profile.gpu_info_span, 0x180000u,
+        "Trinity GPU-info span matches firmware predicate branch");
+    TEST_ASSERT_EQ(profile.cwsr_work_offset, 0x1000000u,
+        "Trinity CWSR working offset matches firmware predicate branch");
+    TEST_ASSERT_EQ(profile.cwsr_size, 0x1600000u,
+        "Trinity CWSR allocation is 22 MiB");
+
+    TEST_ASSERT(agcProsperoBuildRuntimeProfile(0x11600000u, false, &profile),
+        "standard profile builds for same firmware");
+    TEST_ASSERT_EQ(profile.gpu_info_span, 0x100000u,
+        "standard GPU-info span retained");
+    TEST_ASSERT_EQ(profile.cwsr_work_offset, 0xa00000u,
+        "standard CWSR working offset retained");
+    TEST_ASSERT_EQ(profile.cwsr_size, 0x1000000u,
+        "standard CWSR allocation remains 16 MiB");
+    TEST_ASSERT(!agcProsperoBuildRuntimeProfile(0x03100000u, false, &profile),
+        "unknown firmware profile fails closed");
+    TEST_ASSERT(!agcProsperoBuildRuntimeProfile(0x11600000u, false, NULL),
+        "NULL profile output rejected");
+}
+
 static void test_exact_alias_and_capability_selection(void)
 {
     static const uint32_t aliases[] = {0x05500000u, 0x05500001u};
@@ -122,6 +191,8 @@ void test_suite_driver_registry(void)
     TEST_SUITE("Runtime Driver Registry");
     TEST_RUN(test_firmware_normalization);
     TEST_RUN(test_standard_direct_firmware_aliases);
+    TEST_RUN(test_legacy_submit16_firmware_profiles);
+    TEST_RUN(test_trinity_runtime_profile);
     TEST_RUN(test_exact_alias_and_capability_selection);
     TEST_RUN(test_unknown_and_detection_failure_fail_closed);
     TEST_RUN(test_invalid_registry_arguments);

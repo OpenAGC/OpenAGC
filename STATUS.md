@@ -6,14 +6,15 @@ The public AGC API is firmware-agnostic. Runtime native-driver selection now
 uses explicit ABI-family aliases rather than a FW 5.50-only backend or unsafe
 numeric ranges.
 
-- `prospero-gcabi-v4-standard-direct` contains exact inspected standard-PS5
-  builds from FW 4.00 through FW 12.70.
+- Submit16 runtime profiles contain exact inspected standard-PS5 builds from
+  FW 1.00 through FW 12.70.
 - FW 5.50 is hardware-validated; the other aliases are RE-verified and await
   hardware validation on their corresponding firmware.
-- FW 1.00-3.20 require a separate legacy submission backend because request
-  `0xc010813b` is absent.
-- PS5 Pro remains unsupported by this backend because firmware uses a distinct
-  22 MiB CWSR allocation profile. It must not be treated as standard PS5.
+- FW 1.00-3.20 use dedicated legacy profiles around request `0xc0108102`.
+  Optional requests absent from an early family return not-supported.
+- FW 9+ resolves `sceKernelHasTrinityMode`; PS5 Pro receives its firmware-
+  proven 22 MiB CWSR allocation, 16 MiB working offset, and 1.5 MiB GPU-info
+  span. Standard PS5 retains 16 MiB, 10 MiB, and 1 MiB respectively.
 - Unknown firmware builds fail closed.
 
 See `analysis/agc_driver_abi_families.tsv`,

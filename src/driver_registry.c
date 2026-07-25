@@ -5,6 +5,18 @@
 
 #include "agc_error.h"
 
+static const uint32_t g_legacy_v1_aliases[] = {
+    0x01000000u
+};
+
+static const uint32_t g_legacy_v2_aliases[] = {
+    0x02000000u, 0x02500000u
+};
+
+static const uint32_t g_legacy_v3_aliases[] = {
+    0x03000000u, 0x03200000u
+};
+
 /*
  * Exact standard-PS5 builds whose libSceAgcDriver direct-submit ABI was
  * inspected. Keep this fail-closed: never replace the aliases with a range.
@@ -49,6 +61,75 @@ bool agcProsperoStandardDirectAbiSupportsFirmware(uint32_t raw_version)
             return true;
     }
     return false;
+}
+
+static bool agcFirmwareAliasContains(const uint32_t *aliases,
+    size_t alias_count, uint32_t raw_version)
+{
+    size_t i;
+
+    for (i = 0; i < alias_count; ++i) {
+        if (aliases[i] == raw_version)
+            return true;
+    }
+    return false;
+}
+
+bool agcProsperoFirmwareSupported(uint32_t raw_version)
+{
+    return agcFirmwareAliasContains(g_legacy_v1_aliases,
+               sizeof(g_legacy_v1_aliases) / sizeof(g_legacy_v1_aliases[0]),
+               raw_version) ||
+           agcFirmwareAliasContains(g_legacy_v2_aliases,
+               sizeof(g_legacy_v2_aliases) / sizeof(g_legacy_v2_aliases[0]),
+               raw_version) ||
+           agcFirmwareAliasContains(g_legacy_v3_aliases,
+               sizeof(g_legacy_v3_aliases) / sizeof(g_legacy_v3_aliases[0]),
+               raw_version) ||
+           agcProsperoStandardDirectAbiSupportsFirmware(raw_version);
+}
+
+bool agcProsperoBuildRuntimeProfile(uint32_t raw_version, bool is_trinity,
+    AgcProsperoRuntimeProfile *profile_out)
+{
+    AgcProsperoRuntimeProfile profile = {0};
+
+    if (!profile_out)
+        return false;
+
+    if (agcFirmwareAliasContains(g_legacy_v1_aliases,
+            sizeof(g_legacy_v1_aliases) / sizeof(g_legacy_v1_aliases[0]),
+            raw_version)) {
+        profile.family = AGC_PROSPERO_ABI_LEGACY_V1;
+        profile.eop_ring_offset = 0x38000u;
+    } else if (agcFirmwareAliasContains(g_legacy_v2_aliases,
+            sizeof(g_legacy_v2_aliases) / sizeof(g_legacy_v2_aliases[0]),
+            raw_version)) {
+        profile.family = AGC_PROSPERO_ABI_LEGACY_V2;
+        profile.authenticated_special_queue = true;
+        profile.eop_ring_offset = 0x39000u;
+    } else if (agcFirmwareAliasContains(g_legacy_v3_aliases,
+            sizeof(g_legacy_v3_aliases) / sizeof(g_legacy_v3_aliases[0]),
+            raw_version)) {
+        profile.family = AGC_PROSPERO_ABI_LEGACY_V3;
+        profile.authenticated_special_queue = true;
+        profile.supports_tf_ring = true;
+        profile.eop_ring_offset = 0x39000u;
+    } else if (agcProsperoStandardDirectAbiSupportsFirmware(raw_version)) {
+        profile.family = AGC_PROSPERO_ABI_STANDARD;
+        profile.authenticated_special_queue = true;
+        profile.supports_tf_ring = true;
+        profile.eop_ring_offset = 0x39000u;
+    } else {
+        return false;
+    }
+
+    profile.is_trinity = is_trinity;
+    profile.gpu_info_span = is_trinity ? 0x180000u : 0x100000u;
+    profile.cwsr_work_offset = is_trinity ? 0x1000000u : 0xa00000u;
+    profile.cwsr_size = is_trinity ? 0x1600000u : 0x1000000u;
+    *profile_out = profile;
+    return true;
 }
 
 const AgcDriverRegistryEntry *agcDriverRegistryLookup(
@@ -141,7 +222,31 @@ int32_t agcDriverSelectRuntime(AgcFirmwareVersion *version_out,
 #ifdef OPENAGC_PROSPERO
     static const AgcDriverRegistryEntry registry[] = {
         {
-            "prospero-gcabi-v4-standard-direct",
+            "prospero-gcabi-v1-submit16",
+            g_legacy_v1_aliases,
+            sizeof(g_legacy_v1_aliases) / sizeof(g_legacy_v1_aliases[0]),
+            AGC_BACKEND_CAP_NATIVE_SUBMIT | AGC_BACKEND_CAP_COMPUTE |
+                AGC_BACKEND_CAP_GRAPHICS,
+            &agcProsperoDriverOps
+        },
+        {
+            "prospero-gcabi-v2-submit16",
+            g_legacy_v2_aliases,
+            sizeof(g_legacy_v2_aliases) / sizeof(g_legacy_v2_aliases[0]),
+            AGC_BACKEND_CAP_NATIVE_SUBMIT | AGC_BACKEND_CAP_COMPUTE |
+                AGC_BACKEND_CAP_GRAPHICS,
+            &agcProsperoDriverOps
+        },
+        {
+            "prospero-gcabi-v3-submit16",
+            g_legacy_v3_aliases,
+            sizeof(g_legacy_v3_aliases) / sizeof(g_legacy_v3_aliases[0]),
+            AGC_BACKEND_CAP_NATIVE_SUBMIT | AGC_BACKEND_CAP_COMPUTE |
+                AGC_BACKEND_CAP_GRAPHICS,
+            &agcProsperoDriverOps
+        },
+        {
+            "prospero-gcabi-standard-submit16",
             g_standard_direct_aliases,
             sizeof(g_standard_direct_aliases) /
                 sizeof(g_standard_direct_aliases[0]),
@@ -151,10 +256,21 @@ int32_t agcDriverSelectRuntime(AgcFirmwareVersion *version_out,
         }
     };
     const AgcFirmwareDetector detector = {NULL, agcQueryProsperoFirmware};
-
-    return agcDriverSelectFromRegistry(&detector, registry,
+    AgcFirmwareVersion detected_version;
+    int32_t result = agcDriverSelectFromRegistry(&detector, registry,
         sizeof(registry) / sizeof(registry[0]),
-        AGC_BACKEND_CAP_NATIVE_SUBMIT, version_out, ops_out);
+        AGC_BACKEND_CAP_NATIVE_SUBMIT, &detected_version, ops_out);
+
+    if (result != AGC_OK)
+        return result;
+    result = agcProsperoConfigureRuntimeProfile(detected_version.raw);
+    if (result != AGC_OK) {
+        *ops_out = NULL;
+        return result;
+    }
+    if (version_out)
+        *version_out = detected_version;
+    return AGC_OK;
 #else
     if (!ops_out)
         return AGC_ERROR_INVALID_ARGUMENT;
