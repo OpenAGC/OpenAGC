@@ -9,6 +9,7 @@ SRCS = \
 	src/cb.c \
 	src/cb_builders.c \
 	src/driver_ops.c \
+	src/driver_sony_exports.c \
 	src/driver_generic.c \
 	src/context_state.c \
 	src/register_defaults.c \
@@ -40,7 +41,8 @@ TEST_SRCS = \
 	tests/test_shader.c \
 	tests/test_ioctl.c \
 	tests/test_register_defaults.c \
-	tests/test_registers.c
+	tests/test_registers.c \
+	tests/test_sony_exports.c
 
 TEST_OBJS = $(TEST_SRCS:.c=.o)
 

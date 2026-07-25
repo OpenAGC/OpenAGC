@@ -32,6 +32,9 @@
 #include "agc_error.h"
 #include "agc_pm4.h"
 
+/* Private hardware-test diagnostic; not part of the installed public ABI. */
+extern const char *agcDriverDebugBackendName(void);
+
 int sceKernelMapNamedSystemFlexibleMemory(
     void **virtualAddress, size_t length, int protection, int flags,
     const char *name);
@@ -278,7 +281,7 @@ int main(void) {
         printf("    FATAL: cannot initialize AGC\n");
         return 1;
     }
-    printf("    /dev/gc opened, CONTEXT_QUERY succeeded\n");
+    printf("    backend: %s\n", agcDriverDebugBackendName());
 
     /* --- Step 2: Initialize internal memory --- */
     printf("[2] sce_agc_initialize_internal_memory()...\n");
@@ -297,7 +300,8 @@ int main(void) {
     if (err != AGC_OK)
         printf("    WARNING: default state notification failed\n");
     else
-        printf("    Default states notified\n");
+    printf("    Default states notified\n");
+
 
     /* --- Step 4: Verify the official FW 5.50 PA-debug permission stub --- */
     printf("[4] sceAgcDriverGetPaDebugInterfaceVersion()...\n");

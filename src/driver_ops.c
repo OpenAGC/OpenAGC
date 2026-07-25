@@ -19,6 +19,11 @@ const AgcDriverOps *agcDriverGetOps(void)
     return g_driver_ops;
 }
 
+const char *agcDriverDebugBackendName(void)
+{
+    return g_driver_ops->name;
+}
+
 #ifdef OPENAGC_GENERIC
 int32_t agcDriverInstallOpsForTesting(const AgcDriverOps *ops)
 {

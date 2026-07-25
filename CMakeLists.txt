@@ -40,6 +40,7 @@ set(OPENAGC_SOURCES
     src/shader.c
     src/game_compat.c
     src/driver_ops.c
+    src/driver_sony_exports.c
 )
 
 # Platform-specific sources
@@ -91,6 +92,7 @@ if(OPENAGC_BUILD_TESTS)
         tests/test_ioctl.c
         tests/test_register_defaults.c
         tests/test_registers.c
+        tests/test_sony_exports.c
     )
     target_link_libraries(openagc_tests PRIVATE openagc)
     target_include_directories(openagc_tests PRIVATE

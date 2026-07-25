@@ -466,8 +466,15 @@ The internal `AgcDriverOps` dispatch layer is implemented. The stable public
 table, with both the generic backend and the validated FW 5.50 direct Prospero
 backend registered behind it. Host tests can install a fake table to verify
 callback routing and safe `AGC_ERROR_NOT_SUPPORTED` behavior for missing
-operations. Sony SPRX export resolution and runtime firmware selection remain
-the next Phase 8 milestones.
+operations. A module-specific Sony export resolver is also implemented with
+mandatory-symbol validation, recursion rejection, and ABI adapters. FW 5.50
+hardware confirms collision-free calls into the installed module, but its
+payload-context submission path did not execute GPU markers, so the validated
+direct backend remains the default. Runtime firmware/capability selection is
+the next Phase 8 milestone. Installed-module probing also changed submission
+behavior across later payload processes, so it must never be followed by a
+direct fallback in the same boot session; see
+`analysis/sony_export_forwarding_550.md`.
 
 ## Next RE Tasks
 

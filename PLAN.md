@@ -902,9 +902,11 @@ reboot). Do not re-apply these changes without careful analysis:
 
 ## Phase 8: Firmware Forward Compatibility
 
-Status: in progress. The internal operations table now owns the stable public
-driver ABI and both generic and FW 5.50 direct implementations are registered
-behind it. Sony-export forwarding and FW 11.60 validation remain pending.
+Status: in progress. The internal operations table owns the stable public
+driver ABI; generic and FW 5.50 direct implementations are registered behind
+it, and a collision-safe installed-Sony export candidate is implemented. Safe
+runtime selection, FW 11.60 validation, and Sony GPU-submit capability remain
+pending.
 
 Purpose:
 
@@ -929,10 +931,12 @@ Work:
    public `sceAgc*` / `sceAgcDriver*` ABI.
 2. ✅ Refactor the generic and FW 5.50 Prospero implementations behind that
    table, preserving current behavior and host-test coverage.
-3. Add `driver_sony_exports.c` to locate/load the installed
+3. ✅ Add `driver_sony_exports.c` to locate/load the installed
    `libSceAgcDriver.sprx`, resolve mandatory exports into privately named
    function pointers, and avoid recursion or symbol collisions with OpenAGC's
-   public wrappers.
+   public wrappers. FW 5.50 hardware confirms resolution and calls, but its
+   payload-context submit path does not execute GPU work, so it is not selected
+   automatically; see `analysis/sony_export_forwarding_550.md`.
 4. Maintain per-firmware export/NID aliases and module/library version
    metadata. Probe legacy exports where the installed firmware retains them;
    do not assume NIDs are stable between firmware releases.

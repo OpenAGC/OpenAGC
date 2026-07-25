@@ -47,6 +47,7 @@ extern const AgcDriverOps agcGenericDriverOps;
 extern const AgcDriverOps agcProsperoDriverOps;
 
 const AgcDriverOps *agcDriverGetOps(void);
+const char *agcDriverDebugBackendName(void);
 
 #ifdef OPENAGC_GENERIC
 int32_t agcDriverInstallOpsForTesting(const AgcDriverOps *ops);
