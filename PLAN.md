@@ -20,13 +20,17 @@ Work proceeds in this order. Later items must not displace an earlier item
 unless the earlier item is explicitly blocked on unavailable firmware or
 hardware.
 
-1. **Complete FW 3.20 as the lowest active compatibility target.** Audit its
-   userspace exports, queue/submit ABI, optional requests, memory sizes, and
-   register-default selection against the local firmware references. Add
-   byte-exact fixtures without claiming hardware support prematurely.
-2. **Finish firmware-family backend hardening.** Keep exact four-digit firmware
-   aliases and per-profile capabilities fail-closed while preserving the
-   hardware-validated FW 5.50 path.
+1. **Complete and harden the FW 5.50 graphics path on real gfx1013 hardware.**
+   Work in this order: convert the proven Wave32 VS+PS triangle state into
+   reusable builders and fixtures; validate NGG geometry with pass-through and
+   amplification tests; validate tessellation with fixed then dynamic factors;
+   validate the combined tessellation-plus-NGG-geometry path; and repeat the
+   ordered websrv regression after each milestone.
+2. **Finish FW 5.50 backend hardening and compatibility.** Keep exact
+   four-digit firmware selection and fail-closed capabilities, investigate the
+   non-blocking FRAME_OPEN EINVAL and PA-debug EPERM results, then expand the
+   game corpus and prioritize FW 5.50 exports and state combinations observed
+   in real titles.
 3. **Validate additional firmware only when matching hardware is available.**
    FW 11.60 and PS5 Pro remain RE targets, not support claims. Do not issue
    private ioctls on mismatched hardware.
@@ -68,8 +72,9 @@ Current backend coverage:
   proven 22 MiB CWSR allocation and related offsets. Hardware validation is
   still required on a PS5 Pro.
 
-The next compatibility work is completion of the FW 3.20 profile, followed by
-per-family hardware validation. Evidence and exact
+The next compatibility work is completion of the FW 5.50 graphics and driver
+path on the available hardware. FW 3.20 exact-profile work follows after the
+FW 5.50 implementation is mature. Evidence and exact
 aliases are tracked in `analysis/agc_driver_abi_families.tsv` and
 `analysis/agc_driver_abi_1160.md`.
 
@@ -400,7 +405,8 @@ Acceptance criteria:
 
 Status: implemented and hardware-validated for FW 5.50 submit, queue lifecycle,
 suspend points, workloads, and multi-DCB submission. Exact firmware profiles
-fail closed; FW 3.20 is the next active ABI audit target.
+fail closed. Remaining FW 5.50 ioctl issues are non-blocking follow-up work;
+cross-firmware ABI expansion is deferred until advanced graphics is stable.
 
 Purpose:
 
@@ -968,9 +974,10 @@ reboot). Do not re-apply these changes without careful analysis:
 
 Status: in progress. The stable operations table, exact-match runtime registry,
 FW 5.50 direct backend, and collision-safe Sony-export candidate are present.
-FW 3.20 is the lowest active compatibility target. FW 1.00 and 2.x are archival
-RE profiles only; FW 11.60, PS5 Pro, and Sony-export GPU submission remain
-pending and must not displace locally actionable FW 3.20 work.
+FW 5.50 is the active hardware target. FW 3.20 remains the intended lowest
+active cross-firmware target but its implementation is deferred until the FW
+5.50 graphics path is mature. FW 1.00 and 2.x are archival RE profiles only;
+FW 11.60, PS5 Pro, and Sony-export GPU submission remain pending.
 
 Purpose:
 
@@ -989,7 +996,7 @@ Game -> stable OpenAGC public ABI
      -> safe AGC_ERROR_UNSUPPORTED result for unknown interfaces
 ```
 
-### Priority 1: FW 3.20 lowest active profile
+### Deferred: FW 3.20 lowest active cross-firmware profile
 
 Recovery and implementation sequence:
 
@@ -1077,12 +1084,16 @@ Acceptance criteria:
   size/offset assertions, and explicit hardware-validation results.
 
 The internal operations-table migration is complete. The next bounded change
-is the FW 3.20 exact-profile audit described above.
+is the FW 5.50 NGG geometry milestone described below. The FW 3.20 exact-profile
+audit remains the first cross-firmware task after FW 5.50 matures.
 
 ## Phase 9: Higher-Level AGC Features
 
-Status: Wave32 is complete; geometry, cache semantics, VRS, and ray tracing
-remain evidence-driven future work in that order.
+Status: Wave32 VS+PS is complete on FW 5.50 gfx1013 hardware. Advanced graphics
+work proceeds in this order: NGG geometry, tessellation, combined
+tessellation-plus-geometry, cache/synchronization hardening, VRS, and ray
+tracing. Each rendering stage must have host fixtures and a websrv hardware
+test before the next stage begins.
 
 These are long-term goals and should not block draw-call work.
 
