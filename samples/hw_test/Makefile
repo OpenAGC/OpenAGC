@@ -50,7 +50,7 @@ AGC_LDFLAGS := $(OPENAGC_LIB) -lSceVideoOut -lkernel
 
 # === Targets ===
 
-all: videoout_linear.elf agc_init.elf agc_videoout.elf agc_compute.elf
+all: videoout_linear.elf agc_init.elf agc_videoout.elf agc_compute.elf agc_graphics.elf
 
 # VideoOut linear smoke test (no GPU commands)
 videoout_linear.elf: videoout_linear.c ps5_video_out.h
@@ -68,6 +68,10 @@ agc_videoout.elf: agc_videoout.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB
 agc_compute.elf: agc_compute.c ps5_video_out.h gpu_credentials.h shaders/fill_color_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -o $@ agc_compute.c $(AGC_LDFLAGS)
 
+# Graphics draw call test (AGC + VS/PS shaders + render target + VideoOut)
+agc_graphics.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_vert_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -o $@ agc_graphics.c $(AGC_LDFLAGS)
+
 # === eboot.bin versions (for debug-mode PS5) ===
 
 videoout_linear.bin: videoout_linear.elf
@@ -77,6 +81,12 @@ agc_init.bin: agc_init.elf
 	$(FSELF) $< $@ $(PS4_SDK_VERSION) $(PS4_SDK_VERSION)
 
 agc_videoout.bin: agc_videoout.elf
+	$(FSELF) $< $@ $(PS4_SDK_VERSION) $(PS4_SDK_VERSION)
+
+agc_compute.bin: agc_compute.elf
+	$(FSELF) $< $@ $(PS4_SDK_VERSION) $(PS4_SDK_VERSION)
+
+agc_graphics.bin: agc_graphics.elf
 	$(FSELF) $< $@ $(PS4_SDK_VERSION) $(PS4_SDK_VERSION)
 
 # === .pkg packages (for debug-mode PS5 installation) ===
@@ -125,6 +135,12 @@ deploy_agc: agc_init.elf
 	$(PS5_DEPLOY) -h $(PS5_HOST) -p $(PS5_PORT) $<
 
 deploy_agc_videoout: agc_videoout.elf
+	$(PS5_DEPLOY) -h $(PS5_HOST) -p $(PS5_PORT) $<
+
+deploy_agc_compute: agc_compute.elf
+	$(PS5_DEPLOY) -h $(PS5_HOST) -p $(PS5_PORT) $<
+
+deploy_agc_graphics: agc_graphics.elf
 	$(PS5_DEPLOY) -h $(PS5_HOST) -p $(PS5_PORT) $<
 
 # === Install (debug-mode PS5 via FTP) ===
