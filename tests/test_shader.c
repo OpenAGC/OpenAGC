@@ -1,7 +1,10 @@
 #include "test.h"
+#include "agc_registers.h"
 #include "agc_shader.h"
 #include "agc_error.h"
+#include "agcdriver.h"
 
+#include <stddef.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -45,7 +48,7 @@ static void test_shader_record_layout(void) {
     uint32_t user_data_buffer[8] = {0};
     uint32_t cx_buffer[4] = {0};
     uint32_t sh_buffer[4] = {0};
-    uint32_t specials_buffer[4] = {0};
+    uint32_t specials_buffer[12] = {0};
     uint32_t in_sem_buffer[4] = {0};
     uint32_t out_sem_buffer[4] = {0};
 
@@ -78,8 +81,23 @@ static void test_shader_record_layout(void) {
     TEST_ASSERT_EQ(agcShaderRecordGetNumShRegisters(&rec), 16, "SH register count");
 }
 
-static void test_shader_specials_struct_size(void) {
-    TEST_ASSERT_EQ(sizeof(AgcShaderSpecials), 16u, "Specials struct = 16 bytes");
+static void test_shader_specials_struct_layout(void) {
+    TEST_ASSERT_EQ(sizeof(AgcShaderSpecialRegister), 0x08u,
+        "Special register pair = 8 bytes");
+    TEST_ASSERT_EQ(offsetof(AgcShaderSpecialRegister, value), 0x04u,
+        "Special register value offset");
+    TEST_ASSERT_EQ(sizeof(AgcShaderSpecials), 0x30u,
+        "Specials struct = 0x30 bytes");
+    TEST_ASSERT_EQ(offsetof(AgcShaderSpecials, ge_cntl), 0x00u,
+        "GE_CNTL pair offset");
+    TEST_ASSERT_EQ(offsetof(AgcShaderSpecials, vgt_shader_stages_en), 0x08u,
+        "VGT_SHADER_STAGES_EN pair offset");
+    TEST_ASSERT_EQ(offsetof(AgcShaderSpecials, reserved_10), 0x10u,
+        "Reserved pairs offset");
+    TEST_ASSERT_EQ(offsetof(AgcShaderSpecials, vgt_gs_out_prim_type), 0x20u,
+        "VGT_GS_OUT_PRIM_TYPE pair offset");
+    TEST_ASSERT_EQ(offsetof(AgcShaderSpecials, ge_user_vgpr_en), 0x28u,
+        "GE_USER_VGPR_EN pair offset");
 }
 
 static void test_shader_userdata_struct_size(void) {
@@ -88,10 +106,14 @@ static void test_shader_userdata_struct_size(void) {
 
 static void test_shader_specials_typed_accessor(void) {
     AgcShaderSpecials specials = {0};
-    specials.ge_cntl = 0x12345678;
-    specials.vgt_shader_stages_en = 0xAABBCCDD;
-    specials.vgt_gs_out_prim_type = 0x11223344;
-    specials.ge_user_vgpr_en = 0x55667788;
+    specials.ge_cntl.register_offset = 0x01;
+    specials.ge_cntl.value = 0x12345678;
+    specials.vgt_shader_stages_en.register_offset = 0x02;
+    specials.vgt_shader_stages_en.value = 0xAABBCCDD;
+    specials.vgt_gs_out_prim_type.register_offset = 0x03;
+    specials.vgt_gs_out_prim_type.value = 0x11223344;
+    specials.ge_user_vgpr_en.register_offset = 0x04;
+    specials.ge_user_vgpr_en.value = 0x55667788;
 
     AgcShaderRecord rec = {0};
     rec.magic = AGC_SHADER_RECORD_MAGIC;
@@ -101,10 +123,20 @@ static void test_shader_specials_typed_accessor(void) {
 
     const AgcShaderSpecials *sp = agcShaderRecordGetSpecialsTyped(&rec);
     TEST_ASSERT(sp != NULL, "Specials typed pointer non-NULL");
-    TEST_ASSERT_EQ(sp->ge_cntl, 0x12345678u, "GE_CNTL value");
-    TEST_ASSERT_EQ(sp->vgt_shader_stages_en, 0xAABBCCDDu, "VGT_SHADER_STAGES_EN value");
-    TEST_ASSERT_EQ(sp->vgt_gs_out_prim_type, 0x11223344u, "VGT_GS_OUT_PRIM_TYPE value");
-    TEST_ASSERT_EQ(sp->ge_user_vgpr_en, 0x55667788u, "GE_USER_VGPR_EN value");
+    TEST_ASSERT_EQ(sp->ge_cntl.register_offset, 0x01u, "GE_CNTL register");
+    TEST_ASSERT_EQ(sp->ge_cntl.value, 0x12345678u, "GE_CNTL value");
+    TEST_ASSERT_EQ(sp->vgt_shader_stages_en.register_offset, 0x02u,
+        "VGT_SHADER_STAGES_EN register");
+    TEST_ASSERT_EQ(sp->vgt_shader_stages_en.value, 0xAABBCCDDu,
+        "VGT_SHADER_STAGES_EN value");
+    TEST_ASSERT_EQ(sp->vgt_gs_out_prim_type.register_offset, 0x03u,
+        "VGT_GS_OUT_PRIM_TYPE register");
+    TEST_ASSERT_EQ(sp->vgt_gs_out_prim_type.value, 0x11223344u,
+        "VGT_GS_OUT_PRIM_TYPE value");
+    TEST_ASSERT_EQ(sp->ge_user_vgpr_en.register_offset, 0x04u,
+        "GE_USER_VGPR_EN register");
+    TEST_ASSERT_EQ(sp->ge_user_vgpr_en.value, 0x55667788u,
+        "GE_USER_VGPR_EN value");
 }
 
 static void test_shader_userdata_typed_accessor(void) {
@@ -393,47 +425,165 @@ static void test_fused_shader_get_size_null(void) {
         AGC_ERROR_INVALID_ARGUMENT, "GetFusedShaderSize null back");
 }
 
-static void test_fused_shader_fuse_gs(void) {
-    AgcShaderRecord front = {0};
-    front.magic = AGC_SHADER_RECORD_MAGIC;
-    front.version = AGC_SHADER_RECORD_VERSION_GEN5;
-    front.shader_type = kAgcShaderBinaryTypeGsFront;
-    front.code = 0x1000;
+static void build_fused_shader_pair(
+    AgcShaderRecord *front, AgcShaderRecord *back,
+    AgcShaderSpecials *front_specials, AgcShaderSpecials *back_specials,
+    AgcShaderRegister front_regs[4], AgcShaderRegister back_regs[6],
+    bool is_gs)
+{
+    uint32_t checksum = is_gs ? AGC_SPI_SHADER_PGM_CHKSUM_GS
+                              : AGC_SPI_SHADER_PGM_CHKSUM_HS;
+    uint32_t rsrc1 = is_gs ? AGC_SPI_SHADER_PGM_RSRC1_GS
+                           : AGC_SPI_SHADER_PGM_RSRC1_HS;
+    uint32_t rsrc2 = is_gs ? AGC_SPI_SHADER_PGM_RSRC2_GS
+                           : AGC_SPI_SHADER_PGM_RSRC2_HS;
+    uint32_t program_lo = is_gs ? AGC_SPI_SHADER_PGM_LO_ES
+                                : AGC_SPI_SHADER_PGM_LO_LS;
+    uint32_t rsrc1_shift = is_gs ? 29u : 28u;
 
-    AgcShaderRecord back = {0};
-    back.magic = AGC_SHADER_RECORD_MAGIC;
-    back.version = AGC_SHADER_RECORD_VERSION_GEN5;
-    back.shader_type = kAgcShaderBinaryTypeGsBack;
-    back.num_sh_registers = 3;
+    memset(front, 0, sizeof(*front));
+    memset(back, 0, sizeof(*back));
+    memset(front_specials, 0, sizeof(*front_specials));
+    memset(back_specials, 0, sizeof(*back_specials));
 
-    AgcShaderRecord fused = {0};
-    int32_t ret = sceAgcFuseShaderHalves(&fused, &front, &back, NULL);
-    TEST_ASSERT_EQ(ret, AGC_OK, "FuseShaderHalves GS returns OK");
-    TEST_ASSERT_EQ((uint32_t)fused.shader_type, (uint32_t)kAgcShaderTypeGs,
-        "FuseShaderHalves GS sets type to Gs(2)");
-    TEST_ASSERT_EQ(fused.user_data, 0u, "FuseShaderHalves clears user_data");
-    TEST_ASSERT_EQ(fused.magic, AGC_SHADER_RECORD_MAGIC, "FuseShaderHalves copies magic");
+    front_regs[0] = (AgcShaderRegister){checksum, 0x11111111u};
+    front_regs[1] = (AgcShaderRegister){checksum, 0x22222222u};
+    front_regs[2] = (AgcShaderRegister){rsrc1,
+        1u | ((is_gs ? 2u : 3u) << rsrc1_shift)};
+    front_regs[3] = (AgcShaderRegister){rsrc2,
+        (15u << 28u) | (3u << 16u) | 0x0800002Au | 0x00040000u};
+
+    back_regs[0] = (AgcShaderRegister){checksum, 0xAAAAAAAAu};
+    back_regs[1] = (AgcShaderRegister){checksum, 0xBBBBBBBBu};
+    back_regs[2] = (AgcShaderRegister){rsrc1, 3u | (1u << rsrc1_shift)};
+    back_regs[3] = (AgcShaderRegister){rsrc2, (1u << 16u) | 0x14u};
+    back_regs[4] = (AgcShaderRegister){program_lo, 0u};
+    back_regs[5] = (AgcShaderRegister){program_lo + 1u, 0xA5A5A500u};
+
+    front->magic = AGC_SHADER_RECORD_MAGIC;
+    front->version = AGC_SHADER_RECORD_VERSION_GEN5;
+    front->shader_type = is_gs ? kAgcShaderBinaryTypeGsFront
+                               : kAgcShaderBinaryTypeHsFront;
+    front->code = 0x0000AB1234567800ULL;
+    front->user_data = 0x1122334455667788ULL;
+    front->specials = (uint64_t)(uintptr_t)front_specials;
+    front->sh_registers = (uint64_t)(uintptr_t)front_regs;
+    front->num_sh_registers = 4;
+
+    back->magic = AGC_SHADER_RECORD_MAGIC;
+    back->version = AGC_SHADER_RECORD_VERSION_GEN5;
+    back->shader_type = is_gs ? kAgcShaderBinaryTypeGsBack
+                              : kAgcShaderBinaryTypeHsBack;
+    back->user_data = 0x8877665544332211ULL;
+    back->specials = (uint64_t)(uintptr_t)back_specials;
+    back->sh_registers = (uint64_t)(uintptr_t)back_regs;
+    back->num_sh_registers = 6;
 }
 
-static void test_fused_shader_fuse_hs(void) {
-    AgcShaderRecord front = {0};
-    front.magic = AGC_SHADER_RECORD_MAGIC;
-    front.version = AGC_SHADER_RECORD_VERSION_GEN5;
-    front.shader_type = kAgcShaderBinaryTypeHsFront;
-    front.code = 0x2000;
+static void run_fused_shader_success(bool is_gs, bool revision_0200) {
+    AgcShaderRecord front, back, fused;
+    AgcShaderSpecials front_specials, back_specials;
+    AgcShaderRegister front_regs[4], back_regs[6], scratch[6] = {0};
+    build_fused_shader_pair(&front, &back, &front_specials, &back_specials,
+        front_regs, back_regs, is_gs);
 
-    AgcShaderRecord back = {0};
-    back.magic = AGC_SHADER_RECORD_MAGIC;
-    back.version = AGC_SHADER_RECORD_VERSION_GEN5;
-    back.shader_type = kAgcShaderBinaryTypeHsBack;
-    back.num_sh_registers = 2;
+    int32_t ret = revision_0200
+        ? sceAgcFuseShaderHalves_0200(&fused, &front, &back, scratch)
+        : sceAgcFuseShaderHalves(&fused, &front, &back, scratch);
+    TEST_ASSERT_EQ(ret, AGC_OK, "FuseShaderHalves valid pair returns OK");
+    TEST_ASSERT_EQ((uint32_t)fused.shader_type,
+        (uint32_t)(is_gs ? kAgcShaderTypeEs : kAgcShaderTypeVs),
+        "FuseShaderHalves sets firmware fused type 2/3");
+    TEST_ASSERT_EQ(fused.sh_registers, (uint64_t)(uintptr_t)scratch,
+        "FuseShaderHalves points at scratch SH copy");
+    TEST_ASSERT_EQ(scratch[0].value, 0x11111111u,
+        "FuseShaderHalves copies first checksum");
+    TEST_ASSERT_EQ(scratch[1].value, 0x22222222u,
+        "FuseShaderHalves copies second checksum");
+    TEST_ASSERT_EQ(back_regs[0].value, 0xAAAAAAAAu,
+        "FuseShaderHalves leaves back SH source unchanged with scratch");
 
-    AgcShaderRecord fused = {0};
-    int32_t ret = sceAgcFuseShaderHalves(&fused, &front, &back, NULL);
-    TEST_ASSERT_EQ(ret, AGC_OK, "FuseShaderHalves HS returns OK");
-    TEST_ASSERT_EQ((uint32_t)fused.shader_type, (uint32_t)kAgcShaderTypeHs,
-        "FuseShaderHalves HS sets type to Hs(3)");
-    TEST_ASSERT_EQ(fused.user_data, 0u, "FuseShaderHalves HS clears user_data");
+    TEST_ASSERT_EQ(scratch[2].value & 0x3Fu, 3u,
+        "FuseShaderHalves merges RSRC1 low field maximum");
+    TEST_ASSERT_EQ((scratch[2].value >> (is_gs ? 29u : 28u)) & 0x3u,
+        is_gs ? 2u : 3u, "FuseShaderHalves merges RSRC1 stage field");
+    TEST_ASSERT_EQ((scratch[3].value >> 28u) & 0xFu,
+        revision_0200 ? 1u : 15u,
+        "FuseShaderHalves merges RSRC2 high field for export version");
+    if (is_gs) {
+        TEST_ASSERT_EQ((scratch[3].value >> 16u) & 0x3u, 3u,
+            "FuseShaderHalves merges GS RSRC2 bits 16:17");
+        TEST_ASSERT_EQ(scratch[3].value & 0x00040000u, 0x00040000u,
+            "FuseShaderHalves copies GS RSRC2 bit 18");
+    }
+    TEST_ASSERT_EQ(scratch[3].value & 0x0800003Eu,
+        front_regs[3].value & 0x0800003Eu,
+        "FuseShaderHalves copies selected RSRC2 flags");
+    TEST_ASSERT_EQ(scratch[4].value, 0x12345678u,
+        "FuseShaderHalves patches front program low address");
+    TEST_ASSERT_EQ(scratch[5].value, 0xA5A5A5ABu,
+        "FuseShaderHalves patches front program high address byte");
+    TEST_ASSERT_EQ(fused.user_data,
+        revision_0200 ? 0u : front.user_data,
+        "FuseShaderHalves applies export-specific user data behavior");
+}
+
+static void test_fused_shader_fuse_legacy_gs(void) {
+    run_fused_shader_success(true, false);
+}
+
+static void test_fused_shader_fuse_legacy_hs(void) {
+    run_fused_shader_success(false, false);
+}
+
+static void test_fused_shader_fuse_0200_gs(void) {
+    run_fused_shader_success(true, true);
+}
+
+static void test_fused_shader_fuse_0200_hs(void) {
+    run_fused_shader_success(false, true);
+}
+
+static void test_fused_shader_stage_mismatch(void) {
+    AgcShaderRecord front, back, fused;
+    AgcShaderSpecials front_specials, back_specials;
+    AgcShaderRegister front_regs[4], back_regs[6], scratch[6] = {0};
+
+    build_fused_shader_pair(&front, &back, &front_specials, &back_specials,
+        front_regs, back_regs, true);
+    front_specials.vgt_shader_stages_en.value = 1u << 22u;
+    TEST_ASSERT_EQ(sceAgcFuseShaderHalves(
+        &fused, &front, &back, scratch), AGC_ERROR_SHADER_INVALID_HALVES,
+        "Legacy GS rejects stage bit 22 mismatch");
+    TEST_ASSERT_EQ((uint32_t)fused.shader_type, (uint32_t)kAgcShaderTypeEs,
+        "Firmware copies back record before reporting GS stage mismatch");
+
+    build_fused_shader_pair(&front, &back, &front_specials, &back_specials,
+        front_regs, back_regs, false);
+    front_specials.vgt_shader_stages_en.value = 1u << 21u;
+    TEST_ASSERT_EQ(sceAgcFuseShaderHalves_0200(
+        &fused, &front, &back, scratch), AGC_ERROR_SHADER_INVALID_HALVES,
+        "0200 HS rejects stage bit 21 mismatch");
+}
+
+static void test_fused_shader_missing_metadata(void) {
+    AgcShaderRecord front, back, fused;
+    AgcShaderSpecials front_specials, back_specials;
+    AgcShaderRegister front_regs[4], back_regs[6], scratch[6] = {0};
+
+    build_fused_shader_pair(&front, &back, &front_specials, &back_specials,
+        front_regs, back_regs, true);
+    front.specials = 0;
+    TEST_ASSERT_EQ(sceAgcFuseShaderHalves_0200(
+        &fused, &front, &back, scratch), AGC_ERROR_SHADER_INVALID_HALVES,
+        "FuseShaderHalves rejects missing Specials block safely");
+
+    build_fused_shader_pair(&front, &back, &front_specials, &back_specials,
+        front_regs, back_regs, true);
+    front.num_sh_registers = 0;
+    TEST_ASSERT_EQ(sceAgcFuseShaderHalves_0200(
+        &fused, &front, &back, scratch), AGC_ERROR_SHADER_INVALID_HALVES,
+        "FuseShaderHalves rejects missing required SH registers safely");
 }
 
 static void test_fused_shader_fuse_invalid_types(void) {
@@ -458,6 +608,364 @@ static void test_fused_shader_fuse_null(void) {
         AGC_ERROR_INVALID_ARGUMENT, "FuseShaderHalves null front");
     TEST_ASSERT_EQ(sceAgcFuseShaderHalves(&fused, &rec, NULL, NULL),
         AGC_ERROR_INVALID_ARGUMENT, "FuseShaderHalves null back");
+    TEST_ASSERT_EQ(sceAgcFuseShaderHalves_0200(NULL, &rec, &rec, NULL),
+        AGC_ERROR_INVALID_ARGUMENT, "FuseShaderHalves_0200 null result");
+}
+
+static void build_prim_shader(
+    AgcShaderRecord *shader, AgcShaderSpecials *specials,
+    uint32_t stages_value)
+{
+    memset(shader, 0, sizeof(*shader));
+    memset(specials, 0, sizeof(*specials));
+    shader->magic = AGC_SHADER_RECORD_MAGIC;
+    shader->version = AGC_SHADER_RECORD_VERSION_GEN5;
+    shader->specials = (uint64_t)(uintptr_t)specials;
+    specials->ge_cntl = (AgcShaderSpecialRegister){AGC_REG_GE_CNTL, 0x11111111u};
+    specials->vgt_shader_stages_en = (AgcShaderSpecialRegister){
+        AGC_REG_VGT_SHADER_STAGES_EN, stages_value};
+    specials->vgt_gs_out_prim_type = (AgcShaderSpecialRegister){
+        AGC_REG_VGT_GS_OUT_PRIM_TYPE, 0x22222222u};
+    specials->ge_user_vgpr_en = (AgcShaderSpecialRegister){
+        AGC_REG_GE_USER_VGPR_EN, 0x33333333u};
+}
+
+static void test_create_prim_state_gs_enabled(void) {
+    AgcShaderRecord geometry;
+    AgcShaderSpecials specials;
+    AgcShaderRegister cx[2] = {0};
+    AgcShaderRegister uc[3] = {0};
+    build_prim_shader(&geometry, &specials, 0x10000020u);
+
+    TEST_ASSERT_EQ(sceAgcCreatePrimState(cx, uc, NULL, &geometry, 4u),
+        AGC_OK, "CreatePrimState GS-enabled returns OK");
+    TEST_ASSERT_EQ(cx[0].offset, AGC_REG_VGT_SHADER_STAGES_EN,
+        "CreatePrimState copies stage register");
+    TEST_ASSERT_EQ(cx[0].value, 0x10000020u,
+        "CreatePrimState copies stage value");
+    TEST_ASSERT_EQ(cx[1].offset, AGC_REG_VGT_GS_OUT_PRIM_TYPE,
+        "CreatePrimState copies GS output register");
+    TEST_ASSERT_EQ(cx[1].value, 0x22222222u,
+        "CreatePrimState copies GS output value");
+    TEST_ASSERT_EQ(uc[0].offset, AGC_REG_GE_CNTL,
+        "CreatePrimState copies GE_CNTL register");
+    TEST_ASSERT_EQ(uc[0].value, 0x11111111u,
+        "CreatePrimState copies GE_CNTL value");
+    TEST_ASSERT_EQ(uc[1].offset, AGC_REG_GE_USER_VGPR_EN,
+        "CreatePrimState copies GE_USER_VGPR_EN register");
+    TEST_ASSERT_EQ(uc[1].value, 0x33333333u,
+        "CreatePrimState copies GE_USER_VGPR_EN value");
+    TEST_ASSERT_EQ(uc[2].offset, AGC_REG_VGT_PRIMITIVE_TYPE,
+        "CreatePrimState emits VGT_PRIMITIVE_TYPE register");
+    TEST_ASSERT_EQ(uc[2].value, 4u,
+        "CreatePrimState emits input primitive value");
+}
+
+static void test_create_prim_state_primitive_lookup(void) {
+    static const uint32_t expected[18] = {
+        0u, 1u, 1u, 2u, 2u, 2u, 3u, 2u, 2u,
+        1u, 1u, 2u, 2u, 2u, 2u, 2u, 4u, 1u,
+    };
+    AgcShaderRecord geometry;
+    AgcShaderSpecials specials;
+    AgcShaderRegister cx[2];
+    AgcShaderRegister uc[3];
+    build_prim_shader(&geometry, &specials, 0u);
+
+    for (uint32_t primitive = 1; primitive <= 18; primitive++) {
+        TEST_ASSERT_EQ(sceAgcCreatePrimState(
+            cx, uc, NULL, &geometry, primitive), AGC_OK,
+            "CreatePrimState primitive lookup returns OK");
+        TEST_ASSERT_EQ(cx[1].offset, AGC_REG_VGT_GS_OUT_PRIM_TYPE,
+            "CreatePrimState fallback output register");
+        TEST_ASSERT_EQ(cx[1].value, expected[primitive - 1u],
+            "CreatePrimState firmware primitive lookup value");
+        TEST_ASSERT_EQ(uc[2].value, primitive,
+            "CreatePrimState preserves raw input primitive");
+    }
+
+    TEST_ASSERT_EQ(sceAgcCreatePrimState(cx, uc, NULL, &geometry, 0u),
+        AGC_OK, "CreatePrimState primitive zero returns OK");
+    TEST_ASSERT_EQ(cx[1].value, 2u,
+        "CreatePrimState primitive zero uses firmware fallback");
+    TEST_ASSERT_EQ(uc[2].value, 0u,
+        "CreatePrimState primitive zero remains raw in UCONFIG");
+    TEST_ASSERT_EQ(sceAgcCreatePrimState(cx, uc, NULL, &geometry, 19u),
+        AGC_OK, "CreatePrimState primitive 19 returns OK");
+    TEST_ASSERT_EQ(cx[1].value, 2u,
+        "CreatePrimState primitive 19 uses firmware fallback");
+    TEST_ASSERT_EQ(uc[2].value, 19u,
+        "CreatePrimState primitive 19 remains raw in UCONFIG");
+}
+
+static void test_create_prim_state_hull_merge(void) {
+    AgcShaderRecord geometry, hull;
+    AgcShaderSpecials geometry_specials, hull_specials;
+    AgcShaderRegister cx[2];
+    AgcShaderRegister uc[3];
+    build_prim_shader(&geometry, &geometry_specials, 0x100u);
+    build_prim_shader(&hull, &hull_specials, 0x200u);
+    hull_specials.vgt_gs_out_prim_type =
+        (AgcShaderSpecialRegister){0x777u, 0x88888888u};
+    hull_specials.ge_user_vgpr_en =
+        (AgcShaderSpecialRegister){0x999u, 0xAAAAAAAAu};
+
+    TEST_ASSERT_EQ(sceAgcCreatePrimState(cx, uc, &hull, &geometry, 7u),
+        AGC_OK, "CreatePrimState hull merge returns OK");
+    TEST_ASSERT_EQ(cx[0].value, 0x300u,
+        "CreatePrimState ORs hull and geometry stage values");
+    TEST_ASSERT_EQ(cx[1].offset, 0x777u,
+        "CreatePrimState uses hull output pair when GS stays disabled");
+    TEST_ASSERT_EQ(cx[1].value, 0x88888888u,
+        "CreatePrimState copies hull output value");
+    TEST_ASSERT_EQ(uc[1].offset, 0x999u,
+        "CreatePrimState hull overrides user VGPR register");
+    TEST_ASSERT_EQ(uc[1].value, 0xAAAAAAAAu,
+        "CreatePrimState hull overrides user VGPR value");
+
+    hull_specials.vgt_shader_stages_en.value = 1u << 5u;
+    TEST_ASSERT_EQ(sceAgcCreatePrimState(cx, uc, &hull, &geometry, 1u),
+        AGC_OK, "CreatePrimState hull GS-enable returns OK");
+    TEST_ASSERT_EQ(cx[0].value, 0x120u,
+        "CreatePrimState hull sets GS-enable bit");
+    TEST_ASSERT_EQ(cx[1].offset, AGC_REG_VGT_GS_OUT_PRIM_TYPE,
+        "CreatePrimState retains geometry fallback pair after hull enables GS");
+    TEST_ASSERT_EQ(cx[1].value, 0u,
+        "CreatePrimState retains primitive lookup value after hull enables GS");
+}
+
+static void test_create_prim_state_optional_outputs_and_invalid(void) {
+    AgcShaderRecord geometry, hull = {0};
+    AgcShaderSpecials specials;
+    AgcShaderRegister cx[2] = {0};
+    AgcShaderRegister uc[3] = {0};
+    build_prim_shader(&geometry, &specials, 0u);
+
+    TEST_ASSERT_EQ(sceAgcCreatePrimState(cx, NULL, NULL, &geometry, 4u),
+        AGC_OK, "CreatePrimState supports CX-only output");
+    TEST_ASSERT_EQ(sceAgcCreatePrimState(NULL, uc, NULL, &geometry, 4u),
+        AGC_OK, "CreatePrimState supports UCONFIG-only output");
+    TEST_ASSERT_EQ(sceAgcCreatePrimState(NULL, NULL, NULL, NULL, 4u),
+        AGC_OK, "CreatePrimState no outputs matches firmware no-op");
+    TEST_ASSERT_EQ(sceAgcCreatePrimState(cx, uc, NULL, NULL, 4u),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "CreatePrimState rejects missing geometry safely");
+    geometry.specials = 0;
+    TEST_ASSERT_EQ(sceAgcCreatePrimState(cx, uc, NULL, &geometry, 4u),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "CreatePrimState rejects missing geometry Specials safely");
+    build_prim_shader(&geometry, &specials, 0u);
+    TEST_ASSERT_EQ(sceAgcCreatePrimState(cx, uc, &hull, &geometry, 4u),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "CreatePrimState rejects missing hull Specials safely");
+}
+
+static uint32_t semantic_word(
+    uint32_t id, uint32_t mapping, uint32_t flags)
+{
+    return (id & 0xFFu) | ((mapping & 0x1Fu) << 8u) | flags;
+}
+
+static void build_interpolant_shader(
+    AgcShaderRecord *shader,
+    AgcShaderSemantic *inputs, uint32_t num_inputs,
+    AgcShaderSemantic *outputs, uint32_t num_outputs)
+{
+    memset(shader, 0, sizeof(*shader));
+    shader->magic = AGC_SHADER_RECORD_MAGIC;
+    shader->version = AGC_SHADER_RECORD_VERSION_GEN5;
+    shader->input_semantics = (uint64_t)(uintptr_t)inputs;
+    shader->output_semantics = (uint64_t)(uintptr_t)outputs;
+    set_u32(shader->num_input_semantics, num_inputs);
+    set_u32(shader->num_output_semantics, num_outputs);
+}
+
+static void test_create_interpolant_mapping_identity(void) {
+    AgcShaderRegister regs[32] = {0};
+    TEST_ASSERT_EQ(sceAgcCreateInterpolantMapping(regs, NULL, NULL),
+        AGC_OK, "CreateInterpolantMapping null PS uses identity state");
+    for (uint32_t i = 0; i < 32u; i++) {
+        TEST_ASSERT_EQ(regs[i].offset,
+            AGC_INTERPOLANT_REGISTER_DESCRIPTOR_BASE + i,
+            "CreateInterpolantMapping emits raw descriptor offset");
+        TEST_ASSERT_EQ(regs[i].value, i,
+            "CreateInterpolantMapping emits identity value");
+    }
+
+    AgcShaderRecord empty_ps;
+    build_interpolant_shader(&empty_ps, NULL, 0u, NULL, 0u);
+    memset(regs, 0xA5, sizeof(regs));
+    TEST_ASSERT_EQ(sceAgcCreateInterpolantMapping(regs, NULL, &empty_ps),
+        AGC_OK, "CreateInterpolantMapping empty PS uses identity state");
+    TEST_ASSERT_EQ(regs[31].value, 31u,
+        "CreateInterpolantMapping fills final identity entry");
+}
+
+static void test_create_interpolant_mapping_flags(void) {
+    AgcShaderSemantic gs_semantics[3] = {
+        {semantic_word(7u, 5u, 0u)},
+        {semantic_word(9u, 12u, 0u)},
+        {semantic_word(10u, 4u, 1u << 20u)},
+    };
+    AgcShaderSemantic ps_semantics[4] = {
+        {semantic_word(7u, 0u, 0u)},
+        {semantic_word(8u, 0u, 2u << 28u)},
+        {semantic_word(9u, 0u,
+            (1u << 22u) | (1u << 24u) | (1u << 28u))},
+        {semantic_word(10u, 0u,
+            (1u << 20u) | (3u << 28u) | (2u << 30u))},
+    };
+    AgcShaderRecord gs, ps;
+    AgcShaderRegister regs[32] = {0};
+    build_interpolant_shader(&gs, NULL, 0u, gs_semantics, 3u);
+    build_interpolant_shader(&ps, ps_semantics, 4u, NULL, 0u);
+
+    TEST_ASSERT_EQ(sceAgcCreateInterpolantMapping(regs, &gs, &ps),
+        AGC_OK, "CreateInterpolantMapping flag mapping returns OK");
+    TEST_ASSERT_EQ(regs[0].value, 0x00000005u,
+        "CreateInterpolantMapping uses matched GS hardware mapping");
+    TEST_ASSERT_EQ(regs[1].value, 0x00000220u,
+        "CreateInterpolantMapping uses missing-semantic default");
+    TEST_ASSERT_EQ(regs[2].value, 0x0000052Cu,
+        "CreateInterpolantMapping transforms flat/custom flags");
+    TEST_ASSERT_EQ(regs[3].value, 0x01580304u,
+        "CreateInterpolantMapping transforms F16/default-high flags");
+    TEST_ASSERT_EQ(regs[4].offset,
+        AGC_INTERPOLANT_REGISTER_DESCRIPTOR_BASE + 4u,
+        "CreateInterpolantMapping starts identity tail at PS input count");
+    TEST_ASSERT_EQ(regs[4].value, 4u,
+        "CreateInterpolantMapping fills identity tail");
+}
+
+static void test_create_interpolant_mapping_all_entries(void) {
+    AgcShaderSemantic inputs[32];
+    AgcShaderSemantic outputs[32];
+    AgcShaderRegister regs[32] = {0};
+    AgcShaderRecord gs, ps;
+
+    for (uint32_t i = 0; i < 32u; i++) {
+        inputs[i].value = semantic_word(i, 0u, 0u);
+        outputs[31u - i].value = semantic_word(i, 31u - i, 0u);
+    }
+    build_interpolant_shader(&gs, NULL, 0u, outputs, 32u);
+    build_interpolant_shader(&ps, inputs, 32u, NULL, 0u);
+
+    TEST_ASSERT_EQ(sceAgcCreateInterpolantMapping(regs, &gs, &ps),
+        AGC_OK, "CreateInterpolantMapping accepts all 32 entries");
+    for (uint32_t i = 0; i < 32u; i++) {
+        TEST_ASSERT_EQ(regs[i].offset,
+            AGC_INTERPOLANT_REGISTER_DESCRIPTOR_BASE + i,
+            "CreateInterpolantMapping all-entry descriptor offset");
+        TEST_ASSERT_EQ(regs[i].value, 31u - i,
+            "CreateInterpolantMapping searches full output table");
+    }
+}
+
+static void test_create_interpolant_mapping_invalid(void) {
+    AgcShaderRecord gs, ps;
+    AgcShaderSemantic input = {semantic_word(1u, 0u, 0u)};
+    AgcShaderRegister regs[32] = {0};
+    build_interpolant_shader(&ps, &input, 1u, NULL, 0u);
+    build_interpolant_shader(&gs, NULL, 0u, NULL, 0u);
+
+    TEST_ASSERT_EQ(sceAgcCreateInterpolantMapping(NULL, &gs, &ps),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "CreateInterpolantMapping rejects null output safely");
+    TEST_ASSERT_EQ(sceAgcCreateInterpolantMapping(regs, NULL, &ps),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "CreateInterpolantMapping rejects missing GS safely");
+    ps.input_semantics = 0;
+    TEST_ASSERT_EQ(sceAgcCreateInterpolantMapping(regs, &gs, &ps),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "CreateInterpolantMapping rejects missing PS semantics safely");
+    build_interpolant_shader(&ps, &input, 33u, NULL, 0u);
+    TEST_ASSERT_EQ(sceAgcCreateInterpolantMapping(regs, &gs, &ps),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "CreateInterpolantMapping rejects more than 32 PS inputs safely");
+    build_interpolant_shader(&ps, &input, 1u, NULL, 0u);
+    set_u32(gs.num_output_semantics, 1u);
+    TEST_ASSERT_EQ(sceAgcCreateInterpolantMapping(regs, &gs, &ps),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "CreateInterpolantMapping rejects missing GS semantics safely");
+}
+
+static void test_ngg_compiler_record_pipeline_fixture(void)
+{
+    AgcShaderRecord front, back, fused, ps;
+    AgcShaderSpecials front_specials, back_specials;
+    AgcShaderRegister front_regs[4], back_regs[6], fused_regs[6] = {0};
+    AgcShaderRegister prim_cx[2] = {0};
+    AgcShaderRegister prim_uc[3] = {0};
+    AgcShaderRegister interpolants[32] = {0};
+    AgcShaderSemantic gs_outputs[1] = {
+        {semantic_word(7u, 0u, 0u)},
+    };
+    AgcShaderSemantic ps_inputs[1] = {
+        {semantic_word(7u, 0u, 0u)},
+    };
+    const uint32_t stages_en = (1u << 13u) | (1u << 25u);
+
+    build_fused_shader_pair(
+        &front, &back, &front_specials, &back_specials,
+        front_regs, back_regs, true);
+
+    front_specials.vgt_shader_stages_en =
+        (AgcShaderSpecialRegister){AGC_REG_VGT_SHADER_STAGES_EN, stages_en};
+    back_specials.ge_cntl =
+        (AgcShaderSpecialRegister){AGC_REG_GE_CNTL, 0x00FE0080u};
+    back_specials.vgt_shader_stages_en =
+        (AgcShaderSpecialRegister){AGC_REG_VGT_SHADER_STAGES_EN, stages_en};
+    back_specials.vgt_gs_out_prim_type =
+        (AgcShaderSpecialRegister){AGC_REG_VGT_GS_OUT_PRIM_TYPE, 2u};
+    back_specials.ge_user_vgpr_en =
+        (AgcShaderSpecialRegister){AGC_REG_GE_USER_VGPR_EN, 0u};
+
+    back.code = 0x0000CD1234000000ULL;
+    back.output_semantics = (uint64_t)(uintptr_t)gs_outputs;
+    set_u32(back.num_output_semantics, 1u);
+    build_interpolant_shader(&ps, ps_inputs, 1u, NULL, 0u);
+
+    TEST_ASSERT_EQ(sceAgcCreateShader(&front, front.shader_type), AGC_OK,
+        "compiler fixture accepts GS-front record");
+    TEST_ASSERT_EQ(sceAgcCreateShader(&back, back.shader_type), AGC_OK,
+        "compiler fixture accepts GS-back record");
+    TEST_ASSERT_EQ(
+        sceAgcFuseShaderHalves_0200(
+            &fused, &front, &back, fused_regs),
+        AGC_OK,
+        "compiler fixture fuses NGG shader records");
+    TEST_ASSERT_EQ((uint32_t)fused.shader_type, (uint32_t)kAgcShaderTypeEs,
+        "compiler fixture produces fused ES shader type");
+    TEST_ASSERT_EQ(fused.code, back.code,
+        "compiler fixture preserves NGG back-half program");
+    TEST_ASSERT_EQ(fused.specials, (uint64_t)(uintptr_t)&back_specials,
+        "compiler fixture preserves compiler-generated specials");
+    TEST_ASSERT_EQ(fused.output_semantics,
+        (uint64_t)(uintptr_t)gs_outputs,
+        "compiler fixture preserves GS output semantics");
+
+    TEST_ASSERT_EQ(
+        sceAgcCreatePrimState(prim_cx, prim_uc, NULL, &fused, 4u),
+        AGC_OK,
+        "compiler fixture derives primitive state");
+    TEST_ASSERT_EQ(prim_cx[0].offset, AGC_REG_VGT_SHADER_STAGES_EN,
+        "compiler fixture emits NGG stage register");
+    TEST_ASSERT_EQ(prim_cx[0].value, stages_en,
+        "compiler fixture emits NGG passthrough stage value");
+    TEST_ASSERT_EQ(prim_uc[0].offset, AGC_REG_GE_CNTL,
+        "compiler fixture emits GE_CNTL");
+    TEST_ASSERT_EQ(prim_uc[0].value, 0x00FE0080u,
+        "compiler fixture preserves compiler GE_CNTL value");
+
+    TEST_ASSERT_EQ(
+        sceAgcCreateInterpolantMapping(interpolants, &fused, &ps),
+        AGC_OK,
+        "compiler fixture links GS outputs to PS inputs");
+    TEST_ASSERT_EQ(interpolants[0].offset,
+        AGC_INTERPOLANT_REGISTER_DESCRIPTOR_BASE,
+        "compiler fixture emits first interpolant descriptor");
+    TEST_ASSERT_EQ(interpolants[0].value, 0u,
+        "compiler fixture maps PS input zero to GS parameter zero");
 }
 
 void test_suite_shader(void) {
@@ -467,7 +975,7 @@ void test_suite_shader(void) {
     TEST_RUN(test_shader_record_invalid_version);
     TEST_RUN(test_shader_record_invalid_type);
     TEST_RUN(test_shader_record_layout);
-    TEST_RUN(test_shader_specials_struct_size);
+    TEST_RUN(test_shader_specials_struct_layout);
     TEST_RUN(test_shader_userdata_struct_size);
     TEST_RUN(test_shader_specials_typed_accessor);
     TEST_RUN(test_shader_userdata_typed_accessor);
@@ -486,8 +994,24 @@ void test_suite_shader(void) {
     TEST_RUN(test_fused_shader_get_size_hs);
     TEST_RUN(test_fused_shader_get_size_invalid_types);
     TEST_RUN(test_fused_shader_get_size_null);
-    TEST_RUN(test_fused_shader_fuse_gs);
-    TEST_RUN(test_fused_shader_fuse_hs);
+    TEST_RUN(test_fused_shader_fuse_legacy_gs);
+    TEST_RUN(test_fused_shader_fuse_legacy_hs);
+    TEST_RUN(test_fused_shader_fuse_0200_gs);
+    TEST_RUN(test_fused_shader_fuse_0200_hs);
+    TEST_RUN(test_fused_shader_stage_mismatch);
+    TEST_RUN(test_fused_shader_missing_metadata);
     TEST_RUN(test_fused_shader_fuse_invalid_types);
     TEST_RUN(test_fused_shader_fuse_null);
+    /* Primitive state builder (FW 5.50 D9sr1xGUriE). */
+    TEST_RUN(test_create_prim_state_gs_enabled);
+    TEST_RUN(test_create_prim_state_primitive_lookup);
+    TEST_RUN(test_create_prim_state_hull_merge);
+    TEST_RUN(test_create_prim_state_optional_outputs_and_invalid);
+    /* Interpolant mapping builder (FW 5.50 pdEV7bI6COI). */
+    TEST_RUN(test_create_interpolant_mapping_identity);
+    TEST_RUN(test_create_interpolant_mapping_flags);
+    TEST_RUN(test_create_interpolant_mapping_all_entries);
+    TEST_RUN(test_create_interpolant_mapping_invalid);
+    /* Synthetic compiler ES+GS/NGG record pipeline contract. */
+    TEST_RUN(test_ngg_compiler_record_pipeline_fixture);
 }

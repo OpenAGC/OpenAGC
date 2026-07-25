@@ -108,6 +108,29 @@ static void test_sce_agc_cb_set_cx_registers_direct_rejects_invalid(void) {
     TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0, "SetCx rejects do not advance cursor");
 }
 
+static void test_sce_agc_cb_set_uc_registers_direct(void) {
+    uint32_t buffer[16];
+    SceAgcCb cb;
+    AgcRegisterValue regs[3] = {
+        { .offset = 0x249, .value = 0x1111 },
+        { .offset = 0x24A, .value = 0x2222 },
+        { .offset = 0x24B, .value = 0x3333 },
+    };
+    agcCbInit(&cb, buffer, sizeof(buffer));
+
+    uint32_t *cmd = sceAgcCbSetUcRegistersDirect(&cb, regs, 3);
+    TEST_ASSERT(cmd == buffer, "SetUcRegistersDirect returns allocated packet");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_SET_UCONFIG_REG,
+        "SetUc opcode");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 5,
+        "SetUc length (3 regs + 2 header)");
+    TEST_ASSERT_EQ(cmd[1], 0x249, "SetUc start offset");
+    TEST_ASSERT_EQ(cmd[2], 0x1111, "SetUc value 0");
+    TEST_ASSERT_EQ(cmd[3], 0x2222, "SetUc value 1");
+    TEST_ASSERT_EQ(cmd[4], 0x3333, "SetUc value 2");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 5, "SetUc advances cursor by 5");
+}
+
 static void test_sce_agc_dcb_write_data(void) {
     uint32_t buffer[32];
     uint32_t data[2] = {0xAABBCCDD, 0x11223344};
@@ -1026,6 +1049,7 @@ void test_suite_cb(void) {
     TEST_RUN(test_sce_agc_cb_set_sh_registers);
     TEST_RUN(test_sce_agc_cb_set_cx_registers_direct);
     TEST_RUN(test_sce_agc_cb_set_cx_registers_direct_rejects_invalid);
+    TEST_RUN(test_sce_agc_cb_set_uc_registers_direct);
     TEST_RUN(test_sce_agc_dcb_write_data);
     TEST_RUN(test_sce_agc_dcb_wait_reg_mem);
     TEST_RUN(test_sce_agc_dcb_markers_and_flip);

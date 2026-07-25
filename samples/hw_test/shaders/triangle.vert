@@ -1,5 +1,4 @@
 #version 450
-
 /* Triangle vertex shader — generates a fullscreen triangle from gl_VertexID.
  * No vertex buffer required. Draw with DrawIndexAuto(3).
  *

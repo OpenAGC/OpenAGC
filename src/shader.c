@@ -59,8 +59,24 @@ _Static_assert(offsetof(AgcShaderRecord, shader_type) == 0x5A,
 _Static_assert(offsetof(AgcShaderRecord, num_sh_registers) == 0x5C,
     "AgcShaderRecord num_sh_registers offset mismatch");
 
-_Static_assert(sizeof(AgcShaderSpecials) == 16,
+_Static_assert(sizeof(AgcShaderSpecialRegister) == 0x08,
+    "AgcShaderSpecialRegister size mismatch");
+_Static_assert(offsetof(AgcShaderSpecialRegister, register_offset) == 0x00,
+    "AgcShaderSpecialRegister register offset mismatch");
+_Static_assert(offsetof(AgcShaderSpecialRegister, value) == 0x04,
+    "AgcShaderSpecialRegister value offset mismatch");
+_Static_assert(sizeof(AgcShaderSpecials) == 0x30,
     "AgcShaderSpecials size mismatch");
+_Static_assert(offsetof(AgcShaderSpecials, ge_cntl) == 0x00,
+    "AgcShaderSpecials GE_CNTL offset mismatch");
+_Static_assert(offsetof(AgcShaderSpecials, vgt_shader_stages_en) == 0x08,
+    "AgcShaderSpecials VGT_SHADER_STAGES_EN offset mismatch");
+_Static_assert(offsetof(AgcShaderSpecials, reserved_10) == 0x10,
+    "AgcShaderSpecials reserved entry offset mismatch");
+_Static_assert(offsetof(AgcShaderSpecials, vgt_gs_out_prim_type) == 0x20,
+    "AgcShaderSpecials VGT_GS_OUT_PRIM_TYPE offset mismatch");
+_Static_assert(offsetof(AgcShaderSpecials, ge_user_vgpr_en) == 0x28,
+    "AgcShaderSpecials GE_USER_VGPR_EN offset mismatch");
 _Static_assert(sizeof(AgcShaderUserData) == 40,
     "AgcShaderUserData size mismatch");
 
@@ -241,24 +257,129 @@ static AgcShaderRegister *agcFindShaderRegister(
 
 /* Patch a 64-bit address into a lo/hi register pair (GPU address format:
  * lo = bits [31:8], hi = bits [39:32] in the low byte). */
-static void agcPatchShaderRegisterAddress(
+static bool agcPatchShaderRegisterAddress(
     AgcShaderRegister *regs, uint32_t num_regs,
     uint32_t lo_offset, uint64_t address)
 {
     AgcShaderRegister *lo = agcFindShaderRegister(regs, num_regs, lo_offset, 0);
     if (!lo)
-        return;
+        return false;
 
     /* Find the hi register immediately after lo (offset == lo_offset + 1). */
     AgcShaderRegister *hi = NULL;
     if (lo + 1 < regs + num_regs && (lo + 1)->offset == lo_offset + 1)
         hi = lo + 1;
     if (!hi)
-        return;
+        return false;
 
     lo->value = (uint32_t)((address >> 8) & 0xFFFFFFFF);
     hi->value &= 0xFFFFFF00;
     hi->value |= (uint32_t)((address >> 40) & 0xFF);
+    return true;
+}
+
+static uint32_t agcMaxU32(uint32_t a, uint32_t b) {
+    return a > b ? a : b;
+}
+
+static uint32_t agcMinU32(uint32_t a, uint32_t b) {
+    return a < b ? a : b;
+}
+
+static uint32_t agcMergeMaxField(
+    uint32_t dst, uint32_t src, uint32_t shift, uint32_t field_mask)
+{
+    uint32_t mask = field_mask << shift;
+    uint32_t value = agcMaxU32((dst >> shift) & field_mask,
+                               (src >> shift) & field_mask);
+    return (dst & ~mask) | (value << shift);
+}
+
+static uint32_t agcCopyMasked(uint32_t dst, uint32_t src, uint32_t mask) {
+    return (dst & ~mask) | (src & mask);
+}
+
+/* FW 5.50 fd5Bp5tGTgo computes RSRC2[31:28] from the combined resource
+ * pressure of the two halves instead of taking the legacy field maximum. */
+static uint32_t agcComputeRsrc2High0200(
+    uint32_t front_rsrc1, uint32_t front_rsrc2,
+    uint32_t back_rsrc1, uint32_t back_rsrc2)
+{
+    uint32_t front_base = ((front_rsrc1 & 0x3Fu) << 3u) + 8u;
+    uint32_t back_base = ((back_rsrc1 & 0x3Fu) << 3u) + 8u;
+    uint32_t front_total = (front_base >> 1u) +
+        (((front_rsrc2 >> 28u) & 0xFu) << 3u);
+    uint32_t back_total = (back_base >> 1u) +
+        (((back_rsrc2 >> 28u) & 0xFu) << 3u);
+    uint32_t max_total = agcMaxU32(front_total, back_total);
+
+    if ((agcMaxU32(front_base, back_base) >> 1u) >= max_total)
+        return 0;
+
+    uint32_t delta = max_total - agcMinU32(front_total, back_total);
+    return ((delta << 22u) + 0x01C00000u) & 0xF0000000u;
+}
+
+static bool agcCopyShaderRegisterOccurrences(
+    AgcShaderRegister *dst, uint32_t dst_count,
+    const AgcShaderRegister *src, uint32_t src_count,
+    uint32_t offset, uint32_t count)
+{
+    for (uint32_t occurrence = 0; occurrence < count; occurrence++) {
+        AgcShaderRegister *dst_reg = agcFindShaderRegister(
+            dst, dst_count, offset, occurrence);
+        AgcShaderRegister *src_reg = agcFindShaderRegister(
+            (AgcShaderRegister *)(uintptr_t)src, src_count, offset, occurrence);
+        if (!dst_reg || !src_reg)
+            return false;
+        dst_reg->value = src_reg->value;
+    }
+    return true;
+}
+
+static bool agcMergeShaderResources(
+    AgcShaderRegister *dst, uint32_t dst_count,
+    const AgcShaderRegister *front, uint32_t front_count,
+    uint32_t rsrc1_offset, uint32_t rsrc2_offset,
+    bool is_gs, bool revision_0200)
+{
+    AgcShaderRegister *dst_rsrc1 = agcFindShaderRegister(
+        dst, dst_count, rsrc1_offset, 0);
+    AgcShaderRegister *dst_rsrc2 = agcFindShaderRegister(
+        dst, dst_count, rsrc2_offset, 0);
+    AgcShaderRegister *front_rsrc1 = agcFindShaderRegister(
+        (AgcShaderRegister *)(uintptr_t)front, front_count, rsrc1_offset, 0);
+    AgcShaderRegister *front_rsrc2 = agcFindShaderRegister(
+        (AgcShaderRegister *)(uintptr_t)front, front_count, rsrc2_offset, 0);
+    if (!dst_rsrc1 || !dst_rsrc2 || !front_rsrc1 || !front_rsrc2)
+        return false;
+
+    uint32_t dst1 = dst_rsrc1->value;
+    uint32_t dst2 = dst_rsrc2->value;
+    uint32_t front1 = front_rsrc1->value;
+    uint32_t front2 = front_rsrc2->value;
+
+    dst1 = agcMergeMaxField(dst1, front1, 0u, 0x3Fu);
+    if (revision_0200) {
+        uint32_t high = agcComputeRsrc2High0200(front1, front2,
+                                                dst_rsrc1->value,
+                                                dst_rsrc2->value);
+        dst2 = (dst2 & 0x0FFFFFFFu) | high;
+    } else {
+        dst2 = agcMergeMaxField(dst2, front2, 28u, 0xFu);
+    }
+
+    dst1 = agcMergeMaxField(dst1, front1, is_gs ? 29u : 28u, 0x3u);
+    if (is_gs)
+        dst2 = agcMergeMaxField(dst2, front2, 16u, 0x3u);
+
+    dst2 = agcCopyMasked(dst2, front2, 0x0800003Eu);
+    if (is_gs)
+        dst2 = agcCopyMasked(dst2, front2, 0x00040000u);
+
+    dst_rsrc1->value = dst1;
+    dst_rsrc2->value = dst2;
+    return true;
 }
 
 int32_t PS5_SYSV_ABI sceAgcGetFusedShaderSize(
@@ -283,9 +404,9 @@ int32_t PS5_SYSV_ABI sceAgcGetFusedShaderSize(
     return AGC_OK;
 }
 
-int32_t PS5_SYSV_ABI sceAgcFuseShaderHalves(
+static int32_t agcFuseShaderHalvesImpl(
     AgcShaderRecord *fused_result, const AgcShaderRecord *front,
-    const AgcShaderRecord *back, void *scratch_mem)
+    const AgcShaderRecord *back, void *scratch_mem, bool revision_0200)
 {
     if (!fused_result || !front || !back)
         return AGC_ERROR_INVALID_ARGUMENT;
@@ -305,56 +426,75 @@ int32_t PS5_SYSV_ABI sceAgcFuseShaderHalves(
 
     /* Set the fused type to Gs(2) or Hs(3) depending on front type. */
     fused_result->shader_type = (front_type == kAgcShaderBinaryTypeGsFront)
-        ? (uint8_t)kAgcShaderTypeGs
-        : (uint8_t)kAgcShaderTypeHs;
+        ? (uint8_t)kAgcShaderBinaryTypeGs
+        : (uint8_t)kAgcShaderBinaryTypeHs;
 
-    /* Validate vgt_shader_stages_en mismatch bit. */
-    if (front->specials && back->specials) {
-        const AgcShaderSpecials *front_sp = (const AgcShaderSpecials *)(uintptr_t)front->specials;
-        const AgcShaderSpecials *back_sp  = (const AgcShaderSpecials *)(uintptr_t)back->specials;
-        uint32_t front_stages = front_sp->vgt_shader_stages_en;
-        uint32_t back_stages  = back_sp->vgt_shader_stages_en;
-        uint32_t mismatch_bit = (front_type == kAgcShaderBinaryTypeGsFront)
-            ? (1u << 22u) : (1u << 21u);
-        if (((front_stages ^ back_stages) & mismatch_bit) != 0)
-            return AGC_ERROR_SHADER_INVALID_HALVES;
-    }
+    /* The firmware dereferences both Specials blocks unconditionally. Return
+     * INVALID_HALVES instead of reproducing its invalid-input crash. */
+    if (!front->specials || !back->specials)
+        return AGC_ERROR_SHADER_INVALID_HALVES;
+    const AgcShaderSpecials *front_sp =
+        (const AgcShaderSpecials *)(uintptr_t)front->specials;
+    const AgcShaderSpecials *back_sp =
+        (const AgcShaderSpecials *)(uintptr_t)back->specials;
+    uint32_t mismatch_bit = (front_type == kAgcShaderBinaryTypeGsFront)
+        ? (1u << 22u) : (1u << 21u);
+    if (((front_sp->vgt_shader_stages_en.value ^
+          back_sp->vgt_shader_stages_en.value) & mismatch_bit) != 0)
+        return AGC_ERROR_SHADER_INVALID_HALVES;
 
     /* If scratch_mem is provided, copy back's SH registers there. */
-    if (scratch_mem && back->sh_registers && back->num_sh_registers != 0) {
+    if (scratch_mem) {
+        if (!back->sh_registers && back->num_sh_registers != 0)
+            return AGC_ERROR_SHADER_INVALID_HALVES;
         AgcShaderRegister *sh_regs = (AgcShaderRegister *)scratch_mem;
-        memcpy(sh_regs, (const void *)(uintptr_t)back->sh_registers,
-               (size_t)back->num_sh_registers * sizeof(AgcShaderRegister));
+        if (back->num_sh_registers != 0) {
+            memcpy(sh_regs, (const void *)(uintptr_t)back->sh_registers,
+                   (size_t)back->num_sh_registers * sizeof(AgcShaderRegister));
+        }
         fused_result->sh_registers = (uint64_t)(uintptr_t)sh_regs;
     }
 
-    /* Patch front shader code address and checksum into fused registers. */
     AgcShaderRegister *fused_regs = (AgcShaderRegister *)(uintptr_t)fused_result->sh_registers;
     uint32_t fused_reg_count = fused_result->num_sh_registers;
     uint32_t front_reg_count = front->num_sh_registers;
     AgcShaderRegister *front_regs = (AgcShaderRegister *)(uintptr_t)front->sh_registers;
+    bool is_gs = front_type == kAgcShaderBinaryTypeGsFront;
+    uint32_t checksum_offset = is_gs ? AGC_SPI_SHADER_PGM_CHKSUM_GS
+                                     : AGC_SPI_SHADER_PGM_CHKSUM_HS;
+    uint32_t rsrc1_offset = is_gs ? AGC_SPI_SHADER_PGM_RSRC1_GS
+                                  : AGC_SPI_SHADER_PGM_RSRC1_HS;
+    uint32_t rsrc2_offset = is_gs ? AGC_SPI_SHADER_PGM_RSRC2_GS
+                                  : AGC_SPI_SHADER_PGM_RSRC2_HS;
+    uint32_t program_lo_offset = is_gs ? AGC_SPI_SHADER_PGM_LO_ES
+                                       : AGC_SPI_SHADER_PGM_LO_LS;
 
-    if (front_type == kAgcShaderBinaryTypeGsFront) {
-        /* GS: patch SPI_SHADER_PGM_CHKSUM_GS from front (2 occurrences). */
-        for (uint32_t occ = 0; occ < 2; occ++) {
-            AgcShaderRegister *dst_reg = agcFindShaderRegister(
-                fused_regs, fused_reg_count, AGC_SPI_SHADER_PGM_CHKSUM_GS, occ);
-            const AgcShaderRegister *src_reg = agcFindShaderRegister(
-                front_regs, front_reg_count, AGC_SPI_SHADER_PGM_CHKSUM_GS, occ);
-            if (dst_reg && src_reg)
-                dst_reg->value = src_reg->value;
-        }
-        /* Patch SPI_SHADER_PGM_LO_ES with front's code address. */
-        agcPatchShaderRegisterAddress(fused_regs, fused_reg_count,
-            AGC_SPI_SHADER_PGM_LO_ES, front->code);
-    } else {
-        /* HS: patch SPI_SHADER_PGM_LO_LS with front's code address. */
-        agcPatchShaderRegisterAddress(fused_regs, fused_reg_count,
-            AGC_SPI_SHADER_PGM_LO_LS, front->code);
-    }
+    if (!agcCopyShaderRegisterOccurrences(fused_regs, fused_reg_count,
+            front_regs, front_reg_count, checksum_offset, 2) ||
+        !agcMergeShaderResources(fused_regs, fused_reg_count,
+            front_regs, front_reg_count, rsrc1_offset, rsrc2_offset,
+            is_gs, revision_0200) ||
+        !agcPatchShaderRegisterAddress(fused_regs, fused_reg_count,
+            program_lo_offset, front->code))
+        return AGC_ERROR_SHADER_INVALID_HALVES;
 
-    /* Clear user_data pointer in the fused result. */
-    fused_result->user_data = 0;
+    fused_result->user_data = revision_0200 ? 0 : front->user_data;
 
     return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI sceAgcFuseShaderHalves(
+    AgcShaderRecord *fused_result, const AgcShaderRecord *front,
+    const AgcShaderRecord *back, void *scratch_mem)
+{
+    return agcFuseShaderHalvesImpl(
+        fused_result, front, back, scratch_mem, false);
+}
+
+int32_t PS5_SYSV_ABI sceAgcFuseShaderHalves_0200(
+    AgcShaderRecord *fused_result, const AgcShaderRecord *front,
+    const AgcShaderRecord *back, void *scratch_mem)
+{
+    return agcFuseShaderHalvesImpl(
+        fused_result, front, back, scratch_mem, true);
 }

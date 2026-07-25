@@ -519,19 +519,16 @@ Acceptance criteria:
 - ✅ Compute shader compiles and executes on PS5 hardware.
 - ✅ User data layout matches ACO's SGPR arg mapping (confirmed by RDNA2
   disassembly — 100% pixel output).
-- ⬜ Graphics shaders (VS/PS) compile and execute on PS5 hardware.
-  VS+PS compile via psbc and the GPU executes past the draw (WRITE_DATA
-  marker confirmed), but render target output is still black — see Phase 7.
+- ✅ Graphics shaders (VS/PS) compile and execute on PS5 hardware.
+  The gfx1013 NGG front-entry probe executes, and the real ACO VS+PS path
+  rasterizes the expected magenta triangle (1,036,800 changed pixels).
 
 ## Phase 7: Graphics Pipeline (Draw Calls)
 
-Status: **in progress.** The DCB is accepted, the GPU executes past the
-draw (WRITE_DATA marker confirmed), and the render target address is
-verified correct (direct WRITE_DATA writes magenta pixels to the RT).
-However, the rendered triangle does not appear — only the diagnostic
-pixels show. The suspected root cause is the RDNA2 NGG-only geometry
-pipeline requiring additional register configuration. This is the
-current critical-path milestone.
+Status: **complete on real PS5 hardware.** The DCB is accepted, the gfx1013
+NGG front program executes, the pixel shader emits constant magenta, and
+1,036,800 render-target pixels change, exactly matching the expected
+triangle area. The post-draw WRITE_DATA marker also confirms CP progress.
 
 Purpose:
 
@@ -638,37 +635,190 @@ Key learnings from compute validation that apply to graphics:
     `CB_COLOR0_ATTRIB2 = ((height-1) & 0x3FFF) | (((width-1) & 0x3FFF) << 14)`
     and `CB_COLOR0_ATTRIB3 = 0`.
 
-15. **`VGT_GS_OUT_PRIM_TYPE` and `GE_CNTL` added for NGG.** Set
-    `VGT_GS_OUT_PRIM_TYPE = 4` (TRILIST) to match input prim type, and
-    `GE_CNTL` with PRIM_GRP_SIZE=256, VERT_GRP_SIZE=256 for geometry
-    engine batching.
+15. **Removed invalid partial NGG state.** A plain VS record has no
+    GS/NGG `specials` block. `VGT_GS_OUT_PRIM_TYPE=4` was also wrong because
+    that register uses the GS-output enum (`triangles=2`), not the input
+    primitive enum, and the speculative `GE_CNTL` values were unsupported.
 
 16. **`PA_CL_VS_OUT_CNTL` and `PA_CL_CLIP_CNTL` set to 0.** The previous
     non-zero values (USE_VTX_POINT_SIZE, CLIP_DISABLE) may interfere with
     NGG rasterization. Set both to 0 (defaults).
 
-### Current suspected root cause: RDNA2 NGG-only geometry pipeline
+### Current hardware-validation candidate: corrected plain VS path
 
-On RDNA2 (GFX10.3, PS5 GPU), the legacy VS→PA path is not available —
-all vertex processing must go through the NGG (Next-Generation Geometry)
-pipeline. The `psbc` compiler outputs vertex shaders with SH registers at
-ES stage offsets (0x0C8-0x0CB), confirming the VS runs as the ES/NGG
-export shader. Setting `esEn=EsReal` (0x10) does not kernel panic, but
-the triangle still does not render because:
+The generated vertex record declares `shader_type=VS` but stores its four
+program registers at ES offsets. The sample now remaps those registers to
+the VS quartet and uses `VGT_SHADER_STAGES_EN=0`. It also fixes four
+independent state errors found by cross-checking KytyPS5 and sharpemu:
 
-- A proper NGG passthrough configuration may require additional registers
-  (e.g. `GE_NGG_SUBGRP_CNTL`, `VGT_GS_ONCHIP_CNTL`, `VGT_REUSE_OFF`).
-- The ES→NGG export shader may need specific RSRC2 USER_SGPR fields or
-  GE_USER_VGPR_EN settings that we are not setting.
-- The shader "specials" block (used by `sceAgcCreatePrimState` in
-  sharpemu) contains `VGT_SHADER_STAGES_EN`, `VGT_GS_OUT_PRIM_TYPE`,
-  `GE_CNTL`, and `GE_USER_VGPR_EN` values — our shader has
-  `specials_off = 0` (no specials), so these are not being set from the
-  shader record.
+- `CB_COLOR0_INFO.FORMAT` is `10` for `8_8_8_8`, not `2`.
+- `CB_COLOR_CONTROL.MODE` must be Normal (`0x00CC0010` with ROP3 copy),
+  rather than zero/disabled (`0x00CC000F`).
+- `SPI_SHADER_COL_FORMAT=4` selects FP16 ABGR shader export; it is not the
+  same enum as the render-target channel layout.
+- `VGT_PRIMITIVE_TYPE` is UCONFIG-only and must not also be written through
+  `SET_CONTEXT_REG`.
 
-Next steps: investigate the NGG passthrough register set from sharpemu
-and rpcsx, and determine whether a minimal NGG configuration can be
-constructed without a full GS/NGG shader.
+A production PS5 NGG path still requires a real GS/NGG shader record and
+its populated `specials` block. KytyPS5 and sharpemu both source stage,
+GS-output, `GE_CNTL`, and `GE_USER_VGPR_EN` state from that block; partial
+NGG state must not be synthesized around a plain VS.
+
+### Real-PS5 NGG implementation direction
+
+The plain-VS path is only a diagnostic experiment. The target architecture
+for real PS5 hardware is the ES+GS/NGG pipeline indicated by both reference
+emulators and must be validated against FW 5.50 SPRX behavior, game command
+buffers, and hardware results.
+
+Reference roles:
+
+- **KytyPS5 is the primary low-level state reference.** Its recognized PS5
+  vertex path uses an ES program, valid GS metadata/checksum, and
+  `VGT_SHADER_STAGES_EN = 0x02002000`. It is the better reference for PM4
+  register relationships and the minimum coherent NGG state.
+- **sharpemu is the primary AGC ABI reference.** Its
+  `sceAgcCreatePrimState` implementation requires an ES/geometry shader with
+  a non-null `specials` block and copies `VGT_SHADER_STAGES_EN`,
+  `VGT_GS_OUT_PRIM_TYPE`, `GE_CNTL`, and `GE_USER_VGPR_EN` from that shader.
+  Its interpolant builder confirms that ES output semantics must be linked
+  to PS input semantics.
+- **Neither emulator is authoritative by itself.** Final constants and
+  layouts must be confirmed from the FW 5.50 SPRX, captured game state, and
+  real-PS5 execution. Do not replace shader-derived state with guessed
+  constants merely because an emulator accepts them.
+
+FW 5.50 SPRX verification (`libSceAgc.sprx`):
+
+- `sceAgcCreatePrimState` (`D9sr1xGUriE`, `0xE2D0`, 255 bytes) confirms the
+  five-argument ABI: CX output, UCONFIG output, optional hull shader,
+  geometry/fused shader, and input primitive type.
+- The firmware copies register/value pairs from the geometry shader
+  `specials` block at `+0x00` (`GE_CNTL`), `+0x08`
+  (`VGT_SHADER_STAGES_EN`), `+0x20` (`VGT_GS_OUT_PRIM_TYPE`), and `+0x28`
+  (`GE_USER_VGPR_EN`). These are 8-byte register/value entries, not four
+  packed `uint32_t` values. The former 16-byte `AgcShaderSpecials` model has
+  been replaced with the verified 0x30-byte sparse register-pair layout.
+- `CreatePrimState` tests GS-enable bit 5 in the stage-mask value. When GS is
+  enabled it uses the shader-provided GS-output pair at `specials+0x20`;
+  otherwise it derives the low three GS-output primitive bits from the
+  firmware primitive lookup table. An optional hull shader contributes stage
+  bits and replaces `GE_USER_VGPR_EN` with its own specials value.
+- The SPRX does not hard-code `VGT_SHADER_STAGES_EN=0x02002000` in
+  `CreatePrimState`; it copies the compiler-produced value. `0x02002000`
+  remains a useful KytyPS5/game-state observation, not a constant OpenAGC
+  should synthesize unconditionally.
+- `sceAgcCreateInterpolantMapping` (`pdEV7bI6COI`, `0xD7F0`, 758 bytes)
+  builds 32 register/value entries by matching PS input semantics at
+  `PS+0x30` against geometry output semantics at `GS+0x38`. It preserves and
+  transforms interpolation flags rather than emitting a simple identity map;
+  OpenAGC must reproduce this firmware behavior for a production draw path.
+- Both FW 5.50 fusion exports (`0xC770` and `0xCD40`) accept half-type pairs
+  `4+6` and `5+7`, copy the back record, and emit fused record types `2` and
+  `3` respectively. They compare stage-mask value bits 22/21, merge multiple
+  SH resource fields, and patch the front program address into the fused SH
+  register set. OpenAGC's current simplified fusion/type model requires an
+  SPRX-accurate correction before it can produce real NGG shaders.
+
+Implementation work:
+
+1. ~~Correct `AgcShaderSpecials` to the verified sparse register-pair layout,
+   add size/offset static assertions, and update all typed accessors/users.~~
+   Done.
+2. ~~Correct fused-shader half validation, output types (`2`/`3`), stage-bit
+   checks, SH resource merging, and front-program address patching against
+   the `0xC770` and `0xCD40` firmware implementations.~~ Done.
+3. ~~Implement the firmware `sceAgcCreatePrimState` behavior with tests
+   covering exact output register pairs, hull merging, and primitive lookup.~~
+   Done.
+4. ~~Implement `sceAgcCreateInterpolantMapping` semantic mapping with exact
+   FW 5.50 flag/default transformations and all 32 output entries.~~ Done.
+5. ~~Extend `openagc-psbc` to emit a real PS5 ES+GS/NGG shader record rather
+   than a plain VS record containing ES register offsets.~~ Done.
+6. ~~Generate or fuse the required GS front/back halves, including a valid
+   `SPI_SHADER_PGM_CHKSUM_GS` and the complete shader `specials` block.
+   ~~ Done.
+7. ~~Bind vertex/export code through `SPI_SHADER_PGM_LO/HI_ES` and bind all
+   required GS program/resource state from the generated record.~~ Done.
+8. ~~Apply the shader-provided `VGT_SHADER_STAGES_EN`. Preserve
+   `0x02002000` as a captured/reference value only; never substitute it for
+   the compiler-produced specials entry without matching shader metadata.~~
+   Done.
+9. ~~Apply shader-provided `GE_CNTL` and `GE_USER_VGPR_EN`.~~ Done.
+10. ~~Set `VGT_GS_OUT_PRIM_TYPE=2` and input
+    `VGT_PRIMITIVE_TYPE=4`.~~ Done.
+11. ~~Generate ES-to-PS interpolant registers from shader semantics.~~ Done.
+12. ~~Validate with post-draw markers and render-target readback.~~ Done on
+    real PS5 hardware.
+
+Safety constraints:
+
+- Do not enable `GE_NGG_SUBGRP_CNTL` or an NGG stage mask without a valid
+  GS/NGG shader and checksum; the partial configuration already caused a
+  kernel panic.
+- Do not dual-bind the same program to ES and VS register spaces.
+- Keep compute and graphics work in separate DCB submissions during NGG
+  bring-up.
+
+### Immediate Phase 7 execution order
+
+The next work should proceed in this order. Do not begin another round of
+manual PM4 tuning before steps 1-4 are complete.
+
+1. **Fix the shader ABI model.** Done. `AgcShaderSpecials` now models the
+   0x30-byte FW 5.50 sparse register/value layout and has size and offset
+   assertions for the entries at `0x00`, `0x08`, `0x20`, and `0x28`.
+2. **Make shader fusion SPRX-accurate.** Done for both FW 5.50 exports,
+   including half pairs `4+6` and `5+7`, fused types `2` and `3`, stage-mask
+   checks, version-specific SH resource merging and user-data behavior,
+   scratch copying, checksum transfer, and front-address patching.
+3. **Implement `sceAgcCreatePrimState`.** Done. It emits the exact two
+   context and three UCONFIG register/value entries recovered from FW 5.50
+   at `0xE2D0`, including optional hull-stage merging and primitive lookup.
+4. ~~**Implement `sceAgcCreateInterpolantMapping`.** Reproduce the semantic
+   matching and flag transformation recovered from the FW 5.50 function at
+   `0xD7F0`. Test missing semantics, identity fallback, flat interpolation,
+   defaults, and all 32 output entries.~~ Done.
+5. ~~**Add a compiler fixture before changing `psbc`.** Use synthetic shader
+   records and metadata only; do not introduce proprietary firmware or
+   shader data.~~ Done. The host fixture fuses GS-front/GS-back records, then
+   derives primitive and interpolant state from the fused record.
+6. ~~**Extend `openagc-psbc` for the real NGG path.** Emit the required shader
+   halves and fuse them through OpenAGC rather than inventing another record
+   format in the sample.~~ Done for the RDNA2 no-GS NGG vertex path. The
+   compiler runs RADV NGG lowering, computes subgroup/LDS state, emits the
+   monolithic ACO program plus fusion-compatible front/back records, complete
+   specials, semantic maps, and corrected named CX register offsets.
+7. ~~**Replace the graphics sample's plain-VS binding.** Consume the fused
+   shader record plus the primitive-state and interpolant builders, removing
+   remaining guessed stage and semantic state.~~ Done. The sample relocates
+   file records, uploads both halves, fuses with the real GPU addresses, and
+   binds executable code through the ES program pair and resources through
+   the GS register block.
+8. ~~**Validate in layers.**~~ Done. The front-entry probe wrote
+   `0x4E474721`; the real ACO path changed 1,036,800 pixels and produced the
+   expected magenta triangle on PS5 hardware.
+
+The next bounded task is **interpolant validation**. Change the fragment
+shader from constant magenta to `vec4(v_color, 1.0)` and validate the RGB
+triangle on real PS5 hardware. This will prove that the compiler-generated
+ES/NGG output semantics, `sceAgcCreateInterpolantMapping`, PS input registers,
+and parameter exports work together rather than only proving position export
+and constant fragment color.
+
+After interpolants pass, proceed in this order:
+
+1. Add compiler regression coverage that asserts executable ACO code is in
+   the GS-front record and the GS-back record remains the fused state/resource
+   container.
+2. Keep `AGC_NGG_ENTRY_PROBE` as an optional diagnostic and reduce temporary
+   PM4 audit output in the normal hardware sample.
+3. Validate vertex-buffer input and indexed drawing.
+4. Add texture/sampler and additional render-target-format coverage.
+5. Expand to tessellation, geometry shaders, Wave32 graphics, VRS, and ray
+   tracing where supported by gfx1013 and the PS5 AGC ABI.
+6. Continue PA-debug and FRAME_OPEN reverse engineering as non-blocking
+   driver work.
 
 Work:
 
@@ -683,17 +833,17 @@ Work:
 9. ~~Fix VGT_SHADER_STAGES_EN bit layout~~ ✅ Done (esEn=EsReal 0x10).
 10. ~~Fix SPI_SHADER_COL_FORMAT / CB_COLOR0_INFO mismatch~~ ✅ Done (both 8_8_8_8).
 11. ~~Add CB_COLOR0_ATTRIB2 for MIP0 dimensions~~ ✅ Done.
-12. ~~Add VGT_GS_OUT_PRIM_TYPE and GE_CNTL for NGG~~ ✅ Done.
-13. **Verify visual output on hardware** 🔄 Triangle still not rendering.
-    Diagnostic WRITE_DATA confirms RT address is correct. Suspected root
-    cause: RDNA2 NGG-only geometry pipeline needs additional register
-    configuration (see "Current suspected root cause" above).
+12. ~~Remove invalid partial NGG state and correct color/primitive state~~ ✅ Done.
+13. **Optionally test the plain-VS diagnostic on hardware.** The corrected
+    sample may still determine whether a usable legacy path exists, but this
+    is no longer the Phase 7 critical path and must not delay the real NGG
+    implementation.
 
 Acceptance criteria:
 
-- A triangle is visible on the PS5 display, rendered by the GPU.
-- The draw call DCB is accepted by `sceAgcDriverSubmitDcb` without error.
-- Vertex and pixel shaders execute correctly (correct position + color).
+- ✅ A triangle is visible on the PS5 display, rendered by the GPU.
+- ✅ The draw call DCB is accepted by `sceAgcDriverSubmitDcb` without error.
+- ✅ Vertex and pixel shaders execute correctly (correct position + magenta color).
 - Render target is written correctly by the GPU.
 
 ### Experimental approaches that caused a kernel panic (DO NOT RETRY)
@@ -721,7 +871,106 @@ reboot). Do not re-apply these changes without careful analysis:
    single active vertex-processing stage; dual-binding confuses the
    shader scheduler.
 
-## Phase 8: Higher-Level AGC Features
+## Phase 8: Firmware Forward Compatibility
+
+Status: planned; FW 5.50 direct backend is implemented, Sony-export forwarding
+and FW 11.60 validation are pending.
+
+Purpose:
+
+Allow a single game-facing OpenAGC ABI to run across supported PS5 firmware
+versions without exposing firmware-private ioctl layouts to applications.
+Match the compatibility model used by retail titles where practical: prefer
+the installed userspace driver that matches the running kernel, while keeping
+validated direct backends as fallbacks.
+
+Architecture:
+
+```text
+Game -> stable OpenAGC public ABI
+     -> installed Sony driver-export backend (preferred)
+     -> validated per-firmware /dev/gc backend (fallback)
+     -> safe AGC_ERROR_UNSUPPORTED result for unknown interfaces
+```
+
+Work:
+
+1. Introduce an internal `AgcDriverOps` dispatch table without changing the
+   public `sceAgc*` / `sceAgcDriver*` ABI.
+2. Refactor the generic and FW 5.50 Prospero implementations behind that
+   table, preserving current behavior and host-test coverage.
+3. Add `driver_sony_exports.c` to locate/load the installed
+   `libSceAgcDriver.sprx`, resolve mandatory exports into privately named
+   function pointers, and avoid recursion or symbol collisions with OpenAGC's
+   public wrappers.
+4. Maintain per-firmware export/NID aliases and module/library version
+   metadata. Probe legacy exports where the installed firmware retains them;
+   do not assume NIDs are stable between firmware releases.
+5. Forward firmware-sensitive operations first: initialization, internal
+   memory/default-state setup, queue create/destroy, DCB/ACB submission,
+   suspend points, workload tracking, and driver capability queries.
+6. Keep deterministic userspace functionality in OpenAGC: PM4 builders,
+   shader-record parsing/fusion, descriptors, primitive state, interpolant
+   mapping, and other source-backed state builders.
+7. Add runtime firmware detection and capability-based backend selection.
+   Query the installed kernel/libkernel system software version (prefer
+   `sceKernelGetSystemSwVersion` when available through the payload SDK, with
+   a loader-provided or read-only system-version query as fallback), normalize
+   it into major/minor/raw fields, and select from an explicit backend
+   registry. Prefer installed Sony exports when their complete required
+   operation set resolves and initializes; otherwise select only an exact
+   validated direct-backend match such as FW 5.50 or FW 11.60. Never treat
+   every firmware newer than 5.50 as FW 5.50-compatible. Follow version
+   selection with non-destructive capability probes and return
+   `AGC_ERROR_UNSUPPORTED` if detection fails, no exact backend exists, or
+   the selected interface does not validate.
+8. Recover FW 11.60 module exports, NIDs, initialization sequence, ioctl
+   layouts, default-state formats, memory sizes, and permission behavior from
+   local SPRX references. Do not copy or commit firmware modules.
+9. Add an FW 11.60 direct backend/table only after structure sizes and behavior
+   are independently confirmed. Never issue FW 5.50 private ioctls merely
+   because the running firmware is newer.
+10. Add host tests using fake operations tables for dispatch, missing exports,
+    version aliases, fallback selection, recursion prevention, and unsupported
+    firmware behavior.
+11. Validate on hardware in layers: initialization and version query, NOP
+    submission, queue lifecycle, compute dispatch/readback, then the graphics
+    draw sample.
+
+Safety and compatibility rules:
+
+- OpenAGC's public ABI remains firmware-independent; games must not include
+  private ioctl structures or firmware-specific backend headers.
+- Runtime export resolution must use private function-pointer names. Directly
+  importing a firmware symbol that OpenAGC also defines risks self-resolution
+  or duplicate-symbol behavior.
+- Loading the installed Sony driver does not bypass GPU credentials,
+  `cr_sceAuthId`, module-global initialization, or other permission checks.
+- Unknown firmware must fail safely with `AGC_ERROR_UNSUPPORTED`; it must not
+  guess an ioctl ABI.
+- Firmware support is declared only after real-hardware validation. Matching
+  RDNA2 PM4 packets alone is not sufficient evidence that the userspace/kernel
+  submission ABI is compatible.
+- Keep firmware binaries, generated proprietary stubs, and microcode outside
+  the repository.
+
+Acceptance criteria:
+
+- Existing generic and FW 5.50 behavior is preserved behind `AgcDriverOps`.
+- A Sony-export backend resolves and calls installed driver exports without
+  colliding with OpenAGC's public symbols.
+- Backend selection is deterministic, capability-tested, and fails safely.
+- The same OpenAGC-linked test application completes the ordered hardware
+  smoke tests on both FW 5.50 and FW 11.60.
+- Each supported firmware has recorded export provenance, structure
+  size/offset assertions, and explicit hardware-validation results.
+
+This phase should begin after the Phase 7 shader/state ABI work is stable.
+The first bounded change is the internal operations table plus generic-backend
+migration; Sony export loading follows without altering application-facing
+symbols.
+
+## Phase 9: Higher-Level AGC Features
 
 Status: mostly speculative until more evidence is recovered.
 

@@ -401,6 +401,7 @@
 #define AGC_REG_PA_SC_BINNER_CNTL_1                 0x312u
 #define AGC_REG_PA_SC_CONSERVATIVE_RASTERIZATION_CNTL 0x313u
 #define AGC_REG_PA_SC_NGG_MODE_CNTL                 0x314u
+#define AGC_REG_VGT_VERTEX_REUSE_BLOCK_CNTL         0x316u
 #define AGC_REG_PA_SC_FOV_WINDOW_LR                 0x0EBu
 #define AGC_REG_PA_SC_FOV_WINDOW_TB                 0x0ECu
 #define AGC_REG_PA_SC_FSR_ENABLE                    0x0F0u  /* AGC-custom */
@@ -498,6 +499,14 @@
 #define AGC_REG_SPI_SHADER_USER_DATA_GS_31          0x0ABu
 #define AGC_REG_SPI_SHADER_REQ_CTRL_ESGS            0x0B0u
 #define AGC_REG_SPI_SHADER_USER_ACCUM_ESGS_0        0x0B2u
+#define AGC_REG_SPI_SHADER_PGM_RSRC4_VS             0x041u
+#define AGC_REG_SPI_SHADER_PGM_CHKSUM_VS            0x045u
+#define AGC_REG_SPI_SHADER_PGM_RSRC3_VS             0x046u
+#define AGC_REG_SPI_SHADER_LATE_ALLOC_VS            0x047u
+#define AGC_REG_SPI_SHADER_PGM_LO_VS                0x048u
+#define AGC_REG_SPI_SHADER_PGM_HI_VS                0x049u
+#define AGC_REG_SPI_SHADER_PGM_RSRC1_VS             0x04Au
+#define AGC_REG_SPI_SHADER_PGM_RSRC2_VS             0x04Bu
 #define AGC_REG_SPI_SHADER_PGM_LO_ES                0x0C8u
 #define AGC_REG_SPI_SHADER_PGM_HI_ES                0x0C9u
 #define AGC_REG_SPI_SHADER_PGM_RSRC1_ES             0x0CAu
@@ -578,11 +587,13 @@
 
 #define AGC_REG_VGT_INDEX_TYPE                      0x243u
 #define AGC_REG_VGT_OBJECT_ID                       0x248u
+#define AGC_REG_GE_MIN_VTX_INDX                     0x249u
 #define AGC_REG_GE_INDX_OFFSET                      0x24Au
 #define AGC_REG_GE_MULTI_PRIM_IB_RESET_EN           0x24Bu
 #define AGC_REG_VGT_HS_OFFCHIP_PARAM                0x24Fu
 #define AGC_REG_VGT_TF_MEMORY_BASE                  0x250u
 #define AGC_REG_IA_MULTI_VGT_PARAM                  0x258u
+#define AGC_REG_GE_MAX_VTX_INDX                     0x259u
 #define AGC_REG_GE_CNTL                             0x25Bu
 #define AGC_REG_GE_CNTL_PRIM_GRP_SIZE_SHIFT         0u
 #define AGC_REG_GE_CNTL_PRIM_GRP_SIZE_MASK          0x1FFu

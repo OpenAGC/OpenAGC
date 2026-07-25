@@ -22,6 +22,7 @@
 #include <stdint.h>
 
 #include "agc_error.h"
+#include "agc_shader.h"
 #include "agc_types.h"
 
 #ifdef __cplusplus
@@ -488,13 +489,25 @@ int32_t PS5_SYSV_ABI sceAgcDebugRaiseException(void);
 uint32_t *PS5_SYSV_ABI sceAgcGetDataPacketPayload(
     uint64_t *out_addr, uint32_t *cmd, uint32_t skip_header);
 
-/* Shader and primitive state creation.
- * RE: sceAgcCreatePrimState takes 5 params (out_state, out_state2,
- * param3, param4, prim_type) and reads from global register-default tables. */
+/* Shader and primitive state creation. */
 int32_t PS5_SYSV_ABI sceAgcCreateShader(void *shader_record, uint32_t type);
+/* FW 5.50 D9sr1xGUriE: emits two CX and three UCONFIG register/value pairs.
+ * Either output may be NULL. The hull shader is optional; the geometry
+ * shader and every supplied shader must have a valid Specials block when an
+ * output is requested. */
 int32_t PS5_SYSV_ABI sceAgcCreatePrimState(
-    void *out_state, void *out_state2, void *param3,
-    void *param4, uint32_t prim_type);
+    AgcShaderRegister *cx_registers,
+    AgcShaderRegister *uconfig_registers,
+    const AgcShaderRecord *hull_shader,
+    const AgcShaderRecord *geometry_shader,
+    uint32_t primitive_type);
+/* FW 5.50 pdEV7bI6COI: emits all 32 SPI_PS_INPUT_CNTL descriptors by
+ * matching pixel inputs to geometry outputs and transforming interpolation
+ * and default-value flags. */
+int32_t PS5_SYSV_ABI sceAgcCreateInterpolantMapping(
+    AgcShaderRegister *cx_registers,
+    const AgcShaderRecord *geometry_shader,
+    const AgcShaderRecord *pixel_shader);
 
 /* ===================================================================== */
 /* DCB packet builders — SPRX disassembly batch 2 (FW 5.50)              */

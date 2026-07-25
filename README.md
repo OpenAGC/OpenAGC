@@ -54,7 +54,7 @@ builds with ps5-payload-sdk; hardware validation is the remaining step.
 | GPU | AMD GCN (Liverpool/Gladius) | AMD RDNA2 (Oberon) |
 | API prefix | `sceGnm*` | `sceAgc*` |
 | Command buffers | PM4 packets (DCB/CCB) | RDNA2 PM4 (DCB/ACB) |
-| Shader ISA | GCN (Southern Islands) | RDNA2 (GFX10.3) |
+| Shader ISA | GCN (Southern Islands) | gfx1013 (Oberon, custom GFX10) |
 | Wave size | 64 only | 32 or 64 |
 | Shader stages | VS/PS/GS/HS/DS/CS | VS/PS/GS/HS/DS/CS + Mesh/Task |
 | Context state | PM4 SET_*_REG inline | Flat context state block |

@@ -134,21 +134,44 @@ typedef struct AgcShaderRecord {
     uint8_t  num_sh_registers;
 } AgcShaderRecord;
 
+/* One 8-byte register/value entry in the FW 5.50 shader Specials block. */
+typedef struct AgcShaderSpecialRegister {
+    uint32_t register_offset;
+    uint32_t value;
+} AgcShaderSpecialRegister;
+
 /*
- * AGC shader Specials block — pointed to by AgcShaderRecord.specials.
- * Contains graphics-engine (GE) and vertex-generating-team (VGT) register
- * values that configure the shader pipeline. Recovered from observation
- * observation and cross-referenced with shadPS4/RPCSX register definitions.
- *
- * The specials block is a variable-length array of register value pairs.
- * The exact layout depends on shader type, but common fields are:
+ * FW 5.50 AGC shader Specials block prefix, pointed to by
+ * AgcShaderRecord.specials. sceAgcCreatePrimState copies the four named
+ * register/value entries from the offsets below. The two entries at 0x10
+ * and 0x18 are preserved because their firmware meaning is not yet known.
  */
 typedef struct AgcShaderSpecials {
-    uint32_t ge_cntl;              /* GE_CNTL — geometry engine control */
-    uint32_t vgt_shader_stages_en; /* VGT_SHADER_STAGES_EN — stage enable bits */
-    uint32_t vgt_gs_out_prim_type; /* VGT_GS_OUT_PRIM_TYPE — GS output primitive */
-    uint32_t ge_user_vgpr_en;      /* GE_USER_VGPR_EN — user VGPR enable */
+    AgcShaderSpecialRegister ge_cntl;                 /* 0x00: GE_CNTL */
+    AgcShaderSpecialRegister vgt_shader_stages_en;    /* 0x08: VGT_SHADER_STAGES_EN */
+    AgcShaderSpecialRegister reserved_10[2];          /* 0x10: unknown FW entries */
+    AgcShaderSpecialRegister vgt_gs_out_prim_type;    /* 0x20: VGT_GS_OUT_PRIM_TYPE */
+    AgcShaderSpecialRegister ge_user_vgpr_en;         /* 0x28: GE_USER_VGPR_EN */
 } AgcShaderSpecials;
+
+/*
+ * One packed shader input/output semantic descriptor. FW 5.50 consumes the
+ * fields below as a raw 32-bit word when creating SPI_PS_INPUT_CNTL state.
+ */
+typedef struct AgcShaderSemantic {
+    uint32_t value;
+} AgcShaderSemantic;
+
+#define AGC_SHADER_SEMANTIC_ID_MASK              0x000000FFu
+#define AGC_SHADER_SEMANTIC_HW_MAPPING_MASK      0x00001F00u
+#define AGC_SHADER_SEMANTIC_F16_MASK             0x00300000u
+#define AGC_SHADER_SEMANTIC_FLAT_MASK            0x00400000u
+#define AGC_SHADER_SEMANTIC_CUSTOM_MASK          0x01000000u
+#define AGC_SHADER_SEMANTIC_DEFAULT_MASK         0x30000000u
+#define AGC_SHADER_SEMANTIC_DEFAULT_HI_MASK      0xC0000000u
+
+_Static_assert(sizeof(AgcShaderSemantic) == 0x04,
+    "AgcShaderSemantic must match the FW 5.50 4-byte descriptor");
 
 /*
  * AGC shader User Data Table — pointed to by AgcShaderRecord.user_data.
@@ -220,9 +243,17 @@ typedef struct AgcShaderRegister {
     uint32_t value;
 } AgcShaderRegister;
 
+/* Raw CX indirect-register descriptor used by CreateInterpolantMapping. */
+#define AGC_INTERPOLANT_REGISTER_DESCRIPTOR_BASE 0x10000000u
+
 /* SH register offsets used by fused shader patching (reference-confirmed). */
-#define AGC_SPI_SHADER_PGM_CHKSUM_GS  0x80
-#define AGC_SPI_SHADER_PGM_LO_ES      0xC8
+#define AGC_SPI_SHADER_PGM_CHKSUM_GS  0x080
+#define AGC_SPI_SHADER_PGM_RSRC1_GS   0x08A
+#define AGC_SPI_SHADER_PGM_RSRC2_GS   0x08B
+#define AGC_SPI_SHADER_PGM_LO_ES      0x0C8
+#define AGC_SPI_SHADER_PGM_CHKSUM_HS  0x100
+#define AGC_SPI_SHADER_PGM_RSRC1_HS   0x10A
+#define AGC_SPI_SHADER_PGM_RSRC2_HS   0x10B
 #define AGC_SPI_SHADER_PGM_LO_LS      0x148
 
 /*
@@ -241,25 +272,29 @@ int32_t PS5_SYSV_ABI sceAgcGetFusedShaderSize(
     AgcSizeAlign *dst, const AgcShaderRecord *front, const AgcShaderRecord *back);
 
 /*
- * sceAgcFuseShaderHalves (NID: fd5Bp5tGTgo)
- * reference-confirmed: fuses front+back shader halves into a single shader
- * record. The front must be GsFront(4) or HsFront(5), the back must be
- * GsBack(6) or HsBack(7) respectively.
+ * sceAgcFuseShaderHalves (NID: nApJjpKNBl4) and its FW 5.50 _0200 variant
+ * (NID: fd5Bp5tGTgo) fuse front+back shader halves into one shader record.
+ * The front must be GsFront(4) or HsFront(5), and the back must be GsBack(6)
+ * or HsBack(7), respectively.
  *
  * - Copies the back shader record to fused_result
  * - Sets fused_result->shader_type to Gs(2) or Hs(3) depending on front type
  * - If scratch_mem is provided, copies back's SH registers there and points
  *   fused_result->sh_registers to the copy
- * - For GS: patches SPI_SHADER_PGM_CHKSUM_GS from front, patches
- *   SPI_SHADER_PGM_LO_ES with front->code address
- * - For HS: patches SPI_SHADER_PGM_LO_LS with front->code address
+ * - Copies both stage checksum entries from the front half
+ * - Merges stage RSRC1/RSRC2 fields and patches the ES/LS program address
  * - Validates vgt_shader_stages_en mismatch bit (bit 22 for GS, bit 21 for HS)
+ * - The legacy export preserves front->user_data; _0200 clears user_data and
+ *   uses the FW 5.50 combined resource-pressure calculation
  *
  * Returns AGC_OK on success, AGC_ERROR_SHADER_INVALID_HALVES (0x8a6c000a)
  * if the shader types don't form a valid front/back pair or the stages_en
  * mismatch bit differs.
  */
 int32_t PS5_SYSV_ABI sceAgcFuseShaderHalves(
+    AgcShaderRecord *fused_result, const AgcShaderRecord *front,
+    const AgcShaderRecord *back, void *scratch_mem);
+int32_t PS5_SYSV_ABI sceAgcFuseShaderHalves_0200(
     AgcShaderRecord *fused_result, const AgcShaderRecord *front,
     const AgcShaderRecord *back, void *scratch_mem);
 

@@ -469,11 +469,9 @@ static void test_game_compat_init(void) {
     r = sceAgcSuspendPoint(0, 0, 0, 0);
     TEST_ASSERT_EQ(r, AGC_OK, "sceAgcSuspendPoint returns OK");
 
-    /* CreatePrimState with 5 params (out_state, out_state2, param3, param4, prim_type) */
-    uint8_t state[64] = {0xFF};
-    r = sceAgcCreatePrimState(state, NULL, NULL, NULL, 5);
-    TEST_ASSERT_EQ(r, AGC_OK, "CreatePrimState returns OK");
-    TEST_ASSERT_EQ(state[0], 0u, "CreatePrimState zeroes output");
+    /* CreatePrimState permits a no-output no-op, matching the SPRX. */
+    r = sceAgcCreatePrimState(NULL, NULL, NULL, NULL, 5);
+    TEST_ASSERT_EQ(r, AGC_OK, "CreatePrimState no-output returns OK");
 
     /* CreateShader with NULL fails */
     r = sceAgcCreateShader(NULL, 0);

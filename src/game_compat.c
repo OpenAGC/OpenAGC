@@ -30,6 +30,8 @@
 #include "agc_cb.h"
 #include "agc_context.h"
 #include "agc_pm4.h"
+#include "agc_registers.h"
+#include "agc_shader.h"
 #include "agc_types.h"
 #include "agcdriver.h"
 
@@ -658,25 +660,23 @@ uint32_t *PS5_SYSV_ABI sceAgcCbSetShRegisterRangeDirect(
 }
 
 /* sceAgcCbSetUcRegistersDirect (NID: 03RZmELWWzw) — IT_SET_UCONFIG_REG (0x79).
- * Variable-length: 2 + count*2 dwords (each register is reg_offset + value). */
+ * GFX10 packet layout matches SET_SH_REG/SET_CONTEXT_REG: one starting
+ * register offset followed by contiguous register values. */
 uint32_t *PS5_SYSV_ABI sceAgcCbSetUcRegistersDirect(
     SceAgcCb *cb, const AgcRegisterValue *registers, uint32_t register_count)
 {
-    if (!registers || register_count == 0)
+    if (!registers || register_count == 0 || register_count > 0x3FFEu)
         return 0;
 
-    /* Each register entry is 2 dwords: offset + value */
-    uint32_t total_dwords = 2 + register_count * 2;
+    uint32_t total_dwords = register_count + 2;
     uint32_t *cmd = agcCbAllocDwords(cb, total_dwords);
     if (!cmd)
         return 0;
 
     cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_UCONFIG_REG, total_dwords);
-    cmd[1] = register_count;
-    for (uint32_t i = 0; i < register_count; ++i) {
-        cmd[2 + i * 2]     = registers[i].offset;
-        cmd[2 + i * 2 + 1] = registers[i].value;
-    }
+    cmd[1] = registers[0].offset & 0xFFFFu;
+    for (uint32_t i = 0; i < register_count; ++i)
+        cmd[2 + i] = registers[i].value;
     return cmd;
 }
 
@@ -828,24 +828,188 @@ int32_t PS5_SYSV_ABI sceAgcCreateShader(void *shader_record, uint32_t type)
     return AGC_OK;
 }
 
-/* sceAgcCreatePrimState (NID: D9sr1xGUriE) — 0xff bytes in SPRX.
- * RE: SPRX takes 5 params: (out_state, out_state2, param3, param4, prim_type).
- * Reads from global register-default tables and fills VGT_* registers.
- * Valid prim_type range: 1-18 (prim_type-1 is used as table index, max 0x11).
- * On the generic backend we zero the output states as a stub. */
+/* sceAgcCreatePrimState (NID: D9sr1xGUriE) - FW 5.50 @ 0xe2d0.
+ * Values are reconstructed from the SPRX; register pairs stored in shader
+ * Specials are copied verbatim. */
+static const uint32_t s_prim_to_gs_out[18] = {
+    0u, 1u, 1u, 2u, 2u, 2u, 3u, 2u, 2u,
+    1u, 1u, 2u, 2u, 2u, 2u, 2u, 4u, 1u,
+};
+
 int32_t PS5_SYSV_ABI sceAgcCreatePrimState(
-    void *out_state, void *out_state2, void *param3,
-    void *param4, uint32_t prim_type)
+    AgcShaderRegister *cx_registers,
+    AgcShaderRegister *uconfig_registers,
+    const AgcShaderRecord *hull_shader,
+    const AgcShaderRecord *geometry_shader,
+    uint32_t primitive_type)
 {
-    (void)param3;
-    (void)param4;
-    (void)prim_type;
-    /* SPRX checks prim_type-1 <= 0x11 (i.e., prim_type 1..18).
-     * If out of range, it uses a default value (2) instead of failing. */
-    if (out_state)
-        memset(out_state, 0, 16);
-    if (out_state2)
-        memset(out_state2, 0, 24);
+    if (!cx_registers && !uconfig_registers)
+        return AGC_OK;
+    if (!geometry_shader || !geometry_shader->specials)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (hull_shader && !hull_shader->specials)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    const AgcShaderSpecials *geometry_specials =
+        (const AgcShaderSpecials *)(uintptr_t)geometry_shader->specials;
+    const AgcShaderSpecials *hull_specials = hull_shader
+        ? (const AgcShaderSpecials *)(uintptr_t)hull_shader->specials
+        : NULL;
+
+    if (cx_registers) {
+        cx_registers[0].offset = geometry_specials->vgt_shader_stages_en.register_offset;
+        cx_registers[0].value = geometry_specials->vgt_shader_stages_en.value;
+
+        if ((cx_registers[0].value & (1u << 5u)) != 0) {
+            cx_registers[1].offset =
+                geometry_specials->vgt_gs_out_prim_type.register_offset;
+            cx_registers[1].value =
+                geometry_specials->vgt_gs_out_prim_type.value;
+        } else {
+            uint32_t output_primitive = 2u;
+            uint32_t index = primitive_type - 1u;
+            if (index < 18u)
+                output_primitive = s_prim_to_gs_out[index];
+            cx_registers[1].offset = AGC_REG_VGT_GS_OUT_PRIM_TYPE;
+            cx_registers[1].value = output_primitive;
+        }
+
+        if (hull_specials) {
+            cx_registers[0].value |=
+                hull_specials->vgt_shader_stages_en.value;
+            if ((cx_registers[0].value & (1u << 5u)) == 0) {
+                cx_registers[1].offset =
+                    hull_specials->vgt_gs_out_prim_type.register_offset;
+                cx_registers[1].value =
+                    hull_specials->vgt_gs_out_prim_type.value;
+            }
+        }
+    }
+
+    if (uconfig_registers) {
+        uconfig_registers[0].offset = geometry_specials->ge_cntl.register_offset;
+        uconfig_registers[0].value = geometry_specials->ge_cntl.value;
+        const AgcShaderSpecialRegister *user_vgpr = hull_specials
+            ? &hull_specials->ge_user_vgpr_en
+            : &geometry_specials->ge_user_vgpr_en;
+        uconfig_registers[1].offset = user_vgpr->register_offset;
+        uconfig_registers[1].value = user_vgpr->value;
+        uconfig_registers[2].offset = AGC_REG_VGT_PRIMITIVE_TYPE;
+        uconfig_registers[2].value = primitive_type;
+    }
+
+    return AGC_OK;
+}
+
+/* sceAgcCreateInterpolantMapping (NID: pdEV7bI6COI) - FW 5.50 @ 0xd7f0.
+ * The output offsets are raw CX indirect-register descriptors, not decoded
+ * SPI_PS_INPUT_CNTL register offsets. */
+static uint32_t agcInterpolantApplyDefaults(uint32_t value, uint32_t ps)
+{
+    value &= ~0x00000300u;
+    return value | ((ps >> 20u) & 0x00000300u);
+}
+
+static uint32_t agcInterpolantApplyDefaultsHi(uint32_t value, uint32_t ps)
+{
+    value &= ~0x00600000u;
+    return value | ((ps >> 9u) & 0x00600000u);
+}
+
+static uint32_t agcCreateInterpolantValue(
+    uint32_t ps, uint32_t gs, bool matched)
+{
+    uint32_t value;
+
+    if ((ps & AGC_SHADER_SEMANTIC_F16_MASK) != 0) {
+        value = (ps << 4u) & 0x03000000u;
+        if (matched) {
+            uint32_t common = ps & gs;
+            value &= 0xFFF7FFDFu;
+            value |= (common >> 15u) & 0x20u;
+            value ^= 0x00080020u;
+            value &= ~0x00100000u;
+            value |= (~common >> 1u) & 0x00100000u;
+        } else {
+            value |= 0x00180020u;
+        }
+        value = agcInterpolantApplyDefaultsHi(value, ps);
+    } else {
+        value = (!matched ||
+            (ps & (AGC_SHADER_SEMANTIC_FLAT_MASK |
+                   AGC_SHADER_SEMANTIC_CUSTOM_MASK)) != 0)
+            ? 0x20u : 0u;
+    }
+
+    value &= ~0x1Fu;
+    if (matched)
+        value |= (gs & AGC_SHADER_SEMANTIC_HW_MAPPING_MASK) >> 8u;
+
+    value &= ~0x400u;
+    if (matched &&
+        (ps & (AGC_SHADER_SEMANTIC_FLAT_MASK |
+               AGC_SHADER_SEMANTIC_CUSTOM_MASK)) != 0)
+        value |= 0x400u;
+
+    return agcInterpolantApplyDefaults(value, ps);
+}
+
+int32_t PS5_SYSV_ABI sceAgcCreateInterpolantMapping(
+    AgcShaderRegister *cx_registers,
+    const AgcShaderRecord *geometry_shader,
+    const AgcShaderRecord *pixel_shader)
+{
+    if (!cx_registers)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    uint32_t num_inputs = pixel_shader
+        ? agcShaderRecordGetNumInputSemantics(pixel_shader) : 0u;
+    if (num_inputs > 32u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    const AgcShaderSemantic *inputs = pixel_shader
+        ? (const AgcShaderSemantic *)(uintptr_t)pixel_shader->input_semantics
+        : NULL;
+    if (num_inputs != 0u && !inputs)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    const AgcShaderSemantic *outputs = NULL;
+    uint32_t num_outputs = 0u;
+    if (num_inputs != 0u) {
+        if (!geometry_shader)
+            return AGC_ERROR_INVALID_ARGUMENT;
+        outputs = (const AgcShaderSemantic *)(uintptr_t)
+            geometry_shader->output_semantics;
+        num_outputs = agcShaderRecordGetNumOutputSemantics(geometry_shader);
+        if (num_outputs != 0u && !outputs)
+            return AGC_ERROR_INVALID_ARGUMENT;
+    }
+
+    for (uint32_t i = 0; i < num_inputs; i++) {
+        uint32_t ps = inputs[i].value;
+        uint32_t gs = 0u;
+        bool matched = false;
+        for (uint32_t j = 0; j < num_outputs; j++) {
+            if ((outputs[j].value & AGC_SHADER_SEMANTIC_ID_MASK) ==
+                (ps & AGC_SHADER_SEMANTIC_ID_MASK)) {
+                gs = outputs[j].value;
+                matched = true;
+                break;
+            }
+        }
+
+        cx_registers[i].offset =
+            AGC_INTERPOLANT_REGISTER_DESCRIPTOR_BASE + i;
+        cx_registers[i].value =
+            agcCreateInterpolantValue(ps, gs, matched);
+    }
+
+    for (uint32_t i = num_inputs; i < 32u; i++) {
+        cx_registers[i].offset =
+            AGC_INTERPOLANT_REGISTER_DESCRIPTOR_BASE + i;
+        cx_registers[i].value = i;
+    }
+
     return AGC_OK;
 }
 

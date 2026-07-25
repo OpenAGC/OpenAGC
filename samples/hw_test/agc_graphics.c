@@ -38,7 +38,8 @@
 #include <ps5/kernel.h>
 
 /* Embedded shader binaries */
-#include "shaders/triangle_vert_sb.h"
+#include "shaders/triangle_ngg_front_sb.h"
+#include "shaders/triangle_ngg_back_sb.h"
 #include "shaders/triangle_frag_sb.h"
 
 /* Kernel constants fallbacks (if ps5/kernel.h doesn't define them) */
@@ -93,8 +94,7 @@ int sceKernelWaitEqueue(SceKernelEqueue equeue, SceKernelEvent *events,
 #define CB_BUFFER_DWORDS   16384
 
 /* CB_COLOR0_INFO format values (AMD surface format enum) */
-#define COLOR_8_8_8_8              0x02u
-#define COLOR_8_8_8_8_SRGB         0x0Au
+#define COLOR_8_8_8_8              0x0Au
 
 /* CB_COLOR0_INFO bit fields */
 #define CB_INFO_FORMAT(f)      ((f) << AGC_REG_CB_COLOR0_INFO_FORMAT_SHIFT)
@@ -109,9 +109,6 @@ int sceKernelWaitEqueue(SceKernelEqueue equeue, SceKernelEvent *events,
 
 /* VGT primitive types */
 #define VGT_PT_TRILIST         0x04u  /* 4 = triangle list */
-
-/* VGT_SHADER_STAGES_EN bits (RDNA2) */
-#define VGT_SHADER_STAGES_ES_EN  (1u << 8)  /* ES stage = VS without tess */
 
 /* CB_TARGET_MASK: 0xF = write all 4 channels (RGBA) to RT0 */
 #define CB_TARGET_MASK_ALL     0x0Fu
@@ -140,6 +137,7 @@ typedef struct {
 } GraphicsTest;
 
 typedef struct {
+    AgcShaderRecord relocated;
     const AgcShaderRecord *record;
     const uint8_t *code;
     size_t code_size;
@@ -147,6 +145,11 @@ typedef struct {
     uint32_t num_sh_regs;
     const AgcRegisterValue *cx_regs;
     uint32_t num_cx_regs;
+    const AgcShaderSpecials *specials;
+    const AgcShaderSemantic *input_semantics;
+    uint32_t num_input_semantics;
+    const AgcShaderSemantic *output_semantics;
+    uint32_t num_output_semantics;
 } ParsedGraphicsShader;
 
 /* ======================================================================== */
@@ -345,46 +348,121 @@ static bool init_agc(void) {
 static bool parse_graphics_shader(ParsedGraphicsShader *out,
                                    const uint8_t *sb, size_t sb_size,
                                    const char *name) {
-    if (sb_size < sizeof(AgcShaderRecord)) {
+    if (!out || !sb || sb_size < sizeof(AgcShaderRecord)) {
         printf("%s: binary too small (%zu bytes)\n", name, sb_size);
         return false;
     }
 
-    const AgcShaderRecord *rec = (const AgcShaderRecord *)sb;
-    if (rec->magic != AGC_SHADER_RECORD_MAGIC) {
-        printf("%s: bad magic 0x%08x\n", name, rec->magic);
+    memset(out, 0, sizeof(*out));
+    const AgcShaderRecord *file_record = (const AgcShaderRecord *)sb;
+    if (file_record->magic != AGC_SHADER_RECORD_MAGIC ||
+        file_record->version != AGC_SHADER_RECORD_VERSION_GEN5) {
+        printf("%s: invalid record magic/version\n", name);
+        return false;
+    }
+    if (file_record->code < sizeof(*file_record) ||
+        file_record->code > sb_size) {
+        printf("%s: invalid code offset 0x%llx\n", name,
+               (unsigned long long)file_record->code);
         return false;
     }
 
-    out->record = rec;
-    out->num_sh_regs = rec->num_sh_registers;
-    out->sh_regs = (const AgcRegisterValue *)(sb + rec->sh_registers);
-    out->code = sb + rec->code;
-    out->code_size = sb_size - rec->code;
+    uint32_t num_inputs = 0;
+    uint32_t num_outputs = 0;
+    memcpy(&num_inputs, file_record->num_input_semantics, sizeof(num_inputs));
+    memcpy(&num_outputs, file_record->num_output_semantics, sizeof(num_outputs));
 
-    /* CX register count = space between cx_registers offset and code offset */
-    if (rec->cx_registers > 0 && rec->code > rec->cx_registers) {
-        size_t cx_size = rec->code - rec->cx_registers;
-        out->num_cx_regs = (uint32_t)(cx_size / sizeof(AgcRegisterValue));
-        out->cx_regs = (const AgcRegisterValue *)(sb + rec->cx_registers);
-    } else {
-        out->num_cx_regs = 0;
-        out->cx_regs = NULL;
+    if ((file_record->num_sh_registers != 0 &&
+         (file_record->sh_registers < sizeof(*file_record) ||
+          file_record->sh_registers +
+              (uint64_t)file_record->num_sh_registers *
+                  sizeof(AgcRegisterValue) > sb_size)) ||
+        (file_record->specials != 0 &&
+         (file_record->specials < sizeof(*file_record) ||
+          file_record->specials + sizeof(AgcShaderSpecials) > sb_size)) ||
+        (num_inputs != 0 &&
+         (file_record->input_semantics < sizeof(*file_record) ||
+          file_record->input_semantics +
+              (uint64_t)num_inputs * sizeof(AgcShaderSemantic) > sb_size)) ||
+        (num_outputs != 0 &&
+         (file_record->output_semantics < sizeof(*file_record) ||
+          file_record->output_semantics +
+              (uint64_t)num_outputs * sizeof(AgcShaderSemantic) > sb_size))) {
+        printf("%s: record sub-block is out of bounds\n", name);
+        return false;
     }
 
-    printf("%s: type=%u sh_regs=%u cx_regs=%u code_size=%zu\n",
-           name, rec->shader_type, out->num_sh_regs, out->num_cx_regs,
-           out->code_size);
-
-    for (uint32_t i = 0; i < out->num_sh_regs; i++) {
-        printf("  SH[%u]: off=0x%03x val=0x%08x\n",
-               i, out->sh_regs[i].offset, out->sh_regs[i].value);
+    size_t cx_end = (size_t)file_record->code;
+    const uint64_t following_offsets[] = {
+        file_record->specials,
+        file_record->input_semantics,
+        file_record->output_semantics,
+        file_record->code,
+    };
+    if (file_record->cx_registers != 0) {
+        if (file_record->cx_registers < sizeof(*file_record) ||
+            file_record->cx_registers >= sb_size) {
+            printf("%s: invalid CX offset\n", name);
+            return false;
+        }
+        for (uint32_t i = 0;
+             i < sizeof(following_offsets) / sizeof(following_offsets[0]);
+             i++) {
+            uint64_t candidate = following_offsets[i];
+            if (candidate > file_record->cx_registers &&
+                candidate < cx_end) {
+                cx_end = (size_t)candidate;
+            }
+        }
+        if ((cx_end - (size_t)file_record->cx_registers) %
+                sizeof(AgcRegisterValue) != 0) {
+            printf("%s: invalid CX block size\n", name);
+            return false;
+        }
+        out->cx_regs = (const AgcRegisterValue *)
+            (sb + file_record->cx_registers);
+        out->num_cx_regs = (uint32_t)
+            ((cx_end - (size_t)file_record->cx_registers) /
+             sizeof(AgcRegisterValue));
     }
-    for (uint32_t i = 0; i < out->num_cx_regs; i++) {
-        printf("  CX[%u]: off=0x%03x val=0x%08x\n",
-               i, out->cx_regs[i].offset, out->cx_regs[i].value);
-    }
 
+    out->relocated = *file_record;
+    out->record = &out->relocated;
+    out->code = sb + file_record->code;
+    out->code_size = sb_size - (size_t)file_record->code;
+    out->num_sh_regs = file_record->num_sh_registers;
+    out->sh_regs = file_record->sh_registers
+        ? (const AgcRegisterValue *)(sb + file_record->sh_registers)
+        : NULL;
+    out->specials = file_record->specials
+        ? (const AgcShaderSpecials *)(sb + file_record->specials)
+        : NULL;
+    out->input_semantics = num_inputs
+        ? (const AgcShaderSemantic *)(sb + file_record->input_semantics)
+        : NULL;
+    out->num_input_semantics = num_inputs;
+    out->output_semantics = num_outputs
+        ? (const AgcShaderSemantic *)(sb + file_record->output_semantics)
+        : NULL;
+    out->num_output_semantics = num_outputs;
+
+    out->relocated.code = (uint64_t)(uintptr_t)out->code;
+    out->relocated.sh_registers =
+        (uint64_t)(uintptr_t)out->sh_regs;
+    out->relocated.cx_registers =
+        (uint64_t)(uintptr_t)out->cx_regs;
+    out->relocated.specials =
+        (uint64_t)(uintptr_t)out->specials;
+    out->relocated.input_semantics =
+        (uint64_t)(uintptr_t)out->input_semantics;
+    out->relocated.output_semantics =
+        (uint64_t)(uintptr_t)out->output_semantics;
+
+    printf("%s: type=%u sh=%u cx=%u in=%u out=%u code=%zu specials=%s\n",
+           name, out->record->shader_type, out->num_sh_regs,
+           out->num_cx_regs, out->num_input_semantics,
+           out->num_output_semantics, out->code_size,
+           out->specials ? "yes" : "no");
     return true;
 }
 
@@ -460,6 +538,38 @@ static void apply_cx_defaults(SceAgcCb *cb) {
     printf("[Dispatch] Applied %u CX register defaults (individual)\n", applied);
 }
 
+/* Apply FW 5.50 UCONFIG register defaults.  Graphics launch depends on
+ * global GE/VGT state that compute dispatches do not exercise. */
+static void apply_uc_defaults(SceAgcCb *cb) {
+    uint32_t count = 0;
+    const AgcRegisterDefaultsGroup *pgroups =
+        agcRegisterDefaultsV8GetPrimaryGroups(&count);
+    uint32_t applied = 0;
+    for (uint32_t i = 0; i < count; i++) {
+        if (pgroups[i].space == kAgcRegisterDefaultSpaceUc &&
+            pgroups[i].register_count > 0) {
+            for (uint32_t j = 0; j < pgroups[i].register_count; j++) {
+                sceAgcCbSetUcRegistersDirect(cb,
+                    (const AgcRegisterValue *)&pgroups[i].registers[j], 1);
+                applied++;
+            }
+        }
+    }
+    const AgcRegisterDefaultsGroup *igroups =
+        agcRegisterDefaultsV8GetInternalGroups(&count);
+    for (uint32_t i = 0; i < count; i++) {
+        if (igroups[i].space == kAgcRegisterDefaultSpaceUc &&
+            igroups[i].register_count > 0) {
+            for (uint32_t j = 0; j < igroups[i].register_count; j++) {
+                sceAgcCbSetUcRegistersDirect(cb,
+                    (const AgcRegisterValue *)&igroups[i].registers[j], 1);
+                applied++;
+            }
+        }
+    }
+    printf("[Dispatch] Applied %u UC register defaults (individual)\n", applied);
+}
+
 /* Helper to identify PGM_LO and PGM_HI register offsets across all stages:
  * PS: 0x008, VS: 0x048, GS: 0x088, ES: 0x0C8, HS: 0x108, LS: 0x148, CS: 0x20C
  */
@@ -480,13 +590,13 @@ static bool is_pgm_hi_off(uint32_t off) {
 static void write_shader_sh_regs(SceAgcCb *cb,
                                   const ParsedGraphicsShader *shader,
                                   void *code_addr) {
-    /* Patch PGM_LO/HI with the shader code address */
     uint32_t pgm_lo_val = (uint32_t)((uintptr_t)code_addr >> 8);
     uint32_t pgm_hi_val = (uint32_t)((uintptr_t)code_addr >> 40);
+    uint32_t pgm_lo_off = 0;
+    uint32_t pgm_hi_off = 0;
+    bool found_lo = false;
+    bool found_hi = false;
 
-    /* Find PGM_LO and PGM_HI offsets in the SH register block */
-    uint32_t pgm_lo_off = 0, pgm_hi_off = 0;
-    bool found_lo = false, found_hi = false;
     for (uint32_t i = 0; i < shader->num_sh_regs; i++) {
         uint32_t off = shader->sh_regs[i].offset;
         if (!found_lo && is_pgm_lo_off(off)) {
@@ -499,24 +609,20 @@ static void write_shader_sh_regs(SceAgcCb *cb,
         }
     }
 
-    if (found_lo) {
-        printf("[Shader] Patched PGM_LO (0x%03X) = 0x%08X (code %p)\n",
-               pgm_lo_off, pgm_lo_val, code_addr);
-    } else {
-        printf("[Shader] WARNING: PGM_LO not found in shader SH registers!\n");
+    if (!found_lo || !found_hi) {
+        printf("[Shader] missing program register pair for type %u\n",
+               shader->record->shader_type);
+        return;
     }
 
-    /* Write all SH registers, patching PGM_LO/HI values.
-     * On RDNA2, VS shaders compiled by psbc use ES stage offsets (0x0C8-0x0CB)
-     * which is correct — the ES stage feeds NGG passthrough. */
+    printf("[Shader] PGM 0x%03x/0x%03x <- %p\n",
+           pgm_lo_off, pgm_hi_off, code_addr);
     for (uint32_t i = 0; i < shader->num_sh_regs; i++) {
         uint32_t off = shader->sh_regs[i].offset;
-        uint32_t val = shader->sh_regs[i].value;
-
-        if (found_lo && off == pgm_lo_off) val = pgm_lo_val;
-        if (found_hi && off == pgm_hi_off) val = pgm_hi_val;
-
-        AgcRegisterValue reg = { off, val };
+        uint32_t value = shader->sh_regs[i].value;
+        if (off == pgm_lo_off) value = pgm_lo_val;
+        if (off == pgm_hi_off) value = pgm_hi_val;
+        AgcRegisterValue reg = {off, value};
         sceAgcCbSetShRegistersDirect(cb, &reg, 1);
     }
 }
@@ -582,7 +688,9 @@ static void setup_render_target(SceAgcCb *cb, void *rt_addr,
      *   addresses or not write at all.
      * NUM_SAMPLES (3 bits at [14:12]) = 0 (1 sample)
      * NUM_FRAGMENTS (2 bits at [16:15]) = 0 (1 fragment) */
-    rt_regs[5] = 0x0000001Fu;  /* tile_mode_index = 31 (LinearGeneral) */
+    /* GFX10 keeps swizzle/resource metadata in ATTRIB3. ATTRIB only carries
+     * sample-count and destination-alpha fields, all zero for this surface. */
+    rt_regs[5] = 0;
 
     /* reg 6: DCC_CONTROL — disabled */
     rt_regs[6] = 0;
@@ -612,18 +720,17 @@ static void setup_render_target(SceAgcCb *cb, void *rt_addr,
                            (((width - 1) & 0x3FFF) << 14);
     AgcRegisterValue attrib2 = { AGC_REG_CB_COLOR0_ATTRIB2, attrib2_val };
     sceAgcCbSetCxRegistersDirect(cb, &attrib2, 1);
-    /* ATTRIB3 (0x3B8): MIP0_DEPTH (bits [12:0]) = 0 (1 slice) */
-    AgcRegisterValue attrib3 = { AGC_REG_CB_COLOR0_ATTRIB3, 0 };
+    /* GFX10 ATTRIB3: one layer, 2D resource, descriptor resource level. */
+    AgcRegisterValue attrib3 = { AGC_REG_CB_COLOR0_ATTRIB3, 0x09000001u };
     sceAgcCbSetCxRegistersDirect(cb, &attrib3, 1);
 
-    /* CRITICAL: Set CB_COLOR_CONTROL (0x202 CX space) to enable target 0 write & ROP3 copy!
-     * Target write enable (bits 3:0) = 0xF (RT0 enabled).
-     * ROP3 (bits 23:16) = 0xCC (copy src to dst). */
-    AgcRegisterValue cb_color_ctrl = { AGC_REG_CB_COLOR_CONTROL, 0x00CC000Fu };
+    /* CB_COLOR_CONTROL: MODE=Normal (1 at bits [6:4]) and ROP3=copy.
+     * Target/channel enables live in CB_TARGET_MASK, not bits [3:0] here. */
+    AgcRegisterValue cb_color_ctrl = { AGC_REG_CB_COLOR_CONTROL, 0x00CC0010u };
     sceAgcCbSetCxRegistersDirect(cb, &cb_color_ctrl, 1);
 
-    printf("[RT] CB_COLOR0_BASE=0x%08x EXT=0x%08x PITCH=0x%08x SLICE=0x%08x INFO=0x%08x ATTRIB=0x%08x CTRL=0x%08x ATTRIB2=0x%08x\n",
-           rt_regs[0], base_ext.value, rt_regs[1], rt_regs[2], rt_regs[4], rt_regs[5], cb_color_ctrl.value, attrib2_val);
+    printf("[RT] CB_COLOR0_BASE=0x%08x EXT=0x%08x PITCH=0x%08x SLICE=0x%08x INFO=0x%08x ATTRIB=0x%08x CTRL=0x%08x ATTRIB2=0x%08x ATTRIB3=0x%08x\n",
+           rt_regs[0], base_ext.value, rt_regs[1], rt_regs[2], rt_regs[4], rt_regs[5], cb_color_ctrl.value, attrib2_val, attrib3.value);
 }
 
 /* Set up viewport (scale + offset + zmin/zmax) */
@@ -666,6 +773,12 @@ static void setup_viewport(SceAgcCb *cb, uint32_t width, uint32_t height) {
         cmd[2] = z_regs[0];
         cmd[3] = z_regs[1];
     }
+
+    /* Mesa device state: VTX_W0_FMT plus X/Y/Z scale and offset enables. */
+    const AgcRegisterValue vte_cntl = {
+        AGC_REG_PA_CL_VTE_CNTL, 0x0000043fu
+    };
+    sceAgcCbSetCxRegistersDirect(cb, &vte_cntl, 1);
 }
 
 /* Set up scissor (screen scissors, 2 dwords packed as int16 pairs) */
@@ -681,6 +794,21 @@ static void setup_scissor(SceAgcCb *cb, uint32_t width, uint32_t height) {
         cmd[2] = sc_tl;
         cmd[3] = sc_br;
     }
+
+    const AgcRegisterValue remaining_scissors[] = {
+        {AGC_REG_PA_SC_WINDOW_SCISSOR_TL, sc_tl},
+        {AGC_REG_PA_SC_WINDOW_SCISSOR_BR, sc_br},
+        {AGC_REG_PA_SC_GENERIC_SCISSOR_TL, sc_tl},
+        {AGC_REG_PA_SC_GENERIC_SCISSOR_BR, sc_br},
+        {AGC_REG_PA_SC_VPORT_SCISSOR_0_TL, sc_tl},
+        {AGC_REG_PA_SC_VPORT_SCISSOR_0_BR, sc_br},
+    };
+    for (uint32_t i = 0;
+         i < (uint32_t)(sizeof(remaining_scissors) /
+                        sizeof(remaining_scissors[0]));
+         i++) {
+        sceAgcCbSetCxRegistersDirect(cb, &remaining_scissors[i], 1);
+    }
 }
 
 /* Set CB_TARGET_MASK (CX register) */
@@ -689,69 +817,172 @@ static void setup_target_mask(SceAgcCb *cb) {
     sceAgcCbSetCxRegistersDirect(cb, &mask, 1);
 }
 
-/* Set VGT_PRIMITIVE_TYPE (UC register) */
-/* VGT_SHADER_STAGES_EN (CX 0x2D5) — RDNA2 geometry pipeline configuration.
- *
- * VGT_SHADER_STAGES_EN bit layout (from rpcsx Registers.hpp):
- *   bits [1:0] = lsEn  (LsStage: 0=Off, 1=On, 2=CsOn)
- *   bit  [2]   = hsEn
- *   bits [4:3] = esEn  (EsStage: 0=Off, 1=Ds, 2=Real)
- *   bit  [5]   = gsEn
- *   bits [7:6] = vsEn  (VsStage: 0=Real, 1=Ds, 2=Copy)
- *   bit  [8]   = dynamicHs
- *
- * For a simple VS+PS pipeline (no tessellation/geometry):
- *   vsEn = VsReal (0), esEn = EsOff (0), gsEn = 0, hsEn = 0, lsEn = 0
- *   → VGT_SHADER_STAGES_EN = 0
- *
- * NOTE: The previous code set bit 8 (0x100) thinking it was ES_EN, but bit 8
- * is actually dynamicHs. The real ES enable is at bits [4:3] = EsReal (2) = 0x10.
- * On RDNA2, the ES stage output must go through NGG, which requires a proper
- * NGG passthrough shader. Without NGG, use vsEn=VsReal with the shader at
- * VS PGM (0x048) instead.
- */
-static void setup_shader_stages(SceAgcCb *cb) {
-    /* On RDNA2 (GFX10.3), the geometry pipeline is NGG-only. The vertex
-     * shader runs as the ES (export shader) stage, feeding NGG passthrough.
-     * VGT_SHADER_STAGES_EN bit layout (from rpcsx Registers.hpp):
-     *   bits [1:0] = lsEn  (0=Off)
-     *   bit  [2]   = hsEn  (false)
-     *   bits [4:3] = esEn  (2=EsReal) ← this is what we need
-     *   bit  [5]   = gsEn  (false, NGG passthrough)
-     *   bits [7:6] = vsEn  (0=VsReal, unused when esEn=EsReal)
-     *   bit  [8]   = dynamicHs (false)
-     * esEn=EsReal (2) = bits [4:3] = 10 = 0x10.
-     * DO NOT set bit 8 (dynamicHs) or bit 15 — these caused a kernel panic. */
-    AgcRegisterValue stages = { AGC_REG_VGT_SHADER_STAGES_EN, 0x00000010u };
-    sceAgcCbSetCxRegistersDirect(cb, &stages, 1);
-    printf("[VGT] VGT_SHADER_STAGES_EN = 0x10 (EsReal, NGG passthrough)\n");
+/* Build the merged ES+GS/NGG primitive state from the fused shader record. */
+static bool setup_shader_stages(
+    SceAgcCb *cb, const ParsedGraphicsShader *ngg,
+    const ParsedGraphicsShader *ps)
+{
+    AgcShaderRegister prim_cx[2] = {0};
+    AgcShaderRegister prim_uc[3] = {0};
+    AgcShaderRegister interpolants[32] = {0};
+
+    int32_t err = sceAgcCreatePrimState(
+        prim_cx, prim_uc, NULL, ngg->record, VGT_PT_TRILIST);
+    if (err != AGC_OK) {
+        printf("[VGT] CreatePrimState failed: 0x%08x\n", (unsigned)err);
+        return false;
+    }
+
+    for (uint32_t i = 0; i < 2; i++) {
+        AgcRegisterValue reg = {prim_cx[i].offset, prim_cx[i].value};
+        sceAgcCbSetCxRegistersDirect(cb, &reg, 1);
+    }
+    for (uint32_t i = 0; i < 3; i++) {
+        AgcRegisterValue reg = {prim_uc[i].offset, prim_uc[i].value};
+        sceAgcCbSetUcRegistersDirect(cb, &reg, 1);
+    }
+    /* Mesa's GFX10 NGG path programs all 1023 primitive-controller
+     * allocation lines when late allocation is disabled. */
+    AgcRegisterValue ge_pc_alloc = {0x260, 0x000007fe};
+    sceAgcCbSetUcRegistersDirect(cb, &ge_pc_alloc, 1);
+
+    err = sceAgcCreateInterpolantMapping(
+        interpolants, ngg->record, ps->record);
+    if (err != AGC_OK || ps->num_input_semantics > 32u) {
+        printf("[SPI] CreateInterpolantMapping failed: 0x%08x\n",
+               (unsigned)err);
+        return false;
+    }
+    for (uint32_t i = 0; i < ps->num_input_semantics; i++) {
+        AgcRegisterValue input = {
+            AGC_REG_SPI_PS_INPUT_CNTL_0 + i,
+            interpolants[i].value,
+        };
+        sceAgcCbSetCxRegistersDirect(cb, &input, 1);
+    }
+
+    printf("[VGT] compiler primitive state: stages=0x%08x ge_cntl=0x%08x\n",
+           prim_cx[0].value, prim_uc[0].value);
+    return true;
 }
 
 /* ======================================================================== */
 /* Main draw call dispatch                                                   */
 /* ======================================================================== */
 
+static void dump_launch_registers(const uint32_t *dcb, uint32_t dword_count)
+{
+    uint32_t sh[0x400] = {0};
+    uint32_t cx[0x400] = {0};
+    uint32_t uc[0x400] = {0};
+
+    for (uint32_t pos = 0; pos < dword_count;) {
+        uint32_t header = dcb[pos];
+        uint32_t length = agcPm4Length(header);
+        if (length == 0 || length > dword_count - pos)
+            break;
+
+        uint32_t *space = NULL;
+        uint32_t opcode = agcPm4Opcode(header);
+        if (opcode == AGC_PM4_OP_SET_SH_REG)
+            space = sh;
+        else if (opcode == AGC_PM4_OP_SET_CONTEXT_REG)
+            space = cx;
+        else if (opcode == AGC_PM4_OP_SET_UCONFIG_REG)
+            space = uc;
+
+        if (space && length >= 3) {
+            uint32_t start = dcb[pos + 1] & 0xffffu;
+            for (uint32_t i = 0; i < length - 2 && start + i < 0x400; i++)
+                space[start + i] = dcb[pos + 2 + i];
+        }
+        pos += length;
+    }
+
+    printf("[PM4 Audit] GS: R4=%08x R3=%08x PGM=%08x:%08x R1=%08x R2=%08x UD=%08x:%08x\n",
+           sh[AGC_REG_SPI_SHADER_PGM_RSRC4_GS],
+           sh[AGC_REG_SPI_SHADER_PGM_RSRC3_GS],
+           sh[AGC_REG_SPI_SHADER_PGM_HI_GS],
+           sh[AGC_REG_SPI_SHADER_PGM_LO_GS],
+           sh[AGC_REG_SPI_SHADER_PGM_RSRC1_GS],
+           sh[AGC_REG_SPI_SHADER_PGM_RSRC2_GS],
+           sh[AGC_REG_SPI_SHADER_USER_DATA_GS_0 + 1u],
+           sh[AGC_REG_SPI_SHADER_USER_DATA_GS_0]);
+    printf("[PM4 Audit] ES: PGM=%08x:%08x stages=%08x posfmt=%08x\n",
+           sh[AGC_REG_SPI_SHADER_PGM_HI_ES],
+           sh[AGC_REG_SPI_SHADER_PGM_LO_ES],
+           cx[AGC_REG_VGT_SHADER_STAGES_EN],
+           cx[AGC_REG_SPI_SHADER_POS_FORMAT]);
+    printf("[PM4 Audit] UC: prim=%08x min=%08x max=%08x ge=%08x pc=%08x\n",
+           uc[AGC_REG_VGT_PRIMITIVE_TYPE],
+           uc[AGC_REG_GE_MIN_VTX_INDX],
+           uc[AGC_REG_GE_MAX_VTX_INDX],
+           uc[AGC_REG_GE_CNTL], uc[0x260]);
+}
+
 static bool dispatch_graphics(GraphicsTest *test,
-                               const ParsedGraphicsShader *vs,
+                               const ParsedGraphicsShader *front,
+                               const ParsedGraphicsShader *back,
                                const ParsedGraphicsShader *ps) {
-    /* Upload shader code to flexible memory pool */
-    void *vs_code = upload_shader(vs->code, vs->code_size,
-                                   test->compute_buffer, 0x0000);
-    void *ps_code = upload_shader(ps->code, ps->code_size,
-                                   test->compute_buffer, 0x1000);
-    printf("VS code at %p (%zu bytes)\n", vs_code, vs->code_size);
+#ifndef AGC_NGG_ENTRY_PROBE
+#define AGC_NGG_ENTRY_PROBE 0
+#endif
+    static const uint32_t ngg_entry_probe[] = {
+        0x7e000280u,                         /* v_mov_b32 v0, 0 */
+        0x7e0202ffu, 0x4e474721u,           /* v_mov_b32 v1, marker */
+        0xdc708000u, 0x00080100u,           /* global_store v0, v1, s[8:9] */
+        0xbf8c3f70u,                         /* s_waitcnt vmcnt(0) */
+        0xbf810000u,                         /* s_endpgm */
+    };
+    const bool use_entry_probe = AGC_NGG_ENTRY_PROBE != 0;
+    const uint8_t *front_code_bytes = use_entry_probe
+        ? (const uint8_t *)ngg_entry_probe : front->code;
+    const size_t front_code_size = use_entry_probe
+        ? sizeof(ngg_entry_probe) : front->code_size;
+    void *front_code = upload_shader(
+        front_code_bytes, front_code_size, test->compute_buffer, 0x0000);
+    void *back_code = upload_shader(
+        back->code, back->code_size, test->compute_buffer, 0x1000);
+    void *ps_code = upload_shader(
+        ps->code, ps->code_size, test->compute_buffer, 0x4000);
+    printf("NGG front %s at %p (%zu bytes)\n",
+           use_entry_probe ? "entry probe" : "ACO code",
+           front_code, front_code_size);
+    printf("NGG back code at %p (%zu bytes)\n",
+           back_code, back->code_size);
     printf("PS code at %p (%zu bytes)\n", ps_code, ps->code_size);
 
-    /* Render to flexible memory (GPU MMU-mapped).
-     * The Color Buffer hardware writes to flexible memory reliably.
-     * CPU will copy from flexible memory to garlic display buffer after draw. */
-    void *rt_addr = (uint8_t *)test->compute_buffer + 0x10000;
-    printf("Render target at %p (flexible memory)\n", rt_addr);
+    if (back->num_sh_regs > 16u) {
+        printf("NGG back has too many SH registers\n");
+        return false;
+    }
+    AgcShaderRecord front_record = *front->record;
+    AgcShaderRecord back_record = *back->record;
+    AgcShaderRecord fused_record;
+    AgcRegisterValue fused_regs[16] = {0};
+    front_record.code = (uint64_t)(uintptr_t)front_code;
+    back_record.code = (uint64_t)(uintptr_t)back_code;
+    int32_t fuse_err = sceAgcFuseShaderHalves_0200(
+        &fused_record, &front_record, &back_record, fused_regs);
+    if (fuse_err != AGC_OK) {
+        printf("FuseShaderHalves failed: 0x%08x\n", (unsigned)fuse_err);
+        return false;
+    }
 
-    /* Clear render target to black (CPU fill) */
+    ParsedGraphicsShader ngg = *back;
+    ngg.relocated = fused_record;
+    ngg.record = &ngg.relocated;
+    ngg.sh_regs = fused_regs;
+    ngg.num_sh_regs = fused_record.num_sh_registers;
+
+    /* Color-buffer traffic uses the registered garlic display surface. */
+    void *rt_addr = test->buffers[0];
+    printf("Render target at %p (garlic display buffer 0)\n", rt_addr);
+
+    /* Use a diagnostic sentinel so even a black shader write is detectable. */
     uint32_t *rt = (uint32_t *)rt_addr;
     for (uint32_t i = 0; i < test->width * test->height; i++) {
-        rt[i] = 0xFF000000;  /* black with full alpha */
+        rt[i] = 0xFF00FF00u;
     }
 
     /* Build DCB */
@@ -768,107 +999,114 @@ static bool dispatch_graphics(GraphicsTest *test,
     }
     printf("[Dispatch] CONTEXT_CONTROL: load enable\n");
 
+    /* Activate the hardware graphics defaults. FW 5.50's exported builder
+     * emits IT_CLEAR_STATE (0x12); the earlier backend experiment used the
+     * unrelated 0x14 opcode and therefore did not test CLEAR_STATE. */
+    if (!sceAgcDcbClearState(&cb, 0)) {
+        printf("[Dispatch] CLEAR_STATE allocation failed\n");
+        return false;
+    }
+    printf("[Dispatch] CLEAR_STATE: opcode 0x12, state 0\n");
+
     /* 1. Apply FW 5.50 register defaults */
     apply_sh_defaults_graphics(&cb);
     apply_cx_defaults(&cb);
+    apply_uc_defaults(&cb);
 
     /* 2. Set up render target */
     setup_render_target(&cb, rt_addr, test->width, test->height);
 
-    /* 2b. Disable depth buffer — will be re-applied AFTER shader CX regs
-     * because the PS CX block writes 0x00F (DB_DEPTH_INFO) and 0x203
-     * (DB_SHADER_CONTROL) which re-enable depth testing and Z export. */
+    /* 2b. Disable depth-buffer state after applying the shader CX block. */
     /* (moved to after PS CX registers below) */
 
     /* 3. Set up viewport, scissor, target mask */
     setup_viewport(&cb, test->width, test->height);
     setup_scissor(&cb, test->width, test->height);
     setup_target_mask(&cb);
+    AgcRegisterValue ia_multi_vgt = {0x2aa, 0x0070007fu};
+    sceAgcCbSetCxRegistersDirect(&cb, &ia_multi_vgt, 1);
+    printf("[VGT] IA_MULTI_VGT_PARAM=0x%08x\n", ia_multi_vgt.value);
+    const AgcRegisterValue vertex_bounds[] = {
+        {AGC_REG_GE_MIN_VTX_INDX, 0x00000000u},
+        {AGC_REG_GE_INDX_OFFSET, 0x00000000u},
+        {AGC_REG_GE_MAX_VTX_INDX, 0xffffffffu},
+    };
+    for (uint32_t i = 0;
+         i < (uint32_t)(sizeof(vertex_bounds) / sizeof(vertex_bounds[0]));
+         i++) {
+        sceAgcCbSetUcRegistersDirect(&cb, &vertex_bounds[i], 1);
+    }
+    const AgcRegisterValue gfx10_launch_context[] = {
+        {AGC_REG_PA_SC_NGG_MODE_CNTL, 0x00000200u},
+        {AGC_REG_VGT_VERTEX_REUSE_BLOCK_CNTL, 14u},
+    };
+    for (uint32_t i = 0;
+         i < (uint32_t)(sizeof(gfx10_launch_context) /
+                        sizeof(gfx10_launch_context[0]));
+         i++) {
+        sceAgcCbSetCxRegistersDirect(&cb, &gfx10_launch_context[i], 1);
+    }
+    AgcRegisterValue instance_step = {0x2a8, 1u};
+    sceAgcCbSetCxRegistersDirect(&cb, &instance_step, 1);
 
-    /* 4. Enable ES shader stage (VGT_SHADER_STAGES_EN = 0x100) */
-    setup_shader_stages(&cb);
+    /* 4. Derive NGG primitive and interpolant state from fused records. */
+    if (!setup_shader_stages(&cb, &ngg, ps)) return false;
 
-    /* 5. Write VS shader SH + CX registers */
-    write_shader_sh_regs(&cb, vs, vs_code);
-    write_shader_cx_regs(&cb, vs);
+    /* 5. Bind the fused state. On gfx1013 the executable NGG address is the
+     * GS-front address fused into SPI_SHADER_PGM_LO_ES; the GS-back address
+     * remains a state-container program address. */
+    write_shader_sh_regs(&cb, &ngg, back_code);
+    write_shader_cx_regs(&cb, &ngg);
+    volatile uint32_t *shader_marker =
+        (volatile uint32_t *)test->buffers[1];
+    *shader_marker = 0;
+    const uintptr_t shader_marker_addr = (uintptr_t)shader_marker;
+    const AgcRegisterValue shader_marker_regs[] = {
+        {AGC_REG_SPI_SHADER_USER_DATA_GS_0,
+         (uint32_t)shader_marker_addr},
+        {AGC_REG_SPI_SHADER_USER_DATA_GS_0 + 1u,
+         (uint32_t)(shader_marker_addr >> 32)},
+    };
+    if (use_entry_probe) {
+        sceAgcCbSetShRegistersDirect(&cb, shader_marker_regs, 2);
+        printf("[Draw] NGG front entry probe marker address = %p\n",
+               (void *)shader_marker_addr);
+    }
 
     /* 6. Write PS shader SH + CX registers */
     write_shader_sh_regs(&cb, ps, ps_code);
     write_shader_cx_regs(&cb, ps);
 
-    /* 6b. CRITICAL: Override depth/stencil registers AFTER shader CX blocks!
-     * The PS CX block writes:
-     *   0x00F (DB_DEPTH_INFO) = 0x0F — enables depth testing
-     *   0x203 (DB_SHADER_CONTROL) = 0x10 — enables Z_EXPORT in PS
-     * These re-enable depth even though we set DB_Z_INFO=0 earlier.
-     * With no depth buffer bound, depth testing discards ALL fragments.
-     * Must override AFTER the PS CX block to take effect. */
+    /* 6b. Disable depth/stencil buffer state after the shader CX block, but
+     * preserve the compiler's DB_SHADER_CONTROL=0x10 rasterization mode. */
     AgcRegisterValue db_depth_info = { 0x00F, 0x00000000 };  /* DB_DEPTH_INFO = 0 */
     sceAgcCbSetCxRegistersDirect(&cb, &db_depth_info, 1);
     AgcRegisterValue db_z_info = { AGC_REG_DB_Z_INFO, 0 };     /* DB_Z_INFO = 0 */
     sceAgcCbSetCxRegistersDirect(&cb, &db_z_info, 1);
     AgcRegisterValue db_stencil_info = { 0x011, 0 };           /* DB_STENCIL_INFO = 0 */
     sceAgcCbSetCxRegistersDirect(&cb, &db_stencil_info, 1);
-    AgcRegisterValue db_shader_ctrl = { AGC_REG_DB_SHADER_CONTROL, 0x00000000 };
-    sceAgcCbSetCxRegistersDirect(&cb, &db_shader_ctrl, 1);     /* DB_SHADER_CONTROL = 0 (no Z_EXPORT) */
+    AgcRegisterValue db_shader_ctrl = { AGC_REG_DB_SHADER_CONTROL, 0x00000010 };
+    sceAgcCbSetCxRegistersDirect(&cb, &db_shader_ctrl, 1);
     AgcRegisterValue db_depth_ctrl = { AGC_REG_DB_DEPTH_CONTROL, 0x00000000 };
     sceAgcCbSetCxRegistersDirect(&cb, &db_depth_ctrl, 1);      /* DB_DEPTH_CONTROL = 0 (no Z test) */
-    printf("[DB] DB_DEPTH_INFO=0, DB_Z_INFO=0, DB_STENCIL_INFO=0, DB_SHADER_CONTROL=0, DB_DEPTH_CONTROL=0\n");
+    printf("[DB] DB_DEPTH_INFO=0, DB_Z_INFO=0, DB_STENCIL_INFO=0, DB_SHADER_CONTROL=0x10, DB_DEPTH_CONTROL=0\n");
 
-    /* 6c. Set SPI_SHADER_COL_FORMAT and SPI_SHADER_POS_FORMAT — NOT in
-     * shader record or defaults! Without these, the PS doesn't export color
-     * and the PA can't process vertex positions.
-     * SPI_SHADER_POS_FORMAT (0x1C3): 1 = 4_32_32_32_32 (vec4 position)
-     * SPI_SHADER_Z_FORMAT (0x1C4): 0 = no Z export
-     * SPI_SHADER_COL_FORMAT (0x1C5): 4 = hardware-capture matched value */
-    AgcRegisterValue pos_format = { AGC_REG_SPI_SHADER_POS_FORMAT, 0x1 };
-    sceAgcCbSetCxRegistersDirect(&cb, &pos_format, 1);
-    AgcRegisterValue z_format = { AGC_REG_SPI_SHADER_Z_FORMAT, 0 };
-    sceAgcCbSetCxRegistersDirect(&cb, &z_format, 1);
-    /* Fine-tune Primitive Assembler and Clipper registers:
-     * - PA_CL_VS_OUT_CNTL (0x207): Set VS_OUT_PARAM_COUNT=1 (0x00010000) so PA expects 1 param export (v_color).
-     *   The shader CX block had 0x01400300 (expecting 64 params!), causing PA to stall.
-     * - PA_CL_CLIP_CNTL (0x204): Set CLIP_DISABLE=1 (0x00010000, bit 16) and UCPs=0 to bypass clipping.
-     * - PA_SU_SC_MODE_CNTL (0x205): Set 0 (no front/back face culling).
-     * - SPI_VS_OUT_CONFIG (0x1B1): Set 0 (VS_EXPORT_COUNT=0 for 1 export param).
-     */
-    AgcRegisterValue vs_out_cntl = { AGC_REG_PA_CL_VS_OUT_CNTL, 0x00000000 };  /* No clip/cull/point_size — prevent cull distance from killing primitives */
-    sceAgcCbSetCxRegistersDirect(&cb, &vs_out_cntl, 1);
-    AgcRegisterValue clip_cntl = { AGC_REG_PA_CL_CLIP_CNTL, 0x00000000 };  /* Clipping enabled (default) — CLIP_DISABLE may break NGG rasterization */
+    /* 6c. Rasterizer mode remains application state. Shader formats,
+     * stage selection, primitive type, and interpolants came from compiler
+     * records and the OpenAGC state builders above. */
+    AgcRegisterValue clip_cntl = {
+        AGC_REG_PA_CL_CLIP_CNTL, 0x00000000
+    };
     sceAgcCbSetCxRegistersDirect(&cb, &clip_cntl, 1);
-    AgcRegisterValue sc_mode = { AGC_REG_PA_SU_SC_MODE_CNTL, 0x00000000 };
+    AgcRegisterValue sc_mode = {
+        AGC_REG_PA_SU_SC_MODE_CNTL, 0x00000000
+    };
     sceAgcCbSetCxRegistersDirect(&cb, &sc_mode, 1);
-    AgcRegisterValue vs_out_cfg = { AGC_REG_SPI_VS_OUT_CONFIG, 0x00000000 };
-    sceAgcCbSetCxRegistersDirect(&cb, &vs_out_cfg, 1);
-    AgcRegisterValue col_format = { AGC_REG_SPI_SHADER_COL_FORMAT, 0x1 };  /* 1 = 8_8_8_8, matches CB_COLOR0_INFO format */
-    sceAgcCbSetCxRegistersDirect(&cb, &col_format, 1);
-    AgcRegisterValue cb_shader_mask = { AGC_REG_CB_SHADER_MASK, 0x0F };
-    sceAgcCbSetCxRegistersDirect(&cb, &cb_shader_mask, 1);
-    AgcRegisterValue input_ctl = { AGC_REG_SPI_PS_INPUT_CNTL_0, 0x00000000 };  /* OFFSET=0: PS input 0 reads from VS param export 0 (v_color) */
-    sceAgcCbSetCxRegistersDirect(&cb, &input_ctl, 1);
-    printf("[PA/SPI] VS_OUT_CNTL=0, CLIP_CNTL=0, SC_MODE=0, COL_FORMAT=1 (8_8_8_8), PS_INPUT_CNTL_0=0x00000000 (OFFSET=0)\n");
 
-    /* 7. Set primitive type (TRILIST) in both UCONFIG and CONTEXT spaces */
-    AgcRegisterValue prim = { AGC_REG_VGT_PRIMITIVE_TYPE, VGT_PT_TRILIST };
-    sceAgcCbSetUcRegistersDirect(&cb, &prim, 1);
-    sceAgcCbSetCxRegistersDirect(&cb, &prim, 1);
-
-    /* 7b. Set VGT_GS_OUT_PRIM_TYPE = TRILIST (4) to match input prim type.
-     * In NGG passthrough mode, the output prim type must match the input.
-     * Default is 2 (triangle strip) which is wrong for triangle list. */
-    AgcRegisterValue gs_out_prim = { AGC_REG_VGT_GS_OUT_PRIM_TYPE, VGT_PT_TRILIST };
-    sceAgcCbSetCxRegistersDirect(&cb, &gs_out_prim, 1);
-
-    /* 7c. Set GE_CNTL — controls geometry engine batching for NGG.
-     * PRIM_GRP_SIZE (bits [8:0]) = 256: primitives per group
-     * VERT_GRP_SIZE (bits [17:9]) = 256: vertices per group
-     * Without this, the geometry engine may not batch any primitives. */
-    uint32_t ge_cntl_val = (256u & 0x1FF) | ((256u & 0x1FF) << 9);
-    AgcRegisterValue ge_cntl = { AGC_REG_GE_CNTL, ge_cntl_val };
-    sceAgcCbSetUcRegistersDirect(&cb, &ge_cntl, 1);
-    printf("[GE] VGT_GS_OUT_PRIM_TYPE=4 (TRILIST), GE_CNTL=0x%08X (PRIM_GRP=256, VERT_GRP=256)\n", ge_cntl_val);
-
-    /* 8. Draw — IT_DRAW_INDEX_AUTO with 3 vertices */
+    /* 7. Draw one instance with IT_DRAW_INDEX_AUTO. The draw packet does
+     * not carry an instance count; the firmware default is zero. */
+    sceAgcDcbSetNumInstances(&cb, 1);
+    printf("[Draw] NumInstances(1)\n");
     sceAgcDcbDrawIndexAuto(&cb, 3, 0);
     printf("[Draw] DrawIndexAuto(3)\n");
 
@@ -905,6 +1143,8 @@ static bool dispatch_graphics(GraphicsTest *test,
     submit.dword_count = agcCbUsedDwords(&cb);
     submit.reserved = 0;
 
+    dump_launch_registers(cb_buffer, submit.dword_count);
+
     printf("[Draw] DCB: %u dwords, submitting...\n", submit.dword_count);
     int32_t err = sceAgcDriverSubmitDcb(&submit);
     printf("[Draw] SubmitDcb: 0x%08x (%s)\n", (unsigned)err, errstr(err));
@@ -917,10 +1157,14 @@ static bool dispatch_graphics(GraphicsTest *test,
     /* Check WRITE_DATA marker — if present, GPU is alive after draw */
     uint32_t *marker = (uint32_t *)((uintptr_t)cb_buffer + 0x1000);
     printf("[Marker] WRITE_DATA marker = 0x%08x (expected 0xDEADCAFE)\n", *marker);
+    if (use_entry_probe) {
+        printf("[Marker] NGG front entry marker = 0x%08x "
+               "(expected 0x4E474721)\n", *shader_marker);
+    }
 
-    /* Verify pixels in flexible render target */
+    /* Verify pixels in the garlic render target. */
     uint32_t *rt_buf = (uint32_t *)rt_addr;
-    printf("[Readback] Sample pixels from flexible render target:\n");
+    printf("[Readback] Sample pixels from garlic render target:\n");
     uint32_t sample_indices[] = {0, 1, 100, 1000, 1920, 10000, 100000, 500000, 1000000, 2073599};
     for (int i = 0; i < (int)(sizeof(sample_indices)/sizeof(sample_indices[0])); i++) {
         uint32_t idx = sample_indices[i];
@@ -928,16 +1172,12 @@ static bool dispatch_graphics(GraphicsTest *test,
         printf("  pixel[%u] = 0x%08x\n", idx, rt_buf[idx]);
     }
 
-    /* Count non-black pixels to see if GPU rendered anything */
-    uint32_t non_black = 0;
+    /* Count pixels changed by color-buffer writes. */
+    uint32_t changed = 0;
     for (uint32_t i = 0; i < test->width * test->height; i++) {
-        if (rt_buf[i] != 0xFF000000) non_black++;
+        if (rt_buf[i] != 0xFF00FF00u) changed++;
     }
-    printf("[Readback] Non-black pixels: %u / %u\n", non_black, test->width * test->height);
-
-    /* Copy rendered image from flexible memory to garlic display buffer */
-    memcpy(test->buffers[0], rt_addr, test->width * test->height * 4);
-    printf("[Copy] Copied flexible render target to garlic display buffer 0\n");
+    printf("[Readback] Changed pixels: %u / %u\n", changed, test->width * test->height);
 
     return true;
 }
@@ -962,49 +1202,49 @@ static void wait_for_flip(GraphicsTest *test) {
 int main(void) {
     GraphicsTest test = { .handle = -1, .direct_memory = -1 };
 
-    printf("=== openagc Graphics Draw Call Test ===\n");
+    printf("=== openagc NGG Graphics Draw Call Test ===\n");
 
-    /* Step 0: GPU credentials */
     printf("\n--- Step 0: GPU credential bypass ---\n");
     int cred_err = set_gpu_credentials();
     printf("GPU credentials: %s\n", cred_err == 0 ? "OK" : "FAILED");
     if (cred_err != 0) return 1;
 
-    /* Step 1: AGC init */
     printf("\n--- Step 1: AGC initialization ---\n");
     if (!init_agc()) return 1;
 
-    /* Step 2: VideoOut init */
     printf("\n--- Step 2: VideoOut initialization ---\n");
     if (!init_videoout(&test)) return 1;
 
-    /* Step 3: Parse shaders */
     printf("\n--- Step 3: Shader loading ---\n");
-    ParsedGraphicsShader vs, ps;
-    if (!parse_graphics_shader(&vs, triangle_vert_data, sizeof(triangle_vert_data), "VS")) {
-        printf("FATAL: VS parse failed\n");
+    ParsedGraphicsShader front, back, ps;
+    if (!parse_graphics_shader(
+            &front, triangle_ngg_front_data,
+            sizeof(triangle_ngg_front_data), "NGG front")) {
         return 1;
     }
-    if (!parse_graphics_shader(&ps, triangle_frag_data, sizeof(triangle_frag_data), "PS")) {
-        printf("FATAL: PS parse failed\n");
+    if (!parse_graphics_shader(
+            &back, triangle_ngg_back_data,
+            sizeof(triangle_ngg_back_data), "NGG back")) {
+        return 1;
+    }
+    if (!parse_graphics_shader(
+            &ps, triangle_frag_data,
+            sizeof(triangle_frag_data), "PS")) {
         return 1;
     }
 
-    /* Step 4: Draw call */
-    printf("\n--- Step 4: Graphics draw call ---\n");
-    if (!dispatch_graphics(&test, &vs, &ps)) {
+    printf("\n--- Step 4: NGG graphics draw call ---\n");
+    if (!dispatch_graphics(&test, &front, &back, &ps)) {
         printf("FATAL: draw call failed\n");
         return 1;
     }
 
-    /* Step 5: Flip display */
     printf("\n--- Step 5: Display flip ---\n");
     wait_for_flip(&test);
-    printf("Flipped! Triangle should be visible on display.\n");
+    printf("Flipped; the compiler-generated NGG triangle should be visible.\n");
 
-    /* Keep displaying for a few seconds */
     for (int i = 0; i < 60; i++) {
-        sceKernelUsleep(100000);  /* 100ms */
+        sceKernelUsleep(100000);
     }
 
     printf("\nDone.\n");

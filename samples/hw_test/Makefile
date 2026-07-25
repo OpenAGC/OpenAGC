@@ -33,6 +33,7 @@ OPENAGC_INC  := $(OPENAGC_ROOT)/include
 PKG_TOOLS ?= /Users/bizkut/Downloads/PS5/homebrew/LibProsperoPKG-seregonwar/build
 FSELF     := $(PKG_TOOLS)/prosperopkg-fself
 PKGBUILD  := $(PKG_TOOLS)/prosperopkg-pkg
+PSBC      ?= $(OPENAGC_ROOT)/../openagc-psbc/psbc
 
 PS4_SDK_VERSION ?= 0x07590001
 
@@ -40,7 +41,7 @@ PS4_SDK_VERSION ?= 0x07590001
 CONTENT_ID  := UP9000-AGCT00001_00-OPENAGC000000000
 PASSCODE    := 00000000000000000000000000000000
 
-CFLAGS  := -Wall -Wextra -g -I$(OPENAGC_INC) -I$(THIS_DIR)
+CFLAGS  := -Wall -Wextra -g -I$(OPENAGC_INC) -I$(THIS_DIR) $(EXTRA_CFLAGS)
 
 # videoout_linear: no AGC dependency, just VideoOut + kernel
 VIDEOOUT_LDFLAGS := -lSceVideoOut -lkernel
@@ -68,8 +69,18 @@ agc_videoout.elf: agc_videoout.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB
 agc_compute.elf: agc_compute.c ps5_video_out.h gpu_credentials.h shaders/fill_color_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -o $@ agc_compute.c $(AGC_LDFLAGS)
 
-# Graphics draw call test (AGC + VS/PS shaders + render target + VideoOut)
-agc_graphics.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_vert_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+# Regenerate the gfx1013 NGG GS-front/GS-back records and C headers.
+shaders_ngg: shaders/triangle_vert.spv
+	$(PSBC) -f $< -s vertex \
+	    -o shaders/triangle_ngg_back.sb \
+	    --ngg-front shaders/triangle_ngg_front.sb
+	xxd -i -n triangle_ngg_front_data \
+	    shaders/triangle_ngg_front.sb shaders/triangle_ngg_front_sb.h
+	xxd -i -n triangle_ngg_back_data \
+	    shaders/triangle_ngg_back.sb shaders/triangle_ngg_back_sb.h
+
+# Graphics draw call test (AGC + NGG/PS shaders + render target + VideoOut)
+agc_graphics.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -o $@ agc_graphics.c $(AGC_LDFLAGS)
 
 # === eboot.bin versions (for debug-mode PS5) ===

@@ -2,9 +2,10 @@
 
 ## Current Milestone
 
-**Graphics pipeline: first GPU draw call.** The compute dispatch pipeline is
-hardware-validated (Phase 5-6 complete). The next milestone is a real
-graphics draw call with vertex + pixel shaders — see PLAN.md Phase 7.
+**Graphics pipeline: first GPU draw call is hardware-validated.** The gfx1013
+ES+GS/NGG path executes compiler-generated ACO vertex code plus a pixel
+shader and rasterizes a magenta triangle on real PS5 hardware. Phase 7 is
+complete; see PLAN.md for the remaining production-hardening work.
 
 See [PLAN.md](PLAN.md) for the broader GNM-to-AGC architecture roadmap,
 including Wave32, geometry, ray tracing, cache synchronization, and VRS targets.
@@ -19,7 +20,7 @@ The host-generic implementation now has a tested model for:
 - DCB/ACB submit descriptor layout
 - Generic submit validation and debug capture
 - AGC shader record parser (magic, pointer fields, semantics counts, shader type)
-- AGC shader Specials block struct (`AgcShaderSpecials`: GE_CNTL, VGT_SHADER_STAGES_EN, VGT_GS_OUT_PRIM_TYPE, GE_USER_VGPR_EN)
+- FW 5.50 AGC shader Specials block struct (`AgcShaderSpecials`: 0x30-byte sparse register/value layout with fields at 0x00, 0x08, 0x20, and 0x28)
 - AGC shader User Data Table struct (`AgcShaderUserData`: 5× 64-bit entries)
 - Typed accessors for shader sub-blocks (`agcShaderRecordGetSpecialsTyped`, `agcShaderRecordGetUserDataTyped`, `agcShaderRecordGetShRegisterValues`, `agcShaderRecordGetCxRegisterValues`)
 - Extended texture/surface enums: 18 tile modes, 8 image types, 28 data formats (BC1-7, depth/stencil, Fmask, subsampled), 7 number types, 5 clamp modes, 4 filter modes, 3 mip filter modes, 4 border color types
@@ -28,7 +29,7 @@ The host-generic implementation now has a tested model for:
 - Typed sampler helpers: `SetClampMode`, `SetFilterMode`, `SetBorderColor`, `SetMaxAnisotropy` (hardware-correct SQ_IMG_SAMP_WORD0-3 bit layout)
 - Texture format encode/decode helpers: `agcTextureFormatEncode`, `agcTextureFormatGetDataFormat`, `agcTextureFormatGetNumberType`
 - Shader linking: `agcShaderLinkHsGs` — combines HS/LS + CS shader records into GS (matches SPRX ordinal 131)
-- Fused shader support: `sceAgcGetFusedShaderSize` (NID: dolOmWH+huQ) and `sceAgcFuseShaderHalves` (NID: fd5Bp5tGTgo) — reference-confirmed fusion of GS/HS front+back shader halves with register patching
+- Fused shader support: `sceAgcGetFusedShaderSize` plus FW 5.50-accurate legacy `sceAgcFuseShaderHalves` (`nApJjpKNBl4`) and `sceAgcFuseShaderHalves_0200` (`fd5Bp5tGTgo`), including checksum copies, RSRC1/2 merging, scratch relocation, and program-address patching
 - EOP flip submit: `sceAgcDriverSubmitEopFlip` (prospero) + `sceAgcDcbSetEopFlip` DCB builder (IT_RELEASE_MEM 0x49)
 - NID table (FW 5.50): 354 identified exports (216 libSceAgc + 138 libSceAgcDriver) out of 366 total FW 5.50 SPRX exports (96.7% coverage). 322 NIDs algorithm-verified via SHA1(name+salt) prospero-nid computation. Sources: reference emulator LIB_FUNC, ps5-openagc agc_nid.h, FW 3.20 genstub files, aerolib.csv (154k entries), flatz ps5_symbols.txt, NID computation (67 placeholder names resolved). Remaining 12 unknown NIDs are not in any known database. 32 TSV entries are unverified placeholders (`sceAgcUnknown_*`). 9 functions have two NIDs in 5.50 SPRX (old+new version exports), disambiguated with _<NID> suffix. Version-specific NIDs (3.20-only, 11.60-only) are in `analysis/agc_nids_version_variants.tsv`. All 354 TSV NIDs confirmed present in 5.50 SPRX. All function names in source code match their NID-verified correct names (Vsh-prefixed duplicates removed, wrong-function renames fixed).
 - Async-compute queue submission: generic backend queue tracking (32 slots), ACB submit validates queue in-use, full create→submit→destroy flow tested
@@ -208,8 +209,12 @@ Game-compat packet builders (from Joe & Mac game analysis):
   (out_addr, cmd, skip_header); returns NULL (SPRX-confirmed)
 - `sceAgcDebugRaiseException` — debug stub (no-op on non-dev)
 - `sceAgcCreateShader` — shader record validation
-- `sceAgcCreatePrimState` — 5-param primitive state builder
-  (SPRX-confirmed; was incorrectly 2-param with range 0-10)
+- `sceAgcCreatePrimState` — FW 5.50-accurate 5-param primitive state builder;
+  emits two CX and three UCONFIG pairs with shader Specials, hull merging,
+  GS-enable handling, and the recovered 18-entry primitive lookup
+- `sceAgcCreateInterpolantMapping` — FW 5.50-accurate 3-param interpolant
+  builder; emits all 32 raw CX descriptors with semantic matching, F16,
+  flat/custom, missing-semantic, and default-value transformations
 
 SPRX disassembly batch 2 (FW 5.50 deep disassembly):
 
@@ -451,11 +456,18 @@ Submit model:
 
 ## Next RE Tasks
 
-### Priority 1: Graphics draw call (current critical path)
+### Priority 1: Graphics draw call (hardware validated)
 
-Compute dispatch is fully hardware-validated — all 2,073,600 pixels rendered by GPU compute workgroups on real PS5 hardware (`agc_compute.elf` PASS). The next milestone is a real
-graphics draw call with vertex + pixel shaders, render target binding, viewport/scissor state,
-and a visible triangle on the display. See PLAN.md Phase 7 for details.
+Compute dispatch and the first graphics draw are fully hardware-validated on
+real PS5 hardware. `agc_graphics.elf` executes the gfx1013 NGG front program,
+rasterizes the expected magenta triangle, and changes 1,036,800 of 8,294,400
+pixels, exactly matching the triangle's geometric area.
+
+The immediate next hardware milestone is an interpolated RGB triangle. The
+fragment shader will consume `v_color` instead of returning constant magenta,
+validating the complete ES/NGG-to-PS semantic and interpolant path. Compiler
+front/back placement regression coverage, sample cleanup, vertex/index
+buffers, textures, and advanced graphics stages follow in that order.
 
 Subtasks:
 1. ~~Submit a compute dispatch and verify the GPU executes it.~~ ✅ Done
@@ -470,14 +482,15 @@ Subtasks:
    (CB_COLOR0, viewport, scissor, blend, primitive type, SPI_SHADER_POS/COL_FORMAT).
 6. ~~Submit IT_DRAW_INDEX_AUTO~~ ✅ Done
    (DCB accepted by `sceAgcDriverSubmitDcb`, returns AGC_OK).
-7. **Verify visual output** ⬜ In progress — GPU is alive after draw
-   (WRITE_DATA marker = 0xDEADCAFE confirms CP executes past the draw),
-   but render target pixels remain black (0/8294400 non-black).
+7. ~~Verify visual output~~ ✅ Done — the front-entry probe wrote
+   `0x4E474721`, the post-draw WRITE_DATA marker wrote `0xDEADCAFE`, and the
+   real ACO VS+PS path changed 1,036,800 render-target pixels to the
+   fragment shader's magenta output.
 
 #### Key findings from graphics draw call debugging (Phase 7)
 
 These issues were discovered and fixed during hardware validation of the
-graphics draw call. The GPU no longer hangs, but pixels are still black.
+graphics draw call. The final gfx1013 path now renders successfully.
 
 1. **Non-contiguous register default groups corrupt GPU state.** Five
    register-default groups in `register_defaults_v8.c` have non-contiguous
@@ -529,13 +542,17 @@ graphics draw call. The GPU no longer hangs, but pixels are still black.
    `(pitch_elements - 1)`. For 1920px: `(1920/8)-1 = 239 = 0x000EF`.
    The `SLICE` field (22 bits) is `(tiles_per_row * height) - 1`.
 
-#### Remaining issue: pixels still black
+#### Resolved launch and raster issues
 
-Despite all the above fixes, the GPU executes the draw (confirmed by the
-WRITE_DATA marker) but the render target remains black. The diagnostic
-WRITE_DATA directly to the RT address successfully wrote magenta pixels,
-confirming the render target memory mapping is correct — the issue is in
-the CB/PS/VS pipeline, not the RT address.
+The CP marker originally executed after every draw while no shader marker
+or color output appeared. The decisive gfx1013 finding was that NGG code is
+launched from `SPI_SHADER_PGM_LO_ES` while its resources remain in the GS
+register block. The compiler had placed real ACO code in the GS-back record
+and a dummy `s_endpgm` in the GS-front record, so fusion installed the dummy
+address in the executable ES program register. Swapping those code payloads
+made the front-entry probe execute on hardware. The real fixture then still
+faulted on an unbound debug push-constant pointer; removing that diagnostic
+global store allowed normal NGG exports and rasterization.
 
 Additional fixes applied since the last update (still black output):
 
@@ -571,39 +588,33 @@ Additional fixes applied since the last update (still black output):
     `CB_COLOR0_ATTRIB2 = ((height-1) & 0x3FFF) | (((width-1) & 0x3FFF) << 14)`
     and `CB_COLOR0_ATTRIB3 = 0`.
 
-13. **`VGT_GS_OUT_PRIM_TYPE` and `GE_CNTL` added for NGG.** In NGG
-    passthrough mode, the output prim type must match the input. Default
-    is 2 (triangle strip); set to 4 (TRILIST) to match. `GE_CNTL`
-    controls geometry engine batching (PRIM_GRP_SIZE / VERT_GRP_SIZE);
-    set both to 256.
+13. **Invalid partial NGG state removed.** `VGT_GS_OUT_PRIM_TYPE` uses a
+    GS-output enum where triangles are `2`, not the input `TRILIST` value
+    `4`. A plain VS record also has no GS/NGG `specials` block, so speculative
+    `GE_CNTL` and GS-output programming was removed.
 
 14. **`PA_CL_VS_OUT_CNTL` and `PA_CL_CLIP_CNTL` set to 0.** The previous
     `VS_OUT_CNTL=0x00010000` (USE_VTX_POINT_SIZE) and
     `CLIP_CNTL=0x00010000` (CLIP_DISABLE) may have been interfering with
     NGG rasterization. Set both to 0 (defaults).
 
-#### Current suspected root cause: RDNA2 NGG-only geometry pipeline
+#### Corrected hardware-validation candidate
 
-On RDNA2 (GFX10.3, PS5 GPU), the legacy VS→PA path is not available —
-all vertex processing must go through the NGG (Next-Generation Geometry)
-pipeline. The `psbc` compiler outputs vertex shaders with SH registers at
-ES stage offsets (0x0C8-0x0CB), confirming the VS runs as the ES/NGG
-export shader. Setting `esEn=EsReal` (0x10) does not kernel panic, but
-the triangle still does not render because:
+Cross-checking the latest commits against KytyPS5 and sharpemu found four
+additional state bugs: the `8_8_8_8` color format is `10` rather than `2`,
+`CB_COLOR_CONTROL` had MODE=Disable instead of Normal, shader color-export
+format `4` was incorrectly replaced with render-target format `1`, and the
+UCONFIG-only `VGT_PRIMITIVE_TYPE` offset was also emitted as a context write.
 
-- A proper NGG passthrough configuration may require additional registers
-  (e.g. `GE_NGG_SUBGRP_CNTL`, `VGT_GS_ONCHIP_CNTL`, `VGT_REUSE_OFF`).
-- The ES→NGG export shader may need specific RSRC2 USER_SGPR fields or
-  GE_USER_VGPR_EN settings that we are not setting.
-- The shader "specials" block (used by `sceAgcCreatePrimState` in
-  sharpemu) contains `VGT_SHADER_STAGES_EN`, `VGT_GS_OUT_PRIM_TYPE`,
-  `GE_CNTL`, and `GE_USER_VGPR_EN` values — our shader has
-  `specials_off = 0` (no specials), so these are not being set from the
-  shader record.
-
-Next steps: investigate the NGG passthrough register set from sharpemu
-and rpcsx, and determine whether a minimal NGG configuration can be
-constructed without a full GS/NGG shader.
+The plain-VS workaround has been replaced by a compiler-generated gfx1013 NGG
+path. `openagc-psbc --ngg-front` now performs Mesa RADV no-GS NGG lowering,
+runs ACO, and emits fusion-compatible GS-front/GS-back records containing
+compiler-derived resource registers, subgroup state, complete `specials`,
+and semantic maps. The graphics sample relocates and fuses those records,
+derives primitive/interpolant state through OpenAGC, binds executable ACO code
+through `SPI_SHADER_PGM_LO_ES`, and keeps the GS-back record as the fused
+state/resource container. Real-PS5 validation passes: the entry probe runs,
+the CP survives the draw, and the magenta triangle covers 1,036,800 pixels.
 
 #### Experimental approaches that caused a kernel panic (DO NOT RETRY)
 
@@ -736,10 +747,6 @@ verified from SPRX/kernel disassembly.
 
 - No firmware blobs or proprietary microcode are embedded.
 - No claim of official SDK drop-in completeness.
-- Graphics draw calls are in progress: the DCB is accepted, the GPU
-  executes past the draw (WRITE_DATA marker confirmed), and the render
-  target address is verified correct (direct WRITE_DATA writes pixels),
-  but the rendered triangle does not appear. The suspected root cause is
-  the RDNA2 NGG-only geometry pipeline requiring additional register
-  configuration. See the "Key findings" section above for the full list
-  of issues discovered and fixed so far.
+- Graphics draw calls are hardware-validated for the current gfx1013
+  no-GS NGG VS+PS sample. This does not yet claim complete tessellation,
+  geometry-shader, mesh-shader, or game-wide graphics compatibility.
