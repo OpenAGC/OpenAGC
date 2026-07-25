@@ -40,6 +40,7 @@ set(OPENAGC_SOURCES
     src/shader.c
     src/game_compat.c
     src/driver_ops.c
+    src/driver_registry.c
     src/driver_sony_exports.c
 )
 
@@ -93,6 +94,7 @@ if(OPENAGC_BUILD_TESTS)
         tests/test_register_defaults.c
         tests/test_registers.c
         tests/test_sony_exports.c
+        tests/test_driver_registry.c
     )
     target_link_libraries(openagc_tests PRIVATE openagc)
     target_include_directories(openagc_tests PRIVATE

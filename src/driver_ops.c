@@ -6,13 +6,17 @@
 
 #include "driver_ops.h"
 
-#ifdef OPENAGC_PROSPERO
-#define AGC_DEFAULT_DRIVER_OPS agcProsperoDriverOps
-#else
+#include "driver_registry.h"
+
+#ifdef OPENAGC_GENERIC
 #define AGC_DEFAULT_DRIVER_OPS agcGenericDriverOps
 #endif
 
+#ifdef OPENAGC_PROSPERO
+static const AgcDriverOps *g_driver_ops;
+#else
 static const AgcDriverOps *g_driver_ops = &AGC_DEFAULT_DRIVER_OPS;
+#endif
 
 const AgcDriverOps *agcDriverGetOps(void)
 {
@@ -21,7 +25,7 @@ const AgcDriverOps *agcDriverGetOps(void)
 
 const char *agcDriverDebugBackendName(void)
 {
-    return g_driver_ops->name;
+    return g_driver_ops ? g_driver_ops->name : "unselected";
 }
 
 #ifdef OPENAGC_GENERIC
@@ -42,13 +46,21 @@ void agcDriverResetOpsForTesting(void)
 #define AGC_DISPATCH_OR_UNSUPPORTED(member, call) \
     do { \
         const AgcDriverOps *ops = agcDriverGetOps(); \
-        if (!ops->member) \
+        if (!ops || !ops->member) \
             return AGC_ERROR_NOT_SUPPORTED; \
         return ops->member call; \
     } while (0)
 
 int32_t PS5_SYSV_ABI sce_agc_initialize(void)
 {
+#ifdef OPENAGC_PROSPERO
+    if (!g_driver_ops) {
+        int32_t result = agcDriverSelectRuntime(NULL, &g_driver_ops);
+
+        if (result != AGC_OK)
+            return result;
+    }
+#endif
     AGC_DISPATCH_OR_UNSUPPORTED(initialize, ());
 }
 

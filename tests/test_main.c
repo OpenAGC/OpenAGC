@@ -19,6 +19,7 @@ void test_suite_ioctl(void);
 void test_suite_register_defaults(void);
 void test_suite_registers(void);
 void test_suite_sony_exports(void);
+void test_suite_driver_registry(void);
 
 int main(void) {
     printf("openagc test suite\n");
@@ -34,6 +35,7 @@ int main(void) {
     test_suite_register_defaults();
     test_suite_registers();
     test_suite_sony_exports();
+    test_suite_driver_registry();
 
     TEST_SUMMARY();
     return 0;

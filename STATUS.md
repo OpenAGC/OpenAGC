@@ -41,6 +41,9 @@ The host-generic implementation now has a tested model for:
 - 4 AGC-custom flip builders: WaitFlipDone (0x4C), WaitFlip (0x51), InsertWaitFlipDone (0x54), WaitFlipEos (0x4F+0x4E)
 - Workload tracking: sceAgcDriverSetWorkloadsActive / SetWorkloadComplete with SET_WORKLOAD (0x1E) submit on prospero
 - FW 5.50 register-defaults blob builder/parser with embedded primary/internal tables
+- Runtime firmware/backend registry: PS5 system-version ABI validation,
+  BCD-normalized major/minor/patch fields, exact raw-version aliases,
+  capability filtering, and fail-closed selection before backend mutation
 
 ## Verified
 
@@ -56,7 +59,7 @@ make -B test
 Expected result:
 
 ```text
-1675 passed, 0 failed
+2066 passed, 0 failed
 ```
 
 PS5 prospero backend (cross-compiled, no tests):
@@ -464,17 +467,28 @@ Submit model:
 The internal `AgcDriverOps` dispatch layer is implemented. The stable public
 `sceAgc*` / `sceAgcDriver*` symbols now dispatch through a private operations
 table, with both the generic backend and the validated FW 5.50 direct Prospero
-backend registered behind it. Host tests can install a fake table to verify
-callback routing and safe `AGC_ERROR_NOT_SUPPORTED` behavior for missing
-operations. A module-specific Sony export resolver is also implemented with
-mandatory-symbol validation, recursion rejection, and ABI adapters. FW 5.50
-hardware confirms collision-free calls into the installed module, but its
-payload-context submission path did not execute GPU markers, so the validated
-direct backend remains the default. Runtime firmware/capability selection is
-the next Phase 8 milestone. Installed-module probing also changed submission
-behavior across later payload processes, so it must never be followed by a
-direct fallback in the same boot session; see
-`analysis/sony_export_forwarding_550.md`.
+backend registered behind it. Runtime selection now queries
+`sceKernelGetProsperoSystemSwVersion` before initialization and requires an
+exact raw-version alias plus the requested capability flags. FW 5.50 maps to
+`prospero-fw550-direct`; detection failure and all unknown versions fail closed
+with `AGC_ERROR_NOT_SUPPORTED` before `/dev/gc` or a Sony module is touched.
+Host tests cover callback routing, aliases, capability rejection, unknown
+versions, and detector failure.
+
+A module-specific Sony export resolver is also implemented with mandatory
+symbol validation, recursion rejection, and ABI adapters. FW 5.50 hardware
+confirms collision-free calls into the installed module, but its payload-context
+submission path did not execute GPU markers, so it is excluded from automatic
+selection. Installed-module probing also changed submission behavior across
+later payload processes, so it must never be followed by a direct fallback in
+the same boot session; see `analysis/sony_export_forwarding_550.md`.
+
+The 2026-07-26 hardware selector run called the FW 5.50 direct backend, proving
+the installed version query and exact registry match on the console. The direct
+backend then returned `0x8089000B` during initialization in the console session
+already contaminated by the earlier Sony-module probe. Full init/submit remains
+inconclusive for that run and must be repeated only after a reboot; the older
+clean-session FW 5.50 direct results below remain the validation baseline.
 
 ## Next RE Tasks
 

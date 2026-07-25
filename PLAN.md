@@ -904,9 +904,9 @@ reboot). Do not re-apply these changes without careful analysis:
 
 Status: in progress. The internal operations table owns the stable public
 driver ABI; generic and FW 5.50 direct implementations are registered behind
-it, and a collision-safe installed-Sony export candidate is implemented. Safe
-runtime selection, FW 11.60 validation, and Sony GPU-submit capability remain
-pending.
+it, runtime firmware selection is fail-closed and exact-match, and a
+collision-safe installed-Sony export candidate is implemented. FW 11.60
+validation and Sony GPU-submit capability remain pending.
 
 Purpose:
 
@@ -946,18 +946,18 @@ Work:
 6. Keep deterministic userspace functionality in OpenAGC: PM4 builders,
    shader-record parsing/fusion, descriptors, primitive state, interpolant
    mapping, and other source-backed state builders.
-7. Add runtime firmware detection and capability-based backend selection.
-   Query the installed kernel/libkernel system software version (prefer
-   `sceKernelGetSystemSwVersion` when available through the payload SDK, with
-   a loader-provided or read-only system-version query as fallback), normalize
-   it into major/minor/raw fields, and select from an explicit backend
-   registry. Prefer installed Sony exports when their complete required
-   operation set resolves and initializes; otherwise select only an exact
-   validated direct-backend match such as FW 5.50 or FW 11.60. Never treat
-   every firmware newer than 5.50 as FW 5.50-compatible. Follow version
-   selection with non-destructive capability probes and return
-   `AGC_ERROR_UNSUPPORTED` if detection fails, no exact backend exists, or
-   the selected interface does not validate.
+7. ✅ Add runtime firmware detection and capability-based backend selection.
+   The Prospero build queries `sceKernelGetProsperoSystemSwVersion` before
+   backend initialization, validates its 0x30-byte result ABI, normalizes the
+   numeric value into major/minor/patch/raw fields, and selects from an
+   explicit raw-version alias registry. FW 5.50 (`0x05500000`) selects only
+   the hardware-validated direct backend; unregistered versions and detector
+   failures return `AGC_ERROR_NOT_SUPPORTED` without opening `/dev/gc` or
+   loading a Sony module. Registry entries declare required capabilities, and
+   host tests cover aliases, missing capabilities, nearby unknown versions,
+   and detector failure. The installed-Sony candidate is intentionally not
+   eligible for automatic selection until a non-destructive probe proves GPU
+   execution; direct fallback must never follow a mutating Sony probe.
 8. Recover FW 11.60 module exports, NIDs, initialization sequence, ioctl
    layouts, default-state formats, memory sizes, and permission behavior from
    local SPRX references. Do not copy or commit firmware modules.
