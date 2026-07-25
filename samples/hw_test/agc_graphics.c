@@ -600,8 +600,14 @@ static void setup_render_target(SceAgcCb *cb, void *rt_addr,
                                   (uint32_t)((uintptr_t)rt_addr >> 40) };
     sceAgcCbSetCxRegistersDirect(cb, &base_ext, 1);
 
-    printf("[RT] CB_COLOR0_BASE=0x%08x EXT=0x%08x PITCH=0x%08x SLICE=0x%08x INFO=0x%08x ATTRIB=0x%08x\n",
-           rt_regs[0], base_ext.value, rt_regs[1], rt_regs[2], rt_regs[4], rt_regs[5]);
+    /* CRITICAL: Set CB_COLOR_CONTROL (0x202 CX space) to enable target 0 write & ROP3 copy!
+     * Target write enable (bits 3:0) = 0xF (RT0 enabled).
+     * ROP3 (bits 23:16) = 0xCC (copy src to dst). */
+    AgcRegisterValue cb_color_ctrl = { AGC_REG_CB_COLOR_CONTROL, 0x00CC000Fu };
+    sceAgcCbSetCxRegistersDirect(cb, &cb_color_ctrl, 1);
+
+    printf("[RT] CB_COLOR0_BASE=0x%08x EXT=0x%08x PITCH=0x%08x SLICE=0x%08x INFO=0x%08x ATTRIB=0x%08x CTRL=0x%08x\n",
+           rt_regs[0], base_ext.value, rt_regs[1], rt_regs[2], rt_regs[4], rt_regs[5], cb_color_ctrl.value);
 }
 
 /* Set up viewport (scale + offset + zmin/zmax) */
@@ -757,19 +763,33 @@ static bool dispatch_graphics(GraphicsTest *test,
     sceAgcCbSetCxRegistersDirect(&cb, &pos_format, 1);
     AgcRegisterValue z_format = { AGC_REG_SPI_SHADER_Z_FORMAT, 0 };
     sceAgcCbSetCxRegistersDirect(&cb, &z_format, 1);
-    /* 6c. CRITICAL: Override PA_CL_CLIP_CNTL (0x203) and PA_SU_SC_MODE_CNTL (0x204)
-     * The shader record's CX block contained 0x203=0x10 (enabling UCP0 -> clips all primitives!)
-     * and 0x204=0x0F (enabling CULL_FRONT + CULL_BACK -> culls all triangles!).
-     * Explicitly set 0x203=0 (no UCPs) and 0x204=0 (no culling) to allow triangle rendering! */
-    AgcRegisterValue clip_cntl = { AGC_REG_PA_CL_CLIP_CNTL, 0x00000000 };
+    /* 6c. Fine-tune Primitive Assembler and Clipper registers:
+     * - PA_CL_VS_OUT_CNTL (0x207): Set VS_OUT_PARAM_COUNT=1 (0x00010000) so PA expects 1 param export (v_color).
+     *   The shader CX block had 0x01400300 (expecting 64 params!), causing PA to stall.
+     * - PA_CL_CLIP_CNTL (0x203): Set CLIP_DISABLE=1 (0x00010000, bit 16) and UCPs=0 to bypass clipping.
+     * - PA_SU_SC_MODE_CNTL (0x204): Set 0 (no front/back face culling).
+     * - SPI_VS_OUT_CONFIG (0x1B1): Set 0 (VS_EXPORT_COUNT=0 for 1 export param).
+     */
+    AgcRegisterValue vs_out_cntl = { AGC_REG_PA_CL_VS_OUT_CNTL, 0x00010000 };
+    sceAgcCbSetCxRegistersDirect(&cb, &vs_out_cntl, 1);
+    AgcRegisterValue clip_cntl = { AGC_REG_PA_CL_CLIP_CNTL, 0x00010000 };  /* CLIP_DISABLE = 1 */
     sceAgcCbSetCxRegistersDirect(&cb, &clip_cntl, 1);
     AgcRegisterValue sc_mode = { AGC_REG_PA_SU_SC_MODE_CNTL, 0x00000000 };
     sceAgcCbSetCxRegistersDirect(&cb, &sc_mode, 1);
-    printf("[PA] PA_CL_CLIP_CNTL=0 (UCPs disabled), PA_SU_SC_MODE_CNTL=0 (no culling)\n");
+    AgcRegisterValue vs_out_cfg = { AGC_REG_SPI_VS_OUT_CONFIG, 0x00000000 };
+    sceAgcCbSetCxRegistersDirect(&cb, &vs_out_cfg, 1);
+    AgcRegisterValue col_format = { AGC_REG_SPI_SHADER_COL_FORMAT, 0x4 };  /* 0x4 = hardware log colfmt */
+    sceAgcCbSetCxRegistersDirect(&cb, &col_format, 1);
+    AgcRegisterValue cb_shader_mask = { AGC_REG_CB_SHADER_MASK, 0x0F };
+    sceAgcCbSetCxRegistersDirect(&cb, &cb_shader_mask, 1);
+    AgcRegisterValue input_ctl = { 0x1B8, 0x00000001 };  /* SPI_PS_INPUT_CNTL_0 = 1 */
+    sceAgcCbSetCxRegistersDirect(&cb, &input_ctl, 1);
+    printf("[PA/SPI] VS_OUT_CNTL=0x00010000, CLIP_CNTL=0x00010000, SC_MODE=0, COL_FORMAT=4, INPUT_CNTL_0=1\n");
 
-    /* 7. Set primitive type (TRILIST) */
+    /* 7. Set primitive type (TRILIST) in both UCONFIG and CONTEXT spaces */
     AgcRegisterValue prim = { AGC_REG_VGT_PRIMITIVE_TYPE, VGT_PT_TRILIST };
     sceAgcCbSetUcRegistersDirect(&cb, &prim, 1);
+    sceAgcCbSetCxRegistersDirect(&cb, &prim, 1);
 
     /* 8. Draw — IT_DRAW_INDEX_AUTO with 3 vertices */
     sceAgcDcbDrawIndexAuto(&cb, 3, 0);
