@@ -386,6 +386,11 @@ Files:
 
 ## Current Roadmap
 
+The reusable FW 5.50 gfx1013 Wave32 VS+PS binder is host-tested and
+hardware-validated. It consumes the fused `kAgcShaderBinaryTypeGs` record
+(type 2), not the GsFront (4) or GsBack (6) half-records. NGG geometry is the
+next graphics milestone.
+
 FW 3.20 is the lowest active compatibility target. FW 1.00 and 2.x profiles
 are archival RE data only: preserve their known aliases and evidence, but do
 not recover missing legacy-only ABIs or advertise those versions as supported.

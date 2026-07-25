@@ -38,6 +38,7 @@ set(OPENAGC_SOURCES
     src/dcb.c
     src/texture.c
     src/shader.c
+    src/graphics.c
     src/game_compat.c
     src/driver_ops.c
     src/driver_registry.c
@@ -90,6 +91,7 @@ if(OPENAGC_BUILD_TESTS)
         tests/test_driver.c
         tests/test_texture.c
         tests/test_shader.c
+        tests/test_graphics.c
         tests/test_ioctl.c
         tests/test_register_defaults.c
         tests/test_registers.c

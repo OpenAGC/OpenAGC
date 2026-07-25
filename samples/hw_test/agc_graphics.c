@@ -28,6 +28,7 @@
 #include "agc_context.h"
 #include "agc_registers.h"
 #include "agc_shader.h"
+#include "agc_graphics.h"
 #include "agc_texture.h"
 #include "agc_cb.h"
 #include "agc_pm4.h"
@@ -667,74 +668,11 @@ static void apply_uc_defaults(SceAgcCb *cb) {
 /* Helper to identify PGM_LO and PGM_HI register offsets across all stages:
  * PS: 0x008, VS: 0x048, GS: 0x088, ES: 0x0C8, HS: 0x108, LS: 0x148, CS: 0x20C
  */
-static bool is_pgm_lo_off(uint32_t off) {
-    return off == 0x008 || off == 0x048 || off == 0x088 ||
-           off == 0x0C8 || off == 0x108 || off == 0x148 || off == 0x20C;
-}
-
-static bool is_pgm_hi_off(uint32_t off) {
-    return off == 0x009 || off == 0x049 || off == 0x089 ||
-           off == 0x0C9 || off == 0x109 || off == 0x149 || off == 0x20D;
-}
-
 /* Write shader SH registers (PGM_LO/HI patched with code address).
  * For VS shaders compiled by psbc, the SH registers are at ES stage offsets
  * (0x0C7-0x0CB). On RDNA2 without NGG, we remap these to VS stage offsets
  * (0x047-0x04B) so the shader runs as a real VS (vsEn=VsReal). */
-static void write_shader_sh_regs(SceAgcCb *cb,
-                                  const ParsedGraphicsShader *shader,
-                                  void *code_addr) {
-    uint32_t pgm_lo_val = (uint32_t)((uintptr_t)code_addr >> 8);
-    uint32_t pgm_hi_val = (uint32_t)((uintptr_t)code_addr >> 40);
-    uint32_t pgm_lo_off = 0;
-    uint32_t pgm_hi_off = 0;
-    bool found_lo = false;
-    bool found_hi = false;
-
-    for (uint32_t i = 0; i < shader->num_sh_regs; i++) {
-        uint32_t off = shader->sh_regs[i].offset;
-        if (!found_lo && is_pgm_lo_off(off)) {
-            pgm_lo_off = off;
-            found_lo = true;
-        }
-        if (!found_hi && is_pgm_hi_off(off)) {
-            pgm_hi_off = off;
-            found_hi = true;
-        }
-    }
-
-    if (!found_lo || !found_hi) {
-        printf("[Shader] missing program register pair for type %u\n",
-               shader->record->shader_type);
-        return;
-    }
-
-    printf("[Shader] PGM 0x%03x/0x%03x <- %p\n",
-           pgm_lo_off, pgm_hi_off, code_addr);
-    for (uint32_t i = 0; i < shader->num_sh_regs; i++) {
-        uint32_t off = shader->sh_regs[i].offset;
-        uint32_t value = shader->sh_regs[i].value;
-        if (off == pgm_lo_off) value = pgm_lo_val;
-        if (off == pgm_hi_off) value = pgm_hi_val;
-        AgcRegisterValue reg = {off, value};
-        sceAgcCbSetShRegistersDirect(cb, &reg, 1);
-    }
-}
-
 /* Write shader CX registers (from the shader record's CX block) */
-static void write_shader_cx_regs(SceAgcCb *cb,
-                                  const ParsedGraphicsShader *shader) {
-    if (shader->num_cx_regs == 0) return;
-
-    /* Write CX registers as a contiguous block if possible, or one by one */
-    /* The CX block may contain non-contiguous offsets, so write individually */
-    for (uint32_t i = 0; i < shader->num_cx_regs; i++) {
-        AgcRegisterValue reg = { shader->cx_regs[i].offset,
-                                  shader->cx_regs[i].value };
-        sceAgcCbSetCxRegistersDirect(cb, &reg, 1);
-    }
-}
-
 /* Set up render target (CB_COLOR0 registers, 14 contiguous dwords) */
 static void setup_render_target(SceAgcCb *cb, void *rt_addr,
                                  uint32_t width, uint32_t height,
@@ -916,50 +854,25 @@ static void setup_target_mask(SceAgcCb *cb) {
 /* Build the merged ES+GS/NGG primitive state from the fused shader record. */
 static bool setup_shader_stages(
     SceAgcCb *cb, const ParsedGraphicsShader *ngg,
-    const ParsedGraphicsShader *ps)
+    void *ngg_code, const ParsedGraphicsShader *ps, void *ps_code)
 {
-    AgcShaderRegister prim_cx[2] = {0};
-    AgcShaderRegister prim_uc[3] = {0};
-    AgcShaderRegister interpolants[32] = {0};
-
-    int32_t err = sceAgcCreatePrimState(
-        prim_cx, prim_uc, NULL, ngg->record, VGT_PT_TRILIST);
-    if (err != AGC_OK) {
-        printf("[VGT] CreatePrimState failed: 0x%08x\n", (unsigned)err);
-        return false;
-    }
-
-    for (uint32_t i = 0; i < 2; i++) {
-        AgcRegisterValue reg = {prim_cx[i].offset, prim_cx[i].value};
-        sceAgcCbSetCxRegistersDirect(cb, &reg, 1);
-    }
-    for (uint32_t i = 0; i < 3; i++) {
-        AgcRegisterValue reg = {prim_uc[i].offset, prim_uc[i].value};
-        sceAgcCbSetUcRegistersDirect(cb, &reg, 1);
-    }
-    /* Mesa's GFX10 NGG path programs all 1023 primitive-controller
-     * allocation lines when late allocation is disabled. */
-    AgcRegisterValue ge_pc_alloc = {0x260, 0x000007fe};
-    sceAgcCbSetUcRegistersDirect(cb, &ge_pc_alloc, 1);
-
-    err = sceAgcCreateInterpolantMapping(
-        interpolants, ngg->record, ps->record);
-    if (err != AGC_OK || ps->num_input_semantics > 32u) {
-        printf("[SPI] CreateInterpolantMapping failed: 0x%08x\n",
-               (unsigned)err);
-        return false;
-    }
-    for (uint32_t i = 0; i < ps->num_input_semantics; i++) {
-        AgcRegisterValue input = {
-            AGC_REG_SPI_PS_INPUT_CNTL_0 + i,
-            interpolants[i].value,
-        };
-        sceAgcCbSetCxRegistersDirect(cb, &input, 1);
-    }
-
-    printf("[VGT] compiler primitive state: stages=0x%08x ge_cntl=0x%08x\n",
-           prim_cx[0].value, prim_uc[0].value);
-    return true;
+    AgcGfx1013Wave32VsPsState state = {
+        .primitive = {
+            ngg->record, ngg->sh_regs, ngg->num_sh_regs,
+            ngg->cx_regs, ngg->num_cx_regs,
+            (uint64_t)(uintptr_t)ngg_code,
+        },
+        .pixel = {
+            ps->record, ps->sh_regs, ps->num_sh_regs,
+            ps->cx_regs, ps->num_cx_regs,
+            (uint64_t)(uintptr_t)ps_code,
+        },
+        .primitive_type = VGT_PT_TRILIST,
+    };
+    int32_t err = agcGfx1013BindWave32VsPs(cb, &state);
+    printf("[Wave32] reusable gfx1013 VS+PS bind: 0x%08x\n",
+           (unsigned)err);
+    return err == AGC_OK;
 }
 
 /* ======================================================================== */
@@ -1274,13 +1187,12 @@ static bool dispatch_graphics(GraphicsTest *test,
     sceAgcCbSetCxRegistersDirect(&cb, &instance_step, 1);
 
     /* 4. Derive NGG primitive and interpolant state from fused records. */
-    if (!setup_shader_stages(&cb, &ngg, ps)) return false;
+    if (!setup_shader_stages(&cb, &ngg, back_code, ps, ps_code))
+        return false;
 
     /* 5. Bind the fused state. On gfx1013 the executable NGG address is the
      * GS-front address fused into SPI_SHADER_PGM_LO_ES; the GS-back address
      * remains a state-container program address. */
-    write_shader_sh_regs(&cb, &ngg, back_code);
-    write_shader_cx_regs(&cb, &ngg);
     AgcRegisterValue vertex_table = {
         vertex_table_reg, (uint32_t)(uintptr_t)vertex_desc
     };
@@ -1302,8 +1214,6 @@ static bool dispatch_graphics(GraphicsTest *test,
     }
 
     /* 6. Write PS shader SH + CX registers */
-    write_shader_sh_regs(&cb, ps, ps_code);
-    write_shader_cx_regs(&cb, ps);
     const AgcRegisterValue texture_table = {
         texture_table_reg, (uint32_t)(uintptr_t)texture_desc
     };

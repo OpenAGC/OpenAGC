@@ -1,5 +1,21 @@
 # openagc Status
 
+## FW 5.50 reusable Wave32 VS+PS baseline
+
+Complete and hardware-validated on standard PS5 gfx1013, raw firmware
+`0x05500008`. `agcGfx1013ValidateWave32VsPs` and
+`agcGfx1013BindWave32VsPs` now provide a reusable path for fused NGG Gs(2)
+plus Wave32 PS records. The binder validates metadata and 256-byte program
+alignment, derives primitive and interpolant state, patches PGM_LO/HI, preflights
+the full command-buffer allocation, and emits SH/CX/UC state atomically.
+
+Validation evidence: generic tests pass; the Prospero library and
+`agc_graphics.elf` build cleanly; websrv hardware execution returned
+`AGC_OK`, passed the NGG/PS Wave32 PM4 audit, produced 255,744 valid FP16
+pixels with no out-of-range components, executed the post-draw
+`0xDEADCAFE` marker, and completed 1,800/1,800 display flips.
+
+
 ## Firmware compatibility
 
 The public AGC API is firmware-agnostic. Runtime native-driver selection now

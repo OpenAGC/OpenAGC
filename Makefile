@@ -27,6 +27,7 @@ SRCS = \
 	src/dcb.c \
 	src/texture.c \
 	src/shader.c \
+	src/graphics.c \
 	src/game_compat.c
 
 OBJS = $(SRCS:.c=.o)
@@ -40,6 +41,7 @@ TEST_SRCS = \
 	tests/test_driver.c \
 	tests/test_texture.c \
 	tests/test_shader.c \
+	tests/test_graphics.c \
 	tests/test_ioctl.c \
 	tests/test_register_defaults.c \
 	tests/test_registers.c \

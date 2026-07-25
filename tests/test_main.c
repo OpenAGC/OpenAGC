@@ -15,6 +15,7 @@ void test_suite_dcb(void);
 void test_suite_driver(void);
 void test_suite_texture(void);
 void test_suite_shader(void);
+void test_suite_graphics(void);
 void test_suite_ioctl(void);
 void test_suite_register_defaults(void);
 void test_suite_registers(void);
@@ -31,6 +32,7 @@ int main(void) {
     test_suite_driver();
     test_suite_texture();
     test_suite_shader();
+    test_suite_graphics();
     test_suite_ioctl();
     test_suite_register_defaults();
     test_suite_registers();

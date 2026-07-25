@@ -20,12 +20,11 @@ Work proceeds in this order. Later items must not displace an earlier item
 unless the earlier item is explicitly blocked on unavailable firmware or
 hardware.
 
-1. **Complete and harden the FW 5.50 graphics path on real gfx1013 hardware.**
-   Work in this order: convert the proven Wave32 VS+PS triangle state into
-   reusable builders and fixtures; validate NGG geometry with pass-through and
-   amplification tests; validate tessellation with fixed then dynamic factors;
-   validate the combined tessellation-plus-NGG-geometry path; and repeat the
-   ordered websrv regression after each milestone.
+1. **Bring up NGG geometry on FW 5.50 gfx1013 hardware.** The reusable
+   Wave32 VS+PS binder and its host/hardware regression are complete. Start
+   geometry with a pass-through shader, then validate primitive amplification,
+   ring sizing, exports, synchronization, and Wave32 resource state before
+   advancing to tessellation.
 2. **Finish FW 5.50 backend hardening and compatibility.** Keep exact
    four-digit firmware selection and fail-closed capabilities, investigate the
    non-blocking FRAME_OPEN EINVAL and PA-debug EPERM results, then expand the
@@ -1089,11 +1088,13 @@ audit remains the first cross-firmware task after FW 5.50 matures.
 
 ## Phase 9: Higher-Level AGC Features
 
-Status: Wave32 VS+PS is complete on FW 5.50 gfx1013 hardware. Advanced graphics
-work proceeds in this order: NGG geometry, tessellation, combined
-tessellation-plus-geometry, cache/synchronization hardening, VRS, and ray
-tracing. Each rendering stage must have host fixtures and a websrv hardware
-test before the next stage begins.
+Status: reusable Wave32 VS+PS is complete on FW 5.50 gfx1013 hardware.
+The library validates fused Gs(2)+PS records, patches program addresses, derives
+primitive/interpolant state, preflights command-buffer capacity, and emits the
+hardware-proven state. Advanced graphics proceeds in this order: NGG geometry,
+tessellation, combined tessellation-plus-geometry, cache/synchronization
+hardening, VRS, and ray tracing. Each rendering stage must have host fixtures
+and a websrv hardware test before the next stage begins.
 
 These are long-term goals and should not block draw-call work.
 

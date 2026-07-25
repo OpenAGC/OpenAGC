@@ -1,5 +1,15 @@
 # openagc
 
+## Reusable FW 5.50 Wave32 graphics
+
+Include `agc_graphics.h` to use the hardware-validated gfx1013 Wave32 VS+PS
+path. `agcGfx1013ValidateWave32VsPs` validates a fused NGG Gs(2) record and
+Wave32 pixel record; `agcGfx1013BindWave32VsPs` derives primitive/interpolant
+state, patches shader addresses, preflights command-buffer capacity, and emits
+the reusable SH/CX/UC binding sequence. The path is validated on standard PS5
+FW 5.50 through curl and etaHEN websrv.
+
+
 openagc is a clean-rewrite PS5 AGC (Advanced Graphics Controller) library
 for homebrew and emulator-port work. It follows the recovered `sceAgc*` /
 `sceAgcDriver*` naming and command-buffer split used by the PS5 firmware, while
