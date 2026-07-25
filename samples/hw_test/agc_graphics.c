@@ -473,7 +473,10 @@ static bool is_pgm_hi_off(uint32_t off) {
            off == 0x0C9 || off == 0x109 || off == 0x149 || off == 0x20D;
 }
 
-/* Write shader SH registers (PGM_LO/HI patched with code address) */
+/* Write shader SH registers (PGM_LO/HI patched with code address).
+ * For VS shaders compiled by psbc, the SH registers are at ES stage offsets
+ * (0x0C7-0x0CB). On RDNA2 without NGG, we remap these to VS stage offsets
+ * (0x047-0x04B) so the shader runs as a real VS (vsEn=VsReal). */
 static void write_shader_sh_regs(SceAgcCb *cb,
                                   const ParsedGraphicsShader *shader,
                                   void *code_addr) {
@@ -503,7 +506,9 @@ static void write_shader_sh_regs(SceAgcCb *cb,
         printf("[Shader] WARNING: PGM_LO not found in shader SH registers!\n");
     }
 
-    /* Write all SH registers, patching PGM_LO/HI values */
+    /* Write all SH registers, patching PGM_LO/HI values.
+     * On RDNA2, VS shaders compiled by psbc use ES stage offsets (0x0C8-0x0CB)
+     * which is correct — the ES stage feeds NGG passthrough. */
     for (uint32_t i = 0; i < shader->num_sh_regs; i++) {
         uint32_t off = shader->sh_regs[i].offset;
         uint32_t val = shader->sh_regs[i].value;
@@ -600,14 +605,25 @@ static void setup_render_target(SceAgcCb *cb, void *rt_addr,
                                   (uint32_t)((uintptr_t)rt_addr >> 40) };
     sceAgcCbSetCxRegistersDirect(cb, &base_ext, 1);
 
+    /* CRITICAL: Set CB_COLOR0_ATTRIB2 (0x3B0) for MIP0 dimensions!
+     * ATTRIB2 packs MIP0_HEIGHT (bits [13:0]) and MIP0_WIDTH (bits [27:14]).
+     * Without MIP0 dimensions, CB clips all writes to 0x0! */
+    uint32_t attrib2_val = ((height - 1) & 0x3FFF) |
+                           (((width - 1) & 0x3FFF) << 14);
+    AgcRegisterValue attrib2 = { AGC_REG_CB_COLOR0_ATTRIB2, attrib2_val };
+    sceAgcCbSetCxRegistersDirect(cb, &attrib2, 1);
+    /* ATTRIB3 (0x3B8): MIP0_DEPTH (bits [12:0]) = 0 (1 slice) */
+    AgcRegisterValue attrib3 = { AGC_REG_CB_COLOR0_ATTRIB3, 0 };
+    sceAgcCbSetCxRegistersDirect(cb, &attrib3, 1);
+
     /* CRITICAL: Set CB_COLOR_CONTROL (0x202 CX space) to enable target 0 write & ROP3 copy!
      * Target write enable (bits 3:0) = 0xF (RT0 enabled).
      * ROP3 (bits 23:16) = 0xCC (copy src to dst). */
     AgcRegisterValue cb_color_ctrl = { AGC_REG_CB_COLOR_CONTROL, 0x00CC000Fu };
     sceAgcCbSetCxRegistersDirect(cb, &cb_color_ctrl, 1);
 
-    printf("[RT] CB_COLOR0_BASE=0x%08x EXT=0x%08x PITCH=0x%08x SLICE=0x%08x INFO=0x%08x ATTRIB=0x%08x CTRL=0x%08x\n",
-           rt_regs[0], base_ext.value, rt_regs[1], rt_regs[2], rt_regs[4], rt_regs[5], cb_color_ctrl.value);
+    printf("[RT] CB_COLOR0_BASE=0x%08x EXT=0x%08x PITCH=0x%08x SLICE=0x%08x INFO=0x%08x ATTRIB=0x%08x CTRL=0x%08x ATTRIB2=0x%08x\n",
+           rt_regs[0], base_ext.value, rt_regs[1], rt_regs[2], rt_regs[4], rt_regs[5], cb_color_ctrl.value, attrib2_val);
 }
 
 /* Set up viewport (scale + offset + zmin/zmax) */
@@ -674,13 +690,41 @@ static void setup_target_mask(SceAgcCb *cb) {
 }
 
 /* Set VGT_PRIMITIVE_TYPE (UC register) */
-/* Set VGT_SHADER_STAGES_EN (CX 0x2D5) — enable ES stage (bit 8 = 0x100).
- * openagc-psbc compiles vertex shaders to run in the ES stage (SPI_SHADER_PGM_LO_ES at 0x0C8).
- * Setting ES_EN (0x100) routes vertex processing through the ES stage. */
+/* VGT_SHADER_STAGES_EN (CX 0x2D5) — RDNA2 geometry pipeline configuration.
+ *
+ * VGT_SHADER_STAGES_EN bit layout (from rpcsx Registers.hpp):
+ *   bits [1:0] = lsEn  (LsStage: 0=Off, 1=On, 2=CsOn)
+ *   bit  [2]   = hsEn
+ *   bits [4:3] = esEn  (EsStage: 0=Off, 1=Ds, 2=Real)
+ *   bit  [5]   = gsEn
+ *   bits [7:6] = vsEn  (VsStage: 0=Real, 1=Ds, 2=Copy)
+ *   bit  [8]   = dynamicHs
+ *
+ * For a simple VS+PS pipeline (no tessellation/geometry):
+ *   vsEn = VsReal (0), esEn = EsOff (0), gsEn = 0, hsEn = 0, lsEn = 0
+ *   → VGT_SHADER_STAGES_EN = 0
+ *
+ * NOTE: The previous code set bit 8 (0x100) thinking it was ES_EN, but bit 8
+ * is actually dynamicHs. The real ES enable is at bits [4:3] = EsReal (2) = 0x10.
+ * On RDNA2, the ES stage output must go through NGG, which requires a proper
+ * NGG passthrough shader. Without NGG, use vsEn=VsReal with the shader at
+ * VS PGM (0x048) instead.
+ */
 static void setup_shader_stages(SceAgcCb *cb) {
-    AgcRegisterValue stages = { AGC_REG_VGT_SHADER_STAGES_EN, VGT_SHADER_STAGES_ES_EN };
+    /* On RDNA2 (GFX10.3), the geometry pipeline is NGG-only. The vertex
+     * shader runs as the ES (export shader) stage, feeding NGG passthrough.
+     * VGT_SHADER_STAGES_EN bit layout (from rpcsx Registers.hpp):
+     *   bits [1:0] = lsEn  (0=Off)
+     *   bit  [2]   = hsEn  (false)
+     *   bits [4:3] = esEn  (2=EsReal) ← this is what we need
+     *   bit  [5]   = gsEn  (false, NGG passthrough)
+     *   bits [7:6] = vsEn  (0=VsReal, unused when esEn=EsReal)
+     *   bit  [8]   = dynamicHs (false)
+     * esEn=EsReal (2) = bits [4:3] = 10 = 0x10.
+     * DO NOT set bit 8 (dynamicHs) or bit 15 — these caused a kernel panic. */
+    AgcRegisterValue stages = { AGC_REG_VGT_SHADER_STAGES_EN, 0x00000010u };
     sceAgcCbSetCxRegistersDirect(cb, &stages, 1);
-    printf("[VGT] VGT_SHADER_STAGES_EN = 0x%08X (ES stage enabled)\n", VGT_SHADER_STAGES_ES_EN);
+    printf("[VGT] VGT_SHADER_STAGES_EN = 0x10 (EsReal, NGG passthrough)\n");
 }
 
 /* ======================================================================== */
@@ -731,11 +775,10 @@ static bool dispatch_graphics(GraphicsTest *test,
     /* 2. Set up render target */
     setup_render_target(&cb, rt_addr, test->width, test->height);
 
-    /* 2b. Explicitly disable depth buffer (DB_Z_INFO = 0) */
-    AgcRegisterValue db_z_info = { AGC_REG_DB_Z_INFO, 0 };
-    sceAgcCbSetCxRegistersDirect(&cb, &db_z_info, 1);
-    AgcRegisterValue db_stencil_info = { 0x011, 0 };
-    sceAgcCbSetCxRegistersDirect(&cb, &db_stencil_info, 1);
+    /* 2b. Disable depth buffer — will be re-applied AFTER shader CX regs
+     * because the PS CX block writes 0x00F (DB_DEPTH_INFO) and 0x203
+     * (DB_SHADER_CONTROL) which re-enable depth testing and Z export. */
+    /* (moved to after PS CX registers below) */
 
     /* 3. Set up viewport, scissor, target mask */
     setup_viewport(&cb, test->width, test->height);
@@ -753,43 +796,77 @@ static bool dispatch_graphics(GraphicsTest *test,
     write_shader_sh_regs(&cb, ps, ps_code);
     write_shader_cx_regs(&cb, ps);
 
-    /* 6b. Set SPI_SHADER_COL_FORMAT and SPI_SHADER_POS_FORMAT — NOT in
+    /* 6b. CRITICAL: Override depth/stencil registers AFTER shader CX blocks!
+     * The PS CX block writes:
+     *   0x00F (DB_DEPTH_INFO) = 0x0F — enables depth testing
+     *   0x203 (DB_SHADER_CONTROL) = 0x10 — enables Z_EXPORT in PS
+     * These re-enable depth even though we set DB_Z_INFO=0 earlier.
+     * With no depth buffer bound, depth testing discards ALL fragments.
+     * Must override AFTER the PS CX block to take effect. */
+    AgcRegisterValue db_depth_info = { 0x00F, 0x00000000 };  /* DB_DEPTH_INFO = 0 */
+    sceAgcCbSetCxRegistersDirect(&cb, &db_depth_info, 1);
+    AgcRegisterValue db_z_info = { AGC_REG_DB_Z_INFO, 0 };     /* DB_Z_INFO = 0 */
+    sceAgcCbSetCxRegistersDirect(&cb, &db_z_info, 1);
+    AgcRegisterValue db_stencil_info = { 0x011, 0 };           /* DB_STENCIL_INFO = 0 */
+    sceAgcCbSetCxRegistersDirect(&cb, &db_stencil_info, 1);
+    AgcRegisterValue db_shader_ctrl = { AGC_REG_DB_SHADER_CONTROL, 0x00000000 };
+    sceAgcCbSetCxRegistersDirect(&cb, &db_shader_ctrl, 1);     /* DB_SHADER_CONTROL = 0 (no Z_EXPORT) */
+    AgcRegisterValue db_depth_ctrl = { AGC_REG_DB_DEPTH_CONTROL, 0x00000000 };
+    sceAgcCbSetCxRegistersDirect(&cb, &db_depth_ctrl, 1);      /* DB_DEPTH_CONTROL = 0 (no Z test) */
+    printf("[DB] DB_DEPTH_INFO=0, DB_Z_INFO=0, DB_STENCIL_INFO=0, DB_SHADER_CONTROL=0, DB_DEPTH_CONTROL=0\n");
+
+    /* 6c. Set SPI_SHADER_COL_FORMAT and SPI_SHADER_POS_FORMAT — NOT in
      * shader record or defaults! Without these, the PS doesn't export color
      * and the PA can't process vertex positions.
      * SPI_SHADER_POS_FORMAT (0x1C3): 1 = 4_32_32_32_32 (vec4 position)
      * SPI_SHADER_Z_FORMAT (0x1C4): 0 = no Z export
-     * SPI_SHADER_COL_FORMAT (0x1C5): 1 = 8_8_8_8 (RGBA8 color) */
+     * SPI_SHADER_COL_FORMAT (0x1C5): 4 = hardware-capture matched value */
     AgcRegisterValue pos_format = { AGC_REG_SPI_SHADER_POS_FORMAT, 0x1 };
     sceAgcCbSetCxRegistersDirect(&cb, &pos_format, 1);
     AgcRegisterValue z_format = { AGC_REG_SPI_SHADER_Z_FORMAT, 0 };
     sceAgcCbSetCxRegistersDirect(&cb, &z_format, 1);
-    /* 6c. Fine-tune Primitive Assembler and Clipper registers:
+    /* Fine-tune Primitive Assembler and Clipper registers:
      * - PA_CL_VS_OUT_CNTL (0x207): Set VS_OUT_PARAM_COUNT=1 (0x00010000) so PA expects 1 param export (v_color).
      *   The shader CX block had 0x01400300 (expecting 64 params!), causing PA to stall.
-     * - PA_CL_CLIP_CNTL (0x203): Set CLIP_DISABLE=1 (0x00010000, bit 16) and UCPs=0 to bypass clipping.
-     * - PA_SU_SC_MODE_CNTL (0x204): Set 0 (no front/back face culling).
+     * - PA_CL_CLIP_CNTL (0x204): Set CLIP_DISABLE=1 (0x00010000, bit 16) and UCPs=0 to bypass clipping.
+     * - PA_SU_SC_MODE_CNTL (0x205): Set 0 (no front/back face culling).
      * - SPI_VS_OUT_CONFIG (0x1B1): Set 0 (VS_EXPORT_COUNT=0 for 1 export param).
      */
-    AgcRegisterValue vs_out_cntl = { AGC_REG_PA_CL_VS_OUT_CNTL, 0x00010000 };
+    AgcRegisterValue vs_out_cntl = { AGC_REG_PA_CL_VS_OUT_CNTL, 0x00000000 };  /* No clip/cull/point_size — prevent cull distance from killing primitives */
     sceAgcCbSetCxRegistersDirect(&cb, &vs_out_cntl, 1);
-    AgcRegisterValue clip_cntl = { AGC_REG_PA_CL_CLIP_CNTL, 0x00010000 };  /* CLIP_DISABLE = 1 */
+    AgcRegisterValue clip_cntl = { AGC_REG_PA_CL_CLIP_CNTL, 0x00000000 };  /* Clipping enabled (default) — CLIP_DISABLE may break NGG rasterization */
     sceAgcCbSetCxRegistersDirect(&cb, &clip_cntl, 1);
     AgcRegisterValue sc_mode = { AGC_REG_PA_SU_SC_MODE_CNTL, 0x00000000 };
     sceAgcCbSetCxRegistersDirect(&cb, &sc_mode, 1);
     AgcRegisterValue vs_out_cfg = { AGC_REG_SPI_VS_OUT_CONFIG, 0x00000000 };
     sceAgcCbSetCxRegistersDirect(&cb, &vs_out_cfg, 1);
-    AgcRegisterValue col_format = { AGC_REG_SPI_SHADER_COL_FORMAT, 0x4 };  /* 0x4 = hardware log colfmt */
+    AgcRegisterValue col_format = { AGC_REG_SPI_SHADER_COL_FORMAT, 0x1 };  /* 1 = 8_8_8_8, matches CB_COLOR0_INFO format */
     sceAgcCbSetCxRegistersDirect(&cb, &col_format, 1);
     AgcRegisterValue cb_shader_mask = { AGC_REG_CB_SHADER_MASK, 0x0F };
     sceAgcCbSetCxRegistersDirect(&cb, &cb_shader_mask, 1);
-    AgcRegisterValue input_ctl = { 0x1B8, 0x00000001 };  /* SPI_PS_INPUT_CNTL_0 = 1 */
+    AgcRegisterValue input_ctl = { AGC_REG_SPI_PS_INPUT_CNTL_0, 0x00000000 };  /* OFFSET=0: PS input 0 reads from VS param export 0 (v_color) */
     sceAgcCbSetCxRegistersDirect(&cb, &input_ctl, 1);
-    printf("[PA/SPI] VS_OUT_CNTL=0x00010000, CLIP_CNTL=0x00010000, SC_MODE=0, COL_FORMAT=4, INPUT_CNTL_0=1\n");
+    printf("[PA/SPI] VS_OUT_CNTL=0, CLIP_CNTL=0, SC_MODE=0, COL_FORMAT=1 (8_8_8_8), PS_INPUT_CNTL_0=0x00000000 (OFFSET=0)\n");
 
     /* 7. Set primitive type (TRILIST) in both UCONFIG and CONTEXT spaces */
     AgcRegisterValue prim = { AGC_REG_VGT_PRIMITIVE_TYPE, VGT_PT_TRILIST };
     sceAgcCbSetUcRegistersDirect(&cb, &prim, 1);
     sceAgcCbSetCxRegistersDirect(&cb, &prim, 1);
+
+    /* 7b. Set VGT_GS_OUT_PRIM_TYPE = TRILIST (4) to match input prim type.
+     * In NGG passthrough mode, the output prim type must match the input.
+     * Default is 2 (triangle strip) which is wrong for triangle list. */
+    AgcRegisterValue gs_out_prim = { AGC_REG_VGT_GS_OUT_PRIM_TYPE, VGT_PT_TRILIST };
+    sceAgcCbSetCxRegistersDirect(&cb, &gs_out_prim, 1);
+
+    /* 7c. Set GE_CNTL — controls geometry engine batching for NGG.
+     * PRIM_GRP_SIZE (bits [8:0]) = 256: primitives per group
+     * VERT_GRP_SIZE (bits [17:9]) = 256: vertices per group
+     * Without this, the geometry engine may not batch any primitives. */
+    uint32_t ge_cntl_val = (256u & 0x1FF) | ((256u & 0x1FF) << 9);
+    AgcRegisterValue ge_cntl = { AGC_REG_GE_CNTL, ge_cntl_val };
+    sceAgcCbSetUcRegistersDirect(&cb, &ge_cntl, 1);
+    printf("[GE] VGT_GS_OUT_PRIM_TYPE=4 (TRILIST), GE_CNTL=0x%08X (PRIM_GRP=256, VERT_GRP=256)\n", ge_cntl_val);
 
     /* 8. Draw — IT_DRAW_INDEX_AUTO with 3 vertices */
     sceAgcDcbDrawIndexAuto(&cb, 3, 0);

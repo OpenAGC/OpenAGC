@@ -532,19 +532,78 @@ graphics draw call. The GPU no longer hangs, but pixels are still black.
 #### Remaining issue: pixels still black
 
 Despite all the above fixes, the GPU executes the draw (confirmed by the
-WRITE_DATA marker) but the render target remains black. Suspected causes:
-- The VS may not be exporting position correctly (SPI_SHADER_POS_FORMAT
-  may need a different value, or the VS output semantics may not match).
-- The PA_CL_VS_OUT_CNTL / PA_CL_CLIP_CNTL may need explicit configuration
-  for the viewport transform.
-- The PS may not be receiving the color export correctly (the
-  SPI_SHADER_COL_FORMAT value 1 = 8_8_8_8 may not match the export
-  instruction in the compiled PS).
-- The CB_COLOR0_INFO swap/number-type bits may not match the display
-  buffer format exactly.
-- The render target in garlic memory (display buffer) may need to be in
-  flexible memory instead, despite the compute sample writing to garlic
-  successfully.
+WRITE_DATA marker) but the render target remains black. The diagnostic
+WRITE_DATA directly to the RT address successfully wrote magenta pixels,
+confirming the render target memory mapping is correct — the issue is in
+the CB/PS/VS pipeline, not the RT address.
+
+Additional fixes applied since the last update (still black output):
+
+8. **PS CX block re-enables depth after explicit disable.** The PS
+   shader's CX register block writes `DB_DEPTH_INFO` (0x00F) = 0x0F and
+   `DB_SHADER_CONTROL` (0x203) = 0x10 *after* the code disabled depth.
+   With no depth buffer bound, depth testing discards all fragments.
+   **Fix:** override `DB_DEPTH_INFO`, `DB_Z_INFO`, `DB_STENCIL_INFO`,
+   `DB_SHADER_CONTROL`, and `DB_DEPTH_CONTROL` to 0 *after* the PS CX
+   block is written.
+
+9. **`SPI_PS_INPUT_CNTL_0` register offset was wrong.** The code wrote
+   to `0x1B8` (`AGC_REG_SPI_BARYC_CNTL`) instead of the correct
+   `0x191` (`AGC_REG_SPI_PS_INPUT_CNTL_0`). This prevented the PS from
+   fetching its input. **Fix:** use `AGC_REG_SPI_PS_INPUT_CNTL_0` with
+   `OFFSET=0` so PS input 0 reads from VS param export 0 (v_color).
+
+10. **`VGT_SHADER_STAGES_EN` bit layout corrected.** The previous code
+    set bit 8 (0x100) thinking it was `ES_EN`, but bit 8 is actually
+    `dynamicHs` on RDNA2. The real `esEn` field is at bits [4:3]
+    (EsReal=2 → 0x10), and `vsEn` is at bits [7:6] (VsReal=0). For a
+    VS+PS pipeline with the VS shader at ES PGM (0x0C8, as psbc outputs),
+    set `VGT_SHADER_STAGES_EN = 0x10` (EsReal). This does not kernel panic.
+
+11. **`SPI_SHADER_COL_FORMAT` must match `CB_COLOR0_INFO` format.**
+    Setting COL_FORMAT=4 (16_16_16_16) while CB_COLOR0_INFO is
+    COLOR_8_8_8_8 (format 1) is a mismatch that can prevent CB writes.
+    **Fix:** set `SPI_SHADER_COL_FORMAT = 1` (8_8_8_8) to match.
+
+12. **`CB_COLOR0_ATTRIB2` (0x3B0) was missing.** This register packs
+    `MIP0_HEIGHT` (bits [13:0]) and `MIP0_WIDTH` (bits [27:14]). Without
+    it, the CB clips all writes to 0x0. **Fix:** set
+    `CB_COLOR0_ATTRIB2 = ((height-1) & 0x3FFF) | (((width-1) & 0x3FFF) << 14)`
+    and `CB_COLOR0_ATTRIB3 = 0`.
+
+13. **`VGT_GS_OUT_PRIM_TYPE` and `GE_CNTL` added for NGG.** In NGG
+    passthrough mode, the output prim type must match the input. Default
+    is 2 (triangle strip); set to 4 (TRILIST) to match. `GE_CNTL`
+    controls geometry engine batching (PRIM_GRP_SIZE / VERT_GRP_SIZE);
+    set both to 256.
+
+14. **`PA_CL_VS_OUT_CNTL` and `PA_CL_CLIP_CNTL` set to 0.** The previous
+    `VS_OUT_CNTL=0x00010000` (USE_VTX_POINT_SIZE) and
+    `CLIP_CNTL=0x00010000` (CLIP_DISABLE) may have been interfering with
+    NGG rasterization. Set both to 0 (defaults).
+
+#### Current suspected root cause: RDNA2 NGG-only geometry pipeline
+
+On RDNA2 (GFX10.3, PS5 GPU), the legacy VS→PA path is not available —
+all vertex processing must go through the NGG (Next-Generation Geometry)
+pipeline. The `psbc` compiler outputs vertex shaders with SH registers at
+ES stage offsets (0x0C8-0x0CB), confirming the VS runs as the ES/NGG
+export shader. Setting `esEn=EsReal` (0x10) does not kernel panic, but
+the triangle still does not render because:
+
+- A proper NGG passthrough configuration may require additional registers
+  (e.g. `GE_NGG_SUBGRP_CNTL`, `VGT_GS_ONCHIP_CNTL`, `VGT_REUSE_OFF`).
+- The ES→NGG export shader may need specific RSRC2 USER_SGPR fields or
+  GE_USER_VGPR_EN settings that we are not setting.
+- The shader "specials" block (used by `sceAgcCreatePrimState` in
+  sharpemu) contains `VGT_SHADER_STAGES_EN`, `VGT_GS_OUT_PRIM_TYPE`,
+  `GE_CNTL`, and `GE_USER_VGPR_EN` values — our shader has
+  `specials_off = 0` (no specials), so these are not being set from the
+  shader record.
+
+Next steps: investigate the NGG passthrough register set from sharpemu
+and rpcsx, and determine whether a minimal NGG configuration can be
+constructed without a full GS/NGG shader.
 
 #### Experimental approaches that caused a kernel panic (DO NOT RETRY)
 
@@ -678,6 +737,9 @@ verified from SPRX/kernel disassembly.
 - No firmware blobs or proprietary microcode are embedded.
 - No claim of official SDK drop-in completeness.
 - Graphics draw calls are in progress: the DCB is accepted, the GPU
-  executes past the draw (WRITE_DATA marker confirmed), but the render
-  target remains black. See PLAN.md Phase 7 and the "Key findings" section
-  above for the issues discovered and fixed so far.
+  executes past the draw (WRITE_DATA marker confirmed), and the render
+  target address is verified correct (direct WRITE_DATA writes pixels),
+  but the rendered triangle does not appear. The suspected root cause is
+  the RDNA2 NGG-only geometry pipeline requiring additional register
+  configuration. See the "Key findings" section above for the full list
+  of issues discovered and fixed so far.
