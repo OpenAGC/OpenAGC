@@ -624,6 +624,31 @@ Acceptance criteria:
 - Vertex and pixel shaders execute correctly (correct position + color).
 - Render target is written correctly by the GPU.
 
+### Experimental approaches that caused a kernel panic (DO NOT RETRY)
+
+These were attempted and caused a PS5 kernel panic (system freeze +
+reboot). Do not re-apply these changes without careful analysis:
+
+1. **Mixing compute dispatch into a graphics DCB.** Inserting a
+   `DISPATCH_DIRECT` (compute) packet into the same DCB as a graphics
+   `IT_DRAW_INDEX_AUTO` draw call, before the graphics state setup,
+   caused a kernel panic. The CP may not support switching between
+   compute and graphics modes within a single DCB submission. Keep
+   compute and graphics in separate DCB submissions.
+
+2. **Enabling RDNA2 NGG (Next-Gen Geometry) mode.** Setting
+   `GE_NGG_SUBGRP_CNTL (0x2D3) = 1` and `VGT_SHADER_STAGES_EN (0x2D5) =
+   0x8110` (NGG_EN bit + ES_STAGE_REAL) caused a kernel panic. The NGG
+   mode requires a valid GS (geometry shader) or NGG passthrough shader
+   to be bound; without one, the geometry pipeline crashes the GPU. Do
+   not enable NGG mode without a proper NGG-compatible shader setup.
+
+3. **Dual-binding ES and VS SH registers.** Copying VS shader registers
+   to both the VS (0x048-0x04B) and ES (0x0C8-0x0CB) stage register
+   spaces simultaneously caused instability. The PS5 GPU expects a
+   single active vertex-processing stage; dual-binding confuses the
+   shader scheduler.
+
 ## Phase 8: Higher-Level AGC Features
 
 Status: mostly speculative until more evidence is recovered.

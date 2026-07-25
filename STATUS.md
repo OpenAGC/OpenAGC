@@ -546,6 +546,20 @@ WRITE_DATA marker) but the render target remains black. Suspected causes:
   flexible memory instead, despite the compute sample writing to garlic
   successfully.
 
+#### Experimental approaches that caused a kernel panic (DO NOT RETRY)
+
+1. **Mixing compute dispatch into a graphics DCB** — inserting
+   `DISPATCH_DIRECT` (compute) into the same DCB as
+   `IT_DRAW_INDEX_AUTO` caused a kernel panic. Keep compute and graphics
+   in separate DCB submissions.
+2. **Enabling RDNA2 NGG mode** — setting `GE_NGG_SUBGRP_CNTL=1` and
+   `VGT_SHADER_STAGES_EN=0x8110` without a bound GS/NGG passthrough
+   shader crashed the GPU. Do not enable NGG without proper NGG shader
+   setup.
+3. **Dual-binding ES and VS SH registers** — copying VS registers to
+   both VS (0x048-0x04B) and ES (0x0C8-0x0CB) stages simultaneously
+   caused instability. Use a single active vertex-processing stage.
+
 
 ### Priority 3: PA debug ioctl (kernel RE)
 
