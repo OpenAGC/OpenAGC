@@ -96,13 +96,13 @@ Completed and tested:
   default-state `CLEAR_STATE` submission, and suspend-point submit/query
 - Hardware validation samples (`samples/hw_test/`) built as ELF and fake-SELF
 - Build system (CMake + Makefile)
-- Test suite with 581 passing assertions on the host generic backend
+- Test suite with 2110 passing assertions on the host generic backend
 
-Still open before hardware submission:
-- Register-block and Wave32/Wave64 shader parsing (pending observed evidence)
-- Actual `/dev/gc` ioctl submission validation on PS5 hardware
-- Queue setup and native GPU command submission validation
-- Validate default-state blob and suspend-point ioctl behavior on PS5 hardware
+Hardware-validated on real PS5 gfx1013 hardware running FW 5.50:
+- Native `/dev/gc` initialization, queue setup, default states, and submission
+- Compute dispatch and no-GS NGG indexed graphics with GPU readback
+- Wave32 NGG and pixel execution, including compiler-record and final-PM4 checks
+- Linear RGBA8 and `R16G16B16A16_FLOAT` render targets
 
 ### Firmware Reference
 

@@ -88,6 +88,7 @@ shaders_ngg: shaders/triangle_vert.spv
 	$(PSBC) -f $< -s vertex \
 	    -o shaders/triangle_ngg_back.sb \
 	    --ngg-front shaders/triangle_ngg_front.sb \
+	    --wave32 \
 	    --vertex-attribute 0:0:0:20:r32g32_float \
 	    --vertex-attribute 1:0:8:20:r32g32b32_float
 	xxd -i -n triangle_ngg_front_data \

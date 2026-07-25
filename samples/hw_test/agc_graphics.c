@@ -71,10 +71,10 @@ typedef struct { char _opaque[64]; } SceKernelEvent;
 int sceKernelUsleep(unsigned int microseconds);
 int sceKernelAllocateDirectMemory(
     off_t searchStart, off_t searchEnd, size_t len, size_t alignment,
-    int memoryType, int32_t *directMemoryStart);
+    int memoryType, off_t *directMemoryStart);
 int sceKernelMapDirectMemory(
     void **virtualAddress, size_t length, int protection, int flags,
-    int32_t directMemoryStart, size_t alignment);
+    off_t directMemoryStart, size_t alignment);
 int sceKernelMapNamedSystemFlexibleMemory(
     void **virtualAddress, size_t length, int protection, int flags,
     const char *name);
@@ -147,6 +147,10 @@ int sceKernelWaitEqueue(SceKernelEqueue equeue, SceKernelEvent *events,
 #define AGC_SHADER_TYPE_VS     3
 #define AGC_SHADER_TYPE_PS     1
 
+/* GFX10.3 register bits from Linux gc_10_3_0_sh_mask.h. */
+#define GFX10_SPI_PS_IN_CONTROL_PS_W32_EN       0x00008000u
+#define GFX10_VGT_SHADER_STAGES_EN_GS_W32_EN    0x00400000u
+
 /* ======================================================================== */
 /* Types                                                                     */
 /* ======================================================================== */
@@ -161,7 +165,7 @@ _Static_assert(sizeof(GraphicsVertex) == 20,
 
 typedef struct {
     int32_t handle;
-    int32_t direct_memory;
+    off_t direct_memory;
     void *mapped;
     size_t mapped_size;
     uint8_t *buffers[BUFFER_COUNT];
@@ -513,6 +517,40 @@ static bool parse_graphics_shader(ParsedGraphicsShader *out,
            out->num_output_semantics, out->code_size,
            out->specials ? "yes" : "no");
     return true;
+}
+
+static bool shader_cx_register(const ParsedGraphicsShader *shader,
+                               uint32_t offset, uint32_t *value)
+{
+    for (uint32_t i = 0; i < shader->num_cx_regs; i++) {
+        if (shader->cx_regs[i].offset == offset) {
+            *value = shader->cx_regs[i].value;
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool validate_wave32_records(const ParsedGraphicsShader *ngg,
+                                    const ParsedGraphicsShader *ps)
+{
+    uint32_t stages = ngg->specials
+        ? ngg->specials->vgt_shader_stages_en.value
+        : 0;
+    uint32_t ps_control = 0;
+    const bool ngg_wave32 =
+        ngg->specials &&
+        ngg->specials->vgt_shader_stages_en.register_offset ==
+            AGC_REG_VGT_SHADER_STAGES_EN &&
+        (stages & GFX10_VGT_SHADER_STAGES_EN_GS_W32_EN) != 0;
+    const bool ps_wave32 =
+        shader_cx_register(ps, AGC_REG_SPI_PS_IN_CONTROL, &ps_control) &&
+        (ps_control & GFX10_SPI_PS_IN_CONTROL_PS_W32_EN) != 0;
+
+    printf("[Wave32] records: NGG stages=0x%08x PS control=0x%08x: %s\n",
+           stages, ps_control,
+           ngg_wave32 && ps_wave32 ? "PASS" : "FAIL");
+    return ngg_wave32 && ps_wave32;
 }
 
 /* Upload shader code to flexible memory. Returns GPU address. */
@@ -921,7 +959,7 @@ static bool setup_shader_stages(
 /* Main draw call dispatch                                                   */
 /* ======================================================================== */
 
-static void dump_launch_registers(const uint32_t *dcb, uint32_t dword_count)
+static bool dump_launch_registers(const uint32_t *dcb, uint32_t dword_count)
 {
     uint32_t sh[0x400] = {0};
     uint32_t cx[0x400] = {0};
@@ -969,6 +1007,16 @@ static void dump_launch_registers(const uint32_t *dcb, uint32_t dword_count)
            uc[AGC_REG_GE_MIN_VTX_INDX],
            uc[AGC_REG_GE_MAX_VTX_INDX],
            uc[AGC_REG_GE_CNTL], uc[0x260]);
+    const bool ngg_wave32 =
+        (cx[AGC_REG_VGT_SHADER_STAGES_EN] &
+         GFX10_VGT_SHADER_STAGES_EN_GS_W32_EN) != 0;
+    const bool ps_wave32 =
+        (cx[AGC_REG_SPI_PS_IN_CONTROL] &
+         GFX10_SPI_PS_IN_CONTROL_PS_W32_EN) != 0;
+    printf("[PM4 Audit] Wave32: NGG=%s PS=%s: %s\n",
+           ngg_wave32 ? "yes" : "no", ps_wave32 ? "yes" : "no",
+           ngg_wave32 && ps_wave32 ? "PASS" : "FAIL");
+    return ngg_wave32 && ps_wave32;
 }
 
 static bool dispatch_graphics(GraphicsTest *test,
@@ -1329,7 +1377,8 @@ static bool dispatch_graphics(GraphicsTest *test,
     submit.dword_count = agcCbUsedDwords(&cb);
     submit.reserved = 0;
 
-    dump_launch_registers(dispatch_cb, submit.dword_count);
+    if (!dump_launch_registers(dispatch_cb, submit.dword_count))
+        return false;
 
     printf("[Draw] DCB: %u dwords, submitting...\n", submit.dword_count);
     int32_t err = sceAgcDriverSubmitDcb(&submit);
@@ -1537,6 +1586,8 @@ int main(void) {
             sizeof(triangle_frag_data), "PS")) {
         return 1;
     }
+    if (!validate_wave32_records(&back, &ps))
+        return 1;
 
     RenderTargetConfig fp16_target = {
         test.render_target, FP16_TARGET_WIDTH, FP16_TARGET_HEIGHT,

@@ -1041,6 +1041,19 @@ These are long-term goals and should not block draw-call work.
 
 ### Wave32 / Wave64
 
+Status: Wave32 graphics is hardware-validated on real PS5 gfx1013 hardware.
+`openagc-psbc --wave32` compiles the no-GS NGG stage with 32-lane waves while
+gfx1013 pixel and compute stages remain Wave32 by default. The generated
+records carry `VGT_SHADER_STAGES_EN.GS_W32_EN` and
+`SPI_PS_IN_CONTROL.PS_W32_EN`; the hardware sample rejects missing bits both
+before fusion and in the final PM4 stream.
+
+Two consecutive FW 5.50 runs programmed NGG stage state `0x02412010` and PS control
+`0x00008001`, submitted successfully, executed the post-draw marker, and
+passed FP16 readback with 255,744 changed pixels, eight sampled colors, and
+zero out-of-range components. The run also corrected the sample's direct-
+memory physical offset from a truncating `int32_t` to the ABI-correct `off_t`.
+
 Goal:
 
 Represent wave-size metadata and shader register state accurately.

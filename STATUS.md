@@ -27,7 +27,7 @@ See `analysis/agc_driver_abi_families.tsv`,
 
 ## Current Milestone
 
-**Graphics pipeline: indexed drawing and FP16 render targets are
+**Graphics pipeline: Wave32 indexed drawing and FP16 render targets are
 hardware-validated.** The gfx1013
 ES+GS/NGG path fetches `float2` position plus `float3` color from a
 20-byte-stride GPU vertex buffer, consumes a bound 16-bit index buffer, and
@@ -36,8 +36,18 @@ to a 1536x1536 linear `R16G16B16A16_FLOAT` offscreen color buffer and converts
 the readback to the registered RGBA8 display surface for inspection. Phase 7
 is complete; see PLAN.md for the remaining production-hardening work.
 
+The NGG and pixel stages are now explicitly validated as Wave32. Compiler
+records contain `VGT_SHADER_STAGES_EN.GS_W32_EN` and
+`SPI_PS_IN_CONTROL.PS_W32_EN`, and `agc_graphics.elf` audits those same bits in
+the final PM4 stream before submission. Two consecutive runs on FW 5.500.008
+produced identical results: the Wave32 draw
+returned `AGC_OK`, advanced the `0xDEADCAFE` post-draw marker, changed 255,744
+FP16 pixels, sampled eight distinct colors, and reported zero out-of-range
+components. The same run exposed and fixed the sample's 32-bit truncation of
+the ABI-defined `off_t` direct-memory physical offset.
+
 See [PLAN.md](PLAN.md) for the broader GNM-to-AGC architecture roadmap,
-including Wave32, geometry, ray tracing, cache synchronization, and VRS targets.
+including geometry, ray tracing, cache synchronization, and VRS targets.
 
 The host-generic implementation now has a tested model for:
 
