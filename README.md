@@ -104,6 +104,10 @@ Hardware-validated on real PS5 gfx1013 hardware running FW 5.50:
 - Wave32 NGG and pixel execution, including compiler-record and final-PM4 checks
 - Linear RGBA8 and `R16G16B16A16_FLOAT` render targets
 
+Firmware policy: FW 3.20 is the lowest active compatibility target. FW 1.00
+and 2.x aliases are retained only as archival RE data and are not advertised
+as supported; missing legacy-only operations remain fail-closed.
+
 ### Deploy the Wave32 graphics test with etaHEN websrv
 
 Use this websrv path for OpenAGC hardware validation. Do not use

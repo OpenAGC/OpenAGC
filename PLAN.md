@@ -20,14 +20,13 @@ Work proceeds in this order. Later items must not displace an earlier item
 unless the earlier item is explicitly blocked on unavailable firmware or
 hardware.
 
-1. **Recover the FW 1.00 pre-authentication special-queue ABI.** Decode the
-   queue-create argument written by the FW 1.00 userspace driver, connect it to
-   the proven `0x38000` EOP-ring layout, replace the exact-profile
-   `AGC_ERROR_NOT_SUPPORTED` path, and add byte-exact host fixtures.
-2. **Finish firmware-family backend hardening.** Replace the boolean queue-auth
-   capability with an explicit queue ABI family, keep exact four-digit
-   firmware aliases fail-closed, and preserve the hardware-validated FW 5.50
-   path.
+1. **Complete FW 3.20 as the lowest active compatibility target.** Audit its
+   userspace exports, queue/submit ABI, optional requests, memory sizes, and
+   register-default selection against the local firmware references. Add
+   byte-exact fixtures without claiming hardware support prematurely.
+2. **Finish firmware-family backend hardening.** Keep exact four-digit firmware
+   aliases and per-profile capabilities fail-closed while preserving the
+   hardware-validated FW 5.50 path.
 3. **Validate additional firmware only when matching hardware is available.**
    FW 11.60 and PS5 Pro remain RE targets, not support claims. Do not issue
    private ioctls on mismatched hardware.
@@ -50,25 +49,27 @@ aliases, never by assuming that every version in a numeric range is compatible.
 
 Current backend coverage:
 
-- Standard PS5 FW 1.00 through 12.70: exact inspected builds are registered
-  through submit16 ABI profiles. OpenAGC's hardware-proven submission request
-  is `0xc0108102`; the later PID request is not required.
+- Exact inspected builds from FW 1.00 through 12.70 remain registered as RE
+  data through submit16 ABI profiles. Registration is not a support claim.
+- FW 3.20 is the lowest active compatibility target. OpenAGC's hardware-proven
+  submission request is `0xc0108102`; the later PID request is not required.
 - FW 5.50: RE-verified and fully hardware-validated on a standard PS5. The
   console reports raw build `0x05500008` (`5.500.008`); profile selection uses
   its four-digit `0x0550` ABI key while diagnostics retain the complete value.
 - Other registered FW 4.00-12.70 builds: RE-verified, awaiting per-firmware
   hardware validation.
-- FW 1.00-3.20: implemented as three explicit profiles. FW 1.00 has its
-  `0x38000` EOP offset and submit family modeled, but its pre-authentication
-  special-queue argument is still unrecovered and explicitly rejected. FW 1.x
-  and 2.x reject TF-ring setup because the request is absent. Core initialize
-  and submit remain enabled.
+- FW 1.00 and 2.x: archival RE profiles only. Known submit/EOP evidence is
+  retained, including FW 1.00's `0x38000` offset, but missing legacy queue or
+  optional-request ABIs will not be recovered. Unsupported operations remain
+  explicitly fail-closed and these versions are not advertised as supported.
+- FW 3.20: lowest active target, with local firmware references available for
+  exact userspace ABI recovery. Hardware validation remains pending.
 - PS5 Pro: FW 9+ resolves `sceKernelHasTrinityMode` and selects the firmware-
   proven 22 MiB CWSR allocation and related offsets. Hardware validation is
   still required on a PS5 Pro.
 
-The next compatibility work is recovery of the FW 1.00 special-queue helper,
-followed by per-family hardware validation. Evidence and exact
+The next compatibility work is completion of the FW 3.20 profile, followed by
+per-family hardware validation. Evidence and exact
 aliases are tracked in `analysis/agc_driver_abi_families.tsv` and
 `analysis/agc_driver_abi_1160.md`.
 
@@ -153,7 +154,7 @@ Practical rule:
 | Ray tracing | Software compute only | Ray acceleration/BVH state if exposed | Speculative until AGC evidence |
 | Shading rate | Uniform rate | VRS/rate-image state if exposed | Speculative until register/packet evidence |
 | Cache sync | Coarser GCN cache flush/invalidate model | AGC acquire/release/wait/cache-policy packets | Partially observed and partially implemented |
-| Submission | GNM command buffers and PS4 ABI | AGC command buffers, submit descriptors, queues, `/dev/gc` ioctls | FW 5.50 hardware-validated; exact firmware registry implemented; FW 1.00 special queue pending |
+| Submission | GNM command buffers and PS4 ABI | AGC command buffers, submit descriptors, queues, `/dev/gc` ioctls | FW 5.50 hardware-validated; exact registry implemented; FW 3.20 is the lowest active target |
 
 ## Current State
 
@@ -399,7 +400,7 @@ Acceptance criteria:
 
 Status: implemented and hardware-validated for FW 5.50 submit, queue lifecycle,
 suspend points, workloads, and multi-DCB submission. Exact firmware profiles
-fail closed; the FW 1.00 special-queue layout remains the next ABI gap.
+fail closed; FW 3.20 is the next active ABI audit target.
 
 Purpose:
 
@@ -967,9 +968,9 @@ reboot). Do not re-apply these changes without careful analysis:
 
 Status: in progress. The stable operations table, exact-match runtime registry,
 FW 5.50 direct backend, and collision-safe Sony-export candidate are present.
-The next missing ABI is the FW 1.00 pre-authentication special queue. FW 11.60,
-PS5 Pro, and Sony-export GPU submission remain pending and must not block that
-locally actionable recovery.
+FW 3.20 is the lowest active compatibility target. FW 1.00 and 2.x are archival
+RE profiles only; FW 11.60, PS5 Pro, and Sony-export GPU submission remain
+pending and must not displace locally actionable FW 3.20 work.
 
 Purpose:
 
@@ -988,49 +989,42 @@ Game -> stable OpenAGC public ABI
      -> safe AGC_ERROR_UNSUPPORTED result for unknown interfaces
 ```
 
-### Priority 1: FW 1.00 pre-authentication special queue
-
-Known evidence:
-
-- The exact FW 1.00 runtime profile and submit16 family are registered.
-- The EOP allocation uses offset `0x38000`, covered by a host regression.
-- FW 1.00 predates the later authenticated 64-byte queue-create contract.
-- The current Prospero implementation tests `authenticated_special_queue` and
-  returns `AGC_ERROR_NOT_SUPPORTED`, so FW 1.00 queue support is not complete.
+### Priority 1: FW 3.20 lowest active profile
 
 Recovery and implementation sequence:
 
-1. Disassemble the FW 1.00 `_sceAgcDriverCreateUserSpecialQueue` path and its
-   immediate callees. Record every argument write, ioctl request, return-field
-   read, EOP pointer derivation, queue ID, pipe ID, and destroy pairing.
-2. Cross-check the userspace callsite against the FW 1.00 kernel ioctl handler
-   where available. Do not reuse FW 5.50 magic tokens or field meanings without
-   matching writes in FW 1.00.
-3. Replace `authenticated_special_queue` with an explicit queue ABI enum such
-   as `none`, `legacy_pre_auth`, and `authenticated_v2`. Keep the enum private
-   to the backend/runtime profile.
-4. Add a dedicated FW 1.00 queue-create structure with `_Static_assert` size
-   and offset checks plus a byte-exact fixture derived from disassembly.
-5. Implement the legacy branch in `agcProsperoCreateUserSpecialQueue` and its
-   matching destroy path. Remove `AGC_ERROR_NOT_SUPPORTED` only for exact
-   profiles whose legacy ABI is proven.
-6. Add host tests for FW 1.00 profile selection, `0x38000` EOP derivation,
-   encoded create/destroy arguments, returned queue handle, and failure cleanup.
-7. Build the generic and Prospero targets. If FW 1.00 hardware is unavailable,
-   label the result **SPRX-confirmed, hardware pending** rather than claiming
-   runtime support.
+1. Inventory FW 3.20 `libSceAgc.sprx` and `libSceAgcDriver.sprx` exports,
+   versions, initialization calls, and firmware-sensitive wrappers.
+2. Decode queue create/destroy, submit16, suspend, workload, TF-ring, HS
+   offchip, internal-memory sizes, and default-state selection from the local
+   FW 3.20 references.
+3. Compare every private request and structure against FW 5.50. Share code only
+   where request values, sizes, field offsets, and semantics match.
+4. Add or refine an exact FW 3.20 runtime profile using its four-digit ABI key.
+   Keep absent optional operations fail-closed.
+5. Add `_Static_assert` checks and byte-exact host fixtures for every differing
+   private structure or ioctl argument.
+6. Build the generic and Prospero targets. Without matching FW 3.20 hardware,
+   label the result **SPRX-confirmed, hardware pending**.
 
 Acceptance criteria:
 
-- No boolean queue-auth check controls ABI layout selection.
-- FW 1.00 exact aliases select `legacy_pre_auth`; FW 5.50 selects the existing
-  authenticated layout; unknown aliases remain fail-closed.
-- The FW 1.00 create and destroy buffers match disassembly-derived fixtures
-  byte for byte, including the `0x38000` EOP relationship.
-- Queue lifecycle errors release or preserve state exactly as the firmware
-  callsite does.
-- The explicit FW 1.00 `AGC_ERROR_NOT_SUPPORTED` return is removed only after
-  all preceding gates pass.
+- FW 3.20 is the documented lowest active target and has a complete provenance
+  record for every enabled private operation.
+- No FW 5.50 private request is reused solely because FW 3.20 is nearby.
+- Exact FW 3.20 aliases select only capabilities proven by its firmware.
+- Unknown, FW 1.00, and FW 2.x missing operations continue to fail closed.
+- Hardware support is not claimed until the ordered websrv smoke tests pass on
+  a matching FW 3.20 console.
+
+### Deferred archival profiles: FW 1.00 and 2.x
+
+- Preserve exact aliases, known submit-family data, FW 1.00's `0x38000` EOP
+  evidence, and existing regression fixtures for research value.
+- Do not recover the FW 1.00 pre-authentication special queue or other missing
+  legacy-only optional ABIs unless real users and matching hardware appear.
+- Keep explicit `AGC_ERROR_NOT_SUPPORTED` behavior and do not advertise these
+  profiles as supported.
 
 ### Priority 2: Stable backend dispatch and Sony exports
 
@@ -1083,7 +1077,7 @@ Acceptance criteria:
   size/offset assertions, and explicit hardware-validation results.
 
 The internal operations-table migration is complete. The next bounded change
-is the FW 1.00 legacy special-queue ABI described above.
+is the FW 3.20 exact-profile audit described above.
 
 ## Phase 9: Higher-Level AGC Features
 

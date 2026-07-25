@@ -6,17 +6,20 @@ The public AGC API is firmware-agnostic. Runtime native-driver selection now
 uses explicit ABI-family aliases rather than a FW 5.50-only backend or unsafe
 numeric ranges.
 
-- Submit16 runtime profiles contain exact inspected standard-PS5 builds from
-  FW 1.00 through FW 12.70.
-- FW 5.50 is hardware-validated; the other aliases are RE-verified and await
-  hardware validation on their corresponding firmware.
+- Submit16 runtime profiles retain exact inspected standard-PS5 builds from
+  FW 1.00 through FW 12.70 as RE data; registration is not a support claim.
+- FW 3.20 is the lowest active compatibility target. FW 5.50 is
+  hardware-validated; other active aliases await validation on matching
+  firmware.
 - Runtime profile diagnostics are hardware-validated on FW 5.500.008
   (`0x05500008`): family `standard`, model `standard-ps5`, submit16
   `0xC0108102`, authenticated queues enabled, TF ring enabled, EOP offset
   `0x39000`, GPU-info span `0x100000`, CWSR working offset `0xA00000`, and
   CWSR allocation `0x1000000`.
-- FW 1.00-3.20 use dedicated legacy profiles around request `0xc0108102`.
-  Optional requests absent from an early family return not-supported.
+- FW 1.00 and 2.x are archival profiles only. Their known evidence remains in
+  the registry, but missing legacy ABIs will not be recovered and unsupported
+  operations remain fail-closed. FW 3.20 remains an active exact-profile RE
+  target around request `0xc0108102`.
 - FW 9+ resolves `sceKernelHasTrinityMode`; PS5 Pro receives its firmware-
   proven 22 MiB CWSR allocation, 16 MiB working offset, and 1.5 MiB GPU-info
   span. Standard PS5 retains 16 MiB, 10 MiB, and 1 MiB respectively.
