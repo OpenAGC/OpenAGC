@@ -97,6 +97,8 @@ Before marking a task complete:
   `_Static_assert(sizeof(T) == expected, "...")` and, where relevant,
   `_Static_assert(offsetof(T, field) == expected, "...")`.
 - **Code comments:**  Add or remove comments if it will help us in the development.
+- **Commit Messages:** Do not include AI assistant branding or automated co-author tags (e.g. Devin) in git commit messages.
+
 
 ## Architecture Notes
 
@@ -473,53 +475,22 @@ See `STATUS.md` and `PLAN.md`. Next RE tasks, by priority:
 - **WRITE_DATA packet length**: Fixed from 6 dwords to 5 dwords (count=5).
   The extra dword was corrupting the next memory location — in one run it
   overwrote the shader code at 0x201de9000.
-- **User data SGPR layout**: Confirmed from openagc-psbc NIR postprocess
-  output. The shader's `@load_scalar_arg_amd` base values map to USER_DATA
-  registers:
-  - USER_DATA_0 (s0): unused (ring offset placeholder)
-  - USER_DATA_1 (s1): buffer pointer low 32 bits
-  - USER_DATA_2 (s2): buffer pointer high 32 bits
-  - USER_DATA_3 (s3): total_pixels
-  - USER_DATA_4 (s4): fill color (RGBA8 packed)
-  - USER_DATA_5 (s5): workgroup_id_x (system value, set to 0)
+- **User data SGPR layout**: Confirmed from openagc-psbc NIR postprocess output and KytyPS5/SharpEmu reference analysis.
+  The shader's inline push constants start after ring_offsets (s0..s1 unused):
+  - USER_DATA_0 (s0): ring_offsets low (unused, set to 0)
+  - USER_DATA_1 (s1): ring_offsets high (unused, set to 0)
+  - USER_DATA_2 (s2): buffer pointer low 32 bits (pc.buf low)
+  - USER_DATA_3 (s3): buffer pointer high 32 bits (pc.buf high)
+  - USER_DATA_4 (s4): total_pixels (pc.total_pixels)
+  - USER_DATA_5 (s5): fill color (pc.color, RGBA8 packed)
+  - s6: workgroup_id_x (system value, TGID_X_EN=1 in RSRC2)
+- **RSRC2 register encoding**: RSRC2=0x0000008c decodes to USER_SGPR=6 (bits [5:1]=6, s0..s5) and TGID_X_EN=1 (bit 7=1, s6), perfectly matching the 6 user SGPRs + workgroup_id layout.
 
-**Suspected remaining issues (to investigate):**
-- **RSRC2 USER_SGPR field**: The RSRC2 value (0x0000008c) from the shader
-  record may not have the correct USER_SGPR count. The NIR postprocess shows
-  6 SGPR args (base 1-5 + workgroup_id at base 5), so USER_SGPR should be
-  at least 6. Need to decode RSRC2 bits to verify.
-- **Missing COMPUTE_STATIC_THREAD_MGMT_EN / dispatch initialization**:
-  freegnm and KytyPS5 may set additional registers (e.g. 0x2C7-0x2C8 for
-  static thread management, or a SET_BASE packet) that are required for the
-  dispatch to actually launch workgroups.
-- **Shader code alignment**: The shader code is uploaded to a gap in the
-  garlic memory pool. It may need specific alignment (256-byte or 4KB).
-  Current upload uses the gap address directly.
-- **ACQUIRE_MEM before dispatch**: freegnm sends an ACQUIRE_MEM before the
-  dispatch (not just after) to ensure caches are clean. We only send it
-  after.
-- **CLEAR_STATE disabled**: The CLEAR_STATE packet was disabled because it
-  caused a GPU hang. Without it, the compute context may not be properly
-  initialized. Need to fix CLEAR_STATE or find an alternative context init.
-- **CCB (Compute Command Buffer)**: We're submitting only a DCB. The
-  `sceAgcDriverSubmitDcb` function may need a CCB for compute dispatches,
-  or we may need to use a different submit path for compute.
-- **Shader binary format**: The AgcShaderRecord has 5 SH register entries
-  (PGM_LO=0, PGM_HI=0, RSRC1=0x602c0000, RSRC2=0x0000008c, RSRC3=0). The
-  PGM_LO/HI values in the record are 0 — they're placeholders that we
-  override at dispatch time. Need to verify the RSRC1/2/3 values are correct
-  for the PS5 GPU (GFX10.3 / RDNA2).
+**Root cause of compute shader write failure (RESOLVED):**
+- In `samples/hw_test/agc_compute.c`, user data registers were incorrectly offset by 1 dword (`buf_addr_lo` was placed in s1 instead of s2, `buf_addr_hi` in s2 instead of s3, etc.).
+- When the shader attempted to read `pc.buf` from s2..s3, it read `(total_pixels << 32) | buf_addr_hi`, creating an invalid GPU virtual address and failing the `@store_global_amd` write.
+- Fixed `agc_compute.c` user data assignment to map `s0=0, s1=0, s2=buf_addr_lo, s3=buf_addr_hi, s4=total_pixels, s5=color`.
 
-**Shader binary details:**
-- Source: `shaders/fill_color.comp` — GLSL 450 compute shader with
-  `GL_EXT_buffer_reference` for 64-bit buffer pointer access.
-- Compiled by: `openagc-psbc/psbc` (Mesa NIR + ACO → AgcShaderRecord)
-- Binary: 212 bytes total, 76 bytes of shader code at offset 0x88.
-- RSRC1=0x602c0000: SGPRS=6 (bits 0:5), VGPRS=0 (bits 32:39 → wave size 64)
-- RSRC2=0x0000008c: USER_SGPR=3? (bits 0:5 of RSRC2). **This may be wrong** —
-  the NIR shows 6 SGPR args but RSRC2 encodes only 3. Need to verify.
-- The shader uses `@store_global_amd` for buffer writes, which maps to a
-  global memory store instruction on the GPU.
 
 **Reference implementations:**
 - `freegnm` (`/Users/bizkut/Downloads/PS5/homebrew/ps4-freegnm/opengnm/`):
@@ -571,3 +542,6 @@ buffer (under active investigation).
 - Do not delete or rewrite existing RE-provenance comments.
 - Do not change `PS5_SYSV_ABI` calling convention or public function
   signatures without an explicit ABI reason.
+
+- Do not include AI assistant branding or automated co-author tags (e.g. Devin) in git commit messages.
+

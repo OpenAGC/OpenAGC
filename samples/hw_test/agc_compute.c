@@ -548,27 +548,29 @@ static bool dispatch_compute(ComputeTest *test, void *shader_addr,
     *cmd |= 1u;  /* compute shader type */
 
     /* --- Set user data registers ---
-     * Confirmed from openagc-psbc NIR postprocess output:
-     *   %5 = @load_scalar_arg_amd (base=1) → buf ptr low  → USER_DATA_1
-     *   %6 = @load_scalar_arg_amd (base=2) → buf ptr high → USER_DATA_2
-     *   %7 = @load_scalar_arg_amd (base=3) → total_pixels → USER_DATA_3
-     *   %8 = @load_scalar_arg_amd (base=4) → color        → USER_DATA_4
-     *   %0 = @load_scalar_arg_amd (base=5) → workgroup_id_x (system, USER_DATA_5)
-     * USER_DATA_0 is unused (ring offset placeholder). */
+     * Push constant layout (inline push constants in user SGPRs):
+     *   USER_DATA_0 (s0): ring_offsets low  (unused, set to 0)
+     *   USER_DATA_1 (s1): ring_offsets high (unused, set to 0)
+     *   USER_DATA_2 (s2): buffer ptr low    (pc.buf low 32 bits)
+     *   USER_DATA_3 (s3): buffer ptr high   (pc.buf high 32 bits)
+     *   USER_DATA_4 (s4): total_pixels      (pc.total_pixels)
+     *   USER_DATA_5 (s5): fill color        (pc.color, RGBA8 packed)
+     */
     uint32_t buf_addr_lo = (uint32_t)(uintptr_t)test->buffers[0];
     uint32_t buf_addr_hi = (uint32_t)((uintptr_t)test->buffers[0] >> 32);
     uint32_t total_pixels = test->width * test->height;
 
     AgcRegisterValue user_data[6];
-    user_data[0] = (AgcRegisterValue){ AGC_REG_COMPUTE_USER_DATA_0,     0 };           /* unused (s0) */
-    user_data[1] = (AgcRegisterValue){ AGC_REG_COMPUTE_USER_DATA_0 + 1, buf_addr_lo }; /* buffer ptr low (s1) */
-    user_data[2] = (AgcRegisterValue){ AGC_REG_COMPUTE_USER_DATA_0 + 2, buf_addr_hi }; /* buffer ptr high (s2) */
-    user_data[3] = (AgcRegisterValue){ AGC_REG_COMPUTE_USER_DATA_0 + 3, total_pixels };/* total pixels (s3) */
-    user_data[4] = (AgcRegisterValue){ AGC_REG_COMPUTE_USER_DATA_0 + 4, color };       /* fill color (s4) */
-    user_data[5] = (AgcRegisterValue){ AGC_REG_COMPUTE_USER_DATA_0 + 5, 0 };           /* workgroup_id_x (system, s5) */
+    user_data[0] = (AgcRegisterValue){ AGC_REG_COMPUTE_USER_DATA_0 + 0, 0 };           /* ring_offsets low (s0) */
+    user_data[1] = (AgcRegisterValue){ AGC_REG_COMPUTE_USER_DATA_0 + 1, 0 };           /* ring_offsets high (s1) */
+    user_data[2] = (AgcRegisterValue){ AGC_REG_COMPUTE_USER_DATA_0 + 2, buf_addr_lo }; /* buffer ptr low (s2) */
+    user_data[3] = (AgcRegisterValue){ AGC_REG_COMPUTE_USER_DATA_0 + 3, buf_addr_hi }; /* buffer ptr high (s3) */
+    user_data[4] = (AgcRegisterValue){ AGC_REG_COMPUTE_USER_DATA_0 + 4, total_pixels };/* total pixels (s4) */
+    user_data[5] = (AgcRegisterValue){ AGC_REG_COMPUTE_USER_DATA_0 + 5, color };       /* fill color (s5) */
 
     printf("[Dispatch] SET_SH_REG USER_DATA (0x240): buf=0x%x_%08x pixels=%u color=0x%08x\n",
            buf_addr_hi, buf_addr_lo, total_pixels, color);
+
     cmd = sceAgcCbSetShRegistersDirect(&cb, user_data, 6);
     if (!cmd) {
         printf("[Dispatch] ERROR: failed to set user data\n");

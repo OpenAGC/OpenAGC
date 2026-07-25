@@ -481,20 +481,19 @@ Prerequisites:
 
 Work:
 
-1. **Fix `sceAgcDriverNotifyDefaultStates`** — Currently returns
-   `AGC_ERROR_INVALID_ARGUMENT` on hardware. The argument format may not
-   match what the FW 5.50 kernel expects. Cross-reference sharpemu's
-   `sceAgcDriverNotifyDefaultStates` implementation for the correct
-   argument encoding. This may be blocking correct GPU state setup.
+1. **Fix `sceAgcDriverNotifyDefaultStates`** — ✅ Done. Fixed DDID allocation sizes (`AGC_DDID_PRIMARY_SIZE=0x41000`, `AGC_DDID_INTERNAL_SIZE=0xc000`). Now returns `AGC_OK`.
 
-2. **Compile a vertex + pixel shader pair** — Write a minimal VS+PS in
+2. **Verify compute shader execution & user data SGPR layout** — ✅ Done. Confirmed and fixed SGPR mapping (`s0=0, s1=0, s2=buf_addr_lo, s3=buf_addr_hi, s4=total_pixels, s5=color`), matching openagc-psbc NIR postprocess output and KytyPS5 / SharpEmu register models.
+
+3. **Compile a vertex + pixel shader pair** — Write a minimal VS+PS in
    GLSL, compile via psbc, and verify the shader records have correct
    SH/CX register blocks. The RSRC offset functions are already implemented
    for all shader types but need hardware validation.
 
-3. **Set up render target state** — Bind a display buffer as a color
+4. **Set up render target state** — Bind a display buffer as a color
    render target via CB_COLOR0_BASE/INFO/ATTRIB registers. Use the
    `AgcRenderTarget` struct and helpers already implemented in openagc.
+
 
 4. **Set up graphics state** — Viewport (PA_CL_VPORT_*), scissor
    (PA_SC_WINDOW_SCISSOR_*), blend state (CB_BLEND0_CONTROL), primitive

@@ -451,38 +451,27 @@ Submit model:
 
 ### Priority 1: Graphics draw call (current critical path)
 
-Compute dispatch is validated — the GPU accepts and executes non-NOP
-command buffers. The next milestone is a real graphics draw call with
-vertex + pixel shaders, render target binding, viewport/scissor state,
+Compute dispatch is fully validated — the GPU accepts and executes non-NOP
+command buffers and shader writes are verified. The next milestone is a real
+graphics draw call with vertex + pixel shaders, render target binding, viewport/scissor state,
 and a visible triangle on the display. See PLAN.md Phase 7 for details.
 
 Subtasks:
 1. ~~Submit a compute dispatch and verify the GPU executes it.~~ ✅ Done
    (agc_compute.elf — GPU accepts DISPATCH_DIRECT DCB).
-2. **Fix `sceAgcDriverNotifyDefaultStates`** — returns
-   `AGC_ERROR_INVALID_ARGUMENT` on hardware. Cross-reference sharpemu for
-   the correct argument encoding. May be blocking correct GPU state.
-3. **Compile VS+PS via psbc** — Write minimal GLSL vertex + pixel shaders,
+2. ~~Fix `sceAgcDriverNotifyDefaultStates`~~ ✅ Done
+   (Fixed by correcting DDID allocation sizes: `AGC_DDID_PRIMARY_SIZE=0x41000`, `AGC_DDID_INTERNAL_SIZE=0xc000`. Returns `AGC_OK`).
+3. ~~Verify compute shader pixel output~~ ✅ Done
+   (Root cause resolved: `agc_compute.c` user data SGPR layout corrected from s1..s4 misaligned mapping to exact push constant layout s2..s5).
+4. **Compile VS+PS via psbc** — Write minimal GLSL vertex + pixel shaders,
    compile to AgcShaderRecord binaries, verify SH/CX register blocks.
-4. **Set up render target + graphics state** — CB_COLOR0_BASE/INFO,
+5. **Set up render target + graphics state** — CB_COLOR0_BASE/INFO,
    PA_CL_VPORT, PA_SC_WINDOW_SCISSOR, CB_BLEND0_CONTROL,
    VGT_PRIMITIVE_TYPE, VGT_SHADER_STAGES_EN.
-5. **Submit IT_DRAW_INDEX_AUTO** — Build a DCB with all state + draw
+6. **Submit IT_DRAW_INDEX_AUTO** — Build a DCB with all state + draw
    packet, submit via `sceAgcDriverSubmitDcb`, flip display.
-6. **Verify visual output** — Confirm triangle is visible and correct.
+7. **Verify visual output** — Confirm triangle is visible and correct.
 
-### Priority 2: Verify compute shader pixel output
-
-The compute dispatch DCB is accepted by the GPU, but we have not yet
-confirmed that the shader actually wrote the correct pixels to the
-display buffer. The user-data layout (SSBO descriptor + push constants)
-is a best guess based on ACO's arg mapping. Need to either:
-- Read back the display buffer via CPU after dispatch and check pixel values
-- Or visually confirm the screen shows the expected solid color
-
-If the output is wrong, the user-data SGPR layout needs to be corrected
-to match ACO's arg mapping (base=0 for SSBO descriptor, base=1+ for
-push constants). The RSRC2 USER_SGPR count may also need patching.
 
 ### Priority 3: PA debug ioctl (kernel RE)
 
