@@ -109,7 +109,8 @@ int sceKernelWaitEqueue(SceKernelEqueue equeue, SceKernelEvent *events,
 #define DIAGNOSTIC_CLEAR_COLOR    0xFF202020u
 #define FP16_TARGET_WIDTH          1536u
 #define FP16_TARGET_HEIGHT         1536u
-#define FP16_PREVIEW_SCALE         1u
+#define FP16_PREVIEW_DIVISOR       2u
+#define FP16_PREVIEW_FRAMES        1800u
 #define FP16_CLEAR_SENTINEL        UINT64_C(0x3555355535553555)
 
 #ifndef AGC_VALIDATE_RGBA8_REFERENCE
@@ -294,11 +295,12 @@ static bool allocate_display_buffers(GraphicsTest *test) {
     }
     cb_buffer = (uint32_t *)cb_addr;
 
-    /* Flexible memory pool for render target + shader code.
-     * Size must accommodate the render target (width*height*4) plus shader
-     * code and 64KB offset. For 4K (3840x2160*4 = ~33MB), use 64MB. */
-    size_t rt_size = (size_t)test->width * test->height * BYTES_PER_PIXEL;
-    size_t pool_size = align_up(rt_size + 0x100000, 1024 * 1024);  /* rt + 1MB slack */
+    /* The offscreen FP16 target is independent of the VideoOut dimensions.
+     * Reserve its full 8-byte pixel span after the 64 KiB shader/descriptor
+     * prefix instead of deriving this pool from the RGBA8 scanout size. */
+    size_t rt_size = (size_t)FP16_TARGET_WIDTH * FP16_TARGET_HEIGHT *
+                     sizeof(uint64_t);
+    size_t pool_size = align_up(0x10000u + rt_size, 1024 * 1024);
     void *pool_addr = NULL;
     int pool_ret = sceKernelMapNamedSystemFlexibleMemory(
         &pool_addr, pool_size, 0x33, 0, "agc_graphics_pool");
@@ -339,10 +341,15 @@ static bool init_videoout(GraphicsTest *test) {
 
     SceVideoOutResolutionStatus status = {0};
     sceVideoOutGetResolutionStatus(test->handle, &status);
-    test->width = status.full_width;
-    test->height = status.full_height;
+    printf("VideoOut native resolution: %ux%u\n",
+           status.full_width, status.full_height);
+    /* Match the hardware-proven linear VideoOut path. The system compositor
+     * scales this 1080p scanout to the active display mode. */
+    test->width = 1920;
+    test->height = 1080;
     test->pitch_pixels = test->width;
-    printf("Resolution: %ux%u\n", test->width, test->height);
+    printf("VideoOut registered resolution: %ux%u\n",
+           test->width, test->height);
 
     if (!allocate_display_buffers(test)) return false;
 
@@ -1511,18 +1518,18 @@ static uint8_t half_to_unorm8(uint16_t half) {
 static void visualize_fp16(GraphicsTest *test) {
     const uint64_t *source = (const uint64_t *)test->render_target;
     uint32_t *display = (uint32_t *)test->buffers[0];
-    const uint32_t preview_width = FP16_TARGET_WIDTH * FP16_PREVIEW_SCALE;
-    const uint32_t preview_height = FP16_TARGET_HEIGHT * FP16_PREVIEW_SCALE;
+    const uint32_t preview_width = FP16_TARGET_WIDTH / FP16_PREVIEW_DIVISOR;
+    const uint32_t preview_height = FP16_TARGET_HEIGHT / FP16_PREVIEW_DIVISOR;
     const uint32_t origin_x = (test->width - preview_width) / 2u;
     const uint32_t origin_y = (test->height - preview_height) / 2u;
 
     for (uint32_t i = 0; i < test->width * test->height; i++)
         display[i] = DIAGNOSTIC_CLEAR_COLOR;
     for (uint32_t y = 0; y < preview_height; y++) {
-        const uint32_t source_y = y / FP16_PREVIEW_SCALE;
+        const uint32_t source_y = y * FP16_PREVIEW_DIVISOR;
         for (uint32_t x = 0; x < preview_width; x++) {
             uint64_t pixel = source[source_y * FP16_TARGET_WIDTH +
-                                    x / FP16_PREVIEW_SCALE];
+                                    x * FP16_PREVIEW_DIVISOR];
             if (pixel == FP16_CLEAR_SENTINEL)
                 continue;
             uint8_t r = half_to_unorm8((uint16_t)pixel);
@@ -1534,6 +1541,8 @@ static void visualize_fp16(GraphicsTest *test) {
                 ((uint32_t)g << 8) | r;
         }
     }
+    memcpy(test->buffers[1], test->buffers[0],
+           (size_t)test->width * test->height * BYTES_PER_PIXEL);
     printf("[FP16] CPU preview: %ux%u centered on RGBA8 display\n",
            preview_width, preview_height);
 }
@@ -1542,11 +1551,37 @@ static void visualize_fp16(GraphicsTest *test) {
 /* Flip helper                                                               */
 /* ======================================================================== */
 
-static void wait_for_flip(GraphicsTest *test) {
-    int ret = sceVideoOutSubmitFlip(
-        test->handle, 0, SCE_VIDEO_OUT_FLIP_MODE_VSYNC, 0);
-    printf("VideoOutSubmitFlip: 0x%08x\n", (unsigned)ret);
-    sceKernelUsleep(1000000);
+static bool present_preview(GraphicsTest *test) {
+    uint32_t accepted = 0;
+    uint32_t completed = 0;
+    for (uint32_t frame = 0; frame < FP16_PREVIEW_FRAMES; frame++) {
+        const int buffer_index = (int)(frame & 1u);
+        int ret = sceVideoOutSubmitFlip(
+            test->handle, buffer_index, SCE_VIDEO_OUT_FLIP_MODE_VSYNC,
+            (int64_t)frame);
+        if (ret != 0) {
+            printf("VideoOutSubmitFlip[%u]: 0x%08x\n",
+                   frame, (unsigned)ret);
+            return false;
+        }
+        accepted++;
+
+        SceKernelEvent event = {0};
+        int out = 0;
+        ret = sceKernelWaitEqueue(
+            test->flipqueue, &event, 1, &out, NULL);
+        if (ret != 0) {
+            printf("sceKernelWaitEqueue[%u]: 0x%08x\n",
+                   frame, (unsigned)ret);
+            return false;
+        }
+        completed++;
+        if ((frame % 60u) == 0u)
+            printf("VideoOut displayed frame %u\n", frame);
+    }
+    printf("VideoOut sustained preview: %u accepted, %u completed\n",
+           accepted, completed);
+    return completed == FP16_PREVIEW_FRAMES;
 }
 
 /* ======================================================================== */
@@ -1616,12 +1651,11 @@ int main(void) {
     visualize_fp16(&test);
 
     printf("\n--- Step 5: Display FP16 preview ---\n");
-    wait_for_flip(&test);
-    printf("Flipped; the compiler-generated NGG triangle should be visible.\n");
-
-    for (int i = 0; i < 60; i++) {
-        sceKernelUsleep(100000);
+    if (!present_preview(&test)) {
+        printf("FATAL: no VideoOut preview flip was accepted\n");
+        return 1;
     }
+    printf("Displayed the compiler-generated NGG triangle for 30 seconds.\n");
 
     printf("\nDone.\n");
     return 0;

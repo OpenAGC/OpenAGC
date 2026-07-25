@@ -104,6 +104,42 @@ Hardware-validated on real PS5 gfx1013 hardware running FW 5.50:
 - Wave32 NGG and pixel execution, including compiler-record and final-PM4 checks
 - Linear RGBA8 and `R16G16B16A16_FLOAT` render targets
 
+### Deploy the Wave32 graphics test with etaHEN websrv
+
+Use this websrv path for OpenAGC hardware validation. Do not use
+`prospero-deploy`; its direct-loader context did not foreground the VideoOut
+surface reliably during Wave32 validation.
+
+Build the Prospero library and hardware sample first, then upload the ELF and
+icon over websrv FTP. `--ftp-create-dirs` makes the homebrew directory on the
+first upload:
+
+```sh
+export PS5_HOST=10.0.1.41
+export PS5_PAYLOAD_SDK=~/ps5-payload-sdk
+export LLVM_CONFIG=/opt/homebrew/opt/llvm@18/bin/llvm-config
+
+cmake -B build-prospero -DOPENAGC_PLATFORM=prospero \
+    -DOPENAGC_BUILD_TESTS=OFF \
+    -DCMAKE_TOOLCHAIN_FILE="$PS5_PAYLOAD_SDK/toolchain/prospero.cmake"
+cmake --build build-prospero
+make -C samples/hw_test agc_graphics.elf
+
+curl -sS --ftp-create-dirs \
+    -T samples/hw_test/agc_graphics.elf \
+    "ftp://$PS5_HOST:2121/data/homebrew/agc_wave32/eboot.elf"
+curl -sS --ftp-create-dirs \
+    -T samples/hw_test/sce_sys/icon0.png \
+    "ftp://$PS5_HOST:2121/data/homebrew/agc_wave32/sce_sys/icon0.png"
+curl -sS \
+    "http://$PS5_HOST:8080/hbldr?pipe=1&daemon=0&path=/data/homebrew/agc_wave32/eboot.elf"
+```
+
+`pipe=1` streams the validation log to curl and `daemon=0` keeps the launch in
+the foreground. The expected display is a dark-gray background with a centered,
+blended-color triangle. The payload must report Wave32 record and PM4 passes,
+the `0xDEADCAFE` marker, FP16 validation, and 1,800 completed flips.
+
 ### Firmware Reference
 
 Reference inputs used for the open implementation:

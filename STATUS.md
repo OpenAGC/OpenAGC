@@ -39,12 +39,17 @@ is complete; see PLAN.md for the remaining production-hardening work.
 The NGG and pixel stages are now explicitly validated as Wave32. Compiler
 records contain `VGT_SHADER_STAGES_EN.GS_W32_EN` and
 `SPI_PS_IN_CONTROL.PS_W32_EN`, and `agc_graphics.elf` audits those same bits in
-the final PM4 stream before submission. Two consecutive runs on FW 5.500.008
-produced identical results: the Wave32 draw
+the final PM4 stream before submission. Three runs on FW 5.500.008 produced
+identical GPU results: the Wave32 draw
 returned `AGC_OK`, advanced the `0xDEADCAFE` post-draw marker, changed 255,744
 FP16 pixels, sampled eight distinct colors, and reported zero out-of-range
-components. The same run exposed and fixed the sample's 32-bit truncation of
-the ABI-defined `off_t` direct-memory physical offset.
+components. The display path now uses a hardware-proven 1920x1080 linear
+scanout, mirrors a centered 768x768 preview across both buffers, and waits for
+each flip event. The websrv run completed 1,800/1,800 vsync flips over 30
+seconds and was visually confirmed as a dark-gray background with a centered
+blended-color triangle. The validation also exposed and fixed the sample's
+32-bit truncation of the ABI-defined `off_t` direct-memory physical offset and
+decoupled FP16 pool sizing from scanout dimensions.
 
 See [PLAN.md](PLAN.md) for the broader GNM-to-AGC architecture roadmap,
 including geometry, ray tracing, cache synchronization, and VRS targets.

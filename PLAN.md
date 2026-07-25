@@ -1048,11 +1048,17 @@ records carry `VGT_SHADER_STAGES_EN.GS_W32_EN` and
 `SPI_PS_IN_CONTROL.PS_W32_EN`; the hardware sample rejects missing bits both
 before fusion and in the final PM4 stream.
 
-Two consecutive FW 5.50 runs programmed NGG stage state `0x02412010` and PS control
+Three FW 5.50 runs programmed NGG stage state `0x02412010` and PS control
 `0x00008001`, submitted successfully, executed the post-draw marker, and
 passed FP16 readback with 255,744 changed pixels, eight sampled colors, and
-zero out-of-range components. The run also corrected the sample's direct-
-memory physical offset from a truncating `int32_t` to the ABI-correct `off_t`.
+zero out-of-range components. The display path now matches the hardware-proven
+VideoOut contract: a 1920x1080 linear scanout, a centered 768x768 downsampled
+preview mirrored into both registered buffers, and one flip-completion wait per
+frame. The websrv run completed 1,800/1,800 vsync flips over 30 seconds and was
+visually confirmed as a dark-gray background with a centered blended-color
+triangle. The validation also corrected the sample's
+direct-memory physical offset from a truncating `int32_t` to the ABI-correct
+`off_t` and decoupled the FP16 render-pool size from the scanout dimensions.
 
 Goal:
 

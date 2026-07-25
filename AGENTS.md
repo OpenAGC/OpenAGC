@@ -191,16 +191,11 @@ commit the SPRX files themselves — only the generated stubs (if any).
 
 ### Deploy to PS5
 
-Three deployment paths:
+Use websrv for exploited-PS5 hardware validation. Do not use
+`prospero-deploy`; its direct-loader context does not foreground VideoOut
+reliably for the graphics samples.
 
-**1. ELF payload (exploited PS5):**
-
-```sh
-export PS5_HOST=10.0.1.41; export PS5_PORT=9021
-prospero-deploy -h $PS5_HOST -p $PS5_PORT build-prospero/openagc_payload.elf
-```
-
-**2. Homebrew via websrv (exploited PS5 with etaHEN):**
+**1. Homebrew via websrv (exploited PS5 with etaHEN):**
 
 The PS5 runs a `websrv` on port 8080 (HTTP) and 2121 (FTP) that serves as a
 homebrew launcher. Upload the ELF via FTP, then launch it via HTTP:
@@ -223,7 +218,7 @@ executes it. With `pipe=1`, stdout/stderr are streamed back in the HTTP
 response, making it easy to see printf output without a separate log
 viewer. The app appears in the PS5 home menu with its icon.
 
-**3. Installable .pkg (debug-mode PS5):**
+**2. Installable .pkg (debug-mode PS5):**
 
 Use LibProsperoPkg (C++ rewrite by seregonwar) to fake-sign the ELF and
 package it as an installable `.pkg`:
@@ -337,13 +332,6 @@ export PS5_PAYLOAD_SDK=~/ps5-payload-sdk
 export LLVM_CONFIG=/opt/homebrew/opt/llvm@18/bin/llvm-config
 make all              # all four .elf targets
 make videoout_linear.bin agc_init.bin agc_videoout.bin  # fake-SELF versions
-```
-
-**Deploy (exploited PS5):**
-```sh
-make deploy_videoout      # prospero-deploy videoout_linear.elf
-make deploy_agc           # prospero-deploy agc_init.elf
-make deploy_agc_videoout  # prospero-deploy agc_videoout.elf
 ```
 
 **Deploy via websrv (exploited PS5 with etaHEN):**
