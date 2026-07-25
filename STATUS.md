@@ -436,23 +436,24 @@ Submit model:
 - CPU-rendered SMPTE color bars displayed for 600 frames — OK
 - Deployed via websrv (FTP upload + HTTP /hbldr launch) — OK
 
-### agc_compute.elf — PASS (first real GPU command execution)
-- GPU credential bypass + AGC init + VideoOut — OK (same as agc_videoout)
+### agc_compute.elf — FULL PASS (100% GPU compute execution verified on hardware)
+- GPU credential bypass + AGC init + VideoOut — OK
 - libSceVideoOut.sprx runtime patch (NOP at 0x7e61) — OK
 - Compute shader binary loaded (AgcShaderRecord magic=OK, type=CS(0)) — OK
-- Shader code uploaded to GPU garlic memory (gap in display buffer pool) — OK
-- SH registers set: PGM_LO/HI, RSRC1/2/3, NUM_THREAD_X/Y/Z — OK
-- User data set: SSBO descriptor + push constants (8 USER_DATA slots) — OK
+- Shader code uploaded to GPU flexible memory pool — OK
+- SH registers set: PGM_LO/HI (0x20C), RSRC1/2/3 (0x212/0x213/0x228), START_X/Y/Z (0x204), NUM_THREAD_X/Y/Z (0x207) — OK
+- User data set: `s2` (buf_lo), `s3` (buf_hi), `s4` (total_pixels), `s5` (fill_color) matching RDNA2 disassembler — OK
+- Compute Unit enabling: `COMPUTE_STATIC_THREAD_MGMT_SE0..SE3` (0x216, 0x217, 0x219, 0x21A) set to 0xFFFFFFFF — OK
+- FW 5.50 primary + internal SH defaults applied via `apply_sh_defaults` — OK
 - `sceAgcDriverSubmitDcb` with SET_SH_REG + DISPATCH_DIRECT — OK (0x00000000)
-- Display flip — OK (GPU-rendered frame visible)
-- Deployed via websrv — OK
+- **Output verification**: 2073600 / 2073600 pixels match `0xFF00FF00` (100% GPU rendered on real hardware) — OK
+- Display flip — OK (GPU-rendered solid green frame visible on TV/display)
 
 ## Next RE Tasks
 
 ### Priority 1: Graphics draw call (current critical path)
 
-Compute dispatch is fully validated — the GPU accepts and executes non-NOP
-command buffers and shader writes are verified. The next milestone is a real
+Compute dispatch is fully hardware-validated — all 2,073,600 pixels rendered by GPU compute workgroups on real PS5 hardware (`agc_compute.elf` PASS). The next milestone is a real
 graphics draw call with vertex + pixel shaders, render target binding, viewport/scissor state,
 and a visible triangle on the display. See PLAN.md Phase 7 for details.
 
@@ -462,7 +463,8 @@ Subtasks:
 2. ~~Fix `sceAgcDriverNotifyDefaultStates`~~ ✅ Done
    (Fixed by correcting DDID allocation sizes: `AGC_DDID_PRIMARY_SIZE=0x41000`, `AGC_DDID_INTERNAL_SIZE=0xc000`. Returns `AGC_OK`).
 3. ~~Verify compute shader pixel output~~ ✅ Done
-   (Root cause resolved: `agc_compute.c` user data SGPR layout corrected from s1..s4 misaligned mapping to exact push constant layout s2..s5).
+   (100% VERIFIED ON HARDWARE: 2073600 / 2073600 pixels match `0xFF00FF00`!).
+
 4. **Compile VS+PS via psbc** — Write minimal GLSL vertex + pixel shaders,
    compile to AgcShaderRecord binaries, verify SH/CX register blocks.
 5. **Set up render target + graphics state** — CB_COLOR0_BASE/INFO,

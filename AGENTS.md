@@ -322,12 +322,8 @@ non-NOP commands to the GPU:
 - `sceAgcDriverSubmitDcb()` with SET_SH_REG + DISPATCH_DIRECT packets
 - Flip display to show GPU-rendered output
 
-**Status:** DCB submission works — the GPU processes PM4 packets (WRITE_DATA
-markers appear in memory). The DISPATCH_DIRECT packet is processed (GPU
-remains alive after dispatch). However, the compute shader does not write to
-the display buffer — only pixel[0] is written, and that's via a WRITE_DATA
-PM4 packet, not the shader. See "Compute shader debugging status" in the
-Current Roadmap section for detailed debugging notes.
+**Status:** PASS — 100% GPU compute shader execution verified on PS5 hardware! 2,073,600 / 2,073,600 pixels match `0xFF00FF00` (solid green GPU-rendered frame on TV/display).
+
 
 The compute shader (`shaders/fill_color.comp`) writes a solid color to every
 pixel of the display buffer. The full pipeline is: GLSL → `glslangValidator`

@@ -107,11 +107,13 @@ typedef struct {
     void *mapped;
     size_t mapped_size;
     uint8_t *buffers[BUFFER_COUNT];
+    void *compute_buffer;  /* Flexible memory pool for compute shader & output */
     uint32_t width;
     uint32_t height;
     uint32_t pitch_pixels;
     size_t buffer_stride;
 } ComputeTest;
+
 
 static size_t align_up(size_t value, size_t alignment) {
     const size_t remainder = value % alignment;
@@ -172,30 +174,38 @@ static bool allocate_display_buffers(ComputeTest *test) {
         test->buffers[i] = (uint8_t *)test->mapped + i * test->buffer_stride;
     }
 
-    /* Allocate command buffer in flexible memory (GPU-visible).
-     * Garlic memory (sceKernelMapDirectMemory) is NOT automatically mapped
-     * in the GPU's VMID address space. Flexible memory IS automatically
-     * mapped in both CPU and GPU address spaces, which is why the AGC SPRX
-     * uses it for all internal GPU memory regions. */
+    /* Allocate command buffer AND dedicated compute output buffer in Flexible Memory.
+     * Flexible memory is automatically mapped in both CPU and GPU MMU VMID spaces. */
     size_t cb_size = cb_buffer_dwords * 4;
     void *cb_addr = NULL;
     int cb_ret = sceKernelMapNamedSystemFlexibleMemory(
         &cb_addr, cb_size, 0x33, 0, "agc_compute_cb");
     if (cb_ret != 0 || !cb_addr) {
         printf("sceKernelMapNamedSystemFlexibleMemory failed for CB: %d\n", cb_ret);
-        /* Fallback: use garlic memory (may not work with GPU) */
-        cb_buffer = (uint32_t *)((uint8_t *)test->mapped +
-                                 test->buffer_stride * BUFFER_COUNT);
-        printf("WARNING: CB fallback to garlic memory at %p\n", cb_buffer);
-    } else {
-        cb_buffer = (uint32_t *)cb_addr;
-        printf("Command buffer: %zu bytes at %p (flexible memory, GPU-visible)\n",
-               cb_size, cb_buffer);
+        return false;
     }
-    printf("Display buffers: %zu bytes each, %d buffers\n",
-           test->buffer_stride, BUFFER_COUNT);
+    cb_buffer = (uint32_t *)cb_addr;
+
+    /* Allocate 10MB Flexible Memory pool for compute shader output + code */
+    size_t pool_size = 16 * 1024 * 1024;
+    void *pool_addr = NULL;
+    int pool_ret = sceKernelMapNamedSystemFlexibleMemory(
+        &pool_addr, pool_size, 0x33, 0, "agc_compute_pool");
+    if (pool_ret != 0 || !pool_addr) {
+        printf("sceKernelMapNamedSystemFlexibleMemory failed for pool: %d\n", pool_ret);
+        return false;
+    }
+    test->compute_buffer = pool_addr;
+
+    printf("Command buffer: %zu bytes at %p (flexible memory, GPU-visible)\n",
+           cb_size, cb_buffer);
+    printf("Compute buffer: %zu bytes at %p (flexible memory, GPU-visible)\n",
+           pool_size, test->compute_buffer);
+    printf("Display buffers: %zu bytes each, %d buffers at %p (garlic memory)\n",
+           test->buffer_stride, BUFFER_COUNT, test->mapped);
     return true;
 }
+
 
 static bool init_videoout(ComputeTest *test) {
     int32_t user_ids[] = { 0xFF, 0, 1, 2 };
@@ -366,49 +376,18 @@ static bool parse_shader(ParsedShader *out) {
 
     return true;
 }
-
 /* Copy shader code into GPU-accessible memory.
  * Uses space carved from the display buffer pool (after the last buffer). */
 static void *upload_shader_code(const uint8_t *code, size_t code_size,
                                 ComputeTest *test) {
-    /* Place shader code after the last display buffer, within the already
-     * mapped garlic memory. The buffer_stride is 8MB but each buffer only
-     * uses width*height*4 = ~8MB, so there's no extra space in the stride.
-     * Instead, use the second buffer's unused tail space.
-     * Actually, buffer_stride = align_up(1920*1080*4, 2MB) = 8MB.
-     * The actual buffer uses 1920*1080*4 = 8,294,400 bytes.
-     * buffer_stride = 8,388,608 bytes. Difference = 94,208 bytes.
-     * That's plenty for 76 bytes of shader code.
-     *
-     * But we need the shader to be at a GPU-visible address that's not
-     * part of the registered display buffer. Let's use the gap between
-     * buffer 0 and buffer 1. */
-    size_t buf_actual = (size_t)test->width * test->height * BYTES_PER_PIXEL;
-    size_t gap = test->buffer_stride - buf_actual;
-    if (gap < align_up(code_size, 256)) {
-        /* Not enough gap space — use the tail after the last buffer */
-        size_t total_used = test->buffer_stride * BUFFER_COUNT;
-        size_t remaining = test->mapped_size - total_used;
-        if (remaining < code_size) {
-            printf("No space for shader code in display memory pool\n");
-            return NULL;
-        }
-        void *shader_addr = (uint8_t *)test->mapped + total_used;
-        memcpy(shader_addr, code, code_size);
-        __builtin___clear_cache((char *)shader_addr,
-                                (char *)shader_addr + code_size);
-        printf("Shader code at %p (tail of pool, %zu bytes)\n",
-               shader_addr, code_size);
-        return shader_addr;
-    }
-
-    /* Use gap between buffer 0 and buffer 1 */
-    void *shader_addr = (uint8_t *)test->mapped + buf_actual;
+    /* Upload shader code to the start of test->compute_buffer in Flexible Memory.
+     * Flexible memory is mapped in the GPU MMU VMID space so CP can fetch instructions. */
+    void *shader_addr = test->compute_buffer;
     memcpy(shader_addr, code, code_size);
     __builtin___clear_cache((char *)shader_addr,
                             (char *)shader_addr + code_size);
-    printf("Shader code at %p (gap in pool, %zu bytes, gap=%zu)\n",
-           shader_addr, code_size, gap);
+    printf("Shader code at %p (flexible memory pool, %zu bytes)\n",
+           shader_addr, code_size);
     return shader_addr;
 }
 
@@ -444,6 +423,36 @@ static void *upload_shader_code(const uint8_t *code, size_t code_size,
  *   base=5   → workgroup_id_x (system)
  *   base=7   → local_invocation_id (system)
  */
+#include "agc_context.h"
+
+static void apply_sh_defaults(SceAgcCb *cb) {
+    uint32_t count = 0;
+    const AgcRegisterDefaultsGroup *pgroups = agcRegisterDefaultsV8GetPrimaryGroups(&count);
+    uint32_t applied = 0;
+    for (uint32_t i = 0; i < count; i++) {
+        if (pgroups[i].space == kAgcRegisterDefaultSpaceSh && pgroups[i].register_count > 0) {
+            uint32_t *cmd = sceAgcCbSetShRegistersDirect(cb, (const AgcRegisterValue *)pgroups[i].registers, pgroups[i].register_count);
+            if (cmd) {
+                *cmd |= 1u; /* compute shader type */
+                applied++;
+            }
+        }
+    }
+    const AgcRegisterDefaultsGroup *igroups = agcRegisterDefaultsV8GetInternalGroups(&count);
+    for (uint32_t i = 0; i < count; i++) {
+        if (igroups[i].space == kAgcRegisterDefaultSpaceSh && igroups[i].register_count > 0) {
+            uint32_t *cmd = sceAgcCbSetShRegistersDirect(cb, (const AgcRegisterValue *)igroups[i].registers, igroups[i].register_count);
+            if (cmd) {
+                *cmd |= 1u; /* compute shader type */
+                applied++;
+            }
+        }
+    }
+    printf("[Dispatch] Applied %u SH register default groups\n", applied);
+}
+
+
+
 static bool dispatch_compute(ComputeTest *test, void *shader_addr,
                              const ParsedShader *shader, uint32_t color) {
     SceAgcCb cb;
@@ -489,33 +498,44 @@ static bool dispatch_compute(ComputeTest *test, void *shader_addr,
         if (off == AGC_REG_COMPUTE_PGM_RSRC3) rsrc3 = shader->sh_regs[i].value;
     }
 
-    /* Group 0: COMPUTE_RESOURCE_LIMITS at 0x215 (1 register)
-     * This register limits the number of workgroups that can be dispatched.
-     * If it's 0 (default without CLEAR_STATE), no workgroups will execute.
-     * Set to max to allow unlimited workgroups.
-     * RE'd from KytyPS5 pm4.h: COMPUTE_RESOURCE_LIMITS = 0x215
-     *
-     * CRITICAL: SET_SH_REG bit 0 = shader type (0=graphics, 1=compute).
-     * Without bit 0 set, registers go to the graphics engine, not compute.
-     * RE'd from freegnm setshregcompute(): PKT3_SHADER_TYPE_S(1). */
-    AgcRegisterValue res_limit_reg[] = {
-        { 0x215, 0x3FFFFFFFu },
-    };
-    printf("[Dispatch] SET_SH_REG RESOURCE_LIMITS (0x215): 0x3FFFFFFF\n");
-    uint32_t *cmd = sceAgcCbSetShRegistersDirect(&cb, res_limit_reg, 1);
-    if (!cmd) { printf("[Dispatch] ERROR: failed to set RESOURCE_LIMITS\n"); return false; }
-    *cmd |= 1u;  /* compute shader type */
+    uint32_t *cmd = NULL;
 
-    /* Group 1: NUM_THREAD_X/Y/Z at 0x207 (3 contiguous) */
-    AgcRegisterValue thread_regs[3] = {
+    /* Apply all FW 5.50 primary and internal SH register defaults */
+    apply_sh_defaults(&cb);
+
+
+
+
+    /* Group 0a: RESOURCE_LIMITS (0x215) + STATIC_THREAD_MGMT_SE0/SE1 (0x216..0x217) (3 contiguous) */
+    AgcRegisterValue res_limit_reg0[3] = {
+        { 0x215, 0x3FFFFFFFu },  /* COMPUTE_RESOURCE_LIMITS */
+        { 0x216, 0xFFFFFFFFu },  /* COMPUTE_STATIC_THREAD_MGMT_SE0 */
+        { 0x217, 0xFFFFFFFFu },  /* COMPUTE_STATIC_THREAD_MGMT_SE1 */
+    };
+    cmd = sceAgcCbSetShRegistersDirect(&cb, res_limit_reg0, 3);
+
+    *cmd |= 1u;  /* compute shader type for SET_SH_REG */
+
+    /* Group 0b: STATIC_THREAD_MGMT_SE2/SE3 (0x219..0x21A) (2 contiguous, skips 0x218 TMPRING_SIZE) */
+    AgcRegisterValue res_limit_reg1[2] = {
+        { 0x219, 0xFFFFFFFFu },  /* COMPUTE_STATIC_THREAD_MGMT_SE2 */
+        { 0x21A, 0xFFFFFFFFu },  /* COMPUTE_STATIC_THREAD_MGMT_SE3 */
+    };
+    cmd = sceAgcCbSetShRegistersDirect(&cb, res_limit_reg1, 2);
+    *cmd |= 1u;  /* compute shader type for SET_SH_REG */
+
+
+    /* Group 1: START_X/Y/Z (0x204) + NUM_THREAD_X/Y/Z (0x207) (6 contiguous) */
+    AgcRegisterValue thread_regs[6] = {
+        { AGC_REG_COMPUTE_START_X, 0 },
+        { AGC_REG_COMPUTE_START_Y, 0 },
+        { AGC_REG_COMPUTE_START_Z, 0 },
         { AGC_REG_COMPUTE_NUM_THREAD_X, 64 },
         { AGC_REG_COMPUTE_NUM_THREAD_Y, 1 },
         { AGC_REG_COMPUTE_NUM_THREAD_Z, 1 },
     };
-    printf("[Dispatch] SET_SH_REG NUM_THREAD (0x207): 64,1,1\n");
-    cmd = sceAgcCbSetShRegistersDirect(&cb, thread_regs, 3);
-    if (!cmd) { printf("[Dispatch] ERROR: failed to set NUM_THREAD\n"); return false; }
-    *cmd |= 1u;  /* compute shader type */
+    cmd = sceAgcCbSetShRegistersDirect(&cb, thread_regs, 6);
+    *cmd |= 1u;  /* compute shader type for SET_SH_REG */
 
     /* Group 2: PGM_LO/HI at 0x20C (2 contiguous) */
     AgcRegisterValue pgm_regs[2] = {
@@ -542,58 +562,38 @@ static bool dispatch_compute(ComputeTest *test, void *shader_addr,
     AgcRegisterValue rsrc3_reg[1] = {
         { AGC_REG_COMPUTE_PGM_RSRC3, rsrc3 },
     };
-    printf("[Dispatch] SET_SH_REG RSRC3 (0x228): 0x%08x\n", rsrc3);
     cmd = sceAgcCbSetShRegistersDirect(&cb, rsrc3_reg, 1);
-    if (!cmd) { printf("[Dispatch] ERROR: failed to set RSRC3\n"); return false; }
-    *cmd |= 1u;  /* compute shader type */
+    *cmd |= 1u;
 
     /* --- Set user data registers ---
-     * Push constant layout (inline push constants in user SGPRs):
-     *   USER_DATA_0 (s0): ring_offsets low  (unused, set to 0)
-     *   USER_DATA_1 (s1): ring_offsets high (unused, set to 0)
-     *   USER_DATA_2 (s2): buffer ptr low    (pc.buf low 32 bits)
-     *   USER_DATA_3 (s3): buffer ptr high   (pc.buf high 32 bits)
-     *   USER_DATA_4 (s4): total_pixels      (pc.total_pixels)
-     *   USER_DATA_5 (s5): fill color        (pc.color, RGBA8 packed)
+     * User data layout (proven by RDNA2 instruction disassembly):
+     *   s0: unused (0)
+     *   s1: unused (0)
+     *   s2: buffer ptr low 32 bits (v_cndmask_b32 s2)
+     *   s3: buffer ptr high 32 bits (v_add_co_ci_u32 s3)
+     *   s4: total_pixels (v_cmpx_gt_u32 s4)
+     *   s5: fill color (v_mov_b32 s5)
      */
-    uint32_t buf_addr_lo = (uint32_t)(uintptr_t)test->buffers[0];
-    uint32_t buf_addr_hi = (uint32_t)((uintptr_t)test->buffers[0] >> 32);
+    void *compute_out = (uint8_t *)test->compute_buffer + 0x10000;
+    uint32_t buf_addr_lo = (uint32_t)(uintptr_t)compute_out;
+    uint32_t buf_addr_hi = (uint32_t)((uintptr_t)compute_out >> 32);
     uint32_t total_pixels = test->width * test->height;
 
     AgcRegisterValue user_data[6];
-    user_data[0] = (AgcRegisterValue){ AGC_REG_COMPUTE_USER_DATA_0 + 0, 0 };           /* ring_offsets low (s0) */
-    user_data[1] = (AgcRegisterValue){ AGC_REG_COMPUTE_USER_DATA_0 + 1, 0 };           /* ring_offsets high (s1) */
-    user_data[2] = (AgcRegisterValue){ AGC_REG_COMPUTE_USER_DATA_0 + 2, buf_addr_lo }; /* buffer ptr low (s2) */
-    user_data[3] = (AgcRegisterValue){ AGC_REG_COMPUTE_USER_DATA_0 + 3, buf_addr_hi }; /* buffer ptr high (s3) */
-    user_data[4] = (AgcRegisterValue){ AGC_REG_COMPUTE_USER_DATA_0 + 4, total_pixels };/* total pixels (s4) */
-    user_data[5] = (AgcRegisterValue){ AGC_REG_COMPUTE_USER_DATA_0 + 5, color };       /* fill color (s5) */
+    user_data[0] = (AgcRegisterValue){ AGC_REG_COMPUTE_USER_DATA_0 + 0, 0 };           /* s0: unused */
+    user_data[1] = (AgcRegisterValue){ AGC_REG_COMPUTE_USER_DATA_0 + 1, 0 };           /* s1: unused */
+    user_data[2] = (AgcRegisterValue){ AGC_REG_COMPUTE_USER_DATA_0 + 2, buf_addr_lo }; /* s2: buf ptr low */
+    user_data[3] = (AgcRegisterValue){ AGC_REG_COMPUTE_USER_DATA_0 + 3, buf_addr_hi }; /* s3: buf ptr high */
+    user_data[4] = (AgcRegisterValue){ AGC_REG_COMPUTE_USER_DATA_0 + 4, total_pixels };/* s4: total pixels */
+    user_data[5] = (AgcRegisterValue){ AGC_REG_COMPUTE_USER_DATA_0 + 5, color };       /* s5: fill color */
 
-    printf("[Dispatch] SET_SH_REG USER_DATA (0x240): buf=0x%x_%08x pixels=%u color=0x%08x\n",
+    printf("[Dispatch] SET_SH_REG USER_DATA (0x240): s2..s5 buf=0x%x_%08x pixels=%u color=0x%08x\n",
            buf_addr_hi, buf_addr_lo, total_pixels, color);
 
     cmd = sceAgcCbSetShRegistersDirect(&cb, user_data, 6);
-    if (!cmd) {
-        printf("[Dispatch] ERROR: failed to set user data\n");
-        return false;
-    }
     *cmd |= 1u;  /* compute shader type */
 
-    /* --- Test 1: WRITE_DATA — write a marker value to test GPU execution.
-     * We write to TWO targets:
-     *   a) The CB buffer itself (flexible memory, known GPU-visible)
-     *   b) The display buffer (garlic memory, may not be GPU-visible)
-     * This tells us if the GPU is executing commands and whether garlic
-     * memory is accessible from the GPU.
-     *
-     * WRITE_DATA (opcode 0x37) format:
-     *   header: agcPm4Header3(0x37, 6)
-     *   word 1: control = src_sel(2=inline) | dst_sel(0=mem) | wr_confirm(1)
-     *   word 2: dst_addr_lo
-     *   word 3: dst_addr_hi
-     *   word 4: data
-     * Total = 5 dwords (header + 4 body). count = 5-2 = 3. */
-
-    /* Write to flexible memory (CB buffer + offset 0x1000 — past the DCB itself) */
+    /* WRITE_DATA #1: flexible memory marker (CB+0x1000) */
     uint64_t flex_target = (uint64_t)(uintptr_t)cb_buffer + 0x1000;
     uint32_t *wd1 = agcCbAllocDwords(&cb, 5);
     if (wd1) {
@@ -601,13 +601,11 @@ static bool dispatch_compute(ComputeTest *test, void *shader_addr,
         wd1[1] = (2u << 0) | (0u << 2) | (1u << 8);
         wd1[2] = (uint32_t)flex_target;
         wd1[3] = (uint32_t)(flex_target >> 32);
-        wd1[4] = 0x12345678u;  /* marker in flexible memory */
-        printf("[Dispatch] WRITE_DATA #1: 0xFLEX1234 → flexible mem 0x%lx (CB+0x1000)\n",
-               (unsigned long)flex_target);
+        wd1[4] = 0x12345678u;
     }
 
-    /* Write to garlic memory (display buffer last pixel) */
-    uint64_t garlic_target = (uint64_t)(uintptr_t)test->buffers[0] +
+    /* WRITE_DATA #2: marker (compute_out last pixel) */
+    uint64_t garlic_target = (uint64_t)(uintptr_t)compute_out +
                              (size_t)test->width * test->height * 4 - 4;
     uint32_t *wd2 = agcCbAllocDwords(&cb, 5);
     if (wd2) {
@@ -615,39 +613,18 @@ static bool dispatch_compute(ComputeTest *test, void *shader_addr,
         wd2[1] = (2u << 0) | (0u << 2) | (1u << 8);
         wd2[2] = (uint32_t)garlic_target;
         wd2[3] = (uint32_t)(garlic_target >> 32);
-        wd2[4] = 0xCAFEBABE;  /* marker in garlic memory */
-        printf("[Dispatch] WRITE_DATA #2: 0xCAFEBABE → garlic mem 0x%lx (buf[last])\n",
-               (unsigned long)garlic_target);
+        wd2[4] = 0xCAFEBABE;
     }
 
-    /* Write fill color to first pixel of display buffer via WRITE_DATA */
-    uint64_t first_pixel = (uint64_t)(uintptr_t)test->buffers[0];
-    uint32_t *wd3 = agcCbAllocDwords(&cb, 5);
-    if (wd3) {
-        wd3[0] = agcPm4Header3(AGC_PM4_OP_WRITE_DATA, 5);
-        wd3[1] = (2u << 0) | (0u << 2) | (1u << 8);
-        wd3[2] = (uint32_t)first_pixel;
-        wd3[3] = (uint32_t)(first_pixel >> 32);
-        wd3[4] = color;  /* write fill color to pixel[0] */
-        printf("[Dispatch] WRITE_DATA #3: 0x%08x → garlic mem 0x%lx (buf[0])\n",
-               color, (unsigned long)first_pixel);
-    }
+    /* WRITE_DATA #3 disabled — compute_out[0] will ONLY be written if the compute shader executes */
 
-    /* --- Dispatch compute ---
-     * DISPATCH_DIRECT also needs the compute shader type bit (bit 0) set,
-     * same as SET_SH_REG. Without it, the dispatch goes to the graphics
-     * engine and no compute workgroups are launched. */
+
+    /* Dispatch compute */
     uint32_t num_groups_x = (total_pixels + 63) / 64;
-    printf("[Dispatch] Dispatching %u workgroups (64 threads each) for %u pixels...\n",
-           num_groups_x, total_pixels);
-    cmd = sceAgcCbDispatch(&cb, num_groups_x, 1, 1, 0);
-    if (!cmd) {
-        printf("[Dispatch] ERROR: failed to build dispatch packet\n");
-        return false;
-    }
-    *cmd |= 1u;  /* compute shader type */
+    sceAgcCbDispatch(&cb, num_groups_x, 1, 1, 0);
 
-    /* WRITE_DATA #4: write marker AFTER dispatch to check if GPU is still alive */
+
+    /* WRITE_DATA #4: marker after dispatch */
     uint64_t post_dispatch = (uint64_t)(uintptr_t)cb_buffer + 0x1008;
     uint32_t *wd4 = agcCbAllocDwords(&cb, 5);
     if (wd4) {
@@ -655,61 +632,30 @@ static bool dispatch_compute(ComputeTest *test, void *shader_addr,
         wd4[1] = (2u << 0) | (0u << 2) | (1u << 8);
         wd4[2] = (uint32_t)post_dispatch;
         wd4[3] = (uint32_t)(post_dispatch >> 32);
-        wd4[4] = 0xABCDEF01u;  /* marker after dispatch */
-        printf("[Dispatch] WRITE_DATA #4: 0xABCDEF01u → after dispatch\n");
+        wd4[4] = 0xABCDEF01u;
     }
 
-    /* --- ACQUIRE_MEM: flush GPU caches after dispatch ---
-     * On GFX10/GFX11, ACQUIRE_MEM (opcode 0x58) flushes the L2 cache
-     * so CPU-visible memory writes are committed.
-     * Format: header + 5 dwords (coher_cntl, coher_size_lo, coher_size_hi,
-     *         engine_sel | coher_base_lo, coher_base_hi)
-     * coher_cntl=0x2ec47fc0 from freegnm CLEAR_STATE_SEQUENCE reference. */
+    /* ACQUIRE_MEM: flush GPU caches after dispatch */
     uint32_t *am = agcCbAllocDwords(&cb, 6);
     if (am) {
         am[0] = agcPm4Header3(AGC_PM4_OP_ACQUIRE_MEM, 6);
-        am[1] = 0x2ec47fc0u;  /* coher_cntl: flush all caches */
-        am[2] = 0xFFFFFFFFu;  /* coher_size_lo */
-        am[3] = 0;  /* coher_size_hi */
-        am[4] = 0;  /* coher_base_lo */
-        am[5] = 0;  /* coher_base_hi */
-        printf("[Dispatch] ACQUIRE_MEM: cache flush (coher_cntl=0x2ec47fc0)\n");
+        am[1] = 0x2ec47fc0u;
+        am[2] = 0xFFFFFFFFu;
+        am[3] = 0;
+        am[4] = 0;
+        am[5] = 0;
     }
 
-    /* Trailing NOP (ACO convention) */
     sceAgcCbNop(&cb, 2);
-
-    uint32_t used_dwords = agcCbUsedDwords(&cb);
-    printf("[Dispatch] DCB built: %u dwords\n", used_dwords);
-
-    /* Dump DCB content for debugging */
-    printf("[Dispatch] DCB dump (first %u dwords):\n", used_dwords > 64 ? 64 : used_dwords);
-    for (uint32_t i = 0; i < used_dwords && i < 64; i++) {
-        printf("  [%2u] 0x%08x", i, cb_buffer[i]);
-        if ((i & 3) == 3) printf("\n");
-    }
-    if ((used_dwords & 3) != 0) printf("\n");
-
-    /* Submit the DCB */
     AgcCommandBufferSubmit submit;
     submit.command_address = (uintptr_t)cb_buffer;
-    submit.dword_count = used_dwords;
+    submit.dword_count = agcCbUsedDwords(&cb);
     submit.reserved = 0;
 
     int32_t err = sceAgcDriverSubmitDcb(&submit);
-    printf("[Dispatch] SubmitDcb: 0x%08X (%s)\n", (unsigned)err, errstr(err));
-    if (err != AGC_OK) {
-        printf("[Dispatch] FAILED: GPU rejected command buffer\n");
-        return false;
-    }
-
-    /* Wait for GPU to finish — the submit is asynchronous.
-     * The GPU processes the DCB in the background. We need to wait
-     * for the compute shader to finish before reading back results.
-     * Use a simple sleep since we don't have a fence mechanism yet. */
-    printf("[Dispatch] Waiting 100ms for GPU to finish...\n");
-    sceKernelUsleep(100000);  /* 100ms */
-
+    if (err != AGC_OK) return false;
+    printf("[Dispatch] Waiting 200ms for GPU to finish...\n");
+    sceKernelUsleep(200000);
     return true;
 }
 
@@ -720,170 +666,69 @@ static void wait_for_flip(ComputeTest *test) {
 }
 
 int main(void) {
-    ComputeTest test = {
-        .handle = -1,
-        .direct_memory = -1,
-    };
-
-    printf("=== openagc Compute Dispatch Test ===\n");
-
-    /* Step 0: GPU credentials */
-    printf("\n--- Step 0: GPU credential bypass ---\n");
-    int cred_err = set_gpu_credentials();
-    printf("GPU credentials: %s\n", cred_err == 0 ? "OK" : "FAILED");
-    if (cred_err != 0) {
-        printf("FATAL: cannot set GPU credentials\n");
-        return 1;
-    }
-
-    /* Step 1: AGC init */
-    printf("\n--- Step 1: AGC initialization ---\n");
-    if (!init_agc()) {
-        printf("FATAL: AGC init failed\n");
-        return 1;
-    }
-
-    /* Step 2: VideoOut init */
-    printf("\n--- Step 2: VideoOut initialization ---\n");
-    if (!init_videoout(&test)) {
-        printf("FATAL: VideoOut init failed\n");
-        return 1;
-    }
-
+    ComputeTest test = { .handle = -1, .direct_memory = -1 };
+    init_agc();
+    init_videoout(&test);
     /* Step 3: Parse and upload shader */
     printf("\n--- Step 3: Shader loading ---\n");
+
     ParsedShader shader;
     if (!parse_shader(&shader)) {
         printf("FATAL: shader parse failed\n");
         return 1;
     }
 
+    /* Use full 76-byte GLSL compiled shader from psbc */
     void *shader_gpu_addr = upload_shader_code(shader.code, shader.code_size, &test);
     if (!shader_gpu_addr) {
         printf("FATAL: shader upload failed\n");
         return 1;
     }
 
-    /* Step 4: Dispatch compute to fill display buffer */
+
+
+    /* Step 4: Compute dispatch */
     printf("\n--- Step 4: Compute dispatch ---\n");
-    /* Fill with green (ABGR: A=0xFF, B=0x00, G=0xFF, R=0x00 = 0xFF00FF00) */
-    uint32_t fill_color = 0xFF00FF00;  /* Green in ABGR */
+    uint32_t fill_color = 0xFF00FF00;
+    uint32_t *compute_out_pre = (uint32_t *)((uint8_t *)test.compute_buffer + 0x10000);
+    for (uint32_t i = 0; i < test.width * test.height; i++) compute_out_pre[i] = 0xDEADBEEF;
 
-    /* Pre-fill buffer 0 with a marker pattern to detect if shader executes */
-    uint32_t *buf0_pre = (uint32_t *)test.buffers[0];
-    for (uint32_t i = 0; i < test.width * test.height; i++) {
-        buf0_pre[i] = 0xDEADBEEF;
-    }
-    printf("[Pre-fill] Buffer 0 filled with 0xDEADBEEF marker\n");
+    dispatch_compute(&test, shader_gpu_addr, &shader, fill_color);
 
-    if (!dispatch_compute(&test, shader_gpu_addr, &shader, fill_color)) {
-        printf("FATAL: compute dispatch failed\n");
-        return 1;
-    }
-
-    /* Step 5: Wait for GPU to finish, verify output, then flip */
+    /* Step 5: Verify GPU output */
     printf("\n--- Step 5: Verify GPU output ---\n");
-    /* Give the GPU some time to finish */
-    sceKernelUsleep(200000);  /* 200ms */
-
-    /* CPU readback: check if the shader actually wrote pixels */
-    uint32_t *buf0 = (uint32_t *)test.buffers[0];
+    uint32_t *buf0 = (uint32_t *)((uint8_t *)test.compute_buffer + 0x10000);
     uint32_t expected = fill_color;
     uint32_t total_pixels = test.width * test.height;
-    uint32_t match_count = 0;
-    uint32_t mismatch_count = 0;
-    uint32_t first_mismatch_idx = 0xFFFFFFFF;
-    uint32_t first_mismatch_val = 0;
 
     /* Check WRITE_DATA markers */
     uint32_t *flex_marker = (uint32_t *)((uint8_t *)cb_buffer + 0x1000);
-    printf("[Readback] WRITE_DATA flexible mem (CB+0x1000): 0x%08x (expecting 0x12345678)\n",
-           *flex_marker);
     uint32_t *post_marker = (uint32_t *)((uint8_t *)cb_buffer + 0x1008);
-    printf("[Readback] WRITE_DATA post-dispatch (CB+0x1008): 0x%08x (expecting 0xABCDEF01u)\n",
-           *post_marker);
-    printf("[Readback] WRITE_DATA garlic mem (buf[last]): 0x%08x (expecting 0xCAFEBABE)\n",
-           buf0[total_pixels - 1]);
+    printf("[Readback] WRITE_DATA #1 flex (CB+0x1000): 0x%08x (expecting 0x12345678)\n", *flex_marker);
+    printf("[Readback] WRITE_DATA #4 post (CB+0x1008): 0x%08x (expecting 0xABCDEF01)\n", *post_marker);
+    printf("[Readback] WRITE_DATA #2 compute[last]: 0x%08x (expecting 0xCAFEBABE)\n", buf0[total_pixels - 1]);
+    printf("[Readback] WRITE_DATA #3 compute[0]:    0x%08x (expecting 0x%08x)\n", buf0[0], expected);
 
-    printf("[Readback] Checking display buffer 0 (expecting 0x%08x)...\n", expected);
-    uint32_t sample_indices[] = {0, 1, 100, 1000, 1920, 10000, 100000, 500000, 1000000, 2073598};
+    printf("[Readback] Sample pixels:\n");
+    uint32_t sample_indices[] = {0, 1, 63, 64, 127, 128, 1000, 1920, 10000, 100000, 2073598};
     for (int i = 0; i < (int)(sizeof(sample_indices)/sizeof(sample_indices[0])); i++) {
         uint32_t idx = sample_indices[i];
-        if (idx >= total_pixels) continue;
         printf("  pixel[%u] = 0x%08x %s\n", idx, buf0[idx],
                buf0[idx] == expected ? "OK" : "MISMATCH");
     }
-    /* Full scan */
+
+    uint32_t match_count = 0;
     for (uint32_t i = 0; i < total_pixels; i++) {
-        if (buf0[i] == expected) {
-            match_count++;
-        } else {
-            if (mismatch_count == 0) {
-                first_mismatch_idx = i;
-                first_mismatch_val = buf0[i];
-            }
-            mismatch_count++;
-        }
+        if (buf0[i] == expected) match_count++;
     }
-    printf("[Readback] %u/%u pixels match (expected 0x%08x)\n",
-           match_count, total_pixels, expected);
-    if (mismatch_count > 0) {
-        printf("[Readback] First mismatch at pixel %u: got 0x%08x (expected 0x%08x)\n",
-               first_mismatch_idx, first_mismatch_val, expected);
-        if (match_count == 0) {
-            printf("[Readback] WARNING: No pixels match — shader may not have executed,\n");
-            printf("              or user data layout is wrong, or buffer address is wrong.\n");
-        } else {
-            printf("[Readback] Partial match — some pixels written correctly.\n");
-        }
-    } else {
-        printf("[Readback] SUCCESS: All pixels match the expected color!\n");
-    }
+    printf("[Readback] Total: %u/%u pixels match\n", match_count, total_pixels);
 
-    /* Submit flip to show the GPU-filled buffer */
-    int32_t err = sceVideoOutSubmitFlip(test.handle, 0, SCE_VIDEO_OUT_FLIP_MODE_VSYNC, 0);
-    printf("sceVideoOutSubmitFlip(0): 0x%x\n", err);
-    if (err == 0) {
-        wait_for_flip(&test);
-        printf("Flip 0 done — GPU-rendered frame should be visible\n");
-    }
 
-    /* Keep displaying for 5 seconds */
-    printf("\n--- Step 6: Hold display for 5 seconds ---\n");
-    sceKernelUsleep(5000000);
+    /* Copy rendered output to display buffer */
+    memcpy(test.buffers[0], buf0, total_pixels * 4);
 
-    /* Submit second flip with a CPU-rendered red buffer for visual comparison */
-    printf("\n--- Step 7: Second flip (CPU-rendered red) ---\n");
-    /* Clear buffer 1 to red using CPU for comparison */
-    uint32_t *buf1 = (uint32_t *)test.buffers[1];
-    for (uint32_t i = 0; i < test.width * test.height; i++) {
-        buf1[i] = 0xFF0000FF;  /* Red in ABGR */
-    }
-
-    err = sceVideoOutSubmitFlip(test.handle, 1, SCE_VIDEO_OUT_FLIP_MODE_VSYNC, 1);
-    printf("sceVideoOutSubmitFlip(1): 0x%x\n", err);
-    if (err == 0) {
-        wait_for_flip(&test);
-        printf("Flip 1 done — CPU-rendered red frame should be visible\n");
-    }
-
-    sceKernelUsleep(3000000);
-
-    /* Cleanup */
-    printf("\n--- Cleanup ---\n");
-    sceVideoOutSubmitFlip(test.handle, -1, 0, 0);
-    sceKernelDeleteEqueue(test.flipqueue);
-    sceVideoOutClose(test.handle);
-    if (test.direct_memory >= 0)
-        sceKernelReleaseDirectMemory(test.direct_memory, test.mapped_size);
-
-    printf("\n=== Summary ===\n");
-    printf("  AGC initialized:     yes\n");
-    printf("  VideoOut initialized: yes\n");
-    printf("  Shader loaded:       yes\n");
-    printf("  Compute dispatched:  yes\n");
-    printf("  Display flipped:     yes\n");
-    printf("=== Done ===\n");
+    wait_for_flip(&test);
+    sceKernelUsleep(1000000);
 
     return 0;
 }
