@@ -567,7 +567,8 @@ static void setup_render_target(SceAgcCb *cb, void *rt_addr,
      * Swap = ALT (1) at bits [12:11] to match A8B8G8R8 display buffer */
     rt_regs[4] = CB_INFO_FORMAT(COLOR_8_8_8_8) |
                  CB_INFO_NUM_TYPE(SURF_NUMBER_UNORM) |
-                 CB_INFO_SWAP(SURF_SWAP_ALT);
+                 CB_INFO_SWAP(SURF_SWAP_ALT) |
+                 (1u << 16);  /* CB_INFO_BLEND_BYPASS: bypass blend state */
 
     /* reg 5: CB_COLOR0_ATTRIB — tile mode + num_samples + num_fragments
      * TILE_MODE_INDEX (5 bits at [4:0]) = 31 (kAgcTileDisplay_LinearGeneral)
@@ -667,15 +668,14 @@ static void setup_target_mask(SceAgcCb *cb) {
 }
 
 /* Set VGT_PRIMITIVE_TYPE (UC register) */
-static void setup_primitive_type(SceAgcCb *cb) {
-    AgcRegisterValue prim = { AGC_REG_VGT_PRIMITIVE_TYPE, VGT_PT_TRILIST };
-    sceAgcCbSetUcRegistersDirect(cb, &prim, 1);
+/* Set VGT_SHADER_STAGES_EN (CX 0x2D5) — enable ES stage (bit 8 = 0x100).
+ * openagc-psbc compiles vertex shaders to run in the ES stage (SPI_SHADER_PGM_LO_ES at 0x0C8).
+ * Setting ES_EN (0x100) routes vertex processing through the ES stage. */
+static void setup_shader_stages(SceAgcCb *cb) {
+    AgcRegisterValue stages = { AGC_REG_VGT_SHADER_STAGES_EN, VGT_SHADER_STAGES_ES_EN };
+    sceAgcCbSetCxRegistersDirect(cb, &stages, 1);
+    printf("[VGT] VGT_SHADER_STAGES_EN = 0x%08X (ES stage enabled)\n", VGT_SHADER_STAGES_ES_EN);
 }
-
-/* VGT_SHADER_STAGES_EN — NOT set. Default 0 means VS runs as VS (not ES).
- * For a simple VS+PS pipeline without tessellation/geometry shaders,
- * the default (0) is correct. Setting ES_EN would route the VS through
- * the ES stage, which is wrong for a type-3 (VS) shader. */
 
 /* ======================================================================== */
 /* Main draw call dispatch                                                   */
@@ -736,7 +736,8 @@ static bool dispatch_graphics(GraphicsTest *test,
     setup_scissor(&cb, test->width, test->height);
     setup_target_mask(&cb);
 
-    /* 4. VGT_SHADER_STAGES_EN — default 0 (VS runs as VS, not ES) */
+    /* 4. Enable ES shader stage (VGT_SHADER_STAGES_EN = 0x100) */
+    setup_shader_stages(&cb);
 
     /* 5. Write VS shader SH + CX registers */
     write_shader_sh_regs(&cb, vs, vs_code);
@@ -756,15 +757,19 @@ static bool dispatch_graphics(GraphicsTest *test,
     sceAgcCbSetCxRegistersDirect(&cb, &pos_format, 1);
     AgcRegisterValue z_format = { AGC_REG_SPI_SHADER_Z_FORMAT, 0 };
     sceAgcCbSetCxRegistersDirect(&cb, &z_format, 1);
-    AgcRegisterValue col_format = { AGC_REG_SPI_SHADER_COL_FORMAT, 0x1 };
-    sceAgcCbSetCxRegistersDirect(&cb, &col_format, 1);
-    /* Also set CB_SHADER_MASK (0x08F) to 0x0F (all RGBA channels to RT0) */
-    AgcRegisterValue cb_shader_mask = { AGC_REG_CB_SHADER_MASK, 0x0F };
-    sceAgcCbSetCxRegistersDirect(&cb, &cb_shader_mask, 1);
-    printf("[SPI] POS_FORMAT=1, Z_FORMAT=0, COL_FORMAT=1, CB_SHADER_MASK=0x0F\n");
+    /* 6c. CRITICAL: Override PA_CL_CLIP_CNTL (0x203) and PA_SU_SC_MODE_CNTL (0x204)
+     * The shader record's CX block contained 0x203=0x10 (enabling UCP0 -> clips all primitives!)
+     * and 0x204=0x0F (enabling CULL_FRONT + CULL_BACK -> culls all triangles!).
+     * Explicitly set 0x203=0 (no UCPs) and 0x204=0 (no culling) to allow triangle rendering! */
+    AgcRegisterValue clip_cntl = { AGC_REG_PA_CL_CLIP_CNTL, 0x00000000 };
+    sceAgcCbSetCxRegistersDirect(&cb, &clip_cntl, 1);
+    AgcRegisterValue sc_mode = { AGC_REG_PA_SU_SC_MODE_CNTL, 0x00000000 };
+    sceAgcCbSetCxRegistersDirect(&cb, &sc_mode, 1);
+    printf("[PA] PA_CL_CLIP_CNTL=0 (UCPs disabled), PA_SU_SC_MODE_CNTL=0 (no culling)\n");
 
     /* 7. Set primitive type (TRILIST) */
-    setup_primitive_type(&cb);
+    AgcRegisterValue prim = { AGC_REG_VGT_PRIMITIVE_TYPE, VGT_PT_TRILIST };
+    sceAgcCbSetUcRegistersDirect(&cb, &prim, 1);
 
     /* 8. Draw — IT_DRAW_INDEX_AUTO with 3 vertices */
     sceAgcDcbDrawIndexAuto(&cb, 3, 0);
