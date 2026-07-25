@@ -1,5 +1,24 @@
 # openagc Status
 
+## Firmware compatibility
+
+The public AGC API is firmware-agnostic. Runtime native-driver selection now
+uses explicit ABI-family aliases rather than a FW 5.50-only backend or unsafe
+numeric ranges.
+
+- `prospero-gcabi-v4-standard-direct` contains exact inspected standard-PS5
+  builds from FW 4.00 through FW 12.70.
+- FW 5.50 is hardware-validated; the other aliases are RE-verified and await
+  hardware validation on their corresponding firmware.
+- FW 1.00-3.20 require a separate legacy submission backend because request
+  `0xc010813b` is absent.
+- PS5 Pro remains unsupported by this backend because firmware uses a distinct
+  22 MiB CWSR allocation profile. It must not be treated as standard PS5.
+- Unknown firmware builds fail closed.
+
+See `analysis/agc_driver_abi_families.tsv`,
+`analysis/agc_driver_abi_1160.md`, and `tools/verify_agc_driver_abi.sh`.
+
 ## Current Milestone
 
 **Graphics pipeline: indexed drawing and FP16 render targets are

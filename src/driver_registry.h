@@ -2,6 +2,7 @@
 #define OPENAGC_DRIVER_REGISTRY_H
 
 #include <stddef.h>
+#include <stdbool.h>
 #include <stdint.h>
 
 #include "driver_ops.h"
@@ -35,6 +36,7 @@ typedef struct AgcDriverRegistryEntry {
 } AgcDriverRegistryEntry;
 
 AgcFirmwareVersion agcFirmwareNormalize(uint32_t raw_version);
+bool agcProsperoStandardDirectAbiSupportsFirmware(uint32_t raw_version);
 const AgcDriverRegistryEntry *agcDriverRegistryLookup(
     const AgcDriverRegistryEntry *entries, size_t entry_count,
     uint32_t raw_version, uint32_t required_capabilities);

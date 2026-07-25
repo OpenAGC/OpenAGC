@@ -5,6 +5,24 @@
 
 #include "agc_error.h"
 
+/*
+ * Exact standard-PS5 builds whose libSceAgcDriver direct-submit ABI was
+ * inspected. Keep this fail-closed: never replace the aliases with a range.
+ * PS5 Pro has a different CWSR profile and is outside this backend contract.
+ */
+static const uint32_t g_standard_direct_aliases[] = {
+    0x04000000u, 0x04030000u, 0x04500000u, 0x04510000u,
+    0x05020000u, 0x05100000u, 0x05500000u,
+    0x06000000u, 0x06020000u, 0x06500000u,
+    0x07010000u, 0x07200000u, 0x07400000u, 0x07600000u, 0x07610000u,
+    0x08000000u, 0x08200000u, 0x08400000u, 0x08600000u,
+    0x09000000u, 0x09050000u, 0x09200000u, 0x09400000u, 0x09600000u,
+    0x10010000u, 0x10200000u, 0x10400000u, 0x10600000u,
+    0x11000000u, 0x11200000u, 0x11400000u, 0x11600000u,
+    0x12000000u, 0x12020000u, 0x12200000u, 0x12400000u,
+    0x12600000u, 0x12700000u
+};
+
 static uint16_t agcBcdByte(uint32_t value)
 {
     return (uint16_t)(((value >> 4) & 0xfu) * 10u + (value & 0xfu));
@@ -19,6 +37,18 @@ AgcFirmwareVersion agcFirmwareNormalize(uint32_t raw_version)
     version.minor = agcBcdByte(raw_version >> 16);
     version.patch = agcBcdByte(raw_version >> 8);
     return version;
+}
+
+bool agcProsperoStandardDirectAbiSupportsFirmware(uint32_t raw_version)
+{
+    size_t i;
+
+    for (i = 0; i < sizeof(g_standard_direct_aliases) /
+                    sizeof(g_standard_direct_aliases[0]); ++i) {
+        if (g_standard_direct_aliases[i] == raw_version)
+            return true;
+    }
+    return false;
 }
 
 const AgcDriverRegistryEntry *agcDriverRegistryLookup(
@@ -109,12 +139,12 @@ int32_t agcDriverSelectRuntime(AgcFirmwareVersion *version_out,
     const AgcDriverOps **ops_out)
 {
 #ifdef OPENAGC_PROSPERO
-    static const uint32_t fw550_aliases[] = {0x05500000u};
     static const AgcDriverRegistryEntry registry[] = {
         {
-            "prospero-fw550-direct",
-            fw550_aliases,
-            sizeof(fw550_aliases) / sizeof(fw550_aliases[0]),
+            "prospero-gcabi-v4-standard-direct",
+            g_standard_direct_aliases,
+            sizeof(g_standard_direct_aliases) /
+                sizeof(g_standard_direct_aliases[0]),
             AGC_BACKEND_CAP_NATIVE_SUBMIT | AGC_BACKEND_CAP_COMPUTE |
                 AGC_BACKEND_CAP_GRAPHICS,
             &agcProsperoDriverOps

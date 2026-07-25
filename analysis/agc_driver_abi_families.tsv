@@ -1,0 +1,9 @@
+family	firmware_builds	ioctl_count	pid_submit_0x3b	standard_profile	status
+gcabi-v1	1.00	43	no	unknown	older backend required
+gcabi-v2	2.00,2.50	44	no	unknown	older backend required
+gcabi-v3	3.00,3.20	47	no	unknown	older backend required
+gcabi-v4	4.00,4.03,4.50,4.51	48	yes	yes	standard direct backend alias
+gcabi-v5	5.02,5.10,5.50	50	yes	yes	standard direct backend alias; 5.50 hardware validated
+gcabi-v6	6.00,6.02,6.50	52	yes	yes	standard direct backend alias
+gcabi-v7	7.01,7.20,7.40,7.60,7.61,8.00,8.20,8.40,8.60	52	yes	yes	standard direct backend alias
+gcabi-v8	9.00,9.05,9.20,9.40,9.60,10.01,10.20,10.40,10.60,11.00,11.20,11.40,11.60,12.00,12.02,12.20,12.40,12.60,12.70	53	yes	yes	standard direct backend alias; PS5 Pro profile excluded

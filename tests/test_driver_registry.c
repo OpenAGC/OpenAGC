@@ -30,6 +30,22 @@ static void test_firmware_normalization(void)
     TEST_ASSERT_EQ(version.patch, 1u, "firmware patch normalized");
 }
 
+static void test_standard_direct_firmware_aliases(void)
+{
+    TEST_ASSERT(agcProsperoStandardDirectAbiSupportsFirmware(0x04000000u),
+        "oldest independently inspected direct-submit firmware supported");
+    TEST_ASSERT(agcProsperoStandardDirectAbiSupportsFirmware(0x05500000u),
+        "hardware-validated firmware supported");
+    TEST_ASSERT(agcProsperoStandardDirectAbiSupportsFirmware(0x11600000u),
+        "FW 11.60 independently inspected alias supported");
+    TEST_ASSERT(agcProsperoStandardDirectAbiSupportsFirmware(0x12700000u),
+        "newest independently inspected standard firmware supported");
+    TEST_ASSERT(!agcProsperoStandardDirectAbiSupportsFirmware(0x03200000u),
+        "pre-direct-submit ABI firmware rejected");
+    TEST_ASSERT(!agcProsperoStandardDirectAbiSupportsFirmware(0x05510000u),
+        "uninspected nearby firmware rejected");
+}
+
 static void test_exact_alias_and_capability_selection(void)
 {
     static const uint32_t aliases[] = {0x05500000u, 0x05500001u};
@@ -105,6 +121,7 @@ void test_suite_driver_registry(void)
 {
     TEST_SUITE("Runtime Driver Registry");
     TEST_RUN(test_firmware_normalization);
+    TEST_RUN(test_standard_direct_firmware_aliases);
     TEST_RUN(test_exact_alias_and_capability_selection);
     TEST_RUN(test_unknown_and_detection_failure_fail_closed);
     TEST_RUN(test_invalid_registry_arguments);

@@ -14,6 +14,30 @@ The project target is native PS5 AGC behavior, not PS4 GNM compatibility. GNM
 is still a valuable reference because PS5 backward compatibility, GNM, AGC, and
 AMD PM4 packet ancestry overlap in useful ways.
 
+## Firmware Compatibility Strategy
+
+OpenAGC's public API is firmware-agnostic. Private `/dev/gc` behavior is
+represented by versioned ABI families selected from exact inspected firmware
+aliases, never by assuming that every version in a numeric range is compatible.
+
+Current backend coverage:
+
+- Standard PS5 FW 4.00 through 12.70: the current PID/direct-submit ABI is
+  present on every inspected full driver. Exact inspected builds are registered
+  under `prospero-gcabi-v4-standard-direct`.
+- FW 5.50: RE-verified and fully hardware-validated on a standard PS5.
+- Other registered FW 4.00-12.70 builds: RE-verified, awaiting per-firmware
+  hardware validation.
+- FW 1.00-3.20: the PID/direct-submit request is absent. Add a separate legacy
+  backend around the older 16-byte submit path before enabling these builds.
+- PS5 Pro: excluded from the standard backend contract until hardware-model
+  detection and its 22 MiB CWSR profile are implemented and tested.
+
+The next compatibility work is the legacy FW 1.00-3.20 backend, followed by
+model-aware PS5 Pro support and per-family hardware tests. Evidence and exact
+aliases are tracked in `analysis/agc_driver_abi_families.tsv` and
+`analysis/agc_driver_abi_1160.md`.
+
 ## Target Priority
 
 Games built with openagc must run on **real PS5 hardware first**, then on

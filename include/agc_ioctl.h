@@ -21,7 +21,11 @@
 #include <stddef.h>
 
 /*
- * /dev/gc ioctl command table and submit/queue structures for PS5 FW 5.50.
+ * /dev/gc ioctl command table and submit/queue structures for the standard
+ * PS5 direct-submit ABI family independently observed on exact FW builds from
+ * 4.00 through 12.70. OpenAGC does not infer compatibility from a range.
+ * FW 5.50 remains the primary hardware-validated target. PS5 Pro is excluded
+ * because its CWSR allocation profile differs.
  *
  * RE source: kernel dump gc_ioctl_internal at 0x6ed39c (BST + 4 jump tables),
  * gc_submit_with_pid at 0x6e65c0, gc_frame_submit_internal at 0xb7da90.
@@ -30,7 +34,8 @@
  * its ioctl_dispatch.md contains known errors (e.g. it claimed FRAME_OPEN
  * nr=0x00 was valid; it used wrong queue create/destroy ioctl numbers).
  * All ioctl numbers and struct layouts used by openagc have been independently
- * verified from SPRX disassembly. See analysis/ps5_openagc_audit.md.
+ * verified from SPRX disassembly. See analysis/agc_driver_abi_1160.md and
+ * analysis/ps5_openagc_audit.md.
  *
  * openagc is a clean rewrite — these constants are recovered ABI facts, not
  * copied code. The ioctl table is FW-version-specific; 5.50 is the first

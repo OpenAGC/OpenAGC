@@ -1254,7 +1254,7 @@ int agcProsperoMakeSysmap(void *cpu_addr, uint64_t *out_gpu_addr)
 }
 
 const AgcDriverOps agcProsperoDriverOps = {
-    .name = "prospero-fw550-direct",
+.name = "prospero-gcabi-v4-standard-direct",
     .initialize = agcProsperoInitialize,
     .initialize_internal_memory = agcProsperoInitializeInternalMemory,
     .submit_multi_command_buffers_direct = agcProsperoSubmitMultiCommandBuffersDirect,
