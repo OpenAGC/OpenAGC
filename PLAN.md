@@ -14,6 +14,34 @@ The project target is native PS5 AGC behavior, not PS4 GNM compatibility. GNM
 is still a valuable reference because PS5 backward compatibility, GNM, AGC, and
 AMD PM4 packet ancestry overlap in useful ways.
 
+## Current Execution Order
+
+Work proceeds in this order. Later items must not displace an earlier item
+unless the earlier item is explicitly blocked on unavailable firmware or
+hardware.
+
+1. **Recover the FW 1.00 pre-authentication special-queue ABI.** Decode the
+   queue-create argument written by the FW 1.00 userspace driver, connect it to
+   the proven `0x38000` EOP-ring layout, replace the exact-profile
+   `AGC_ERROR_NOT_SUPPORTED` path, and add byte-exact host fixtures.
+2. **Finish firmware-family backend hardening.** Replace the boolean queue-auth
+   capability with an explicit queue ABI family, keep exact four-digit
+   firmware aliases fail-closed, and preserve the hardware-validated FW 5.50
+   path.
+3. **Validate additional firmware only when matching hardware is available.**
+   FW 11.60 and PS5 Pro remain RE targets, not support claims. Do not issue
+   private ioctls on mismatched hardware.
+4. **Recover native geometry processing.** Start with existing AGC shader
+   records, fusion metadata, and gfx1013 registers; do not invent public mesh
+   APIs without firmware evidence.
+5. **Close cache synchronization semantics, then VRS and ray tracing.** Cache
+   behavior has observable packets and is more actionable than speculative
+   feature APIs.
+
+Every completed goal requires updated documentation, host regression coverage,
+the relevant Prospero build, hardware validation through curl/websrv when
+hardware is available, and a focused git commit. Do not use `prospero-deploy`.
+
 ## Firmware Compatibility Strategy
 
 OpenAGC's public API is firmware-agnostic. Private `/dev/gc` behavior is
@@ -30,15 +58,17 @@ Current backend coverage:
   its four-digit `0x0550` ABI key while diagnostics retain the complete value.
 - Other registered FW 4.00-12.70 builds: RE-verified, awaiting per-firmware
   hardware validation.
-- FW 1.00-3.20: implemented as three explicit profiles. FW 1.00 rejects its
-  unrecovered legacy special-queue helper; FW 1.x and 2.x reject TF-ring setup
-  because the request is absent. Core initialize and submit remain enabled.
+- FW 1.00-3.20: implemented as three explicit profiles. FW 1.00 has its
+  `0x38000` EOP offset and submit family modeled, but its pre-authentication
+  special-queue argument is still unrecovered and explicitly rejected. FW 1.x
+  and 2.x reject TF-ring setup because the request is absent. Core initialize
+  and submit remain enabled.
 - PS5 Pro: FW 9+ resolves `sceKernelHasTrinityMode` and selects the firmware-
   proven 22 MiB CWSR allocation and related offsets. Hardware validation is
   still required on a PS5 Pro.
 
-The next compatibility work is per-family hardware validation and recovery of
-the FW 1.00 special-queue helper. Evidence and exact
+The next compatibility work is recovery of the FW 1.00 special-queue helper,
+followed by per-family hardware validation. Evidence and exact
 aliases are tracked in `analysis/agc_driver_abi_families.tsv` and
 `analysis/agc_driver_abi_1160.md`.
 
@@ -118,12 +148,12 @@ Practical rule:
 | Area | PS4 GNM / GNMX | PS5 AGC target | Current evidence |
 |---|---|---|---|
 | GPU architecture | GCN | RDNA2 / Gen5 AGC | Observed from platform context |
-| Wavefront model | Wave64-centric | Wave32/Wave64 metadata and register state | Inferred; shader header work needed |
+| Wavefront model | Wave64-centric | Wave32/Wave64 metadata and register state | Wave32 NGG+PS compiler records, PM4, readback, and display hardware-validated on gfx1013 |
 | Geometry pipeline | VS/HS/DS/GS fixed-function path | AGC shader records and possible task/mesh-style paths | Speculative until firmware/shader evidence |
 | Ray tracing | Software compute only | Ray acceleration/BVH state if exposed | Speculative until AGC evidence |
 | Shading rate | Uniform rate | VRS/rate-image state if exposed | Speculative until register/packet evidence |
 | Cache sync | Coarser GCN cache flush/invalidate model | AGC acquire/release/wait/cache-policy packets | Partially observed and partially implemented |
-| Submission | GNM command buffers and PS4 ABI | AGC command buffers, submit descriptors, queues, `/dev/gc` ioctls | Submit descriptor implemented; ioctl model open |
+| Submission | GNM command buffers and PS4 ABI | AGC command buffers, submit descriptors, queues, `/dev/gc` ioctls | FW 5.50 hardware-validated; exact firmware registry implemented; FW 1.00 special queue pending |
 
 ## Current State
 
@@ -185,7 +215,7 @@ Implemented and host-tested:
 Current expected host test result:
 
 ```text
-1675 passed, 0 failed
+2110 passed, 0 failed
 ```
 
 ## Phase 0: RE Groundwork
@@ -274,8 +304,10 @@ Acceptance criteria:
 
 ## Phase 2: Shader Records and Wavefront Metadata
 
-Status: mostly implemented (shader record parser done; fused shader support
-done; register-block/Wave parsing pending observed evidence).
+Status: implemented for the currently exercised Gen5 records. Shader parsing,
+specials, fusion, semantic mapping, NGG/PS Wave32 record state, and final-PM4
+validation are host-tested and hardware-validated on gfx1013. Unobserved record
+extensions remain evidence-gated.
 
 Purpose:
 
@@ -324,10 +356,9 @@ Acceptance criteria:
 
 ## Phase 3: Register Defaults and State Builders
 
-Status: implemented (FW 5.50 primary/internal groups embedded; complete v8
-register defaults from reference implementation; prospero `NotifyDefaultStates`
-builds the blobs in GPU memory and submits a `CLEAR_STATE` DCB; hardware
-validation pending).
+Status: implemented and hardware-validated on FW 5.50. Primary/internal groups
+are embedded, the complete v8 defaults are available, and Prospero
+`NotifyDefaultStates` builds the GPU blobs and submits `CLEAR_STATE`.
 
 Purpose:
 
@@ -366,8 +397,9 @@ Acceptance criteria:
 
 ## Phase 4: `/dev/gc` Ioctl and Queue Model
 
-Status: implemented (ioctl table + struct size/alignment tests + suspend arg
-struct; no hardware validation yet).
+Status: implemented and hardware-validated for FW 5.50 submit, queue lifecycle,
+suspend points, workloads, and multi-DCB submission. Exact firmware profiles
+fail closed; the FW 1.00 special-queue layout remains the next ABI gap.
 
 Purpose:
 
@@ -498,8 +530,10 @@ Acceptance criteria:
 
 ## Phase 6: Shader Compiler (openagc-psbc)
 
-Status: **implemented and hardware-validated for compute shaders.**
-User data SGPR layout confirmed by RDNA2 disassembly.
+Status: **implemented and hardware-validated for compute and graphics
+shaders.** User-data SGPR layout, no-GS NGG fusion, vertex/texture descriptors,
+varying exports, and Wave32 NGG+PS state are confirmed by compiler fixtures and
+real gfx1013 execution.
 
 Purpose:
 
@@ -931,11 +965,11 @@ reboot). Do not re-apply these changes without careful analysis:
 
 ## Phase 8: Firmware Forward Compatibility
 
-Status: in progress. The internal operations table owns the stable public
-driver ABI; generic and FW 5.50 direct implementations are registered behind
-it, runtime firmware selection is fail-closed and exact-match, and a
-collision-safe installed-Sony export candidate is implemented. FW 11.60
-validation and Sony GPU-submit capability remain pending.
+Status: in progress. The stable operations table, exact-match runtime registry,
+FW 5.50 direct backend, and collision-safe Sony-export candidate are present.
+The next missing ABI is the FW 1.00 pre-authentication special queue. FW 11.60,
+PS5 Pro, and Sony-export GPU submission remain pending and must not block that
+locally actionable recovery.
 
 Purpose:
 
@@ -954,51 +988,70 @@ Game -> stable OpenAGC public ABI
      -> safe AGC_ERROR_UNSUPPORTED result for unknown interfaces
 ```
 
-Work:
+### Priority 1: FW 1.00 pre-authentication special queue
 
-1. ✅ Introduce an internal `AgcDriverOps` dispatch table without changing the
-   public `sceAgc*` / `sceAgcDriver*` ABI.
-2. ✅ Refactor the generic and FW 5.50 Prospero implementations behind that
-   table, preserving current behavior and host-test coverage.
-3. ✅ Add `driver_sony_exports.c` to locate/load the installed
-   `libSceAgcDriver.sprx`, resolve mandatory exports into privately named
-   function pointers, and avoid recursion or symbol collisions with OpenAGC's
-   public wrappers. FW 5.50 hardware confirms resolution and calls, but its
-   payload-context submit path does not execute GPU work, so it is not selected
-   automatically; see `analysis/sony_export_forwarding_550.md`.
-4. Maintain per-firmware export/NID aliases and module/library version
-   metadata. Probe legacy exports where the installed firmware retains them;
-   do not assume NIDs are stable between firmware releases.
-5. Forward firmware-sensitive operations first: initialization, internal
-   memory/default-state setup, queue create/destroy, DCB/ACB submission,
-   suspend points, workload tracking, and driver capability queries.
-6. Keep deterministic userspace functionality in OpenAGC: PM4 builders,
-   shader-record parsing/fusion, descriptors, primitive state, interpolant
-   mapping, and other source-backed state builders.
-7. ✅ Add runtime firmware detection and capability-based backend selection.
-   The Prospero build queries `sceKernelGetProsperoSystemSwVersion` before
-   backend initialization, validates its 0x30-byte result ABI, normalizes the
-   numeric value into major/minor/patch/raw fields, and selects from an
-   explicit raw-version alias registry. FW 5.50 (`0x05500000`) selects only
-   the hardware-validated direct backend; unregistered versions and detector
-   failures return `AGC_ERROR_NOT_SUPPORTED` without opening `/dev/gc` or
-   loading a Sony module. Registry entries declare required capabilities, and
-   host tests cover aliases, missing capabilities, nearby unknown versions,
-   and detector failure. The installed-Sony candidate is intentionally not
-   eligible for automatic selection until a non-destructive probe proves GPU
-   execution; direct fallback must never follow a mutating Sony probe.
-8. Recover FW 11.60 module exports, NIDs, initialization sequence, ioctl
-   layouts, default-state formats, memory sizes, and permission behavior from
-   local SPRX references. Do not copy or commit firmware modules.
-9. Add an FW 11.60 direct backend/table only after structure sizes and behavior
-   are independently confirmed. Never issue FW 5.50 private ioctls merely
-   because the running firmware is newer.
-10. Add host tests using fake operations tables for dispatch, missing exports,
-    version aliases, fallback selection, recursion prevention, and unsupported
-    firmware behavior.
-11. Validate on hardware in layers: initialization and version query, NOP
-    submission, queue lifecycle, compute dispatch/readback, then the graphics
-    draw sample.
+Known evidence:
+
+- The exact FW 1.00 runtime profile and submit16 family are registered.
+- The EOP allocation uses offset `0x38000`, covered by a host regression.
+- FW 1.00 predates the later authenticated 64-byte queue-create contract.
+- The current Prospero implementation tests `authenticated_special_queue` and
+  returns `AGC_ERROR_NOT_SUPPORTED`, so FW 1.00 queue support is not complete.
+
+Recovery and implementation sequence:
+
+1. Disassemble the FW 1.00 `_sceAgcDriverCreateUserSpecialQueue` path and its
+   immediate callees. Record every argument write, ioctl request, return-field
+   read, EOP pointer derivation, queue ID, pipe ID, and destroy pairing.
+2. Cross-check the userspace callsite against the FW 1.00 kernel ioctl handler
+   where available. Do not reuse FW 5.50 magic tokens or field meanings without
+   matching writes in FW 1.00.
+3. Replace `authenticated_special_queue` with an explicit queue ABI enum such
+   as `none`, `legacy_pre_auth`, and `authenticated_v2`. Keep the enum private
+   to the backend/runtime profile.
+4. Add a dedicated FW 1.00 queue-create structure with `_Static_assert` size
+   and offset checks plus a byte-exact fixture derived from disassembly.
+5. Implement the legacy branch in `agcProsperoCreateUserSpecialQueue` and its
+   matching destroy path. Remove `AGC_ERROR_NOT_SUPPORTED` only for exact
+   profiles whose legacy ABI is proven.
+6. Add host tests for FW 1.00 profile selection, `0x38000` EOP derivation,
+   encoded create/destroy arguments, returned queue handle, and failure cleanup.
+7. Build the generic and Prospero targets. If FW 1.00 hardware is unavailable,
+   label the result **SPRX-confirmed, hardware pending** rather than claiming
+   runtime support.
+
+Acceptance criteria:
+
+- No boolean queue-auth check controls ABI layout selection.
+- FW 1.00 exact aliases select `legacy_pre_auth`; FW 5.50 selects the existing
+  authenticated layout; unknown aliases remain fail-closed.
+- The FW 1.00 create and destroy buffers match disassembly-derived fixtures
+  byte for byte, including the `0x38000` EOP relationship.
+- Queue lifecycle errors release or preserve state exactly as the firmware
+  callsite does.
+- The explicit FW 1.00 `AGC_ERROR_NOT_SUPPORTED` return is removed only after
+  all preceding gates pass.
+
+### Priority 2: Stable backend dispatch and Sony exports
+
+- ✅ `AgcDriverOps` preserves the public ABI across generic and Prospero
+  implementations.
+- ✅ Exact firmware detection and capability selection fail closed.
+- ✅ The Sony-export candidate resolves privately without symbol recursion.
+- Keep the installed-Sony candidate ineligible for automatic GPU submission
+  until a non-destructive probe proves execution. Never follow a mutating Sony
+  probe with direct fallback in the same boot session.
+- Maintain per-firmware NID/module aliases without assuming NID stability.
+
+### Priority 3: Additional firmware families
+
+- Recover FW 11.60 exports, initialization, ioctls, memory sizes, defaults, and
+  permissions from local references without committing firmware binaries.
+- Add a direct backend only after independent structure and behavior proof.
+- Validate in layers on matching hardware: version query, initialization, NOP,
+  queue lifecycle, compute readback, graphics readback, and display.
+- Keep deterministic PM4 builders, descriptors, shader parsing/fusion,
+  primitive state, and interpolant mapping inside OpenAGC.
 
 Safety and compatibility rules:
 
@@ -1023,19 +1076,19 @@ Acceptance criteria:
 - A Sony-export backend resolves and calls installed driver exports without
   colliding with OpenAGC's public symbols.
 - Backend selection is deterministic, capability-tested, and fails safely.
-- The same OpenAGC-linked test application completes the ordered hardware
-  smoke tests on both FW 5.50 and FW 11.60.
+- FW 5.50 continues to complete the ordered websrv hardware smoke tests.
+- Other firmware families are not called supported until the same tests pass
+  on matching hardware.
 - Each supported firmware has recorded export provenance, structure
   size/offset assertions, and explicit hardware-validation results.
 
-This phase should begin after the Phase 7 shader/state ABI work is stable.
-The first bounded change is the internal operations table plus generic-backend
-migration; Sony export loading follows without altering application-facing
-symbols.
+The internal operations-table migration is complete. The next bounded change
+is the FW 1.00 legacy special-queue ABI described above.
 
 ## Phase 9: Higher-Level AGC Features
 
-Status: mostly speculative until more evidence is recovered.
+Status: Wave32 is complete; geometry, cache semantics, VRS, and ray tracing
+remain evidence-driven future work in that order.
 
 These are long-term goals and should not block draw-call work.
 
@@ -1131,7 +1184,8 @@ No placeholder VRS enums in public headers until evidence is found.
   - CreateShader PGM_LO/HI patching (scans SH table, handles missing pairs)
 - openagc-psbc shader compiler: `../openagc-psbc/`
   — Mesa NIR + ACO based compiler that produces PS5 AgcShaderRecord binaries
-  from GLSL/SPIR-V input. Hardware-validated for compute shaders.
+  from GLSL/SPIR-V input. Hardware-validated for compute and Wave32 NGG+PS
+  graphics shaders.
 
 ## Reference Alignment Action Items
 
