@@ -145,10 +145,14 @@ Implemented and host-tested:
 - DCB/VSH packet builders for clear state, atomic GDS, context state ops, reset
   queue, set flip, workload markers, wait-safe, and preemption (SPRX-confirmed
   unimplemented VSH-only stub).
-- Native prospero `/dev/gc` backend skeleton with ioctl submission, internal memory
+- Native prospero `/dev/gc` backend with ioctl submission, internal memory
   allocation, default-state `CLEAR_STATE` submission, and suspend-point
-  submit/query.
+  submit/query. **Hardware-validated** on PS5 (FW 5.50, exploited).
 - Hardware validation samples (`samples/hw_test/`) built as ELF and fake-SELF.
+- **Compute shader execution verified on PS5 hardware** — 2,073,600 / 2,073,600
+  pixels match expected output. GPU MMU memory mapping (flexible vs garlic),
+  COMPUTE_STATIC_THREAD_MGMT_SE0..SE3, user data SGPR layout, and SH register
+  defaults all confirmed.
 
 Current expected host test result:
 
@@ -377,9 +381,9 @@ Acceptance criteria:
 
 ## Phase 5: Native PS5 Backend
 
-Status: **implemented and hardware-validated** (NOP submit, compute dispatch,
-queue create/destroy, suspend point, workload tracking all confirmed on PS5
-hardware).
+Status: **implemented and hardware-validated** (NOP submit, compute dispatch
+with 100% pixel output, queue create/destroy, suspend point, workload
+tracking all confirmed on PS5 hardware).
 
 Purpose:
 
@@ -406,22 +410,68 @@ Work:
    All deployed and validated on PS5 hardware (FW 5.50, exploited).
 8. Submit a compute dispatch with a real shader. ✅ Done — `agc_compute.elf`
    loads a psbc-compiled compute shader, sets SH registers (PGM_LO/HI,
-   RSRC1/2/3, NUM_THREAD), sets user data (SSBO + push constants), dispatches
-   via `DISPATCH_DIRECT`, and flips the display. GPU accepts the DCB
+   RSRC1/2/3, NUM_THREAD), sets user data (buffer pointer + push constants),
+   dispatches via `DISPATCH_DIRECT`, and flips the display. GPU accepts the DCB
    (`SubmitDcb: 0x00000000`).
+9. Verify compute shader pixel output. ✅ Done — 2,073,600 / 2,073,600 pixels
+   match `0xFF00FF00` (solid green GPU-rendered frame). See "Key architectural
+   discoveries" below.
+
+### Key architectural discoveries (Phase 5 hardware validation)
+
+These were the root causes of the compute shader not writing to the display
+buffer. All four had to be fixed before the shader executed correctly:
+
+1. **GPU MMU virtual memory mapping — flexible vs garlic memory.**
+   Garlic memory (`sceKernelMapDirectMemory`) is NOT automatically mapped
+   in the GPU's VMID address space. Only **flexible memory**
+   (`sceKernelMapNamedSystemFlexibleMemory`) is automatically mapped in
+   both CPU and GPU MMU spaces. This is why the AGC SPRX uses flexible
+   memory for all internal GPU memory regions. The compute shader output
+   buffer and shader code must be in flexible memory, not garlic memory.
+   The display buffer (garlic) is registered with VideoOut separately and
+   is GPU-accessible for display scanout, but not for general compute
+   writes. Fix: allocate a 16MB flexible memory pool for compute output.
+
+2. **Compute Unit enable — `COMPUTE_STATIC_THREAD_MGMT_SE0..SE3`.**
+   Registers `0x216, 0x217, 0x219, 0x21A` must be set to `0xFFFFFFFF` to
+   enable compute units on all shader engines (SE0-SE3). Without these,
+   `DISPATCH_DIRECT` is processed but no workgroups actually execute on
+   the CUs. Register `0x218` (`COMPUTE_TMPRING_SIZE`) is skipped in this
+   contiguous block. This was the missing register that prevented shader
+   execution even after all other state was correct.
+
+3. **User data SGPR layout — `s2..s5` (confirmed by RDNA2 disassembly).**
+   The openagc-psbc NIR postprocess shows `@load_scalar_arg_amd` base
+   values, but the actual SGPR mapping was confirmed by disassembling the
+   shader binary:
+   - `s0`: unused (0)
+   - `s1`: unused (0)
+   - `s2`: buffer ptr low 32 bits
+   - `s3`: buffer ptr high 32 bits
+   - `s4`: total_pixels
+   - `s5`: fill color (RGBA8 packed)
+
+4. **FW 5.50 SH register defaults in the compute command buffer.**
+   Applying the primary and internal SH register default groups (from
+   `register_defaults_v8.c`) in the compute command buffer, with the
+   compute shader type bit (bit 0) set on each `SET_SH_REG` packet header.
+   This provides the baseline GPU state that the compute dispatch expects.
 
 Acceptance criteria:
 
 - ✅ Minimal DCB NOP submission does not fault on PS5 hardware.
-- ✅ `NotifyDefaultStates` produces a valid `CLEAR_STATE` DCB (note: returns
-  `AGC_ERROR_INVALID_ARGUMENT` on hardware — see Phase 7).
+- ✅ `NotifyDefaultStates` produces a valid `CLEAR_STATE` DCB and returns
+  `AGC_OK` on hardware.
 - ✅ Suspend-point ioctls return expected behavior.
 - ✅ Failure paths return stable error codes.
 - ✅ Compute dispatch accepted by GPU (non-NOP command buffer).
+- ✅ Compute shader writes 100% of pixels correctly (2,073,600 / 2,073,600).
 
 ## Phase 6: Shader Compiler (openagc-psbc)
 
 Status: **implemented and hardware-validated for compute shaders.**
+User data SGPR layout confirmed by RDNA2 disassembly.
 
 Purpose:
 
@@ -437,7 +487,7 @@ Work:
 4. ACO → machine code assembly. ✅ Done (Mesa `aco_assembler`).
 5. Emit `AgcShaderRecord` with SH/CX register blocks. ✅ Done.
 6. Compute shader support. ✅ Done — `fill_color.comp` compiles to
-   `fill_color.sb` and runs on PS5 hardware.
+   `fill_color.sb` and runs on PS5 hardware (100% pixel output verified).
 7. Graphics shader support (VS/PS/GS/HS/LS). ⬜ Not yet tested on hardware.
    The RSRC1/2/3 offset functions are implemented for all shader types but
    only compute has been hardware-validated.
@@ -458,15 +508,23 @@ Bugs found and fixed during compute shader validation:
   This matters because `sceAgcCreateShader` uses this byte to select which
   PGM_LO/HI register pair to patch with the shader code address.
 
+- **User data SGPR layout confirmed.** The NIR postprocess output shows
+  `@load_scalar_arg_amd` base values, but the actual SGPR mapping was
+  confirmed by RDNA2 disassembly of the shader binary. The layout is:
+  s0=unused, s1=unused, s2=buf_lo, s3=buf_hi, s4=total_pixels, s5=color.
+  See "Key architectural discoveries" in Phase 5 for details.
+
 Acceptance criteria:
 
 - ✅ Compute shader compiles and executes on PS5 hardware.
+- ✅ User data layout matches ACO's SGPR arg mapping (confirmed by RDNA2
+  disassembly — 100% pixel output).
 - ⬜ Graphics shaders (VS/PS) compile and execute on PS5 hardware.
-- ⬜ User data layout matches ACO's SGPR arg mapping (currently best-guess).
 
 ## Phase 7: Graphics Pipeline (Draw Calls)
 
 Status: **not started.** This is the current critical-path milestone.
+All prerequisites are now met.
 
 Purpose:
 
@@ -475,36 +533,57 @@ target + viewport + blend state + indexed draw — and display the result.
 
 Prerequisites:
 
-- Compute dispatch works (Phase 5). ✅
-- Shader compiler produces valid compute binaries (Phase 6). ✅
-- Graphics shader compilation (Phase 6). ⬜ Needed.
+- ✅ Compute dispatch works with 100% pixel output (Phase 5).
+- ✅ Shader compiler produces valid compute binaries (Phase 6).
+- ✅ GPU MMU memory mapping understood (flexible memory for GPU writes).
+- ✅ `NotifyDefaultStates` returns `AGC_OK` on hardware.
+- ⬜ Graphics shader compilation (Phase 6) — needed.
+
+Key learnings from compute validation that apply to graphics:
+
+- **Render targets must be in flexible memory**, not garlic memory. The
+  GPU's VMID address space only sees flexible memory mappings. Garlic
+  memory is for VideoOut display scanout, not GPU compute/graphics writes.
+  The render target should be a flexible memory buffer; copy to the garlic
+  display buffer for flip, or register the flexible buffer with VideoOut
+  directly (if supported).
+- **SET_SH_REG packets need the shader type bit** (bit 0): 0=graphics,
+  1=compute. For VS/PS draw calls, use bit 0 = 0 (graphics engine).
+- **Apply FW 5.50 SH register defaults** in the command buffer before
+  setting shader-specific state. This provides the baseline GPU state.
+- **COMPUTE_STATIC_THREAD_MGMT_SE0..SE3** is compute-specific, but
+  graphics may have analogous CU enable registers. Check if the default
+  state blobs already handle this for graphics.
 
 Work:
 
-1. **Fix `sceAgcDriverNotifyDefaultStates`** — ✅ Done. Fixed DDID allocation sizes (`AGC_DDID_PRIMARY_SIZE=0x41000`, `AGC_DDID_INTERNAL_SIZE=0xc000`). Now returns `AGC_OK`.
-
-2. **Verify compute shader execution & user data SGPR layout** — ✅ Done. Confirmed and fixed SGPR mapping (`s0=0, s1=0, s2=buf_addr_lo, s3=buf_addr_hi, s4=total_pixels, s5=color`), matching openagc-psbc NIR postprocess output and KytyPS5 / SharpEmu register models.
-
-3. **Compile a vertex + pixel shader pair** — Write a minimal VS+PS in
+1. **Compile a vertex + pixel shader pair** — Write a minimal VS+PS in
    GLSL, compile via psbc, and verify the shader records have correct
    SH/CX register blocks. The RSRC offset functions are already implemented
    for all shader types but need hardware validation.
 
-4. **Set up render target state** — Bind a display buffer as a color
-   render target via CB_COLOR0_BASE/INFO/ATTRIB registers. Use the
+2. **Set up render target state** — Bind a flexible memory buffer as a
+   color render target via CB_COLOR0_BASE/INFO/ATTRIB registers. Use the
    `AgcRenderTarget` struct and helpers already implemented in openagc.
+   **Important:** the render target buffer must be in flexible memory
+   (GPU MMU-mapped), not garlic memory.
 
-
-4. **Set up graphics state** — Viewport (PA_CL_VPORT_*), scissor
+3. **Set up graphics state** — Viewport (PA_CL_VPORT_*), scissor
    (PA_SC_WINDOW_SCISSOR_*), blend state (CB_BLEND0_CONTROL), primitive
    type (VGT_PRIMITIVE_TYPE), and shader stage enable (VGT_SHADER_STAGES_EN).
 
-5. **Submit a draw call** — Build a DCB with:
+4. **Submit a draw call** — Build a DCB with:
+   - Apply SH register defaults (graphics type, bit 0 = 0)
    - SET_SH_REG (VS/PS PGM_LO/HI, RSRC1/2/3, user data)
    - SET_CX_REG (render target, viewport, scissor, blend)
    - SET_UC_REG (VGT_PRIMITIVE_TYPE, CB_TARGET_MASK)
    - IT_DRAW_INDEX_AUTO (draw a triangle)
    Submit via `sceAgcDriverSubmitDcb`.
+
+5. **Copy render target to display buffer** — After the draw completes
+   (ACQUIRE_MEM flush), copy the flexible-memory render target to the
+   garlic-memory display buffer for VideoOut flip. Alternatively, register
+   the flexible buffer directly with VideoOut if the API supports it.
 
 6. **Verify visual output** — Flip the display buffer and confirm the
    triangle is visible. Compare with CPU-rendered reference.
@@ -514,6 +593,7 @@ Acceptance criteria:
 - A triangle is visible on the PS5 display, rendered by the GPU.
 - The draw call DCB is accepted by `sceAgcDriverSubmitDcb` without error.
 - Vertex and pixel shaders execute correctly (correct position + color).
+- Render target in flexible memory is written correctly by the GPU.
 
 ## Phase 8: Higher-Level AGC Features
 
@@ -639,6 +719,16 @@ Completed (Phase 5-6, hardware validation):
 - [x] libSceVideoOut.sprx runtime patch (NOP linear tiling check at 0x7e61)
 - [x] Websrv homebrew deployment (FTP upload + HTTP /hbldr launch)
 - [x] Cross-reference sharpemu AGC implementation for compute dispatch encoding
+- [x] Fix DCB submit descriptor (SUBMIT_16 format, 0xC0108102)
+- [x] Fix DDID allocation sizes for NotifyDefaultStates (primary=0x41000, internal=0xc000)
+- [x] Set compute shader type bit on SET_SH_REG and DISPATCH_DIRECT headers
+- [x] Fix PGM_LO address format (shader_addr >> 8, confirmed from KytyPS5)
+- [x] Fix WRITE_DATA packet length (5 dwords, was corrupting shader code)
+- [x] Discover GPU MMU mapping: flexible memory is GPU-visible, garlic is not
+- [x] Enable Compute Units via COMPUTE_STATIC_THREAD_MGMT_SE0..SE3 (0x216/0x217/0x219/0x21A)
+- [x] Apply FW 5.50 SH register defaults in compute command buffer
+- [x] Confirm user data SGPR layout by RDNA2 disassembly (s2..s5)
+- [x] **100% compute shader pixel output verified on PS5 hardware** (2,073,600 / 2,073,600 pixels match 0xFF00FF00)
 
 ## Working Rules
 
