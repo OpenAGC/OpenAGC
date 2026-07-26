@@ -20,20 +20,15 @@ Work proceeds in this order. Later items must not displace an earlier item
 unless the earlier item is explicitly blocked on unavailable firmware or
 hardware.
 
-1. **Extend combined-stage topology, invocation, and render-target coverage.**
-   Isolated tessellation and TES-to-NGG geometry composition are now
-   hardware-proven on FW 5.50, including `invocations=2` and line-strip GS
-   output. Retain the isolated samples as controls and validate the remaining
-   isolated RGBA8 target without changing shader stages.
-2. **Finish FW 5.50 backend hardening and compatibility.** Keep exact
+1. **Finish FW 5.50 backend hardening and compatibility.** Keep exact
    four-digit firmware selection and fail-closed capabilities, investigate the
    non-blocking FRAME_OPEN EINVAL and PA-debug EPERM results, then expand the
    game corpus and prioritize FW 5.50 exports and state combinations observed
    in real titles.
-3. **Validate additional firmware only when matching hardware is available.**
+2. **Validate additional firmware only when matching hardware is available.**
    FW 11.60 and PS5 Pro remain RE targets, not support claims. Do not issue
    private ioctls on mismatched hardware.
-4. **Close cache synchronization semantics, then VRS and ray tracing.** Cache
+3. **Close cache synchronization semantics, then VRS and ray tracing.** Cache
    behavior has observable packets and is more actionable than speculative
    feature APIs.
 
@@ -926,8 +921,9 @@ After interpolants pass, proceed in this order:
    hardware-validated with two half-scale tessellated copies, deterministic
    127,488-pixel FP16 coverage, and `VGT_GS_INSTANCE_CNT=0x9`. Combined
    line-strip output is also hardware-validated with `out_prim=1`, a colorful
-   6,749-pixel wire grid, and retained tessellation state. An isolated RGBA8
-   target is next.
+   6,749-pixel wire grid, and retained tessellation state. The isolated direct
+   RGBA8 target completes the matrix with repeatable 76,803-pixel coverage and
+   physical confirmation of the subdivided centroid-shrink triangle.
 11. ✅ Close PA-debug and FRAME_OPEN RE for FW 5.50. The PA-debug version
    export is a userspace permission stub returning `0x8A6D0001` without an
    ioctl, while `FRAME_OPEN` is absent from the kernel dispatcher.

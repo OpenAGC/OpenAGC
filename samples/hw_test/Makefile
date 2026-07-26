@@ -52,7 +52,7 @@ AGC_LDFLAGS := $(OPENAGC_LIB) -lSceVideoOut -lkernel
 
 # === Targets ===
 
-all: videoout_linear.elf agc_init.elf agc_videoout.elf agc_compute.elf agc_graphics.elf agc_tessellation.elf agc_tess_geometry.elf agc_tess_geometry_invocations.elf agc_tess_geometry_lines.elf
+all: videoout_linear.elf agc_init.elf agc_videoout.elf agc_compute.elf agc_graphics.elf agc_tessellation.elf agc_tess_geometry.elf agc_tess_geometry_invocations.elf agc_tess_geometry_lines.elf agc_tess_geometry_rgba8.elf
 
 # VideoOut linear smoke test (no GPU commands)
 videoout_linear.elf: videoout_linear.c ps5_video_out.h
@@ -268,6 +268,9 @@ agc_tess_geometry_invocations.elf: shaders_tess_geometry_invocations agc_graphic
 
 agc_tess_geometry_lines.elf: shaders_tess_geometry_lines agc_graphics.c gfx1013_tess_ring.h ps5_video_out.h gpu_credentials.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_TESSELLATION=1 -DAGC_TESS_GEOMETRY=1 -DAGC_TESS_GEOMETRY_LINES=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_tess_geometry_rgba8.elf: shaders_tess_geometry agc_graphics.c gfx1013_tess_ring.h ps5_video_out.h gpu_credentials.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_TESSELLATION=1 -DAGC_TESS_GEOMETRY=1 -DAGC_VALIDATE_RGBA8_REFERENCE=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
 
 # === eboot.bin versions (for debug-mode PS5) ===
 

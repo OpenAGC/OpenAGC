@@ -1810,8 +1810,16 @@ static bool dispatch_graphics(GraphicsTest *test,
         printf("  color[%u] = 0x%08x\n", i, unique_colors[i]);
     const uint32_t viewport_extent =
         target->width < target->height ? target->width : target->height;
+#if AGC_TESS_GEOMETRY
+    /* The combined TES+GS control shrinks every microtriangle around its
+     * centroid by 0.78, reducing ideal RGBA8 coverage by 0.78^2. */
+    const uint32_t expected_changed = (uint32_t)
+        (((uint64_t)viewport_extent * viewport_extent * 1774u * 1521u) /
+         (16384u * 2500u));
+#else
     const uint32_t expected_changed = (uint32_t)
         (((uint64_t)viewport_extent * viewport_extent * 1774u) / 16384u);
+#endif
     const uint32_t coverage_tolerance = 1024u;
     printf("[Readback] Expected triangle coverage: about %u (+/-%u)\n",
            expected_changed, coverage_tolerance);

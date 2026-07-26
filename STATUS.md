@@ -136,6 +136,16 @@ eight sampled colors, 3,044 opaque samples, zero out-of-range components, four
 1,800/1,800 display flips. The PS5 display showed the expected colorful
 equal-sided triangular wire grid on gray without a GPU hang or kernel panic.
 
+The isolated combined-stage RGBA8 target is hardware-validated. The
+`agc_tess_geometry_rgba8.elf` fixture reuses the centroid-shrink TES+GS records
+unchanged and switches only the render target to the registered 1920x1080
+`R8G8B8A8_UNORM` display surface with `CB_COLOR0_INFO=0x00010828`. Two runs
+each produced exactly 76,803 changed pixels versus 76,836 expected, eight
+sampled colors, four `4.0` factors, 24 changed offchip dwords, a live post-draw
+marker, and 1,800/1,800 display flips. Physical confirmation showed the
+equal-sided red/green subdivided triangle with the centroid-shrink dark seams
+on a gray background. No GPU hang or kernel panic occurred.
+
 Host coverage validates record types, required HS continuation state, the
 front-only TES form produced by ACO, runtime placeholder patching, Wave32
 stage enables, primitive type `DI_PT_PATCH=9`, and command-buffer cursor
@@ -144,8 +154,9 @@ stage-local control-point data and writes tessellation level 4, while its TES
 uses `gl_TessCoord` for barycentric position and color interpolation. Keeping
 the position tables local isolates HS/TES launch from inter-stage varying ABI.
 The isolated sample remains the control for future combined-stage expansion.
-Invocation count and line-strip output are proven; render-target format remains
-the final isolated test in this matrix.
+The planned combined-stage matrix is complete: `invocations=2`, line-strip
+output, FP16 offscreen rendering, and direct RGBA8 display rendering are all
+independently hardware-proven on FW 5.500.008.
 
 
 ## Firmware compatibility
