@@ -1134,6 +1134,30 @@ Goal:
 
 Recover native PS5 geometry setup beyond the classic GNM-style pipeline.
 
+Current FW 5.50 gfx1013 sequence:
+
+1. **Stabilize pass-through NGG geometry.** Isolate the Wave32
+   `GS_ALLOC_REQ`, following workgroup barrier, and primitive/vertex export
+   boundary. Preserve the proven ES/GS entry ABI, WGP mode, triangle-strip
+   Specials, and Mesa-aligned allocation registers while probing one boundary
+   at a time.
+2. **Hardware-accept pass-through geometry.** Require successful DCB
+   submission, the live post-draw marker, approximately 255,456 covered FP16
+   pixels within tolerance, centered bounds, at least eight sampled colors,
+   no out-of-range components, and visual confirmation of the centered RGB
+   triangle on FW 5.50.
+3. **Validate geometry amplification.** Compile and run the prepared
+   `triangle_amplify.geom` path. Require two distinct half-scale textured
+   triangles, correct aggregate coverage, stable repeated execution, and
+   visual confirmation.
+4. **Promote the path to reusable coverage.** Run the compiler NGG-record
+   regression and OpenAGC generic suites, remove obsolete entry/allocation
+   probes and override switches, and retain only bounded PM4 diagnostics.
+5. **Proceed to tessellation only after geometry passes.** Geometry remains
+   ahead of tessellation and combined tessellation-plus-geometry so later
+   failures do not conflate hull/domain ABI work with the unresolved NGG
+   allocation boundary.
+
 Rule:
 
 Do not add task/mesh public APIs until firmware exports, shader metadata, or

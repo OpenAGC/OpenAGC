@@ -77,18 +77,22 @@ shaders/triangle_vert.spv: shaders/triangle.vert
 shaders/triangle_frag.spv: shaders/triangle.frag
 	$(GLSLANG) -V --target-env vulkan1.2 $< -o $@
 
+shaders/triangle_geom.spv: shaders/triangle.geom
+	$(GLSLANG) -V --target-env vulkan1.2 $< -o $@
+
 shaders/triangle_frag.sb: shaders/triangle_frag.spv
 	$(PSBC) -f $< -s fragment -o $@
 
 shaders/triangle_frag_sb.h: shaders/triangle_frag.sb
 	xxd -i -n triangle_frag_data $< $@
 
-# Regenerate the gfx1013 NGG GS-front/GS-back records and C headers.
-shaders_ngg: shaders/triangle_vert.spv
-	$(PSBC) -f $< -s vertex \
+# Regenerate a merged gfx1013 VS+GS NGG program and C headers.
+shaders_ngg: shaders/triangle_vert.spv shaders/triangle_geom.spv
+	$(PSBC) -f shaders/triangle_geom.spv -s geometry \
+	    --pre-vertex shaders/triangle_vert.spv \
+	    --wave32 \
 	    -o shaders/triangle_ngg_back.sb \
 	    --ngg-front shaders/triangle_ngg_front.sb \
-	    --wave32 \
 	    --vertex-attribute 0:0:0:20:r32g32_float \
 	    --vertex-attribute 1:0:8:20:r32g32b32_float
 	xxd -i -n triangle_ngg_front_data \
@@ -96,9 +100,30 @@ shaders_ngg: shaders/triangle_vert.spv
 	xxd -i -n triangle_ngg_back_data \
 	    shaders/triangle_ngg_back.sb shaders/triangle_ngg_back_sb.h
 
+.PHONY: shaders_ngg_amplify
+shaders_ngg_amplify: shaders/triangle_vert.spv shaders/triangle_amplify.geom
+	glslangValidator -V --target-env vulkan1.2 shaders/triangle_amplify.geom \
+	    -o shaders/triangle_amplify.spv
+	$(PSBC) -f shaders/triangle_amplify.spv -s geometry \
+	    --pre-vertex shaders/triangle_vert.spv \
+	    --wave32 \
+	    -o shaders/triangle_ngg_amplify_back.sb \
+	    --ngg-front shaders/triangle_ngg_amplify_front.sb \
+	    --vertex-attribute 0:0:0:20:r32g32_float \
+	    --vertex-attribute 1:0:8:20:r32g32b32_float
+	xxd -i -n triangle_ngg_amplify_front_data \
+	    shaders/triangle_ngg_amplify_front.sb \
+	    shaders/triangle_ngg_amplify_front_sb.h
+	xxd -i -n triangle_ngg_amplify_back_data \
+	    shaders/triangle_ngg_amplify_back.sb \
+	    shaders/triangle_ngg_amplify_back_sb.h
+
 # Graphics draw call test (AGC + NGG/PS shaders + render target + VideoOut)
 agc_graphics.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_graphics_amplify.elf: shaders_ngg_amplify agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_NGG_AMPLIFY=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
 
 # === eboot.bin versions (for debug-mode PS5) ===
 

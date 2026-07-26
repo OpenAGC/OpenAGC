@@ -31,6 +31,10 @@ int32_t PS5_SYSV_ABI agcGfx1013ValidateWave32VsPs(
     const AgcGfx1013Wave32VsPsState *state);
 int32_t PS5_SYSV_ABI agcGfx1013BindWave32VsPs(
     SceAgcCb *cb, const AgcGfx1013Wave32VsPsState *state);
+int32_t PS5_SYSV_ABI agcGfx1013ValidateVsPs(
+    const AgcGfx1013Wave32VsPsState *state);
+int32_t PS5_SYSV_ABI agcGfx1013BindVsPs(
+    SceAgcCb *cb, const AgcGfx1013Wave32VsPsState *state);
 
 #ifdef __cplusplus
 }

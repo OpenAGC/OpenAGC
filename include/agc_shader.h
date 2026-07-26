@@ -42,6 +42,11 @@ extern "C" {
  * PS5 user allocations share the fixed high address32 value 0x2. */
 #define OPENAGC_VERTEX_BUFFER_TABLE_PLACEHOLDER 0x56424450u /* "VBDP" */
 
+/* Separately compiled gfx1013 GsFront code jumps to GsBack through this
+ * address32 user SGPR. Applications replace the tag with the low 32 bits of
+ * the uploaded back-program address before drawing. */
+#define OPENAGC_NEXT_STAGE_PC_PLACEHOLDER 0x4E585450u /* "NXTP" */
+
 /* openagc-psbc tags RADV address32 descriptor-set user SGPRs with these
  * values. Applications replace the tag with the low 32 bits of the runtime
  * descriptor table; PS5 user allocations share address32_hi=0x2. */

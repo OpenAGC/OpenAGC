@@ -15,6 +15,44 @@ Validation evidence: generic tests pass; the Prospero library and
 pixels with no out-of-range components, executed the post-draw
 `0xDEADCAFE` marker, and completed 1,800/1,800 display flips.
 
+## FW 5.50 NGG geometry bring-up
+
+Status: **in progress; pass-through geometry is not hardware-validated yet.**
+
+The compiler and sample now support separate Wave32 ES-front and GS-back
+records for a real geometry shader. The current implementation preserves the
+pre-lowering `triangle_strip` output topology in `AgcShaderSpecials`, enables
+`SPI_SHADER_PGM_RSRC1_GS.WGP_MODE`, leaves the unsafe `NGG_WAVE_ID_EN` bit
+clear, and emits the same GFX10 allocation-register formulas used by Mesa.
+The reusable binder consumes the record Specials through
+`sceAgcCreatePrimState`; the hardware audit confirms `out_prim=2`,
+`GE_CNTL=0x00010055`, Wave32 stage state, successful DCB submission, and a live
+post-draw marker.
+
+Hardware probes on FW 5.500.008 have confirmed all of the following before the
+remaining failure:
+
+- The ES front and GS back both execute.
+- `GS_TG_INFO` reports three input vertices and merged-wave state reports one
+  GS invocation.
+- The input LDS offsets and vertex position data are correct.
+- The GS writes all three output vertices and completion data to LDS.
+- The generated shader reaches the NGG allocation/export region without a GPU
+  or kernel hang.
+
+The final raster is still unstable and incorrect. The latest probe-free run
+changed 430,155 FP16 pixels, bounded at `x=0..504, y=0..1099`, with one solid
+sampled color instead of the expected approximately 255,456-pixel centered RGB
+triangle. Earlier runs produced different partial or oversized regions. This
+run-to-run variation localizes the remaining work to the Wave32
+`GS_ALLOC_REQ`/workgroup-barrier/export boundary rather than PM4 submission,
+shader entry, input fetch, topology metadata, or GS LDS emission.
+
+Two-triangle geometry amplification is prepared but must not be called
+validated until stable pass-through geometry passes first. Compiler regression
+coverage for WGP mode, triangle-strip record serialization, and the obsolete
+query wait has been added but was not run during this hardware-only iteration.
+
 
 ## Firmware compatibility
 

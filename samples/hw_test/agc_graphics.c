@@ -40,8 +40,20 @@
 #include <ps5/kernel.h>
 
 /* Embedded shader binaries */
+#ifndef AGC_NGG_AMPLIFY
+#define AGC_NGG_AMPLIFY 0
+#endif
+#if AGC_NGG_AMPLIFY
+#include "shaders/triangle_ngg_amplify_front_sb.h"
+#include "shaders/triangle_ngg_amplify_back_sb.h"
+#define NGG_FRONT_DATA triangle_ngg_amplify_front_data
+#define NGG_BACK_DATA triangle_ngg_amplify_back_data
+#else
 #include "shaders/triangle_ngg_front_sb.h"
 #include "shaders/triangle_ngg_back_sb.h"
+#define NGG_FRONT_DATA triangle_ngg_front_data
+#define NGG_BACK_DATA triangle_ngg_back_data
+#endif
 #include "shaders/triangle_frag_sb.h"
 
 /* Kernel constants fallbacks (if ps5/kernel.h doesn't define them) */
@@ -539,7 +551,7 @@ static bool shader_cx_register(const ParsedGraphicsShader *shader,
     return false;
 }
 
-static bool validate_wave32_records(const ParsedGraphicsShader *ngg,
+static bool validate_shader_records(const ParsedGraphicsShader *ngg,
                                     const ParsedGraphicsShader *ps)
 {
     uint32_t stages = ngg->specials
@@ -555,10 +567,11 @@ static bool validate_wave32_records(const ParsedGraphicsShader *ngg,
         shader_cx_register(ps, AGC_REG_SPI_PS_IN_CONTROL, &ps_control) &&
         (ps_control & GFX10_SPI_PS_IN_CONTROL_PS_W32_EN) != 0;
 
-    printf("[Wave32] records: NGG stages=0x%08x PS control=0x%08x: %s\n",
-           stages, ps_control,
-           ngg_wave32 && ps_wave32 ? "PASS" : "FAIL");
-    return ngg_wave32 && ps_wave32;
+    printf("[Wave] records: NGG=%s stages=0x%08x PS=Wave32 "
+           "control=0x%08x: %s\n",
+           ngg_wave32 ? "Wave32" : "Wave64", stages, ps_control,
+           ps_wave32 ? "PASS" : "FAIL");
+    return ps_wave32;
 }
 
 /* Upload shader code to flexible memory. Returns GPU address. */
@@ -869,8 +882,8 @@ static bool setup_shader_stages(
         },
         .primitive_type = VGT_PT_TRILIST,
     };
-    int32_t err = agcGfx1013BindWave32VsPs(cb, &state);
-    printf("[Wave32] reusable gfx1013 VS+PS bind: 0x%08x\n",
+    int32_t err = agcGfx1013BindVsPs(cb, &state);
+    printf("[Wave] reusable gfx1013 VS+PS bind: 0x%08x\n",
            (unsigned)err);
     return err == AGC_OK;
 }
@@ -922,6 +935,13 @@ static bool dump_launch_registers(const uint32_t *dcb, uint32_t dword_count)
            sh[AGC_REG_SPI_SHADER_PGM_LO_ES],
            cx[AGC_REG_VGT_SHADER_STAGES_EN],
            cx[AGC_REG_SPI_SHADER_POS_FORMAT]);
+    printf("[PM4 Audit] GS user: VBO(s2)=%08x base(s3)=%08x "
+           "ESGS(s14)=%08x LDS(s15)=%08x NEXT(s16)=%08x\n",
+           sh[AGC_REG_SPI_SHADER_USER_DATA_GS_0 + 2u],
+           sh[AGC_REG_SPI_SHADER_USER_DATA_GS_0 + 3u],
+           sh[AGC_REG_SPI_SHADER_USER_DATA_GS_0 + 14u],
+           sh[AGC_REG_SPI_SHADER_USER_DATA_GS_0 + 15u],
+           sh[AGC_REG_SPI_SHADER_USER_DATA_GS_0 + 16u]);
     printf("[PM4 Audit] UC: prim=%08x min=%08x max=%08x ge=%08x pc=%08x\n",
            uc[AGC_REG_VGT_PRIMITIVE_TYPE],
            uc[AGC_REG_GE_MIN_VTX_INDX],
@@ -933,10 +953,10 @@ static bool dump_launch_registers(const uint32_t *dcb, uint32_t dword_count)
     const bool ps_wave32 =
         (cx[AGC_REG_SPI_PS_IN_CONTROL] &
          GFX10_SPI_PS_IN_CONTROL_PS_W32_EN) != 0;
-    printf("[PM4 Audit] Wave32: NGG=%s PS=%s: %s\n",
+    printf("[PM4 Audit] Wave: NGG=%s PS=%s: %s\n",
            ngg_wave32 ? "yes" : "no", ps_wave32 ? "yes" : "no",
-           ngg_wave32 && ps_wave32 ? "PASS" : "FAIL");
-    return ngg_wave32 && ps_wave32;
+           ps_wave32 ? "PASS" : "FAIL");
+    return ps_wave32;
 }
 
 static bool dispatch_graphics(GraphicsTest *test,
@@ -947,6 +967,18 @@ static bool dispatch_graphics(GraphicsTest *test,
 #ifndef AGC_NGG_ENTRY_PROBE
 #define AGC_NGG_ENTRY_PROBE 0
 #endif
+#ifndef AGC_NGG_BACK_ENTRY_PROBE
+#define AGC_NGG_BACK_ENTRY_PROBE 0
+#endif
+#ifndef AGC_NGG_OUT_PRIM_OVERRIDE
+#define AGC_NGG_OUT_PRIM_OVERRIDE 0
+#endif
+#ifndef AGC_NGG_ALLOC_PROBE
+#define AGC_NGG_ALLOC_PROBE 0
+#endif
+#ifndef AGC_NGG_WGP_OVERRIDE
+#define AGC_NGG_WGP_OVERRIDE 0
+#endif
     static const uint32_t ngg_entry_probe[] = {
         0x7e000280u,                         /* v_mov_b32 v0, 0 */
         0x7e0202ffu, 0x4e474721u,           /* v_mov_b32 v1, marker */
@@ -954,22 +986,73 @@ static bool dispatch_graphics(GraphicsTest *test,
         0xbf8c3f70u,                         /* s_waitcnt vmcnt(0) */
         0xbf810000u,                         /* s_endpgm */
     };
+    static const uint32_t ngg_back_entry_probe[] = {
+        0xbf8a0000u,                         /* s_barrier */
+        0xd7650002u, 0x000100c1u,           /* v_mbcnt_lo v2, -1, 0 */
+        0x34040482u,                         /* v_lshlrev_b32 v2, 2, v2 */
+        0x360600ffu, 0x0000ffffu,           /* v_and_b32 v3, 0xffff, v0 */
+        0x34060682u,                         /* v_lshlrev_b32 v3, 2, v3 */
+        0xd8d80000u, 0x01000003u,           /* ds_read_b32 v1, v3 */
+        0xbf8cc07fu,                         /* s_waitcnt lgkmcnt(0) */
+        0xdc708000u, 0x00140102u,           /* global_store v2, v1, s[20:21] */
+        0xbf8c3f70u,                         /* s_waitcnt vmcnt(0) */
+        0xbf810000u,                         /* s_endpgm */
+    };
+    uint32_t ngg_export_probe[] = {
+        0xbe9400ffu, 0x00000000u,           /* s_mov_b32 s20, marker_lo */
+        0xbe9500ffu, 0x00000000u,           /* s_mov_b32 s21, marker_hi */
+        0xbefe03c1u,                         /* s_mov_b32 exec_lo, -1 */
+        0x7e080204u,                         /* v_mov_b32 v4, s4 */
+        0x38080884u,                         /* v_or_b32 v4, 4, v4 */
+        0xd7650000u, 0x000100c1u,           /* v_mbcnt_lo_u32_b32 v0, -1, 0 */
+        0x34000082u,                         /* v_lshlrev_b32 v0, 2, v0 */
+        0xdc708000u, 0x00140400u,           /* global_store v0, v4, s[20:21] */
+        0xbf8c3f70u,                         /* s_waitcnt vmcnt(0) */
+        0xbf810000u,                         /* s_endpgm */
+    };
     const bool use_entry_probe = AGC_NGG_ENTRY_PROBE != 0;
+    const bool replace_back_code = AGC_NGG_BACK_ENTRY_PROBE != 0;
+    const bool use_back_entry_probe =
+        replace_back_code || AGC_NGG_ALLOC_PROBE != 0;
     const uint8_t *front_code_bytes = use_entry_probe
         ? (const uint8_t *)ngg_entry_probe : front->code;
     const size_t front_code_size = use_entry_probe
         ? sizeof(ngg_entry_probe) : front->code_size;
     void *front_code = upload_shader(
         front_code_bytes, front_code_size, test->compute_buffer, 0x0000);
+    const uint8_t *back_code_bytes = replace_back_code
+        ? (const uint8_t *)ngg_back_entry_probe : back->code;
+    const size_t back_code_size = replace_back_code
+        ? sizeof(ngg_back_entry_probe) : back->code_size;
     void *back_code = upload_shader(
-        back->code, back->code_size, test->compute_buffer, 0x1000);
+        back_code_bytes, back_code_size, test->compute_buffer, 0x1000);
+    if (AGC_NGG_ALLOC_PROBE) {
+        const uintptr_t export_probe_addr = (uintptr_t)test->buffers[1];
+        ngg_export_probe[1] = (uint32_t)export_probe_addr;
+        ngg_export_probe[3] = (uint32_t)(export_probe_addr >> 32);
+        uint32_t *words = (uint32_t *)back_code;
+        const size_t word_count = back_code_size / sizeof(words[0]);
+        bool patched = false;
+        for (size_t i = 0; i + 1u < word_count; i++) {
+            if (words[i] == 0xbf8cff0fu) { /* query-disabled target before expcnt wait */
+                memcpy(&words[i], ngg_export_probe, sizeof(ngg_export_probe));
+                patched = true;
+                break;
+            }
+        }
+        if (!patched) {
+            printf("NGG export probe could not find pre-expcnt target\n");
+            return false;
+        }
+    }
     void *ps_code = upload_shader(
         ps->code, ps->code_size, test->compute_buffer, 0x4000);
     printf("NGG front %s at %p (%zu bytes)\n",
            use_entry_probe ? "entry probe" : "ACO code",
            front_code, front_code_size);
-    printf("NGG back code at %p (%zu bytes)\n",
-           back_code, back->code_size);
+    printf("NGG back %s at %p (%zu bytes)\n",
+           replace_back_code ? "entry probe" : "ACO code",
+           back_code, back_code_size);
     printf("PS code at %p (%zu bytes)\n", ps_code, ps->code_size);
 
     if (back->num_sh_regs > 16u) {
@@ -989,7 +1072,64 @@ static bool dispatch_graphics(GraphicsTest *test,
         return false;
     }
 
+    uint32_t front_rsrc1 = 0, front_rsrc2 = 0;
+    uint32_t raw_rsrc1 = 0, raw_rsrc2 = 0;
+    uint32_t fused_rsrc1 = 0, fused_rsrc2 = 0;
+    for (uint32_t i = 0; i < front->num_sh_regs; i++) {
+        if (front->sh_regs[i].offset == AGC_REG_SPI_SHADER_PGM_RSRC1_GS)
+            front_rsrc1 = front->sh_regs[i].value;
+        else if (front->sh_regs[i].offset == AGC_REG_SPI_SHADER_PGM_RSRC2_GS)
+            front_rsrc2 = front->sh_regs[i].value;
+    }
+    for (uint32_t i = 0; i < back->num_sh_regs; i++) {
+        if (back->sh_regs[i].offset == AGC_REG_SPI_SHADER_PGM_RSRC1_GS)
+            raw_rsrc1 = back->sh_regs[i].value;
+        else if (back->sh_regs[i].offset == AGC_REG_SPI_SHADER_PGM_RSRC2_GS)
+            raw_rsrc2 = back->sh_regs[i].value;
+    }
+    for (uint32_t i = 0; i < fused_record.num_sh_registers; i++) {
+        if (fused_regs[i].offset == AGC_REG_SPI_SHADER_PGM_RSRC1_GS) {
+            if (AGC_NGG_WGP_OVERRIDE)
+                fused_regs[i].value |= 1u << 27; /* WGP_MODE */
+            fused_rsrc1 = fused_regs[i].value;
+        } else if (fused_regs[i].offset == AGC_REG_SPI_SHADER_PGM_RSRC2_GS) {
+            fused_rsrc2 = fused_regs[i].value;
+        }
+    }
+    printf("[Fusion] GS RSRC front=%08x:%08x back=%08x:%08x "
+           "fused=%08x:%08x\n",
+           front_rsrc1, front_rsrc2, raw_rsrc1, raw_rsrc2,
+           fused_rsrc1, fused_rsrc2);
+
+    uint32_t onchip = 0, max_output = 0, subgroup = 0;
+    uint32_t instances = 0, max_vert_out = 0;
+    const uint32_t out_prim = back->specials
+        ? back->specials->vgt_gs_out_prim_type.value
+        : 0u;
+    (void)shader_cx_register(back, 0x291u, &onchip);
+    (void)shader_cx_register(back, 0x1ffu, &max_output);
+    (void)shader_cx_register(back, 0x2d3u, &subgroup);
+    (void)shader_cx_register(back, 0x2e4u, &instances);
+    (void)shader_cx_register(back, 0x2ceu, &max_vert_out);
+    printf("[NGG Config] onchip=%08x max_output=%08x subgroup=%08x "
+           "instances=%08x max_vert_out=%08x out_prim=%08x\n",
+           onchip, max_output, subgroup, instances, max_vert_out, out_prim);
+
     ParsedGraphicsShader ngg = *back;
+    AgcRegisterValue diagnostic_cx_regs[16];
+    if (AGC_NGG_OUT_PRIM_OVERRIDE) {
+        if (back->num_cx_regs > 16u) {
+            printf("NGG back has too many CX registers\n");
+            return false;
+        }
+        memcpy(diagnostic_cx_regs, back->cx_regs,
+               back->num_cx_regs * sizeof(diagnostic_cx_regs[0]));
+        for (uint32_t i = 0; i < back->num_cx_regs; i++) {
+            if (diagnostic_cx_regs[i].offset == 0x29bu)
+                diagnostic_cx_regs[i].value = 2u; /* triangle strip */
+        }
+        ngg.cx_regs = diagnostic_cx_regs;
+    }
     ngg.relocated = fused_record;
     ngg.record = &ngg.relocated;
     ngg.sh_regs = fused_regs;
@@ -1015,14 +1155,17 @@ static bool dispatch_graphics(GraphicsTest *test,
 
     /* Upload one interleaved binding: float2 position + float3 color. The
      * compiler uses a single static binding descriptor for both attributes. */
-    static const GraphicsVertex vertices[4] = {
-        /* Deliberate decoy: indexed draw must skip vertex 0. */
-        {{ 2.0f,  2.0f}, {1.0f, 0.0f, 1.0f}},
+    static const GraphicsVertex vertices[8] = {
         {{-0.5f, -0.4330127f}, {1.0f, 0.0f, 0.0f}},
         {{ 0.5f, -0.4330127f}, {0.0f, 1.0f, 0.0f}},
         {{ 0.0f,  0.4330127f}, {0.0f, 0.0f, 1.0f}},
+        {{ 0.0f,  0.4330127f}, {0.0f, 0.0f, 1.0f}},
+        {{ 0.0f,  0.4330127f}, {0.0f, 0.0f, 1.0f}},
+        {{ 0.0f,  0.4330127f}, {0.0f, 0.0f, 1.0f}},
+        {{ 0.0f,  0.4330127f}, {0.0f, 0.0f, 1.0f}},
+        {{ 0.0f,  0.4330127f}, {0.0f, 0.0f, 1.0f}},
     };
-    static const uint16_t indices[3] = {1, 2, 3};
+    static const uint16_t indices[3] = {0, 1, 2};
     GraphicsVertex *gpu_vertices = (GraphicsVertex *)
         ((uint8_t *)test->compute_buffer + VERTEX_DATA_OFFSET);
     uint32_t *vertex_desc = (uint32_t *)
@@ -1046,7 +1189,7 @@ static bool dispatch_graphics(GraphicsTest *test,
     vertex_desc[0] = (uint32_t)vertex_addr;
     vertex_desc[1] = (uint32_t)(vertex_addr >> 32) |
                      ((uint32_t)sizeof(GraphicsVertex) << 16);
-    vertex_desc[2] = 4u;
+    vertex_desc[2] = 8u;
     vertex_desc[3] = GFX10_VBO_DESC_WORD3;
 
     /* RADV combined-image-sampler layout for set 0, binding 0:
@@ -1074,24 +1217,33 @@ static bool dispatch_graphics(GraphicsTest *test,
     memcpy(&texture_desc[8], sampler.words, sizeof(sampler.words));
 
     uint32_t vertex_table_reg = 0;
+    uint32_t next_stage_pc_reg = 0;
     bool found_vertex_table_reg = false;
+    bool found_next_stage_pc_reg = false;
     for (uint32_t i = 0; i < ngg.num_sh_regs; i++) {
         if (ngg.sh_regs[i].value ==
                 OPENAGC_VERTEX_BUFFER_TABLE_PLACEHOLDER) {
             vertex_table_reg = ngg.sh_regs[i].offset;
             found_vertex_table_reg = true;
-            break;
+        } else if (ngg.sh_regs[i].value ==
+                   OPENAGC_NEXT_STAGE_PC_PLACEHOLDER) {
+            next_stage_pc_reg = ngg.sh_regs[i].offset;
+            found_next_stage_pc_reg = true;
         }
     }
-    if (!found_vertex_table_reg) {
-        printf("[Vertex] shader record has no VBO descriptor-table SGPR\n");
+    if (!found_next_stage_pc_reg) {
+        printf("[NGG] shader record has no GS-back continuation-PC SGPR\n");
         return false;
     }
-    printf("[Vertex] data=%p stride=%zu records=4 table=%p sh_reg=0x%03x\n",
-           gpu_vertices, sizeof(GraphicsVertex), vertex_desc,
-           vertex_table_reg);
-    printf("[Vertex] descriptor=%08x %08x %08x %08x\n",
-           vertex_desc[0], vertex_desc[1], vertex_desc[2], vertex_desc[3]);
+    if (found_vertex_table_reg) {
+        printf("[Vertex] data=%p stride=%zu records=8 table=%p sh_reg=0x%03x\n",
+               gpu_vertices, sizeof(GraphicsVertex), vertex_desc,
+               vertex_table_reg);
+        printf("[Vertex] descriptor=%08x %08x %08x %08x\n",
+               vertex_desc[0], vertex_desc[1], vertex_desc[2], vertex_desc[3]);
+    } else {
+        printf("[Vertex] procedural gl_VertexIndex path (no VBO SGPR)\n");
+    }
     printf("[Index] data=%p type=u16 count=3 values={%u,%u,%u}\n",
            gpu_indices, indices[0], indices[1], indices[2]);
     uint32_t texture_table_reg = 0;
@@ -1160,9 +1312,6 @@ static bool dispatch_graphics(GraphicsTest *test,
     setup_viewport(&cb, target->width, target->height);
     setup_scissor(&cb, target->width, target->height);
     setup_target_mask(&cb);
-    AgcRegisterValue ia_multi_vgt = {0x2aa, 0x0070007fu};
-    sceAgcCbSetCxRegistersDirect(&cb, &ia_multi_vgt, 1);
-    printf("[VGT] IA_MULTI_VGT_PARAM=0x%08x\n", ia_multi_vgt.value);
     const AgcRegisterValue vertex_bounds[] = {
         {AGC_REG_GE_MIN_VTX_INDX, 0x00000000u},
         {AGC_REG_GE_INDX_OFFSET, 0x00000000u},
@@ -1190,26 +1339,34 @@ static bool dispatch_graphics(GraphicsTest *test,
     if (!setup_shader_stages(&cb, &ngg, back_code, ps, ps_code))
         return false;
 
-    /* 5. Bind the fused state. On gfx1013 the executable NGG address is the
-     * GS-front address fused into SPI_SHADER_PGM_LO_ES; the GS-back address
-     * remains a state-container program address. */
-    AgcRegisterValue vertex_table = {
-        vertex_table_reg, (uint32_t)(uintptr_t)vertex_desc
+    /* 5. Bind the fused state. The ES-front starts the merged wave and uses
+     * the address32 AC_UD_NEXT_STAGE_PC value to continue at the GS-back
+     * program; ACO supplies the fixed high address dword in the ISA. */
+    if (found_vertex_table_reg) {
+        const AgcRegisterValue vertex_table = {
+            vertex_table_reg, (uint32_t)(uintptr_t)vertex_desc
+        };
+        sceAgcCbSetShRegistersDirect(&cb, &vertex_table, 1);
+    }
+    const AgcRegisterValue next_stage_pc = {
+        next_stage_pc_reg, (uint32_t)(uintptr_t)back_code
     };
-    sceAgcCbSetShRegistersDirect(&cb, &vertex_table, 1);
+    sceAgcCbSetShRegistersDirect(&cb, &next_stage_pc, 1);
     volatile uint32_t *shader_marker =
         (volatile uint32_t *)test->buffers[1];
     *shader_marker = 0;
     const uintptr_t shader_marker_addr = (uintptr_t)shader_marker;
+    const uint32_t marker_user_sgpr = use_back_entry_probe ? 12u : 0u;
     const AgcRegisterValue shader_marker_regs[] = {
-        {AGC_REG_SPI_SHADER_USER_DATA_GS_0,
+        {AGC_REG_SPI_SHADER_USER_DATA_GS_0 + marker_user_sgpr,
          (uint32_t)shader_marker_addr},
-        {AGC_REG_SPI_SHADER_USER_DATA_GS_0 + 1u,
+        {AGC_REG_SPI_SHADER_USER_DATA_GS_0 + marker_user_sgpr + 1u,
          (uint32_t)(shader_marker_addr >> 32)},
     };
-    if (use_entry_probe) {
+    if (use_entry_probe || use_back_entry_probe) {
         sceAgcCbSetShRegistersDirect(&cb, shader_marker_regs, 2);
-        printf("[Draw] NGG front entry probe marker address = %p\n",
+        printf("[Draw] NGG %s entry probe marker address = %p\n",
+               use_back_entry_probe ? "back" : "front",
                (void *)shader_marker_addr);
     }
 
@@ -1245,20 +1402,15 @@ static bool dispatch_graphics(GraphicsTest *test,
     };
     sceAgcCbSetCxRegistersDirect(&cb, &sc_mode, 1);
 
-    /* 7. Bind a 16-bit index buffer and draw indices {1,2,3}. Vertex 0 is a
-     * decoy outside the intended triangle, so matching the known coverage
-     * proves that the CP used the bound index buffer. */
+    /* 7. Establish the NGG stage ABI with canonical auto-generated vertex
+     * IDs. Indexed offset semantics are a separate PM4 validation case. */
     sceAgcDcbSetNumInstances(&cb, 1);
     printf("[Draw] NumInstances(1)\n");
-    if (!sceAgcDcbSetIndexSize(&cb, INDEX_TYPE_16, 0) ||
-        !sceAgcDcbSetIndexBuffer(
-            &cb, (uint64_t)(uintptr_t)gpu_indices, 3) ||
-        !sceAgcDcbDrawIndexOffset(&cb, 0, 3, 0)) {
-        printf("[Draw] indexed packet allocation failed\n");
+    if (!sceAgcDcbDrawIndexAuto(&cb, 3, 0x40000000u)) {
+        printf("[Draw] auto-index packet allocation failed\n");
         return false;
     }
-    printf("[Draw] IndexType(u16), IndexBuffer(%p, 3), "
-           "DrawIndexOffset(0, 3)\n", gpu_indices);
+    printf("[Draw] DrawIndexAuto(3)\n");
 
     /* 8b. WRITE_DATA marker — verify GPU is alive after draw. Keep it near
      * the end of this 32 KiB allocation, outside the active command stream. */
@@ -1309,9 +1461,13 @@ static bool dispatch_graphics(GraphicsTest *test,
     /* Check WRITE_DATA marker — if present, GPU is alive after draw */
     uint32_t *marker = (uint32_t *)(uintptr_t)marker_target;
     printf("[Marker] WRITE_DATA marker = 0x%08x (expected 0xDEADCAFE)\n", *marker);
-    if (use_entry_probe) {
-        printf("[Marker] NGG front entry marker = 0x%08x "
-               "(expected 0x4E474721)\n", *shader_marker);
+    if (use_entry_probe || use_back_entry_probe) {
+        const uint32_t expected_shader_marker =
+            use_back_entry_probe ? 0x4e474742u : 0x4e474721u;
+        printf("[Marker] NGG %s entry marker = 0x%08x "
+               "(expected 0x%08x)\n",
+               use_back_entry_probe ? "back" : "front",
+               *shader_marker, expected_shader_marker);
     }
 
     if (target->fp16) {
@@ -1321,11 +1477,21 @@ static bool dispatch_graphics(GraphicsTest *test,
         uint32_t changed = 0;
         uint32_t opaque_samples = 0;
         uint32_t out_of_range_components = 0;
+        uint32_t min_x = target->width;
+        uint32_t min_y = target->height;
+        uint32_t max_x = 0;
+        uint32_t max_y = 0;
         for (uint32_t i = 0; i < target_pixels; i++) {
             uint64_t color = rt[i];
             if (color == FP16_CLEAR_SENTINEL)
                 continue;
             changed++;
+            const uint32_t x = i % target->width;
+            const uint32_t y = i / target->width;
+            if (x < min_x) min_x = x;
+            if (y < min_y) min_y = y;
+            if (x > max_x) max_x = x;
+            if (y > max_y) max_y = y;
             if ((uint16_t)(color >> 48) == 0x3c00u)
                 opaque_samples++;
             for (uint32_t lane = 0; lane < 4u; lane++) {
@@ -1347,11 +1513,22 @@ static bool dispatch_graphics(GraphicsTest *test,
         }
         /* Equilateral NDC triangle covers sqrt(3)/16 of a square target.
          * 1774/16384 is a close integer approximation. */
+#if AGC_NGG_AMPLIFY
+        /* Two half-scale copies cover half the pass-through triangle area. */
+        const uint32_t expected_changed = (uint32_t)
+            (((uint64_t)target_pixels * 887u) / 16384u);
+#else
         const uint32_t expected_changed = (uint32_t)
             (((uint64_t)target_pixels * 1774u) / 16384u);
+#endif
         const uint32_t coverage_tolerance = target->width;
         printf("[FP16] Changed pixels: %u / %u (expected about %u)\n",
                changed, target_pixels, expected_changed);
+        if (changed != 0u) {
+            printf("[FP16] Coverage bounds: x=%u..%u y=%u..%u (%ux%u)\n",
+                   min_x, max_x, min_y, max_y,
+                   max_x - min_x + 1u, max_y - min_y + 1u);
+        }
         printf("[FP16] Distinct sampled colors: %u\n", unique_color_count);
         for (uint32_t i = 0; i < unique_color_count; i++)
             printf("  fp16_color[%u] = 0x%016llx\n", i,
@@ -1517,13 +1694,13 @@ int main(void) {
     printf("\n--- Step 3: Shader loading ---\n");
     ParsedGraphicsShader front, back, ps;
     if (!parse_graphics_shader(
-            &front, triangle_ngg_front_data,
-            sizeof(triangle_ngg_front_data), "NGG front")) {
+            &front, NGG_FRONT_DATA,
+            sizeof(NGG_FRONT_DATA), "NGG front")) {
         return 1;
     }
     if (!parse_graphics_shader(
-            &back, triangle_ngg_back_data,
-            sizeof(triangle_ngg_back_data), "NGG back")) {
+            &back, NGG_BACK_DATA,
+            sizeof(NGG_BACK_DATA), "NGG back")) {
         return 1;
     }
     if (!parse_graphics_shader(
@@ -1531,7 +1708,7 @@ int main(void) {
             sizeof(triangle_frag_data), "PS")) {
         return 1;
     }
-    if (!validate_wave32_records(&back, &ps))
+    if (!validate_shader_records(&back, &ps))
         return 1;
 
     RenderTargetConfig fp16_target = {

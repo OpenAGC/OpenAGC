@@ -7,7 +7,9 @@
 #include "agc_registers.h"
 
 #define AGC_GFX1013_REG_GE_PC_ALLOC 0x260u
-#define AGC_GFX1013_GE_PC_ALLOC_ALL 0x000007feu
+#define AGC_GFX1013_GE_PC_ALLOC_NGG 0x000007feu
+
+#define AGC_GFX1013_VGT_DRAW_PAYLOAD_EN_VRS_RATE (1u << 6)
 
 static bool agcGfx1013AddressIsProgramCompatible(uint64_t address)
 {
@@ -97,8 +99,9 @@ static bool agcGfx1013EmitShader(
     return true;
 }
 
-int32_t PS5_SYSV_ABI agcGfx1013ValidateWave32VsPs(
-    const AgcGfx1013Wave32VsPsState *state)
+static int32_t agcGfx1013ValidateVsPsImpl(
+    const AgcGfx1013Wave32VsPsState *state,
+    bool require_primitive_wave32)
 {
     const AgcShaderSpecials *specials;
     uint32_t primitive_lo;
@@ -135,8 +138,9 @@ int32_t PS5_SYSV_ABI agcGfx1013ValidateWave32VsPs(
     if (!specials ||
         specials->vgt_shader_stages_en.register_offset !=
             AGC_REG_VGT_SHADER_STAGES_EN ||
-        (specials->vgt_shader_stages_en.value &
-         AGC_GFX1013_VGT_SHADER_STAGES_EN_GS_W32_EN) == 0u ||
+        (require_primitive_wave32 &&
+         (specials->vgt_shader_stages_en.value &
+          AGC_GFX1013_VGT_SHADER_STAGES_EN_GS_W32_EN) == 0u) ||
         !agcGfx1013FindCxValue(
             &state->pixel, AGC_REG_SPI_PS_IN_CONTROL, &ps_control) ||
         (ps_control & AGC_GFX1013_SPI_PS_IN_CONTROL_PS_W32_EN) == 0u ||
@@ -145,8 +149,21 @@ int32_t PS5_SYSV_ABI agcGfx1013ValidateWave32VsPs(
     return AGC_OK;
 }
 
-int32_t PS5_SYSV_ABI agcGfx1013BindWave32VsPs(
-    SceAgcCb *cb, const AgcGfx1013Wave32VsPsState *state)
+int32_t PS5_SYSV_ABI agcGfx1013ValidateVsPs(
+    const AgcGfx1013Wave32VsPsState *state)
+{
+    return agcGfx1013ValidateVsPsImpl(state, false);
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013ValidateWave32VsPs(
+    const AgcGfx1013Wave32VsPsState *state)
+{
+    return agcGfx1013ValidateVsPsImpl(state, true);
+}
+
+static int32_t agcGfx1013BindVsPsImpl(
+    SceAgcCb *cb, const AgcGfx1013Wave32VsPsState *state,
+    bool require_primitive_wave32)
 {
     AgcShaderRegister prim_cx[2] = {{0}};
     AgcShaderRegister prim_uc[3] = {{0}};
@@ -160,7 +177,7 @@ int32_t PS5_SYSV_ABI agcGfx1013BindWave32VsPs(
 
     if (!cb)
         return AGC_ERROR_INVALID_ARGUMENT;
-    error = agcGfx1013ValidateWave32VsPs(state);
+    error = agcGfx1013ValidateVsPsImpl(state, require_primitive_wave32);
     if (error != AGC_OK)
         return error;
 
@@ -175,7 +192,7 @@ int32_t PS5_SYSV_ABI agcGfx1013BindWave32VsPs(
         return error;
 
     input_count = agcShaderRecordGetNumInputSemantics(state->pixel.record);
-    required_dwords = 18u + input_count * 3u +
+    required_dwords = 21u + input_count * 3u +
         (state->primitive.num_sh_registers +
          state->primitive.num_cx_registers +
          state->pixel.num_sh_registers +
@@ -187,8 +204,11 @@ int32_t PS5_SYSV_ABI agcGfx1013BindWave32VsPs(
         agcGfx1013EmitCx(cb, prim_cx[i].offset, prim_cx[i].value);
     for (i = 0; i < 3u; ++i)
         agcGfx1013EmitUc(cb, prim_uc[i].offset, prim_uc[i].value);
+    agcGfx1013EmitCx(
+        cb, AGC_REG_VGT_DRAW_PAYLOAD_CNTL,
+        AGC_GFX1013_VGT_DRAW_PAYLOAD_EN_VRS_RATE);
     agcGfx1013EmitUc(
-        cb, AGC_GFX1013_REG_GE_PC_ALLOC, AGC_GFX1013_GE_PC_ALLOC_ALL);
+        cb, AGC_GFX1013_REG_GE_PC_ALLOC, AGC_GFX1013_GE_PC_ALLOC_NGG);
     for (i = 0; i < input_count; ++i) {
         agcGfx1013EmitCx(
             cb, AGC_REG_SPI_PS_INPUT_CNTL_0 + i, interpolants[i].value);
@@ -200,4 +220,16 @@ int32_t PS5_SYSV_ABI agcGfx1013BindWave32VsPs(
         !agcGfx1013EmitShader(cb, &state->pixel, pixel_lo))
         return AGC_ERROR_INTERNAL;
     return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013BindVsPs(
+    SceAgcCb *cb, const AgcGfx1013Wave32VsPsState *state)
+{
+    return agcGfx1013BindVsPsImpl(cb, state, false);
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013BindWave32VsPs(
+    SceAgcCb *cb, const AgcGfx1013Wave32VsPsState *state)
+{
+    return agcGfx1013BindVsPsImpl(cb, state, true);
 }

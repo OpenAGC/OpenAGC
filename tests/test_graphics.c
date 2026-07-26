@@ -114,7 +114,7 @@ static void test_gfx1013_wave32_vs_ps_binding(void)
         "gfx1013 Wave32 VS+PS validation succeeds");
     TEST_ASSERT_EQ(agcGfx1013BindWave32VsPs(&cb, &state), AGC_OK,
         "gfx1013 Wave32 VS+PS binding succeeds");
-    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 33u,
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 36u,
         "gfx1013 Wave32 VS+PS exact dword count");
     TEST_ASSERT(find_register(
         buffer, agcCbUsedDwords(&cb), AGC_PM4_OP_SET_SH_REG,
@@ -134,11 +134,23 @@ static void test_gfx1013_wave32_vs_ps_binding(void)
         "gfx1013 pixel Wave32 control emitted");
     TEST_ASSERT_EQ(value, AGC_GFX1013_SPI_PS_IN_CONTROL_PS_W32_EN,
         "gfx1013 pixel Wave32 control value");
+    TEST_ASSERT(find_register(
+        buffer, agcCbUsedDwords(&cb), AGC_PM4_OP_SET_CONTEXT_REG,
+        AGC_REG_VGT_DRAW_PAYLOAD_CNTL, &value),
+        "gfx1013 draw payload control emitted");
+    TEST_ASSERT_EQ(value, 1u << 6,
+        "gfx1013 GFX10.3 VRS-rate payload channel enabled");
+    TEST_ASSERT(find_register(
+        buffer, agcCbUsedDwords(&cb), AGC_PM4_OP_SET_UCONFIG_REG,
+        0x260u, &value),
+        "gfx1013 NGG parameter-cache allocation emitted");
+    TEST_ASSERT_EQ(value, 0x000007feu,
+        "gfx1013 NGG late allocation remains disabled");
 }
 
-static void test_gfx1013_wave32_rejects_invalid_without_emission(void)
+static void test_gfx1013_wave32_rejects_but_generic_accepts_wave64(void)
 {
-    uint32_t buffer[16] = {0};
+    uint32_t buffer[128] = {0};
     SceAgcCb cb;
     AgcGfx1013Wave32VsPsState state;
     AgcShaderRecord primitive_record;
@@ -158,6 +170,12 @@ static void test_gfx1013_wave32_rejects_invalid_without_emission(void)
         "gfx1013 non-Wave32 primitive rejected");
     TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
         "gfx1013 rejected state emits no packets");
+    TEST_ASSERT_EQ(
+        agcGfx1013ValidateVsPs(&state), AGC_OK,
+        "gfx1013 generic validation accepts Wave64 primitive");
+    TEST_ASSERT_EQ(
+        agcGfx1013BindVsPs(&cb, &state), AGC_OK,
+        "gfx1013 generic binding accepts Wave64 primitive");
 }
 
 static void test_gfx1013_wave32_rejects_small_buffer_atomically(void)
@@ -187,6 +205,6 @@ void test_suite_graphics(void)
 {
     TEST_SUITE("GFX1013 Graphics State");
     TEST_RUN(test_gfx1013_wave32_vs_ps_binding);
-    TEST_RUN(test_gfx1013_wave32_rejects_invalid_without_emission);
+    TEST_RUN(test_gfx1013_wave32_rejects_but_generic_accepts_wave64);
     TEST_RUN(test_gfx1013_wave32_rejects_small_buffer_atomically);
 }
