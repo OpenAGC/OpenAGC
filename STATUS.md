@@ -1042,6 +1042,11 @@ six-byte `0x8A6C1000` stubs and leave caller state untouched.
 Eight resource/GDS exports match the bundled FW 5.50 driver's six-byte
 `0x8A6C9018` stubs with recovered SysV signatures, and the three capture
 controls return the exact `0x8A6C1000` status. All preserve caller outputs.
+Subnautica (`PPSA02453`) content `01.022.394` passes the strict analyzer with
+63/63 AGC imports covered. The exact executable hash, SDK `0x0400` metadata,
+five versioned wrappers, and the distinction between static API coverage and
+FW `0x0550` runtime compatibility are recorded in
+`analysis/subnautica_ppsa02453_audit.md`.
 Dragon Quest VII Reimagined coverage is now 252/253. Its FW 11.60
 `dbOlWdppb4o` and `vieBRwlh1Lw` imports are implemented as the recovered
 create-style and update-style enhanced interpolant mappers. Exact host fixtures

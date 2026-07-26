@@ -162,6 +162,13 @@ Convert the conclusions into permanent capability/profile regressions:
 
 ### 5. Expand FW 5.50 game compatibility
 
+Subnautica (`PPSA02453`) content `01.022.394` is now re-audited from the
+decrypted executable: all 63 AGC imports pass the strict coverage gate, with 58
+direct implementations and five intentional versioned wrappers. The artifact
+is pinned by SHA-256 in `analysis/subnautica_ppsa02453_audit.md`. Its metadata
+requires system software `0x1120`, so this result proves SDK `0x0400` API
+coverage rather than native package launch compatibility on FW `0x0550`.
+
 Dragon Quest VII Reimagined (`PPSA17942`) is the fifth target in progress. It
 is hardware-proven on FW `0x0550` and bundles AGC compatibility SPRXs despite
 declaring `0x1202`. Its 253 imports currently have 252 covered and 1 unresolved
