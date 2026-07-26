@@ -1004,10 +1004,12 @@ is a missing initialization feature or a blocker for rendering.
 
 ### Priority 3: Game compatibility expansion
 
-Continue analyzing game binaries to identify and implement remaining
-missing AGC functions. See `analysis/game_agc_usage.md` for the Joe & Mac
-analysis. Current coverage: 3 games, 72 unique AGC functions, 100%
-implemented. Analyzing more games will surface new function requirements.
+Dragon Quest VII Reimagined (`PPSA17942`) is a hardware-proven FW `0x0550` backport and the fifth target in progress. Its executable imports 253 AGC functions; 177 are covered and 76 remain after the first 43 exact constant-size helper implementations. It is not yet counted in the four-title, 100%-covered corpus. Astro's Playroom remains explicitly excluded.
+
+Continue analyzing game binaries to identify and implement remaining missing
+AGC functions. The completed corpus covers 4 games and 73 unique AGC functions
+at 100%; see `analysis/game_agc_usage.md`. Dragon Quest is tracked separately
+until its remaining imports are implemented.
 
 ### Blocked: Remaining 12+32 unknown NIDs
 
@@ -1019,7 +1021,7 @@ NID databases or firmware dumps.
 
 ## Game Compatibility
 
-### Coverage across 3 game binaries
+### Coverage across 4 game binaries
 
 | Game | Title ID | AGC imports | Implemented | Missing |
 |------|----------|-------------|-------------|---------|

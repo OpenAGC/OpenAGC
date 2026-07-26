@@ -162,6 +162,13 @@ Convert the conclusions into permanent capability/profile regressions:
 
 ### 5. Expand FW 5.50 game compatibility
 
+Dragon Quest VII Reimagined (`PPSA17942`) is the fifth target in progress. It
+is hardware-proven on FW `0x0550` and bundles AGC compatibility SPRXs despite
+declaring `0x1202`. Its 253 imports currently have 177 covered and 76 unresolved
+after adding 43 exact FW 5.50 constant packet-size helpers. Complete the
+parameter-dependent size helpers next, then packet patchers and useful driver
+resource APIs; preserve unknown NIDs for evidence-driven resolution.
+
 Grow the corpus from three games to at least ten representative,
 FW 5.50-compatible binaries spanning multiple engines, SDK vintages, and
 graphics workloads. For each title:
@@ -181,8 +188,10 @@ name or ABI. The exit gate is 100% named-import implementation across the
 expanded corpus and no exercised path relying on a silent success stub.
 
 Candidate selection is fail-closed. `PPSA01325` (ASTRO's PLAYROOM) is
-explicitly excluded by project scope, and titles requiring firmware newer than
-`0x0550` are ineligible for this corpus. Record rejected candidates in
+explicitly excluded by project scope. Metadata-only candidates that have not
+run on FW `0x0550` are ineligible. A hardware-proven backport is eligible even
+when its metadata names newer firmware, provided its executable provenance and
+bundled compatibility ABI are recorded. Record rejected candidates in
 `analysis/game_compat_exclusions.tsv` so they are not counted or repeatedly
 reinvestigated.
 

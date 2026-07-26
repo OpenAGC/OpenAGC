@@ -744,6 +744,51 @@ uint32_t PS5_SYSV_ABI sceAgcAcbCondExecGetSize(void);
 /* NID: 43WJ08sSugE — returns 14*4 (32-bit) or 16*4 (64-bit) bytes */
 uint32_t PS5_SYSV_ABI sceAgcDcbWaitOnAddressGetSize(uint32_t size);
 
+/* FW 5.50 constant packet-size helpers. */
+uint32_t PS5_SYSV_ABI sceAgcAcbAtomicGdsGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcAcbAtomicMemGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcAcbCopyDataGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcAcbDispatchIndirectGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcAcbDmaDataGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcAcbEventWriteGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcAcbJumpGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcAcbPrimeUtcl2GetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcAcbQueueEndOfShaderActionGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcAcbRewindGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcCbBranchGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcCbCondWriteGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcCbDispatchGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcDcbAtomicGdsGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcDcbAtomicMemGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcDcbCopyDataGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcDcbDispatchIndirectGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcDcbDmaDataGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcDcbDrawIndexAutoGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcDcbDrawIndexGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcDcbDrawIndexIndirectGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcDcbDrawIndexOffsetGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcDcbDrawIndirectGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcDcbEndOcclusionQueryGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcDcbPrimeUtcl2GetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcDcbQueueEndOfShaderActionGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcDcbSetBaseDispatchIndirectArgsGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcDcbSetBaseDrawIndirectArgsGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcDcbSetBoolPredicationEnableGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcDcbSetCxRegisterDirectGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcDcbSetCxRegistersIndirectGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcDcbSetIndexBufferGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcDcbSetIndexCountGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcDcbSetIndexIndirectArgsGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcDcbSetIndexSizeGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcDcbSetNumInstancesGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcDcbSetPredicationDisableGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcDcbSetShRegisterDirectGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcDcbSetShRegistersIndirectGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcDcbSetUcRegisterDirectGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcDcbSetUcRegistersIndirectGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcDcbSetZPassPredicationEnableGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcDcbStallCommandBufferParserGetSize(void);
+
 #ifdef __cplusplus
 }
 #endif

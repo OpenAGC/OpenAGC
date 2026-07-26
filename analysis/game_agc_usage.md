@@ -24,13 +24,15 @@ The four-title corpus contains **73 unique AGC functions, all implemented**.
 The release target remains at least ten representative FW 5.50-compatible
 titles across multiple engines and SDK vintages.
 
-## Excluded candidates
+## Candidate scope
 
 - `PPSA01325` (ASTRO's PLAYROOM) is excluded by project scope decision and
   must not be counted toward the ten-title release gate.
-- `PPSA17942` (DRAGON QUEST VII Reimagined) requires system software `0x1202`
-  and is not FW 5.50-compatible. Its 253-import result is later-firmware
-  evidence, not part of the FW 5.50 corpus.
+- `PPSA17942` (DRAGON QUEST VII Reimagined) is a hardware-proven FW `0x0550`
+  backport target despite its `0x1202` metadata. It bundles AGC compatibility
+  SPRXs and imports 253 AGC functions. The first exact helper batch covers 177
+  imports; 76 remain under analysis, so it is tracked separately from the four
+  fully covered titles.
 - The durable exclusion list is `analysis/game_compat_exclusions.tsv`.
 
 ## PPSA02453 evidence

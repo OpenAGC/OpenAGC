@@ -1037,6 +1037,53 @@ static void test_batch3_ref_getsize_helpers(void) {
     TEST_ASSERT_EQ(sceAgcDcbWaitOnAddressGetSize(0), 56u, "WaitOnAddressGetSize(0)");
     TEST_ASSERT_EQ(sceAgcDcbWaitOnAddressGetSize(1), 64u, "WaitOnAddressGetSize(1)");
     TEST_ASSERT_EQ(sceAgcDcbWaitOnAddressGetSize(2), 0u, "WaitOnAddressGetSize(invalid)");
+
+#define CHECK_FIXED_GET_SIZE(name, expected) \
+    TEST_ASSERT_EQ(name(), expected, #name)
+    CHECK_FIXED_GET_SIZE(sceAgcAcbAtomicGdsGetSize, 44u);
+    CHECK_FIXED_GET_SIZE(sceAgcAcbAtomicMemGetSize, 36u);
+    CHECK_FIXED_GET_SIZE(sceAgcAcbCopyDataGetSize, 24u);
+    CHECK_FIXED_GET_SIZE(sceAgcAcbDispatchIndirectGetSize, 16u);
+    CHECK_FIXED_GET_SIZE(sceAgcAcbDmaDataGetSize, 28u);
+    CHECK_FIXED_GET_SIZE(sceAgcAcbEventWriteGetSize, 8u);
+    CHECK_FIXED_GET_SIZE(sceAgcAcbJumpGetSize, 16u);
+    CHECK_FIXED_GET_SIZE(sceAgcAcbPrimeUtcl2GetSize, 20u);
+    CHECK_FIXED_GET_SIZE(sceAgcAcbQueueEndOfShaderActionGetSize, 32u);
+    CHECK_FIXED_GET_SIZE(sceAgcAcbRewindGetSize, 8u);
+    CHECK_FIXED_GET_SIZE(sceAgcCbBranchGetSize, 56u);
+    CHECK_FIXED_GET_SIZE(sceAgcCbCondWriteGetSize, 36u);
+    CHECK_FIXED_GET_SIZE(sceAgcCbDispatchGetSize, 20u);
+    CHECK_FIXED_GET_SIZE(sceAgcDcbAtomicGdsGetSize, 44u);
+    CHECK_FIXED_GET_SIZE(sceAgcDcbAtomicMemGetSize, 36u);
+    CHECK_FIXED_GET_SIZE(sceAgcDcbCopyDataGetSize, 24u);
+    CHECK_FIXED_GET_SIZE(sceAgcDcbDispatchIndirectGetSize, 12u);
+    CHECK_FIXED_GET_SIZE(sceAgcDcbDmaDataGetSize, 28u);
+    CHECK_FIXED_GET_SIZE(sceAgcDcbDrawIndexAutoGetSize, 12u);
+    CHECK_FIXED_GET_SIZE(sceAgcDcbDrawIndexGetSize, 24u);
+    CHECK_FIXED_GET_SIZE(sceAgcDcbDrawIndexIndirectGetSize, 20u);
+    CHECK_FIXED_GET_SIZE(sceAgcDcbDrawIndexOffsetGetSize, 20u);
+    CHECK_FIXED_GET_SIZE(sceAgcDcbDrawIndirectGetSize, 20u);
+    CHECK_FIXED_GET_SIZE(sceAgcDcbEndOcclusionQueryGetSize, 16u);
+    CHECK_FIXED_GET_SIZE(sceAgcDcbPrimeUtcl2GetSize, 20u);
+    CHECK_FIXED_GET_SIZE(sceAgcDcbQueueEndOfShaderActionGetSize, 32u);
+    CHECK_FIXED_GET_SIZE(sceAgcDcbSetBaseDispatchIndirectArgsGetSize, 16u);
+    CHECK_FIXED_GET_SIZE(sceAgcDcbSetBaseDrawIndirectArgsGetSize, 16u);
+    CHECK_FIXED_GET_SIZE(sceAgcDcbSetBoolPredicationEnableGetSize, 16u);
+    CHECK_FIXED_GET_SIZE(sceAgcDcbSetCxRegisterDirectGetSize, 12u);
+    CHECK_FIXED_GET_SIZE(sceAgcDcbSetCxRegistersIndirectGetSize, 20u);
+    CHECK_FIXED_GET_SIZE(sceAgcDcbSetIndexBufferGetSize, 12u);
+    CHECK_FIXED_GET_SIZE(sceAgcDcbSetIndexCountGetSize, 8u);
+    CHECK_FIXED_GET_SIZE(sceAgcDcbSetIndexIndirectArgsGetSize, 16u);
+    CHECK_FIXED_GET_SIZE(sceAgcDcbSetIndexSizeGetSize, 12u);
+    CHECK_FIXED_GET_SIZE(sceAgcDcbSetNumInstancesGetSize, 8u);
+    CHECK_FIXED_GET_SIZE(sceAgcDcbSetPredicationDisableGetSize, 16u);
+    CHECK_FIXED_GET_SIZE(sceAgcDcbSetShRegisterDirectGetSize, 12u);
+    CHECK_FIXED_GET_SIZE(sceAgcDcbSetShRegistersIndirectGetSize, 20u);
+    CHECK_FIXED_GET_SIZE(sceAgcDcbSetUcRegisterDirectGetSize, 12u);
+    CHECK_FIXED_GET_SIZE(sceAgcDcbSetUcRegistersIndirectGetSize, 20u);
+    CHECK_FIXED_GET_SIZE(sceAgcDcbSetZPassPredicationEnableGetSize, 16u);
+    CHECK_FIXED_GET_SIZE(sceAgcDcbStallCommandBufferParserGetSize, 8u);
+#undef CHECK_FIXED_GET_SIZE
 }
 
 static void test_batch3_ref_driver_stubs(void) {

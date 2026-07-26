@@ -1,3 +1,2 @@
 title_id	title	reason	evidence
 PPSA01325	ASTRO's PLAYROOM	Explicitly excluded from the OpenAGC game compatibility corpus by project scope decision	PS5 installed-title metadata
-PPSA17942	DRAGON QUEST VII Reimagined	Requires system software 0x1202 and SDK 0x1000; not FW 5.50-compatible	param.json and analyzed eboot SHA-256 b1273368b09f6de936ff36030e4fc271b6bd8e781845739e462362f1585333b3
