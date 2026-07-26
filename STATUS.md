@@ -414,6 +414,7 @@ Old-style ACB stubs (from `src/acb.c`) and DCB raw-buffer variants (from `src/dc
 - `sceAgcAcbSetWorkloadStreamInactive` — now emits `IT_AGC_0x79` (opcode 0x79) with 3-dword packet
 - `sceAgcAcbSetWorkloadsActive` — now emits `IT_SET_WORKLOAD` (opcode 0x1E) with 8-dword packet
 - `sceAgcAcbAtomicGds` — now emits `IT_ATOMIC_GDS` (opcode 0x1D) with 10-dword packet
+- `sceAgcAcbAtomicGds_0900` — compatibility cursor ABI, 11-dword `IT_ATOMIC_GDS`
 - `sceAgcAcbPrimeUtcl2` — now emits `IT_PRIME_UTCL2` (opcode 0x5D) with 4-dword packet
 - `sceAgcAcbJump`
 - `sceAgcAcbPushMarker` / `sceAgcAcbPopMarker` / `sceAgcAcbSetMarker`
@@ -1006,10 +1007,11 @@ is a missing initialization feature or a blocker for rendering.
 
 Dragon Quest VII Reimagined (`PPSA17942`) is a hardware-proven FW `0x0550`
 backport and the fifth target in progress. Its executable imports 253 AGC
-functions; 208 are covered and 45 remain after completing its FW 5.50 GetSize
+functions; 209 are covered and 44 remain after completing its FW 5.50 GetSize
 imports, seven exact packet patchers, payload-range ABI, and primitive-state
 update ABI, three constant driver-status queries, the corrected workload-stream
-ABI, AGR multi-DCB status path, and compatibility-SPRX WriteData patchers.
+ABI, AGR multi-DCB status path, compatibility-SPRX WriteData patchers, and the
+cursor-based ACB AtomicGds `_0900` packet builder.
 AcquireMem size
 follows the firmware's
 title-workaround mode rather than the emulator's fixed 32-byte path. Dragon

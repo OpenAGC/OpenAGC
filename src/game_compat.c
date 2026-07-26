@@ -1315,6 +1315,41 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbAtomicGds(
     return cmd;
 }
 
+/* sceAgcAcbAtomicGds_0900 (NID: gQkqkLttcpw) - compatibility SPRX
+ * @ 0x1790. This is a cursor ABI distinct from the older raw ACB helper. */
+uint32_t *PS5_SYSV_ABI sceAgcAcbAtomicGds_0900(
+    SceAgcCb *cb, uint32_t control, uint32_t mode,
+    uint32_t gds_op, uint32_t src, uint16_t offset, uint16_t index,
+    uint32_t mask, uint32_t data, uint64_t compare_data,
+    uint64_t extra_data)
+{
+    uint32_t *cmd = agcCbAllocDwords(cb, 11);
+    uint32_t control_word;
+
+    if (!cmd)
+        return NULL;
+
+    control_word = control & 0xFFu;
+    control_word |= (control << 7u) & 0x00010000u;
+    control_word |= (control & 0x20u) << 13u;
+    control_word |= (control & 0x40u) << 14u;
+    if ((control & 0x20u) == 0 && mode == 1u)
+        control_word |= 0x00020000u;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_ATOMIC_GDS, 11);
+    cmd[1] = control_word;
+    cmd[2] = ((gds_op & 1u) << 8u) | (src & 0x3Fu);
+    cmd[3] = offset;
+    cmd[4] = index;
+    cmd[5] = mask & 0x00FF00FFu;
+    cmd[6] = data;
+    cmd[7] = (uint32_t)compare_data;
+    cmd[8] = (uint32_t)(compare_data >> 32u);
+    cmd[9] = (uint32_t)extra_data;
+    cmd[10] = (uint32_t)(extra_data >> 32u);
+    return cmd;
+}
+
 /* sceAgcDcbMemSemaphore (NID: G0jrLdvEqDw) — 4 dwords.
  * RE: SPRX emits 0xc0023900 (opcode 0x39 = MEM_SEMAPHORE).
  * cmd[1] = addr_lo & ~7, cmd[2] = addr_hi,

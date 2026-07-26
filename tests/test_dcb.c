@@ -595,6 +595,37 @@ static void test_batch2_dcb_atomic_gds(void) {
     TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 11u, "AtomicGds length 11");
 }
 
+static void test_acb_atomic_gds_0900(void) {
+    SceAgcCb cb;
+    uint32_t buf[16] = {0};
+    uint32_t *cmd;
+
+    agcCbInit(&cb, buf, sizeof(buf));
+    cmd = sceAgcAcbAtomicGds_0900(
+        &cb, 0x200u, 1u, 1u, 0x2Au, 0x1234u, 0x5678u,
+        0xFFFFFFFFu, 0xAABBCCDDu, 0x1122334455667788ULL,
+        0x99AABBCCDDEEFF00ULL);
+    TEST_ASSERT(cmd == buf, "AcbAtomicGds_0900 returns packet start");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_ATOMIC_GDS,
+        "AcbAtomicGds_0900 opcode");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 11u,
+        "AcbAtomicGds_0900 length");
+    TEST_ASSERT_EQ(cmd[1], 0x00030000u,
+        "AcbAtomicGds_0900 packed control");
+    TEST_ASSERT_EQ(cmd[2], 0x0000012Au,
+        "AcbAtomicGds_0900 operation and source");
+    TEST_ASSERT_EQ(cmd[3], 0x1234u, "AcbAtomicGds_0900 offset");
+    TEST_ASSERT_EQ(cmd[4], 0x5678u, "AcbAtomicGds_0900 index");
+    TEST_ASSERT_EQ(cmd[5], 0x00FF00FFu, "AcbAtomicGds_0900 mask");
+    TEST_ASSERT_EQ(cmd[6], 0xAABBCCDDu, "AcbAtomicGds_0900 data");
+    TEST_ASSERT_EQ(cmd[7], 0x55667788u, "AcbAtomicGds_0900 compare low");
+    TEST_ASSERT_EQ(cmd[8], 0x11223344u, "AcbAtomicGds_0900 compare high");
+    TEST_ASSERT_EQ(cmd[9], 0xDDEEFF00u, "AcbAtomicGds_0900 extra low");
+    TEST_ASSERT_EQ(cmd[10], 0x99AABBCCu, "AcbAtomicGds_0900 extra high");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 11u,
+        "AcbAtomicGds_0900 advances cursor by 11 dwords");
+}
+
 static void test_batch2_dcb_mem_semaphore(void) {
     SceAgcCb cb;
     uint32_t buf[32];
@@ -898,6 +929,7 @@ void test_suite_dcb(void) {
     TEST_RUN(test_batch2_dcb_set_index_indirect_args);
     TEST_RUN(test_batch2_dcb_atomic_mem);
     TEST_RUN(test_batch2_dcb_atomic_gds);
+    TEST_RUN(test_acb_atomic_gds_0900);
     TEST_RUN(test_batch2_dcb_mem_semaphore);
     TEST_RUN(test_batch2_dcb_prime_utcl2);
     TEST_RUN(test_batch2_dcb_reg_direct_setters);

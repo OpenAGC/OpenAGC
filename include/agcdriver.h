@@ -337,6 +337,12 @@ int32_t PS5_SYSV_ABI sceAgcAcbAtomicGds(
 int32_t PS5_SYSV_ABI sceAgcAcbAtomicGds_pre0090(
     uint32_t *acb, uint32_t size_dw, uint32_t op, uint32_t gds_offset,
     uint32_t data, uint32_t src);
+/* FW compatibility ABI gQkqkLttcpw: cursor-based 11-dword ATOMIC_GDS. */
+uint32_t *PS5_SYSV_ABI sceAgcAcbAtomicGds_0900(
+    SceAgcCb *cb, uint32_t control, uint32_t mode,
+    uint32_t gds_op, uint32_t src, uint16_t offset, uint16_t index,
+    uint32_t mask, uint32_t data, uint64_t compare_data,
+    uint64_t extra_data);
 int32_t PS5_SYSV_ABI sceAgcAcbAtomicMem(
     uint32_t *acb, uint32_t size_dw, uint32_t op, uint64_t addr, uint64_t data);
 int32_t PS5_SYSV_ABI sceAgcAcbCondExec(
