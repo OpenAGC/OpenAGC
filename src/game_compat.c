@@ -1950,6 +1950,73 @@ uint32_t PS5_SYSV_ABI sceAgcCbSetUcRegistersDirectGetSize(
     return 12u * num_registers;
 }
 
+uint32_t PS5_SYSV_ABI sceAgcDriverUserDataGetPacketSize(uint32_t size_in_bytes)
+{
+    uint32_t payload_dwords;
+
+    if (size_in_bytes == 0)
+        return 3u;
+
+    payload_dwords = (uint32_t)(((uint64_t)size_in_bytes + 3u) >> 2);
+    if (payload_dwords == 1u)
+        return 4u;
+    return payload_dwords + 7u;
+}
+
+uint32_t PS5_SYSV_ABI sceAgcAcbWaitOnAddressGetSize(uint32_t size)
+{
+    uint32_t user_data_dwords =
+        sceAgcDriverUserDataGetPacketSize(4u) +
+        sceAgcDriverUserDataGetPacketSize(0u);
+
+    switch ((uint8_t)size) {
+    case 0: return 28u + 4u * user_data_dwords;
+    case 1: return 36u + 4u * user_data_dwords;
+    default: return 0;
+    }
+}
+
+uint32_t PS5_SYSV_ABI sceAgcDcbBeginOcclusionQueryGetSize(uint32_t query_type)
+{
+    if (query_type == 0)
+        return 16u;
+    if ((uint8_t)query_type == 1u)
+        return 288u;
+    return 0;
+}
+
+uint32_t PS5_SYSV_ABI sceAgcDcbContextStateOpGetSize(uint32_t operation)
+{
+    static const uint32_t sizes[] = {20u, 108u, 108u, 128u};
+
+    if (operation >= sizeof(sizes) / sizeof(sizes[0]))
+        return 0;
+    return sizes[operation];
+}
+
+uint32_t PS5_SYSV_ABI sceAgcDcbDrawIndirectMultiGetSize(void)
+{
+    uint32_t user_data_dwords = sceAgcDriverUserDataGetPacketSize(0u);
+    return 4u * (2u * user_data_dwords + 10u);
+}
+
+uint32_t PS5_SYSV_ABI sceAgcDcbDrawIndexIndirectMultiGetSize(void)
+{
+    uint32_t user_data_dwords = sceAgcDriverUserDataGetPacketSize(0u);
+    return 4u * (2u * user_data_dwords + 10u);
+}
+
+uint32_t PS5_SYSV_ABI sceAgcDcbDrawIndexMultiInstancedGetSize(void)
+{
+    uint32_t user_data_dwords = sceAgcDriverUserDataGetPacketSize(0u);
+    return 4u * (2u * user_data_dwords + 9u);
+}
+
+uint32_t PS5_SYSV_ABI sceAgcDcbEventWriteGetSize(uint32_t event_type)
+{
+    return (((uint8_t)event_type & 0xFEu) == 0x38u) ? 16u : 8u;
+}
+
 #define AGC_DEFINE_FIXED_GET_SIZE(name, value) \
     uint32_t PS5_SYSV_ABI name(void) { return (value); }
 

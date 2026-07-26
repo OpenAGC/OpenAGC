@@ -1105,6 +1105,62 @@ static void test_batch3_ref_getsize_helpers(void) {
     CHECK_LIST_GET_SIZE(sceAgcCbSetShRegistersDirectGetSize);
     CHECK_LIST_GET_SIZE(sceAgcCbSetUcRegistersDirectGetSize);
 #undef CHECK_LIST_GET_SIZE
+
+    TEST_ASSERT_EQ(sceAgcDriverUserDataGetPacketSize(0), 3u,
+        "UserDataGetPacketSize empty");
+    TEST_ASSERT_EQ(sceAgcDriverUserDataGetPacketSize(1), 4u,
+        "UserDataGetPacketSize one byte");
+    TEST_ASSERT_EQ(sceAgcDriverUserDataGetPacketSize(4), 4u,
+        "UserDataGetPacketSize one dword");
+    TEST_ASSERT_EQ(sceAgcDriverUserDataGetPacketSize(5), 9u,
+        "UserDataGetPacketSize two dwords");
+    TEST_ASSERT_EQ(sceAgcDriverUserDataGetPacketSize(UINT32_MAX), 0x40000007u,
+        "UserDataGetPacketSize uint32 boundary");
+
+    TEST_ASSERT_EQ(sceAgcAcbWaitOnAddressGetSize(0), 56u,
+        "AcbWaitOnAddressGetSize 32-bit");
+    TEST_ASSERT_EQ(sceAgcAcbWaitOnAddressGetSize(1), 64u,
+        "AcbWaitOnAddressGetSize 64-bit");
+    TEST_ASSERT_EQ(sceAgcAcbWaitOnAddressGetSize(2), 0u,
+        "AcbWaitOnAddressGetSize invalid");
+    TEST_ASSERT_EQ(sceAgcAcbWaitOnAddressGetSize(0x100), 56u,
+        "AcbWaitOnAddressGetSize FW 5.50 low-byte selector");
+
+    TEST_ASSERT_EQ(sceAgcDcbBeginOcclusionQueryGetSize(0), 16u,
+        "BeginOcclusionQueryGetSize simple");
+    TEST_ASSERT_EQ(sceAgcDcbBeginOcclusionQueryGetSize(1), 288u,
+        "BeginOcclusionQueryGetSize extended");
+    TEST_ASSERT_EQ(sceAgcDcbBeginOcclusionQueryGetSize(2), 0u,
+        "BeginOcclusionQueryGetSize invalid");
+    TEST_ASSERT_EQ(sceAgcDcbBeginOcclusionQueryGetSize(0x101), 288u,
+        "BeginOcclusionQueryGetSize FW 5.50 low-byte selector");
+
+    TEST_ASSERT_EQ(sceAgcDcbContextStateOpGetSize(0), 20u,
+        "ContextStateOpGetSize op0");
+    TEST_ASSERT_EQ(sceAgcDcbContextStateOpGetSize(1), 108u,
+        "ContextStateOpGetSize op1");
+    TEST_ASSERT_EQ(sceAgcDcbContextStateOpGetSize(2), 108u,
+        "ContextStateOpGetSize op2");
+    TEST_ASSERT_EQ(sceAgcDcbContextStateOpGetSize(3), 128u,
+        "ContextStateOpGetSize op3");
+    TEST_ASSERT_EQ(sceAgcDcbContextStateOpGetSize(4), 0u,
+        "ContextStateOpGetSize invalid");
+
+    TEST_ASSERT_EQ(sceAgcDcbDrawIndirectMultiGetSize(), 64u,
+        "DrawIndirectMultiGetSize");
+    TEST_ASSERT_EQ(sceAgcDcbDrawIndexIndirectMultiGetSize(), 64u,
+        "DrawIndexIndirectMultiGetSize");
+    TEST_ASSERT_EQ(sceAgcDcbDrawIndexMultiInstancedGetSize(), 60u,
+        "DrawIndexMultiInstancedGetSize");
+
+    TEST_ASSERT_EQ(sceAgcDcbEventWriteGetSize(0x37), 8u,
+        "EventWriteGetSize normal");
+    TEST_ASSERT_EQ(sceAgcDcbEventWriteGetSize(0x38), 16u,
+        "EventWriteGetSize address event even");
+    TEST_ASSERT_EQ(sceAgcDcbEventWriteGetSize(0x39), 16u,
+        "EventWriteGetSize address event odd");
+    TEST_ASSERT_EQ(sceAgcDcbEventWriteGetSize(0x138), 16u,
+        "EventWriteGetSize FW 5.50 low-byte event");
 }
 
 static void test_batch3_ref_driver_stubs(void) {

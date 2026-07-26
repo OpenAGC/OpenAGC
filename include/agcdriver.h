@@ -754,6 +754,16 @@ uint32_t PS5_SYSV_ABI sceAgcCbSetUcRegisterRangeDirectGetSize(
     uint32_t num_registers);
 uint32_t PS5_SYSV_ABI sceAgcCbSetUcRegistersDirectGetSize(
     uint32_t num_registers);
+uint32_t PS5_SYSV_ABI sceAgcAcbWaitOnAddressGetSize(uint32_t size);
+uint32_t PS5_SYSV_ABI sceAgcDcbBeginOcclusionQueryGetSize(uint32_t query_type);
+uint32_t PS5_SYSV_ABI sceAgcDcbContextStateOpGetSize(uint32_t operation);
+uint32_t PS5_SYSV_ABI sceAgcDcbDrawIndexIndirectMultiGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcDcbDrawIndexMultiInstancedGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcDcbDrawIndirectMultiGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcDcbEventWriteGetSize(uint32_t event_type);
+
+/* Returns the FW 5.50 user-data packet size in dwords. */
+uint32_t PS5_SYSV_ABI sceAgcDriverUserDataGetPacketSize(uint32_t size_in_bytes);
 
 /* FW 5.50 constant packet-size helpers. */
 uint32_t PS5_SYSV_ABI sceAgcAcbAtomicGdsGetSize(void);
