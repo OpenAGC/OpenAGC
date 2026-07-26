@@ -51,7 +51,7 @@ official SDK parity, all-firmware support, VRS, or ray-tracing completeness.
 | --- | --- | --- |
 | 1. Harden FW 5.50 graphics and promote sample PM4 | **Complete** | Atomic reusable gfx1013 builders cover render-target, viewport, scissor, target-mask, depth-disabled, V8 defaults, and the baseline bind/index/instance/auto-index draw composition. Exact host fixtures and FW 5.50 RGBA16F/RGBA8 runs pass. |
 | 2. Add exact Wave32 and fixed-function host fixtures | **Complete** | Exact fixtures cover the Wave32 VS/PS binder, hardware-proven RT/viewport/scissor/depth/default streams, and the 44-dword baseline draw wrapper, including post-bind overrides and atomic short-buffer rejection. |
-| 3. Re-run the complete FW 5.50 websrv suite | **Partial** | Every major path has hardware evidence, including compute, NGG geometry, tessellation, combined stages, FP16, and RGBA8. A single complete qualification run is still required after the sample PM4 promotion lands. |
+| 3. Re-run the complete FW 5.50 websrv suite | **Complete** | Revision `c0633c7` passed the dependency-ordered base, compute, baseline/NGG, tessellation, and combined-stage matrix through curl/websrv. Required three-run repeats were deterministic, every applicable case completed 1,800/1,800 flips, and the sequential run had no hang, panic, or UI crash. |
 | 4. Investigate FRAME_OPEN EINVAL and PA-debug EPERM | **Complete** | FW 5.50 `FRAME_OPEN` is absent from the kernel dispatcher. The PA-debug export is a userspace permission stub returning `0x8A6D0001`; neither result is an unresolved graphics blocker. |
 | 5. Expand games and useful exports/NIDs | **Partial** | Three games expose 72 unique AGC functions and all 72 are implemented. The corpus must expand. Twelve unknown SPRX NIDs plus 32 placeholder mappings remain blocked on new evidence and are not guessed. |
 | 6. Defer FW 3.20 | **Complete policy** | FW 3.20 remains the lowest active future target, but implementation and hardware work begin only after the FW 5.50 core satisfies the release gates above. |
@@ -141,6 +141,13 @@ finite 600-flip window, cleans up, and exits. The compute test submits and
 waits for its display flip before returning. These lifecycle rules prevent a
 successful persistent display case from occupying websrv during the next
 qualification launch.
+
+Status: complete on revision `c0633c7`, raw firmware `0x05500008`. All 14
+qualification ELFs passed their deterministic oracles and physical-display
+checks. The baseline binder and combined TES-to-NGG geometry paths each passed
+three consecutive runs from identical hashed ELFs. See
+`analysis/fw550_qualification_c0633c7.md` for the full matrix, readback metrics,
+markers, flip counts, hashes, and lifecycle-incident analysis.
 
 ### 4. Preserve the closed FW 5.50 driver-gap results
 

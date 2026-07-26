@@ -51,6 +51,15 @@ qualification runner must observe foreground `/hbldr` completion before
 starting another ELF; a curl timeout halts the sequence to prevent overlapping
 homebrew-loader processes.
 
+The complete post-PM4-promotion FW 5.50 qualification suite passes on revision
+`c0633c7` and raw firmware `0x05500008`. Base VideoOut/AGC/compute, baseline
+and NGG variants, isolated tessellation, and all combined tessellation/geometry
+variants passed through foreground curl/websrv. Baseline and combined geometry
+each repeated identically three times; all applicable cases completed
+1,800/1,800 flips, all physical results were confirmed, and the corrected
+sequential run had no hang, panic, or UI crash. Full evidence is in
+`analysis/fw550_qualification_c0633c7.md`.
+
 Complete and hardware-validated on standard PS5 gfx1013, raw firmware
 `0x05500008`. `agcGfx1013ValidateWave32VsPs` and
 `agcGfx1013BindWave32VsPs` now provide a reusable path for fused NGG Gs(2)
