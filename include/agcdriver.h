@@ -128,6 +128,7 @@ int32_t  PS5_SYSV_ABI sceAgcDriverSubmitToHDRScopesACQ(void);
 #define AGC_DRIVER_ERROR_INVALID_VALUE           0x8A6C0033u
 #define AGC_DRIVER_ERROR_INVALID_ARGUMENT        0x8A6C0035u
 #define AGC_DRIVER_ERROR_NOT_REGISTERED          0x8A6C003Au
+#define AGC_DRIVER_ERROR_DEBUG_UNAVAILABLE       0x8A6C1000u
 #define AGC_DRIVER_ERROR_AGR_NOT_INITIALIZED     0x8A6D0003u
 uint32_t PS5_SYSV_ABI sceAgcDriverGetPaDebugInterfaceVersion(void);
 
@@ -138,6 +139,14 @@ int32_t PS5_SYSV_ABI sceAgcDriverIsCaptureInProgress(void);
 int32_t PS5_SYSV_ABI sceAgcDriverIsSubmitValidationEnabled(void);
 int32_t PS5_SYSV_ABI sceAgcDriverIsTraceInProgress(void);
 int32_t PS5_SYSV_ABI sceAgcDriverGetShaderDebuggingStatus(void);
+/* Compatibility-SPRX submit-validation controls. Their bundled FW 0x0550
+ * bodies are unconditional debug-unavailable stubs and never touch outputs. */
+int32_t PS5_SYSV_ABI sceAgcDriverSetSubmitValidationMode(uint32_t mode);
+int32_t PS5_SYSV_ABI sceAgcDriverGetSubmitValidationMode(uint32_t *mode_out);
+int32_t PS5_SYSV_ABI sceAgcDriverSetSubmitValidationConfig(const void *config);
+int32_t PS5_SYSV_ABI sceAgcDriverGetSubmitValidationConfig(void *config_out);
+int32_t PS5_SYSV_ABI sceAgcDriverSetValidationErrorOutputFrequency(
+    uint32_t frequency);
 
 /* Event queue management. NIDs:
  * DeleteEqEvent: DL2RXaXOy88

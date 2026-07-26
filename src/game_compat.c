@@ -156,6 +156,40 @@ int32_t PS5_SYSV_ABI sceAgcDriverGetShaderDebuggingStatus(void)
     return 1;
 }
 
+/* Dragon Quest VII compatibility libSceAgcDriver.sprx @ 0x7bb0-0x7bf0.
+ * Each export is exactly `mov eax, 0x8a6c1000; ret`: no argument reads,
+ * output writes, or state transitions occur. */
+int32_t PS5_SYSV_ABI sceAgcDriverSetSubmitValidationMode(uint32_t mode)
+{
+    (void)mode;
+    return (int32_t)AGC_DRIVER_ERROR_DEBUG_UNAVAILABLE;
+}
+
+int32_t PS5_SYSV_ABI sceAgcDriverGetSubmitValidationMode(uint32_t *mode_out)
+{
+    (void)mode_out;
+    return (int32_t)AGC_DRIVER_ERROR_DEBUG_UNAVAILABLE;
+}
+
+int32_t PS5_SYSV_ABI sceAgcDriverSetSubmitValidationConfig(const void *config)
+{
+    (void)config;
+    return (int32_t)AGC_DRIVER_ERROR_DEBUG_UNAVAILABLE;
+}
+
+int32_t PS5_SYSV_ABI sceAgcDriverGetSubmitValidationConfig(void *config_out)
+{
+    (void)config_out;
+    return (int32_t)AGC_DRIVER_ERROR_DEBUG_UNAVAILABLE;
+}
+
+int32_t PS5_SYSV_ABI sceAgcDriverSetValidationErrorOutputFrequency(
+    uint32_t frequency)
+{
+    (void)frequency;
+    return (int32_t)AGC_DRIVER_ERROR_DEBUG_UNAVAILABLE;
+}
+
 /* sceAgcDriverGetDefaultOwner (NID: F0ZXt5q0ZTA)
  * reference-confirmed: returns 0 (default owner handle). */
 uint32_t PS5_SYSV_ABI sceAgcDriverGetDefaultOwner(void)

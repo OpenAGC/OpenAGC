@@ -1380,6 +1380,28 @@ static void test_batch3_ref_driver_stubs(void) {
     TEST_ASSERT_EQ(sceAgcDriverGetShaderDebuggingStatus(), 1,
         "GetShaderDebuggingStatus returns 1");
 
+    uint32_t validation_mode = 0xA5A5A5A5u;
+    uint32_t validation_config = 0x5A5A5A5Au;
+    TEST_ASSERT_EQ((uint32_t)sceAgcDriverSetSubmitValidationMode(2u),
+        AGC_DRIVER_ERROR_DEBUG_UNAVAILABLE,
+        "SetSubmitValidationMode returns compatibility stub error");
+    TEST_ASSERT_EQ((uint32_t)sceAgcDriverGetSubmitValidationMode(&validation_mode),
+        AGC_DRIVER_ERROR_DEBUG_UNAVAILABLE,
+        "GetSubmitValidationMode returns compatibility stub error");
+    TEST_ASSERT_EQ(validation_mode, 0xA5A5A5A5u,
+        "GetSubmitValidationMode leaves output untouched");
+    TEST_ASSERT_EQ((uint32_t)sceAgcDriverSetSubmitValidationConfig(&validation_config),
+        AGC_DRIVER_ERROR_DEBUG_UNAVAILABLE,
+        "SetSubmitValidationConfig returns compatibility stub error");
+    TEST_ASSERT_EQ((uint32_t)sceAgcDriverGetSubmitValidationConfig(&validation_config),
+        AGC_DRIVER_ERROR_DEBUG_UNAVAILABLE,
+        "GetSubmitValidationConfig returns compatibility stub error");
+    TEST_ASSERT_EQ(validation_config, 0x5A5A5A5Au,
+        "GetSubmitValidationConfig leaves output untouched");
+    TEST_ASSERT_EQ((uint32_t)sceAgcDriverSetValidationErrorOutputFrequency(1u),
+        AGC_DRIVER_ERROR_DEBUG_UNAVAILABLE,
+        "SetValidationErrorOutputFrequency returns compatibility stub error");
+
     /* GetDefaultOwner: returns 0 */
     TEST_ASSERT_EQ(sceAgcDriverGetDefaultOwner(), 0u, "GetDefaultOwner returns 0");
 

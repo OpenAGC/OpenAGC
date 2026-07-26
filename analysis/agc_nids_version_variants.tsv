@@ -36,7 +36,7 @@ firmware	library	name	nid	notes
 11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	gtvWv7DEKD4	11.60 SPRX export
 11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	NQLvUnSDyBU	11.60 SPRX export
 11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	+ADiO6FQvEA	11.60 SPRX export
-11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	8F5j7U-Bq6s	11.60 SPRX export
+11.60	libSceAgcDriver	sceAgcDriverSetValidationErrorOutputFrequency	8F5j7U-Bq6s	11.60 compatibility SPRX export; aerolib name; unconditional 0x8A6C1000 stub in Dragon Quest VII bundled SPRX
 11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	m9n9wJC2D+4	11.60 SPRX export
 11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	nTwzz-6W9Jg	11.60 SPRX export
 11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	8j6-e3dPf4c	11.60 SPRX export
@@ -45,12 +45,12 @@ firmware	library	name	nid	notes
 11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	38aK8XQj6Cg	11.60 SPRX export
 11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	SFB48L57OKQ	11.60 SPRX export
 11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	EcaEt4nv8No	11.60 SPRX export
-11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	chJWZcNSzjk	11.60 SPRX export
+11.60	libSceAgcDriver	sceAgcDriverSetSubmitValidationConfig	chJWZcNSzjk	11.60 compatibility SPRX export; aerolib name; unconditional 0x8A6C1000 stub in Dragon Quest VII bundled SPRX
 11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	Hb3p8BJm2PI	11.60 SPRX export
 11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	mQfUoU5-d1g	11.60 SPRX export
-11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	WHIOMbb+iIU	11.60 SPRX export
-11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	ICaGtkEIXTk	11.60 SPRX export
-11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	+iAOE3jCnkk	11.60 SPRX export
+11.60	libSceAgcDriver	sceAgcDriverGetSubmitValidationMode	WHIOMbb+iIU	11.60 compatibility SPRX export; aerolib name; unconditional 0x8A6C1000 stub in Dragon Quest VII bundled SPRX
+11.60	libSceAgcDriver	sceAgcDriverGetSubmitValidationConfig	ICaGtkEIXTk	11.60 compatibility SPRX export; aerolib name; unconditional 0x8A6C1000 stub in Dragon Quest VII bundled SPRX
+11.60	libSceAgcDriver	sceAgcDriverSetSubmitValidationMode	+iAOE3jCnkk	11.60 compatibility SPRX export; aerolib name; unconditional 0x8A6C1000 stub in Dragon Quest VII bundled SPRX
 11.60	libSceAgcDriver	sceAgcWriteDataPatchSetAddressOrOffset	fPSCdQxgpSw	libGraphicsDriver.cpp
 3.20	libSceAgcDriver	sceAgcSdmaClose	OYBiWgeGpPo	3.20 stub (libSceAgcDriver)
 3.20	libSceAgcDriver	sceAgcSdmaConstFill	CmlLiND79W8	3.20 stub (libSceAgcDriver)
