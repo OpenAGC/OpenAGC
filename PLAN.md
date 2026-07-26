@@ -16,21 +16,168 @@ AMD PM4 packet ancestry overlap in useful ways.
 
 ## Current Execution Order
 
-Work proceeds in this order. Later items must not displace an earlier item
-unless the earlier item is explicitly blocked on unavailable firmware or
-hardware.
+This section is the authoritative completion plan. The later phase sections
+retain detailed history and evidence; they do not override this order.
 
-1. **Finish FW 5.50 backend hardening and compatibility.** Keep exact
-   four-digit firmware selection and fail-closed capabilities, investigate the
-   non-blocking FRAME_OPEN EINVAL and PA-debug EPERM results, then expand the
-   game corpus and prioritize FW 5.50 exports and state combinations observed
-   in real titles.
-2. **Validate additional firmware only when matching hardware is available.**
-   FW 11.60 and PS5 Pro remain RE targets, not support claims. Do not issue
-   private ioctls on mismatched hardware.
-3. **Close cache synchronization semantics, then VRS and ray tracing.** Cache
-   behavior has observable packets and is more actionable than speculative
-   feature APIs.
+### Definition of a finished FW 5.50 core
+
+OpenAGC's FW 5.50 core is release-ready when all of these conditions hold:
+
+1. The library, rather than a hardware sample, owns every PM4 state builder
+   required by the hardware-proven Wave32 graphics paths. Samples may retain
+   memory allocation, VideoOut presentation, diagnostics, and visual oracles.
+2. Exact host fixtures lock the validated shader, render-target, viewport,
+   scissor, target-mask, depth-disabled, draw, and synchronization packet
+   streams, including cursor advance and atomic short-buffer failure.
+3. One revision passes the clean generic build, the complete retained host
+   suite, the Prospero build, and the complete FW 5.500.008 websrv hardware
+   qualification sequence without a GPU hang or kernel panic.
+4. Exact four-digit firmware selection remains fail-closed. The implementation
+   never calls absent or permission-only FW 5.50 driver operations as if they
+   were supported capabilities.
+5. A representative FW 5.50-compatible game corpus has 100% coverage for every
+   observed AGC import and exercised ABI path. Unknown exports that no observed
+   title uses are documented evidence gaps, not fabricated implementations.
+6. Public declarations, calling conventions, firmware-layout static asserts,
+   build instructions, deployment instructions, and supported/non-supported
+   claims agree with the tested implementation.
+
+This completion definition is for the stable FW 5.50 core, not a claim of full
+official SDK parity, all-firmware support, VRS, or ray-tracing completeness.
+
+### Audit of the proposed work
+
+| Item | Status | Current evidence and remaining work |
+| --- | --- | --- |
+| 1. Harden FW 5.50 graphics and promote sample PM4 | **Partial** | Reusable gfx1013 VS/PS and tessellation binders are hardware-proven. Render-target, viewport, scissor, graphics-default, target-mask, and draw orchestration still live in `samples/hw_test/agc_graphics.c`. |
+| 2. Add exact Wave32 and fixed-function host fixtures | **Partial** | Shader binders and individual `DRAW_INDEX_AUTO` packets have host coverage. Register-offset checks are not exact packet-stream fixtures for the hardware-proven RT/viewport/scissor setup. |
+| 3. Re-run the complete FW 5.50 websrv suite | **Partial** | Every major path has hardware evidence, including compute, NGG geometry, tessellation, combined stages, FP16, and RGBA8. A single complete qualification run is still required after the sample PM4 promotion lands. |
+| 4. Investigate FRAME_OPEN EINVAL and PA-debug EPERM | **Complete** | FW 5.50 `FRAME_OPEN` is absent from the kernel dispatcher. The PA-debug export is a userspace permission stub returning `0x8A6D0001`; neither result is an unresolved graphics blocker. |
+| 5. Expand games and useful exports/NIDs | **Partial** | Three games expose 72 unique AGC functions and all 72 are implemented. The corpus must expand. Twelve unknown SPRX NIDs plus 32 placeholder mappings remain blocked on new evidence and are not guessed. |
+| 6. Defer FW 3.20 | **Complete policy** | FW 3.20 remains the lowest active future target, but implementation and hardware work begin only after the FW 5.50 core satisfies the release gates above. |
+
+### 1. Promote the hardware-proven graphics state into OpenAGC
+
+Implement reusable gfx1013 state descriptions and atomic emitters for the
+state that is still sample-only:
+
+- Linear color targets covering the proven FP16 and RGBA8 formats, including
+  base/base-ext, pitch, slice, info, attrib2/attrib3, color control, and target
+  mask.
+- Aspect-preserving viewport state, depth range, transform control, and full
+  target scissor state.
+- Depth-disabled color rendering state and the FW 5.50 graphics register
+  defaults currently emitted by the sample.
+- A baseline draw-state wrapper that composes the existing shader binder with
+  primitive type, index type, instance count, and `DRAW_INDEX_AUTO` without
+  hiding the lower-level packet builders.
+
+Each emitter must validate dimensions, alignment, format, and address range;
+preflight its complete dword requirement; emit nothing on failure; and use
+`agcPm4Header3*` plus the existing register helpers rather than hand-packed
+headers. Public helper declarations use `PS5_SYSV_ABI`; firmware-layout structs
+receive size and offset assertions.
+
+Refactor `samples/hw_test/agc_graphics.c` to call these helpers. The sample may
+still audit emitted registers, but it must no longer be the only implementation
+of required render state. The exit gate is that deleting the sample-local
+setup helpers does not change the hardware packet stream.
+
+### 2. Lock exact host packet fixtures
+
+Add golden host fixtures derived from the already validated OpenAGC output,
+not copied firmware blobs. Normalize runtime addresses, then compare exact
+dwords and cursor advance for:
+
+- Wave32 fused NGG VS/PS binding and Wave32 HS/TES/NGG/PS binding.
+- The 1536x1536 linear FP16 target and 1920x1080 linear RGBA8 display target.
+- Square aspect-preserving viewports on square and 16:9 targets, depth range,
+  full scissor, target mask, and disabled depth state.
+- Primitive type, index type, one instance, `DRAW_INDEX_AUTO(3)`, completion
+  marker, and the cache/synchronization tail used by the proven draw.
+- FW 5.50 graphics-default emission counts and critical register sentinels.
+
+Add negative fixtures for unaligned addresses, zero or excessive dimensions,
+unsupported formats, invalid shader metadata, and every short-buffer boundary.
+The exit gate is exact equality with the captured proven packet stream plus
+zero cursor movement for every rejected state.
+
+### 3. Qualify one revision on FW 5.50 hardware
+
+After sections 1 and 2 land, build one clean revision and run the websrv suite
+in dependency order through curl:
+
+1. `videoout_linear.elf`.
+2. `agc_init.elf`.
+3. `agc_videoout.elf`.
+4. `agc_compute.elf`.
+5. Baseline `agc_graphics.elf` plus the vertex-fetch, indexed-draw, texture,
+   repeated-submit, geometry invocation/amplification/topology, FP16, and RGBA8
+   variants.
+6. Isolated tessellation, TES-to-NGG geometry, combined invocation-count,
+   combined line-strip, and combined RGBA8 variants.
+
+Record the git revision, raw firmware value `0x05500008`, PM4 audit, readback
+metrics, completion marker, flip count, and physical-display result for every
+case. Run the baseline reusable binder and the combined tessellation path three
+consecutive times from identical ELFs. The exit gate is all deterministic
+oracles passing, 1,800/1,800 flips where applicable, and no hang, panic, or UI
+crash. Use curl/websrv only; do not use `prospero-deploy`.
+
+### 4. Preserve the closed FW 5.50 driver-gap results
+
+Do not reopen PA-debug or `FRAME_OPEN` without contradictory firmware evidence.
+Convert the conclusions into permanent capability/profile regressions:
+
+- FW 5.50 must not issue `FRAME_OPEN`; its absence is expected behavior.
+- `sceAgcDriverGetPaDebugInterfaceVersion` remains a permission-only userspace
+  stub result, not a required ioctl or release gate.
+- Unsupported optional operations return a stable fail-closed AGC error and do
+  not mutate backend state.
+
+### 5. Expand FW 5.50 game compatibility
+
+Grow the corpus from three games to at least ten representative,
+FW 5.50-compatible binaries spanning multiple engines, SDK vintages, and
+graphics workloads. For each title:
+
+- Extract imported AGC NIDs and named functions into the analysis tables.
+- Classify each import as implemented, forwarding wrapper, intentional
+  fail-closed optional feature, or unresolved.
+- Implement observed missing functions with ABI declarations, static asserts,
+  packet/layout fixtures, and a game-provenance note.
+- Add runtime fixtures for newly observed state combinations instead of
+  declaring compatibility from symbol presence alone.
+
+Prioritize functions used by real titles. The 12 unknown SPRX exports and 32
+placeholder mappings are not release blockers unless a corpus title imports
+or exercises them; if that occurs, obtain new evidence rather than guessing a
+name or ABI. The exit gate is 100% named-import implementation across the
+expanded corpus and no exercised path relying on a silent success stub.
+
+### 6. Run the FW 5.50 release audit
+
+Before calling the FW 5.50 core complete:
+
+- Audit all public symbols against FW 5.50 names, signatures, calling
+  conventions, and NID provenance.
+- Audit every firmware ABI struct for size and relevant offset assertions.
+- Pass clean CMake and Make generic builds with no new warnings, the complete
+  host suite, and a clean Prospero build.
+- Ensure samples build only from public headers plus explicitly private sample
+  support, and contain no second implementation of reusable PM4 state.
+- Update `STATUS.md`, API/build/deployment documentation, the support matrix,
+  and non-goals from the final qualification evidence.
+
+### 7. Work deliberately deferred until after the FW 5.50 core
+
+FW 3.20 exact-profile implementation is first after the FW 5.50 release gates
+are satisfied; it remains the lowest active compatibility target. Other
+firmware families require matching hardware before support claims. Cache
+synchronization semantics follow the core audit and become an earlier blocker
+only if the expanded game corpus exercises an unresolved path. VRS and ray
+tracing remain later feature tracks driven by verified FW 5.50 ABI evidence and
+real-title demand.
 
 Every completed goal requires updated documentation, host regression coverage,
 the relevant Prospero build, hardware validation through curl/websrv when
