@@ -196,6 +196,11 @@ uint32_t *PS5_SYSV_ABI sceAgcCbDispatch(
     uint32_t group_count_z, uint32_t modifier);
 uint32_t *PS5_SYSV_ABI sceAgcCbSetShRegistersDirect(
     SceAgcCb *cb, const AgcRegisterValue *registers, uint32_t register_count);
+/* Compatibility-SPRX 6nths4DHNrs: bind OpenAGC's internal gfx1013 compute
+ * kernel and fill each complete 16-byte block with pattern16. */
+uint32_t *PS5_SYSV_ABI sceAgcCbMemsetExclusive(
+    SceAgcCb *cb, uint64_t destination, const void *pattern16,
+    uint64_t size_bytes);
 uint32_t *PS5_SYSV_ABI sceAgcDcbWriteData(
     SceAgcCb *cb, uint32_t destination, uint32_t cache_policy,
     uint64_t destination_address, const uint32_t *data, uint32_t dword_count,

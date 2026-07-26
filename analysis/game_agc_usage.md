@@ -38,7 +38,9 @@ titles across multiple engines and SDK vintages.
   ABIs plus the compatibility `ACQUIRE_MEM` engine and async `WRITE_DATA`
   patchers, four ACB/DCB marker-span exports, and the compatibility GS
   primitive-payload and full GS-oversubscription occupancy queries, and five
-  submit-validation stubs cover 232 imports; 21 remain under analysis, so the title is tracked
+  submit-validation stubs and the clean-room gfx1013 compute-backed
+  `sceAgcCbMemsetExclusive` builder cover 233 imports; 20 remain under analysis,
+  so the title is tracked
   separately from the four fully covered titles. AcquireMem packet size follows
   the FW 5.50 title
   workaround mode: mode 1 uses 64 bytes, while modes 0 and 2 use 32 bytes.

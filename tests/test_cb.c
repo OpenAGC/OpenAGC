@@ -1,6 +1,7 @@
 #include "test.h"
 #include "agc_cb.h"
 #include "agc_pm4.h"
+#include "agc_registers.h"
 #include "agcdriver.h"
 
 static void test_cb_layout_offsets(void) {
@@ -67,6 +68,69 @@ static void test_sce_agc_cb_set_sh_registers(void) {
     TEST_ASSERT_EQ(cmd[1], 0x20C, "SetSh start offset");
     TEST_ASSERT_EQ(cmd[2], 0x1234, "SetSh value 0");
     TEST_ASSERT_EQ(cmd[3], 0x5678, "SetSh value 1");
+}
+
+static void test_sce_agc_cb_memset_exclusive(void) {
+    uint32_t buffer[32] = {0};
+    const uint32_t pattern[4] = {
+        0x11223344u, 0x55667788u, 0x99AABBCCu, 0xDDEEFF00u,
+    };
+    SceAgcCb cb;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+
+    uint32_t *cmd = sceAgcCbMemsetExclusive(
+        &cb, 0x0000123456789000ULL, pattern, 128u);
+    TEST_ASSERT(cmd == buffer, "MemsetExclusive returns first packet");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 32u,
+        "MemsetExclusive advances exact cursor size");
+    TEST_ASSERT_EQ(agcPm4Opcode(buffer[0]), AGC_PM4_OP_SET_SH_REG,
+        "MemsetExclusive binds program address");
+    TEST_ASSERT_EQ(buffer[0] & 1u, 1u,
+        "MemsetExclusive PGM packet selects compute");
+    TEST_ASSERT_EQ(buffer[1], AGC_REG_COMPUTE_PGM_LO,
+        "MemsetExclusive PGM register offset");
+    TEST_ASSERT_EQ(buffer[4] & 1u, 1u,
+        "MemsetExclusive resource packet selects compute");
+    TEST_ASSERT_EQ(buffer[5], AGC_REG_COMPUTE_PGM_RSRC1,
+        "MemsetExclusive resource register offset");
+    TEST_ASSERT_EQ(buffer[6], 0x602C0000u,
+        "MemsetExclusive embeds compiled RSRC1");
+    TEST_ASSERT_EQ(buffer[7], 0x92u,
+        "MemsetExclusive embeds nine-user-SGPR RSRC2");
+    TEST_ASSERT_EQ(buffer[9], AGC_REG_COMPUTE_PGM_RSRC3,
+        "MemsetExclusive RSRC3 register offset");
+    TEST_ASSERT_EQ(buffer[12], AGC_REG_COMPUTE_NUM_THREAD_X,
+        "MemsetExclusive thread register offset");
+    TEST_ASSERT_EQ(buffer[13], 64u, "MemsetExclusive local size X");
+    TEST_ASSERT_EQ(buffer[17], AGC_REG_COMPUTE_USER_DATA_0,
+        "MemsetExclusive user-data register offset");
+    TEST_ASSERT_EQ(buffer[18], 0u, "MemsetExclusive ring offset low");
+    TEST_ASSERT_EQ(buffer[19], 0u, "MemsetExclusive ring offset high");
+    TEST_ASSERT_EQ(buffer[20], 0x56789000u,
+        "MemsetExclusive destination low");
+    TEST_ASSERT_EQ(buffer[21], 0x00001234u,
+        "MemsetExclusive destination high");
+    TEST_ASSERT_EQ(buffer[22], 8u, "MemsetExclusive 16-byte block count");
+    TEST_ASSERT_EQ(buffer[23], pattern[0], "MemsetExclusive pattern word 0");
+    TEST_ASSERT_EQ(buffer[26], pattern[3], "MemsetExclusive pattern word 3");
+    TEST_ASSERT_EQ(agcPm4Opcode(buffer[27]), AGC_PM4_OP_DISPATCH_DIRECT,
+        "MemsetExclusive dispatch opcode");
+    TEST_ASSERT_EQ(buffer[27] & 1u, 1u,
+        "MemsetExclusive dispatch selects compute");
+    TEST_ASSERT_EQ(buffer[28], 1u, "MemsetExclusive dispatch group count");
+    TEST_ASSERT_EQ(buffer[31], 0x41u,
+        "MemsetExclusive dispatch initiator");
+
+    uint32_t short_buffer[31] = {0};
+    agcCbInit(&cb, short_buffer, sizeof(short_buffer));
+    TEST_ASSERT(sceAgcCbMemsetExclusive(
+        &cb, 0u, pattern, 128u) == NULL,
+        "MemsetExclusive rejects insufficient command space");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "MemsetExclusive failure preserves cursor");
+    TEST_ASSERT(sceAgcCbMemsetExclusive(
+        &cb, 0u, NULL, 128u) == NULL,
+        "MemsetExclusive rejects null pattern");
 }
 
 static void test_sce_agc_cb_set_cx_registers_direct(void) {
@@ -1048,6 +1112,7 @@ void test_suite_cb(void) {
     TEST_RUN(test_sce_agc_cb_nop);
     TEST_RUN(test_sce_agc_cb_dispatch);
     TEST_RUN(test_sce_agc_cb_set_sh_registers);
+    TEST_RUN(test_sce_agc_cb_memset_exclusive);
     TEST_RUN(test_sce_agc_cb_set_cx_registers_direct);
     TEST_RUN(test_sce_agc_cb_set_cx_registers_direct_rejects_invalid);
     TEST_RUN(test_sce_agc_cb_set_uc_registers_direct);

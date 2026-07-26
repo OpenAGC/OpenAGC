@@ -22,8 +22,10 @@
 
 #include "agc_cb.h"
 #include "agc_pm4.h"
+#include "agc_registers.h"
 #include "agc_types.h"
 #include "agcdriver.h"
+#include "memset_exclusive_shader.h"
 
 #include <string.h>
 
@@ -73,6 +75,68 @@ uint32_t *PS5_SYSV_ABI sceAgcCbSetShRegistersDirect(
     for (uint32_t i = 0; i < register_count; ++i)
         cmd[2 + i] = registers[i].value;
     return cmd;
+}
+
+/* sceAgcCbMemsetExclusive (compatibility NID: 6nths4DHNrs) - bundled SPRX
+ * @ 0x3100. Sony's implementation binds an internal compute shader rather
+ * than lowering this operation to DMA_DATA. OpenAGC mirrors that architecture
+ * with its own gfx1013 kernel and the hardware-proven psbc compute ABI. */
+uint32_t *PS5_SYSV_ABI sceAgcCbMemsetExclusive(
+    SceAgcCb *cb, uint64_t destination, const void *pattern16,
+    uint64_t size_bytes)
+{
+    enum { kPacketDwords = 32 };
+    if (!cb || !pattern16 || agcCbRemainingDwords(cb) < kPacketDwords)
+        return NULL;
+
+    uint32_t pattern[4];
+    memcpy(pattern, pattern16, sizeof(pattern));
+
+    uint64_t shader_address =
+        (uint64_t)(uintptr_t)s_agc_memset_exclusive_code;
+    uint32_t block_count = (uint32_t)(size_bytes >> 4u);
+    uint32_t group_count = (block_count + 63u) >> 6u;
+    AgcRegisterValue pgm[] = {
+        {AGC_REG_COMPUTE_PGM_LO, (uint32_t)(shader_address >> 8u)},
+        {AGC_REG_COMPUTE_PGM_HI, (uint32_t)(shader_address >> 40u)},
+    };
+    AgcRegisterValue resources[] = {
+        {AGC_REG_COMPUTE_PGM_RSRC1, AGC_MEMSET_EXCLUSIVE_RSRC1},
+        {AGC_REG_COMPUTE_PGM_RSRC2, AGC_MEMSET_EXCLUSIVE_RSRC2},
+    };
+    AgcRegisterValue resource3[] = {
+        {AGC_REG_COMPUTE_PGM_RSRC3, AGC_MEMSET_EXCLUSIVE_RSRC3},
+    };
+    AgcRegisterValue threads[] = {
+        {AGC_REG_COMPUTE_NUM_THREAD_X, 64u},
+        {AGC_REG_COMPUTE_NUM_THREAD_Y, 1u},
+        {AGC_REG_COMPUTE_NUM_THREAD_Z, 1u},
+    };
+    AgcRegisterValue user_data[] = {
+        {AGC_REG_COMPUTE_USER_DATA_0 + 0u, 0u},
+        {AGC_REG_COMPUTE_USER_DATA_0 + 1u, 0u},
+        {AGC_REG_COMPUTE_USER_DATA_0 + 2u, (uint32_t)destination},
+        {AGC_REG_COMPUTE_USER_DATA_0 + 3u, (uint32_t)(destination >> 32u)},
+        {AGC_REG_COMPUTE_USER_DATA_0 + 4u, block_count},
+        {AGC_REG_COMPUTE_USER_DATA_0 + 5u, pattern[0]},
+        {AGC_REG_COMPUTE_USER_DATA_0 + 6u, pattern[1]},
+        {AGC_REG_COMPUTE_USER_DATA_0 + 7u, pattern[2]},
+        {AGC_REG_COMPUTE_USER_DATA_0 + 8u, pattern[3]},
+    };
+
+    uint32_t *first = sceAgcCbSetShRegistersDirect(cb, pgm, 2u);
+    first[0] |= 1u;
+    uint32_t *cmd = sceAgcCbSetShRegistersDirect(cb, resources, 2u);
+    cmd[0] |= 1u;
+    cmd = sceAgcCbSetShRegistersDirect(cb, resource3, 1u);
+    cmd[0] |= 1u;
+    cmd = sceAgcCbSetShRegistersDirect(cb, threads, 3u);
+    cmd[0] |= 1u;
+    cmd = sceAgcCbSetShRegistersDirect(cb, user_data, 9u);
+    cmd[0] |= 1u;
+    cmd = sceAgcCbDispatch(cb, group_count, 1u, 1u, 0u);
+    cmd[0] |= 1u;
+    return first;
 }
 
 uint32_t *PS5_SYSV_ABI sceAgcCbSetCxRegistersDirect(

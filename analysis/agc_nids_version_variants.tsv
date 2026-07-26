@@ -26,7 +26,7 @@ firmware	library	name	nid	notes
 11.60	libSceAgc	sceAgcSetShaderInstrumentation	RTpj-tIlvZc	11.60 compatibility SPRX export; aerolib name; stores EDI flags and returns zero
 11.60	libSceAgc	sceAgcWriteDataPatchSetDst	tmy-+rBpspY	11.60 SPRX export; identified from sharpemu AgcExports.cs
 11.60	libSceAgc	sceAgcUnknown_11.60	86rJnbZUpr4	11.60 SPRX export
-11.60	libSceAgc	sceAgcUnknown_11.60	6nths4DHNrs	11.60 SPRX export
+11.60	libSceAgc	sceAgcCbMemsetExclusive	6nths4DHNrs	PPSA17942 bundled compatibility SPRX @ 0x3100; cursor/compute ABI recovered
 11.60	libSceAgc	sceAgcUnknown_11.60	shuFv6ZAOsI	11.60 SPRX export
 11.60	libSceAgc	sceAgcAcbPushMarkerSpan	8Kly1JrJUlw	11.60 compatibility SPRX export; aerolib name; exact cursor/text/length/color ABI recovered from Dragon Quest VII bundled SPRX
 11.60	libSceAgc	sceAgcGetIsTrinityMode	BfBDZGbti7A	11.60 compatibility SPRX export; Dragon Quest VII body writes sceKernelHasTrinityMode result through one-byte RDI output pointer; sole game caller ignores RAX; FW 5.50 standard PS5 reports false

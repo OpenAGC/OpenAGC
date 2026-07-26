@@ -308,6 +308,10 @@ The host-generic implementation now has a tested model for:
   firmware-proven `GE_PC_ALLOC` and `SPI_SHADER_PGM_RSRC4_GS` pairs and
   reproduces the full shader-state occupancy/interpolation calculation used by
   Dragon Quest VII Reimagined's bundled AGC compatibility library.
+- Compatibility GPU memset: `sceAgcCbMemsetExclusive` emits an atomic
+  32-dword compute bind/dispatch sequence using an aligned, clean-room gfx1013
+  kernel and nine-user-SGPR psbc ABI. Host packet fixtures are complete;
+  FW `0x0550` execution/readback remains the hardware promotion gate.
 
 ## Verified
 
@@ -323,7 +327,7 @@ make -B test
 Expected result:
 
 ```text
-3230 passed, 0 failed
+3257 passed, 0 failed
 ```
 
 PS5 prospero backend (cross-compiled, no tests):
