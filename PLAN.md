@@ -22,9 +22,9 @@ hardware.
 
 1. **Extend combined-stage topology, invocation, and render-target coverage.**
    Isolated tessellation and TES-to-NGG geometry composition are now
-   hardware-proven on FW 5.50. Vary one dimension at a time, retaining the
-   isolated tessellation and geometry samples as controls: first geometry
-   invocation count, then output topology, then an isolated RGBA8 target.
+   hardware-proven on FW 5.50, including `invocations=2`. Continue varying one
+   dimension at a time while retaining the isolated samples as controls: next
+   output topology, then an isolated RGBA8 target.
 2. **Finish FW 5.50 backend hardening and compatibility.** Keep exact
    four-digit firmware selection and fail-closed capabilities, investigate the
    non-blocking FRAME_OPEN EINVAL and PA-debug EPERM results, then expand the
@@ -922,7 +922,10 @@ After interpolants pass, proceed in this order:
    dark seams around each colorful microtriangle. The isolated tessellation
    and geometry samples remain controls.
 10. Expand Wave32 graphics coverage, then VRS and ray tracing where supported
-   by gfx1013 and the PS5 AGC ABI.
+   by gfx1013 and the PS5 AGC ABI. Combined GS `invocations=2` is
+   hardware-validated with two half-scale tessellated copies, deterministic
+   127,488-pixel FP16 coverage, and `VGT_GS_INSTANCE_CNT=0x9`. Combined output
+   topology is next, followed by an isolated RGBA8 target.
 11. ✅ Close PA-debug and FRAME_OPEN RE for FW 5.50. The PA-debug version
    export is a userspace permission stub returning `0x8A6D0001` without an
    ioctl, while `FRAME_OPEN` is absent from the kernel dispatcher.

@@ -52,7 +52,7 @@ AGC_LDFLAGS := $(OPENAGC_LIB) -lSceVideoOut -lkernel
 
 # === Targets ===
 
-all: videoout_linear.elf agc_init.elf agc_videoout.elf agc_compute.elf agc_graphics.elf agc_tessellation.elf agc_tess_geometry.elf
+all: videoout_linear.elf agc_init.elf agc_videoout.elf agc_compute.elf agc_graphics.elf agc_tessellation.elf agc_tess_geometry.elf agc_tess_geometry_invocations.elf
 
 # VideoOut linear smoke test (no GPU commands)
 videoout_linear.elf: videoout_linear.c ps5_video_out.h
@@ -153,6 +153,23 @@ shaders_tess_geometry: shaders_tess shaders/triangle_tess_geom.spv
 	    shaders/triangle_tess_gs_back.sb \
 	    shaders/triangle_tess_gs_back_sb.h
 
+.PHONY: shaders_tess_geometry_invocations
+shaders_tess_geometry_invocations: shaders_tess shaders/triangle_invocations.geom
+	$(GLSLANG) -V --target-env vulkan1.2 shaders/triangle_invocations.geom \
+	    -o shaders/triangle_invocations.spv
+	$(PSBC) -f shaders/triangle_invocations.spv -s geometry \
+	    --pre-tess-eval shaders/triangle_tese.spv \
+	    --ngg-front shaders/triangle_tess_invocations_gs_front.sb \
+	    --wave32 \
+	    --tess-control-points 3 --tess-patches 8 \
+	    -o shaders/triangle_tess_invocations_gs_back.sb
+	xxd -i -n triangle_tess_invocations_gs_front_data \
+	    shaders/triangle_tess_invocations_gs_front.sb \
+	    shaders/triangle_tess_invocations_gs_front_sb.h
+	xxd -i -n triangle_tess_invocations_gs_back_data \
+	    shaders/triangle_tess_invocations_gs_back.sb \
+	    shaders/triangle_tess_invocations_gs_back_sb.h
+
 .PHONY: shaders_ngg_amplify
 shaders_ngg_amplify: shaders/triangle_vert.spv shaders/triangle_amplify.geom
 	glslangValidator -V --target-env vulkan1.2 shaders/triangle_amplify.geom \
@@ -228,6 +245,9 @@ agc_tessellation.elf: shaders_tess agc_graphics.c gfx1013_tess_ring.h ps5_video_
 
 agc_tess_geometry.elf: shaders_tess_geometry agc_graphics.c gfx1013_tess_ring.h ps5_video_out.h gpu_credentials.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_TESSELLATION=1 -DAGC_TESS_GEOMETRY=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_tess_geometry_invocations.elf: shaders_tess_geometry_invocations agc_graphics.c gfx1013_tess_ring.h ps5_video_out.h gpu_credentials.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_TESSELLATION=1 -DAGC_TESS_GEOMETRY=1 -DAGC_TESS_GEOMETRY_INVOCATIONS=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
 
 # === eboot.bin versions (for debug-mode PS5) ===
 

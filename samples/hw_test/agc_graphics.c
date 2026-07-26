@@ -60,6 +60,14 @@
 #define AGC_TESS_GEOMETRY 0
 #endif
 
+#ifndef AGC_TESS_GEOMETRY_INVOCATIONS
+#define AGC_TESS_GEOMETRY_INVOCATIONS 0
+#endif
+
+#if AGC_TESS_GEOMETRY_INVOCATIONS && !AGC_TESS_GEOMETRY
+#error "tessellation geometry invocations require AGC_TESS_GEOMETRY"
+#endif
+
 #ifndef AGC_TESS_DISTRIBUTION_MODE
 #define AGC_TESS_DISTRIBUTION_MODE 0u
 #endif
@@ -68,10 +76,17 @@
 #include "shaders/triangle_tess_hs_front_sb.h"
 #include "shaders/triangle_tess_hs_back_sb.h"
 #if AGC_TESS_GEOMETRY
+#if AGC_TESS_GEOMETRY_INVOCATIONS
+#include "shaders/triangle_tess_invocations_gs_front_sb.h"
+#include "shaders/triangle_tess_invocations_gs_back_sb.h"
+#define NGG_FRONT_DATA triangle_tess_invocations_gs_front_data
+#define NGG_BACK_DATA triangle_tess_invocations_gs_back_data
+#else
 #include "shaders/triangle_tess_gs_front_sb.h"
 #include "shaders/triangle_tess_gs_back_sb.h"
 #define NGG_FRONT_DATA triangle_tess_gs_front_data
 #define NGG_BACK_DATA triangle_tess_gs_back_data
+#endif
 #else
 #include "shaders/triangle_tess_es_front_sb.h"
 #include "shaders/triangle_tess_es_back_sb.h"
@@ -1703,7 +1718,12 @@ static bool dispatch_graphics(GraphicsTest *test,
         }
         /* Equilateral NDC triangle covers sqrt(3)/16 of a square target.
          * 1774/16384 is a close integer approximation. */
-#if AGC_TESS_GEOMETRY
+#if AGC_TESS_GEOMETRY_INVOCATIONS
+        /* Two invocation-ID-selected half-scale copies cover half the
+         * isolated tessellation triangle area. */
+        const uint32_t expected_changed = (uint32_t)
+            (((uint64_t)target_pixels * 887u) / 16384u);
+#elif AGC_TESS_GEOMETRY
         /* The combined TES+GS fixture scales each vertex around the centroid
          * by 0.78, so its rasterized area is 0.78^2 of the TES control. */
         const uint32_t expected_changed = (uint32_t)

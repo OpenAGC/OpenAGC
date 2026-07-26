@@ -113,6 +113,17 @@ triangle on a dark-gray background. Dark seams surround every colorful
 microtriangle, exactly matching the GS centroid shrink and directly confirming
 that tessellation output feeds the NGG geometry stage rather than bypassing it.
 
+Combined-stage GS invocation count is also hardware-validated. The
+`agc_tess_geometry_invocations.elf` fixture compiles an `invocations=2` GS
+after TES and selects two half-scale copies with `gl_InvocationID`. The shader
+record programs `VGT_GS_INSTANCE_CNT=0x00000009`; FW 5.500.008 produced
+127,488 changed FP16 pixels versus 127,728 expected, bounds
+`x=346..1189, y=602..933`, eight sampled colors, 56,003 opaque samples, zero
+out-of-range components, four retained `4.0` factors, 24 changed offchip
+dwords, a live post-draw marker, and 1,800/1,800 display flips. The PS5 display
+showed two colorful tessellated triangles on the gray background without a GPU
+hang or kernel panic.
+
 Host coverage validates record types, required HS continuation state, the
 front-only TES form produced by ACO, runtime placeholder patching, Wave32
 stage enables, primitive type `DI_PT_PATCH=9`, and command-buffer cursor
@@ -121,9 +132,8 @@ stage-local control-point data and writes tessellation level 4, while its TES
 uses `gl_TessCoord` for barycentric position and color interpolation. Keeping
 the position tables local isolates HS/TES launch from inter-stage varying ABI.
 The isolated sample remains the control for future combined-stage expansion.
-The next graphics work varies topology, invocation count, and render-target
-format independently so failures remain attributable to one ABI or PM4 state
-change.
+Invocation count is now proven; output topology and render-target format remain
+separate tests so failures stay attributable to one ABI or PM4 state change.
 
 
 ## Firmware compatibility
