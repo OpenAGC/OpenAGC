@@ -64,8 +64,17 @@
 #define AGC_TESS_GEOMETRY_INVOCATIONS 0
 #endif
 
-#if AGC_TESS_GEOMETRY_INVOCATIONS && !AGC_TESS_GEOMETRY
-#error "tessellation geometry invocations require AGC_TESS_GEOMETRY"
+#ifndef AGC_TESS_GEOMETRY_LINES
+#define AGC_TESS_GEOMETRY_LINES 0
+#endif
+
+#if (AGC_TESS_GEOMETRY_INVOCATIONS + AGC_TESS_GEOMETRY_LINES) > 1
+#error "select only one tessellation geometry variant"
+#endif
+
+#if (AGC_TESS_GEOMETRY_INVOCATIONS || AGC_TESS_GEOMETRY_LINES) && \
+    !AGC_TESS_GEOMETRY
+#error "tessellation geometry variants require AGC_TESS_GEOMETRY"
 #endif
 
 #ifndef AGC_TESS_DISTRIBUTION_MODE
@@ -81,6 +90,11 @@
 #include "shaders/triangle_tess_invocations_gs_back_sb.h"
 #define NGG_FRONT_DATA triangle_tess_invocations_gs_front_data
 #define NGG_BACK_DATA triangle_tess_invocations_gs_back_data
+#elif AGC_TESS_GEOMETRY_LINES
+#include "shaders/triangle_tess_lines_gs_front_sb.h"
+#include "shaders/triangle_tess_lines_gs_back_sb.h"
+#define NGG_FRONT_DATA triangle_tess_lines_gs_front_data
+#define NGG_BACK_DATA triangle_tess_lines_gs_back_data
 #else
 #include "shaders/triangle_tess_gs_front_sb.h"
 #include "shaders/triangle_tess_gs_back_sb.h"
@@ -1718,7 +1732,13 @@ static bool dispatch_graphics(GraphicsTest *test,
         }
         /* Equilateral NDC triangle covers sqrt(3)/16 of a square target.
          * 1774/16384 is a close integer approximation. */
-#if AGC_TESS_GEOMETRY_INVOCATIONS
+#if AGC_TESS_GEOMETRY_LINES
+        /* A level-4 triangular grid has 30 unique edges. Each edge is one
+         * quarter of the half-width outer side, for 15/4 target widths of
+         * ideal one-pixel line coverage before rasterization endpoint rules. */
+        const uint32_t expected_changed =
+            (target->width * 15u) / 4u;
+#elif AGC_TESS_GEOMETRY_INVOCATIONS
         /* Two invocation-ID-selected half-scale copies cover half the
          * isolated tessellation triangle area. */
         const uint32_t expected_changed = (uint32_t)

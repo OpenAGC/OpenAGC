@@ -124,6 +124,18 @@ dwords, a live post-draw marker, and 1,800/1,800 display flips. The PS5 display
 showed two colorful tessellated triangles on the gray background without a GPU
 hang or kernel panic.
 
+Combined-stage GS output topology is hardware-validated with line strips. The
+`agc_tess_geometry_lines.elf` fixture changes only the GS output declaration,
+emitting a closed four-vertex `line_strip` for each TES-generated
+microtriangle. Its record programs `out_prim=1`, `max_vert_out=4`, and
+`GE_CNTL=0x40` while retaining the tessellation ring ABI. FW 5.500.008 produced
+6,749 changed FP16 pixels versus the dimension-derived 5,760 estimate within
+the 1,536-pixel rasterization tolerance, bounds `x=384..1151, y=435..1100`,
+eight sampled colors, 3,044 opaque samples, zero out-of-range components, four
+`4.0` factors, 24 changed offchip dwords, a live post-draw marker, and
+1,800/1,800 display flips. The PS5 display showed the expected colorful
+equal-sided triangular wire grid on gray without a GPU hang or kernel panic.
+
 Host coverage validates record types, required HS continuation state, the
 front-only TES form produced by ACO, runtime placeholder patching, Wave32
 stage enables, primitive type `DI_PT_PATCH=9`, and command-buffer cursor
@@ -132,8 +144,8 @@ stage-local control-point data and writes tessellation level 4, while its TES
 uses `gl_TessCoord` for barycentric position and color interpolation. Keeping
 the position tables local isolates HS/TES launch from inter-stage varying ABI.
 The isolated sample remains the control for future combined-stage expansion.
-Invocation count is now proven; output topology and render-target format remain
-separate tests so failures stay attributable to one ABI or PM4 state change.
+Invocation count and line-strip output are proven; render-target format remains
+the final isolated test in this matrix.
 
 
 ## Firmware compatibility
