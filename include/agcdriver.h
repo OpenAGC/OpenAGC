@@ -863,6 +863,13 @@ int32_t PS5_SYSV_ABI sceAgcUnknownRP5xLdOf26k(
 int32_t PS5_SYSV_ABI sceAgcUnknownIkfdtRIqCE(
     uint32_t *cmd, uint32_t cache_policy, uint64_t address,
     uint32_t size_in_dwords);
+uint32_t *PS5_SYSV_ABI sceAgcUnknownKRzWekV120(
+    SceAgcCb *cb, uint32_t index_type, uint32_t swap,
+    uint32_t control_flag);
+uint32_t *PS5_SYSV_ABI sceAgcUnknownZARR5aCmkoY(
+    SceAgcCb *cb, uint32_t arg1, uint32_t arg2, uint32_t arg3,
+    uint32_t arg4, uint32_t arg5, uint16_t arg6, uint16_t arg7,
+    uint32_t arg8, uint32_t arg9, uint64_t arg10, uint64_t arg11);
 
 /* SetNumRegisters patchers for indirect register packets. NIDs:
  * Cx: whb1RL7K4Ss, Sh: nCUgItdN2ms, Uc: fRG-JOH5+sI

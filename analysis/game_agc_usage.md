@@ -41,7 +41,8 @@ titles across multiple engines and SDK vintages.
   submit-validation stubs, eight resource/GDS status exports, three capture
   controls, and the clean-room gfx1013 compute-backed
   `sceAgcCbMemsetExclusive` builder plus three NID-exact indirect-buffer field
-  patchers cover 247 imports; 6 remain under analysis,
+  patchers, the NID-exact four-argument `SET_INDEX_SIZE` variant, and the full
+  12-argument atomic-GDS builder cover 249 imports; 4 remain under analysis,
   so the title is tracked
   separately from the four fully covered titles. AcquireMem packet size follows
   the FW 5.50 title
@@ -52,6 +53,8 @@ titles across multiple engines and SDK vintages.
   firmware stub does not reveal the public argument ABI.
   The three packet patchers retain NID-derived labels because their FW 5.50 and
   11.60 bodies prove behavior and calling convention but not official names.
+  The version-specific index-size and atomic-GDS builders likewise retain
+  NID-derived labels and coexist with their older named compatibility APIs.
 - The durable exclusion list is `analysis/game_compat_exclusions.tsv`.
 
 ## PPSA02453 evidence

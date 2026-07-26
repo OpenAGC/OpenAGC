@@ -6,7 +6,7 @@ firmware	library	name	nid	notes
 11.60	libSceAgc	sceAgcDcbSetMarkerSpan	BYcSvEsINWU	11.60 compatibility SPRX export; aerolib name; exact cursor/text/length/color ABI recovered from Dragon Quest VII bundled SPRX
 11.60	libSceAgc	sceAgcUnknown_11.60	Eq7asRCcfMs	11.60 SPRX export
 11.60	libSceAgc	sceAgcAsyncWriteDataPatchSetAddressOrOffset	d4NZIlguzv0	11.60 compatibility SPRX export; aerolib name; exact IT_WRITE_DATA dword 2-3 patch recovered from Dragon Quest VII bundled SPRX
-11.60	libSceAgc	sceAgcUnknown_11.60	-KRzWekV120	11.60 SPRX export
+11.60	libSceAgc	sceAgcUnknownKRzWekV120	-KRzWekV120	11.60 SPRX-confirmed four-argument index-size builder; official name unknown
 11.60	libSceAgc	sceAgcSetAmmSemaphoreMemory	OQTgEXyihvA	11.60 compatibility SPRX export; aerolib name; exact two-argument base/size ABI, 16 KiB alignment, and state transitions recovered from Dragon Quest VII bundled SPRX
 11.60	libSceAgc	sceAgcWriteDataPatchSetAddressOrOffset	fPSCdQxgpSw	11.60 SPRX export; identified from sharpemu AgcExports.cs (also exported from libSceAgcDriver, see below)
 11.60	libSceAgc	sceAgcUnknown_11.60	NbiQSQ-UL+M	11.60 SPRX export

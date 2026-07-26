@@ -2593,6 +2593,65 @@ int32_t PS5_SYSV_ABI sceAgcUnknownIkfdtRIqCE(
         cmd, 1u, cache_policy, address, size_in_dwords);
 }
 
+/* NID -KRzWekV120. This is the 11.60 compatibility form of the index-size
+ * packet. Its fourth argument contributes control bit 14 and therefore cannot
+ * be represented by the three-argument FW 5.50 named entry point. */
+uint32_t *PS5_SYSV_ABI sceAgcUnknownKRzWekV120(
+    SceAgcCb *cb, uint32_t index_type, uint32_t swap,
+    uint32_t control_flag)
+{
+    uint32_t *cmd = agcCbAllocDwords(cb, 3u);
+    if (!cmd)
+        return 0;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_INDEX_SIZE, 3u);
+    cmd[1] = 0x20000243u;
+    cmd[2] = (index_type & 0x3u) |
+             ((swap & 0x3u) << 6u) |
+             ((control_flag & 0x1u) << 14u) |
+             0x400u;
+    return cmd;
+}
+
+/* NID zARR5aCmkoY. Both FW 5.50 and 11.60 read eleven arguments after the
+ * command-buffer cursor. Keep this exact NID ABI separate from the older
+ * incomplete named declaration retained for source compatibility. */
+uint32_t *PS5_SYSV_ABI sceAgcUnknownZARR5aCmkoY(
+    SceAgcCb *cb, uint32_t arg1, uint32_t arg2, uint32_t arg3,
+    uint32_t arg4, uint32_t arg5, uint16_t arg6, uint16_t arg7,
+    uint32_t arg8, uint32_t arg9, uint64_t arg10, uint64_t arg11)
+{
+    uint32_t *cmd = agcCbAllocDwords(cb, 11u);
+    uint64_t control;
+    uint32_t conditional_bit;
+
+    if (!cmd)
+        return 0;
+
+    conditional_bit = (arg3 == 1u && (arg2 & 0x20u) == 0u) ? 1u : 0u;
+    control = ((uint64_t)(arg1 & 0x3u) << 30u) |
+              (uint64_t)(arg2 & 0xFFu) |
+              (uint64_t)((arg2 << 7u) & 0x10000u) |
+              (uint64_t)((arg2 & 0x20u) << 13u) |
+              (uint64_t)((arg2 & 0x40u) << 14u) |
+              ((uint64_t)conditional_bit << 17u) |
+              ((uint64_t)(arg5 & 0x3Fu) << 32u) |
+              ((uint64_t)(arg4 & 0x1u) << 40u);
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_ATOMIC_GDS, 11u);
+    cmd[1] = (uint32_t)control;
+    cmd[2] = (uint32_t)(control >> 32u);
+    cmd[3] = (uint32_t)arg6;
+    cmd[4] = (uint32_t)arg7;
+    cmd[5] = arg8 & 0x00FF00FFu;
+    cmd[6] = arg9;
+    cmd[7] = (uint32_t)arg10;
+    cmd[8] = (uint32_t)(arg10 >> 32u);
+    cmd[9] = (uint32_t)arg11;
+    cmd[10] = (uint32_t)(arg11 >> 32u);
+    return cmd;
+}
+
 /* sceAgcJumpPatchSetTarget (NID: 2BS4EtAaF28)
  * Patches IT_INDIRECT_BUFFER cmd[1] lo, cmd[2] hi (bits 15:0),
  * cmd[3] size (bits 19:0). */

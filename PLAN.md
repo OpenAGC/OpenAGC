@@ -164,7 +164,7 @@ Convert the conclusions into permanent capability/profile regressions:
 
 Dragon Quest VII Reimagined (`PPSA17942`) is the fifth target in progress. It
 is hardware-proven on FW `0x0550` and bundles AGC compatibility SPRXs despite
-declaring `0x1202`. Its 253 imports currently have 247 covered and 6 unresolved
+declaring `0x1202`. Its 253 imports currently have 249 covered and 4 unresolved
 after completing the FW 5.50 GetSize imports, seven packet patchers, and the
 data-packet payload-range, primitive-state update, and constant driver-status
 ABIs. Its FW 5.50 workload-stream register/unregister pair and AGR multi-DCB
@@ -219,11 +219,18 @@ field-patcher ABIs. They validate opcode `0x3F`, patch the firmware-specific
 dword offsets, preserve reserved bits, and return `0x8A6C000C` without mutation
 for the wrong packet. Their NID-derived public labels are intentionally not
 presented as recovered Sony names.
+Two version-specific builder ABIs are also covered without changing the older
+named source-compatible entry points. `-KRzWekV120` emits the exact four-argument
+11.60 `SET_INDEX_SIZE` form, including its extra control bit, while
+`zARR5aCmkoY` emits the exact 12-argument, 11-dword full atomic-GDS packet.
+Both retain NID-derived public labels because matching firmware bodies prove
+their packet layouts and SysV signatures but not their official names.
 AcquireMem sizes follow the
 firmware title-workaround mode: mode 1 returns 64 bytes and modes 0/2 return 32,
-instead of hard-coding the emulator's 32-byte path. Resolve the remaining six
-imports from game call sites or independently corroborated public prototypes;
-preserve unknown NIDs and `sceAgcDriverFindResourcesPublic` for evidence-driven
+instead of hard-coding the emulator's 32-byte path. Resolve the remaining four
+imports (`dbOlWdppb4o`, `vieBRwlh1Lw`, `qj7QZpgr9Uw`, and
+`sceAgcDriverFindResourcesPublic`) from game call sites or independently
+corroborated public prototypes; preserve unknown NIDs for evidence-driven
 resolution.
 
 Grow the corpus from three games to at least ten representative,

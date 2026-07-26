@@ -1008,6 +1008,53 @@ static void test_nid_specific_indirect_buffer_patchers(void) {
                    "NID patcher rejection preserves packet");
 }
 
+static void test_nid_specific_builder_variants(void) {
+    uint32_t buffer[32] = {0};
+    uint32_t short_buffer[10] = {0};
+    SceAgcCb cb;
+    uint32_t *cmd;
+
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    cmd = sceAgcUnknownKRzWekV120(&cb, 2u, 3u, 1u);
+    TEST_ASSERT(cmd != NULL, "KRz index-size variant returns packet");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_SET_INDEX_SIZE,
+                   "KRz index-size opcode");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 3u, "KRz index-size length");
+    TEST_ASSERT_EQ(cmd[1], UINT32_C(0x20000243),
+                   "KRz index-size register selector");
+    TEST_ASSERT_EQ(cmd[2], UINT32_C(0x000044c2),
+                   "KRz index-size fourth-argument control bit");
+
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    cmd = sceAgcUnknownZARR5aCmkoY(
+        &cb, 2u, 0x260u, 1u, 1u, 0x2au, 0x1234u, 0x5678u,
+        UINT32_C(0xdeadbeef), UINT32_C(0xcafebabe),
+        UINT64_C(0x1122334455667788), UINT64_C(0x99aabbccddeeff00));
+    TEST_ASSERT(cmd != NULL, "zARR atomic-GDS variant returns packet");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_ATOMIC_GDS,
+                   "zARR atomic-GDS opcode");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 11u, "zARR atomic-GDS length");
+    TEST_ASSERT_EQ(cmd[1], UINT32_C(0x80150060),
+                   "zARR atomic-GDS low control");
+    TEST_ASSERT_EQ(cmd[2], UINT32_C(0x0000012a),
+                   "zARR atomic-GDS high control");
+    TEST_ASSERT_EQ(cmd[3], UINT32_C(0x00001234), "zARR argument 6");
+    TEST_ASSERT_EQ(cmd[4], UINT32_C(0x00005678), "zARR argument 7");
+    TEST_ASSERT_EQ(cmd[5], UINT32_C(0x00ad00ef), "zARR masked argument 8");
+    TEST_ASSERT_EQ(cmd[6], UINT32_C(0xcafebabe), "zARR argument 9");
+    TEST_ASSERT_EQ(cmd[7], UINT32_C(0x55667788), "zARR argument 10 low");
+    TEST_ASSERT_EQ(cmd[8], UINT32_C(0x11223344), "zARR argument 10 high");
+    TEST_ASSERT_EQ(cmd[9], UINT32_C(0xddeeff00), "zARR argument 11 low");
+    TEST_ASSERT_EQ(cmd[10], UINT32_C(0x99aabbcc), "zARR argument 11 high");
+
+    agcCbInit(&cb, short_buffer, sizeof(short_buffer));
+    cmd = sceAgcUnknownZARR5aCmkoY(
+        &cb, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u);
+    TEST_ASSERT(cmd == NULL, "zARR rejects short command buffer");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+                   "zARR short-buffer failure is atomic");
+}
+
 static void test_batch3_ref_patchers(void);
 static void test_batch3_ref_getsize_helpers(void);
 static void test_batch3_ref_driver_stubs(void);
@@ -1045,6 +1092,7 @@ void test_suite_dcb(void) {
     TEST_RUN(test_game_compat_set_nop);
     TEST_RUN(test_game_compat_patchers);
     TEST_RUN(test_nid_specific_indirect_buffer_patchers);
+    TEST_RUN(test_nid_specific_builder_variants);
     TEST_RUN(test_game_compat_driver_stubs);
     TEST_RUN(test_game_compat_init);
     TEST_RUN(test_batch2_dcb_clear_state);
