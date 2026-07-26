@@ -52,11 +52,17 @@ interpolated colors, no out-of-range components, a live post-draw marker, and
 allocation, remap, and export probes have been removed. The physical display
 confirmed the expected centered colorful triangle on a gray background.
 
-Two-triangle geometry amplification is prepared as the next milestone.
-Compiler regression coverage locks WGP mode, triangle-strip serialization, the
-GFX10 `GE_CNTL` adjustment, unit hardware ESGS offsets, the 21-dword shader
-stride, and absence of unsupported shader-query intrinsics. The compiler suite
-passes, as does the clean OpenAGC generic suite with 2,129 checks.
+Two-triangle geometry amplification is hardware-validated on FW 5.500.008. The
+six-vertex GS emits two color-preserving half-scale copies at horizontal offsets
+`-0.3` and `+0.3`. Repeated captured runs produce exactly 127,488 changed FP16
+pixels, bounds `x=346..1189, y=602..933`, eight sampled colors, zero out-of-range
+components, a live post-draw marker, and 1,800/1,800 completed flips. Three
+physical-display observations confirmed two colorful triangles on a gray
+background. Compiler regression coverage locks WGP mode, triangle-strip
+serialization, the GFX10 `GE_CNTL` adjustment, unit hardware ESGS offsets, the
+21-dword shader stride, and absence of unsupported shader-query intrinsics. The
+retained compiler suite passes, as does the clean OpenAGC generic suite with
+2,129 checks.
 
 
 ## Firmware compatibility

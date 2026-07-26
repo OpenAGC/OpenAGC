@@ -20,11 +20,13 @@ Work proceeds in this order. Later items must not displace an earlier item
 unless the earlier item is explicitly blocked on unavailable firmware or
 hardware.
 
-1. **Pass-through NGG geometry is complete on FW 5.50 gfx1013 hardware.** Three
-   identical runs now pass readback, coverage, interpolation, marker, and
-   sustained-flip gates, and the physical display shows the expected centered
-   colorful triangle on a gray background. The retained compiler and OpenAGC
-   regressions pass, and the probe-free path is committed before amplification.
+1. **NGG geometry amplification is complete on FW 5.50 gfx1013 hardware.** The
+   pass-through baseline remains stable, and the six-vertex GS emits two
+   half-scale colorful triangles. Repeated captured runs produce identical
+   coverage, interpolation, marker, and sustained-flip results, with three
+   matching physical-display confirmations. The retained compiler and OpenAGC
+   regressions pass. Extend topology, invocation, and render-target coverage
+   next.
 2. **Finish FW 5.50 backend hardening and compatibility.** Keep exact
    four-digit firmware selection and fail-closed capabilities, investigate the
    non-blocking FRAME_OPEN EINVAL and PA-debug EPERM results, then expand the
@@ -1145,10 +1147,11 @@ Current FW 5.50 gfx1013 sequence:
 2. **Probe-free path promoted.** The compiler NGG-record regression and OpenAGC
    generic suite pass, and the documentation records the hardware-confirmed
    implementation.
-3. **Validate geometry amplification.** Compile and run the prepared
-   `triangle_amplify.geom` path. Require two distinct half-scale textured
-   triangles, correct aggregate coverage, stable repeated execution, and
-   physical-display confirmation.
+3. **Geometry amplification validated.** The `triangle_amplify.geom` path emits
+   two distinct half-scale textured triangles. Captured runs consistently
+   produce 127,488 changed pixels, bounds `x=346..1189, y=602..933`, eight
+   sampled colors, zero out-of-range components, a live marker, and
+   1,800/1,800 completed flips; the physical display was confirmed three times.
 4. **Extend geometry coverage.** Add varied input/output topology, invocation,
    and render-target cases after amplification is stable.
 5. **Proceed to tessellation only after geometry passes.** Geometry remains
