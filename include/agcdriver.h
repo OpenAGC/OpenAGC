@@ -581,6 +581,13 @@ int32_t PS5_SYSV_ABI sceAgcUpdatePrimState(
  * when CX register 0x1C2 has low-nibble mode 2, otherwise zero. */
 int32_t PS5_SYSV_ABI sceAgcGetGsPrimPayload(
     uint32_t *payload_out, const AgcShaderRecord *shader);
+/* Compatibility-SPRX NKIzURsgV7I: returns GE_PC_ALLOC and
+ * SPI_SHADER_PGM_RSRC4_GS occupancy controls. The limit and interpolation
+ * factor select a point between the non-oversubscribed and maximum GS
+ * occupancy bounds derived from the shader's CX state. */
+int32_t PS5_SYSV_ABI sceAgcGetGsOversubscription(
+    AgcShaderRegister output[2], const AgcShaderRecord *shader,
+    uint32_t limit, float interpolation);
 /* FW 5.50 pdEV7bI6COI: emits all 32 SPI_PS_INPUT_CNTL descriptors by
  * matching pixel inputs to geometry outputs and transforming interpolation
  * and default-value flags. */

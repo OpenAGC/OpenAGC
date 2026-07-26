@@ -304,6 +304,10 @@ The host-generic implementation now has a tested model for:
 - Runtime firmware/backend registry: PS5 system-version ABI validation,
   four-digit major/minor ABI keys with complete raw-version diagnostics,
   capability filtering, and fail-closed selection before backend mutation
+- Compatibility GS occupancy: `sceAgcGetGsOversubscription` returns the
+  firmware-proven `GE_PC_ALLOC` and `SPI_SHADER_PGM_RSRC4_GS` pairs and
+  reproduces the full shader-state occupancy/interpolation calculation used by
+  Dragon Quest VII Reimagined's bundled AGC compatibility library.
 
 ## Verified
 
@@ -319,7 +323,7 @@ make -B test
 Expected result:
 
 ```text
-3217 passed, 0 failed
+3230 passed, 0 failed
 ```
 
 PS5 prospero backend (cross-compiled, no tests):

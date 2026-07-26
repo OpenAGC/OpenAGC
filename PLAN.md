@@ -164,7 +164,7 @@ Convert the conclusions into permanent capability/profile regressions:
 
 Dragon Quest VII Reimagined (`PPSA17942`) is the fifth target in progress. It
 is hardware-proven on FW `0x0550` and bundles AGC compatibility SPRXs despite
-declaring `0x1202`. Its 253 imports currently have 231 covered and 22 unresolved
+declaring `0x1202`. Its 253 imports currently have 232 covered and 21 unresolved
 after completing the FW 5.50 GetSize imports, seven packet patchers, and the
 data-packet payload-range, primitive-state update, and constant driver-status
 ABIs. Its FW 5.50 workload-stream register/unregister pair and AGR multi-DCB
@@ -192,6 +192,10 @@ including explicit-length set/push span exports, color words, and distinct
 The compatibility GS primitive-payload query scans the shader record's
 firmware-counted CX register pairs and returns eight bytes only for register
 `0x1C2` mode 2.
+The compatibility GS-oversubscription query now reproduces the bundled
+SPRX's `GE_PC_ALLOC` and `SPI_SHADER_PGM_RSRC4_GS` occupancy calculation,
+including zero-limit defaults, forced-maximum state, shader-register-derived
+bounds, and the fourth-argument floating-point interpolation factor.
 The five compatibility submit-validation controls reproduce the bundled
 driver's unconditional `0x8A6C1000` debug-unavailable stubs without modifying
 caller outputs or runtime state.

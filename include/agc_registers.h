@@ -427,9 +427,13 @@
 /* VGT (Vector Graphics Tessellator) */
 #define AGC_REG_VGT_MULTI_PRIM_IB_RESET_INDX        0x103u
 #define AGC_REG_GE_MAX_OUTPUT_PER_SUBGROUP          0x1FFu
+#define AGC_REG_GE_MAX_OUTPUT_PER_SUBGROUP_MAX_VERTS_SHIFT 0u
+#define AGC_REG_GE_MAX_OUTPUT_PER_SUBGROUP_MAX_VERTS_MASK  0x3FFu
 #define AGC_REG_VGT_HOS_MAX_TESS_LEVEL              0x286u
 #define AGC_REG_VGT_HOS_MIN_TESS_LEVEL              0x287u
 #define AGC_REG_VGT_GS_ONCHIP_CNTL                  0x291u
+#define AGC_REG_VGT_GS_ONCHIP_CNTL_GS_PRIMS_SHIFT  11u
+#define AGC_REG_VGT_GS_ONCHIP_CNTL_GS_PRIMS_MASK   0x7FFu
 #define AGC_REG_VGT_GS_OUT_PRIM_TYPE                0x29Bu
 #define AGC_REG_VGT_PRIMITIVEID_EN                  0x2A1u
 #define AGC_REG_VGT_PRIMITIVEID_RESET               0x2A3u
@@ -438,6 +442,8 @@
 #define AGC_REG_VGT_REUSE_OFF                       0x2ADu
 #define AGC_REG_VGT_GS_MAX_VERT_OUT                 0x2CEu
 #define AGC_REG_GE_NGG_SUBGRP_CNTL                  0x2D3u
+#define AGC_REG_GE_NGG_SUBGRP_CNTL_PRIM_AMP_SHIFT  0u
+#define AGC_REG_GE_NGG_SUBGRP_CNTL_PRIM_AMP_MASK   0x1FFu
 #define AGC_REG_VGT_TESS_DISTRIBUTION               0x2D4u
 #define AGC_REG_VGT_SHADER_STAGES_EN                0x2D5u
 #define AGC_REG_VGT_LS_HS_CONFIG                    0x2D6u
@@ -487,6 +493,8 @@
 /* Geometry shader (GS) / Export shader (ES) */
 #define AGC_REG_SPI_SHADER_PGM_CHKSUM_GS            0x080u
 #define AGC_REG_SPI_SHADER_PGM_RSRC4_GS             0x081u
+#define AGC_REG_SPI_SHADER_PGM_RSRC4_GS_LATE_ALLOC_SHIFT 16u
+#define AGC_REG_SPI_SHADER_PGM_RSRC4_GS_LATE_ALLOC_MASK  0x7Fu
 #define AGC_REG_SPI_SHADER_USER_DATA_ADDR_LO_GS     0x082u
 #define AGC_REG_SPI_SHADER_USER_DATA_ADDR_HI_GS     0x083u
 #define AGC_REG_SPI_SHADER_PGM_RSRC3_GS             0x087u
@@ -606,6 +614,12 @@
 #define AGC_REG_GE_USER_VGPR3                       0x25Eu
 #define AGC_REG_GE_STEREO_CNTL                      0x25Fu
 #define AGC_REG_GE_USER_VGPR_EN                     0x262u
+
+#define AGC_REG_GE_PC_ALLOC                         0x260u
+#define AGC_REG_GE_PC_ALLOC_OVERSUB_EN_SHIFT        0u
+#define AGC_REG_GE_PC_ALLOC_OVERSUB_EN_MASK         0x1u
+#define AGC_REG_GE_PC_ALLOC_NUM_PC_LINES_SHIFT      1u
+#define AGC_REG_GE_PC_ALLOC_NUM_PC_LINES_MASK       0x3FFu
 
 #define AGC_REG_TA_CS_BC_BASE_ADDR                  0x380u
 #define AGC_REG_TA_CS_BC_BASE_ADDR_HI               0x381u

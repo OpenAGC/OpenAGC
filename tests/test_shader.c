@@ -217,6 +217,57 @@ static void test_get_gs_prim_payload(void) {
         AGC_ERROR_INVALID_ARGUMENT, "GetGsPrimPayload rejects null shader");
 }
 
+static void test_get_gs_oversubscription(void) {
+    AgcShaderRegister output[2] = {{0xFFFFFFFFu, 0xFFFFFFFFu},
+                                  {0xFFFFFFFFu, 0xFFFFFFFFu}};
+    TEST_ASSERT_EQ(sceAgcGetGsOversubscription(output, NULL, 0u, 0.5f),
+        AGC_OK, "GetGsOversubscription returns defaults for zero limit");
+    TEST_ASSERT_EQ(output[0].offset, AGC_REG_GE_PC_ALLOC,
+        "GetGsOversubscription GE_PC_ALLOC offset");
+    TEST_ASSERT_EQ(output[0].value, 0u,
+        "GetGsOversubscription GE_PC_ALLOC default");
+    TEST_ASSERT_EQ(output[1].offset, AGC_REG_SPI_SHADER_PGM_RSRC4_GS,
+        "GetGsOversubscription RSRC4_GS offset");
+    TEST_ASSERT_EQ(output[1].value, 0u,
+        "GetGsOversubscription RSRC4_GS default");
+
+    TEST_ASSERT_EQ(sceAgcGetGsOversubscription(
+        output, NULL, UINT32_MAX, 0.5f), AGC_OK,
+        "GetGsOversubscription accepts forced maximum");
+    TEST_ASSERT_EQ(output[0].value, 0x7FFu,
+        "GetGsOversubscription forces all PC lines");
+    TEST_ASSERT_EQ(output[1].value, 0x007F0000u,
+        "GetGsOversubscription forces maximum late allocation");
+
+    AgcShaderRegister cx_registers[5] = {
+        {AGC_REG_VGT_GS_ONCHIP_CNTL, 128u << 11u},
+        {AGC_REG_GE_NGG_SUBGRP_CNTL, 4u},
+        {AGC_REG_SPI_VS_OUT_CONFIG, 3u << 2u},
+        {AGC_REG_PA_CL_VS_OUT_CNTL, 0u},
+        {AGC_REG_GE_MAX_OUTPUT_PER_SUBGROUP, 256u},
+    };
+    AgcShaderSpecials specials = {0};
+    AgcShaderRecord rec = {0};
+    rec.cx_registers = (uint64_t)(uintptr_t)cx_registers;
+    rec.num_cx_registers = 5u;
+    rec.specials = (uint64_t)(uintptr_t)&specials;
+    TEST_ASSERT_EQ(sceAgcGetGsOversubscription(
+        output, &rec, 65536u, 0.5f), AGC_OK,
+        "GetGsOversubscription computes interpolated occupancy");
+    TEST_ASSERT_EQ(output[0].value, 0x3FFu,
+        "GetGsOversubscription interpolates PC allocation");
+    TEST_ASSERT_EQ(output[1].value, 0x007F0000u,
+        "GetGsOversubscription preserves maximum late allocation");
+
+    rec.num_cx_registers = 4u;
+    TEST_ASSERT_EQ(sceAgcGetGsOversubscription(
+        output, &rec, 65536u, 0.5f), AGC_ERROR_INVALID_ARGUMENT,
+        "GetGsOversubscription rejects missing shader state");
+    TEST_ASSERT_EQ(sceAgcGetGsOversubscription(
+        NULL, &rec, 0u, 0.5f), AGC_ERROR_INVALID_ARGUMENT,
+        "GetGsOversubscription rejects null output");
+}
+
 static void test_shader_null_sub_blocks(void) {
     AgcShaderRecord rec = {0};
     rec.magic = AGC_SHADER_RECORD_MAGIC;
@@ -1076,6 +1127,7 @@ void test_suite_shader(void) {
     TEST_RUN(test_shader_userdata_typed_accessor);
     TEST_RUN(test_shader_register_value_accessors);
     TEST_RUN(test_get_gs_prim_payload);
+    TEST_RUN(test_get_gs_oversubscription);
     TEST_RUN(test_shader_null_sub_blocks);
     /* Shader linking (sceAgcShaderLinkHsGs) */
     TEST_RUN(test_shader_link_hs_cs_success);

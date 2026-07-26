@@ -1217,6 +1217,138 @@ int32_t PS5_SYSV_ABI sceAgcGetGsPrimPayload(
     return AGC_OK;
 }
 
+static const AgcShaderRegister *agcFindShaderCxRegister(
+    const AgcShaderRecord *shader, uint32_t offset)
+{
+    const AgcShaderRegister *registers =
+        (const AgcShaderRegister *)(uintptr_t)shader->cx_registers;
+    for (uint32_t i = 0; i < shader->num_cx_registers; ++i) {
+        if (registers[i].offset == offset)
+            return &registers[i];
+    }
+    return NULL;
+}
+
+static uint32_t agcCeilDiv32(uint32_t value)
+{
+    return (value + 31u) >> 5u;
+}
+
+/* sceAgcGetGsOversubscription (compatibility NID: NKIzURsgV7I) - bundled
+ * SPRX @ 0x11d00. The two outputs are runtime-default register pairs in the
+ * firmware; the compatibility defaults used by PPSA17942 are both zero. */
+int32_t PS5_SYSV_ABI sceAgcGetGsOversubscription(
+    AgcShaderRegister output[2], const AgcShaderRecord *shader,
+    uint32_t limit, float interpolation)
+{
+    if (!output)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    output[0].offset = AGC_REG_GE_PC_ALLOC;
+    output[0].value = 0u;
+    output[1].offset = AGC_REG_SPI_SHADER_PGM_RSRC4_GS;
+    output[1].value = 0u;
+
+    if (limit == 0u)
+        return AGC_OK;
+    if (limit == UINT32_MAX) {
+        output[0].value = 0x7FFu;
+        output[1].value = 0x007F0000u;
+        return AGC_OK;
+    }
+    if (!shader || shader->cx_registers == 0u || shader->specials == 0u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    const AgcShaderRegister *onchip = agcFindShaderCxRegister(
+        shader, AGC_REG_VGT_GS_ONCHIP_CNTL);
+    const AgcShaderRegister *ngg = agcFindShaderCxRegister(
+        shader, AGC_REG_GE_NGG_SUBGRP_CNTL);
+    const AgcShaderRegister *vs_out = agcFindShaderCxRegister(
+        shader, AGC_REG_SPI_VS_OUT_CONFIG);
+    const AgcShaderRegister *pa_out = agcFindShaderCxRegister(
+        shader, AGC_REG_PA_CL_VS_OUT_CNTL);
+    const AgcShaderRegister *max_output = agcFindShaderCxRegister(
+        shader, AGC_REG_GE_MAX_OUTPUT_PER_SUBGROUP);
+    if (!onchip || !ngg || !vs_out || !pa_out || !max_output)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    uint32_t gs_prims = AGC_REG_GET(onchip->value,
+        VGT_GS_ONCHIP_CNTL, GS_PRIMS);
+    uint32_t prim_amp = AGC_REG_GET(ngg->value,
+        GE_NGG_SUBGRP_CNTL, PRIM_AMP);
+    uint32_t max_verts = AGC_REG_GET(max_output->value,
+        GE_MAX_OUTPUT_PER_SUBGROUP, MAX_VERTS);
+    uint32_t max_vert_groups = agcCeilDiv32(max_verts);
+    uint32_t subgroup_groups = agcCeilDiv32(prim_amp * gs_prims);
+    uint32_t groups = subgroup_groups < max_vert_groups
+        ? subgroup_groups : max_vert_groups;
+
+    const AgcShaderSpecials *specials =
+        (const AgcShaderSpecials *)(uintptr_t)shader->specials;
+    uint32_t stage_flags = specials->vgt_shader_stages_en.value;
+    if ((stage_flags & 0x00400000u) == 0u)
+        groups >>= 1u;
+    if (groups <= 1u)
+        ++groups;
+    if (max_vert_groups == 0u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    uint32_t pa_divisor = 1u + ((pa_out->value >> 21u) & 1u) +
+        ((pa_out->value >> 22u) & 1u) +
+        ((pa_out->value >> 23u) & 1u);
+    uint32_t export_divisor = 2u * (((vs_out->value >> 2u) & 0xFu) + 1u);
+    uint32_t export_base = 2048u;
+    uint32_t export_max = 2048u;
+    if ((vs_out->value & 0x80u) == 0u) {
+        export_base /= export_divisor;
+        export_max = 4096u / export_divisor;
+    }
+
+    uint32_t pc_base = (export_base / max_vert_groups) * groups;
+    uint32_t late_base = (((128u / pa_divisor) * 4u) /
+        max_vert_groups) * groups;
+    uint32_t pc_max = (export_max / max_vert_groups) * groups;
+    uint32_t late_max = (((382u / pa_divisor) * 4u) /
+        max_vert_groups) * groups;
+    uint32_t base = pc_base < late_base ? pc_base : late_base;
+    uint32_t maximum = pc_max < late_max ? pc_max : late_max;
+    uint32_t limit_shift = (stage_flags & 0x00400000u) ? 5u : 6u;
+    uint32_t scaled_limit = limit >> limit_shift;
+    if (maximum > scaled_limit)
+        maximum = scaled_limit;
+    if (maximum > 1024u)
+        maximum = 1024u;
+
+    uint32_t span = maximum > base ? maximum - base : 0u;
+    uint32_t target = base + (uint32_t)(interpolation * (float)span);
+    if (target <= base)
+        return AGC_OK;
+
+    if (target < late_base) {
+        uint32_t denominator = pc_max > pc_base ? pc_max - pc_base : 1u;
+        uint64_t numerator = (uint64_t)(target - pc_base) << 10u;
+        uint32_t lines = (uint32_t)(numerator / denominator);
+        if (lines > 1024u)
+            lines = 1024u;
+        lines = lines == 0u ? 0u : lines - 1u;
+        output[0].value = AGC_REG_SET(GE_PC_ALLOC, OVERSUB_EN, 1u) |
+            AGC_REG_SET(GE_PC_ALLOC, NUM_PC_LINES, lines);
+        output[1].value = AGC_REG_SET(
+            SPI_SHADER_PGM_RSRC4_GS, LATE_ALLOC, 0x7Fu);
+    } else {
+        uint32_t denominator = late_max > late_base
+            ? late_max - late_base : 1u;
+        uint64_t numerator = (uint64_t)(target - late_base) * 127u;
+        uint32_t late_alloc = (uint32_t)(numerator / denominator);
+        if (late_alloc > 0x7Fu)
+            late_alloc = 0x7Fu;
+        output[0].value = 0x7FFu;
+        output[1].value = AGC_REG_SET(
+            SPI_SHADER_PGM_RSRC4_GS, LATE_ALLOC, late_alloc);
+    }
+    return AGC_OK;
+}
+
 /* sceAgcCreateInterpolantMapping (NID: pdEV7bI6COI) - FW 5.50 @ 0xd7f0.
  * The output offsets are raw CX indirect-register descriptors, not decoded
  * SPI_PS_INPUT_CNTL register offsets. */
