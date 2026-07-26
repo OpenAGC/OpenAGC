@@ -1703,7 +1703,13 @@ static bool dispatch_graphics(GraphicsTest *test,
         }
         /* Equilateral NDC triangle covers sqrt(3)/16 of a square target.
          * 1774/16384 is a close integer approximation. */
-#if AGC_NGG_AMPLIFY || AGC_NGG_INVOCATIONS
+#if AGC_TESS_GEOMETRY
+        /* The combined TES+GS fixture scales each vertex around the centroid
+         * by 0.78, so its rasterized area is 0.78^2 of the TES control. */
+        const uint32_t expected_changed = (uint32_t)
+            (((uint64_t)target_pixels * 1774u * 1521u) /
+             (16384u * 2500u));
+#elif AGC_NGG_AMPLIFY || AGC_NGG_INVOCATIONS
         /* Two half-scale copies cover half the pass-through triangle area. */
         const uint32_t expected_changed = (uint32_t)
             (((uint64_t)target_pixels * 887u) / 16384u);

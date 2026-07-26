@@ -78,7 +78,8 @@ retained compiler suite passes, as does the clean OpenAGC generic suite with
 
 ## FW 5.50 tessellation bring-up
 
-Status: **isolated Wave32 tessellation is hardware-validated on FW 5.500.008.**
+Status: **isolated Wave32 tessellation and TES-to-NGG geometry composition are
+hardware-validated on FW 5.500.008.**
 The reusable gfx1013 binder consumes fused HsFront/HsBack and TES
 GsFront/GsBack records, patches the runtime ring descriptors and
 `VGT_TCS_OFFCHIP_LAYOUT`, and programs the factor/offchip ring state required
@@ -96,6 +97,22 @@ components, a live post-draw marker, and 1,800/1,800 completed display flips.
 The PS5 display showed a centered colorful triangle with equal sides on the
 gray background. No GPU hang or kernel panic occurred.
 
+The combined `agc_tess_geometry.elf` fixture retains the same HS/TES control
+path and adds a real NGG geometry stage. The GS shrinks every tessellated
+microtriangle to 78% around its primitive centroid, providing an unambiguous
+stage signature instead of pass-through output. FW 5.500.008 returned `AGC_OK`
+for TF-ring setup, reusable binding, and DCB submission; retained four `4.0`
+factors and 24 changed offchip dwords; and produced 155,321 changed FP16 pixels
+versus 155,419 expected, bounds `x=406..1129, y=465..1091`, eight sampled
+colors, 68,208 opaque samples, zero out-of-range components, and a live
+`0xDEADCAFE` post-draw marker. The run completed 1,800/1,800 display flips
+without a GPU hang or kernel panic.
+
+Physical-display confirmation showed a centered equal-sided subdivided
+triangle on a dark-gray background. Dark seams surround every colorful
+microtriangle, exactly matching the GS centroid shrink and directly confirming
+that tessellation output feeds the NGG geometry stage rather than bypassing it.
+
 Host coverage validates record types, required HS continuation state, the
 front-only TES form produced by ACO, runtime placeholder patching, Wave32
 stage enables, primitive type `DI_PT_PATCH=9`, and command-buffer cursor
@@ -103,8 +120,10 @@ advance. The hardware sample is `agc_tessellation.elf`; its GLSL TCS forwards
 stage-local control-point data and writes tessellation level 4, while its TES
 uses `gl_TessCoord` for barycentric position and color interpolation. Keeping
 the position tables local isolates HS/TES launch from inter-stage varying ABI.
-The next graphics milestone is tessellation plus a real NGG geometry shader,
-using this isolated path as the control.
+The isolated sample remains the control for future combined-stage expansion.
+The next graphics work varies topology, invocation count, and render-target
+format independently so failures remain attributable to one ABI or PM4 state
+change.
 
 
 ## Firmware compatibility

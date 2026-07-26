@@ -20,26 +20,20 @@ Work proceeds in this order. Later items must not displace an earlier item
 unless the earlier item is explicitly blocked on unavailable firmware or
 hardware.
 
-1. **Combine tessellation with NGG geometry on FW 5.50 gfx1013.** Isolated
-   Wave32 tessellation now passes on hardware through the recovered public
-   TF-ring ioctl `0x80108128`: the HS writes four `4.0` factors, the TES path
-   shades 255,744 FP16 pixels, and the display shows the expected centered
-   equal-sided colorful triangle. Preserve that sample as the control, then
-   add a real geometry-emitting stage after TES and validate deterministic
-   readback plus physical output.
-2. **Extend topology, invocation, and render-target coverage.** The
-   pass-through NGG baseline and six-vertex two-triangle GS amplification are
-   already hardware-proven. Add combinations only after the tessellation plus
-   geometry milestone remains stable.
-3. **Finish FW 5.50 backend hardening and compatibility.** Keep exact
+1. **Extend combined-stage topology, invocation, and render-target coverage.**
+   Isolated tessellation and TES-to-NGG geometry composition are now
+   hardware-proven on FW 5.50. Vary one dimension at a time, retaining the
+   isolated tessellation and geometry samples as controls: first geometry
+   invocation count, then output topology, then an isolated RGBA8 target.
+2. **Finish FW 5.50 backend hardening and compatibility.** Keep exact
    four-digit firmware selection and fail-closed capabilities, investigate the
    non-blocking FRAME_OPEN EINVAL and PA-debug EPERM results, then expand the
    game corpus and prioritize FW 5.50 exports and state combinations observed
    in real titles.
-4. **Validate additional firmware only when matching hardware is available.**
+3. **Validate additional firmware only when matching hardware is available.**
    FW 11.60 and PS5 Pro remain RE targets, not support claims. Do not issue
    private ioctls on mismatched hardware.
-5. **Close cache synchronization semantics, then VRS and ray tracing.** Cache
+4. **Close cache synchronization semantics, then VRS and ray tracing.** Cache
    behavior has observable packets and is more actionable than speculative
    feature APIs.
 
@@ -920,8 +914,13 @@ After interpolants pass, proceed in this order:
    valid FP16 pixels within the expected equilateral bounds, and the PS5
    displays the centered interpolated triangle with equal sides without a hang
    or kernel panic.
-9. Combine the validated tessellation path with a real NGG geometry shader,
-   retaining the isolated tessellation and geometry samples as controls.
+9. ✅ Combine the validated tessellation path with a real NGG geometry shader.
+   The centroid-shrink GS executes after TES, producing 155,321 changed FP16
+   pixels versus 155,419 expected, eight sampled colors, zero out-of-range
+   components, a live completion marker, and 1,800/1,800 display flips. The
+   physical display shows the expected equal-sided tessellated triangle with
+   dark seams around each colorful microtriangle. The isolated tessellation
+   and geometry samples remain controls.
 10. Expand Wave32 graphics coverage, then VRS and ray tracing where supported
    by gfx1013 and the PS5 AGC ABI.
 11. ✅ Close PA-debug and FRAME_OPEN RE for FW 5.50. The PA-debug version
