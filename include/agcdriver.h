@@ -129,6 +129,7 @@ int32_t  PS5_SYSV_ABI sceAgcDriverSubmitToHDRScopesACQ(void);
 #define AGC_DRIVER_ERROR_INVALID_ARGUMENT        0x8A6C0035u
 #define AGC_DRIVER_ERROR_NOT_REGISTERED          0x8A6C003Au
 #define AGC_DRIVER_ERROR_DEBUG_UNAVAILABLE       0x8A6C1000u
+#define AGC_DRIVER_ERROR_RESOURCE_REGISTRATION_UNAVAILABLE 0x8A6C9018u
 #define AGC_DRIVER_ERROR_AGR_NOT_INITIALIZED     0x8A6D0003u
 uint32_t PS5_SYSV_ABI sceAgcDriverGetPaDebugInterfaceVersion(void);
 
@@ -438,6 +439,26 @@ int32_t PS5_SYSV_ABI sceAgcDcbSetPreemption(
 int32_t PS5_SYSV_ABI sceAgcDriverRegisterOwner(void *resource, uint32_t *out_handle);
 /* Stub: returns AGC_ERROR_NOT_SUPPORTED (0x8a6c9018) per SPRX. */
 int32_t PS5_SYSV_ABI sceAgcDriverRegisterResource(void *resource, uint32_t owner_handle);
+int32_t PS5_SYSV_ABI sceAgcDriverGetOwnerName(uint32_t owner, char *name,
+                                              uint64_t size);
+int32_t PS5_SYSV_ABI sceAgcDriverGetResourceBaseAddressAndSizeInBytes(
+    uint64_t resource, uint64_t *out_address, uint64_t *out_size);
+int32_t PS5_SYSV_ABI sceAgcDriverGetResourceName(uint64_t resource,
+                                                 uint64_t *out_name);
+int32_t PS5_SYSV_ABI sceAgcDriverGetResourceShaderGuid(
+    uint64_t arg0, uint64_t arg1, uint64_t arg2, uint64_t arg3);
+int32_t PS5_SYSV_ABI sceAgcDriverGetResourceType(uint64_t resource,
+                                                 uint32_t *out_type);
+int32_t PS5_SYSV_ABI sceAgcDriverGetResourceUserData(uint64_t resource,
+                                                     uint64_t *out_data);
+int32_t PS5_SYSV_ABI sceAgcDriverSetResourceUserData(uint64_t resource,
+                                                     uint64_t user_data);
+int32_t PS5_SYSV_ABI sceAgcDriverRegisterGdsResource(
+    uint64_t arg0, uint32_t arg1, uint64_t arg2, uint32_t arg3,
+    uint32_t arg4);
+int32_t PS5_SYSV_ABI sceAgcDriverRequestCaptureStart(void);
+int32_t PS5_SYSV_ABI sceAgcDriverRequestCaptureStop(void);
+int32_t PS5_SYSV_ABI sceAgcDriverTriggerCapture(void);
 /* Returns the EQ (event queue) context ID. */
 uint32_t PS5_SYSV_ABI sceAgcDriverGetEqContextId(void);
 /* Non-Direct TF ring set (256-byte aligned address, size clamps to 0x4000). */

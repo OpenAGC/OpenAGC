@@ -430,6 +430,57 @@ static void test_game_compat_patchers(void) {
 }
 
 static void test_game_compat_driver_stubs(void) {
+    char owner_name[9] = "sentinel";
+    uint64_t address = UINT64_C(0x1111222233334444);
+    uint64_t size = UINT64_C(0x5555666677778888);
+    uint64_t name = UINT64_C(0x9999aaaabbbbcccc);
+    uint64_t user_data = UINT64_C(0xddddeeeeffff0000);
+    uint32_t type = UINT32_C(0x12345678);
+    const int32_t resource_error =
+        (int32_t)AGC_DRIVER_ERROR_RESOURCE_REGISTRATION_UNAVAILABLE;
+    const int32_t capture_error = (int32_t)AGC_DRIVER_ERROR_DEBUG_UNAVAILABLE;
+
+    TEST_ASSERT_EQ((uint32_t)sceAgcDriverGetOwnerName(
+                       7u, owner_name, sizeof(owner_name)),
+                   (uint32_t)resource_error, "GetOwnerName status stub");
+    TEST_ASSERT_EQ((uint32_t)owner_name[0], (uint32_t)'s',
+                   "GetOwnerName preserves output");
+    TEST_ASSERT_EQ((uint32_t)sceAgcDriverGetResourceBaseAddressAndSizeInBytes(
+                       UINT64_C(0x100), &address, &size),
+                   (uint32_t)resource_error, "GetResourceAddress status stub");
+    TEST_ASSERT_EQ(address, UINT64_C(0x1111222233334444),
+                   "GetResourceAddress preserves address");
+    TEST_ASSERT_EQ(size, UINT64_C(0x5555666677778888),
+                   "GetResourceAddress preserves size");
+    TEST_ASSERT_EQ((uint32_t)sceAgcDriverGetResourceName(
+                       UINT64_C(0x200), &name),
+                   (uint32_t)resource_error, "GetResourceName status stub");
+    TEST_ASSERT_EQ(name, UINT64_C(0x9999aaaabbbbcccc),
+                   "GetResourceName preserves output");
+    TEST_ASSERT_EQ((uint32_t)sceAgcDriverGetResourceShaderGuid(1u, 2u, 3u, 4u),
+                   (uint32_t)resource_error, "GetResourceShaderGuid status stub");
+    TEST_ASSERT_EQ((uint32_t)sceAgcDriverGetResourceType(
+                       UINT64_C(0x300), &type),
+                   (uint32_t)resource_error, "GetResourceType status stub");
+    TEST_ASSERT_EQ(type, UINT32_C(0x12345678),
+                   "GetResourceType preserves output");
+    TEST_ASSERT_EQ((uint32_t)sceAgcDriverGetResourceUserData(
+                       UINT64_C(0x400), &user_data),
+                   (uint32_t)resource_error, "GetResourceUserData status stub");
+    TEST_ASSERT_EQ(user_data, UINT64_C(0xddddeeeeffff0000),
+                   "GetResourceUserData preserves output");
+    TEST_ASSERT_EQ((uint32_t)sceAgcDriverSetResourceUserData(
+                       UINT64_C(0x500), 9u),
+                   (uint32_t)resource_error, "SetResourceUserData status stub");
+    TEST_ASSERT_EQ((uint32_t)sceAgcDriverRegisterGdsResource(1u, 2u, 3u, 4u, 5u),
+                   (uint32_t)resource_error, "RegisterGdsResource status stub");
+    TEST_ASSERT_EQ((uint32_t)sceAgcDriverRequestCaptureStart(),
+                   (uint32_t)capture_error, "RequestCaptureStart status stub");
+    TEST_ASSERT_EQ((uint32_t)sceAgcDriverRequestCaptureStop(),
+                   (uint32_t)capture_error, "RequestCaptureStop status stub");
+    TEST_ASSERT_EQ((uint32_t)sceAgcDriverTriggerCapture(),
+                   (uint32_t)capture_error, "TriggerCapture status stub");
+
     /* RegisterOwner/Resource return 0x8a6c9018 per SPRX */
     int32_t r = sceAgcDriverRegisterOwner(NULL, NULL);
     TEST_ASSERT_EQ((uint32_t)r, 0x8a6c9018u, "RegisterOwner stub");

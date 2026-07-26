@@ -164,7 +164,7 @@ Convert the conclusions into permanent capability/profile regressions:
 
 Dragon Quest VII Reimagined (`PPSA17942`) is the fifth target in progress. It
 is hardware-proven on FW `0x0550` and bundles AGC compatibility SPRXs despite
-declaring `0x1202`. Its 253 imports currently have 233 covered and 20 unresolved
+declaring `0x1202`. Its 253 imports currently have 244 covered and 9 unresolved
 after completing the FW 5.50 GetSize imports, seven packet patchers, and the
 data-packet payload-range, primitive-state update, and constant driver-status
 ABIs. Its FW 5.50 workload-stream register/unregister pair and AGR multi-DCB
@@ -206,11 +206,19 @@ hardware-validated status.
 The five compatibility submit-validation controls reproduce the bundled
 driver's unconditional `0x8A6C1000` debug-unavailable stubs without modifying
 caller outputs or runtime state.
+Eight resource/GDS exports reproduce the FW 5.50 userspace `0x8A6C9018`
+status-only behavior with recovered SysV signatures, and capture start, stop,
+and trigger reproduce their unconditional `0x8A6C1000` status. These stubs do
+not inspect arguments or modify output storage.
+`sceAgcDriverFindResourcesPublic` remains unresolved because the firmware body
+proves only its constant status, not its public prototype; do not guess that
+ABI.
 AcquireMem sizes follow the
 firmware title-workaround mode: mode 1 returns 64 bytes and modes 0/2 return 32,
-instead of hard-coding the emulator's 32-byte path. Implement the remaining
-named AGC helpers and useful driver resource APIs next; preserve unknown NIDs
-for evidence-driven resolution.
+instead of hard-coding the emulator's 32-byte path. Resolve the remaining nine
+imports from game call sites or independently corroborated public prototypes;
+preserve unknown NIDs and `sceAgcDriverFindResourcesPublic` for evidence-driven
+resolution.
 
 Grow the corpus from three games to at least ten representative,
 FW 5.50-compatible binaries spanning multiple engines, SDK vintages, and

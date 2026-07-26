@@ -37,13 +37,18 @@ titles across multiple engines and SDK vintages.
   `sceAgcGetIsTrinityMode`, shader-instrumentation, and AMM semaphore-label
   ABIs plus the compatibility `ACQUIRE_MEM` engine and async `WRITE_DATA`
   patchers, four ACB/DCB marker-span exports, and the compatibility GS
-  primitive-payload and full GS-oversubscription occupancy queries, and five
-  submit-validation stubs and the clean-room gfx1013 compute-backed
-  `sceAgcCbMemsetExclusive` builder cover 233 imports; 20 remain under analysis,
+  primitive-payload and full GS-oversubscription occupancy queries, five
+  submit-validation stubs, eight resource/GDS status exports, three capture
+  controls, and the clean-room gfx1013 compute-backed
+  `sceAgcCbMemsetExclusive` builder cover 244 imports; 9 remain under analysis,
   so the title is tracked
   separately from the four fully covered titles. AcquireMem packet size follows
   the FW 5.50 title
   workaround mode: mode 1 uses 64 bytes, while modes 0 and 2 use 32 bytes.
+  The resource/GDS exports preserve caller outputs and return the exact FW 5.50
+  `0x8A6C9018` status; capture start, stop, and trigger return `0x8A6C1000`.
+  `sceAgcDriverFindResourcesPublic` remains unresolved because its constant
+  firmware stub does not reveal the public argument ABI.
 - The durable exclusion list is `analysis/game_compat_exclusions.tsv`.
 
 ## PPSA02453 evidence

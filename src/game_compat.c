@@ -66,6 +66,95 @@ int32_t PS5_SYSV_ABI sceAgcDriverRegisterResource(void *resource, uint32_t owner
 /* sceAgcDriverGetEqContextId (NID: Zw7uUVPulbw)
  * SPRX: calls internal function, right-shifts result by 16.
  * Returns the EQ (event queue) context ID. */
+/* FW 5.50 exports these APIs as status-only stubs. They do not inspect
+ * arguments or modify caller-owned output storage. */
+int32_t PS5_SYSV_ABI sceAgcDriverGetOwnerName(uint32_t owner, char *name,
+                                              uint64_t size)
+{
+    (void)owner;
+    (void)name;
+    (void)size;
+    return (int32_t)AGC_DRIVER_ERROR_RESOURCE_REGISTRATION_UNAVAILABLE;
+}
+
+int32_t PS5_SYSV_ABI sceAgcDriverGetResourceBaseAddressAndSizeInBytes(
+    uint64_t resource, uint64_t *out_address, uint64_t *out_size)
+{
+    (void)resource;
+    (void)out_address;
+    (void)out_size;
+    return (int32_t)AGC_DRIVER_ERROR_RESOURCE_REGISTRATION_UNAVAILABLE;
+}
+
+int32_t PS5_SYSV_ABI sceAgcDriverGetResourceName(uint64_t resource,
+                                                 uint64_t *out_name)
+{
+    (void)resource;
+    (void)out_name;
+    return (int32_t)AGC_DRIVER_ERROR_RESOURCE_REGISTRATION_UNAVAILABLE;
+}
+
+int32_t PS5_SYSV_ABI sceAgcDriverGetResourceShaderGuid(
+    uint64_t arg0, uint64_t arg1, uint64_t arg2, uint64_t arg3)
+{
+    (void)arg0;
+    (void)arg1;
+    (void)arg2;
+    (void)arg3;
+    return (int32_t)AGC_DRIVER_ERROR_RESOURCE_REGISTRATION_UNAVAILABLE;
+}
+
+int32_t PS5_SYSV_ABI sceAgcDriverGetResourceType(uint64_t resource,
+                                                 uint32_t *out_type)
+{
+    (void)resource;
+    (void)out_type;
+    return (int32_t)AGC_DRIVER_ERROR_RESOURCE_REGISTRATION_UNAVAILABLE;
+}
+
+int32_t PS5_SYSV_ABI sceAgcDriverGetResourceUserData(uint64_t resource,
+                                                     uint64_t *out_data)
+{
+    (void)resource;
+    (void)out_data;
+    return (int32_t)AGC_DRIVER_ERROR_RESOURCE_REGISTRATION_UNAVAILABLE;
+}
+
+int32_t PS5_SYSV_ABI sceAgcDriverSetResourceUserData(uint64_t resource,
+                                                     uint64_t user_data)
+{
+    (void)resource;
+    (void)user_data;
+    return (int32_t)AGC_DRIVER_ERROR_RESOURCE_REGISTRATION_UNAVAILABLE;
+}
+
+int32_t PS5_SYSV_ABI sceAgcDriverRegisterGdsResource(
+    uint64_t arg0, uint32_t arg1, uint64_t arg2, uint32_t arg3,
+    uint32_t arg4)
+{
+    (void)arg0;
+    (void)arg1;
+    (void)arg2;
+    (void)arg3;
+    (void)arg4;
+    return (int32_t)AGC_DRIVER_ERROR_RESOURCE_REGISTRATION_UNAVAILABLE;
+}
+
+int32_t PS5_SYSV_ABI sceAgcDriverRequestCaptureStart(void)
+{
+    return (int32_t)AGC_DRIVER_ERROR_DEBUG_UNAVAILABLE;
+}
+
+int32_t PS5_SYSV_ABI sceAgcDriverRequestCaptureStop(void)
+{
+    return (int32_t)AGC_DRIVER_ERROR_DEBUG_UNAVAILABLE;
+}
+
+int32_t PS5_SYSV_ABI sceAgcDriverTriggerCapture(void)
+{
+    return (int32_t)AGC_DRIVER_ERROR_DEBUG_UNAVAILABLE;
+}
+
 uint32_t PS5_SYSV_ABI sceAgcDriverGetEqContextId(void)
 {
     /* On the generic backend, return 0 (no EQ context).
