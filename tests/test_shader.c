@@ -768,6 +768,52 @@ static void test_create_prim_state_optional_outputs_and_invalid(void) {
         "CreatePrimState rejects missing hull Specials safely");
 }
 
+static void test_update_prim_state(void) {
+    static const uint32_t expected[18] = {
+        0x80000180u, 0x00000011u, 0x20000180u, 0x00000012u,
+        0x00000000u, 0x00000013u, 0x00000000u, 0x00000014u,
+        0x00000000u, 0x00000015u, 0x00000000u, 0x0000001Au,
+        0x00000000u, 0x0000001Bu, 0x00000000u, 0x0000001Cu,
+        0x00000000u, 0x0000001Du,
+    };
+    AgcShaderRegister cx[2] = {{0u, 0u}, {0u, 0xA5A5A5A0u}};
+    AgcShaderRegister uc[3] = {{0u, 0u}, {0u, 0u}, {0u, 0x5A5A5A40u}};
+
+    for (uint32_t primitive = 1u; primitive <= 18u; primitive++) {
+        cx[0].value = 0u;
+        cx[1].value = 0xA5A5A5A0u;
+        uc[2].value = 0x5A5A5A40u;
+        TEST_ASSERT_EQ(sceAgcUpdatePrimState(cx, uc, primitive), AGC_OK,
+            "UpdatePrimState table entry returns OK");
+        TEST_ASSERT_EQ(cx[1].value,
+            (0xA5A5A5A0u & ~0x7u) | expected[primitive - 1u],
+            "UpdatePrimState applies firmware GS output table");
+        TEST_ASSERT_EQ(uc[2].value,
+            (0x5A5A5A40u & ~0x1Fu) | primitive,
+            "UpdatePrimState replaces UCONFIG primitive bits");
+    }
+
+    cx[1].value = 0x12345670u;
+    TEST_ASSERT_EQ(sceAgcUpdatePrimState(cx, NULL, 0u), AGC_OK,
+        "UpdatePrimState zero primitive returns OK");
+    TEST_ASSERT_EQ(cx[1].value, 0x12345672u,
+        "UpdatePrimState zero primitive uses firmware fallback");
+    cx[1].value = 0x12345670u;
+    TEST_ASSERT_EQ(sceAgcUpdatePrimState(cx, NULL, 19u), AGC_OK,
+        "UpdatePrimState out-of-table primitive returns OK");
+    TEST_ASSERT_EQ(cx[1].value, 0x12345672u,
+        "UpdatePrimState out-of-table primitive uses firmware fallback");
+
+    cx[0].value = 0x24u;
+    cx[1].value = 0xCAFEBABEu;
+    TEST_ASSERT_EQ(sceAgcUpdatePrimState(cx, NULL, 4u), AGC_OK,
+        "UpdatePrimState guarded CX state returns OK");
+    TEST_ASSERT_EQ(cx[1].value, 0xCAFEBABEu,
+        "UpdatePrimState preserves guarded CX state");
+    TEST_ASSERT_EQ(sceAgcUpdatePrimState(NULL, NULL, 4u), AGC_OK,
+        "UpdatePrimState accepts null outputs");
+}
+
 static uint32_t semantic_word(
     uint32_t id, uint32_t mapping, uint32_t flags)
 {
@@ -1021,6 +1067,7 @@ void test_suite_shader(void) {
     TEST_RUN(test_create_prim_state_primitive_lookup);
     TEST_RUN(test_create_prim_state_hull_merge);
     TEST_RUN(test_create_prim_state_optional_outputs_and_invalid);
+    TEST_RUN(test_update_prim_state);
     /* Interpolant mapping builder (FW 5.50 pdEV7bI6COI). */
     TEST_RUN(test_create_interpolant_mapping_identity);
     TEST_RUN(test_create_interpolant_mapping_flags);

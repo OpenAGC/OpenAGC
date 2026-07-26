@@ -519,6 +519,12 @@ int32_t PS5_SYSV_ABI sceAgcCreatePrimState(
     const AgcShaderRecord *hull_shader,
     const AgcShaderRecord *geometry_shader,
     uint32_t primitive_type);
+/* FW 5.50 Y3ymLfZ1384: updates the primitive fields in an existing pair of
+ * CX registers and/or three UCONFIG registers. Either array may be NULL. */
+int32_t PS5_SYSV_ABI sceAgcUpdatePrimState(
+    AgcShaderRegister *cx_registers,
+    AgcShaderRegister *uconfig_registers,
+    uint32_t primitive_type);
 /* FW 5.50 pdEV7bI6COI: emits all 32 SPI_PS_INPUT_CNTL descriptors by
  * matching pixel inputs to geometry outputs and transforming interpolation
  * and default-value flags. */

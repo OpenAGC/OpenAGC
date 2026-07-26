@@ -31,7 +31,8 @@ titles across multiple engines and SDK vintages.
 - `PPSA17942` (DRAGON QUEST VII Reimagined) is a hardware-proven FW `0x0550`
   backport target despite its `0x1202` metadata. It bundles AGC compatibility
   SPRXs and imports 253 AGC functions. The completed GetSize and packet-patcher
-  batches cover 199 imports; 54 remain under analysis, so it is tracked
+  batches plus the payload-range and primitive-state update ABIs cover 200
+  imports; 53 remain under analysis, so it is tracked
   separately from the four fully covered titles. AcquireMem packet size follows
   the FW 5.50 title
   workaround mode: mode 1 uses 64 bytes, while modes 0 and 2 use 32 bytes.

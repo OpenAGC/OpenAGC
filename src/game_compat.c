@@ -971,6 +971,37 @@ int32_t PS5_SYSV_ABI sceAgcCreatePrimState(
     return AGC_OK;
 }
 
+/* sceAgcUpdatePrimState (NID: Y3ymLfZ1384) - FW 5.50 @ 0xe3d0. */
+static const uint32_t s_update_prim_to_gs_out[18] = {
+    0x80000180u, 0x00000011u, 0x20000180u, 0x00000012u,
+    0x00000000u, 0x00000013u, 0x00000000u, 0x00000014u,
+    0x00000000u, 0x00000015u, 0x00000000u, 0x0000001Au,
+    0x00000000u, 0x0000001Bu, 0x00000000u, 0x0000001Cu,
+    0x00000000u, 0x0000001Du,
+};
+
+int32_t PS5_SYSV_ABI sceAgcUpdatePrimState(
+    AgcShaderRegister *cx_registers,
+    AgcShaderRegister *uconfig_registers,
+    uint32_t primitive_type)
+{
+    if (cx_registers && (cx_registers[0].value & 0x24u) == 0) {
+        uint32_t output_primitive = 2u;
+        uint32_t index = primitive_type - 1u;
+        if (index < 18u)
+            output_primitive = s_update_prim_to_gs_out[index];
+        cx_registers[1].value =
+            (cx_registers[1].value & ~0x7u) | output_primitive;
+    }
+
+    if (uconfig_registers) {
+        uconfig_registers[2].value =
+            (uconfig_registers[2].value & ~0x1Fu) | primitive_type;
+    }
+
+    return AGC_OK;
+}
+
 /* sceAgcCreateInterpolantMapping (NID: pdEV7bI6COI) - FW 5.50 @ 0xd7f0.
  * The output offsets are raw CX indirect-register descriptors, not decoded
  * SPI_PS_INPUT_CNTL register offsets. */
