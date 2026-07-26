@@ -964,95 +964,22 @@ static bool dispatch_graphics(GraphicsTest *test,
                                const ParsedGraphicsShader *back,
                                const ParsedGraphicsShader *ps,
                                const RenderTargetConfig *target) {
-#ifndef AGC_NGG_ENTRY_PROBE
-#define AGC_NGG_ENTRY_PROBE 0
-#endif
-#ifndef AGC_NGG_BACK_ENTRY_PROBE
-#define AGC_NGG_BACK_ENTRY_PROBE 0
-#endif
 #ifndef AGC_NGG_OUT_PRIM_OVERRIDE
 #define AGC_NGG_OUT_PRIM_OVERRIDE 0
-#endif
-#ifndef AGC_NGG_ALLOC_PROBE
-#define AGC_NGG_ALLOC_PROBE 0
 #endif
 #ifndef AGC_NGG_WGP_OVERRIDE
 #define AGC_NGG_WGP_OVERRIDE 0
 #endif
-    static const uint32_t ngg_entry_probe[] = {
-        0x7e000280u,                         /* v_mov_b32 v0, 0 */
-        0x7e0202ffu, 0x4e474721u,           /* v_mov_b32 v1, marker */
-        0xdc708000u, 0x00080100u,           /* global_store v0, v1, s[8:9] */
-        0xbf8c3f70u,                         /* s_waitcnt vmcnt(0) */
-        0xbf810000u,                         /* s_endpgm */
-    };
-    static const uint32_t ngg_back_entry_probe[] = {
-        0xbf8a0000u,                         /* s_barrier */
-        0xd7650002u, 0x000100c1u,           /* v_mbcnt_lo v2, -1, 0 */
-        0x34040482u,                         /* v_lshlrev_b32 v2, 2, v2 */
-        0x360600ffu, 0x0000ffffu,           /* v_and_b32 v3, 0xffff, v0 */
-        0x34060682u,                         /* v_lshlrev_b32 v3, 2, v3 */
-        0xd8d80000u, 0x01000003u,           /* ds_read_b32 v1, v3 */
-        0xbf8cc07fu,                         /* s_waitcnt lgkmcnt(0) */
-        0xdc708000u, 0x00140102u,           /* global_store v2, v1, s[20:21] */
-        0xbf8c3f70u,                         /* s_waitcnt vmcnt(0) */
-        0xbf810000u,                         /* s_endpgm */
-    };
-    uint32_t ngg_export_probe[] = {
-        0xbe9400ffu, 0x00000000u,           /* s_mov_b32 s20, marker_lo */
-        0xbe9500ffu, 0x00000000u,           /* s_mov_b32 s21, marker_hi */
-        0xbefe03c1u,                         /* s_mov_b32 exec_lo, -1 */
-        0x7e080204u,                         /* v_mov_b32 v4, s4 */
-        0x38080884u,                         /* v_or_b32 v4, 4, v4 */
-        0xd7650000u, 0x000100c1u,           /* v_mbcnt_lo_u32_b32 v0, -1, 0 */
-        0x34000082u,                         /* v_lshlrev_b32 v0, 2, v0 */
-        0xdc708000u, 0x00140400u,           /* global_store v0, v4, s[20:21] */
-        0xbf8c3f70u,                         /* s_waitcnt vmcnt(0) */
-        0xbf810000u,                         /* s_endpgm */
-    };
-    const bool use_entry_probe = AGC_NGG_ENTRY_PROBE != 0;
-    const bool replace_back_code = AGC_NGG_BACK_ENTRY_PROBE != 0;
-    const bool use_back_entry_probe =
-        replace_back_code || AGC_NGG_ALLOC_PROBE != 0;
-    const uint8_t *front_code_bytes = use_entry_probe
-        ? (const uint8_t *)ngg_entry_probe : front->code;
-    const size_t front_code_size = use_entry_probe
-        ? sizeof(ngg_entry_probe) : front->code_size;
     void *front_code = upload_shader(
-        front_code_bytes, front_code_size, test->compute_buffer, 0x0000);
-    const uint8_t *back_code_bytes = replace_back_code
-        ? (const uint8_t *)ngg_back_entry_probe : back->code;
-    const size_t back_code_size = replace_back_code
-        ? sizeof(ngg_back_entry_probe) : back->code_size;
+        front->code, front->code_size, test->compute_buffer, 0x0000);
     void *back_code = upload_shader(
-        back_code_bytes, back_code_size, test->compute_buffer, 0x1000);
-    if (AGC_NGG_ALLOC_PROBE) {
-        const uintptr_t export_probe_addr = (uintptr_t)test->buffers[1];
-        ngg_export_probe[1] = (uint32_t)export_probe_addr;
-        ngg_export_probe[3] = (uint32_t)(export_probe_addr >> 32);
-        uint32_t *words = (uint32_t *)back_code;
-        const size_t word_count = back_code_size / sizeof(words[0]);
-        bool patched = false;
-        for (size_t i = 0; i + 1u < word_count; i++) {
-            if (words[i] == 0xbf8cff0fu) { /* query-disabled target before expcnt wait */
-                memcpy(&words[i], ngg_export_probe, sizeof(ngg_export_probe));
-                patched = true;
-                break;
-            }
-        }
-        if (!patched) {
-            printf("NGG export probe could not find pre-expcnt target\n");
-            return false;
-        }
-    }
+        back->code, back->code_size, test->compute_buffer, 0x1000);
     void *ps_code = upload_shader(
         ps->code, ps->code_size, test->compute_buffer, 0x4000);
-    printf("NGG front %s at %p (%zu bytes)\n",
-           use_entry_probe ? "entry probe" : "ACO code",
-           front_code, front_code_size);
-    printf("NGG back %s at %p (%zu bytes)\n",
-           replace_back_code ? "entry probe" : "ACO code",
-           back_code, back_code_size);
+    printf("NGG front ACO code at %p (%zu bytes)\n",
+           front_code, front->code_size);
+    printf("NGG back ACO code at %p (%zu bytes)\n",
+           back_code, back->code_size);
     printf("PS code at %p (%zu bytes)\n", ps_code, ps->code_size);
 
     if (back->num_sh_regs > 16u) {
@@ -1352,23 +1279,6 @@ static bool dispatch_graphics(GraphicsTest *test,
         next_stage_pc_reg, (uint32_t)(uintptr_t)back_code
     };
     sceAgcCbSetShRegistersDirect(&cb, &next_stage_pc, 1);
-    volatile uint32_t *shader_marker =
-        (volatile uint32_t *)test->buffers[1];
-    *shader_marker = 0;
-    const uintptr_t shader_marker_addr = (uintptr_t)shader_marker;
-    const uint32_t marker_user_sgpr = use_back_entry_probe ? 12u : 0u;
-    const AgcRegisterValue shader_marker_regs[] = {
-        {AGC_REG_SPI_SHADER_USER_DATA_GS_0 + marker_user_sgpr,
-         (uint32_t)shader_marker_addr},
-        {AGC_REG_SPI_SHADER_USER_DATA_GS_0 + marker_user_sgpr + 1u,
-         (uint32_t)(shader_marker_addr >> 32)},
-    };
-    if (use_entry_probe || use_back_entry_probe) {
-        sceAgcCbSetShRegistersDirect(&cb, shader_marker_regs, 2);
-        printf("[Draw] NGG %s entry probe marker address = %p\n",
-               use_back_entry_probe ? "back" : "front",
-               (void *)shader_marker_addr);
-    }
 
     /* 6. Write PS shader SH + CX registers */
     const AgcRegisterValue texture_table = {
@@ -1461,14 +1371,6 @@ static bool dispatch_graphics(GraphicsTest *test,
     /* Check WRITE_DATA marker — if present, GPU is alive after draw */
     uint32_t *marker = (uint32_t *)(uintptr_t)marker_target;
     printf("[Marker] WRITE_DATA marker = 0x%08x (expected 0xDEADCAFE)\n", *marker);
-    if (use_entry_probe || use_back_entry_probe) {
-        const uint32_t expected_shader_marker =
-            use_back_entry_probe ? 0x4e474742u : 0x4e474721u;
-        printf("[Marker] NGG %s entry marker = 0x%08x "
-               "(expected 0x%08x)\n",
-               use_back_entry_probe ? "back" : "front",
-               *shader_marker, expected_shader_marker);
-    }
 
     if (target->fp16) {
         const uint64_t *rt = (const uint64_t *)rt_addr;

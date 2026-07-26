@@ -20,11 +20,11 @@ Work proceeds in this order. Later items must not displace an earlier item
 unless the earlier item is explicitly blocked on unavailable firmware or
 hardware.
 
-1. **Bring up NGG geometry on FW 5.50 gfx1013 hardware.** The reusable
-   Wave32 VS+PS binder and its host/hardware regression are complete. Start
-   geometry with a pass-through shader, then validate primitive amplification,
-   ring sizing, exports, synchronization, and Wave32 resource state before
-   advancing to tessellation.
+1. **Pass-through NGG geometry is complete on FW 5.50 gfx1013 hardware.** Three
+   identical runs now pass readback, coverage, interpolation, marker, and
+   sustained-flip gates, and the physical display shows the expected centered
+   colorful triangle on a gray background. The retained compiler and OpenAGC
+   regressions pass, and the probe-free path is committed before amplification.
 2. **Finish FW 5.50 backend hardening and compatibility.** Keep exact
    four-digit firmware selection and fail-closed capabilities, investigate the
    non-blocking FRAME_OPEN EINVAL and PA-debug EPERM results, then expand the
@@ -1136,27 +1136,24 @@ Recover native PS5 geometry setup beyond the classic GNM-style pipeline.
 
 Current FW 5.50 gfx1013 sequence:
 
-1. **Stabilize pass-through NGG geometry.** Isolate the Wave32
-   `GS_ALLOC_REQ`, following workgroup barrier, and primitive/vertex export
-   boundary. Preserve the proven ES/GS entry ABI, WGP mode, triangle-strip
-   Specials, and Mesa-aligned allocation registers while probing one boundary
-   at a time.
-2. **Hardware-accept pass-through geometry.** Require successful DCB
-   submission, the live post-draw marker, approximately 255,456 covered FP16
-   pixels within tolerance, centered bounds, at least eight sampled colors,
-   no out-of-range components, and visual confirmation of the centered RGB
-   triangle on FW 5.50.
+1. **Pass-through visual gate closed.** The split-GS ESGS ABI and GFX10
+   `GE_CNTL` programming are fixed. Three identical FW 5.50 runs produced
+   255,744 covered FP16 pixels, centered bounds, eight sampled colors, no
+   out-of-range components, a live marker, and 1,800/1,800 completed flips.
+   The physical display confirmed the centered colorful triangle on a gray
+   background.
+2. **Probe-free path promoted.** The compiler NGG-record regression and OpenAGC
+   generic suite pass, and the documentation records the hardware-confirmed
+   implementation.
 3. **Validate geometry amplification.** Compile and run the prepared
    `triangle_amplify.geom` path. Require two distinct half-scale textured
    triangles, correct aggregate coverage, stable repeated execution, and
-   visual confirmation.
-4. **Promote the path to reusable coverage.** Run the compiler NGG-record
-   regression and OpenAGC generic suites, remove obsolete entry/allocation
-   probes and override switches, and retain only bounded PM4 diagnostics.
+   physical-display confirmation.
+4. **Extend geometry coverage.** Add varied input/output topology, invocation,
+   and render-target cases after amplification is stable.
 5. **Proceed to tessellation only after geometry passes.** Geometry remains
    ahead of tessellation and combined tessellation-plus-geometry so later
-   failures do not conflate hull/domain ABI work with the unresolved NGG
-   allocation boundary.
+   failures do not conflate hull/domain ABI work with geometry ABI work.
 
 Rule:
 

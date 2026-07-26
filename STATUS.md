@@ -9,7 +9,8 @@ plus Wave32 PS records. The binder validates metadata and 256-byte program
 alignment, derives primitive and interpolant state, patches PGM_LO/HI, preflights
 the full command-buffer allocation, and emits SH/CX/UC state atomically.
 
-Validation evidence: generic tests pass; the Prospero library and
+Validation evidence: compiler NGG-record regressions and 2,129 generic checks
+pass; the Prospero library and
 `agc_graphics.elf` build cleanly; websrv hardware execution returned
 `AGC_OK`, passed the NGG/PS Wave32 PM4 audit, produced 255,744 valid FP16
 pixels with no out-of-range components, executed the post-draw
@@ -17,7 +18,8 @@ pixels with no out-of-range components, executed the post-draw
 
 ## FW 5.50 NGG geometry bring-up
 
-Status: **in progress; pass-through geometry is not hardware-validated yet.**
+Status: **pass-through geometry passes deterministic hardware readback and
+physical-display validation.**
 
 The compiler and sample now support separate Wave32 ES-front and GS-back
 records for a real geometry shader. The current implementation preserves the
@@ -26,32 +28,35 @@ pre-lowering `triangle_strip` output topology in `AgcShaderSpecials`, enables
 clear, and emits the same GFX10 allocation-register formulas used by Mesa.
 The reusable binder consumes the record Specials through
 `sceAgcCreatePrimState`; the hardware audit confirms `out_prim=2`,
-`GE_CNTL=0x00010055`, Wave32 stage state, successful DCB submission, and a live
+`GE_CNTL=0x0000f655`, Wave32 stage state, successful DCB submission, and a live
 post-draw marker.
 
-Hardware probes on FW 5.500.008 have confirmed all of the following before the
-remaining failure:
+FW 5.500.008 checkpoint probes confirmed the complete allocation/export
+control path: `GS_ALLOC_REQ` is reached and returns, the following workgroup
+barrier releases, and primitive plus position export points execute. The
+remaining corruption was traced to double-scaled GS input offsets. Hardware
+already applied `VGT_ESGS_RING_ITEMSIZE=21`, producing packed offsets
+`0,21,42`, while the separately compiled GS multiplied them by its shader-side
+stride of 21 again. The corrected split ABI programs the hardware register to
+unit stride and retains 21 only in `AC_UD_VGT_ESGS_RING_ITEMSIZE`; captured
+back-stage offsets are now exactly `0,1,2`.
 
-- The ES front and GS back both execute.
-- `GS_TG_INFO` reports three input vertices and merged-wave state reports one
-  GS invocation.
-- The input LDS offsets and vertex position data are correct.
-- The GS writes all three output vertices and completion data to LDS.
-- The generated shader reaches the NGG allocation/export region without a GPU
-  or kernel hang.
+The compiler also applies Mesa's required GFX10 non-tessellation workaround:
+`GE_CNTL.VERT_GRP_SIZE = VGT_GS_ONCHIP_CNTL.ES_VERTS_PER_SUBGRP - 5` when the
+group size is not 256. gfx1013 is modeled as GFX10, not GFX10.3.
 
-The final raster is still unstable and incorrect. The latest probe-free run
-changed 430,155 FP16 pixels, bounded at `x=0..504, y=0..1099`, with one solid
-sampled color instead of the expected approximately 255,456-pixel centered RGB
-triangle. Earlier runs produced different partial or oversized regions. This
-run-to-run variation localizes the remaining work to the Wave32
-`GS_ALLOC_REQ`/workgroup-barrier/export boundary rather than PM4 submission,
-shader entry, input fetch, topology metadata, or GS LDS emission.
+Three consecutive probe-free runs of the identical ELF now produce exactly
+255,744 changed FP16 pixels, bounds `x=384..1151, y=436..1100`, eight sampled
+interpolated colors, no out-of-range components, a live post-draw marker, and
+1,800/1,800 completed display flips per run. The temporary entry,
+allocation, remap, and export probes have been removed. The physical display
+confirmed the expected centered colorful triangle on a gray background.
 
-Two-triangle geometry amplification is prepared but must not be called
-validated until stable pass-through geometry passes first. Compiler regression
-coverage for WGP mode, triangle-strip record serialization, and the obsolete
-query wait has been added but was not run during this hardware-only iteration.
+Two-triangle geometry amplification is prepared as the next milestone.
+Compiler regression coverage locks WGP mode, triangle-strip serialization, the
+GFX10 `GE_CNTL` adjustment, unit hardware ESGS offsets, the 21-dword shader
+stride, and absence of unsupported shader-query intrinsics. The compiler suite
+passes, as does the clean OpenAGC generic suite with 2,129 checks.
 
 
 ## Firmware compatibility
