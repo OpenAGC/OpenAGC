@@ -180,6 +180,12 @@ or exercises them; if that occurs, obtain new evidence rather than guessing a
 name or ABI. The exit gate is 100% named-import implementation across the
 expanded corpus and no exercised path relying on a silent success stub.
 
+Candidate selection is fail-closed. `PPSA01325` (ASTRO's PLAYROOM) is
+explicitly excluded by project scope, and titles requiring firmware newer than
+`0x0550` are ineligible for this corpus. Record rejected candidates in
+`analysis/game_compat_exclusions.tsv` so they are not counted or repeatedly
+reinvestigated.
+
 ### 6. Run the FW 5.50 release audit
 
 Before calling the FW 5.50 core complete:
