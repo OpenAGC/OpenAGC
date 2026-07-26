@@ -7,10 +7,13 @@ layout(location = 0) out vec3 out_color;
 
 void main()
 {
-    gl_Position = gl_TessCoord.x * gl_in[0].gl_Position +
-                  gl_TessCoord.y * gl_in[1].gl_Position +
-                  gl_TessCoord.z * gl_in[2].gl_Position;
-    out_color = gl_TessCoord.x * in_color[0] +
-                gl_TessCoord.y * in_color[1] +
-                gl_TessCoord.z * in_color[2];
+    const vec4 positions[3] = vec4[](
+        vec4(-0.50, -0.4330127, 0.0, 1.0),
+        vec4( 0.50, -0.4330127, 0.0, 1.0),
+        vec4( 0.00,  0.4330127, 0.0, 1.0)
+    );
+    gl_Position = gl_TessCoord.x * positions[0] +
+                  gl_TessCoord.y * positions[1] +
+                  gl_TessCoord.z * positions[2];
+    out_color = gl_TessCoord;
 }

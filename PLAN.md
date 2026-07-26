@@ -21,11 +21,12 @@ unless the earlier item is explicitly blocked on unavailable firmware or
 hardware.
 
 1. **Combine tessellation with NGG geometry on FW 5.50 gfx1013.** Isolated
-   Wave32 tessellation now passes on hardware: the HS writes four `4.0`
-   factors and the TES path displays the expected centered, interpolated
-   triangle. Preserve that sample as the control, then add a real
-   geometry-emitting stage after TES and validate deterministic readback plus
-   physical output.
+   Wave32 tessellation now passes on hardware through the recovered public
+   TF-ring ioctl `0x80108128`: the HS writes four `4.0` factors, the TES path
+   shades 255,744 FP16 pixels, and the display shows the expected centered
+   equal-sided colorful triangle. Preserve that sample as the control, then
+   add a real geometry-emitting stage after TES and validate deterministic
+   readback plus physical output.
 2. **Extend topology, invocation, and render-target coverage.** The
    pass-through NGG baseline and six-vertex two-triangle GS amplification are
    already hardware-proven. Add combinations only after the tessellation plus
@@ -914,9 +915,11 @@ After interpolants pass, proceed in this order:
    harmless. Two immediate deployments each passed three repeated two-DCB
    iterations with unique ordered markers and zero polling delay.
 8. ✅ Validate isolated Wave32 tessellation. Fused HS and TES records execute
-   through the reusable gfx1013 binder, the factor ring contains four `4.0`
-   factors, and the PS5 displays the centered interpolated triangle with even
-   sides.
+   through the reusable gfx1013 binder and the recovered non-Direct TF-ring
+   ABI. The factor ring contains four `4.0` factors, readback contains 255,744
+   valid FP16 pixels within the expected equilateral bounds, and the PS5
+   displays the centered interpolated triangle with equal sides without a hang
+   or kernel panic.
 9. Combine the validated tessellation path with a real NGG geometry shader,
    retaining the isolated tessellation and geometry samples as controls.
 10. Expand Wave32 graphics coverage, then VRS and ray tracing where supported

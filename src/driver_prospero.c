@@ -851,20 +851,31 @@ int32_t PS5_SYSV_ABI agcProsperoSetupAsyncGraphics(uint32_t pipe_id)
     return AGC_OK;
 }
 
-/*
- * Set tessellation factor ring.
- * Uses ioctl nr=0x20 (SET_TF_RING, 16-byte RW).
- */
-int32_t PS5_SYSV_ABI agcProsperoSetTFRingDirect(void)
+/* Public tessellation factor-ring setup recovered from FW 5.50
+ * libSceAgcDriver.sprx vaddrs 0x67e0 and 0x9180. */
+int32_t PS5_SYSV_ABI agcProsperoSetTFRing(
+    uintptr_t ring_addr, uint32_t size)
 {
     if (!g_prospero.initialized)
         return AGC_ERROR_NOT_INITIALIZED;
     if (!g_prospero.profile.supports_tf_ring)
         return AGC_ERROR_NOT_SUPPORTED;
 
-    uint32_t arg[4] = {0};
-    int ret = agcProsperoIoctl(AGC_GC_IOCTL_SET_TF_RING, arg);
+    AgcGcSetTFRingArg arg = {0};
+    arg.ring_addr = (uint64_t)ring_addr;
+    arg.size = size;
+    int ret = agcProsperoIoctl(AGC_GC_IOCTL_SET_TF_RING, &arg);
     return (ret < 0) ? AGC_ERROR_INTERNAL : AGC_OK;
+}
+
+/* FW 5.50 exports sceAgcDriverSetTFRingDirect as a permission stub. */
+int32_t PS5_SYSV_ABI agcProsperoSetTFRingDirect(void)
+{
+    if (!g_prospero.initialized)
+        return AGC_ERROR_NOT_INITIALIZED;
+    if (!g_prospero.profile.supports_tf_ring)
+        return AGC_ERROR_NOT_SUPPORTED;
+    return AGC_ERROR_NOT_SUPPORTED;
 }
 
 /*
@@ -1362,6 +1373,7 @@ const AgcDriverOps agcProsperoDriverOps = {
     .is_suspend_point_in_flight_direct = agcProsperoIsSuspendPointInFlightDirect,
     .internal_suspend_point_submit_final = agcProsperoInternalSuspendPointSubmitFinal,
     .setup_async_graphics = agcProsperoSetupAsyncGraphics,
+    .set_tf_ring = agcProsperoSetTFRing,
     .set_tf_ring_direct = agcProsperoSetTFRingDirect,
     .set_hs_offchip_param_direct = agcProsperoSetHsOffchipParamDirect,
     .set_target_ring_for_diag = agcProsperoSetTargetRingForDiag,

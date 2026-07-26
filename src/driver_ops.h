@@ -25,6 +25,7 @@ typedef struct AgcDriverOps {
     int32_t (PS5_SYSV_ABI *internal_suspend_point_submit_final)(
         uint32_t, uint32_t, uint32_t, uint32_t);
     int32_t (PS5_SYSV_ABI *setup_async_graphics)(uint32_t);
+    int32_t (PS5_SYSV_ABI *set_tf_ring)(uintptr_t, uint32_t);
     int32_t (PS5_SYSV_ABI *set_tf_ring_direct)(void);
     int32_t (PS5_SYSV_ABI *set_hs_offchip_param_direct)(uint64_t, uint32_t);
     int32_t (PS5_SYSV_ABI *set_target_ring_for_diag)(void);

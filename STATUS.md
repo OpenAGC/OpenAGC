@@ -82,18 +82,29 @@ Status: **isolated Wave32 tessellation is hardware-validated on FW 5.500.008.**
 The reusable gfx1013 binder consumes fused HsFront/HsBack and TES
 GsFront/GsBack records, patches the runtime ring descriptors and
 `VGT_TCS_OFFCHIP_LAYOUT`, and programs the factor/offchip ring state required
-by gfx1013. The hardware run emitted four `4.0` tessellation factors, proving
-LS/HS execution, and the PS5 display showed a centered, colorful red triangle
-with even sides on the gray background, proving that TES, NGG, pixel shading,
-and rasterization complete from the isolated tessellation path.
+by gfx1013. FW 5.50 `sceAgcDriverSetTFRing` takes a 256-byte-aligned ring
+address and a dword-aligned size, clamps the size to `0x4000`, and submits the
+16-byte `{uint64_t ring_addr, uint32_t size, uint32_t reserved}` payload with
+ioctl `0x80108128`. The similarly named Direct export is a permission stub and
+must not be used for normal ring setup.
+
+The final hardware run returned `AGC_OK` from TF-ring setup and DCB submission,
+emitted four `4.0` tessellation factors, changed 24 offchip dwords, and shaded
+255,744 FP16 pixels versus 255,456 expected. Coverage bounds were
+`x=384..1151, y=436..1100` (768x665), with eight sampled colors, no out-of-range
+components, a live post-draw marker, and 1,800/1,800 completed display flips.
+The PS5 display showed a centered colorful triangle with equal sides on the
+gray background. No GPU hang or kernel panic occurred.
 
 Host coverage validates record types, required HS continuation state, the
 front-only TES form produced by ACO, runtime placeholder patching, Wave32
 stage enables, primitive type `DI_PT_PATCH=9`, and command-buffer cursor
 advance. The hardware sample is `agc_tessellation.elf`; its GLSL TCS forwards
-position/color and writes tessellation level 4, while its TES performs
-barycentric interpolation. The next graphics milestone is tessellation plus a
-real NGG geometry shader, using this isolated path as the control.
+stage-local control-point data and writes tessellation level 4, while its TES
+uses `gl_TessCoord` for barycentric position and color interpolation. Keeping
+the position tables local isolates HS/TES launch from inter-stage varying ABI.
+The next graphics milestone is tessellation plus a real NGG geometry shader,
+using this isolated path as the control.
 
 
 ## Firmware compatibility
@@ -427,7 +438,8 @@ Game-compat driver functions:
 - `sceAgcDriverRegisterOwner` — stub (returns 0x8a6c9018, matches SPRX)
 - `sceAgcDriverRegisterResource` — stub (returns 0x8a6c9018, matches SPRX)
 - `sceAgcDriverGetEqContextId` — EQ context ID query
-- `sceAgcDriverSetTFRing` — non-Direct TF ring set (clamps to 0x4000)
+- `sceAgcDriverSetTFRing` — non-Direct TF ring set using ioctl `0x80108128`;
+  256-byte-aligned address plus dword-aligned size, clamped to `0x4000`
 - `sceAgcDriverSetHsOffchipParam` — non-Direct HS offchip param
 - `sceAgcDriverAgrSubmitDcb` — AGR submit (returns 0x8a6d0003 if not initialized)
 - `sceAgcDriverAddEqEvent` — EQ event registration
@@ -483,7 +495,8 @@ Native prospero backend (`src/driver_prospero.c`, `#ifdef OPENAGC_PROSPERO`):
 - `sceAgcDriverSubmitEopFlip` — EOP flip submit; validates display buffer
   index (< 16), delegates to `sceVideoOutSubmitEopFlip` (SPRX ordinals 49/50)
 - `sceAgcDriverSetupAsyncGraphics` — `QUEUE_STATUS` ioctl (nr=0x26, arg=1; SPRX-confirmed)
-- `sceAgcDriverSetTFRingDirect` — `SET_TF_RING` ioctl (user arg ignored on FW 5.50)
+- `sceAgcDriverSetTFRingDirect` — FW 5.50 permission stub; returns unsupported
+  without programming the public TF ring
 - `sceAgcDriverSetHsOffchipParamDirect` — `SET_HS_OFFCHIP` ioctl with RE'd 16-byte patch-list argument
 - `sceAgcDriverGetPaDebugInterfaceVersion` — FW 5.50 permission stub returning
   `0x8A6D0001` without an ioctl (SPRX-confirmed)

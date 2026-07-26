@@ -22,7 +22,8 @@ static void test_ioctl_encoding(void) {
     TEST_ASSERT_EQ(AGC_GC_IOCTL_QUEUE_CREATE,  0xC0408121u, "QUEUE_CREATE cmd");
     TEST_ASSERT_EQ(AGC_GC_IOCTL_QUEUE_DESTROY, 0xC00C810Eu, "QUEUE_DESTROY cmd");
     TEST_ASSERT_EQ(AGC_GC_IOCTL_QUEUE_STATUS,  0x80048126u, "QUEUE_STATUS cmd (setup async)");
-    TEST_ASSERT_EQ(AGC_GC_IOCTL_SET_TF_RING,   0xC0108120u, "SET_TF_RING cmd");
+    TEST_ASSERT_EQ(AGC_GC_IOCTL_SET_TF_RING_DIRECT, 0xC0108120u, "SET_TF_RING_DIRECT cmd");
+    TEST_ASSERT_EQ(AGC_GC_IOCTL_SET_TF_RING,   0x80108128u, "SET_TF_RING cmd");
     TEST_ASSERT_EQ(AGC_GC_IOCTL_SET_HS_OFFCHIP,0xC010812Cu, "SET_HS_OFFCHIP cmd");
     TEST_ASSERT_EQ(AGC_GC_IOCTL_SETUP_ASYNC,   0xC004811Fu, "SETUP_ASYNC cmd");
     TEST_ASSERT_EQ(AGC_GC_IOCTL_SUSPEND_16,    0xC010811Cu, "SUSPEND_16 cmd");
@@ -37,7 +38,8 @@ static void test_ioctl_nr_enum(void) {
     TEST_ASSERT_EQ(AGC_GC_NR_QUEUE_CREATE,     0x21u, "NR QUEUE_CREATE");
     TEST_ASSERT_EQ(AGC_GC_NR_QUEUE_DESTROY,    0x0Eu, "NR QUEUE_DESTROY");
     TEST_ASSERT_EQ(AGC_GC_NR_MAKESYSMAP_8,     0x09u, "NR MAKESYSMAP_8");
-    TEST_ASSERT_EQ(AGC_GC_NR_SET_TF_RING,      0x20u, "NR SET_TF_RING");
+    TEST_ASSERT_EQ(AGC_GC_NR_SET_TF_RING_DIRECT, 0x20u, "NR SET_TF_RING_DIRECT");
+    TEST_ASSERT_EQ(AGC_GC_NR_SET_TF_RING,      0x28u, "NR SET_TF_RING");
     TEST_ASSERT_EQ(AGC_GC_NR_SETUP_ASYNC,      0x1Fu, "NR SETUP_ASYNC");
     TEST_ASSERT_EQ(AGC_GC_NR_SUSPEND_16,       0x1Cu, "NR SUSPEND_16");
     TEST_ASSERT_EQ(AGC_GC_IOCTL_COUNT,         76u,   "ioctl count");
@@ -132,6 +134,13 @@ static void test_set_hs_offchip_struct_layout(void) {
     TEST_ASSERT_EQ(offsetof(AgcGcSetHsOffchipArg, reserved), 0x0Cu, "SetHsOffchipArg reserved");
 }
 
+static void test_set_tf_ring_struct_layout(void) {
+    TEST_ASSERT_EQ(sizeof(AgcGcSetTFRingArg), 0x10u, "SetTFRingArg size");
+    TEST_ASSERT_EQ(offsetof(AgcGcSetTFRingArg, ring_addr), 0x00u, "SetTFRingArg ring_addr");
+    TEST_ASSERT_EQ(offsetof(AgcGcSetTFRingArg, size), 0x08u, "SetTFRingArg size field");
+    TEST_ASSERT_EQ(offsetof(AgcGcSetTFRingArg, reserved), 0x0Cu, "SetTFRingArg reserved");
+}
+
 static void test_queue_create_struct_layout(void) {
     TEST_ASSERT_EQ(sizeof(AgcGcQueueCreateArg), 0x40u, "QueueCreateArg size");
     TEST_ASSERT_EQ(offsetof(AgcGcQueueCreateArg, magic1),    0x00u, "QueueCreateArg magic1");
@@ -180,6 +189,15 @@ static void test_misc_driver_ioctls(void) {
     ret = sceAgcDriverSetTFRingDirect();
     TEST_ASSERT_EQ(ret, (int32_t)AGC_OK, "SetTFRingDirect");
 
+    ret = sceAgcDriverSetTFRing((uintptr_t)0x1000u, 0x4000u);
+    TEST_ASSERT_EQ(ret, (int32_t)AGC_OK, "SetTFRing");
+
+    ret = sceAgcDriverSetTFRing((uintptr_t)0x1001u, 0x4000u);
+    TEST_ASSERT_EQ(ret, (int32_t)AGC_ERROR_INTERNAL, "SetTFRing address alignment");
+
+    ret = sceAgcDriverSetTFRing((uintptr_t)0x1000u, 3u);
+    TEST_ASSERT_EQ(ret, (int32_t)AGC_ERROR_INTERNAL, "SetTFRing size alignment");
+
     ret = sceAgcDriverSetHsOffchipParamDirect(0u, 0u);
     TEST_ASSERT_EQ(ret, (int32_t)AGC_OK, "SetHsOffchipParamDirect");
 
@@ -219,6 +237,7 @@ void test_suite_ioctl(void) {
     TEST_RUN(test_suspend_struct_layout);
     TEST_RUN(test_suspend_point_api);
     TEST_RUN(test_set_hs_offchip_struct_layout);
+    TEST_RUN(test_set_tf_ring_struct_layout);
     TEST_RUN(test_queue_create_struct_layout);
     TEST_RUN(test_queue_create_magic_values);
     TEST_RUN(test_queue_destroy_struct_layout);

@@ -133,7 +133,8 @@ enum AgcGcIoctlNr {
     AGC_GC_NR_LARGE_260        = 0x0f, /* 260-byte RW */
 
     /* Misc */
-    AGC_GC_NR_SET_TF_RING      = 0x20, /* set tessellation factor ring */
+    AGC_GC_NR_SET_TF_RING_DIRECT = 0x20, /* privileged direct variant */
+    AGC_GC_NR_SET_TF_RING      = 0x28, /* public TF ring address/size */
     AGC_GC_NR_SET_HS_OFFCHIP   = 0x2c, /* set hull shader offchip params */
     AGC_GC_NR_SETUP_ASYNC      = 0x1f, /* (not used by SPRX for setup_async) */
     AGC_GC_NR_SUBMITDONE       = 0x25, /* gc_setup_submitdone */
@@ -171,7 +172,8 @@ enum AgcGcIoctlNr {
 #define AGC_GC_IOCTL_WFDEBUG_1D     AGC_GC_IOC(3u, 0x1du, 4u)
 #define AGC_GC_IOCTL_LARGE_48       AGC_GC_IOC(3u, 0x1eu, 48u)
 #define AGC_GC_IOCTL_SETUP_ASYNC    AGC_GC_IOC(3u, 0x1fu, 4u)   /* nr=0x1f (not used by SPRX) */
-#define AGC_GC_IOCTL_SET_TF_RING    AGC_GC_IOC(3u, 0x20u, 16u)
+#define AGC_GC_IOCTL_SET_TF_RING_DIRECT AGC_GC_IOC(3u, 0x20u, 16u)
+#define AGC_GC_IOCTL_SET_TF_RING    AGC_GC_IOC(2u, 0x28u, 16u)
 #define AGC_GC_IOCTL_QUEUE_CREATE   AGC_GC_IOC(3u, 0x21u, 64u)  /* nr=0x21, 64-byte RW (SPRX-confirmed) */
 #define AGC_GC_IOCTL_QUERY_120      AGC_GC_IOC(2u, 0x23u, 120u)
 #define AGC_GC_IOCTL_QUERY_68       AGC_GC_IOC(2u, 0x24u, 68u)
@@ -425,6 +427,22 @@ _Static_assert(offsetof(AgcGcSetHsOffchipArg, num_entries) == 0x08,
     "AgcGcSetHsOffchipArg num_entries offset mismatch");
 _Static_assert(offsetof(AgcGcSetHsOffchipArg, reserved) == 0x0C,
     "AgcGcSetHsOffchipArg reserved offset mismatch");
+
+/* Public sceAgcDriverSetTFRing ioctl payload recovered from FW 5.50
+ * libSceAgcDriver.sprx at vaddr 0x9180. */
+typedef struct AgcGcSetTFRingArg {
+    uint64_t ring_addr;     /* offset 0x00, 256-byte aligned */
+    uint32_t size;          /* offset 0x08, multiple of 4, max 0x4000 */
+    uint32_t reserved;      /* offset 0x0C */
+} AgcGcSetTFRingArg;
+_Static_assert(sizeof(AgcGcSetTFRingArg) == 0x10,
+    "AgcGcSetTFRingArg size mismatch");
+_Static_assert(offsetof(AgcGcSetTFRingArg, ring_addr) == 0x00,
+    "AgcGcSetTFRingArg ring_addr offset mismatch");
+_Static_assert(offsetof(AgcGcSetTFRingArg, size) == 0x08,
+    "AgcGcSetTFRingArg size offset mismatch");
+_Static_assert(offsetof(AgcGcSetTFRingArg, reserved) == 0x0C,
+    "AgcGcSetTFRingArg reserved offset mismatch");
 
 /*
  * Queue create ioctl argument struct (nr=0x21, dir=RW, size=64).

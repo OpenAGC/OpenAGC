@@ -56,14 +56,29 @@
 #define AGC_TESSELLATION 0
 #endif
 
+#ifndef AGC_TESS_GEOMETRY
+#define AGC_TESS_GEOMETRY 0
+#endif
+
+#ifndef AGC_TESS_DISTRIBUTION_MODE
+#define AGC_TESS_DISTRIBUTION_MODE 0u
+#endif
+
 #if AGC_TESSELLATION
 #include "shaders/triangle_tess_hs_front_sb.h"
 #include "shaders/triangle_tess_hs_back_sb.h"
+#if AGC_TESS_GEOMETRY
+#include "shaders/triangle_tess_gs_front_sb.h"
+#include "shaders/triangle_tess_gs_back_sb.h"
+#define NGG_FRONT_DATA triangle_tess_gs_front_data
+#define NGG_BACK_DATA triangle_tess_gs_back_data
+#else
 #include "shaders/triangle_tess_es_front_sb.h"
 #include "shaders/triangle_tess_es_back_sb.h"
-#include "gfx1013_tess_ring.h"
 #define NGG_FRONT_DATA triangle_tess_es_front_data
 #define NGG_BACK_DATA triangle_tess_es_back_data
+#endif
+#include "gfx1013_tess_ring.h"
 #define NGG_DRAW_VERTEX_COUNT 3u
 #define NGG_INPUT_PRIMITIVE_TYPE 9u
 #elif AGC_NGG_INPUT_LINES
@@ -461,16 +476,6 @@ static bool init_agc(void) {
 
     err = sceAgcDriverSetupAsyncGraphics(1);
     if (err != AGC_OK) { printf("SetupAsyncGraphics failed: 0x%08x\n", (unsigned)err); return false; }
-
-#if AGC_TESSELLATION
-    err = sceAgcDriverSetTFRingDirect();
-    if (err != AGC_OK) {
-        printf("[Tess] FW 5.50 TF-ring driver setup unavailable: 0x%08x; "
-               "using explicit PM4 state\n", (unsigned)err);
-    } else {
-        printf("[Tess] FW 5.50 TF-ring driver setup: OK\n");
-    }
-#endif
 
     return true;
 }
@@ -1039,6 +1044,12 @@ static bool dump_launch_registers(const uint32_t *dcb, uint32_t dword_count)
            cx[AGC_REG_VGT_SHADER_STAGES_EN],
            cx[AGC_REG_SPI_SHADER_POS_FORMAT]);
 #if AGC_TESSELLATION
+    printf("[PM4 Audit] LS: PGM=%08x:%08x R1=%08x R2=%08x VBO=%08x\n",
+           sh[AGC_REG_SPI_SHADER_PGM_HI_LS],
+           sh[AGC_REG_SPI_SHADER_PGM_LO_LS],
+           sh[AGC_REG_SPI_SHADER_PGM_RSRC1_LS],
+           sh[AGC_REG_SPI_SHADER_PGM_RSRC2_LS],
+           sh[0x10Eu]);
     printf("[PM4 Audit] HS: PGM=%08x:%08x R1=%08x R2=%08x "
            "ring=%08x:%08x\n",
            sh[AGC_REG_SPI_SHADER_PGM_HI_HS],
@@ -1063,8 +1074,11 @@ static bool dump_launch_registers(const uint32_t *dcb, uint32_t dword_count)
            cx[AGC_REG_VGT_ESGS_RING_ITEMSIZE],
            cx[AGC_REG_VGT_TESS_DISTRIBUTION]);
 #endif
-    printf("[PM4 Audit] GS user: VBO(s2)=%08x base(s3)=%08x "
+    printf("[PM4 Audit] GS addr(s0:s1)=%08x:%08x user: "
+           "VBO(s2)=%08x base(s3)=%08x "
            "ESGS(s14)=%08x LDS(s15)=%08x NEXT(s16)=%08x\n",
+           sh[AGC_REG_SPI_SHADER_USER_DATA_ADDR_HI_GS],
+           sh[AGC_REG_SPI_SHADER_USER_DATA_ADDR_LO_GS],
            sh[AGC_REG_SPI_SHADER_USER_DATA_GS_0 + 2u],
            sh[AGC_REG_SPI_SHADER_USER_DATA_GS_0 + 3u],
            sh[AGC_REG_SPI_SHADER_USER_DATA_GS_0 + 14u],
@@ -1153,14 +1167,14 @@ static bool dispatch_graphics(GraphicsTest *test,
            back_code, back->code_size);
     printf("PS code at %p (%zu bytes)\n", ps_code, ps->code_size);
 
-    if (back->num_sh_regs > 16u) {
+    if (back->num_sh_regs > 24u) {
         printf("NGG back has too many SH registers\n");
         return false;
     }
     AgcShaderRecord front_record = *front->record;
     AgcShaderRecord back_record = *back->record;
     AgcShaderRecord fused_record;
-    AgcRegisterValue fused_regs[16] = {0};
+    AgcRegisterValue fused_regs[24] = {0};
     front_record.code = (uint64_t)(uintptr_t)front_code;
     back_record.code = (uint64_t)(uintptr_t)back_code;
     int32_t fuse_err = sceAgcFuseShaderHalves_0200(
@@ -1452,8 +1466,16 @@ static bool dispatch_graphics(GraphicsTest *test,
         (uint8_t *)test->compute_buffer + TESS_FACTOR_OFFSET;
     uint32_t *ring_table = (uint32_t *)
         ((uint8_t *)test->compute_buffer + TESS_RING_TABLE_OFFSET);
-    memset(offchip_ring, 0, GFX1013_TESS_OFFCHIP_RING_SIZE);
+    uint32_t *offchip_words = (uint32_t *)offchip_ring;
+    for (uint32_t i = 0; i < GFX1013_TESS_OFFCHIP_RING_SIZE / 4u; ++i)
+        offchip_words[i] = 0xDEADBEEFu;
     memset(factor_ring, 0, GFX1013_TESS_FACTOR_RING_SIZE);
+    int32_t tf_ring_err = sceAgcDriverSetTFRing(
+        (uintptr_t)factor_ring, GFX1013_TESS_FACTOR_RING_SIZE);
+    printf("[Tess] FW 5.50 TF-ring address setup: 0x%08x\n",
+           (unsigned)tf_ring_err);
+    if (tf_ring_err != AGC_OK)
+        return false;
     gfx1013BuildTessRingTable(
         ring_table, (uint64_t)(uintptr_t)offchip_ring,
         (uint64_t)(uintptr_t)factor_ring);
@@ -1475,6 +1497,8 @@ static bool dispatch_graphics(GraphicsTest *test,
         {AGC_REG_VGT_HOS_MIN_TESS_LEVEL, 0u},
         {AGC_REG_VGT_ESGS_RING_ITEMSIZE, 1u},
         {AGC_REG_VGT_TESS_DISTRIBUTION, 0xD8181E0Cu},
+        {AGC_REG_VGT_TF_PARAM,
+         0x00000061u | ((AGC_TESS_DISTRIBUTION_MODE & 3u) << 17)},
     };
     printf("[Tess] offchip=%p size=0x%x factor=%p size=0x%x table=%p\n",
            offchip_ring, GFX1013_TESS_OFFCHIP_RING_SIZE,
@@ -1614,10 +1638,9 @@ static bool dispatch_graphics(GraphicsTest *test,
 #if AGC_TESSELLATION
     uint32_t offchip_changed = 0;
     uint32_t factor_changed = 0;
-    const uint32_t *offchip_words = (const uint32_t *)offchip_ring;
     const uint32_t *factor_words = (const uint32_t *)factor_ring;
     for (uint32_t i = 0; i < GFX1013_TESS_OFFCHIP_RING_SIZE / 4u; ++i)
-        offchip_changed += offchip_words[i] != 0u;
+        offchip_changed += offchip_words[i] != 0xDEADBEEFu;
     for (uint32_t i = 0; i < GFX1013_TESS_FACTOR_RING_SIZE / 4u; ++i)
         factor_changed += factor_words[i] != 0u;
     printf("[Tess Rings] offchip changed=%u factor changed=%u\n",
@@ -1627,6 +1650,14 @@ static bool dispatch_graphics(GraphicsTest *test,
            offchip_words[0], offchip_words[1], offchip_words[2],
            offchip_words[3], factor_words[0], factor_words[1],
            factor_words[2], factor_words[3]);
+    uint32_t dumped = 0;
+    for (uint32_t i = 0;
+         i < GFX1013_TESS_OFFCHIP_RING_SIZE / 4u && dumped < 32u; ++i) {
+        if (offchip_words[i] != 0xDEADBEEFu) {
+            printf("[Tess Offchip] word[%u]=%08x\n", i, offchip_words[i]);
+            ++dumped;
+        }
+    }
 #endif
 
     if (target->fp16) {

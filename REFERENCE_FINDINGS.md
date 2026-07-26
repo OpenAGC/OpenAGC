@@ -213,8 +213,9 @@ Relevant kernel offsets:
   (submit path, already documented in `include/agc_ioctl.h`)
 - Suspend handler `sub_06e6ff0` at `0x6e6ff0` for ioctl `0xC010811C`
 - Final suspend handler for `0xC0108139` (same arg layout, function not yet named)
-- Async/TF/HS setup handler `sub_06ee43c` at `0x6ee43c` for ioctls
-  `0xC004811F` (SETUP_ASYNC), `0xC0108120` (SET_TF_RING), and related commands
+- Async/direct-TF/HS setup handler `sub_06ee43c` at `0x6ee43c` for ioctls
+  `0xC004811F` (SETUP_ASYNC), `0xC0108120` (privileged direct TF setup), and
+  related commands
 - Queue create handler `sub_06ee502` at `0x6ee502` for kernel-internal ioctl `0x8004812A`
   (not used by SPRX; SPRX uses nr=0x21 for queue create)
 
@@ -238,9 +239,16 @@ Key findings:
   same 16-byte argument layout.
 - SETUP_ASYNC (`0xC004811F`) simply writes zero back to the 4-byte user buffer
   and returns success when the device is in the right state.
-- SET_TF_RING (`0xC0108120`) takes a 16-byte argument but the FW 5.50 handler
+- The privileged direct TF command (`0xC0108120`) takes a 16-byte argument but
+  the FW 5.50 handler
   at `0x6ee476` ignores the user buffer; it only writes constant/derived values
   into device offsets `0x178` and `0x180`.
+- The public `sceAgcDriverSetTFRing` export (`XlNp7jzGiPo`, vaddr `0x6840`)
+  dispatches to vaddr `0x67e0`; its ioctl wrapper at `0x9180` submits
+  `0x80108128` with a 16-byte payload containing ring address at `0x00`, size
+  at `0x08`, and zero padding at `0x0C`. It requires 256-byte address alignment
+  and dword size alignment. The Direct export (`16IjQxB-Heo`, vaddr `0x6950`)
+  is a permission stub returning `0x8A6D0001` and performs no ioctl.
 - SET_HS_OFFCHIP (`0xC010812C`) handler at `0x6ee6d2` copies the 16-byte user
   argument directly into `gc_pm4_clearstate_patch` (0xb7dd20) as a patch-list
   pointer and count:
@@ -281,6 +289,7 @@ Key findings:
   - `sceAgcDriverSuspendPointSubmitDirect`: `ZV04pRl7cWU`
   - `sceAgcDriverNotifyDefaultStates`: `nR6xhiFsOoc`
   - `sceAgcDriverSetupAsyncGraphics`: `Vlaj1gwmIFA`
+  - `sceAgcDriverSetTFRing`: `XlNp7jzGiPo`
   - `sceAgcDriverSetTFRingDirect`: `16IjQxB-Heo`
   - `sceAgcDriverSetHsOffchipParamDirect`: `DPcAnsOlTQs`
   - `sce_agc_internal_suspend_point_submit_final`: `ZrN+92fezeA`

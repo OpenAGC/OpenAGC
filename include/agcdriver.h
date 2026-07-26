@@ -399,8 +399,8 @@ int32_t PS5_SYSV_ABI sceAgcDriverRegisterOwner(void *resource, uint32_t *out_han
 int32_t PS5_SYSV_ABI sceAgcDriverRegisterResource(void *resource, uint32_t owner_handle);
 /* Returns the EQ (event queue) context ID. */
 uint32_t PS5_SYSV_ABI sceAgcDriverGetEqContextId(void);
-/* Non-Direct TF ring set (clamps to 0x4000). */
-int32_t PS5_SYSV_ABI sceAgcDriverSetTFRing(uint32_t pipe_id, uint32_t size);
+/* Non-Direct TF ring set (256-byte aligned address, size clamps to 0x4000). */
+int32_t PS5_SYSV_ABI sceAgcDriverSetTFRing(uintptr_t ring_addr, uint32_t size);
 /* Non-Direct HS offchip param set. */
 int32_t PS5_SYSV_ABI sceAgcDriverSetHsOffchipParam(uint32_t pipe_id, uint64_t list_addr, uint32_t num_entries);
 /* AGR (async graphics ring) DCB submit. */

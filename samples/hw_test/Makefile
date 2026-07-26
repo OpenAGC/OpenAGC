@@ -52,7 +52,7 @@ AGC_LDFLAGS := $(OPENAGC_LIB) -lSceVideoOut -lkernel
 
 # === Targets ===
 
-all: videoout_linear.elf agc_init.elf agc_videoout.elf agc_compute.elf agc_graphics.elf agc_tessellation.elf
+all: videoout_linear.elf agc_init.elf agc_videoout.elf agc_compute.elf agc_graphics.elf agc_tessellation.elf agc_tess_geometry.elf
 
 # VideoOut linear smoke test (no GPU commands)
 videoout_linear.elf: videoout_linear.c ps5_video_out.h
@@ -83,7 +83,13 @@ shaders/triangle_geom.spv: shaders/triangle.geom
 shaders/triangle_tesc.spv: shaders/triangle.tesc
 	$(GLSLANG) -V --target-env vulkan1.2 $< -o $@
 
+shaders/triangle_tess_vert.spv: shaders/triangle_tess.vert
+	$(GLSLANG) -V --target-env vulkan1.2 $< -o $@
+
 shaders/triangle_tese.spv: shaders/triangle.tese
+	$(GLSLANG) -V --target-env vulkan1.2 $< -o $@
+
+shaders/triangle_tess_geom.spv: shaders/triangle_tess.geom
 	$(GLSLANG) -V --target-env vulkan1.2 $< -o $@
 
 shaders/triangle_frag.sb: shaders/triangle_frag.spv
@@ -107,15 +113,13 @@ shaders_ngg: shaders/triangle_vert.spv shaders/triangle_geom.spv
 	    shaders/triangle_ngg_back.sb shaders/triangle_ngg_back_sb.h
 
 .PHONY: shaders_tess
-shaders_tess: shaders/triangle_vert.spv shaders/triangle_tesc.spv shaders/triangle_tese.spv
+shaders_tess: shaders/triangle_tess_vert.spv shaders/triangle_tesc.spv shaders/triangle_tese.spv
 	$(PSBC) -f shaders/triangle_tesc.spv -s tess-ctrl \
-	    --pre-vertex shaders/triangle_vert.spv \
+	    --pre-vertex shaders/triangle_tess_vert.spv \
 	    --merged-front shaders/triangle_tess_hs_front.sb \
 	    --wave32 \
 	    --tess-control-points 3 --tess-patches 8 \
-	    -o shaders/triangle_tess_hs_back.sb \
-	    --vertex-attribute 0:0:0:20:r32g32_float \
-	    --vertex-attribute 1:0:8:20:r32g32b32_float
+	    -o shaders/triangle_tess_hs_back.sb
 	$(PSBC) -f shaders/triangle_tese.spv -s tess-eval \
 	    --ngg-front shaders/triangle_tess_es_front.sb \
 	    --wave32 \
@@ -133,6 +137,21 @@ shaders_tess: shaders/triangle_vert.spv shaders/triangle_tesc.spv shaders/triang
 	xxd -i -n triangle_tess_es_back_data \
 	    shaders/triangle_tess_es_back.sb \
 	    shaders/triangle_tess_es_back_sb.h
+
+.PHONY: shaders_tess_geometry
+shaders_tess_geometry: shaders_tess shaders/triangle_tess_geom.spv
+	$(PSBC) -f shaders/triangle_tess_geom.spv -s geometry \
+	    --pre-tess-eval shaders/triangle_tese.spv \
+	    --ngg-front shaders/triangle_tess_gs_front.sb \
+	    --wave32 \
+	    --tess-control-points 3 --tess-patches 8 \
+	    -o shaders/triangle_tess_gs_back.sb
+	xxd -i -n triangle_tess_gs_front_data \
+	    shaders/triangle_tess_gs_front.sb \
+	    shaders/triangle_tess_gs_front_sb.h
+	xxd -i -n triangle_tess_gs_back_data \
+	    shaders/triangle_tess_gs_back.sb \
+	    shaders/triangle_tess_gs_back_sb.h
 
 .PHONY: shaders_ngg_amplify
 shaders_ngg_amplify: shaders/triangle_vert.spv shaders/triangle_amplify.geom
@@ -206,6 +225,9 @@ agc_graphics_rgba8.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders
 
 agc_tessellation.elf: shaders_tess agc_graphics.c gfx1013_tess_ring.h ps5_video_out.h gpu_credentials.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_TESSELLATION=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_tess_geometry.elf: shaders_tess_geometry agc_graphics.c gfx1013_tess_ring.h ps5_video_out.h gpu_credentials.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_TESSELLATION=1 -DAGC_TESS_GEOMETRY=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
 
 # === eboot.bin versions (for debug-mode PS5) ===
 

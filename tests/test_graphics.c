@@ -33,6 +33,27 @@ static bool find_register(
     return false;
 }
 
+static bool find_indexed_register(
+    const uint32_t *commands, uint32_t used, uint32_t opcode,
+    uint32_t offset, uint32_t index, uint32_t *value)
+{
+    uint32_t cursor = 0;
+
+    while (cursor < used) {
+        uint32_t length = agcPm4Length(commands[cursor]);
+        if (length < 2u || cursor + length > used)
+            return false;
+        if (agcPm4Opcode(commands[cursor]) == opcode && length >= 3u &&
+            (commands[cursor + 1u] & 0xFFFFu) == offset &&
+            (commands[cursor + 1u] >> 28) == index) {
+            *value = commands[cursor + 2u];
+            return true;
+        }
+        cursor += length;
+    }
+    return false;
+}
+
 static bool find_last_register(
     const uint32_t *commands, uint32_t used, uint32_t opcode,
     uint32_t offset, uint32_t *value)
@@ -249,6 +270,8 @@ static void test_gfx1013_wave32_tessellation_binding(void)
          OPENAGC_RING_OFFSETS_LO_PLACEHOLDER},
         {AGC_REG_SPI_SHADER_USER_DATA_ADDR_HI_GS,
          OPENAGC_RING_OFFSETS_HI_PLACEHOLDER},
+        {AGC_REG_SPI_SHADER_USER_DATA_GS_0 + 11u,
+         OPENAGC_TCS_OFFCHIP_LAYOUT_PLACEHOLDER},
         {AGC_REG_SPI_SHADER_USER_DATA_GS_0 + 1u,
          OPENAGC_NEXT_STAGE_PC_PLACEHOLDER},
         {AGC_REG_SPI_SHADER_PGM_LO_GS, 0u},
@@ -257,6 +280,9 @@ static void test_gfx1013_wave32_tessellation_binding(void)
     AgcRegisterValue ps_sh[] = {
         {AGC_REG_SPI_SHADER_PGM_LO_PS, 0u},
         {AGC_REG_SPI_SHADER_PGM_HI_PS, 0u},
+    };
+    AgcRegisterValue gs_cx[] = {
+        {AGC_REG_VGT_LS_HS_CONFIG, 0x0000C308u},
     };
     AgcRegisterValue ps_cx[] = {
         {AGC_REG_SPI_PS_IN_CONTROL,
@@ -299,7 +325,7 @@ static void test_gfx1013_wave32_tessellation_binding(void)
         &hs_record, hs_sh, hs_record.num_sh_registers, NULL, 0u,
         0x0000001234500000ull};
     state.primitive = (AgcGfx1013ShaderBinding){
-        &gs_record, gs_sh, gs_record.num_sh_registers, NULL, 0u,
+        &gs_record, gs_sh, gs_record.num_sh_registers, gs_cx, 1u,
         0x0000001234600000ull};
     state.pixel = (AgcGfx1013ShaderBinding){
         &ps_record, ps_sh, ps_record.num_sh_registers, ps_cx, 1u,
@@ -335,6 +361,18 @@ static void test_gfx1013_wave32_tessellation_binding(void)
         "HS offchip layout emitted");
     TEST_ASSERT_EQ(value, state.tcs_offchip_layout,
         "HS offchip layout patched");
+    TEST_ASSERT(find_register(
+        buffer, agcCbUsedDwords(&cb), AGC_PM4_OP_SET_SH_REG,
+        AGC_REG_SPI_SHADER_USER_DATA_GS_0 + 11u, &value),
+        "TES offchip layout emitted");
+    TEST_ASSERT_EQ(value, state.tcs_offchip_layout,
+        "TES offchip layout patched");
+    TEST_ASSERT(find_indexed_register(
+        buffer, agcCbUsedDwords(&cb), AGC_PM4_OP_SET_CONTEXT_REG,
+        AGC_REG_VGT_LS_HS_CONFIG, 2u, &value),
+        "VGT_LS_HS_CONFIG emitted with GFX7+ index 2");
+    TEST_ASSERT_EQ(value, 0x0000C308u,
+        "indexed VGT_LS_HS_CONFIG value preserved");
     TEST_ASSERT(find_last_register(
         buffer, agcCbUsedDwords(&cb), AGC_PM4_OP_SET_CONTEXT_REG,
         AGC_REG_VGT_SHADER_STAGES_EN, &value),
@@ -344,7 +382,7 @@ static void test_gfx1013_wave32_tessellation_binding(void)
 
     /* TES-as-NGG can be a complete front program with an inert back half.
      * ACO then allocates no continuation SGPR; ring pointers remain required. */
-    gs_sh[2].value = 0u;
+    gs_sh[3].value = 0u;
     agcCbInit(&cb, buffer, sizeof(buffer));
     TEST_ASSERT_EQ(
         agcGfx1013ValidateWave32TessVsPs(&state), AGC_OK,

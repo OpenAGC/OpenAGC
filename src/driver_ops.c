@@ -115,6 +115,18 @@ int32_t PS5_SYSV_ABI sceAgcDriverSetupAsyncGraphics(uint32_t pipe_id)
     AGC_DISPATCH_OR_UNSUPPORTED(setup_async_graphics, (pipe_id));
 }
 
+int32_t PS5_SYSV_ABI sceAgcDriverSetTFRing(
+    uintptr_t ring_addr, uint32_t size)
+{
+    /* FW 5.50 vaddr 0x9180 rejects addresses that are not 256-byte
+     * aligned and sizes that are not dword-aligned. */
+    if ((ring_addr & 0xffu) != 0u || (size & 3u) != 0u)
+        return AGC_ERROR_INTERNAL;
+    if (size > 0x4000u)
+        size = 0x4000u;
+    AGC_DISPATCH_OR_UNSUPPORTED(set_tf_ring, (ring_addr, size));
+}
+
 int32_t PS5_SYSV_ABI sceAgcDriverSetTFRingDirect(void)
 {
     AGC_DISPATCH_OR_UNSUPPORTED(set_tf_ring_direct, ());

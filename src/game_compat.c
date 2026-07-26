@@ -78,23 +78,6 @@ uint32_t PS5_SYSV_ABI sceAgcDriverGetEqContextId(void)
 #endif
 }
 
-/* sceAgcDriverSetTFRing (NID: XlNp7jzGiPo)
- * Non-Direct variant. SPRX clamps size to 0x4000 and checks SDK version.
- * Delegates to sceAgcDriverSetTFRingDirect on the prospero backend. */
-int32_t PS5_SYSV_ABI sceAgcDriverSetTFRing(uint32_t pipe_id, uint32_t size)
-{
-    (void)pipe_id;
-    /* SPRX clamps to 0x4000 */
-    if (size > 0x4000)
-        size = 0x4000;
-    (void)size;
-#ifdef OPENAGC_PROSPERO
-    return sceAgcDriverSetTFRingDirect();
-#else
-    return AGC_OK;
-#endif
-}
-
 /* sceAgcDriverSetHsOffchipParam (NID: MM4IZSEYytQ)
  * Non-Direct variant. Delegates to the Direct variant. */
 int32_t PS5_SYSV_ABI sceAgcDriverSetHsOffchipParam(

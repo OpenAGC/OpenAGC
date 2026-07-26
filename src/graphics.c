@@ -4,6 +4,7 @@
 
 #include "agc_cb.h"
 #include "agc_error.h"
+#include "agc_pm4.h"
 #include "agc_registers.h"
 
 #define AGC_GFX1013_REG_GE_PC_ALLOC 0x260u
@@ -68,6 +69,19 @@ static bool agcGfx1013EmitCx(SceAgcCb *cb, uint32_t offset, uint32_t value)
     return sceAgcCbSetCxRegistersDirect(cb, &reg, 1u) != NULL;
 }
 
+static bool agcGfx1013EmitCxIndexed(
+    SceAgcCb *cb, uint32_t offset, uint32_t index, uint32_t value)
+{
+    uint32_t *cmd = agcCbAllocDwords(cb, 3u);
+    if (!cmd)
+        return false;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u);
+    cmd[1] = (offset & 0xFFFFu) | ((index & 0xFu) << 28);
+    cmd[2] = value;
+    return true;
+}
+
 static bool agcGfx1013EmitUc(SceAgcCb *cb, uint32_t offset, uint32_t value)
 {
     AgcRegisterValue reg = {offset, value};
@@ -92,8 +106,11 @@ static bool agcGfx1013EmitShader(
             return false;
     }
     for (i = 0; i < binding->num_cx_registers; ++i) {
-        if (!sceAgcCbSetCxRegistersDirect(
-                cb, &binding->cx_registers[i], 1u))
+        const AgcRegisterValue reg = binding->cx_registers[i];
+        const bool emitted = reg.offset == AGC_REG_VGT_LS_HS_CONFIG
+            ? agcGfx1013EmitCxIndexed(cb, reg.offset, 2u, reg.value)
+            : sceAgcCbSetCxRegistersDirect(cb, &reg, 1u) != NULL;
+        if (!emitted)
             return false;
     }
     return true;
@@ -143,8 +160,11 @@ static bool agcGfx1013EmitShaderPatched(
             return false;
     }
     for (i = 0; i < binding->num_cx_registers; ++i) {
-        if (!sceAgcCbSetCxRegistersDirect(
-                cb, &binding->cx_registers[i], 1u))
+        const AgcRegisterValue reg = binding->cx_registers[i];
+        const bool emitted = reg.offset == AGC_REG_VGT_LS_HS_CONFIG
+            ? agcGfx1013EmitCxIndexed(cb, reg.offset, 2u, reg.value)
+            : sceAgcCbSetCxRegistersDirect(cb, &reg, 1u) != NULL;
+        if (!emitted)
             return false;
     }
     return true;
@@ -362,7 +382,9 @@ int32_t PS5_SYSV_ABI agcGfx1013ValidateWave32TessVsPs(
         !agcGfx1013BindingHasValue(
             &state->primitive, OPENAGC_RING_OFFSETS_LO_PLACEHOLDER) ||
         !agcGfx1013BindingHasValue(
-            &state->primitive, OPENAGC_RING_OFFSETS_HI_PLACEHOLDER))
+            &state->primitive, OPENAGC_RING_OFFSETS_HI_PLACEHOLDER) ||
+        !agcGfx1013BindingHasValue(
+            &state->primitive, OPENAGC_TCS_OFFCHIP_LAYOUT_PLACEHOLDER))
         return AGC_ERROR_VALIDATION_FAILED;
     return AGC_OK;
 }
@@ -440,7 +462,7 @@ int32_t PS5_SYSV_ABI agcGfx1013BindWave32TessVsPs(
     gs_patches = (AgcGfx1013RuntimePatches){
         state->ring_descriptor_address,
         state->primitive_back_code_address,
-        0u,
+        state->tcs_offchip_layout,
     };
     if (!agcGfx1013EmitShaderPatched(
             cb, &state->hull, hs_program_lo, &hs_patches) ||

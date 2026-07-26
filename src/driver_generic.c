@@ -155,6 +155,13 @@ int32_t PS5_SYSV_ABI agcGenericSetTFRingDirect(void)
     return AGC_OK;
 }
 
+int32_t PS5_SYSV_ABI agcGenericSetTFRing(uintptr_t ring_addr, uint32_t size)
+{
+    (void)ring_addr;
+    (void)size;
+    return AGC_OK;
+}
+
 int32_t PS5_SYSV_ABI agcGenericSetHsOffchipParamDirect(
     uint64_t list_addr, uint32_t num_entries)
 {
@@ -355,6 +362,7 @@ const AgcDriverOps agcGenericDriverOps = {
     .is_suspend_point_in_flight_direct = agcGenericIsSuspendPointInFlightDirect,
     .internal_suspend_point_submit_final = agcGenericInternalSuspendPointSubmitFinal,
     .setup_async_graphics = agcGenericSetupAsyncGraphics,
+    .set_tf_ring = agcGenericSetTFRing,
     .set_tf_ring_direct = agcGenericSetTFRingDirect,
     .set_hs_offchip_param_direct = agcGenericSetHsOffchipParamDirect,
     .set_target_ring_for_diag = agcGenericSetTargetRingForDiag,
