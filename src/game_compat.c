@@ -1851,6 +1851,100 @@ int32_t PS5_SYSV_ABI sceAgcCondExecPatchSetCommandAddress(
     return AGC_OK;
 }
 
+int32_t PS5_SYSV_ABI sceAgcAsyncCondExecPatchSetCommandAddress(
+    uint32_t *cmd, const uint32_t *command)
+{
+    uint64_t address;
+
+    if (!cmd || !command || ((cmd[0] >> 8) & 0xFFu) != AGC_PM4_OP_COND_EXEC)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    address = (uint64_t)(uintptr_t)command;
+    cmd[1] = (cmd[1] & 0x3u) | ((uint32_t)address & ~0x3u);
+    cmd[2] = (uint32_t)(address >> 32);
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI sceAgcAsyncCondExecPatchSetEnd(
+    uint32_t *cmd, const uint32_t *end)
+{
+    uint32_t byte_delta;
+
+    if (!cmd || !end || ((cmd[0] >> 8) & 0xFFu) != AGC_PM4_OP_COND_EXEC)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    byte_delta = (uint32_t)(uintptr_t)end - (uint32_t)(uintptr_t)cmd - 20u;
+    cmd[4] = (cmd[4] & ~0x3FFFu) | ((byte_delta >> 2) & 0x3FFFu);
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI sceAgcBranchPatchSetCompareAddress(
+    uint32_t *cmd, uint64_t address)
+{
+    if (!cmd || ((cmd[0] >> 8) & 0xFFu) != AGC_PM4_OP_INDIRECT_BUFFER)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    cmd[2] = (cmd[2] & 0x7u) | ((uint32_t)address & ~0x7u);
+    cmd[3] = (uint32_t)(address >> 32);
+    return AGC_OK;
+}
+
+static int32_t agcRewindPatchSetRewindState(
+    uint32_t *cmd, uint32_t rewind_state)
+{
+    if (!cmd || ((cmd[0] >> 8) & 0xFFu) != AGC_PM4_OP_REWIND)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    cmd[1] = (cmd[1] & 0x7FFFFFFFu) | ((rewind_state & 1u) << 31);
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI sceAgcRewindPatchSetRewindState(
+    uint32_t *cmd, uint32_t rewind_state)
+{
+    return agcRewindPatchSetRewindState(cmd, rewind_state);
+}
+
+int32_t PS5_SYSV_ABI sceAgcAsyncRewindPatchSetRewindState(
+    uint32_t *cmd, uint32_t rewind_state)
+{
+    return agcRewindPatchSetRewindState(cmd, rewind_state);
+}
+
+int32_t PS5_SYSV_ABI sceAgcQueueEndOfPipeActionPatchGcrCntl(
+    uint32_t *cmd, uint32_t gcr_cntl)
+{
+    uint64_t fields;
+
+    if (!cmd || ((cmd[0] >> 8) & 0xFFu) != AGC_PM4_OP_RELEASE_MEM)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    fields = (uint64_t)cmd[1] | ((uint64_t)cmd[2] << 32);
+    fields = (fields & ~(0xFFFull << 12)) |
+        (((uint64_t)gcr_cntl & 0xFFFu) << 12);
+    cmd[1] = (uint32_t)fields;
+    cmd[2] = (uint32_t)(fields >> 32);
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI sceAgcQueueEndOfPipeActionPatchType(
+    uint32_t *cmd, uint32_t event_type)
+{
+    uint64_t fields;
+    uint64_t encoded_type;
+
+    if (!cmd || ((cmd[0] >> 8) & 0xFFu) != AGC_PM4_OP_RELEASE_MEM)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    fields = (uint64_t)cmd[1] | ((uint64_t)cmd[2] << 32);
+    encoded_type = (uint8_t)event_type >= 0x2Fu ? 0x600u : 0x500u;
+    encoded_type |= event_type & 0x3Fu;
+    fields = (fields & ~0xF3Full) | encoded_type;
+    cmd[1] = (uint32_t)fields;
+    cmd[2] = (uint32_t)(fields >> 32);
+    return AGC_OK;
+}
+
 /* sceAgcWriteDataPatchSetAddressOrOffset (NID: fPSCdQxgpSw)
  * Patches cmd[2] lo and cmd[3] hi for IT_WRITE_DATA packets. */
 int32_t PS5_SYSV_ABI sceAgcWriteDataPatchSetAddressOrOffset(

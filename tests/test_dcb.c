@@ -1013,6 +1013,71 @@ static void test_batch3_ref_patchers(void) {
     ind[0] = agcPm4Header3(AGC_PM4_OP_NOP, 5);
     TEST_ASSERT_EQ(sceAgcSetCxRegIndirectPatchSetNumRegisters(ind, 1), AGC_ERROR_INVALID_ARGUMENT,
         "SetCxNumRegs rejects wrong opcode");
+
+    uint32_t async_cond[10] = {0};
+    uint32_t async_target[4] = {0};
+    uint64_t async_address = (uint64_t)(uintptr_t)async_target;
+    async_cond[0] = agcPm4Header3(AGC_PM4_OP_COND_EXEC, 5);
+    async_cond[1] = 2u;
+    async_cond[4] = 0xA5A5C000u;
+    TEST_ASSERT_EQ(sceAgcAsyncCondExecPatchSetCommandAddress(
+        async_cond, async_target), AGC_OK, "AsyncCondExec command address");
+    TEST_ASSERT_EQ(async_cond[1], ((uint32_t)async_address & ~3u) | 2u,
+        "AsyncCondExec command low");
+    TEST_ASSERT_EQ(async_cond[2], (uint32_t)(async_address >> 32),
+        "AsyncCondExec command high");
+    TEST_ASSERT_EQ(sceAgcAsyncCondExecPatchSetEnd(
+        async_cond, async_cond + 8), AGC_OK, "AsyncCondExec end");
+    TEST_ASSERT_EQ(async_cond[4], 0xA5A5C003u, "AsyncCondExec end count");
+
+    uint32_t branch[14] = {0};
+    branch[0] = agcPm4Header3(AGC_PM4_OP_INDIRECT_BUFFER, 14);
+    branch[2] = 5u;
+    TEST_ASSERT_EQ(sceAgcBranchPatchSetCompareAddress(
+        branch, 0x1122334455667788ull), AGC_OK, "Branch compare address");
+    TEST_ASSERT_EQ(branch[2], 0x5566778Du, "Branch compare low and flags");
+    TEST_ASSERT_EQ(branch[3], 0x11223344u, "Branch compare high");
+
+    uint32_t rewind[2] = {
+        agcPm4Header3(AGC_PM4_OP_REWIND, 2), 0x12345678u
+    };
+    TEST_ASSERT_EQ(sceAgcRewindPatchSetRewindState(rewind, 1), AGC_OK,
+        "Rewind state");
+    TEST_ASSERT_EQ(rewind[1], 0x92345678u, "Rewind state bit");
+    TEST_ASSERT_EQ(sceAgcAsyncRewindPatchSetRewindState(rewind, 0), AGC_OK,
+        "Async rewind state");
+    TEST_ASSERT_EQ(rewind[1], 0x12345678u, "Async rewind state bit");
+
+    uint32_t release[7] = {0};
+    release[0] = agcPm4Header3(AGC_PM4_OP_RELEASE_MEM, 7);
+    release[1] = 0x89ABCDEFu;
+    release[2] = 0x01234567u;
+    uint64_t release_fields = (uint64_t)release[1] |
+        ((uint64_t)release[2] << 32);
+    TEST_ASSERT_EQ(sceAgcQueueEndOfPipeActionPatchGcrCntl(
+        release, 0xA55u), AGC_OK, "Queue EOP GCR control");
+    release_fields = (release_fields & ~(0xFFFull << 12)) | (0xA55ull << 12);
+    TEST_ASSERT_EQ(release[1], (uint32_t)release_fields, "Queue EOP GCR low");
+    TEST_ASSERT_EQ(release[2], (uint32_t)(release_fields >> 32),
+        "Queue EOP GCR high");
+
+    release_fields = (uint64_t)release[1] | ((uint64_t)release[2] << 32);
+    TEST_ASSERT_EQ(sceAgcQueueEndOfPipeActionPatchType(
+        release, 0x2Fu), AGC_OK, "Queue EOP event type");
+    release_fields = (release_fields & ~0xF3Full) | 0x62Full;
+    TEST_ASSERT_EQ(release[1], (uint32_t)release_fields, "Queue EOP type low");
+    TEST_ASSERT_EQ(release[2], (uint32_t)(release_fields >> 32),
+        "Queue EOP type high");
+
+    async_cond[0] = agcPm4Header3(AGC_PM4_OP_NOP, 5);
+    TEST_ASSERT_EQ(sceAgcAsyncCondExecPatchSetEnd(async_cond, async_cond + 8),
+        AGC_ERROR_INVALID_ARGUMENT, "AsyncCondExec rejects wrong opcode");
+    rewind[0] = agcPm4Header3(AGC_PM4_OP_NOP, 2);
+    TEST_ASSERT_EQ(sceAgcRewindPatchSetRewindState(rewind, 1),
+        AGC_ERROR_INVALID_ARGUMENT, "Rewind rejects wrong opcode");
+    release[0] = agcPm4Header3(AGC_PM4_OP_NOP, 7);
+    TEST_ASSERT_EQ(sceAgcQueueEndOfPipeActionPatchGcrCntl(release, 0),
+        AGC_ERROR_INVALID_ARGUMENT, "Queue EOP rejects wrong opcode");
 }
 
 static void test_batch3_ref_getsize_helpers(void) {

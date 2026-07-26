@@ -700,6 +700,20 @@ int32_t PS5_SYSV_ABI sceAgcCondExecPatchSetEnd(
  * cmd[1] bits 1:0. */
 int32_t PS5_SYSV_ABI sceAgcCondExecPatchSetCommandAddress(
     uint32_t *cmd, const uint32_t *command);
+int32_t PS5_SYSV_ABI sceAgcAsyncCondExecPatchSetCommandAddress(
+    uint32_t *cmd, const uint32_t *command);
+int32_t PS5_SYSV_ABI sceAgcAsyncCondExecPatchSetEnd(
+    uint32_t *cmd, const uint32_t *end);
+int32_t PS5_SYSV_ABI sceAgcBranchPatchSetCompareAddress(
+    uint32_t *cmd, uint64_t address);
+int32_t PS5_SYSV_ABI sceAgcRewindPatchSetRewindState(
+    uint32_t *cmd, uint32_t rewind_state);
+int32_t PS5_SYSV_ABI sceAgcAsyncRewindPatchSetRewindState(
+    uint32_t *cmd, uint32_t rewind_state);
+int32_t PS5_SYSV_ABI sceAgcQueueEndOfPipeActionPatchGcrCntl(
+    uint32_t *cmd, uint32_t gcr_cntl);
+int32_t PS5_SYSV_ABI sceAgcQueueEndOfPipeActionPatchType(
+    uint32_t *cmd, uint32_t event_type);
 
 /* Patch WriteData address (cmd[2..3]). NID: fPSCdQxgpSw
  * reference-confirmed: patches cmd[2] lo and cmd[3] hi for IT_WRITE_DATA. */
