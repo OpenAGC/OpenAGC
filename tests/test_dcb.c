@@ -1117,6 +1117,12 @@ static void test_batch3_ref_getsize_helpers(void) {
     TEST_ASSERT_EQ(sceAgcDriverUserDataGetPacketSize(UINT32_MAX), 0x40000007u,
         "UserDataGetPacketSize uint32 boundary");
 
+    /* test_game_compat_init ran first and selected the no-workaround mode. */
+    TEST_ASSERT_EQ(sceAgcAcbAcquireMemGetSize(), 64u,
+        "AcbAcquireMemGetSize default FW 5.50 title mode");
+    TEST_ASSERT_EQ(sceAgcDcbAcquireMemGetSize(), 64u,
+        "DcbAcquireMemGetSize default FW 5.50 title mode");
+
     TEST_ASSERT_EQ(sceAgcAcbWaitOnAddressGetSize(0), 56u,
         "AcbWaitOnAddressGetSize 32-bit");
     TEST_ASSERT_EQ(sceAgcAcbWaitOnAddressGetSize(1), 64u,

@@ -286,6 +286,43 @@ int32_t PS5_SYSV_ABI sceAgcDriverSubmitMultiAcbs(
 /* libSceAgc user-facing wrappers                                        */
 /* ===================================================================== */
 
+static uint32_t g_agc_packet_mode;
+
+#ifdef OPENAGC_PROSPERO
+extern int getpid(void);
+extern int PS5_SYSV_ABI sceKernelGetAppInfo(int pid, void *app_info);
+extern int PS5_SYSV_ABI sceKernelTitleWorkaroundIsEnabled(
+    const void *title_info, uint32_t workaround_id, uint32_t *enabled);
+#endif
+
+static void agcUpdatePacketMode(void)
+{
+#ifdef OPENAGC_PROSPERO
+    uint8_t app_info[0x60] = {0};
+    uint32_t workaround_52 = 0;
+    uint32_t workaround_53 = 0;
+
+    g_agc_packet_mode = 0;
+    if (sceKernelGetAppInfo(getpid(), app_info) != 0)
+        return;
+    if (sceKernelTitleWorkaroundIsEnabled(
+            app_info + 0x30, 0x52u, &workaround_52) != 0)
+        return;
+    if (sceKernelTitleWorkaroundIsEnabled(
+            app_info + 0x30, 0x53u, &workaround_53) != 0)
+        return;
+
+    if (workaround_53 == 1u)
+        g_agc_packet_mode = 0;
+    else if (workaround_52 == 1u)
+        g_agc_packet_mode = 2;
+    else
+        g_agc_packet_mode = 1;
+#else
+    g_agc_packet_mode = 1;
+#endif
+}
+
 /* sceAgcInit (NID: kW3GLb7QfPg)
  * SPRX: wrapper that calls internal init at 0x75e0 which:
  *   1. Locks mutex
@@ -304,6 +341,8 @@ int32_t PS5_SYSV_ABI sceAgcInit(uint32_t init_level, uint32_t flags, uint32_t *o
     int32_t ret = sce_agc_initialize();
     if (ret != AGC_OK)
         return ret;
+
+    agcUpdatePacketMode();
 
     if (out_value)
         *out_value = 0;
@@ -1961,6 +2000,16 @@ uint32_t PS5_SYSV_ABI sceAgcDriverUserDataGetPacketSize(uint32_t size_in_bytes)
     if (payload_dwords == 1u)
         return 4u;
     return payload_dwords + 7u;
+}
+
+uint32_t PS5_SYSV_ABI sceAgcAcbAcquireMemGetSize(void)
+{
+    return g_agc_packet_mode == 1u ? 64u : 32u;
+}
+
+uint32_t PS5_SYSV_ABI sceAgcDcbAcquireMemGetSize(void)
+{
+    return g_agc_packet_mode == 1u ? 64u : 32u;
 }
 
 uint32_t PS5_SYSV_ABI sceAgcAcbWaitOnAddressGetSize(uint32_t size)

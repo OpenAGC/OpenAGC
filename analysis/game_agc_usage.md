@@ -30,10 +30,10 @@ titles across multiple engines and SDK vintages.
   must not be counted toward the ten-title release gate.
 - `PPSA17942` (DRAGON QUEST VII Reimagined) is a hardware-proven FW `0x0550`
   backport target despite its `0x1202` metadata. It bundles AGC compatibility
-  SPRXs and imports 253 AGC functions. Three exact helper batches cover 189
-  imports; 64 remain under analysis, so it is tracked separately from the four
-  fully covered titles. The two remaining GetSize imports depend on internal
-  AGC mode state and are deferred until that state is wired correctly.
+  SPRXs and imports 253 AGC functions. The completed GetSize batches cover 191
+  imports; 62 remain under analysis, so it is tracked separately from the four
+  fully covered titles. AcquireMem packet size now follows the FW 5.50 title
+  workaround mode: mode 1 uses 64 bytes, while modes 0 and 2 use 32 bytes.
 - The durable exclusion list is `analysis/game_compat_exclusions.tsv`.
 
 ## PPSA02453 evidence

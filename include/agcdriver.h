@@ -755,6 +755,8 @@ uint32_t PS5_SYSV_ABI sceAgcCbSetUcRegisterRangeDirectGetSize(
 uint32_t PS5_SYSV_ABI sceAgcCbSetUcRegistersDirectGetSize(
     uint32_t num_registers);
 uint32_t PS5_SYSV_ABI sceAgcAcbWaitOnAddressGetSize(uint32_t size);
+uint32_t PS5_SYSV_ABI sceAgcAcbAcquireMemGetSize(void);
+uint32_t PS5_SYSV_ABI sceAgcDcbAcquireMemGetSize(void);
 uint32_t PS5_SYSV_ABI sceAgcDcbBeginOcclusionQueryGetSize(uint32_t query_type);
 uint32_t PS5_SYSV_ABI sceAgcDcbContextStateOpGetSize(uint32_t operation);
 uint32_t PS5_SYSV_ABI sceAgcDcbDrawIndexIndirectMultiGetSize(void);
