@@ -10,6 +10,7 @@ extern "C" {
 #endif
 
 #define AGC_GFX1013_SPI_PS_IN_CONTROL_PS_W32_EN    0x00008000u
+#define AGC_GFX1013_VGT_SHADER_STAGES_EN_HS_W32_EN 0x00200000u
 #define AGC_GFX1013_VGT_SHADER_STAGES_EN_GS_W32_EN 0x00400000u
 
 typedef struct AgcGfx1013ShaderBinding {
@@ -27,6 +28,17 @@ typedef struct AgcGfx1013Wave32VsPsState {
     uint32_t primitive_type;
 } AgcGfx1013Wave32VsPsState;
 
+typedef struct AgcGfx1013Wave32TessVsPsState {
+    AgcGfx1013ShaderBinding hull;
+    AgcGfx1013ShaderBinding primitive;
+    AgcGfx1013ShaderBinding pixel;
+    uint64_t hull_back_code_address;
+    uint64_t primitive_back_code_address;
+    uint64_t ring_descriptor_address;
+    uint32_t tcs_offchip_layout;
+    uint32_t primitive_type;
+} AgcGfx1013Wave32TessVsPsState;
+
 int32_t PS5_SYSV_ABI agcGfx1013ValidateWave32VsPs(
     const AgcGfx1013Wave32VsPsState *state);
 int32_t PS5_SYSV_ABI agcGfx1013BindWave32VsPs(
@@ -35,6 +47,10 @@ int32_t PS5_SYSV_ABI agcGfx1013ValidateVsPs(
     const AgcGfx1013Wave32VsPsState *state);
 int32_t PS5_SYSV_ABI agcGfx1013BindVsPs(
     SceAgcCb *cb, const AgcGfx1013Wave32VsPsState *state);
+int32_t PS5_SYSV_ABI agcGfx1013ValidateWave32TessVsPs(
+    const AgcGfx1013Wave32TessVsPsState *state);
+int32_t PS5_SYSV_ABI agcGfx1013BindWave32TessVsPs(
+    SceAgcCb *cb, const AgcGfx1013Wave32TessVsPsState *state);
 
 #ifdef __cplusplus
 }

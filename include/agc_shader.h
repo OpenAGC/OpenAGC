@@ -47,6 +47,13 @@ extern "C" {
  * the uploaded back-program address before drawing. */
 #define OPENAGC_NEXT_STAGE_PC_PLACEHOLDER 0x4E585450u /* "NXTP" */
 
+/* Tessellation records keep runtime-owned ring state out of the compiler
+ * artifact. The hardware binder replaces these sentinels with the low/high
+ * address of its ring-descriptor table and the packed offchip-layout word. */
+#define OPENAGC_RING_OFFSETS_LO_PLACEHOLDER 0x524E474Cu /* "RNGL" */
+#define OPENAGC_RING_OFFSETS_HI_PLACEHOLDER 0x524E4748u /* "RNGH" */
+#define OPENAGC_TCS_OFFCHIP_LAYOUT_PLACEHOLDER 0x54434F4Cu /* "TCOL" */
+
 /* openagc-psbc tags RADV address32 descriptor-set user SGPRs with these
  * values. Applications replace the tag with the low 32 bits of the runtime
  * descriptor table; PS5 user allocations share address32_hi=0x2. */

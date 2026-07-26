@@ -20,24 +20,24 @@ Work proceeds in this order. Later items must not displace an earlier item
 unless the earlier item is explicitly blocked on unavailable firmware or
 hardware.
 
-1. **Extended NGG geometry coverage is complete on FW 5.50 gfx1013 hardware.** The
-   pass-through baseline remains stable, and the six-vertex GS emits two
-   half-scale colorful triangles. Repeated captured runs produce identical
-   coverage, interpolation, marker, and sustained-flip results, with three
-   matching physical-display confirmations. The retained compiler and OpenAGC
-   regressions pass. Extend topology, invocation, and render-target coverage
-   next.
-2. **Finish FW 5.50 backend hardening and compatibility.** Keep exact
+1. **Combine tessellation with NGG geometry on FW 5.50 gfx1013.** Isolated
+   Wave32 tessellation now passes on hardware: the HS writes four `4.0`
+   factors and the TES path displays the expected centered, interpolated
+   triangle. Preserve that sample as the control, then add a real
+   geometry-emitting stage after TES and validate deterministic readback plus
+   physical output.
+2. **Extend topology, invocation, and render-target coverage.** The
+   pass-through NGG baseline and six-vertex two-triangle GS amplification are
+   already hardware-proven. Add combinations only after the tessellation plus
+   geometry milestone remains stable.
+3. **Finish FW 5.50 backend hardening and compatibility.** Keep exact
    four-digit firmware selection and fail-closed capabilities, investigate the
    non-blocking FRAME_OPEN EINVAL and PA-debug EPERM results, then expand the
    game corpus and prioritize FW 5.50 exports and state combinations observed
    in real titles.
-3. **Validate additional firmware only when matching hardware is available.**
+4. **Validate additional firmware only when matching hardware is available.**
    FW 11.60 and PS5 Pro remain RE targets, not support claims. Do not issue
    private ioctls on mismatched hardware.
-4. **Recover native geometry processing.** Start with existing AGC shader
-   records, fusion metadata, and gfx1013 registers; do not invent public mesh
-   APIs without firmware evidence.
 5. **Close cache synchronization semantics, then VRS and ray tracing.** Cache
    behavior has observable packets and is more actionable than speculative
    feature APIs.
@@ -913,9 +913,15 @@ After interpolants pass, proceed in this order:
    a dedicated GPU-visible NOP IB trailer, making the deferred descriptor
    harmless. Two immediate deployments each passed three repeated two-DCB
    iterations with unique ordered markers and zero polling delay.
-8. Expand to tessellation, geometry shaders, Wave32 graphics, VRS, and ray
-   tracing where supported by gfx1013 and the PS5 AGC ABI.
-9. ✅ Close PA-debug and FRAME_OPEN RE for FW 5.50. The PA-debug version
+8. ✅ Validate isolated Wave32 tessellation. Fused HS and TES records execute
+   through the reusable gfx1013 binder, the factor ring contains four `4.0`
+   factors, and the PS5 displays the centered interpolated triangle with even
+   sides.
+9. Combine the validated tessellation path with a real NGG geometry shader,
+   retaining the isolated tessellation and geometry samples as controls.
+10. Expand Wave32 graphics coverage, then VRS and ray tracing where supported
+   by gfx1013 and the PS5 AGC ABI.
+11. ✅ Close PA-debug and FRAME_OPEN RE for FW 5.50. The PA-debug version
    export is a userspace permission stub returning `0x8A6D0001` without an
    ioctl, while `FRAME_OPEN` is absent from the kernel dispatcher.
 

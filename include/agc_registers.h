@@ -590,8 +590,10 @@
 #define AGC_REG_GE_MIN_VTX_INDX                     0x249u
 #define AGC_REG_GE_INDX_OFFSET                      0x24Au
 #define AGC_REG_GE_MULTI_PRIM_IB_RESET_EN           0x24Bu
+#define AGC_REG_VGT_TF_RING_SIZE                    0x24Eu
 #define AGC_REG_VGT_HS_OFFCHIP_PARAM                0x24Fu
 #define AGC_REG_VGT_TF_MEMORY_BASE                  0x250u
+#define AGC_REG_VGT_TF_MEMORY_BASE_HI               0x261u
 #define AGC_REG_IA_MULTI_VGT_PARAM                  0x258u
 #define AGC_REG_GE_MAX_VTX_INDX                     0x259u
 #define AGC_REG_GE_CNTL                             0x25Bu

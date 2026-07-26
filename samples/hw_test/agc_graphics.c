@@ -52,7 +52,21 @@
 #if (AGC_NGG_AMPLIFY + AGC_NGG_INPUT_LINES + AGC_NGG_INVOCATIONS) > 1
 #error "select only one NGG geometry variant"
 #endif
-#if AGC_NGG_INPUT_LINES
+#ifndef AGC_TESSELLATION
+#define AGC_TESSELLATION 0
+#endif
+
+#if AGC_TESSELLATION
+#include "shaders/triangle_tess_hs_front_sb.h"
+#include "shaders/triangle_tess_hs_back_sb.h"
+#include "shaders/triangle_tess_es_front_sb.h"
+#include "shaders/triangle_tess_es_back_sb.h"
+#include "gfx1013_tess_ring.h"
+#define NGG_FRONT_DATA triangle_tess_es_front_data
+#define NGG_BACK_DATA triangle_tess_es_back_data
+#define NGG_DRAW_VERTEX_COUNT 3u
+#define NGG_INPUT_PRIMITIVE_TYPE 9u
+#elif AGC_NGG_INPUT_LINES
 #include "shaders/triangle_ngg_lines_front_sb.h"
 #include "shaders/triangle_ngg_lines_back_sb.h"
 #define NGG_FRONT_DATA triangle_ngg_lines_front_data
@@ -141,6 +155,15 @@ int sceKernelWaitEqueue(SceKernelEqueue equeue, SceKernelEvent *events,
 #define TEXTURE_DATA_OFFSET 0xB000u
 #define TEXTURE_DESC_OFFSET 0xC000u
 #define INDEX_TYPE_16      0u
+
+#if AGC_TESSELLATION
+#define GRAPHICS_POOL_PREFIX 0x30000u
+#define TESS_OFFCHIP_OFFSET  0x10000u
+#define TESS_FACTOR_OFFSET   0x18000u
+#define TESS_RING_TABLE_OFFSET 0x28000u
+#else
+#define GRAPHICS_POOL_PREFIX 0x10000u
+#endif
 
 #define TEXTURE_WIDTH       2u
 #define TEXTURE_HEIGHT      2u
@@ -340,7 +363,8 @@ static bool allocate_display_buffers(GraphicsTest *test) {
      * prefix instead of deriving this pool from the RGBA8 scanout size. */
     size_t rt_size = (size_t)FP16_TARGET_WIDTH * FP16_TARGET_HEIGHT *
                      sizeof(uint64_t);
-    size_t pool_size = align_up(0x10000u + rt_size, 1024 * 1024);
+    size_t pool_size = align_up(GRAPHICS_POOL_PREFIX + rt_size,
+                                1024 * 1024);
     void *pool_addr = NULL;
     int pool_ret = sceKernelMapNamedSystemFlexibleMemory(
         &pool_addr, pool_size, 0x33, 0, "agc_graphics_pool");
@@ -350,8 +374,8 @@ static bool allocate_display_buffers(GraphicsTest *test) {
     }
     test->compute_buffer = pool_addr;
 
-    /* Render target at offset 0x10000 in the pool (after shader code space) */
-    test->render_target = (uint8_t *)pool_addr + 0x10000;
+    /* Render target follows shader data and any tessellation rings. */
+    test->render_target = (uint8_t *)pool_addr + GRAPHICS_POOL_PREFIX;
 
     printf("Command buffer: %zu bytes at %p (flexible)\n", cb_size, cb_buffer);
     printf("Compute pool: %zu bytes at %p (flexible)\n", pool_size, pool_addr);
@@ -437,6 +461,16 @@ static bool init_agc(void) {
 
     err = sceAgcDriverSetupAsyncGraphics(1);
     if (err != AGC_OK) { printf("SetupAsyncGraphics failed: 0x%08x\n", (unsigned)err); return false; }
+
+#if AGC_TESSELLATION
+    err = sceAgcDriverSetTFRingDirect();
+    if (err != AGC_OK) {
+        printf("[Tess] FW 5.50 TF-ring driver setup unavailable: 0x%08x; "
+               "using explicit PM4 state\n", (unsigned)err);
+    } else {
+        printf("[Tess] FW 5.50 TF-ring driver setup: OK\n");
+    }
+#endif
 
     return true;
 }
@@ -893,6 +927,7 @@ static void setup_target_mask(SceAgcCb *cb) {
 }
 
 /* Build the merged ES+GS/NGG primitive state from the fused shader record. */
+#if !AGC_TESSELLATION
 static bool setup_shader_stages(
     SceAgcCb *cb, const ParsedGraphicsShader *ngg,
     void *ngg_code, const ParsedGraphicsShader *ps, void *ps_code)
@@ -915,6 +950,46 @@ static bool setup_shader_stages(
            (unsigned)err);
     return err == AGC_OK;
 }
+#endif
+
+#if AGC_TESSELLATION
+static bool setup_tess_shader_stages(
+    SceAgcCb *cb, const ParsedGraphicsShader *hull,
+    void *hull_back_code,
+    const ParsedGraphicsShader *primitive,
+    void *primitive_back_code,
+    const ParsedGraphicsShader *ps, void *ps_code,
+    uint64_t ring_descriptor_address)
+{
+    AgcGfx1013Wave32TessVsPsState state = {
+        .hull = {
+            hull->record, hull->sh_regs, hull->num_sh_regs,
+            hull->cx_regs, hull->num_cx_regs,
+            (uint64_t)(uintptr_t)hull_back_code,
+        },
+        .primitive = {
+            primitive->record, primitive->sh_regs, primitive->num_sh_regs,
+            primitive->cx_regs, primitive->num_cx_regs,
+            (uint64_t)(uintptr_t)primitive_back_code,
+        },
+        .pixel = {
+            ps->record, ps->sh_regs, ps->num_sh_regs,
+            ps->cx_regs, ps->num_cx_regs,
+            (uint64_t)(uintptr_t)ps_code,
+        },
+        .hull_back_code_address = (uint64_t)(uintptr_t)hull_back_code,
+        .primitive_back_code_address =
+            (uint64_t)(uintptr_t)primitive_back_code,
+        .ring_descriptor_address = ring_descriptor_address,
+        .tcs_offchip_layout = GFX1013_TESS_OFFCHIP_LAYOUT,
+        .primitive_type = 9u,
+    };
+    int32_t err = agcGfx1013BindWave32TessVsPs(cb, &state);
+    printf("[Tess] reusable gfx1013 HS+TES+PS bind: 0x%08x\n",
+           (unsigned)err);
+    return err == AGC_OK;
+}
+#endif
 
 /* ======================================================================== */
 /* Main draw call dispatch                                                   */
@@ -963,6 +1038,31 @@ static bool dump_launch_registers(const uint32_t *dcb, uint32_t dword_count)
            sh[AGC_REG_SPI_SHADER_PGM_LO_ES],
            cx[AGC_REG_VGT_SHADER_STAGES_EN],
            cx[AGC_REG_SPI_SHADER_POS_FORMAT]);
+#if AGC_TESSELLATION
+    printf("[PM4 Audit] HS: PGM=%08x:%08x R1=%08x R2=%08x "
+           "ring=%08x:%08x\n",
+           sh[AGC_REG_SPI_SHADER_PGM_HI_HS],
+           sh[AGC_REG_SPI_SHADER_PGM_LO_HS],
+           sh[AGC_REG_SPI_SHADER_PGM_RSRC1_HS],
+           sh[AGC_REG_SPI_SHADER_PGM_RSRC2_HS],
+           sh[AGC_REG_SPI_SHADER_USER_DATA_ADDR_HI_HS],
+           sh[AGC_REG_SPI_SHADER_USER_DATA_ADDR_LO_HS]);
+    printf("[PM4 Audit] Tess: GS-ring=%08x:%08x LS_HS=%08x TF=%08x "
+           "ring-size=%08x offchip=%08x base=%08x:%08x\n",
+           sh[AGC_REG_SPI_SHADER_USER_DATA_ADDR_HI_GS],
+           sh[AGC_REG_SPI_SHADER_USER_DATA_ADDR_LO_GS],
+           cx[AGC_REG_VGT_LS_HS_CONFIG], cx[AGC_REG_VGT_TF_PARAM],
+           uc[AGC_REG_VGT_TF_RING_SIZE],
+           uc[AGC_REG_VGT_HS_OFFCHIP_PARAM],
+           uc[AGC_REG_VGT_TF_MEMORY_BASE_HI],
+           uc[AGC_REG_VGT_TF_MEMORY_BASE]);
+    printf("[PM4 Audit] Tess context: max=%08x min=%08x ESGS=%08x "
+           "distribution=%08x\n",
+           cx[AGC_REG_VGT_HOS_MAX_TESS_LEVEL],
+           cx[AGC_REG_VGT_HOS_MIN_TESS_LEVEL],
+           cx[AGC_REG_VGT_ESGS_RING_ITEMSIZE],
+           cx[AGC_REG_VGT_TESS_DISTRIBUTION]);
+#endif
     printf("[PM4 Audit] GS user: VBO(s2)=%08x base(s3)=%08x "
            "ESGS(s14)=%08x LDS(s15)=%08x NEXT(s16)=%08x\n",
            sh[AGC_REG_SPI_SHADER_USER_DATA_GS_0 + 2u],
@@ -997,6 +1097,49 @@ static bool dispatch_graphics(GraphicsTest *test,
 #endif
 #ifndef AGC_NGG_WGP_OVERRIDE
 #define AGC_NGG_WGP_OVERRIDE 0
+#endif
+#if AGC_TESSELLATION
+    ParsedGraphicsShader hs_front;
+    ParsedGraphicsShader hs_back;
+    if (!parse_graphics_shader(
+            &hs_front, triangle_tess_hs_front_data,
+            sizeof(triangle_tess_hs_front_data), "HS front") ||
+        !parse_graphics_shader(
+            &hs_back, triangle_tess_hs_back_data,
+            sizeof(triangle_tess_hs_back_data), "HS back")) {
+        return false;
+    }
+    if (hs_back.num_sh_regs > 16u) {
+        printf("HS back has too many SH registers\n");
+        return false;
+    }
+    void *hs_front_code = upload_shader(
+        hs_front.code, hs_front.code_size, test->compute_buffer, 0x2000);
+    void *hs_back_code = upload_shader(
+        hs_back.code, hs_back.code_size, test->compute_buffer, 0x3000);
+    AgcShaderRecord hs_front_record = *hs_front.record;
+    AgcShaderRecord hs_back_record = *hs_back.record;
+    AgcShaderRecord fused_hull_record;
+    AgcRegisterValue fused_hull_regs[16] = {0};
+    hs_front_record.code = (uint64_t)(uintptr_t)hs_front_code;
+    hs_back_record.code = (uint64_t)(uintptr_t)hs_back_code;
+    int32_t hull_fuse_err = sceAgcFuseShaderHalves_0200(
+        &fused_hull_record, &hs_front_record, &hs_back_record,
+        fused_hull_regs);
+    if (hull_fuse_err != AGC_OK) {
+        printf("FuseShaderHalves(HS) failed: 0x%08x\n",
+               (unsigned)hull_fuse_err);
+        return false;
+    }
+    ParsedGraphicsShader hull = hs_back;
+    hull.relocated = fused_hull_record;
+    hull.record = &hull.relocated;
+    hull.sh_regs = fused_hull_regs;
+    hull.num_sh_regs = fused_hull_record.num_sh_registers;
+    printf("HS front ACO code at %p (%zu bytes)\n",
+           hs_front_code, hs_front.code_size);
+    printf("HS back ACO code at %p (%zu bytes)\n",
+           hs_back_code, hs_back.code_size);
 #endif
     void *front_code = upload_shader(
         front->code, front->code_size, test->compute_buffer, 0x0000);
@@ -1186,10 +1329,21 @@ static bool dispatch_graphics(GraphicsTest *test,
             found_next_stage_pc_reg = true;
         }
     }
+#if AGC_TESSELLATION
+    for (uint32_t i = 0; i < hull.num_sh_regs; i++) {
+        if (hull.sh_regs[i].value ==
+                OPENAGC_VERTEX_BUFFER_TABLE_PLACEHOLDER) {
+            vertex_table_reg = hull.sh_regs[i].offset;
+            found_vertex_table_reg = true;
+        }
+    }
+#endif
+#if !AGC_TESSELLATION
     if (!found_next_stage_pc_reg) {
         printf("[NGG] shader record has no GS-back continuation-PC SGPR\n");
         return false;
     }
+#endif
     if (found_vertex_table_reg) {
         printf("[Vertex] data=%p stride=%zu records=8 table=%p sh_reg=0x%03x\n",
                gpu_vertices, sizeof(GraphicsVertex), vertex_desc,
@@ -1290,9 +1444,57 @@ static bool dispatch_graphics(GraphicsTest *test,
     AgcRegisterValue instance_step = {0x2a8, 1u};
     sceAgcCbSetCxRegistersDirect(&cb, &instance_step, 1);
 
-    /* 4. Derive NGG primitive and interpolant state from fused records. */
+    /* 4. Derive primitive and interpolant state from fused records. */
+#if AGC_TESSELLATION
+    void *offchip_ring =
+        (uint8_t *)test->compute_buffer + TESS_OFFCHIP_OFFSET;
+    void *factor_ring =
+        (uint8_t *)test->compute_buffer + TESS_FACTOR_OFFSET;
+    uint32_t *ring_table = (uint32_t *)
+        ((uint8_t *)test->compute_buffer + TESS_RING_TABLE_OFFSET);
+    memset(offchip_ring, 0, GFX1013_TESS_OFFCHIP_RING_SIZE);
+    memset(factor_ring, 0, GFX1013_TESS_FACTOR_RING_SIZE);
+    gfx1013BuildTessRingTable(
+        ring_table, (uint64_t)(uintptr_t)offchip_ring,
+        (uint64_t)(uintptr_t)factor_ring);
+
+    const uint64_t factor_address = (uint64_t)(uintptr_t)factor_ring;
+    const AgcRegisterValue tess_ring_state[] = {
+        {AGC_REG_VGT_TF_RING_SIZE, GFX1013_TESS_FACTOR_RING_SIZE / 4u},
+        {AGC_REG_VGT_HS_OFFCHIP_PARAM, GFX1013_TESS_OFFCHIP_PARAM},
+        {AGC_REG_VGT_TF_MEMORY_BASE, (uint32_t)(factor_address >> 8)},
+        {AGC_REG_VGT_TF_MEMORY_BASE_HI,
+         (uint32_t)(factor_address >> 40)},
+    };
+    for (uint32_t i = 0;
+         i < sizeof(tess_ring_state) / sizeof(tess_ring_state[0]); ++i) {
+        sceAgcCbSetUcRegistersDirect(&cb, &tess_ring_state[i], 1);
+    }
+    const AgcRegisterValue tess_context_state[] = {
+        {AGC_REG_VGT_HOS_MAX_TESS_LEVEL, 0x42800000u}, /* 64.0f */
+        {AGC_REG_VGT_HOS_MIN_TESS_LEVEL, 0u},
+        {AGC_REG_VGT_ESGS_RING_ITEMSIZE, 1u},
+        {AGC_REG_VGT_TESS_DISTRIBUTION, 0xD8181E0Cu},
+    };
+    printf("[Tess] offchip=%p size=0x%x factor=%p size=0x%x table=%p\n",
+           offchip_ring, GFX1013_TESS_OFFCHIP_RING_SIZE,
+           factor_ring, GFX1013_TESS_FACTOR_RING_SIZE, ring_table);
+    if (!setup_tess_shader_stages(
+            &cb, &hull, hs_back_code,
+            &ngg, back_code, ps, ps_code,
+            (uint64_t)(uintptr_t)ring_table)) {
+        return false;
+    }
+    /* The compiled TES record carries generic CX defaults, including an
+     * ESGS item size of zero. Reapply the GFX10 tessellation context last. */
+    for (uint32_t i = 0;
+         i < sizeof(tess_context_state) / sizeof(tess_context_state[0]); ++i) {
+        sceAgcCbSetCxRegistersDirect(&cb, &tess_context_state[i], 1);
+    }
+#else
     if (!setup_shader_stages(&cb, &ngg, back_code, ps, ps_code))
         return false;
+#endif
 
     /* 5. Bind the fused state. The ES-front starts the merged wave and uses
      * the address32 AC_UD_NEXT_STAGE_PC value to continue at the GS-back
@@ -1303,10 +1505,12 @@ static bool dispatch_graphics(GraphicsTest *test,
         };
         sceAgcCbSetShRegistersDirect(&cb, &vertex_table, 1);
     }
-    const AgcRegisterValue next_stage_pc = {
-        next_stage_pc_reg, (uint32_t)(uintptr_t)back_code
-    };
-    sceAgcCbSetShRegistersDirect(&cb, &next_stage_pc, 1);
+    if (found_next_stage_pc_reg) {
+        const AgcRegisterValue next_stage_pc = {
+            next_stage_pc_reg, (uint32_t)(uintptr_t)back_code
+        };
+        sceAgcCbSetShRegistersDirect(&cb, &next_stage_pc, 1);
+    }
 
     /* 6. Write PS shader SH + CX registers */
     const AgcRegisterValue texture_table = {
@@ -1407,6 +1611,23 @@ static bool dispatch_graphics(GraphicsTest *test,
     /* Check WRITE_DATA marker — if present, GPU is alive after draw */
     uint32_t *marker = (uint32_t *)(uintptr_t)marker_target;
     printf("[Marker] WRITE_DATA marker = 0x%08x (expected 0xDEADCAFE)\n", *marker);
+#if AGC_TESSELLATION
+    uint32_t offchip_changed = 0;
+    uint32_t factor_changed = 0;
+    const uint32_t *offchip_words = (const uint32_t *)offchip_ring;
+    const uint32_t *factor_words = (const uint32_t *)factor_ring;
+    for (uint32_t i = 0; i < GFX1013_TESS_OFFCHIP_RING_SIZE / 4u; ++i)
+        offchip_changed += offchip_words[i] != 0u;
+    for (uint32_t i = 0; i < GFX1013_TESS_FACTOR_RING_SIZE / 4u; ++i)
+        factor_changed += factor_words[i] != 0u;
+    printf("[Tess Rings] offchip changed=%u factor changed=%u\n",
+           offchip_changed, factor_changed);
+    printf("[Tess Rings] offchip[0..3]=%08x %08x %08x %08x "
+           "factor[0..3]=%08x %08x %08x %08x\n",
+           offchip_words[0], offchip_words[1], offchip_words[2],
+           offchip_words[3], factor_words[0], factor_words[1],
+           factor_words[2], factor_words[3]);
+#endif
 
     if (target->fp16) {
         const uint64_t *rt = (const uint64_t *)rt_addr;

@@ -74,7 +74,26 @@ background. Compiler regression coverage locks WGP mode, triangle-strip
 serialization, the GFX10 `GE_CNTL` adjustment, unit hardware ESGS offsets, the
 21-dword shader stride, and absence of unsupported shader-query intrinsics. The
 retained compiler suite passes, as does the clean OpenAGC generic suite with
-2,129 checks.
+2,139 checks.
+
+## FW 5.50 tessellation bring-up
+
+Status: **isolated Wave32 tessellation is hardware-validated on FW 5.500.008.**
+The reusable gfx1013 binder consumes fused HsFront/HsBack and TES
+GsFront/GsBack records, patches the runtime ring descriptors and
+`VGT_TCS_OFFCHIP_LAYOUT`, and programs the factor/offchip ring state required
+by gfx1013. The hardware run emitted four `4.0` tessellation factors, proving
+LS/HS execution, and the PS5 display showed a centered, colorful red triangle
+with even sides on the gray background, proving that TES, NGG, pixel shading,
+and rasterization complete from the isolated tessellation path.
+
+Host coverage validates record types, required HS continuation state, the
+front-only TES form produced by ACO, runtime placeholder patching, Wave32
+stage enables, primitive type `DI_PT_PATCH=9`, and command-buffer cursor
+advance. The hardware sample is `agc_tessellation.elf`; its GLSL TCS forwards
+position/color and writes tessellation level 4, while its TES performs
+barycentric interpolation. The next graphics milestone is tessellation plus a
+real NGG geometry shader, using this isolated path as the control.
 
 
 ## Firmware compatibility
@@ -107,8 +126,8 @@ See `analysis/agc_driver_abi_families.tsv`,
 
 ## Current Milestone
 
-**Graphics pipeline: Wave32 indexed drawing and FP16 render targets are
-hardware-validated.** The gfx1013
+**Graphics pipeline: Wave32 indexed drawing, FP16 render targets, NGG geometry,
+and isolated tessellation are hardware-validated.** The gfx1013
 ES+GS/NGG path fetches `float2` position plus `float3` color from a
 20-byte-stride GPU vertex buffer, consumes a bound 16-bit index buffer, and
 rasterizes an RGB triangle on real PS5 hardware. The same path also renders
