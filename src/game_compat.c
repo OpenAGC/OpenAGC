@@ -2076,6 +2076,32 @@ int32_t PS5_SYSV_ABI sceAgcWriteDataPatchSetAddressOrOffset(
     return AGC_OK;
 }
 
+/* Compatibility-SPRX eAy8eGNsCuU @ 0xd4a0. */
+int32_t PS5_SYSV_ABI sceAgcWriteDataPatchSetCachePolicy(
+    uint32_t *cmd, uint32_t cache_policy)
+{
+    if (!cmd || ((cmd[0] >> 8) & 0xFFu) != AGC_PM4_OP_WRITE_DATA)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    cmd[1] = (cmd[1] & 0xF9FFFFFFu) | ((cache_policy & 0x3u) << 25u);
+    return AGC_OK;
+}
+
+/* Compatibility-SPRX tmy-+rBpspY @ 0xd4d0. The five-bit destination is
+ * split between control bit 30 and bits 11:8. */
+int32_t PS5_SYSV_ABI sceAgcWriteDataPatchSetDst(
+    uint32_t *cmd, uint32_t destination)
+{
+    uint32_t encoded;
+
+    if (!cmd || ((cmd[0] >> 8) & 0xFFu) != AGC_PM4_OP_WRITE_DATA)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    encoded = ((destination << 30u) | (destination << 7u)) & 0x40000F00u;
+    cmd[1] = (cmd[1] & 0x3FFFF0FFu) | encoded;
+    return AGC_OK;
+}
+
 /* sceAgcJumpPatchSetTarget (NID: 2BS4EtAaF28)
  * Patches IT_INDIRECT_BUFFER cmd[1] lo, cmd[2] hi (bits 15:0),
  * cmd[3] size (bits 19:0). */

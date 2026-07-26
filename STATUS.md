@@ -1006,10 +1006,11 @@ is a missing initialization feature or a blocker for rendering.
 
 Dragon Quest VII Reimagined (`PPSA17942`) is a hardware-proven FW `0x0550`
 backport and the fifth target in progress. Its executable imports 253 AGC
-functions; 205 are covered and 48 remain after completing its FW 5.50 GetSize
+functions; 208 are covered and 45 remain after completing its FW 5.50 GetSize
 imports, seven exact packet patchers, payload-range ABI, and primitive-state
 update ABI, three constant driver-status queries, the corrected workload-stream
-ABI, and AGR multi-DCB status path. AcquireMem size
+ABI, AGR multi-DCB status path, and compatibility-SPRX WriteData patchers.
+AcquireMem size
 follows the firmware's
 title-workaround mode rather than the emulator's fixed 32-byte path. Dragon
 Quest is not yet counted in the four-title, 100%-covered corpus. Astro's

@@ -32,8 +32,8 @@ titles across multiple engines and SDK vintages.
   backport target despite its `0x1202` metadata. It bundles AGC compatibility
   SPRXs and imports 253 AGC functions. The completed GetSize and packet-patcher
   batches plus the payload-range, primitive-state update, and constant
-  driver-status, workload-stream, and AGR multi-DCB ABIs cover 205 imports; 48
-  remain under analysis, so it is tracked
+  driver-status, workload-stream, AGR multi-DCB, and compatibility-SPRX
+  WriteData ABIs cover 208 imports; 45 remain under analysis, so it is tracked
   separately from the four fully covered titles. AcquireMem packet size follows
   the FW 5.50 title
   workaround mode: mode 1 uses 64 bytes, while modes 0 and 2 use 32 bytes.

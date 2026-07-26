@@ -748,6 +748,12 @@ int32_t PS5_SYSV_ABI sceAgcQueueEndOfPipeActionPatchType(
  * reference-confirmed: patches cmd[2] lo and cmd[3] hi for IT_WRITE_DATA. */
 int32_t PS5_SYSV_ABI sceAgcWriteDataPatchSetAddressOrOffset(
     uint32_t *cmd, uint64_t address_or_offset);
+/* Compatibility-SPRX WriteData control patchers. NIDs:
+ * CachePolicy=eAy8eGNsCuU, Dst=tmy-+rBpspY. */
+int32_t PS5_SYSV_ABI sceAgcWriteDataPatchSetCachePolicy(
+    uint32_t *cmd, uint32_t cache_policy);
+int32_t PS5_SYSV_ABI sceAgcWriteDataPatchSetDst(
+    uint32_t *cmd, uint32_t destination);
 
 /* Patch Jump target address and size (cmd[1..3]). NID: 2BS4EtAaF28
  * reference-confirmed: patches IT_INDIRECT_BUFFER cmd[1] lo,

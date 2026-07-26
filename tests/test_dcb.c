@@ -997,6 +997,28 @@ static void test_batch3_ref_patchers(void) {
     TEST_ASSERT_EQ(sceAgcWriteDataPatchSetAddressOrOffset(wd, 0), AGC_ERROR_INVALID_ARGUMENT,
         "WriteDataPatchAddr rejects wrong opcode");
 
+    wd[0] = agcPm4Header3(AGC_PM4_OP_WRITE_DATA, 8);
+    wd[1] = 0xFFFFFFFFu;
+    TEST_ASSERT_EQ(sceAgcWriteDataPatchSetCachePolicy(wd, 2u), AGC_OK,
+        "WriteData cache-policy patch returns OK");
+    TEST_ASSERT_EQ(wd[1], 0xFDFFFFFFu,
+        "WriteData cache-policy patch replaces bits 26:25");
+
+    wd[1] = 0xA5A5A5A5u;
+    TEST_ASSERT_EQ(sceAgcWriteDataPatchSetDst(wd, 0x1Bu), AGC_OK,
+        "WriteData destination patch returns OK");
+    TEST_ASSERT_EQ(wd[1],
+        (0xA5A5A5A5u & 0x3FFFF0FFu) |
+        (((0x1Bu << 30u) | (0x1Bu << 7u)) & 0x40000F00u),
+        "WriteData destination patch uses split firmware encoding");
+    wd[0] = agcPm4Header3(AGC_PM4_OP_NOP, 8);
+    TEST_ASSERT_EQ(sceAgcWriteDataPatchSetCachePolicy(wd, 0u),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "WriteData cache-policy patch rejects wrong opcode");
+    TEST_ASSERT_EQ(sceAgcWriteDataPatchSetDst(wd, 0u),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "WriteData destination patch rejects wrong opcode");
+
     /* JumpPatchSetTarget: patch cmd[1..3] for IT_INDIRECT_BUFFER */
     uint32_t jump[4];
     jump[0] = agcPm4Header3(AGC_PM4_OP_INDIRECT_BUFFER, 4);

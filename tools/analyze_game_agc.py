@@ -62,6 +62,15 @@ def load_known_nids(path: Path) -> dict[str, tuple[str, str]]:
     return result
 
 
+def load_variant_nids(path: Path) -> dict[str, tuple[str, str]]:
+    result: dict[str, tuple[str, str]] = {}
+    with path.open(newline="", encoding="utf-8") as stream:
+        for row in csv.reader(stream, delimiter="\t"):
+            if len(row) >= 4 and row[1].startswith("libSceAgc"):
+                result[row[3]] = (row[1], row[2])
+    return result
+
+
 def load_public_declarations(include_dir: Path) -> set[str]:
     declarations: set[str] = set()
     for header in include_dir.glob("*.h"):
@@ -161,13 +170,19 @@ def main() -> int:
     parser.add_argument("--known", type=Path,
                         default=Path(__file__).resolve().parents[1] /
                         "analysis/agc_known_nids.tsv")
+    parser.add_argument("--variants", type=Path,
+                        default=Path(__file__).resolve().parents[1] /
+                        "analysis/agc_nids_version_variants.tsv")
     parser.add_argument("--include-dir", type=Path,
                         default=Path(__file__).resolve().parents[1] / "include")
     parser.add_argument("--require-covered", action="store_true")
     args = parser.parse_args()
 
     data = args.binary.read_bytes()
-    imports = parse_imports(data, load_known_nids(args.known),
+    known = load_known_nids(args.known)
+    for nid, mapped in load_variant_nids(args.variants).items():
+        known.setdefault(nid, mapped)
+    imports = parse_imports(data, known,
                             load_public_declarations(args.include_dir))
     writer = csv.writer(sys.stdout, delimiter="\t", lineterminator="\n")
     writer.writerow(("library", "function", "nid", "classification", "raw_symbol"))
