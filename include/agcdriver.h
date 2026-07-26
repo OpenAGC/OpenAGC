@@ -165,6 +165,12 @@ int32_t  PS5_SYSV_ABI sceAgcDriverRegisterWorkloadStream(
     uint32_t stream_id, const void *stream);
 int32_t  PS5_SYSV_ABI sceAgcDriverUnregisterWorkloadStream(
     uint32_t stream_id);
+/* FW 5.50 owner-management exports are intentional NOT_SUPPORTED stubs. */
+int32_t  PS5_SYSV_ABI sceAgcDriverRegisterDefaultOwner(uint32_t owner);
+int32_t  PS5_SYSV_ABI sceAgcDriverUnregisterAllResourcesForOwner(
+    uint32_t owner);
+int32_t  PS5_SYSV_ABI sceAgcDriverUnregisterOwnerAndResources(
+    uint32_t owner);
 
 /* Default state queries */
 int32_t PS5_SYSV_ABI sceAgcGetDefaultState(AgcContextState *out_state);

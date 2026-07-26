@@ -232,6 +232,28 @@ int32_t PS5_SYSV_ABI sceAgcDriverUnregisterWorkloadStream(
     return AGC_OK;
 }
 
+/* FW 5.50 ZLJk9r2+2Aw, SCoAN5fYlUM, and U9ueyEhSkF4 are identical
+ * six-byte userspace stubs returning 0x8A6C9018. */
+int32_t PS5_SYSV_ABI sceAgcDriverRegisterDefaultOwner(uint32_t owner)
+{
+    (void)owner;
+    return AGC_ERROR_NOT_SUPPORTED;
+}
+
+int32_t PS5_SYSV_ABI sceAgcDriverUnregisterAllResourcesForOwner(
+    uint32_t owner)
+{
+    (void)owner;
+    return AGC_ERROR_NOT_SUPPORTED;
+}
+
+int32_t PS5_SYSV_ABI sceAgcDriverUnregisterOwnerAndResources(
+    uint32_t owner)
+{
+    (void)owner;
+    return AGC_ERROR_NOT_SUPPORTED;
+}
+
 /* ===================================================================== */
 /* Convenience submit wrappers (reference-confirmed)                     */
 /* ===================================================================== */

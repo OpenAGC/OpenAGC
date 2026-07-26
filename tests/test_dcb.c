@@ -1370,6 +1370,16 @@ static void test_batch3_ref_driver_stubs(void) {
     TEST_ASSERT_EQ((uint32_t)sceAgcDriverUnregisterWorkloadStream(32),
         AGC_DRIVER_ERROR_INVALID_VALUE,
         "UnregisterWorkloadStream rejects out-of-range ID");
+
+    TEST_ASSERT_EQ(sceAgcDriverRegisterDefaultOwner(7u),
+        AGC_ERROR_NOT_SUPPORTED,
+        "RegisterDefaultOwner matches FW 5.50 stub");
+    TEST_ASSERT_EQ(sceAgcDriverUnregisterAllResourcesForOwner(7u),
+        AGC_ERROR_NOT_SUPPORTED,
+        "UnregisterAllResourcesForOwner matches FW 5.50 stub");
+    TEST_ASSERT_EQ(sceAgcDriverUnregisterOwnerAndResources(7u),
+        AGC_ERROR_NOT_SUPPORTED,
+        "UnregisterOwnerAndResources matches FW 5.50 stub");
 }
 
 static void test_batch3_submit_wrappers(void) {
