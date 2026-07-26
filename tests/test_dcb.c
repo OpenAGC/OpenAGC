@@ -1385,6 +1385,41 @@ static void test_batch3_ref_driver_stubs(void) {
     sceAgcGetIsTrinityMode(&is_trinity);
     TEST_ASSERT_EQ(is_trinity, 0u,
         "GetIsTrinityMode reports standard FW 5.50 hardware");
+
+    TEST_ASSERT_EQ(sceAgcGetShaderInstrumentation(), 0u,
+        "GetShaderInstrumentation defaults to zero");
+    TEST_ASSERT_EQ(sceAgcSetShaderInstrumentation(0xa5u), AGC_OK,
+        "SetShaderInstrumentation succeeds");
+    TEST_ASSERT_EQ(sceAgcGetShaderInstrumentation(), 0xa5u,
+        "GetShaderInstrumentation returns stored flags");
+
+    static uint8_t semaphore_storage[0x8000u];
+    uintptr_t semaphore_address = ((uintptr_t)semaphore_storage + 0x3fffu) &
+        ~(uintptr_t)0x3fffu;
+    void *label0 = NULL;
+    void *label1 = NULL;
+
+    TEST_ASSERT_EQ((uint32_t)sceAgcGetSemaphoreLabel(0u, &label0),
+        0x8a6c0049u, "GetSemaphoreLabel rejects uninitialized memory");
+    TEST_ASSERT_EQ((uint32_t)sceAgcSetAmmSemaphoreMemory(
+        (void *)(semaphore_address + 1u), 0x4000u), 0x8a6c0002u,
+        "SetAmmSemaphoreMemory enforces 16 KiB alignment");
+    TEST_ASSERT_EQ(sceAgcSetAmmSemaphoreMemory(
+        (void *)semaphore_address, 0x4000u), AGC_OK,
+        "SetAmmSemaphoreMemory accepts aligned storage");
+    TEST_ASSERT_EQ(sceAgcGetSemaphoreLabel(0u, &label0), AGC_OK,
+        "GetSemaphoreLabel returns label zero");
+    TEST_ASSERT(label0 && *(uint8_t *)label0 == 0,
+        "SetAmmSemaphoreMemory clears label storage");
+    TEST_ASSERT_EQ(sceAgcGetSemaphoreLabel(1u, &label1), AGC_OK,
+        "GetSemaphoreLabel returns label one");
+    TEST_ASSERT_EQ((uintptr_t)label1 - (uintptr_t)label0, 32u,
+        "GetSemaphoreLabel uses the FW 32-byte stride");
+    TEST_ASSERT_EQ((uint32_t)sceAgcGetSemaphoreLabel(512u, &label1),
+        0x8a6c000bu, "GetSemaphoreLabel rejects an out-of-range index");
+    TEST_ASSERT_EQ((uint32_t)sceAgcSetAmmSemaphoreMemory(
+        (void *)semaphore_address, 0x4000u), 0x8a6c0048u,
+        "SetAmmSemaphoreMemory rejects duplicate initialization");
 }
 
 static void test_batch3_submit_wrappers(void) {

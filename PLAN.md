@@ -164,7 +164,7 @@ Convert the conclusions into permanent capability/profile regressions:
 
 Dragon Quest VII Reimagined (`PPSA17942`) is the fifth target in progress. It
 is hardware-proven on FW `0x0550` and bundles AGC compatibility SPRXs despite
-declaring `0x1202`. Its 253 imports currently have 213 covered and 40 unresolved
+declaring `0x1202`. Its 253 imports currently have 217 covered and 36 unresolved
 after completing the FW 5.50 GetSize imports, seven packet patchers, and the
 data-packet payload-range, primitive-state update, and constant driver-status
 ABIs. Its FW 5.50 workload-stream register/unregister pair and AGR multi-DCB
@@ -179,6 +179,10 @@ The compatibility-only `sceAgcGetIsTrinityMode` ABI is also recovered: it
 writes the `sceKernelHasTrinityMode` result through a one-byte output pointer,
 and the standard FW `0x0550` PS5 path reports false. The sole Dragon Quest call
 site ignores the residual return register and consumes the stored byte.
+The executed shader-instrumentation getter/setter and AMM semaphore-memory
+path are recovered as well. The latter enforces 16 KiB base/size alignment,
+returns 32-byte label records by index, and preserves the firmware's
+already-initialized, not-initialized, and out-of-range errors.
 AcquireMem sizes follow the
 firmware title-workaround mode: mode 1 returns 64 bytes and modes 0/2 return 32,
 instead of hard-coding the emulator's 32-byte path. Implement the remaining

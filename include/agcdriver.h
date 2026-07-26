@@ -442,6 +442,15 @@ int32_t PS5_SYSV_ABI sceAgcInit_0090(
  * reports false. NID: BfBDZGbti7A. */
 void PS5_SYSV_ABI sceAgcGetIsTrinityMode(uint8_t *is_trinity);
 
+/* Compatibility-SPRX runtime state used by shader instrumentation and AMM
+ * semaphore labels. */
+uint32_t PS5_SYSV_ABI sceAgcGetShaderInstrumentation(void);
+int32_t PS5_SYSV_ABI sceAgcSetShaderInstrumentation(uint32_t flags);
+int32_t PS5_SYSV_ABI sceAgcSetAmmSemaphoreMemory(
+    void *memory, uint64_t size_in_bytes);
+int32_t PS5_SYSV_ABI sceAgcGetSemaphoreLabel(
+    uint32_t index, void **label_out);
+
 /* libSceAgc SuspendPoint wrapper (calls sceAgcDriverSuspendPointSubmit) */
 int32_t PS5_SYSV_ABI sceAgcSuspendPoint(
     uint32_t field0, uint32_t field1, uint32_t field2, uint32_t field3);

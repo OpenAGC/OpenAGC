@@ -34,7 +34,8 @@ titles across multiple engines and SDK vintages.
   batches plus the payload-range, primitive-state update, and constant
   driver-status, workload-stream, AGR multi-DCB, and compatibility-SPRX
   WriteData, ACB AtomicGds `_0900`, owner-management, and compatibility-SPRX
-  `sceAgcGetIsTrinityMode` ABIs cover 213 imports; 40 remain under analysis, so it is tracked
+  `sceAgcGetIsTrinityMode`, shader-instrumentation, and AMM semaphore-label
+  ABIs cover 217 imports; 36 remain under analysis, so it is tracked
   separately from the four fully covered titles. AcquireMem packet size follows
   the FW 5.50 title
   workaround mode: mode 1 uses 64 bytes, while modes 0 and 2 use 32 bytes.

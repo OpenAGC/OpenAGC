@@ -381,6 +381,67 @@ void PS5_SYSV_ABI sceAgcGetIsTrinityMode(uint8_t *is_trinity)
         *is_trinity = 0;
 }
 
+/* Dragon Quest's compatibility SPRX stores this value verbatim. Its getter
+ * may add later-firmware system instrumentation bits; FW 5.50 standard PS5
+ * has no such additional bits. */
+static uint32_t s_shader_instrumentation;
+
+uint32_t PS5_SYSV_ABI sceAgcGetShaderInstrumentation(void)
+{
+    return s_shader_instrumentation;
+}
+
+int32_t PS5_SYSV_ABI sceAgcSetShaderInstrumentation(uint32_t flags)
+{
+    s_shader_instrumentation = flags;
+    return AGC_OK;
+}
+
+/* FW compatibility errors used by the AMM semaphore-memory exports. */
+#define AGC_COMPAT_ERROR_INVALID_VALUE       ((int32_t)0x8a6c000bu)
+#define AGC_COMPAT_ERROR_INVALID_ALIGNMENT   ((int32_t)0x8a6c0002u)
+#define AGC_COMPAT_ERROR_ALREADY_INITIALIZED ((int32_t)0x8a6c0048u)
+#define AGC_COMPAT_ERROR_NOT_INITIALIZED     ((int32_t)0x8a6c0049u)
+
+static uint8_t *s_amm_semaphore_memory;
+static uint64_t s_amm_semaphore_size;
+
+int32_t PS5_SYSV_ABI sceAgcSetAmmSemaphoreMemory(
+    void *memory, uint64_t size_in_bytes)
+{
+    if (s_amm_semaphore_size != 0)
+        return AGC_COMPAT_ERROR_ALREADY_INITIALIZED;
+    if (!memory || size_in_bytes == 0 ||
+        ((((uintptr_t)memory | size_in_bytes) & 0x3fffu) != 0))
+        return AGC_COMPAT_ERROR_INVALID_ALIGNMENT;
+
+    memset(memory, 0, (size_t)size_in_bytes);
+    s_amm_semaphore_memory = memory;
+    s_amm_semaphore_size = size_in_bytes;
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI sceAgcGetSemaphoreLabel(
+    uint32_t index, void **label_out)
+{
+    uint64_t end = ((uint64_t)index + 1u) * 32u;
+
+    if (s_amm_semaphore_size == 0)
+        return AGC_COMPAT_ERROR_NOT_INITIALIZED;
+    if (end > s_amm_semaphore_size)
+        return AGC_COMPAT_ERROR_INVALID_VALUE;
+    if (!label_out)
+        return AGC_COMPAT_ERROR_INVALID_ALIGNMENT;
+
+    *label_out = s_amm_semaphore_memory + (uint64_t)index * 32u;
+    return AGC_OK;
+}
+
+#undef AGC_COMPAT_ERROR_INVALID_VALUE
+#undef AGC_COMPAT_ERROR_INVALID_ALIGNMENT
+#undef AGC_COMPAT_ERROR_ALREADY_INITIALIZED
+#undef AGC_COMPAT_ERROR_NOT_INITIALIZED
+
 #ifdef OPENAGC_PROSPERO
 extern int getpid(void);
 extern int PS5_SYSV_ABI sceKernelGetAppInfo(int pid, void *app_info);

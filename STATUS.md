@@ -319,7 +319,7 @@ make -B test
 Expected result:
 
 ```text
-2067 passed, 0 failed
+3173 passed, 0 failed
 ```
 
 PS5 prospero backend (cross-compiled, no tests):
@@ -1007,7 +1007,7 @@ is a missing initialization feature or a blocker for rendering.
 
 Dragon Quest VII Reimagined (`PPSA17942`) is a hardware-proven FW `0x0550`
 backport and the fifth target in progress. Its executable imports 253 AGC
-functions; 213 are covered and 40 remain after completing its FW 5.50 GetSize
+functions; 217 are covered and 36 remain after completing its FW 5.50 GetSize
 imports, seven exact packet patchers, payload-range ABI, and primitive-state
 update ABI, three constant driver-status queries, the corrected workload-stream
 ABI, AGR multi-DCB status path, compatibility-SPRX WriteData patchers, and the
@@ -1017,6 +1017,10 @@ The owner-management register/unregister exports match the intentional FW 5.50
 The bundled compatibility-SPRX `sceAgcGetIsTrinityMode` export is covered with
 its recovered one-byte output-pointer ABI and standard-PS5 false result; the
 game caller ignores RAX and later reads the output byte.
+The two executed shader-instrumentation exports and the AMM semaphore-memory
+setup/get-label path are also implemented from the bundled SPRX. Semaphore
+memory uses 16 KiB alignment and exposes 32-byte labels with exact state and
+range errors.
 AcquireMem size
 follows the firmware's
 title-workaround mode rather than the emulator's fixed 32-byte path. Dragon
