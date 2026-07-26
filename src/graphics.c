@@ -1,8 +1,10 @@
 #include "agc_graphics.h"
 
 #include <stdbool.h>
+#include <string.h>
 
 #include "agc_cb.h"
+#include "agc_context.h"
 #include "agc_error.h"
 #include "agc_pm4.h"
 #include "agc_registers.h"
@@ -470,5 +472,282 @@ int32_t PS5_SYSV_ABI agcGfx1013BindWave32TessVsPs(
             cb, &state->primitive, gs_program_lo, &gs_patches) ||
         !agcGfx1013EmitShader(cb, &state->pixel, ps_program_lo))
         return AGC_ERROR_INTERNAL;
+    return AGC_OK;
+}
+
+static uint32_t agcGfx1013FloatBits(float value)
+{
+    uint32_t bits;
+    memcpy(&bits, &value, sizeof(bits));
+    return bits;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013SetColorTarget(
+    SceAgcCb *cb, const AgcGfx1013ColorTargetState *state)
+{
+    uint32_t *cmd;
+    uint32_t regs[14] = {0};
+    uint32_t tiles_per_row;
+    uint64_t tile_count;
+    bool supported;
+
+    if (!cb || !state || state->address == 0u || state->width == 0u ||
+        state->height == 0u || state->width > 0x4000u ||
+        state->height > 0x4000u || (state->width & 7u) != 0u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if ((state->address & 0xffu) != 0u || (state->address >> 48) != 0u)
+        return AGC_ERROR_INVALID_ALIGNMENT;
+
+    supported =
+        (state->color_format == AGC_GFX1013_COLOR_FORMAT_8_8_8_8 &&
+         state->number_type == AGC_GFX1013_SURFACE_NUMBER_UNORM &&
+         state->component_swap == AGC_GFX1013_SURFACE_SWAP_ALT) ||
+        (state->color_format == AGC_GFX1013_COLOR_FORMAT_16_16_16_16 &&
+         state->number_type == AGC_GFX1013_SURFACE_NUMBER_FLOAT &&
+         state->component_swap == AGC_GFX1013_SURFACE_SWAP_STD);
+    if (!supported)
+        return AGC_ERROR_NOT_SUPPORTED;
+
+    tiles_per_row = state->width / 8u;
+    tile_count = (uint64_t)tiles_per_row * state->height;
+    if (tiles_per_row > 0x800u || tile_count == 0u || tile_count > 0x400000u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (agcCbRemainingDwords(cb) < 28u)
+        return AGC_ERROR_BUFFER_TOO_SMALL;
+
+    regs[0] = (uint32_t)(state->address >> 8);
+    regs[1] = tiles_per_row - 1u;
+    regs[2] = (uint32_t)tile_count - 1u;
+    regs[4] =
+        (state->color_format << AGC_REG_CB_COLOR0_INFO_FORMAT_SHIFT) |
+        (state->number_type << AGC_REG_CB_COLOR0_INFO_NUMBER_TYPE_SHIFT) |
+        (state->component_swap << 11) | (1u << 16);
+
+    cmd = agcCbAllocDwords(cb, 16u);
+    if (!cmd)
+        return AGC_ERROR_INTERNAL;
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 16u);
+    cmd[1] = AGC_REG_CB_COLOR0_BASE;
+    memcpy(&cmd[2], regs, sizeof(regs));
+
+    if (!agcGfx1013EmitCx(
+            cb, AGC_REG_CB_COLOR0_BASE_EXT,
+            (uint32_t)(state->address >> 40)) ||
+        !agcGfx1013EmitCx(
+            cb, AGC_REG_CB_COLOR0_ATTRIB2,
+            ((state->height - 1u) & 0x3fffu) |
+            (((state->width - 1u) & 0x3fffu) << 14)) ||
+        !agcGfx1013EmitCx(
+            cb, AGC_REG_CB_COLOR0_ATTRIB3, 0x09000001u) ||
+        !agcGfx1013EmitCx(
+            cb, AGC_REG_CB_COLOR_CONTROL, 0x00cc0010u))
+        return AGC_ERROR_INTERNAL;
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013SetViewport(
+    SceAgcCb *cb, const AgcGfx1013ViewportState *state)
+{
+    uint32_t *cmd;
+    uint32_t extent;
+    uint32_t regs[6];
+
+    if (!cb || !state || state->width == 0u || state->height == 0u ||
+        state->width > 0x7fffu || state->height > 0x7fffu)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (agcCbRemainingDwords(cb) < 15u)
+        return AGC_ERROR_BUFFER_TOO_SMALL;
+
+    extent = state->width < state->height ? state->width : state->height;
+    regs[0] = agcGfx1013FloatBits((float)extent * 0.5f);
+    regs[1] = agcGfx1013FloatBits((float)state->width * 0.5f);
+    regs[2] = agcGfx1013FloatBits(-(float)extent * 0.5f);
+    regs[3] = agcGfx1013FloatBits((float)state->height * 0.5f);
+    regs[4] = agcGfx1013FloatBits(0.5f);
+    regs[5] = agcGfx1013FloatBits(0.5f);
+
+    cmd = agcCbAllocDwords(cb, 8u);
+    if (!cmd)
+        return AGC_ERROR_INTERNAL;
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 8u);
+    cmd[1] = AGC_REG_PA_CL_VPORT_XSCALE;
+    memcpy(&cmd[2], regs, sizeof(regs));
+
+    cmd = agcCbAllocDwords(cb, 4u);
+    if (!cmd)
+        return AGC_ERROR_INTERNAL;
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 4u);
+    cmd[1] = AGC_REG_PA_SC_VPORT_ZMIN_0;
+    cmd[2] = agcGfx1013FloatBits(0.0f);
+    cmd[3] = agcGfx1013FloatBits(1.0f);
+    if (!agcGfx1013EmitCx(cb, AGC_REG_PA_CL_VTE_CNTL, 0x0000043fu))
+        return AGC_ERROR_INTERNAL;
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013SetScissor(
+    SceAgcCb *cb, const AgcGfx1013ScissorState *state)
+{
+    static const uint32_t offsets[6] = {
+        AGC_REG_PA_SC_WINDOW_SCISSOR_TL,
+        AGC_REG_PA_SC_WINDOW_SCISSOR_BR,
+        AGC_REG_PA_SC_GENERIC_SCISSOR_TL,
+        AGC_REG_PA_SC_GENERIC_SCISSOR_BR,
+        AGC_REG_PA_SC_VPORT_SCISSOR_0_TL,
+        AGC_REG_PA_SC_VPORT_SCISSOR_0_BR,
+    };
+    uint32_t *cmd;
+    uint32_t tl;
+    uint32_t br;
+    uint32_t i;
+
+    if (!cb || !state || state->left >= state->right ||
+        state->top >= state->bottom || state->right > 0x7fffu ||
+        state->bottom > 0x7fffu)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (agcCbRemainingDwords(cb) < 22u)
+        return AGC_ERROR_BUFFER_TOO_SMALL;
+
+    tl = state->left | (state->top << 16);
+    br = state->right | (state->bottom << 16);
+    cmd = agcCbAllocDwords(cb, 4u);
+    if (!cmd)
+        return AGC_ERROR_INTERNAL;
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 4u);
+    cmd[1] = AGC_REG_PA_SC_SCREEN_SCISSOR_TL;
+    cmd[2] = tl;
+    cmd[3] = br;
+    for (i = 0; i < 6u; ++i) {
+        uint32_t value = (i & 1u) == 0u ? tl : br;
+        if (!agcGfx1013EmitCx(cb, offsets[i], value))
+            return AGC_ERROR_INTERNAL;
+    }
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013SetTargetMask(
+    SceAgcCb *cb, uint32_t mask)
+{
+    if (!cb)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (agcCbRemainingDwords(cb) < 3u)
+        return AGC_ERROR_BUFFER_TOO_SMALL;
+    return agcGfx1013EmitCx(cb, AGC_REG_CB_TARGET_MASK, mask)
+        ? AGC_OK : AGC_ERROR_INTERNAL;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013SetDepthDisabled(SceAgcCb *cb)
+{
+    static const AgcRegisterValue regs[5] = {
+        {AGC_REG_DB_DEPTH_INFO, 0u},
+        {AGC_REG_DB_Z_INFO, 0u},
+        {AGC_REG_DB_STENCIL_INFO, 0u},
+        {AGC_REG_DB_SHADER_CONTROL, 0x00000010u},
+        {AGC_REG_DB_DEPTH_CONTROL, 0u},
+    };
+    uint32_t i;
+
+    if (!cb)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (agcCbRemainingDwords(cb) < 15u)
+        return AGC_ERROR_BUFFER_TOO_SMALL;
+    for (i = 0; i < 5u; ++i) {
+        if (!agcGfx1013EmitCx(cb, regs[i].offset, regs[i].value))
+            return AGC_ERROR_INTERNAL;
+    }
+    return AGC_OK;
+}
+
+static uint32_t agcGfx1013CountDefaults(
+    const AgcRegisterDefaultsGroup *groups, uint32_t group_count,
+    AgcRegisterDefaultSpace space)
+{
+    uint32_t count = 0u;
+    uint32_t i;
+    for (i = 0; i < group_count; ++i) {
+        if (groups[i].space == space)
+            count += groups[i].register_count;
+    }
+    return count;
+}
+
+static bool agcGfx1013EmitDefaults(
+    SceAgcCb *cb, const AgcRegisterDefaultsGroup *groups,
+    uint32_t group_count, AgcRegisterDefaultSpace space)
+{
+    uint32_t i;
+    uint32_t j;
+    for (i = 0; i < group_count; ++i) {
+        if (groups[i].space != space)
+            continue;
+        for (j = 0; j < groups[i].register_count; ++j) {
+            AgcRegisterValue reg = {
+                groups[i].registers[j].offset,
+                groups[i].registers[j].value,
+            };
+            uint32_t *emitted = space == kAgcRegisterDefaultSpaceSh
+                ? sceAgcCbSetShRegistersDirect(cb, &reg, 1u)
+                : space == kAgcRegisterDefaultSpaceCx
+                    ? sceAgcCbSetCxRegistersDirect(cb, &reg, 1u)
+                    : sceAgcCbSetUcRegistersDirect(cb, &reg, 1u);
+            if (!emitted)
+                return false;
+        }
+    }
+    return true;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013ApplyGraphicsDefaultsV8(
+    SceAgcCb *cb, AgcGfx1013GraphicsDefaultStats *stats)
+{
+    const AgcRegisterDefaultsGroup *primary;
+    const AgcRegisterDefaultsGroup *internal;
+    AgcGfx1013GraphicsDefaultStats counts = {0};
+    uint32_t primary_count;
+    uint32_t internal_count;
+    uint32_t required_dwords;
+
+    if (!cb)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    primary = agcRegisterDefaultsV8GetPrimaryGroups(&primary_count);
+    internal = agcRegisterDefaultsV8GetInternalGroups(&internal_count);
+    if (!primary || !internal)
+        return AGC_ERROR_INTERNAL;
+
+    counts.sh_register_count =
+        agcGfx1013CountDefaults(primary, primary_count,
+            kAgcRegisterDefaultSpaceSh) +
+        agcGfx1013CountDefaults(internal, internal_count,
+            kAgcRegisterDefaultSpaceSh);
+    counts.cx_register_count =
+        agcGfx1013CountDefaults(primary, primary_count,
+            kAgcRegisterDefaultSpaceCx) +
+        agcGfx1013CountDefaults(internal, internal_count,
+            kAgcRegisterDefaultSpaceCx);
+    counts.uc_register_count =
+        agcGfx1013CountDefaults(primary, primary_count,
+            kAgcRegisterDefaultSpaceUc) +
+        agcGfx1013CountDefaults(internal, internal_count,
+            kAgcRegisterDefaultSpaceUc);
+    required_dwords = 3u * (counts.sh_register_count +
+        counts.cx_register_count + counts.uc_register_count);
+    if (agcCbRemainingDwords(cb) < required_dwords)
+        return AGC_ERROR_BUFFER_TOO_SMALL;
+
+    if (!agcGfx1013EmitDefaults(cb, primary, primary_count,
+            kAgcRegisterDefaultSpaceSh) ||
+        !agcGfx1013EmitDefaults(cb, internal, internal_count,
+            kAgcRegisterDefaultSpaceSh) ||
+        !agcGfx1013EmitDefaults(cb, primary, primary_count,
+            kAgcRegisterDefaultSpaceCx) ||
+        !agcGfx1013EmitDefaults(cb, internal, internal_count,
+            kAgcRegisterDefaultSpaceCx) ||
+        !agcGfx1013EmitDefaults(cb, primary, primary_count,
+            kAgcRegisterDefaultSpaceUc) ||
+        !agcGfx1013EmitDefaults(cb, internal, internal_count,
+            kAgcRegisterDefaultSpaceUc))
+        return AGC_ERROR_INTERNAL;
+    if (stats)
+        *stats = counts;
     return AGC_OK;
 }

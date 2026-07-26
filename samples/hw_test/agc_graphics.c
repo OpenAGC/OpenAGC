@@ -25,7 +25,6 @@
 
 /* openagc headers */
 #include "agcdriver.h"
-#include "agc_context.h"
 #include "agc_registers.h"
 #include "agc_shader.h"
 #include "agc_graphics.h"
@@ -229,27 +228,8 @@ int sceKernelWaitEqueue(SceKernelEqueue equeue, SceKernelEvent *events,
  * and byte offsets are encoded in the shader's typed buffer loads. */
 #define GFX10_VBO_DESC_WORD3 0x11014FACu
 
-/* CB_COLOR0_INFO format values (AMD surface format enum) */
-#define COLOR_8_8_8_8              0x0Au
-#define COLOR_16_16_16_16          0x0Cu
-
-/* CB_COLOR0_INFO bit fields */
-#define CB_INFO_FORMAT(f)      ((f) << AGC_REG_CB_COLOR0_INFO_FORMAT_SHIFT)
-#define CB_INFO_NUM_TYPE(t)    ((t) << AGC_REG_CB_COLOR0_INFO_NUMBER_TYPE_SHIFT)
-#define CB_INFO_SWAP(s)        ((s) << 11)  /* bits [12:11] */
-
-/* GnmSurfaceNumber: 0=unsigned norm, 1=signed norm, ... */
-#define SURF_NUMBER_UNORM      0
-#define SURF_NUMBER_FLOAT      7
-/* GnmSurfaceSwap: 0=standard (RGBA), 1=alt (BGRA) */
-#define SURF_SWAP_STD          0
-#define SURF_SWAP_ALT          1
-
 /* VGT primitive types */
 #define VGT_PT_TRILIST         0x04u  /* 4 = triangle list */
-
-/* CB_TARGET_MASK: 0xF = write all 4 channels (RGBA) to RT0 */
-#define CB_TARGET_MASK_ALL     0x0Fu
 
 /* Shader type constants */
 #define AGC_SHADER_TYPE_VS     3
@@ -681,284 +661,6 @@ static void *upload_shader(const uint8_t *code, size_t code_size,
 /* ======================================================================== */
 /* DCB construction                                                          */
 /* ======================================================================== */
-
-/* Apply FW 5.50 SH register defaults (graphics type — bit 0 = 0).
- * Writes each register INDIVIDUALLY because some groups have
- * non-contiguous offsets — the batch SET_SH_REG packet assumes
- * contiguous offsets and would corrupt state. */
-static void apply_sh_defaults_graphics(SceAgcCb *cb) {
-    uint32_t count = 0;
-    const AgcRegisterDefaultsGroup *pgroups = agcRegisterDefaultsV8GetPrimaryGroups(&count);
-    uint32_t applied = 0;
-    for (uint32_t i = 0; i < count; i++) {
-        if (pgroups[i].space == kAgcRegisterDefaultSpaceSh && pgroups[i].register_count > 0) {
-            for (uint32_t j = 0; j < pgroups[i].register_count; j++) {
-                sceAgcCbSetShRegistersDirect(cb,
-                    (const AgcRegisterValue *)&pgroups[i].registers[j], 1);
-                applied++;
-            }
-        }
-    }
-    const AgcRegisterDefaultsGroup *igroups = agcRegisterDefaultsV8GetInternalGroups(&count);
-    for (uint32_t i = 0; i < count; i++) {
-        if (igroups[i].space == kAgcRegisterDefaultSpaceSh && igroups[i].register_count > 0) {
-            for (uint32_t j = 0; j < igroups[i].register_count; j++) {
-                sceAgcCbSetShRegistersDirect(cb,
-                    (const AgcRegisterValue *)&igroups[i].registers[j], 1);
-                applied++;
-            }
-        }
-    }
-    printf("[Dispatch] Applied %u SH register defaults (graphics, individual)\n", applied);
-}
-
-/* Apply FW 5.50 CX register defaults.
- * Writes each register INDIVIDUALLY because some groups (e.g. group 72
- * with 128 CB_COLOR0 registers) have non-contiguous offsets. */
-static void apply_cx_defaults(SceAgcCb *cb) {
-    uint32_t count = 0;
-    const AgcRegisterDefaultsGroup *pgroups = agcRegisterDefaultsV8GetPrimaryGroups(&count);
-    uint32_t applied = 0;
-    for (uint32_t i = 0; i < count; i++) {
-        if (pgroups[i].space == kAgcRegisterDefaultSpaceCx && pgroups[i].register_count > 0) {
-            for (uint32_t j = 0; j < pgroups[i].register_count; j++) {
-                sceAgcCbSetCxRegistersDirect(cb,
-                    (const AgcRegisterValue *)&pgroups[i].registers[j], 1);
-                applied++;
-            }
-        }
-    }
-    const AgcRegisterDefaultsGroup *igroups = agcRegisterDefaultsV8GetInternalGroups(&count);
-    for (uint32_t i = 0; i < count; i++) {
-        if (igroups[i].space == kAgcRegisterDefaultSpaceCx && igroups[i].register_count > 0) {
-            for (uint32_t j = 0; j < igroups[i].register_count; j++) {
-                sceAgcCbSetCxRegistersDirect(cb,
-                    (const AgcRegisterValue *)&igroups[i].registers[j], 1);
-                applied++;
-            }
-        }
-    }
-    printf("[Dispatch] Applied %u CX register defaults (individual)\n", applied);
-}
-
-/* Apply FW 5.50 UCONFIG register defaults.  Graphics launch depends on
- * global GE/VGT state that compute dispatches do not exercise. */
-static void apply_uc_defaults(SceAgcCb *cb) {
-    uint32_t count = 0;
-    const AgcRegisterDefaultsGroup *pgroups =
-        agcRegisterDefaultsV8GetPrimaryGroups(&count);
-    uint32_t applied = 0;
-    for (uint32_t i = 0; i < count; i++) {
-        if (pgroups[i].space == kAgcRegisterDefaultSpaceUc &&
-            pgroups[i].register_count > 0) {
-            for (uint32_t j = 0; j < pgroups[i].register_count; j++) {
-                sceAgcCbSetUcRegistersDirect(cb,
-                    (const AgcRegisterValue *)&pgroups[i].registers[j], 1);
-                applied++;
-            }
-        }
-    }
-    const AgcRegisterDefaultsGroup *igroups =
-        agcRegisterDefaultsV8GetInternalGroups(&count);
-    for (uint32_t i = 0; i < count; i++) {
-        if (igroups[i].space == kAgcRegisterDefaultSpaceUc &&
-            igroups[i].register_count > 0) {
-            for (uint32_t j = 0; j < igroups[i].register_count; j++) {
-                sceAgcCbSetUcRegistersDirect(cb,
-                    (const AgcRegisterValue *)&igroups[i].registers[j], 1);
-                applied++;
-            }
-        }
-    }
-    printf("[Dispatch] Applied %u UC register defaults (individual)\n", applied);
-}
-
-/* Helper to identify PGM_LO and PGM_HI register offsets across all stages:
- * PS: 0x008, VS: 0x048, GS: 0x088, ES: 0x0C8, HS: 0x108, LS: 0x148, CS: 0x20C
- */
-/* Write shader SH registers (PGM_LO/HI patched with code address).
- * For VS shaders compiled by psbc, the SH registers are at ES stage offsets
- * (0x0C7-0x0CB). On RDNA2 without NGG, we remap these to VS stage offsets
- * (0x047-0x04B) so the shader runs as a real VS (vsEn=VsReal). */
-/* Write shader CX registers (from the shader record's CX block) */
-/* Set up render target (CB_COLOR0 registers, 14 contiguous dwords) */
-static void setup_render_target(SceAgcCb *cb, void *rt_addr,
-                                 uint32_t width, uint32_t height,
-                                 uint32_t color_format,
-                                 uint32_t number_type,
-                                 uint32_t component_swap) {
-    /* Build the 14-dword CB_COLOR0 register block.
-     * Registers 0x318-0x325 (14 contiguous CX registers):
-     *   0x318: BASE      0x319: PITCH     0x31A: SLICE
-     *   0x31B: VIEW      0x31C: INFO      0x31D: ATTRIB
-     *   0x31E: DCC_CTRL  0x31F: CMASK_BASE 0x320: CMASK_SLICE
-     *   0x321: FMASK_BASE 0x322: FMASK_SLICE
-     *   0x323: CLEAR_WORD0  0x324: CLEAR_WORD1  0x325: DCC_BASE
-     */
-    uint32_t rt_regs[14];
-    memset(rt_regs, 0, sizeof(rt_regs));
-
-    /* reg 0: CB_COLOR0_BASE — base address >> 8 */
-    rt_regs[0] = (uint32_t)((uintptr_t)rt_addr >> 8);
-
-    /* reg 1: CB_COLOR0_PITCH — TILE_MAX (11 bits) + FMASK_TILE_MAX (11 bits)
-     * For linear mode, each tile is 8 elements wide.
-     * TILE_MAX = (pitch_elements / 8) - 1 */
-    uint32_t tiles_per_row = width / 8;
-    rt_regs[1] = (tiles_per_row - 1) & 0x7FF;  /* TILE_MAX (11 bits) */
-
-    /* reg 2: CB_COLOR0_SLICE — TILE_MAX (22 bits)
-     * For linear mode: total tiles = tiles_per_row * height
-     * TILE_MAX = (tiles_per_row * height) - 1 */
-    rt_regs[2] = ((tiles_per_row * height) - 1) & 0x3FFFFF;
-
-    /* reg 3: CB_COLOR0_VIEW — no slice view */
-    rt_regs[3] = 0;
-
-    /* reg 4: CB_COLOR0_INFO — caller-selected format, number type, and
-     * component swap. RGBA8 display memory uses ALT; the offscreen FP16
-     * surface uses standard RGBA ordering. */
-    rt_regs[4] = CB_INFO_FORMAT(color_format) |
-                 CB_INFO_NUM_TYPE(number_type) |
-                 CB_INFO_SWAP(component_swap) |
-                 (1u << 16);  /* CB_INFO_BLEND_BYPASS: bypass blend state */
-
-    /* reg 5: CB_COLOR0_ATTRIB — tile mode + num_samples + num_fragments
-     * TILE_MODE_INDEX (5 bits at [4:0]) = 31 (kAgcTileDisplay_LinearGeneral)
-     *   This is CRITICAL — tile mode 0 is Depth_2DThin_64 (a depth tile mode),
-     *   not linear! Using it for a color RT causes the CB to write to wrong
-     *   addresses or not write at all.
-     * NUM_SAMPLES (3 bits at [14:12]) = 0 (1 sample)
-     * NUM_FRAGMENTS (2 bits at [16:15]) = 0 (1 fragment) */
-    /* GFX10 keeps swizzle/resource metadata in ATTRIB3. ATTRIB only carries
-     * sample-count and destination-alpha fields, all zero for this surface. */
-    rt_regs[5] = 0;
-
-    /* reg 6: DCC_CONTROL — disabled */
-    rt_regs[6] = 0;
-
-    /* reg 7-13: CMask, FMask, clear words, DCC base — all 0 */
-    /* Already zeroed by memset */
-
-    /* Write 14 contiguous CX registers starting at CB_COLOR0_BASE (0x318) */
-    uint32_t *cmd = agcCbAllocDwords(cb, 14 + 2);
-    if (cmd) {
-        cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 14 + 2);
-        cmd[1] = AGC_REG_CB_COLOR0_BASE;  /* base offset */
-        for (int i = 0; i < 14; i++) {
-            cmd[2 + i] = rt_regs[i];
-        }
-    }
-
-    /* CRITICAL: Set CB_COLOR0_BASE_EXT (0x390 CX space) for 64-bit high bits! */
-    AgcRegisterValue base_ext = { AGC_REG_CB_COLOR0_BASE_EXT,
-                                  (uint32_t)((uintptr_t)rt_addr >> 40) };
-    sceAgcCbSetCxRegistersDirect(cb, &base_ext, 1);
-
-    /* CRITICAL: Set CB_COLOR0_ATTRIB2 (0x3B0) for MIP0 dimensions!
-     * ATTRIB2 packs MIP0_HEIGHT (bits [13:0]) and MIP0_WIDTH (bits [27:14]).
-     * Without MIP0 dimensions, CB clips all writes to 0x0! */
-    uint32_t attrib2_val = ((height - 1) & 0x3FFF) |
-                           (((width - 1) & 0x3FFF) << 14);
-    AgcRegisterValue attrib2 = { AGC_REG_CB_COLOR0_ATTRIB2, attrib2_val };
-    sceAgcCbSetCxRegistersDirect(cb, &attrib2, 1);
-    /* GFX10 ATTRIB3: one layer, 2D resource, descriptor resource level. */
-    AgcRegisterValue attrib3 = { AGC_REG_CB_COLOR0_ATTRIB3, 0x09000001u };
-    sceAgcCbSetCxRegistersDirect(cb, &attrib3, 1);
-
-    /* CB_COLOR_CONTROL: MODE=Normal (1 at bits [6:4]) and ROP3=copy.
-     * Target/channel enables live in CB_TARGET_MASK, not bits [3:0] here. */
-    AgcRegisterValue cb_color_ctrl = { AGC_REG_CB_COLOR_CONTROL, 0x00CC0010u };
-    sceAgcCbSetCxRegistersDirect(cb, &cb_color_ctrl, 1);
-
-    printf("[RT] CB_COLOR0_BASE=0x%08x EXT=0x%08x PITCH=0x%08x SLICE=0x%08x INFO=0x%08x ATTRIB=0x%08x CTRL=0x%08x ATTRIB2=0x%08x ATTRIB3=0x%08x\n",
-           rt_regs[0], base_ext.value, rt_regs[1], rt_regs[2], rt_regs[4], rt_regs[5], cb_color_ctrl.value, attrib2_val, attrib3.value);
-}
-
-/* Set up viewport (scale + offset + zmin/zmax) */
-static void setup_viewport(SceAgcCb *cb, uint32_t width, uint32_t height) {
-    /* Preserve NDC aspect ratio on non-square targets by centering a square
-     * viewport inside the full render-target/scissor extent. */
-    const uint32_t extent = width < height ? width : height;
-    float scale_x = (float)extent * 0.5f;
-    float scale_y = -(float)extent * 0.5f;
-    float scale_z = 0.5f;
-    float offset_x = (float)width * 0.5f;
-    float offset_y = (float)height * 0.5f;
-    float offset_z = 0.5f;
-
-    /* PA_CL_VPORT_XSCALE + 5 more (interleaved scale/offset) */
-    uint32_t vp_regs[6];
-    memcpy(&vp_regs[0], &scale_x, 4);
-    memcpy(&vp_regs[1], &offset_x, 4);
-    memcpy(&vp_regs[2], &scale_y, 4);
-    memcpy(&vp_regs[3], &offset_y, 4);
-    memcpy(&vp_regs[4], &scale_z, 4);
-    memcpy(&vp_regs[5], &offset_z, 4);
-
-    uint32_t *cmd = agcCbAllocDwords(cb, 6 + 2);
-    if (cmd) {
-        cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 6 + 2);
-        cmd[1] = AGC_REG_PA_CL_VPORT_XSCALE;
-        for (int i = 0; i < 6; i++) cmd[2 + i] = vp_regs[i];
-    }
-
-    /* PA_SC_VPORT_ZMIN_0 + ZMAX_0 (2 contiguous) */
-    float zmin = 0.0f, zmax = 1.0f;
-    uint32_t z_regs[2];
-    memcpy(&z_regs[0], &zmin, 4);
-    memcpy(&z_regs[1], &zmax, 4);
-
-    cmd = agcCbAllocDwords(cb, 2 + 2);
-    if (cmd) {
-        cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 2 + 2);
-        cmd[1] = AGC_REG_PA_SC_VPORT_ZMIN_0;
-        cmd[2] = z_regs[0];
-        cmd[3] = z_regs[1];
-    }
-
-    /* Mesa device state: VTX_W0_FMT plus X/Y/Z scale and offset enables. */
-    const AgcRegisterValue vte_cntl = {
-        AGC_REG_PA_CL_VTE_CNTL, 0x0000043fu
-    };
-    sceAgcCbSetCxRegistersDirect(cb, &vte_cntl, 1);
-}
-
-/* Set up scissor (screen scissors, 2 dwords packed as int16 pairs) */
-static void setup_scissor(SceAgcCb *cb, uint32_t width, uint32_t height) {
-    /* PA_SC_SCREEN_SCISSOR_TL/BR — packed as (x16 | y16) */
-    uint32_t sc_tl = 0;  /* left=0, top=0 */
-    uint32_t sc_br = (width & 0xFFFF) | ((height & 0xFFFF) << 16);
-
-    uint32_t *cmd = agcCbAllocDwords(cb, 2 + 2);
-    if (cmd) {
-        cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 2 + 2);
-        cmd[1] = AGC_REG_PA_SC_SCREEN_SCISSOR_TL;
-        cmd[2] = sc_tl;
-        cmd[3] = sc_br;
-    }
-
-    const AgcRegisterValue remaining_scissors[] = {
-        {AGC_REG_PA_SC_WINDOW_SCISSOR_TL, sc_tl},
-        {AGC_REG_PA_SC_WINDOW_SCISSOR_BR, sc_br},
-        {AGC_REG_PA_SC_GENERIC_SCISSOR_TL, sc_tl},
-        {AGC_REG_PA_SC_GENERIC_SCISSOR_BR, sc_br},
-        {AGC_REG_PA_SC_VPORT_SCISSOR_0_TL, sc_tl},
-        {AGC_REG_PA_SC_VPORT_SCISSOR_0_BR, sc_br},
-    };
-    for (uint32_t i = 0;
-         i < (uint32_t)(sizeof(remaining_scissors) /
-                        sizeof(remaining_scissors[0]));
-         i++) {
-        sceAgcCbSetCxRegistersDirect(cb, &remaining_scissors[i], 1);
-    }
-}
-
-/* Set CB_TARGET_MASK (CX register) */
-static void setup_target_mask(SceAgcCb *cb) {
-    AgcRegisterValue mask = { AGC_REG_CB_TARGET_MASK, CB_TARGET_MASK_ALL };
-    sceAgcCbSetCxRegistersDirect(cb, &mask, 1);
-}
 
 /* Build the merged ES+GS/NGG primitive state from the fused shader record. */
 #if !AGC_TESSELLATION
@@ -1447,23 +1149,59 @@ static bool dispatch_graphics(GraphicsTest *test,
     }
     printf("[Dispatch] CLEAR_STATE: opcode 0x12, state 0\n");
 
-    /* 1. Apply FW 5.50 register defaults */
-    apply_sh_defaults_graphics(&cb);
-    apply_cx_defaults(&cb);
-    apply_uc_defaults(&cb);
+    /* 1. Apply FW 5.50 register defaults. */
+    AgcGfx1013GraphicsDefaultStats default_stats;
+    int32_t state_error = agcGfx1013ApplyGraphicsDefaultsV8(
+        &cb, &default_stats);
+    if (state_error != AGC_OK) {
+        printf("[Dispatch] graphics defaults failed: %s\n",
+               errstr(state_error));
+        return false;
+    }
+    printf("[Dispatch] Applied %u SH, %u CX, %u UC register defaults\n",
+           default_stats.sh_register_count,
+           default_stats.cx_register_count,
+           default_stats.uc_register_count);
 
     /* 2. Set up render target */
-    setup_render_target(&cb, rt_addr, target->width, target->height,
-                        target->color_format, target->number_type,
-                        target->component_swap);
+    const AgcGfx1013ColorTargetState color_target = {
+        (uint64_t)(uintptr_t)rt_addr,
+        target->width,
+        target->height,
+        target->color_format,
+        target->number_type,
+        target->component_swap,
+    };
+    state_error = agcGfx1013SetColorTarget(&cb, &color_target);
+    if (state_error != AGC_OK) {
+        printf("[RT] reusable color-target state failed: %s\n",
+               errstr(state_error));
+        return false;
+    }
+    printf("[RT] reusable gfx1013 color target: %ux%u format=0x%x\n",
+           target->width, target->height, target->color_format);
 
     /* 2b. Disable depth-buffer state after applying the shader CX block. */
     /* (moved to after PS CX registers below) */
 
     /* 3. Set up viewport, scissor, target mask */
-    setup_viewport(&cb, target->width, target->height);
-    setup_scissor(&cb, target->width, target->height);
-    setup_target_mask(&cb);
+    const AgcGfx1013ViewportState viewport = {
+        target->width, target->height
+    };
+    const AgcGfx1013ScissorState scissor = {
+        0u, 0u, target->width, target->height
+    };
+    state_error = agcGfx1013SetViewport(&cb, &viewport);
+    if (state_error == AGC_OK)
+        state_error = agcGfx1013SetScissor(&cb, &scissor);
+    if (state_error == AGC_OK)
+        state_error = agcGfx1013SetTargetMask(
+            &cb, AGC_GFX1013_TARGET_MASK_RGBA0);
+    if (state_error != AGC_OK) {
+        printf("[Raster] reusable viewport/scissor/mask failed: %s\n",
+               errstr(state_error));
+        return false;
+    }
     const AgcRegisterValue vertex_bounds[] = {
         {AGC_REG_GE_MIN_VTX_INDX, 0x00000000u},
         {AGC_REG_GE_INDX_OFFSET, 0x00000000u},
@@ -1573,16 +1311,12 @@ static bool dispatch_graphics(GraphicsTest *test,
 
     /* 6b. Disable depth/stencil buffer state after the shader CX block, but
      * preserve the compiler's DB_SHADER_CONTROL=0x10 rasterization mode. */
-    AgcRegisterValue db_depth_info = { 0x00F, 0x00000000 };  /* DB_DEPTH_INFO = 0 */
-    sceAgcCbSetCxRegistersDirect(&cb, &db_depth_info, 1);
-    AgcRegisterValue db_z_info = { AGC_REG_DB_Z_INFO, 0 };     /* DB_Z_INFO = 0 */
-    sceAgcCbSetCxRegistersDirect(&cb, &db_z_info, 1);
-    AgcRegisterValue db_stencil_info = { 0x011, 0 };           /* DB_STENCIL_INFO = 0 */
-    sceAgcCbSetCxRegistersDirect(&cb, &db_stencil_info, 1);
-    AgcRegisterValue db_shader_ctrl = { AGC_REG_DB_SHADER_CONTROL, 0x00000010 };
-    sceAgcCbSetCxRegistersDirect(&cb, &db_shader_ctrl, 1);
-    AgcRegisterValue db_depth_ctrl = { AGC_REG_DB_DEPTH_CONTROL, 0x00000000 };
-    sceAgcCbSetCxRegistersDirect(&cb, &db_depth_ctrl, 1);      /* DB_DEPTH_CONTROL = 0 (no Z test) */
+    state_error = agcGfx1013SetDepthDisabled(&cb);
+    if (state_error != AGC_OK) {
+        printf("[DB] reusable depth-disabled state failed: %s\n",
+               errstr(state_error));
+        return false;
+    }
     printf("[DB] DB_DEPTH_INFO=0, DB_Z_INFO=0, DB_STENCIL_INFO=0, DB_SHADER_CONTROL=0x10, DB_DEPTH_CONTROL=0\n");
 
     /* 6c. Rasterizer mode remains application state. Shader formats,
@@ -1968,7 +1702,9 @@ int main(void) {
 #if AGC_VALIDATE_RGBA8_REFERENCE
     RenderTargetConfig rgba8_target = {
         test.buffers[0], test.width, test.height,
-        COLOR_8_8_8_8, SURF_NUMBER_UNORM, SURF_SWAP_ALT,
+        AGC_GFX1013_COLOR_FORMAT_8_8_8_8,
+        AGC_GFX1013_SURFACE_NUMBER_UNORM,
+        AGC_GFX1013_SURFACE_SWAP_ALT,
         false, "display RGBA8"
     };
     printf("\n--- Step 4: RGBA8 reference draw ---\n");
@@ -1981,7 +1717,9 @@ int main(void) {
 #else
     RenderTargetConfig fp16_target = {
         test.render_target, FP16_TARGET_WIDTH, FP16_TARGET_HEIGHT,
-        COLOR_16_16_16_16, SURF_NUMBER_FLOAT, SURF_SWAP_STD,
+        AGC_GFX1013_COLOR_FORMAT_16_16_16_16,
+        AGC_GFX1013_SURFACE_NUMBER_FLOAT,
+        AGC_GFX1013_SURFACE_SWAP_STD,
         true, "offscreen FP16"
     };
     printf("\n--- Step 4: RGBA16F offscreen draw ---\n");

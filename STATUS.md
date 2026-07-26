@@ -2,6 +2,29 @@
 
 ## FW 5.50 reusable Wave32 VS+PS baseline
 
+### Reusable gfx1013 fixed-function state
+
+The FW 5.50 sample-only fixed-function PM4 setup has been promoted into
+atomic public builders for color-target binding, aspect-preserving viewport,
+screen/window/generic/viewport scissors, target mask, depth-disabled state,
+and V8 graphics register defaults. The builders preflight their complete
+packet allocation and leave the command-buffer cursor unchanged on invalid
+arguments or insufficient space.
+
+Host fixtures verify the exact Wave32 graphics streams and dword budgets:
+28 dwords for a color target, 15 for the viewport, 22 for scissors, 3 for the
+target mask, 15 for depth-disabled state, and 2184 for the V8 defaults
+(174 SH, 493 CX, and 61 UC register writes). The supported, hardware-proven
+color-target tuples are RGBA16F FLOAT/STD and RGBA8 UNORM/ALT.
+
+FW 5.50 gfx1013 hardware validation passed through websrv for both paths. The
+RGBA16F baseline rendered the centered blended-color triangle for all 1800
+flips, changed 255,744 pixels, and produced the expected bounds and eight
+colors. The direct RGBA8 path rendered the centered green/dark-red blended
+triangle for all 1800 flips, changed 126,360 pixels, produced eight colors,
+and passed vertex-fetch, indexed-draw, and texture-sampling checks. Neither
+run hung or panicked the console.
+
 Complete and hardware-validated on standard PS5 gfx1013, raw firmware
 `0x05500008`. `agcGfx1013ValidateWave32VsPs` and
 `agcGfx1013BindWave32VsPs` now provide a reusable path for fused NGG Gs(2)

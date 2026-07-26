@@ -392,6 +392,200 @@ static void test_gfx1013_wave32_tessellation_binding(void)
         "TES front-only record binds without continuation SGPR");
 }
 
+static void test_gfx1013_fixed_function_packets(void)
+{
+    uint32_t buffer[64] = {0};
+    SceAgcCb cb;
+    const AgcGfx1013ColorTargetState color = {
+        0x0000000201600000ull, 1920u, 1080u,
+        AGC_GFX1013_COLOR_FORMAT_8_8_8_8,
+        AGC_GFX1013_SURFACE_NUMBER_UNORM,
+        AGC_GFX1013_SURFACE_SWAP_ALT,
+    };
+    const AgcGfx1013ViewportState viewport = {1920u, 1080u};
+    const AgcGfx1013ScissorState scissor = {0u, 0u, 1920u, 1080u};
+    const uint32_t expected_color[28] = {
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 16u),
+        AGC_REG_CB_COLOR0_BASE,
+        0x02016000u, 0x000000efu, 0x0003f47fu, 0u,
+        0x00010828u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
+        AGC_REG_CB_COLOR0_BASE_EXT, 0u,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
+        AGC_REG_CB_COLOR0_ATTRIB2, 0x01dfc437u,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
+        AGC_REG_CB_COLOR0_ATTRIB3, 0x09000001u,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
+        AGC_REG_CB_COLOR_CONTROL, 0x00cc0010u,
+    };
+    const uint32_t expected_viewport[15] = {
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 8u),
+        AGC_REG_PA_CL_VPORT_XSCALE,
+        0x44070000u, 0x44700000u, 0xc4070000u,
+        0x44070000u, 0x3f000000u, 0x3f000000u,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 4u),
+        AGC_REG_PA_SC_VPORT_ZMIN_0, 0u, 0x3f800000u,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
+        AGC_REG_PA_CL_VTE_CNTL, 0x0000043fu,
+    };
+    const uint32_t packed_br = 0x04380780u;
+    const uint32_t expected_scissor[22] = {
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 4u),
+        AGC_REG_PA_SC_SCREEN_SCISSOR_TL, 0u, packed_br,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
+        AGC_REG_PA_SC_WINDOW_SCISSOR_TL, 0u,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
+        AGC_REG_PA_SC_WINDOW_SCISSOR_BR, packed_br,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
+        AGC_REG_PA_SC_GENERIC_SCISSOR_TL, 0u,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
+        AGC_REG_PA_SC_GENERIC_SCISSOR_BR, packed_br,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
+        AGC_REG_PA_SC_VPORT_SCISSOR_0_TL, 0u,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
+        AGC_REG_PA_SC_VPORT_SCISSOR_0_BR, packed_br,
+    };
+    const uint32_t expected_depth[15] = {
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
+        AGC_REG_DB_DEPTH_INFO, 0u,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
+        AGC_REG_DB_Z_INFO, 0u,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
+        AGC_REG_DB_STENCIL_INFO, 0u,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
+        AGC_REG_DB_SHADER_CONTROL, 0x10u,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
+        AGC_REG_DB_DEPTH_CONTROL, 0u,
+    };
+
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetColorTarget(&cb, &color), AGC_OK,
+        "gfx1013 RGBA8 target emits");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 28u,
+        "gfx1013 color target exact dword count");
+    TEST_ASSERT(memcmp(buffer, expected_color, sizeof(expected_color)) == 0,
+        "gfx1013 color target exact packet stream");
+
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetViewport(&cb, &viewport), AGC_OK,
+        "gfx1013 viewport emits");
+    TEST_ASSERT(memcmp(buffer, expected_viewport,
+        sizeof(expected_viewport)) == 0,
+        "gfx1013 viewport exact packet stream");
+
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetScissor(&cb, &scissor), AGC_OK,
+        "gfx1013 scissor emits");
+    TEST_ASSERT(memcmp(buffer, expected_scissor,
+        sizeof(expected_scissor)) == 0,
+        "gfx1013 scissor exact packet stream");
+
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetTargetMask(
+        &cb, AGC_GFX1013_TARGET_MASK_RGBA0), AGC_OK,
+        "gfx1013 target mask emits");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 3u,
+        "gfx1013 target mask exact dword count");
+    TEST_ASSERT_EQ(buffer[1], AGC_REG_CB_TARGET_MASK,
+        "gfx1013 target mask offset");
+    TEST_ASSERT_EQ(buffer[2], AGC_GFX1013_TARGET_MASK_RGBA0,
+        "gfx1013 target mask value");
+
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetDepthDisabled(&cb), AGC_OK,
+        "gfx1013 depth-disabled state emits");
+    TEST_ASSERT(memcmp(buffer, expected_depth, sizeof(expected_depth)) == 0,
+        "gfx1013 depth-disabled exact packet stream");
+}
+
+static void test_gfx1013_graphics_defaults_v8(void)
+{
+    uint32_t buffer[2184] = {0};
+    SceAgcCb cb;
+    AgcGfx1013GraphicsDefaultStats stats = {0};
+    uint32_t sh = 0u;
+    uint32_t cx = 0u;
+    uint32_t uc = 0u;
+    uint32_t cursor = 0u;
+
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013ApplyGraphicsDefaultsV8(&cb, &stats), AGC_OK,
+        "gfx1013 FW 5.50 graphics defaults emit");
+    TEST_ASSERT_EQ(stats.sh_register_count, 174u,
+        "gfx1013 FW 5.50 SH default count");
+    TEST_ASSERT_EQ(stats.cx_register_count, 493u,
+        "gfx1013 FW 5.50 CX default count");
+    TEST_ASSERT_EQ(stats.uc_register_count, 61u,
+        "gfx1013 FW 5.50 UC default count");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 2184u,
+        "gfx1013 FW 5.50 defaults exact dword count");
+    while (cursor < agcCbUsedDwords(&cb)) {
+        TEST_ASSERT_EQ(agcPm4Length(buffer[cursor]), 3u,
+            "each default is an individual register packet");
+        if (agcPm4Opcode(buffer[cursor]) == AGC_PM4_OP_SET_SH_REG)
+            sh++;
+        else if (agcPm4Opcode(buffer[cursor]) == AGC_PM4_OP_SET_CONTEXT_REG)
+            cx++;
+        else if (agcPm4Opcode(buffer[cursor]) == AGC_PM4_OP_SET_UCONFIG_REG)
+            uc++;
+        cursor += 3u;
+    }
+    TEST_ASSERT_EQ(sh, stats.sh_register_count,
+        "default SH packets match stats");
+    TEST_ASSERT_EQ(cx, stats.cx_register_count,
+        "default CX packets match stats");
+    TEST_ASSERT_EQ(uc, stats.uc_register_count,
+        "default UC packets match stats");
+}
+
+static void test_gfx1013_fixed_function_rejects_atomically(void)
+{
+    uint32_t buffer[2183] = {0};
+    SceAgcCb cb;
+    AgcGfx1013GraphicsDefaultStats stats = {0};
+    AgcGfx1013ColorTargetState color = {
+        0x0000000201600000ull, 1920u, 1080u,
+        AGC_GFX1013_COLOR_FORMAT_8_8_8_8,
+        AGC_GFX1013_SURFACE_NUMBER_UNORM,
+        AGC_GFX1013_SURFACE_SWAP_ALT,
+    };
+    const AgcGfx1013ViewportState viewport = {1920u, 1080u};
+    const AgcGfx1013ScissorState scissor = {0u, 0u, 1920u, 1080u};
+
+    agcCbInit(&cb, buffer, 27u * sizeof(uint32_t));
+    TEST_ASSERT_EQ(agcGfx1013SetColorTarget(&cb, &color),
+        AGC_ERROR_BUFFER_TOO_SMALL, "short color target rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "short color target is atomic");
+    agcCbReset(&cb, buffer, 14u * sizeof(uint32_t));
+    TEST_ASSERT_EQ(agcGfx1013SetViewport(&cb, &viewport),
+        AGC_ERROR_BUFFER_TOO_SMALL, "short viewport rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u, "short viewport is atomic");
+    agcCbReset(&cb, buffer, 21u * sizeof(uint32_t));
+    TEST_ASSERT_EQ(agcGfx1013SetScissor(&cb, &scissor),
+        AGC_ERROR_BUFFER_TOO_SMALL, "short scissor rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u, "short scissor is atomic");
+    agcCbReset(&cb, buffer, 2u * sizeof(uint32_t));
+    TEST_ASSERT_EQ(agcGfx1013SetTargetMask(&cb, 0x0fu),
+        AGC_ERROR_BUFFER_TOO_SMALL, "short target mask rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u, "short target mask is atomic");
+    agcCbReset(&cb, buffer, 14u * sizeof(uint32_t));
+    TEST_ASSERT_EQ(agcGfx1013SetDepthDisabled(&cb),
+        AGC_ERROR_BUFFER_TOO_SMALL, "short depth state rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u, "short depth state is atomic");
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013ApplyGraphicsDefaultsV8(&cb, &stats),
+        AGC_ERROR_BUFFER_TOO_SMALL, "short defaults reject");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u, "short defaults are atomic");
+
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    color.address++;
+    TEST_ASSERT_EQ(agcGfx1013SetColorTarget(&cb, &color),
+        AGC_ERROR_INVALID_ALIGNMENT, "unaligned target rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "invalid target emits no packets");
+}
+
 void test_suite_graphics(void)
 {
     TEST_SUITE("GFX1013 Graphics State");
@@ -399,4 +593,7 @@ void test_suite_graphics(void)
     TEST_RUN(test_gfx1013_wave32_rejects_but_generic_accepts_wave64);
     TEST_RUN(test_gfx1013_wave32_rejects_small_buffer_atomically);
     TEST_RUN(test_gfx1013_wave32_tessellation_binding);
+    TEST_RUN(test_gfx1013_fixed_function_packets);
+    TEST_RUN(test_gfx1013_graphics_defaults_v8);
+    TEST_RUN(test_gfx1013_fixed_function_rejects_atomically);
 }
