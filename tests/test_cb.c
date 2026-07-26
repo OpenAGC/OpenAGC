@@ -205,9 +205,10 @@ static void test_sce_agc_dcb_markers_and_flip(void) {
     SceAgcCb cb;
     agcCbInit(&cb, buffer, sizeof(buffer));
 
-    uint32_t* push = sceAgcDcbPushMarker(&cb, "abc");
+    uint32_t* push = sceAgcDcbPushMarker(&cb, "abc", 0x10203040u);
     TEST_ASSERT(push == buffer, "PushMarker returns allocated packet");
     TEST_ASSERT_EQ(agcPm4Subcommand(push[0]), AGC_PM4_SUB_PUSH_MARKER, "PushMarker subcommand");
+    TEST_ASSERT_EQ(push[1], 0x10203040u, "PushMarker color");
 
     uint32_t* pop = sceAgcDcbPopMarker(&cb);
     TEST_ASSERT(pop != NULL, "PopMarker returns allocated packet");

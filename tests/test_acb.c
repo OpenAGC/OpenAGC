@@ -1,4 +1,5 @@
 #include "test.h"
+#include "agc_cb.h"
 #include "agcdriver.h"
 #include "agc_pm4.h"
 
@@ -47,15 +48,28 @@ static void test_acb_acquire_mem(void) {
 
 static void test_acb_push_marker(void) {
     uint32_t buf[64];
-    int32_t r = sceAgcAcbPushMarker(buf, 64, "test");
-    TEST_ASSERT(r > 0, "Push marker should succeed");
+    SceAgcCb cb;
+    agcCbInit(&cb, buf, sizeof(buf));
+    uint32_t *r = sceAgcAcbPushMarker(&cb, "test", 0x11223344u);
+    TEST_ASSERT(r == buf, "Push marker should return packet");
     TEST_ASSERT_EQ(agcPm4Subcommand(buf[0]), AGC_PM4_SUB_PUSH_MARKER, "Push marker subcommand");
+    TEST_ASSERT_EQ(buf[1], 0x11223344u, "Push marker color");
+    TEST_ASSERT_EQ(buf[2], 0x74736574u, "Push marker text");
+
+    r = sceAgcAcbSetMarkerSpan(&cb, "span-tail", 4u, 0xAABBCCDDu);
+    TEST_ASSERT(r == &buf[3], "Set marker span advances cursor");
+    TEST_ASSERT_EQ(agcPm4Subcommand(r[0]), AGC_PM4_SUB_SET_MARKER,
+        "Set marker span subcommand");
+    TEST_ASSERT_EQ(r[1], 0xAABBCCDDu, "Set marker span color");
+    TEST_ASSERT_EQ(r[2], 0x6E617073u, "Set marker span uses explicit length");
 }
 
 static void test_acb_pop_marker(void) {
     uint32_t buf[64];
-    int32_t r = sceAgcAcbPopMarker(buf, 64);
-    TEST_ASSERT_EQ(r, 2, "Pop marker should write 2 dwords");
+    SceAgcCb cb;
+    agcCbInit(&cb, buf, sizeof(buf));
+    uint32_t *r = sceAgcAcbPopMarker(&cb);
+    TEST_ASSERT(r == buf, "Pop marker should return packet");
     TEST_ASSERT_EQ(agcPm4Subcommand(buf[0]), AGC_PM4_SUB_POP_MARKER, "Pop marker subcommand");
 }
 

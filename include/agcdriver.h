@@ -212,7 +212,8 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndexAuto(
     SceAgcCb *cb, uint32_t index_count, uint64_t modifier);
 uint32_t *PS5_SYSV_ABI sceAgcDcbWaitUntilSafeForRendering(
     SceAgcCb *cb, uint32_t video_out_handle, uint32_t display_buffer_index);
-uint32_t *PS5_SYSV_ABI sceAgcDcbPushMarker(SceAgcCb *cb, const char *marker);
+uint32_t *PS5_SYSV_ABI sceAgcDcbPushMarker(
+    SceAgcCb *cb, const char *marker, uint32_t color);
 uint32_t *PS5_SYSV_ABI sceAgcDcbPopMarker(SceAgcCb *cb);
 uint32_t *PS5_SYSV_ABI sceAgcDcbSetFlip(
     SceAgcCb *cb, uint32_t video_out_handle, int32_t display_buffer_index,
@@ -389,11 +390,15 @@ int32_t PS5_SYSV_ABI sceAgcAcbSetWorkloadStreamInactive(
     uint32_t *acb, uint32_t size_dw, AgcWorkloadId workload);
 int32_t PS5_SYSV_ABI sceAgcAcbSetWorkloadsActive(
     uint32_t *acb, uint32_t size_dw, uint32_t flags);
-int32_t PS5_SYSV_ABI sceAgcAcbPushMarker(
-    uint32_t *acb, uint32_t size_dw, const char *marker);
-int32_t PS5_SYSV_ABI sceAgcAcbPopMarker(uint32_t *acb, uint32_t size_dw);
-int32_t PS5_SYSV_ABI sceAgcAcbSetMarker(
-    uint32_t *acb, uint32_t size_dw, const char *marker);
+uint32_t *PS5_SYSV_ABI sceAgcAcbPushMarker(
+    SceAgcCb *cb, const char *marker, uint32_t color);
+uint32_t *PS5_SYSV_ABI sceAgcAcbPopMarker(SceAgcCb *cb);
+uint32_t *PS5_SYSV_ABI sceAgcAcbSetMarker(
+    SceAgcCb *cb, const char *marker, uint32_t color);
+uint32_t *PS5_SYSV_ABI sceAgcAcbPushMarkerSpan(
+    SceAgcCb *cb, const char *marker, uint32_t length, uint32_t color);
+uint32_t *PS5_SYSV_ABI sceAgcAcbSetMarkerSpan(
+    SceAgcCb *cb, const char *marker, uint32_t length, uint32_t color);
 
 /* DCB raw-buffer variant functions (version variants and specials) */
 int32_t PS5_SYSV_ABI sceAgcDcbInitializeDefaultHardwareState(
@@ -639,7 +644,11 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndexMultiInstanced(
 /* Set marker. NID: QhCbS4X9Rl8
  * Variable length: depends on marker string. */
 uint32_t *PS5_SYSV_ABI sceAgcDcbSetMarker(
-    SceAgcCb *cb, const char *marker, uint32_t flags);
+    SceAgcCb *cb, const char *marker, uint32_t color);
+uint32_t *PS5_SYSV_ABI sceAgcDcbPushMarkerSpan(
+    SceAgcCb *cb, const char *marker, uint32_t length, uint32_t color);
+uint32_t *PS5_SYSV_ABI sceAgcDcbSetMarkerSpan(
+    SceAgcCb *cb, const char *marker, uint32_t length, uint32_t color);
 
 /* Context state operation. NID: HabmgqPwPw0
  * op 0: CLEAR_STATE (2 dwords)

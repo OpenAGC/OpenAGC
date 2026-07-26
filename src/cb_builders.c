@@ -199,25 +199,100 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbWaitRegMem(
     return cmd;
 }
 
-uint32_t *PS5_SYSV_ABI sceAgcDcbPushMarker(SceAgcCb *cb, const char *marker)
+static uint32_t *agcCbMarkerSpan(
+    SceAgcCb *cb, uint32_t subcommand, const char *marker,
+    uint32_t length, uint32_t color)
 {
-    if (!marker)
+    if (!cb || (!marker && length != 0u))
         return 0;
 
-    uint32_t len = (uint32_t)strlen(marker);
-    uint32_t payload_dwords = (len + 4u) / 4u;
-    if (payload_dwords == 0)
-        payload_dwords = 1;
-
-    uint32_t packet_dwords = payload_dwords + 1;
+    uint64_t payload_dwords = ((uint64_t)length + 3u) / 4u;
+    uint64_t packet_dwords64 = 2u + payload_dwords;
+    if (packet_dwords64 > UINT32_MAX)
+        return 0;
+    uint32_t packet_dwords = (uint32_t)packet_dwords64;
     uint32_t *cmd = agcCbAllocDwords(cb, packet_dwords);
     if (!cmd)
         return 0;
 
-    cmd[0] = agcPm4Header3Sub(AGC_PM4_OP_NOP, AGC_PM4_SUB_PUSH_MARKER, packet_dwords);
-    for (uint32_t i = 1; i < packet_dwords; ++i)
-        cmd[i] = 0;
-    memcpy(&cmd[1], marker, len);
+    cmd[0] = agcPm4Header3Sub(AGC_PM4_OP_NOP, subcommand, packet_dwords);
+    cmd[1] = color;
+    if (payload_dwords != 0u) {
+        memset(&cmd[2], 0, (size_t)payload_dwords * sizeof(uint32_t));
+        memcpy(&cmd[2], marker, length);
+    }
+    return cmd;
+}
+
+static uint32_t agcMarkerLength(const char *marker)
+{
+    return marker ? (uint32_t)strlen(marker) : 0u;
+}
+
+uint32_t *PS5_SYSV_ABI sceAgcDcbSetMarker(
+    SceAgcCb *cb, const char *marker, uint32_t color)
+{
+    return agcCbMarkerSpan(cb, AGC_PM4_SUB_SET_MARKER, marker,
+        agcMarkerLength(marker), color);
+}
+
+uint32_t *PS5_SYSV_ABI sceAgcDcbPushMarker(
+    SceAgcCb *cb, const char *marker, uint32_t color)
+{
+    return agcCbMarkerSpan(cb, AGC_PM4_SUB_PUSH_MARKER, marker,
+        agcMarkerLength(marker), color);
+}
+
+uint32_t *PS5_SYSV_ABI sceAgcDcbSetMarkerSpan(
+    SceAgcCb *cb, const char *marker, uint32_t length, uint32_t color)
+{
+    return agcCbMarkerSpan(
+        cb, AGC_PM4_SUB_SET_MARKER, marker, length, color);
+}
+
+uint32_t *PS5_SYSV_ABI sceAgcDcbPushMarkerSpan(
+    SceAgcCb *cb, const char *marker, uint32_t length, uint32_t color)
+{
+    return agcCbMarkerSpan(
+        cb, AGC_PM4_SUB_PUSH_MARKER, marker, length, color);
+}
+
+uint32_t *PS5_SYSV_ABI sceAgcAcbSetMarker(
+    SceAgcCb *cb, const char *marker, uint32_t color)
+{
+    return agcCbMarkerSpan(cb, AGC_PM4_SUB_SET_MARKER, marker,
+        agcMarkerLength(marker), color);
+}
+
+uint32_t *PS5_SYSV_ABI sceAgcAcbPushMarker(
+    SceAgcCb *cb, const char *marker, uint32_t color)
+{
+    return agcCbMarkerSpan(cb, AGC_PM4_SUB_PUSH_MARKER, marker,
+        agcMarkerLength(marker), color);
+}
+
+uint32_t *PS5_SYSV_ABI sceAgcAcbSetMarkerSpan(
+    SceAgcCb *cb, const char *marker, uint32_t length, uint32_t color)
+{
+    return agcCbMarkerSpan(
+        cb, AGC_PM4_SUB_SET_MARKER, marker, length, color);
+}
+
+uint32_t *PS5_SYSV_ABI sceAgcAcbPushMarkerSpan(
+    SceAgcCb *cb, const char *marker, uint32_t length, uint32_t color)
+{
+    return agcCbMarkerSpan(
+        cb, AGC_PM4_SUB_PUSH_MARKER, marker, length, color);
+}
+
+uint32_t *PS5_SYSV_ABI sceAgcAcbPopMarker(SceAgcCb *cb)
+{
+    uint32_t *cmd = agcCbAllocDwords(cb, 2u);
+    if (!cmd)
+        return 0;
+    cmd[0] = agcPm4Header3Sub(
+        AGC_PM4_OP_NOP, AGC_PM4_SUB_POP_MARKER, 2u);
+    cmd[1] = 0u;
     return cmd;
 }
 

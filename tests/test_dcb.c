@@ -830,6 +830,20 @@ static void test_batch2_dcb_set_marker(void) {
     uint32_t *cmd = sceAgcDcbSetMarker(&cb, "test", 0);
     TEST_ASSERT(cmd != 0, "SetMarker returns non-NULL");
     TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_NOP, "SetMarker uses NOP wrapper");
+    TEST_ASSERT_EQ(agcPm4Subcommand(cmd[0]), AGC_PM4_SUB_SET_MARKER,
+        "SetMarker uses set subcommand");
+
+    cmd = sceAgcDcbPushMarkerSpan(&cb, "abcdef", 3u, 0x55667788u);
+    TEST_ASSERT(cmd != 0, "PushMarkerSpan returns non-NULL");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 3u,
+        "PushMarkerSpan size follows explicit length");
+    TEST_ASSERT_EQ(agcPm4Subcommand(cmd[0]), AGC_PM4_SUB_PUSH_MARKER,
+        "PushMarkerSpan uses push subcommand");
+    TEST_ASSERT_EQ(cmd[1], 0x55667788u, "PushMarkerSpan color");
+    TEST_ASSERT_EQ(cmd[2], 0x00636261u,
+        "PushMarkerSpan copies only explicit bytes and clears padding");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 6u,
+        "marker builders advance cursor by exact packet sizes");
 }
 
 static void test_batch2_dcb_context_state_op(void) {

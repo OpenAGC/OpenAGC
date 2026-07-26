@@ -38,25 +38,6 @@ static int32_t acb_write_nop(uint32_t *acb, uint32_t size_dw, uint32_t marker)
     return 2;
 }
 
-static int32_t acb_write_marker(uint32_t *acb, uint32_t size_dw,
-    uint32_t subcommand, const char *marker)
-{
-    if (!acb || size_dw < 2)
-        return AGC_ERROR_CB_INVALID_SIZE;
-
-    uint32_t len = marker ? (uint32_t)strlen(marker) : 0;
-    uint32_t dw_needed = 2 + ((len + 3) / 4);
-    if (size_dw < dw_needed)
-        return AGC_ERROR_CB_INVALID_SIZE;
-
-    acb[0] = agcPm4Header3Sub(AGC_PM4_OP_NOP, subcommand, dw_needed);
-    for (uint32_t i = 1; i < dw_needed; ++i)
-        acb[i] = 0;
-    if (marker && len > 0)
-        memcpy(&acb[1], marker, len);
-    return (int32_t)dw_needed;
-}
-
 int32_t PS5_SYSV_ABI sceAgcAcbInitializeDefaultHardwareState_pre0090(
     uint32_t *acb, uint32_t size_dw)
 {
@@ -560,23 +541,6 @@ int32_t PS5_SYSV_ABI sceAgcAcbSetWorkloadsActive(
     acb[6] = 0;
     acb[7] = 0;
     return 8;
-}
-
-int32_t PS5_SYSV_ABI sceAgcAcbPushMarker(
-    uint32_t *acb, uint32_t size_dw, const char *marker)
-{
-    return acb_write_marker(acb, size_dw, AGC_PM4_SUB_PUSH_MARKER, marker);
-}
-
-int32_t PS5_SYSV_ABI sceAgcAcbPopMarker(uint32_t *acb, uint32_t size_dw)
-{
-    return acb_write_nop(acb, size_dw, AGC_PM4_SUB_POP_MARKER);
-}
-
-int32_t PS5_SYSV_ABI sceAgcAcbSetMarker(
-    uint32_t *acb, uint32_t size_dw, const char *marker)
-{
-    return acb_write_marker(acb, size_dw, AGC_PM4_SUB_PUSH_MARKER, marker);
 }
 
 int32_t PS5_SYSV_ABI sceAgcSuspendPointAndCheckStatus(uint32_t value)

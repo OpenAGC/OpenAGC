@@ -131,6 +131,7 @@ typedef enum AgcPm4Subcommand {
     AGC_PM4_SUB_WAIT_FLIP_DONE   = 0x06,
     AGC_PM4_SUB_ACB_RESET        = 0x09,
     AGC_PM4_SUB_WAIT_MEM32       = 0x0A,
+    AGC_PM4_SUB_SET_MARKER       = 0x0A,
     AGC_PM4_SUB_PUSH_MARKER      = 0x0B,
     AGC_PM4_SUB_POP_MARKER       = 0x0C,
     AGC_PM4_SUB_SH_REGS_INDIRECT = 0x11,

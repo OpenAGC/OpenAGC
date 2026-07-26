@@ -1834,34 +1834,6 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndexMultiInstanced(
     return cmd;
 }
 
-/* sceAgcDcbSetMarker (NID: QhCbS4X9Rl8)
- * RE: SPRX calls a helper to compute the marker size, then calls
- * an internal builder. The marker is encoded as a NOP-wrapped string.
- * On the generic backend, we emit a NOP packet with the marker data. */
-uint32_t *PS5_SYSV_ABI sceAgcDcbSetMarker(
-    SceAgcCb *cb, const char *marker, uint32_t flags)
-{
-    if (!marker)
-        return 0;
-
-    /* Compute string length + padding to 4-byte alignment */
-    size_t len = 0;
-    while (marker[len])
-        len++;
-    uint32_t payload_dwords = (uint32_t)((len + 3) / 4);
-    uint32_t total = 2 + payload_dwords;
-
-    uint32_t *cmd = agcCbAllocDwords(cb, total);
-    if (!cmd)
-        return 0;
-
-    cmd[0] = agcPm4Header3Sub(AGC_PM4_OP_NOP, AGC_PM4_SUB_PUSH_MARKER, total);
-    cmd[1] = flags;
-    memset(&cmd[2], 0, payload_dwords * 4);
-    memcpy(&cmd[2], marker, len);
-    return cmd;
-}
-
 /* sceAgcDcbContextStateOp (NID: HabmgqPwPw0)
  * RE: SPRX switches on op (0..3):
  *   0: CLEAR_STATE (2 dwords, opcode 0x12)
