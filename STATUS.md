@@ -327,7 +327,7 @@ make -B test
 Expected result:
 
 ```text
-3345 passed, 0 failed
+3366 passed, 0 failed
 ```
 
 PS5 prospero backend (cross-compiled, no tests):
@@ -1042,6 +1042,12 @@ six-byte `0x8A6C1000` stubs and leave caller state untouched.
 Eight resource/GDS exports match the bundled FW 5.50 driver's six-byte
 `0x8A6C9018` stubs with recovered SysV signatures, and the three capture
 controls return the exact `0x8A6C1000` status. All preserve caller outputs.
+Dragon Quest VII Reimagined coverage is now 252/253. Its FW 11.60
+`dbOlWdppb4o` and `vieBRwlh1Lw` imports are implemented as the recovered
+create-style and update-style enhanced interpolant mappers. Exact host fixtures
+cover all four descriptor modes, matched and unmatched semantics, identity-tail
+fill, and update-tail preservation. These helpers are CPU-only; game-runtime
+validation is still pending.
 `sceAgcDriverFindResourcesPublic` remains intentionally unresolved because its
 constant stub does not prove the public prototype.
 Three NID-specific `IT_INDIRECT_BUFFER` field patchers are implemented directly

@@ -625,6 +625,16 @@ int32_t PS5_SYSV_ABI sceAgcCreateInterpolantMapping_0100(
     AgcShaderRegister *cx_registers,
     const AgcShaderRecord *geometry_shader,
     const AgcShaderRecord *pixel_shader);
+/* FW 11.60 variants imported by Dragon Quest VII Reimagined.  Sony's
+ * exported names remain unknown; the NID-derived labels are stable. */
+int32_t PS5_SYSV_ABI sceAgcUnknownDbOlWdppb4o(
+    AgcShaderRegister *cx_registers,
+    const AgcShaderRecord *geometry_shader,
+    const AgcShaderRecord *pixel_shader);
+int32_t PS5_SYSV_ABI sceAgcUnknownVieBRwlh1Lw(
+    AgcShaderRegister *cx_registers,
+    const AgcShaderRecord *geometry_shader,
+    const AgcShaderRecord *pixel_shader);
 
 /* ===================================================================== */
 /* DCB packet builders — SPRX disassembly batch 2 (FW 5.50)              */

@@ -1492,6 +1492,113 @@ static uint32_t agcCreateInterpolantValue(
     return agcInterpolantApplyDefaults(value, ps);
 }
 
+/* Shared descriptor transform recovered from the FW 11.60 create/update
+ * interpolant export pair imported by Dragon Quest VII Reimagined. */
+static uint32_t agcCreateInterpolantValueEnhanced(
+    uint32_t ps, uint32_t gs, bool matched)
+{
+    uint32_t mode = (ps >> 20u) & 3u;
+    uint32_t value;
+
+    if (mode == 0u) {
+        value = (!matched ||
+                 (ps & AGC_SHADER_SEMANTIC_CUSTOM_MASK) != 0u)
+            ? 0x20u : 0u;
+        value = (value & ~0x300u) | (((ps >> 28u) & 3u) << 8u);
+    } else {
+        uint32_t common = matched ? (ps & gs) : 0u;
+
+        value = ((ps << 4u) & 0x03000000u) | 0x00080000u;
+        value &= ~0x00100020u;
+        if (mode == 2u) {
+            value |= (~common >> 16u) & 0x20u;
+        } else {
+            value |= (~common >> 15u) & 0x20u;
+            value |= (~common >> 1u) & 0x00100000u;
+        }
+        value = (value & ~0x00000300u) |
+            (((ps >> 30u) & 3u) << 8u);
+        value = (value & ~0x00600000u) |
+            (((ps >> 30u) & 3u) << 21u);
+    }
+
+    value &= ~0x1fu;
+    if (matched)
+        value |= (gs & AGC_SHADER_SEMANTIC_HW_MAPPING_MASK) >> 8u;
+
+    value &= ~0x400u;
+    if (matched &&
+        (ps & (AGC_SHADER_SEMANTIC_FLAT_MASK |
+               AGC_SHADER_SEMANTIC_CUSTOM_MASK)) != 0u)
+        value |= 0x400u;
+
+    return value;
+}
+
+static int32_t agcBuildEnhancedInterpolantMapping(
+    AgcShaderRegister *cx_registers,
+    const AgcShaderRecord *geometry_shader,
+    const AgcShaderRecord *pixel_shader,
+    bool fill_identity_tail)
+{
+    if (!cx_registers || !pixel_shader)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    uint32_t num_inputs = agcShaderRecordGetNumInputSemantics(pixel_shader);
+    if (num_inputs > 32u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (num_inputs == 0u) {
+        if (fill_identity_tail) {
+            for (uint32_t i = 0u; i < 32u; i++) {
+                cx_registers[i].offset =
+                    AGC_INTERPOLANT_REGISTER_DESCRIPTOR_BASE + i;
+                cx_registers[i].value = i;
+            }
+        }
+        return AGC_OK;
+    }
+    if (!geometry_shader)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    const AgcShaderSemantic *inputs =
+        (const AgcShaderSemantic *)(uintptr_t)pixel_shader->input_semantics;
+    const AgcShaderSemantic *outputs =
+        (const AgcShaderSemantic *)(uintptr_t)geometry_shader->output_semantics;
+    uint32_t num_outputs =
+        agcShaderRecordGetNumOutputSemantics(geometry_shader);
+    if (!inputs || (num_outputs != 0u && !outputs))
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    uint32_t i;
+    for (i = 0u; i < num_inputs; i++) {
+        uint32_t ps = inputs[i].value;
+        uint32_t gs = 0u;
+        bool matched = false;
+        for (uint32_t j = 0u; j < num_outputs; j++) {
+            if ((outputs[j].value & AGC_SHADER_SEMANTIC_ID_MASK) ==
+                (ps & AGC_SHADER_SEMANTIC_ID_MASK)) {
+                gs = outputs[j].value;
+                matched = true;
+                break;
+            }
+        }
+
+        cx_registers[i].offset =
+            AGC_INTERPOLANT_REGISTER_DESCRIPTOR_BASE + i;
+        cx_registers[i].value =
+            agcCreateInterpolantValueEnhanced(ps, gs, matched);
+    }
+
+    if (fill_identity_tail) {
+        for (; i < 32u; i++) {
+            cx_registers[i].offset =
+                AGC_INTERPOLANT_REGISTER_DESCRIPTOR_BASE + i;
+            cx_registers[i].value = i;
+        }
+    }
+    return AGC_OK;
+}
+
 int32_t PS5_SYSV_ABI sceAgcCreateInterpolantMapping(
     AgcShaderRegister *cx_registers,
     const AgcShaderRecord *geometry_shader,
@@ -1559,6 +1666,24 @@ int32_t PS5_SYSV_ABI sceAgcCreateInterpolantMapping_0100(
 {
     return sceAgcCreateInterpolantMapping(
         cx_registers, geometry_shader, pixel_shader);
+}
+
+int32_t PS5_SYSV_ABI sceAgcUnknownDbOlWdppb4o(
+    AgcShaderRegister *cx_registers,
+    const AgcShaderRecord *geometry_shader,
+    const AgcShaderRecord *pixel_shader)
+{
+    return agcBuildEnhancedInterpolantMapping(
+        cx_registers, geometry_shader, pixel_shader, true);
+}
+
+int32_t PS5_SYSV_ABI sceAgcUnknownVieBRwlh1Lw(
+    AgcShaderRegister *cx_registers,
+    const AgcShaderRecord *geometry_shader,
+    const AgcShaderRecord *pixel_shader)
+{
+    return agcBuildEnhancedInterpolantMapping(
+        cx_registers, geometry_shader, pixel_shader, false);
 }
 
 /* ===================================================================== */

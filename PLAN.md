@@ -164,7 +164,7 @@ Convert the conclusions into permanent capability/profile regressions:
 
 Dragon Quest VII Reimagined (`PPSA17942`) is the fifth target in progress. It
 is hardware-proven on FW `0x0550` and bundles AGC compatibility SPRXs despite
-declaring `0x1202`. Its 253 imports currently have 250 covered and 3 unresolved
+declaring `0x1202`. Its 253 imports currently have 252 covered and 1 unresolved
 after completing the FW 5.50 GetSize imports, seven packet patchers, and the
 data-packet payload-range, primitive-state update, and constant driver-status
 ABIs. Its FW 5.50 workload-stream register/unregister pair and AGR multi-DCB
@@ -236,11 +236,15 @@ failure; a focused FW `0x0550` hardware run remains required before this path
 is labeled hardware-validated.
 AcquireMem sizes follow the
 firmware title-workaround mode: mode 1 returns 64 bytes and modes 0/2 return 32,
-instead of hard-coding the emulator's 32-byte path. Resolve the remaining three
-imports (`dbOlWdppb4o`, `vieBRwlh1Lw`, and
-`sceAgcDriverFindResourcesPublic`) from game call sites or independently
-corroborated public prototypes; preserve unknown NIDs for evidence-driven
-resolution.
+instead of hard-coding the emulator's 32-byte path. The FW 11.60
+`dbOlWdppb4o` and `vieBRwlh1Lw` imports now use their recovered three-argument
+interpolant-mapping ABI and exact enhanced descriptor transform. The create
+variant fills the 32-entry identity tail, while the update variant leaves the
+tail untouched. These are CPU-side shader metadata helpers covered by exact
+host fixtures; game-runtime validation remains pending. Resolve the sole
+remaining import, `sceAgcDriverFindResourcesPublic`, only from a game call site
+or independently corroborated public prototype; its constant firmware stub is
+not sufficient evidence to guess the ABI.
 
 Grow the corpus from three games to at least ten representative,
 FW 5.50-compatible binaries spanning multiple engines, SDK vintages, and

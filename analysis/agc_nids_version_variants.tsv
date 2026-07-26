@@ -13,7 +13,7 @@ firmware	library	name	nid	notes
 11.60	libSceAgc	sceAgcWriteDataPatchSetCachePolicy	eAy8eGNsCuU	11.60 SPRX export; identified from sharpemu AgcExports.cs
 11.60	libSceAgc	sceAgcAsyncWriteDataPatchSetCachePolicy	y5K5tPktiL8	11.60 compatibility SPRX export; aerolib name; exact IT_WRITE_DATA bits 26:25 patch recovered from Dragon Quest VII bundled SPRX
 11.60	libSceAgc	sceAgcGetShaderInstrumentation	SwI6QxqwAC0	11.60 compatibility SPRX export; aerolib name; Dragon Quest caller uses the low instrumentation bit
-11.60	libSceAgc	sceAgcUnknown_11.60	dbOlWdppb4o	11.60 SPRX export
+11.60	libSceAgc	sceAgcUnknownDbOlWdppb4o	dbOlWdppb4o	FW 11.60 enhanced create-style interpolant mapper; exact ABI recovered, official name unknown
 11.60	libSceAgc	sceAgcAcquireMemSetEngine	W0WEyog0f74	11.60 compatibility SPRX export; aerolib name; exact IT_ACQUIRE_MEM control bit 31 patch recovered from Dragon Quest VII bundled SPRX
 11.60	libSceAgc	sceAgcDcbPushMarkerSpan	N7M3+N-sBCw	11.60 compatibility SPRX export; aerolib name; exact cursor/text/length/color ABI recovered from Dragon Quest VII bundled SPRX
 11.60	libSceAgc	sceAgcGetSemaphoreLabel	hFQ9pUxoLQ4	11.60 compatibility SPRX export; aerolib name; exact index/output-pointer ABI and 32-byte label stride recovered from Dragon Quest VII bundled SPRX
@@ -22,7 +22,7 @@ firmware	library	name	nid	notes
 11.60	libSceAgc	sceAgcAsyncWriteDataPatchSetDst	EJBA4dbmvfg	11.60 compatibility SPRX export; aerolib name; exact IT_WRITE_DATA bits 11:8 patch recovered from Dragon Quest VII bundled SPRX
 11.60	libSceAgc	sceAgcAcbSetMarkerSpan	pxx-GoOSdw4	11.60 compatibility SPRX export; aerolib name; exact cursor/text/length/color ABI recovered from Dragon Quest VII bundled SPRX
 11.60	libSceAgc	sceAgcUnknown_11.60	h4h5EQ-Y20M	11.60 SPRX export
-11.60	libSceAgc	sceAgcUnknown_11.60	vieBRwlh1Lw	11.60 SPRX export
+11.60	libSceAgc	sceAgcUnknownVieBRwlh1Lw	vieBRwlh1Lw	FW 11.60 enhanced update-style interpolant mapper; exact ABI recovered, official name unknown
 11.60	libSceAgc	sceAgcSetShaderInstrumentation	RTpj-tIlvZc	11.60 compatibility SPRX export; aerolib name; stores EDI flags and returns zero
 11.60	libSceAgc	sceAgcWriteDataPatchSetDst	tmy-+rBpspY	11.60 SPRX export; identified from sharpemu AgcExports.cs
 11.60	libSceAgc	sceAgcUnknown_11.60	86rJnbZUpr4	11.60 SPRX export

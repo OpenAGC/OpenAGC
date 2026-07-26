@@ -341,7 +341,7 @@ libSceAgc	sceAgcUnknownIkfdtRIqCE	Ikfdt-rIqCE	FW 5.50 and 11.60 SPRX-confirmed I
 libSceAgc	sceAgcCreateInterpolantMapping_0100	HV4j+E0MBHE	NID computation verified; FW 5.50 ordinal 133 at 0xdd60; imported by PPSA02453
 libSceAgcDriver	sceAgcUnknown_NRO47jBXLiI	NRO47jBXLiI	unverified (name unknown)
 libSceAgcDriver	sceAgcUnknown_dwoD-LJDQy8	dwoD-LJDQy8	unverified (name unknown)
-libSceAgc	sceAgcUnknown_k0E7vkgqAuE	k0E7vkgqAuE	unverified (name unknown)
+libSceAgc	sceAgcUpdateInterpolantMapping_0100	k0E7vkgqAuE	NID computation verified; FW 11.60 update partner of sceAgcCreateInterpolantMapping_0100
 libSceAgcDriver	sceAgcUnknown_oFb2hMcoJa4	oFb2hMcoJa4	unverified (name unknown)
 libSceAgc	sceAgcUnknownQj7QZpgr9Uw	qj7QZpgr9Uw	exact 2-arg context-state transition builder; FW 5.50/11.60 SPRX bodies, official name unknown
 libSceAgc	sceAgcUnknownZARR5aCmkoY	zARR5aCmkoY	FW 5.50 and 11.60 SPRX-confirmed exact 12-argument ATOMIC_GDS builder; official name unknown

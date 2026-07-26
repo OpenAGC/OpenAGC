@@ -43,13 +43,18 @@ titles across multiple engines and SDK vintages.
   `sceAgcCbMemsetExclusive` builder plus three NID-exact indirect-buffer field
   patchers, the NID-exact four-argument `SET_INDEX_SIZE` variant, and the full
   12-argument atomic-GDS builder plus the exact two-argument `qj7QZpgr9Uw`
-  context-state transition builder cover 250 imports; 3 remain under analysis,
+  context-state transition builder plus the FW 11.60 enhanced create/update
+  interpolant mappers cover 252 imports; 1 remains under analysis,
   so the title is tracked
   separately from the four fully covered titles. AcquireMem packet size follows
   the FW 5.50 title
   workaround mode: mode 1 uses 64 bytes, while modes 0 and 2 use 32 bytes.
   The resource/GDS exports preserve caller outputs and return the exact FW 5.50
   `0x8A6C9018` status; capture start, stop, and trigger return `0x8A6C1000`.
+  The enhanced interpolant helpers use the recovered three-argument ABI and
+  exact descriptor transform. Host fixtures cover all four modes, matched and
+  unmatched semantics, create identity-tail fill, and update-tail preservation;
+  game-runtime validation remains pending.
   `sceAgcDriverFindResourcesPublic` remains unresolved because its constant
   firmware stub does not reveal the public argument ABI.
   The three packet patchers retain NID-derived labels because their FW 5.50 and

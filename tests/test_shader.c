@@ -1035,6 +1035,69 @@ static void test_create_interpolant_mapping_invalid(void) {
         "CreateInterpolantMapping rejects missing GS semantics safely");
 }
 
+static void test_enhanced_interpolant_mapping_variants(void) {
+    AgcShaderSemantic inputs[4] = {
+        {semantic_word(1u, 0u, 0u) | AGC_SHADER_SEMANTIC_CUSTOM_MASK |
+            (2u << 28u)},
+        {semantic_word(2u, 0u, 0u) | (1u << 20u) | (1u << 30u)},
+        {semantic_word(3u, 0u, 0u) | (2u << 20u) | (2u << 30u)},
+        {semantic_word(4u, 0u, 0u) | (3u << 20u) | (3u << 30u) |
+            AGC_SHADER_SEMANTIC_CUSTOM_MASK},
+    };
+    AgcShaderSemantic outputs[3] = {
+        {semantic_word(1u, 5u, 0u)},
+        {semantic_word(2u, 7u, 0u) | (1u << 20u)},
+        {semantic_word(4u, 9u, 0u) | (3u << 20u)},
+    };
+    AgcShaderRegister create_regs[32];
+    AgcShaderRegister update_regs[32];
+    AgcShaderRecord gs, ps;
+
+    memset(create_regs, 0xcc, sizeof(create_regs));
+    memset(update_regs, 0xcc, sizeof(update_regs));
+    build_interpolant_shader(&gs, NULL, 0u, outputs, 3u);
+    build_interpolant_shader(&ps, inputs, 4u, NULL, 0u);
+
+    TEST_ASSERT_EQ(sceAgcUnknownDbOlWdppb4o(create_regs, &gs, &ps),
+        AGC_OK, "enhanced create interpolant mapping succeeds");
+    TEST_ASSERT_EQ(create_regs[0].value, 0x00000625u,
+        "enhanced mode zero descriptor");
+    TEST_ASSERT_EQ(create_regs[1].value, 0x01380107u,
+        "enhanced mode one descriptor");
+    TEST_ASSERT_EQ(create_regs[2].value, 0x02480220u,
+        "enhanced unmatched mode two descriptor");
+    TEST_ASSERT_EQ(create_regs[3].value, 0x03680709u,
+        "enhanced mode three descriptor");
+    TEST_ASSERT_EQ(create_regs[4].offset,
+        AGC_INTERPOLANT_REGISTER_DESCRIPTOR_BASE + 4u,
+        "enhanced create starts identity tail at input count");
+    TEST_ASSERT_EQ(create_regs[4].value, 4u,
+        "enhanced create fills identity tail");
+
+    TEST_ASSERT_EQ(sceAgcUnknownVieBRwlh1Lw(update_regs, &gs, &ps),
+        AGC_OK, "enhanced update interpolant mapping succeeds");
+    for (uint32_t i = 0u; i < 4u; i++) {
+        TEST_ASSERT_EQ(update_regs[i].offset, create_regs[i].offset,
+            "enhanced update descriptor offset matches create");
+        TEST_ASSERT_EQ(update_regs[i].value, create_regs[i].value,
+            "enhanced update descriptor value matches create");
+    }
+    TEST_ASSERT_EQ(update_regs[4].offset, 0xCCCCCCCCu,
+        "enhanced update preserves tail offset");
+    TEST_ASSERT_EQ(update_regs[4].value, 0xCCCCCCCCu,
+        "enhanced update preserves tail value");
+
+    build_interpolant_shader(&ps, NULL, 0u, NULL, 0u);
+    update_regs[0].offset = 0x12345678u;
+    update_regs[0].value = 0x87654321u;
+    TEST_ASSERT_EQ(sceAgcUnknownVieBRwlh1Lw(update_regs, &gs, &ps),
+        AGC_OK, "enhanced empty update succeeds");
+    TEST_ASSERT_EQ(update_regs[0].offset, 0x12345678u,
+        "enhanced empty update preserves offset");
+    TEST_ASSERT_EQ(update_regs[0].value, 0x87654321u,
+        "enhanced empty update preserves value");
+}
+
 static void test_ngg_compiler_record_pipeline_fixture(void)
 {
     AgcShaderRecord front, back, fused, ps;
@@ -1161,6 +1224,7 @@ void test_suite_shader(void) {
     TEST_RUN(test_create_interpolant_mapping_flags);
     TEST_RUN(test_create_interpolant_mapping_all_entries);
     TEST_RUN(test_create_interpolant_mapping_invalid);
+    TEST_RUN(test_enhanced_interpolant_mapping_variants);
     /* Synthetic compiler ES+GS/NGG record pipeline contract. */
     TEST_RUN(test_ngg_compiler_record_pipeline_fixture);
 }
