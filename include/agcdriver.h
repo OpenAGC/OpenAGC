@@ -130,6 +130,10 @@ uint32_t PS5_SYSV_ABI sceAgcDriverGetPaDebugInterfaceVersion(void);
 /* Capture status query. NID: Ddwk4gLT5j0
  * reference-confirmed: returns 0 (no capture in progress). */
 int32_t PS5_SYSV_ABI sceAgcDriverIsCaptureInProgress(void);
+/* FW 5.50 constant status queries. */
+int32_t PS5_SYSV_ABI sceAgcDriverIsSubmitValidationEnabled(void);
+int32_t PS5_SYSV_ABI sceAgcDriverIsTraceInProgress(void);
+int32_t PS5_SYSV_ABI sceAgcDriverGetShaderDebuggingStatus(void);
 
 /* Event queue management. NIDs:
  * DeleteEqEvent: DL2RXaXOy88

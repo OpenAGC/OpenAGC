@@ -1261,6 +1261,12 @@ static void test_batch3_ref_getsize_helpers(void) {
 static void test_batch3_ref_driver_stubs(void) {
     /* IsCaptureInProgress: returns 0 */
     TEST_ASSERT_EQ(sceAgcDriverIsCaptureInProgress(), 0, "IsCaptureInProgress returns 0");
+    TEST_ASSERT_EQ(sceAgcDriverIsSubmitValidationEnabled(), 0,
+        "IsSubmitValidationEnabled returns 0");
+    TEST_ASSERT_EQ(sceAgcDriverIsTraceInProgress(), 0,
+        "IsTraceInProgress returns 0");
+    TEST_ASSERT_EQ(sceAgcDriverGetShaderDebuggingStatus(), 1,
+        "GetShaderDebuggingStatus returns 1");
 
     /* GetDefaultOwner: returns 0 */
     TEST_ASSERT_EQ(sceAgcDriverGetDefaultOwner(), 0u, "GetDefaultOwner returns 0");

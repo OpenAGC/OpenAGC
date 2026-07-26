@@ -139,6 +139,23 @@ int32_t PS5_SYSV_ABI sceAgcDriverIsCaptureInProgress(void)
     return 0;
 }
 
+/* FW 5.50 qspAL8bgcBY @ 0x77c0 and +TN0oRTBxJQ @ 0x6730. */
+int32_t PS5_SYSV_ABI sceAgcDriverIsSubmitValidationEnabled(void)
+{
+    return 0;
+}
+
+int32_t PS5_SYSV_ABI sceAgcDriverIsTraceInProgress(void)
+{
+    return 0;
+}
+
+/* FW 5.50 rJUyMrDdxJg @ 0x6740. */
+int32_t PS5_SYSV_ABI sceAgcDriverGetShaderDebuggingStatus(void)
+{
+    return 1;
+}
+
 /* sceAgcDriverGetDefaultOwner (NID: F0ZXt5q0ZTA)
  * reference-confirmed: returns 0 (default owner handle). */
 uint32_t PS5_SYSV_ABI sceAgcDriverGetDefaultOwner(void)
