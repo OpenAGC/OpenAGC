@@ -779,6 +779,17 @@ int32_t PS5_SYSV_ABI sceAgcWriteDataPatchSetCachePolicy(
     uint32_t *cmd, uint32_t cache_policy);
 int32_t PS5_SYSV_ABI sceAgcWriteDataPatchSetDst(
     uint32_t *cmd, uint32_t destination);
+/* Compatibility-SPRX async packet patchers. NIDs:
+ * AcquireMem engine=W0WEyog0f74, WriteData address=d4NZIlguzv0,
+ * cache policy=y5K5tPktiL8, destination=EJBA4dbmvfg. */
+int32_t PS5_SYSV_ABI sceAgcAcquireMemSetEngine(
+    uint32_t *cmd, uint32_t engine);
+int32_t PS5_SYSV_ABI sceAgcAsyncWriteDataPatchSetAddressOrOffset(
+    uint32_t *cmd, uint64_t address_or_offset);
+int32_t PS5_SYSV_ABI sceAgcAsyncWriteDataPatchSetCachePolicy(
+    uint32_t *cmd, uint32_t cache_policy);
+int32_t PS5_SYSV_ABI sceAgcAsyncWriteDataPatchSetDst(
+    uint32_t *cmd, uint32_t destination);
 
 /* Patch Jump target address and size (cmd[1..3]). NID: 2BS4EtAaF28
  * reference-confirmed: patches IT_INDIRECT_BUFFER cmd[1] lo,

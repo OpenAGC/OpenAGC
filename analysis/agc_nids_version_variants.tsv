@@ -5,21 +5,21 @@ firmware	library	name	nid	notes
 # firmware	library	name	nid	source
 11.60	libSceAgc	sceAgcUnknown_11.60	BYcSvEsINWU	11.60 SPRX export
 11.60	libSceAgc	sceAgcUnknown_11.60	Eq7asRCcfMs	11.60 SPRX export
-11.60	libSceAgc	sceAgcUnknown_11.60	d4NZIlguzv0	11.60 SPRX export
+11.60	libSceAgc	sceAgcAsyncWriteDataPatchSetAddressOrOffset	d4NZIlguzv0	11.60 compatibility SPRX export; aerolib name; exact IT_WRITE_DATA dword 2-3 patch recovered from Dragon Quest VII bundled SPRX
 11.60	libSceAgc	sceAgcUnknown_11.60	-KRzWekV120	11.60 SPRX export
 11.60	libSceAgc	sceAgcSetAmmSemaphoreMemory	OQTgEXyihvA	11.60 compatibility SPRX export; aerolib name; exact two-argument base/size ABI, 16 KiB alignment, and state transitions recovered from Dragon Quest VII bundled SPRX
 11.60	libSceAgc	sceAgcWriteDataPatchSetAddressOrOffset	fPSCdQxgpSw	11.60 SPRX export; identified from sharpemu AgcExports.cs (also exported from libSceAgcDriver, see below)
 11.60	libSceAgc	sceAgcUnknown_11.60	NbiQSQ-UL+M	11.60 SPRX export
 11.60	libSceAgc	sceAgcWriteDataPatchSetCachePolicy	eAy8eGNsCuU	11.60 SPRX export; identified from sharpemu AgcExports.cs
-11.60	libSceAgc	sceAgcUnknown_11.60	y5K5tPktiL8	11.60 SPRX export
+11.60	libSceAgc	sceAgcAsyncWriteDataPatchSetCachePolicy	y5K5tPktiL8	11.60 compatibility SPRX export; aerolib name; exact IT_WRITE_DATA bits 26:25 patch recovered from Dragon Quest VII bundled SPRX
 11.60	libSceAgc	sceAgcGetShaderInstrumentation	SwI6QxqwAC0	11.60 compatibility SPRX export; aerolib name; Dragon Quest caller uses the low instrumentation bit
 11.60	libSceAgc	sceAgcUnknown_11.60	dbOlWdppb4o	11.60 SPRX export
-11.60	libSceAgc	sceAgcUnknown_11.60	W0WEyog0f74	11.60 SPRX export
+11.60	libSceAgc	sceAgcAcquireMemSetEngine	W0WEyog0f74	11.60 compatibility SPRX export; aerolib name; exact IT_ACQUIRE_MEM control bit 31 patch recovered from Dragon Quest VII bundled SPRX
 11.60	libSceAgc	sceAgcUnknown_11.60	N7M3+N-sBCw	11.60 SPRX export
 11.60	libSceAgc	sceAgcGetSemaphoreLabel	hFQ9pUxoLQ4	11.60 compatibility SPRX export; aerolib name; exact index/output-pointer ABI and 32-byte label stride recovered from Dragon Quest VII bundled SPRX
 11.60	libSceAgc	sceAgcUnknown_11.60	pRO4U9d0vaA	11.60 SPRX export
 11.60	libSceAgc	sceAgcUnknown_11.60	ICkECTBxrMw	11.60 SPRX export
-11.60	libSceAgc	sceAgcUnknown_11.60	EJBA4dbmvfg	11.60 SPRX export
+11.60	libSceAgc	sceAgcAsyncWriteDataPatchSetDst	EJBA4dbmvfg	11.60 compatibility SPRX export; aerolib name; exact IT_WRITE_DATA bits 11:8 patch recovered from Dragon Quest VII bundled SPRX
 11.60	libSceAgc	sceAgcUnknown_11.60	pxx-GoOSdw4	11.60 SPRX export
 11.60	libSceAgc	sceAgcUnknown_11.60	h4h5EQ-Y20M	11.60 SPRX export
 11.60	libSceAgc	sceAgcUnknown_11.60	vieBRwlh1Lw	11.60 SPRX export

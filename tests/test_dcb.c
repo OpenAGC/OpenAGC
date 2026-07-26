@@ -1051,6 +1051,50 @@ static void test_batch3_ref_patchers(void) {
         AGC_ERROR_INVALID_ARGUMENT,
         "WriteData destination patch rejects wrong opcode");
 
+    uint32_t acquire_patch[8] = {
+        agcPm4Header3(AGC_PM4_OP_ACQUIRE_MEM, 8), 0x12345678u
+    };
+    TEST_ASSERT_EQ(sceAgcAcquireMemSetEngine(acquire_patch, 1u), AGC_OK,
+        "AcquireMem engine patch returns OK");
+    TEST_ASSERT_EQ(acquire_patch[1], 0x92345678u,
+        "AcquireMem engine patch sets bit 31");
+    TEST_ASSERT_EQ(sceAgcAcquireMemSetEngine(acquire_patch, 0u), AGC_OK,
+        "AcquireMem engine clear returns OK");
+    TEST_ASSERT_EQ(acquire_patch[1], 0x12345678u,
+        "AcquireMem engine patch clears bit 31");
+    acquire_patch[0] = agcPm4Header3(AGC_PM4_OP_NOP, 8);
+    TEST_ASSERT_EQ(sceAgcAcquireMemSetEngine(acquire_patch, 1u),
+        (int32_t)0x8A6C000Cu,
+        "AcquireMem engine patch returns compatibility packet error");
+
+    wd[0] = agcPm4Header3(AGC_PM4_OP_WRITE_DATA, 8);
+    wd[1] = 0xFFFFFFFFu;
+    TEST_ASSERT_EQ(sceAgcAsyncWriteDataPatchSetAddressOrOffset(wd, wd_addr),
+        AGC_OK, "Async WriteData address patch returns OK");
+    TEST_ASSERT_EQ(wd[2], (uint32_t)wd_addr,
+        "Async WriteData address patch sets low dword");
+    TEST_ASSERT_EQ(wd[3], (uint32_t)(wd_addr >> 32),
+        "Async WriteData address patch sets high dword");
+    TEST_ASSERT_EQ(sceAgcAsyncWriteDataPatchSetCachePolicy(wd, 1u), AGC_OK,
+        "Async WriteData cache-policy patch returns OK");
+    TEST_ASSERT_EQ(wd[1], 0xFBFFFFFFu,
+        "Async WriteData cache-policy patch replaces bits 26:25");
+    wd[1] = 0xA5A5A5A5u;
+    TEST_ASSERT_EQ(sceAgcAsyncWriteDataPatchSetDst(wd, 0x1Bu), AGC_OK,
+        "Async WriteData destination patch returns OK");
+    TEST_ASSERT_EQ(wd[1], (0xA5A5A5A5u & 0xFFFFF0FFu) | 0xB00u,
+        "Async WriteData destination patch replaces only bits 11:8");
+    wd[0] = agcPm4Header3(AGC_PM4_OP_NOP, 8);
+    TEST_ASSERT_EQ(sceAgcAsyncWriteDataPatchSetAddressOrOffset(wd, 0u),
+        (int32_t)0x8A6C000Cu,
+        "Async WriteData address patch returns compatibility packet error");
+    TEST_ASSERT_EQ(sceAgcAsyncWriteDataPatchSetCachePolicy(wd, 0u),
+        (int32_t)0x8A6C000Cu,
+        "Async WriteData cache patch returns compatibility packet error");
+    TEST_ASSERT_EQ(sceAgcAsyncWriteDataPatchSetDst(wd, 0u),
+        (int32_t)0x8A6C000Cu,
+        "Async WriteData destination patch returns compatibility packet error");
+
     /* JumpPatchSetTarget: patch cmd[1..3] for IT_INDIRECT_BUFFER */
     uint32_t jump[4];
     jump[0] = agcPm4Header3(AGC_PM4_OP_INDIRECT_BUFFER, 4);

@@ -2234,6 +2234,65 @@ int32_t PS5_SYSV_ABI sceAgcWriteDataPatchSetDst(
     return AGC_OK;
 }
 
+static int32_t agcCompatibilityPacketCheck(
+    const uint32_t *cmd, uint32_t expected_opcode)
+{
+    if (!cmd)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (((cmd[0] >> 8) & 0xFFu) != expected_opcode)
+        return (int32_t)0x8A6C000Cu;
+    return AGC_OK;
+}
+
+/* Compatibility-SPRX W0WEyog0f74 @ 0xd450. */
+int32_t PS5_SYSV_ABI sceAgcAcquireMemSetEngine(
+    uint32_t *cmd, uint32_t engine)
+{
+    int32_t result = agcCompatibilityPacketCheck(cmd, AGC_PM4_OP_ACQUIRE_MEM);
+    if (result != AGC_OK)
+        return result;
+
+    cmd[1] = (cmd[1] & 0x7FFFFFFFu) | ((engine & 1u) << 31u);
+    return AGC_OK;
+}
+
+/* Compatibility-SPRX d4NZIlguzv0 @ 0xd510. */
+int32_t PS5_SYSV_ABI sceAgcAsyncWriteDataPatchSetAddressOrOffset(
+    uint32_t *cmd, uint64_t address_or_offset)
+{
+    int32_t result = agcCompatibilityPacketCheck(cmd, AGC_PM4_OP_WRITE_DATA);
+    if (result != AGC_OK)
+        return result;
+
+    cmd[2] = (uint32_t)address_or_offset;
+    cmd[3] = (uint32_t)(address_or_offset >> 32);
+    return AGC_OK;
+}
+
+/* Compatibility-SPRX y5K5tPktiL8 @ 0xd530. */
+int32_t PS5_SYSV_ABI sceAgcAsyncWriteDataPatchSetCachePolicy(
+    uint32_t *cmd, uint32_t cache_policy)
+{
+    int32_t result = agcCompatibilityPacketCheck(cmd, AGC_PM4_OP_WRITE_DATA);
+    if (result != AGC_OK)
+        return result;
+
+    cmd[1] = (cmd[1] & 0xF9FFFFFFu) | ((cache_policy & 0x3u) << 25u);
+    return AGC_OK;
+}
+
+/* Compatibility-SPRX EJBA4dbmvfg @ 0xd560. */
+int32_t PS5_SYSV_ABI sceAgcAsyncWriteDataPatchSetDst(
+    uint32_t *cmd, uint32_t destination)
+{
+    int32_t result = agcCompatibilityPacketCheck(cmd, AGC_PM4_OP_WRITE_DATA);
+    if (result != AGC_OK)
+        return result;
+
+    cmd[1] = (cmd[1] & 0xFFFFF0FFu) | ((destination & 0xFu) << 8u);
+    return AGC_OK;
+}
+
 /* sceAgcJumpPatchSetTarget (NID: 2BS4EtAaF28)
  * Patches IT_INDIRECT_BUFFER cmd[1] lo, cmd[2] hi (bits 15:0),
  * cmd[3] size (bits 19:0). */
