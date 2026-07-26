@@ -1296,13 +1296,33 @@ static void test_batch3_ref_driver_stubs(void) {
     TEST_ASSERT_EQ(sceAgcDriverUnregisterResource(0), AGC_ERROR_NOT_SUPPORTED,
         "UnregisterResource returns NOT_SUPPORTED");
 
-    /* RegisterWorkloadStream: stub returns NOT_SUPPORTED */
-    uint32_t wl_id = 0xDEAD;
-    TEST_ASSERT_EQ(sceAgcDriverRegisterWorkloadStream(NULL, &wl_id), AGC_ERROR_NOT_SUPPORTED,
-        "RegisterWorkloadStream returns NOT_SUPPORTED");
+    uint8_t workload_stream[32] = {0xA5u};
+    TEST_ASSERT_EQ((uint32_t)sceAgcDriverRegisterWorkloadStream(0, workload_stream),
+        AGC_DRIVER_ERROR_INVALID_VALUE,
+        "RegisterWorkloadStream rejects stream zero");
+    TEST_ASSERT_EQ((uint32_t)sceAgcDriverRegisterWorkloadStream(1, NULL),
+        AGC_DRIVER_ERROR_INVALID_ARGUMENT,
+        "RegisterWorkloadStream rejects null record");
+    TEST_ASSERT_EQ(sceAgcDriverRegisterWorkloadStream(1, workload_stream), AGC_OK,
+        "RegisterWorkloadStream stores valid record");
+    TEST_ASSERT_EQ((uint32_t)sceAgcDriverRegisterWorkloadStream(1, workload_stream),
+        AGC_DRIVER_ERROR_INVALID_VALUE,
+        "RegisterWorkloadStream rejects duplicate ID");
+    TEST_ASSERT_EQ(sceAgcDriverUnregisterWorkloadStream(1), AGC_OK,
+        "UnregisterWorkloadStream removes valid record");
+    TEST_ASSERT_EQ((uint32_t)sceAgcDriverUnregisterWorkloadStream(1),
+        AGC_DRIVER_ERROR_NOT_REGISTERED,
+        "UnregisterWorkloadStream rejects missing record");
+    TEST_ASSERT_EQ((uint32_t)sceAgcDriverUnregisterWorkloadStream(32),
+        AGC_DRIVER_ERROR_INVALID_VALUE,
+        "UnregisterWorkloadStream rejects out-of-range ID");
 }
 
 static void test_batch3_submit_wrappers(void) {
+    TEST_ASSERT_EQ((uint32_t)sceAgcDriverAgrSubmitMultiDcbs(NULL, NULL, 0),
+        AGC_DRIVER_ERROR_AGR_NOT_INITIALIZED,
+        "AgrSubmitMultiDcbs reports uninitialized AGR");
+
     /* SubmitMultiDcbs with count=0 returns OK */
     TEST_ASSERT_EQ(sceAgcDriverSubmitMultiDcbs(NULL, NULL, 0), AGC_OK,
         "SubmitMultiDcbs count=0 returns OK");

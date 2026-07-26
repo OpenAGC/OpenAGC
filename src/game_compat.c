@@ -194,14 +194,42 @@ int32_t PS5_SYSV_ABI sceAgcDriverUnregisterResource(uint32_t resource_id)
     return AGC_ERROR_NOT_SUPPORTED;
 }
 
-/* sceAgcDriverRegisterWorkloadStream (NID: 3AyTaWcF-H8)
- * reference-confirmed: stub, returns AGC_ERROR_NOT_SUPPORTED. */
+/* FW 5.50 workload-stream table: IDs 1..31, one 32-byte record per ID. */
+static uint32_t s_workload_stream_mask;
+static uint8_t s_workload_streams[32][32];
+
 int32_t PS5_SYSV_ABI sceAgcDriverRegisterWorkloadStream(
-    const char *name, uint32_t *out_id)
+    uint32_t stream_id, const void *stream)
 {
-    (void)name;
-    if (out_id) *out_id = 0;
-    return AGC_ERROR_NOT_SUPPORTED;
+    if (stream_id < 1u || stream_id > 31u)
+        return (int32_t)AGC_DRIVER_ERROR_INVALID_VALUE;
+
+    uint32_t bit = 1u << stream_id;
+    if ((s_workload_stream_mask & bit) != 0)
+        return (int32_t)AGC_DRIVER_ERROR_INVALID_VALUE;
+    if (!stream)
+        return (int32_t)AGC_DRIVER_ERROR_INVALID_ARGUMENT;
+
+    memcpy(s_workload_streams[stream_id], stream,
+        sizeof(s_workload_streams[stream_id]));
+    s_workload_stream_mask |= bit;
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI sceAgcDriverUnregisterWorkloadStream(
+    uint32_t stream_id)
+{
+    if (stream_id < 1u || stream_id > 31u)
+        return (int32_t)AGC_DRIVER_ERROR_INVALID_VALUE;
+
+    uint32_t bit = 1u << stream_id;
+    if ((s_workload_stream_mask & bit) == 0)
+        return (int32_t)AGC_DRIVER_ERROR_NOT_REGISTERED;
+
+    memset(s_workload_streams[stream_id], 0,
+        sizeof(s_workload_streams[stream_id]));
+    s_workload_stream_mask &= ~bit;
+    return AGC_OK;
 }
 
 /* ===================================================================== */
@@ -246,6 +274,18 @@ int32_t PS5_SYSV_ABI sceAgcDriverSubmitMultiDcbs(
 {
     return agcSubmitDcbArrayDirect(
         dcb_gpu_addrs, dcb_sizes_in_dwords, count);
+}
+
+/* FW 5.50 +T8Xo6LtFJI uses the same three-argument ABI as SubmitMultiDcbs.
+ * The retail AGR path is unavailable until its private driver state exists. */
+int32_t PS5_SYSV_ABI sceAgcDriverAgrSubmitMultiDcbs(
+    void *const dcb_gpu_addrs[], const uint32_t *dcb_sizes_in_dwords,
+    uint32_t count)
+{
+    (void)dcb_gpu_addrs;
+    (void)dcb_sizes_in_dwords;
+    (void)count;
+    return (int32_t)AGC_DRIVER_ERROR_AGR_NOT_INITIALIZED;
 }
 
 /* sceAgcDriverSubmitCommandBuffer (NID: b4fpgH5ZXxQ)

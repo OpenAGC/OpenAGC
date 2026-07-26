@@ -125,6 +125,10 @@ int32_t  PS5_SYSV_ABI sceAgcDriverSubmitToRazorACQ(void);
 int32_t  PS5_SYSV_ABI sceAgcDriverSubmitToHDRScopesACQ(void);
 /* FW 5.50 permission-stub result returned by PA-debug-only exports. */
 #define AGC_DRIVER_ERROR_PERMISSION_INSUFFICIENT 0x8A6D0001u
+#define AGC_DRIVER_ERROR_INVALID_VALUE           0x8A6C0033u
+#define AGC_DRIVER_ERROR_INVALID_ARGUMENT        0x8A6C0035u
+#define AGC_DRIVER_ERROR_NOT_REGISTERED          0x8A6C003Au
+#define AGC_DRIVER_ERROR_AGR_NOT_INITIALIZED     0x8A6D0003u
 uint32_t PS5_SYSV_ABI sceAgcDriverGetPaDebugInterfaceVersion(void);
 
 /* Capture status query. NID: Ddwk4gLT5j0
@@ -158,7 +162,9 @@ int32_t  PS5_SYSV_ABI sceAgcDriverQueryResourceRegistrationUserMemoryRequirement
 uint32_t PS5_SYSV_ABI sceAgcDriverGetResourceRegistrationMaxNameLength(void);
 int32_t  PS5_SYSV_ABI sceAgcDriverUnregisterResource(uint32_t resource_id);
 int32_t  PS5_SYSV_ABI sceAgcDriverRegisterWorkloadStream(
-    const char *name, uint32_t *out_id);
+    uint32_t stream_id, const void *stream);
+int32_t  PS5_SYSV_ABI sceAgcDriverUnregisterWorkloadStream(
+    uint32_t stream_id);
 
 /* Default state queries */
 int32_t PS5_SYSV_ABI sceAgcGetDefaultState(AgcContextState *out_state);
@@ -409,6 +415,9 @@ int32_t PS5_SYSV_ABI sceAgcDriverSetTFRing(uintptr_t ring_addr, uint32_t size);
 int32_t PS5_SYSV_ABI sceAgcDriverSetHsOffchipParam(uint32_t pipe_id, uint64_t list_addr, uint32_t num_entries);
 /* AGR (async graphics ring) DCB submit. */
 int32_t PS5_SYSV_ABI sceAgcDriverAgrSubmitDcb(const AgcCommandBufferSubmit *packet);
+int32_t PS5_SYSV_ABI sceAgcDriverAgrSubmitMultiDcbs(
+    void *const dcb_gpu_addrs[], const uint32_t *dcb_sizes_in_dwords,
+    uint32_t count);
 /* Add an EQ event. */
 int32_t PS5_SYSV_ABI sceAgcDriverAddEqEvent(void *eq, uint32_t type, void *event);
 
