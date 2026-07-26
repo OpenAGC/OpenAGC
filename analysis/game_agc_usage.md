@@ -36,8 +36,9 @@ titles across multiple engines and SDK vintages.
   WriteData, ACB AtomicGds `_0900`, owner-management, and compatibility-SPRX
   `sceAgcGetIsTrinityMode`, shader-instrumentation, and AMM semaphore-label
   ABIs plus the compatibility `ACQUIRE_MEM` engine and async `WRITE_DATA`
-  patchers and four ACB/DCB marker-span exports cover 225 imports; 28 remain
-  under analysis, so it is tracked
+  patchers, four ACB/DCB marker-span exports, and the compatibility GS
+  primitive-payload query cover 226 imports; 27 remain under analysis, so the
+  title is tracked
   separately from the four fully covered titles. AcquireMem packet size follows
   the FW 5.50 title
   workaround mode: mode 1 uses 64 bytes, while modes 0 and 2 use 32 bytes.

@@ -182,6 +182,41 @@ static void test_shader_register_value_accessors(void) {
     TEST_ASSERT_EQ(cx[1], 0x9ABCDEF0u, "CX reg[1]");
 }
 
+static void test_get_gs_prim_payload(void) {
+    AgcShaderRegister cx_registers[3] = {
+        {0x100u, 0xFFFFFFFFu},
+        {0x1C2u, 0x12u},
+        {0x1C2u, 0x02u},
+    };
+    AgcShaderRecord rec = {0};
+    rec.cx_registers = (uint64_t)(uintptr_t)cx_registers;
+    rec.num_cx_registers = 3u;
+
+    uint32_t payload = 0xFFFFFFFFu;
+    TEST_ASSERT_EQ(sceAgcGetGsPrimPayload(&payload, &rec), AGC_OK,
+        "GetGsPrimPayload returns OK");
+    TEST_ASSERT_EQ(payload, 8u,
+        "GetGsPrimPayload reports eight bytes for mode two");
+
+    cx_registers[1].value = 0x13u;
+    payload = 0xFFFFFFFFu;
+    TEST_ASSERT_EQ(sceAgcGetGsPrimPayload(&payload, &rec), AGC_OK,
+        "GetGsPrimPayload nonmatching mode returns OK");
+    TEST_ASSERT_EQ(payload, 0u,
+        "GetGsPrimPayload clears output for nonmatching mode");
+
+    rec.num_cx_registers = 1u;
+    payload = 0xFFFFFFFFu;
+    TEST_ASSERT_EQ(sceAgcGetGsPrimPayload(&payload, &rec), AGC_OK,
+        "GetGsPrimPayload respects CX register count");
+    TEST_ASSERT_EQ(payload, 0u,
+        "GetGsPrimPayload ignores entries beyond CX register count");
+    TEST_ASSERT_EQ(sceAgcGetGsPrimPayload(NULL, &rec),
+        AGC_ERROR_INVALID_ARGUMENT, "GetGsPrimPayload rejects null output");
+    TEST_ASSERT_EQ(sceAgcGetGsPrimPayload(&payload, NULL),
+        AGC_ERROR_INVALID_ARGUMENT, "GetGsPrimPayload rejects null shader");
+}
+
 static void test_shader_null_sub_blocks(void) {
     AgcShaderRecord rec = {0};
     rec.magic = AGC_SHADER_RECORD_MAGIC;
@@ -1040,6 +1075,7 @@ void test_suite_shader(void) {
     TEST_RUN(test_shader_specials_typed_accessor);
     TEST_RUN(test_shader_userdata_typed_accessor);
     TEST_RUN(test_shader_register_value_accessors);
+    TEST_RUN(test_get_gs_prim_payload);
     TEST_RUN(test_shader_null_sub_blocks);
     /* Shader linking (sceAgcShaderLinkHsGs) */
     TEST_RUN(test_shader_link_hs_cs_success);

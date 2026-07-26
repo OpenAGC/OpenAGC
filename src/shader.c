@@ -56,6 +56,8 @@ _Static_assert(offsetof(AgcShaderRecord, num_output_semantics) == 0x56,
     "AgcShaderRecord num_output_semantics offset mismatch");
 _Static_assert(offsetof(AgcShaderRecord, shader_type) == 0x5A,
     "AgcShaderRecord shader_type offset mismatch");
+_Static_assert(offsetof(AgcShaderRecord, num_cx_registers) == 0x5B,
+    "AgcShaderRecord CX register count offset mismatch");
 _Static_assert(offsetof(AgcShaderRecord, num_sh_registers) == 0x5C,
     "AgcShaderRecord num_sh_registers offset mismatch");
 

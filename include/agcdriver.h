@@ -568,6 +568,10 @@ int32_t PS5_SYSV_ABI sceAgcUpdatePrimState(
     AgcShaderRegister *cx_registers,
     AgcShaderRegister *uconfig_registers,
     uint32_t primitive_type);
+/* Compatibility-SPRX ICkECTBxrMw: returns an 8-byte GS primitive payload
+ * when CX register 0x1C2 has low-nibble mode 2, otherwise zero. */
+int32_t PS5_SYSV_ABI sceAgcGetGsPrimPayload(
+    uint32_t *payload_out, const AgcShaderRecord *shader);
 /* FW 5.50 pdEV7bI6COI: emits all 32 SPI_PS_INPUT_CNTL descriptors by
  * matching pixel inputs to geometry outputs and transforming interpolation
  * and default-value flags. */

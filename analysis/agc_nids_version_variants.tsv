@@ -18,7 +18,7 @@ firmware	library	name	nid	notes
 11.60	libSceAgc	sceAgcDcbPushMarkerSpan	N7M3+N-sBCw	11.60 compatibility SPRX export; aerolib name; exact cursor/text/length/color ABI recovered from Dragon Quest VII bundled SPRX
 11.60	libSceAgc	sceAgcGetSemaphoreLabel	hFQ9pUxoLQ4	11.60 compatibility SPRX export; aerolib name; exact index/output-pointer ABI and 32-byte label stride recovered from Dragon Quest VII bundled SPRX
 11.60	libSceAgc	sceAgcUnknown_11.60	pRO4U9d0vaA	11.60 SPRX export
-11.60	libSceAgc	sceAgcUnknown_11.60	ICkECTBxrMw	11.60 SPRX export
+11.60	libSceAgc	sceAgcGetGsPrimPayload	ICkECTBxrMw	11.60 compatibility SPRX export; aerolib name; exact output-pointer/shader-record ABI and CX register 0x1C2 mode scan recovered from Dragon Quest VII bundled SPRX
 11.60	libSceAgc	sceAgcAsyncWriteDataPatchSetDst	EJBA4dbmvfg	11.60 compatibility SPRX export; aerolib name; exact IT_WRITE_DATA bits 11:8 patch recovered from Dragon Quest VII bundled SPRX
 11.60	libSceAgc	sceAgcAcbSetMarkerSpan	pxx-GoOSdw4	11.60 compatibility SPRX export; aerolib name; exact cursor/text/length/color ABI recovered from Dragon Quest VII bundled SPRX
 11.60	libSceAgc	sceAgcUnknown_11.60	h4h5EQ-Y20M	11.60 SPRX export

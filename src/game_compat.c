@@ -1156,6 +1156,33 @@ int32_t PS5_SYSV_ABI sceAgcUpdatePrimState(
     return AGC_OK;
 }
 
+/* sceAgcGetGsPrimPayload (compatibility NID: ICkECTBxrMw) - bundled SPRX
+ * @ 0x121c0. The shader record stores num_cx_registers at byte 0x5B and
+ * points to 8-byte register/value pairs at 0x18. */
+int32_t PS5_SYSV_ABI sceAgcGetGsPrimPayload(
+    uint32_t *payload_out, const AgcShaderRecord *shader)
+{
+    if (!payload_out || !shader)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    *payload_out = 0u;
+    if (shader->num_cx_registers == 0u)
+        return AGC_OK;
+    if (shader->cx_registers == 0u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    const AgcShaderRegister *registers =
+        (const AgcShaderRegister *)(uintptr_t)shader->cx_registers;
+    for (uint32_t i = 0; i < shader->num_cx_registers; ++i) {
+        if (registers[i].offset == 0x1C2u) {
+            if ((registers[i].value & 0xFu) == 2u)
+                *payload_out = 8u;
+            break;
+        }
+    }
+    return AGC_OK;
+}
+
 /* sceAgcCreateInterpolantMapping (NID: pdEV7bI6COI) - FW 5.50 @ 0xd7f0.
  * The output offsets are raw CX indirect-register descriptors, not decoded
  * SPI_PS_INPUT_CNTL register offsets. */

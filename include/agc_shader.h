@@ -128,7 +128,7 @@ typedef enum AgcShaderBinaryType {
  *   0x54: padding (2 bytes)
  *   0x56: num_output_semantics (uint32)
  *   0x5A: shader_type    (uint8)   — AgcShaderType
- *   0x5B: padding (1 byte)
+ *   0x5B: num_cx_registers (uint8)
  *   0x5C: num_sh_registers (uint8)
  *   0x5D-0x5F: padding (3 bytes)
  */
@@ -153,7 +153,7 @@ typedef struct AgcShaderRecord {
     uint8_t  _pad2[0x2];
     uint8_t  num_output_semantics[4];
     uint8_t  shader_type;
-    uint8_t  _pad3[0x1];
+    uint8_t  num_cx_registers;
     uint8_t  num_sh_registers;
 } AgcShaderRecord;
 
