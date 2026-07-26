@@ -57,6 +57,11 @@ titles across multiple engines and SDK vintages.
   game-runtime validation remains pending.
   `sceAgcDriverFindResourcesPublic` remains unresolved because its constant
   firmware stub does not reveal the public argument ABI.
+  A cross-version audit of FW `1.00` through `12.70` found the same six-byte
+  `0x8A6C9018` stub everywhere. Dragon Quest and the FW `0x0550` system-app
+  imports are dead thunks with no code or relocated-data callers, so they do
+  not prove a prototype. See `find_resources_public_audit.md`; a live PS5 call
+  site or typed PS5 header is required before implementation.
   The three packet patchers retain NID-derived labels because their FW 5.50 and
   11.60 bodies prove behavior and calling convention but not official names.
   The version-specific index-size and atomic-GDS builders likewise retain

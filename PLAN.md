@@ -245,6 +245,14 @@ host fixtures; game-runtime validation remains pending. Resolve the sole
 remaining import, `sceAgcDriverFindResourcesPublic`, only from a game call site
 or independently corroborated public prototype; its constant firmware stub is
 not sufficient evidence to guess the ABI.
+The completed cross-version audit confirms that FW `1.00` through `12.70` all
+use the same six-byte `0x8A6C9018` return stub. Dragon Quest and the two FW
+`0x0550` system applications that import it contain only dead local thunks, with
+no code or relocated-data callers. See
+`analysis/find_resources_public_audit.md`. Keep the NID unresolved until a live
+PS5 caller or typed PS5 header becomes available; do not use the PS4 placeholder
+prototype. Corpus expansion therefore requires another decrypted PS5 title
+binary rather than more firmware variants of this stub.
 
 Grow the corpus from three games to at least ten representative,
 FW 5.50-compatible binaries spanning multiple engines, SDK vintages, and

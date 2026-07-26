@@ -1050,6 +1050,12 @@ fill, and update-tail preservation. These helpers are CPU-only; game-runtime
 validation is still pending.
 `sceAgcDriverFindResourcesPublic` remains intentionally unresolved because its
 constant stub does not prove the public prototype.
+The cross-version audit covers every available driver from FW `1.00` through
+`12.70`; all return `0x8A6C9018` with the same six-byte body. Dragon Quest and
+FW `0x0550` system applications `NPXS40099` and `NPXS40074` expose only dead
+import thunks with no code or relocated-data callers. The full negative
+evidence and unblock criteria are recorded in
+`analysis/find_resources_public_audit.md`.
 Three NID-specific `IT_INDIRECT_BUFFER` field patchers are implemented directly
 from matching FW 5.50 and 11.60 SPRX bodies. Their exact four-argument ABIs,
 three packet-relative offsets, field masks, reserved-bit preservation, and
