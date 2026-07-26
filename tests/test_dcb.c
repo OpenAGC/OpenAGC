@@ -1084,6 +1084,27 @@ static void test_batch3_ref_getsize_helpers(void) {
     CHECK_FIXED_GET_SIZE(sceAgcDcbSetZPassPredicationEnableGetSize, 16u);
     CHECK_FIXED_GET_SIZE(sceAgcDcbStallCommandBufferParserGetSize, 8u);
 #undef CHECK_FIXED_GET_SIZE
+
+    TEST_ASSERT_EQ(sceAgcCbNopGetSize(0), 0u, "CbNopGetSize zero");
+    TEST_ASSERT_EQ(sceAgcCbNopGetSize(7), 28u, "CbNopGetSize normal");
+    TEST_ASSERT_EQ(sceAgcCbNopGetSize(0x40000001u), 4u,
+        "CbNopGetSize wraps as FW 5.50 uint32 arithmetic");
+
+#define CHECK_RANGE_GET_SIZE(name) \
+    TEST_ASSERT_EQ(name(0), 8u, #name " zero"); \
+    TEST_ASSERT_EQ(name(7), 36u, #name " normal"); \
+    TEST_ASSERT_EQ(name(0x3FFFFFFFu), 4u, #name " wraps")
+    CHECK_RANGE_GET_SIZE(sceAgcCbSetShRegisterRangeDirectGetSize);
+    CHECK_RANGE_GET_SIZE(sceAgcCbSetUcRegisterRangeDirectGetSize);
+#undef CHECK_RANGE_GET_SIZE
+
+#define CHECK_LIST_GET_SIZE(name) \
+    TEST_ASSERT_EQ(name(0), 0u, #name " zero"); \
+    TEST_ASSERT_EQ(name(7), 84u, #name " normal"); \
+    TEST_ASSERT_EQ(name(0x40000001u), 12u, #name " wraps")
+    CHECK_LIST_GET_SIZE(sceAgcCbSetShRegistersDirectGetSize);
+    CHECK_LIST_GET_SIZE(sceAgcCbSetUcRegistersDirectGetSize);
+#undef CHECK_LIST_GET_SIZE
 }
 
 static void test_batch3_ref_driver_stubs(void) {

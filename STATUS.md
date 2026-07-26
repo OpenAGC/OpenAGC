@@ -1004,7 +1004,12 @@ is a missing initialization feature or a blocker for rendering.
 
 ### Priority 3: Game compatibility expansion
 
-Dragon Quest VII Reimagined (`PPSA17942`) is a hardware-proven FW `0x0550` backport and the fifth target in progress. Its executable imports 253 AGC functions; 177 are covered and 76 remain after the first 43 exact constant-size helper implementations. It is not yet counted in the four-title, 100%-covered corpus. Astro's Playroom remains explicitly excluded.
+Dragon Quest VII Reimagined (`PPSA17942`) is a hardware-proven FW `0x0550`
+backport and the fifth target in progress. Its executable imports 253 AGC
+functions; 182 are covered and 71 remain after 43 constant and 5
+parameter-dependent exact size-helper implementations. It is not yet counted
+in the four-title, 100%-covered corpus. Astro's Playroom remains explicitly
+excluded.
 
 Continue analyzing game binaries to identify and implement remaining missing
 AGC functions. The completed corpus covers 4 games and 73 unique AGC functions

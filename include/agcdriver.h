@@ -744,6 +744,17 @@ uint32_t PS5_SYSV_ABI sceAgcAcbCondExecGetSize(void);
 /* NID: 43WJ08sSugE — returns 14*4 (32-bit) or 16*4 (64-bit) bytes */
 uint32_t PS5_SYSV_ABI sceAgcDcbWaitOnAddressGetSize(uint32_t size);
 
+/* FW 5.50 parameter-dependent packet-size helpers. */
+uint32_t PS5_SYSV_ABI sceAgcCbNopGetSize(uint32_t num_dwords);
+uint32_t PS5_SYSV_ABI sceAgcCbSetShRegisterRangeDirectGetSize(
+    uint32_t num_registers);
+uint32_t PS5_SYSV_ABI sceAgcCbSetShRegistersDirectGetSize(
+    uint32_t num_registers);
+uint32_t PS5_SYSV_ABI sceAgcCbSetUcRegisterRangeDirectGetSize(
+    uint32_t num_registers);
+uint32_t PS5_SYSV_ABI sceAgcCbSetUcRegistersDirectGetSize(
+    uint32_t num_registers);
+
 /* FW 5.50 constant packet-size helpers. */
 uint32_t PS5_SYSV_ABI sceAgcAcbAtomicGdsGetSize(void);
 uint32_t PS5_SYSV_ABI sceAgcAcbAtomicMemGetSize(void);

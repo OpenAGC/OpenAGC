@@ -1921,6 +1921,35 @@ uint32_t PS5_SYSV_ABI sceAgcDcbWaitOnAddressGetSize(uint32_t size)
     }
 }
 
+uint32_t PS5_SYSV_ABI sceAgcCbNopGetSize(uint32_t num_dwords)
+{
+    return 4u * num_dwords;
+}
+
+uint32_t PS5_SYSV_ABI sceAgcCbSetShRegisterRangeDirectGetSize(
+    uint32_t num_registers)
+{
+    return 8u + 4u * num_registers;
+}
+
+uint32_t PS5_SYSV_ABI sceAgcCbSetShRegistersDirectGetSize(
+    uint32_t num_registers)
+{
+    return 12u * num_registers;
+}
+
+uint32_t PS5_SYSV_ABI sceAgcCbSetUcRegisterRangeDirectGetSize(
+    uint32_t num_registers)
+{
+    return 8u + 4u * num_registers;
+}
+
+uint32_t PS5_SYSV_ABI sceAgcCbSetUcRegistersDirectGetSize(
+    uint32_t num_registers)
+{
+    return 12u * num_registers;
+}
+
 #define AGC_DEFINE_FIXED_GET_SIZE(name, value) \
     uint32_t PS5_SYSV_ABI name(void) { return (value); }
 
