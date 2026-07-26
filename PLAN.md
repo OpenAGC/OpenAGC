@@ -49,8 +49,8 @@ official SDK parity, all-firmware support, VRS, or ray-tracing completeness.
 
 | Item | Status | Current evidence and remaining work |
 | --- | --- | --- |
-| 1. Harden FW 5.50 graphics and promote sample PM4 | **Mostly complete** | Atomic reusable gfx1013 builders now cover the hardware-proven render-target, viewport, scissor, target-mask, depth-disabled, and V8 graphics-default state. Exact host fixtures and FW 5.50 RGBA16F/RGBA8 runs pass. Only a reusable baseline draw-state/orchestration wrapper remains. |
-| 2. Add exact Wave32 and fixed-function host fixtures | **Partial** | Shader binders and individual `DRAW_INDEX_AUTO` packets have host coverage. Register-offset checks are not exact packet-stream fixtures for the hardware-proven RT/viewport/scissor setup. |
+| 1. Harden FW 5.50 graphics and promote sample PM4 | **Complete** | Atomic reusable gfx1013 builders cover render-target, viewport, scissor, target-mask, depth-disabled, V8 defaults, and the baseline bind/index/instance/auto-index draw composition. Exact host fixtures and FW 5.50 RGBA16F/RGBA8 runs pass. |
+| 2. Add exact Wave32 and fixed-function host fixtures | **Complete** | Exact fixtures cover the Wave32 VS/PS binder, hardware-proven RT/viewport/scissor/depth/default streams, and the 44-dword baseline draw wrapper, including post-bind overrides and atomic short-buffer rejection. |
 | 3. Re-run the complete FW 5.50 websrv suite | **Partial** | Every major path has hardware evidence, including compute, NGG geometry, tessellation, combined stages, FP16, and RGBA8. A single complete qualification run is still required after the sample PM4 promotion lands. |
 | 4. Investigate FRAME_OPEN EINVAL and PA-debug EPERM | **Complete** | FW 5.50 `FRAME_OPEN` is absent from the kernel dispatcher. The PA-debug export is a userspace permission stub returning `0x8A6D0001`; neither result is an unresolved graphics blocker. |
 | 5. Expand games and useful exports/NIDs | **Partial** | Three games expose 72 unique AGC functions and all 72 are implemented. The corpus must expand. Twelve unknown SPRX NIDs plus 32 placeholder mappings remain blocked on new evidence and are not guessed. |
@@ -72,13 +72,14 @@ state that is still sample-only:
   primitive type, index type, instance count, and `DRAW_INDEX_AUTO` without
   hiding the lower-level packet builders.
 
-Current status: the fixed-function promotion is complete. The atomic gfx1013
-builders cover the color target (RGBA16F FLOAT/STD and RGBA8 UNORM/ALT),
-aspect-preserving viewport, all required scissors, target mask,
-depth-disabled state, and V8 SH/CX/UC defaults. Exact packet fixtures,
-short-buffer cursor-preservation tests, clean host tests, and both FW 5.50
-websrv hardware paths pass. The remaining work in this item is the baseline
-draw-state/orchestration wrapper.
+Status: complete. The atomic gfx1013 builders cover the color target (RGBA16F
+FLOAT/STD and RGBA8 UNORM/ALT), aspect-preserving viewport, all required
+scissors, target mask, depth-disabled state, V8 SH/CX/UC defaults, and the
+baseline draw-state wrapper. The wrapper composes the existing VS/PS binder,
+primitive and index state, post-bind application overrides, instance count,
+and `DRAW_INDEX_AUTO` without removing access to any lower-level builder.
+Exact packet fixtures, short-buffer cursor-preservation tests, clean host
+tests, and both FW 5.50 websrv hardware paths pass.
 
 Each emitter must validate dimensions, alignment, format, and address range;
 preflight its complete dword requirement; emit nothing on failure; and use

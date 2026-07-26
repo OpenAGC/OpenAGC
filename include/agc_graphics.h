@@ -74,6 +74,21 @@ typedef struct AgcGfx1013GraphicsDefaultStats {
     uint32_t uc_register_count;
 } AgcGfx1013GraphicsDefaultStats;
 
+typedef struct AgcGfx1013BaselineDrawState {
+    AgcGfx1013Wave32VsPsState shaders;
+    const AgcRegisterValue *post_bind_sh_registers;
+    uint32_t num_post_bind_sh_registers;
+    const AgcRegisterValue *post_bind_cx_registers;
+    uint32_t num_post_bind_cx_registers;
+    const AgcRegisterValue *post_bind_uc_registers;
+    uint32_t num_post_bind_uc_registers;
+    uint32_t index_type;
+    uint32_t index_swap;
+    uint32_t instance_count;
+    uint32_t vertex_count;
+    uint64_t draw_modifier;
+} AgcGfx1013BaselineDrawState;
+
 int32_t PS5_SYSV_ABI agcGfx1013ValidateWave32VsPs(
     const AgcGfx1013Wave32VsPsState *state);
 int32_t PS5_SYSV_ABI agcGfx1013BindWave32VsPs(
@@ -82,6 +97,8 @@ int32_t PS5_SYSV_ABI agcGfx1013ValidateVsPs(
     const AgcGfx1013Wave32VsPsState *state);
 int32_t PS5_SYSV_ABI agcGfx1013BindVsPs(
     SceAgcCb *cb, const AgcGfx1013Wave32VsPsState *state);
+int32_t PS5_SYSV_ABI agcGfx1013DrawBaselineIndexAuto(
+    SceAgcCb *cb, const AgcGfx1013BaselineDrawState *state);
 int32_t PS5_SYSV_ABI agcGfx1013ValidateWave32TessVsPs(
     const AgcGfx1013Wave32TessVsPsState *state);
 int32_t PS5_SYSV_ABI agcGfx1013BindWave32TessVsPs(

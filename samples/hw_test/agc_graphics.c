@@ -664,11 +664,12 @@ static void *upload_shader(const uint8_t *code, size_t code_size,
 
 /* Build the merged ES+GS/NGG primitive state from the fused shader record. */
 #if !AGC_TESSELLATION
-static bool setup_shader_stages(
-    SceAgcCb *cb, const ParsedGraphicsShader *ngg,
+static void setup_shader_stages(
+    AgcGfx1013Wave32VsPsState *state,
+    const ParsedGraphicsShader *ngg,
     void *ngg_code, const ParsedGraphicsShader *ps, void *ps_code)
 {
-    AgcGfx1013Wave32VsPsState state = {
+    *state = (AgcGfx1013Wave32VsPsState){
         .primitive = {
             ngg->record, ngg->sh_regs, ngg->num_sh_regs,
             ngg->cx_regs, ngg->num_cx_regs,
@@ -679,12 +680,8 @@ static bool setup_shader_stages(
             ps->cx_regs, ps->num_cx_regs,
             (uint64_t)(uintptr_t)ps_code,
         },
-        .primitive_type = VGT_PT_TRILIST,
+        .primitive_type = NGG_INPUT_PRIMITIVE_TYPE,
     };
-    int32_t err = agcGfx1013BindVsPs(cb, &state);
-    printf("[Wave] reusable gfx1013 VS+PS bind: 0x%08x\n",
-           (unsigned)err);
-    return err == AGC_OK;
 }
 #endif
 
@@ -1283,63 +1280,58 @@ static bool dispatch_graphics(GraphicsTest *test,
         sceAgcCbSetCxRegistersDirect(&cb, &tess_context_state[i], 1);
     }
 #else
-    if (!setup_shader_stages(&cb, &ngg, back_code, ps, ps_code))
-        return false;
+    AgcGfx1013Wave32VsPsState baseline_shaders;
+    setup_shader_stages(&baseline_shaders, &ngg, back_code, ps, ps_code);
 #endif
 
     /* 5. Bind the fused state. The ES-front starts the merged wave and uses
      * the address32 AC_UD_NEXT_STAGE_PC value to continue at the GS-back
      * program; ACO supplies the fixed high address dword in the ISA. */
+    AgcRegisterValue post_bind_sh[3];
+    uint32_t post_bind_sh_count = 0u;
     if (found_vertex_table_reg) {
-        const AgcRegisterValue vertex_table = {
+        post_bind_sh[post_bind_sh_count++] = (AgcRegisterValue){
             vertex_table_reg, (uint32_t)(uintptr_t)vertex_desc
         };
-        sceAgcCbSetShRegistersDirect(&cb, &vertex_table, 1);
     }
     if (found_next_stage_pc_reg) {
-        const AgcRegisterValue next_stage_pc = {
+        post_bind_sh[post_bind_sh_count++] = (AgcRegisterValue){
             next_stage_pc_reg, (uint32_t)(uintptr_t)back_code
         };
-        sceAgcCbSetShRegistersDirect(&cb, &next_stage_pc, 1);
     }
 
     /* 6. Write PS shader SH + CX registers */
-    const AgcRegisterValue texture_table = {
+    post_bind_sh[post_bind_sh_count++] = (AgcRegisterValue){
         texture_table_reg, (uint32_t)(uintptr_t)texture_desc
     };
-    sceAgcCbSetShRegistersDirect(&cb, &texture_table, 1);
 
-    /* 6b. Disable depth/stencil buffer state after the shader CX block, but
-     * preserve the compiler's DB_SHADER_CONTROL=0x10 rasterization mode. */
-    state_error = agcGfx1013SetDepthDisabled(&cb);
-    if (state_error != AGC_OK) {
-        printf("[DB] reusable depth-disabled state failed: %s\n",
-               errstr(state_error));
-        return false;
-    }
-    printf("[DB] DB_DEPTH_INFO=0, DB_Z_INFO=0, DB_STENCIL_INFO=0, DB_SHADER_CONTROL=0x10, DB_DEPTH_CONTROL=0\n");
-
-    /* 6c. Rasterizer mode remains application state. Shader formats,
+    /* 6b. Post-bind depth and rasterizer overrides remain application state.
+     * Shader formats,
      * stage selection, primitive type, and interpolants came from compiler
      * records and the OpenAGC state builders above. */
-    AgcRegisterValue clip_cntl = {
-        AGC_REG_PA_CL_CLIP_CNTL, 0x00000000
+    const AgcRegisterValue post_bind_cx[] = {
+        {AGC_REG_DB_DEPTH_INFO, 0u},
+        {AGC_REG_DB_Z_INFO, 0u},
+        {AGC_REG_DB_STENCIL_INFO, 0u},
+        {AGC_REG_DB_SHADER_CONTROL, 0x10u},
+        {AGC_REG_DB_DEPTH_CONTROL, 0u},
+        {AGC_REG_PA_CL_CLIP_CNTL, 0u},
+        {AGC_REG_PA_SU_SC_MODE_CNTL, 0u},
     };
-    sceAgcCbSetCxRegistersDirect(&cb, &clip_cntl, 1);
-    AgcRegisterValue sc_mode = {
-        AGC_REG_PA_SU_SC_MODE_CNTL, 0x00000000
-    };
-    sceAgcCbSetCxRegistersDirect(&cb, &sc_mode, 1);
+
+#if AGC_TESSELLATION
+    for (uint32_t i = 0u; i < post_bind_sh_count; ++i)
+        sceAgcCbSetShRegistersDirect(&cb, &post_bind_sh[i], 1u);
+    for (uint32_t i = 0u;
+         i < (uint32_t)(sizeof(post_bind_cx) / sizeof(post_bind_cx[0]));
+         ++i) {
+        sceAgcCbSetCxRegistersDirect(&cb, &post_bind_cx[i], 1u);
+    }
+#endif
 
     /* 7. Establish the NGG stage ABI with canonical auto-generated vertex
      * IDs. Indexed offset semantics are a separate PM4 validation case. */
-#if AGC_NGG_INPUT_LINES
-    const AgcRegisterValue input_primitive = {
-        AGC_REG_VGT_PRIMITIVE_TYPE, NGG_INPUT_PRIMITIVE_TYPE
-    };
-    sceAgcCbSetUcRegistersDirect(&cb, &input_primitive, 1);
-    printf("[Draw] Input primitive: line-list (2 vertices)\n");
-#endif
+#if AGC_TESSELLATION
     sceAgcDcbSetNumInstances(&cb, 1);
     printf("[Draw] NumInstances(1)\n");
     if (!sceAgcDcbDrawIndexAuto(
@@ -1348,6 +1340,26 @@ static bool dispatch_graphics(GraphicsTest *test,
         return false;
     }
     printf("[Draw] DrawIndexAuto(%u)\n", NGG_DRAW_VERTEX_COUNT);
+#else
+    const AgcGfx1013BaselineDrawState baseline_draw = {
+        .shaders = baseline_shaders,
+        .post_bind_sh_registers = post_bind_sh,
+        .num_post_bind_sh_registers = post_bind_sh_count,
+        .post_bind_cx_registers = post_bind_cx,
+        .num_post_bind_cx_registers =
+            (uint32_t)(sizeof(post_bind_cx) / sizeof(post_bind_cx[0])),
+        .index_type = kAgcIndexSize16,
+        .index_swap = 0u,
+        .instance_count = 1u,
+        .vertex_count = NGG_DRAW_VERTEX_COUNT,
+        .draw_modifier = 0x40000000u,
+    };
+    state_error = agcGfx1013DrawBaselineIndexAuto(&cb, &baseline_draw);
+    printf("[Draw] reusable baseline bind/index/instance/auto: 0x%08x\n",
+           (unsigned)state_error);
+    if (state_error != AGC_OK)
+        return false;
+#endif
 
     /* 8b. WRITE_DATA marker — verify GPU is alive after draw. Keep it near
      * the end of this 32 KiB allocation, outside the active command stream. */

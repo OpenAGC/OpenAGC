@@ -25,6 +25,23 @@ triangle for all 1800 flips, changed 126,360 pixels, produced eight colors,
 and passed vertex-fetch, indexed-draw, and texture-sampling checks. Neither
 run hung or panicked the console.
 
+The baseline draw tail is also reusable. `AgcGfx1013BaselineDrawState` and
+`agcGfx1013DrawBaselineIndexAuto` atomically compose the existing VS/PS
+binder, primitive state, optional post-bind SH/CX/UC application overrides,
+index size/swap, instance count, and `DRAW_INDEX_AUTO`. The base stream is
+44 dwords for the exact host fixture, with three dwords per non-contiguous
+post-bind override; short buffers and invalid state leave the cursor
+unchanged.
+
+FW 5.50 hardware validation uses the wrapper as the real draw path. Both the
+RGBA16F and direct RGBA8 samples submitted a 2473-dword DCB, completed the
+post-draw marker and all 1800 flips, and produced the same validated coverage
+as before the refactor. The RGBA16F path changed 255,744 pixels; RGBA8 changed
+126,360 pixels and passed vertex-fetch, u16 index-state, and texture-sampling
+checks. Physical display validation showed the gray background with the
+colorful triangle in both modes. The specialized tessellation sample still
+builds with its existing binder and direct post-bind override path.
+
 Complete and hardware-validated on standard PS5 gfx1013, raw firmware
 `0x05500008`. `agcGfx1013ValidateWave32VsPs` and
 `agcGfx1013BindWave32VsPs` now provide a reusable path for fused NGG Gs(2)

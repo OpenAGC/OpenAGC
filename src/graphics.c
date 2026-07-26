@@ -307,6 +307,80 @@ int32_t PS5_SYSV_ABI agcGfx1013BindWave32VsPs(
     return agcGfx1013BindVsPsImpl(cb, state, true);
 }
 
+int32_t PS5_SYSV_ABI agcGfx1013DrawBaselineIndexAuto(
+    SceAgcCb *cb, const AgcGfx1013BaselineDrawState *state)
+{
+    uint32_t input_count;
+    uint32_t required_dwords;
+    uint32_t i;
+    int32_t error;
+
+    if (!cb || !state)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (state->index_type > (uint32_t)kAgcIndexSize32 ||
+        state->index_swap > 1u || state->instance_count == 0u ||
+        state->vertex_count == 0u) {
+        return AGC_ERROR_INVALID_ARGUMENT;
+    }
+    if ((state->num_post_bind_sh_registers != 0u &&
+         !state->post_bind_sh_registers) ||
+        (state->num_post_bind_cx_registers != 0u &&
+         !state->post_bind_cx_registers) ||
+        (state->num_post_bind_uc_registers != 0u &&
+         !state->post_bind_uc_registers) ||
+        state->num_post_bind_sh_registers > 0x3ffeu ||
+        state->num_post_bind_cx_registers > 0x3ffeu ||
+        state->num_post_bind_uc_registers > 0x3ffeu) {
+        return AGC_ERROR_INVALID_ARGUMENT;
+    }
+
+    error = agcGfx1013ValidateVsPs(&state->shaders);
+    if (error != AGC_OK)
+        return error;
+
+    input_count = agcShaderRecordGetNumInputSemantics(
+        state->shaders.pixel.record);
+    required_dwords = 29u + input_count * 3u +
+        (state->shaders.primitive.num_sh_registers +
+         state->shaders.primitive.num_cx_registers +
+         state->shaders.pixel.num_sh_registers +
+         state->shaders.pixel.num_cx_registers +
+         state->num_post_bind_sh_registers +
+         state->num_post_bind_cx_registers +
+         state->num_post_bind_uc_registers) * 3u;
+    if (agcCbRemainingDwords(cb) < required_dwords)
+        return AGC_ERROR_BUFFER_TOO_SMALL;
+
+    error = agcGfx1013BindVsPs(cb, &state->shaders);
+    if (error != AGC_OK)
+        return error;
+    for (i = 0; i < state->num_post_bind_sh_registers; ++i) {
+        if (!sceAgcCbSetShRegistersDirect(
+                cb, &state->post_bind_sh_registers[i], 1u)) {
+            return AGC_ERROR_INTERNAL;
+        }
+    }
+    for (i = 0; i < state->num_post_bind_cx_registers; ++i) {
+        if (!sceAgcCbSetCxRegistersDirect(
+                cb, &state->post_bind_cx_registers[i], 1u)) {
+            return AGC_ERROR_INTERNAL;
+        }
+    }
+    for (i = 0; i < state->num_post_bind_uc_registers; ++i) {
+        if (!sceAgcCbSetUcRegistersDirect(
+                cb, &state->post_bind_uc_registers[i], 1u)) {
+            return AGC_ERROR_INTERNAL;
+        }
+    }
+    if (!sceAgcDcbSetIndexSize(cb, state->index_type, state->index_swap) ||
+        !sceAgcDcbSetNumInstances(cb, state->instance_count) ||
+        !sceAgcDcbDrawIndexAuto(
+            cb, state->vertex_count, state->draw_modifier)) {
+        return AGC_ERROR_INTERNAL;
+    }
+    return AGC_OK;
+}
+
 int32_t PS5_SYSV_ABI agcGfx1013ValidateWave32TessVsPs(
     const AgcGfx1013Wave32TessVsPsState *state)
 {

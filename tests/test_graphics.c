@@ -190,6 +190,87 @@ static void test_gfx1013_wave32_vs_ps_binding(void)
         "gfx1013 NGG late allocation remains disabled");
 }
 
+static void test_gfx1013_baseline_draw_wrapper(void)
+{
+    uint32_t buffer[128] = {0};
+    SceAgcCb cb;
+    AgcGfx1013BaselineDrawState draw;
+    AgcShaderRecord primitive_record;
+    AgcShaderRecord pixel_record;
+    AgcShaderSpecials specials;
+    AgcRegisterValue primitive_sh[2];
+    AgcRegisterValue pixel_sh[2];
+    AgcRegisterValue pixel_cx[1];
+    const AgcRegisterValue post_bind_cx[] = {
+        {AGC_REG_DB_DEPTH_CONTROL, 0u},
+    };
+
+    memset(&draw, 0, sizeof(draw));
+    make_wave32_state(&draw.shaders, &primitive_record, &pixel_record,
+        &specials, primitive_sh, pixel_sh, pixel_cx);
+    draw.index_type = kAgcIndexSize16;
+    draw.instance_count = 1u;
+    draw.vertex_count = 3u;
+    draw.draw_modifier = 0x40000000u;
+
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndexAuto(&cb, &draw), AGC_OK,
+        "gfx1013 baseline draw wrapper succeeds");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 44u,
+        "gfx1013 baseline draw wrapper exact dword count");
+    TEST_ASSERT_EQ(agcPm4Opcode(buffer[36]), AGC_PM4_OP_SET_INDEX_SIZE,
+        "gfx1013 baseline draw index-size opcode");
+    TEST_ASSERT_EQ(agcPm4Length(buffer[36]), 3u,
+        "gfx1013 baseline draw index-size length");
+    TEST_ASSERT_EQ(buffer[37], 0x20000243u,
+        "gfx1013 baseline draw index-size control");
+    TEST_ASSERT_EQ(buffer[38], 0x400u,
+        "gfx1013 baseline draw 16-bit unswapped index state");
+    TEST_ASSERT_EQ(agcPm4Opcode(buffer[39]), AGC_PM4_OP_NUM_INSTANCES,
+        "gfx1013 baseline draw instance opcode");
+    TEST_ASSERT_EQ(buffer[40], 1u,
+        "gfx1013 baseline draw instance count");
+    TEST_ASSERT_EQ(agcPm4Opcode(buffer[41]), AGC_PM4_OP_DRAW_INDEX_AUTO,
+        "gfx1013 baseline auto-index opcode");
+    TEST_ASSERT_EQ(agcPm4Length(buffer[41]), 3u,
+        "gfx1013 baseline auto-index length");
+    TEST_ASSERT_EQ(buffer[42], 3u,
+        "gfx1013 baseline auto-index vertex count");
+    TEST_ASSERT_EQ(buffer[43], 2u,
+        "gfx1013 baseline auto-index initiator");
+
+    draw.post_bind_cx_registers = post_bind_cx;
+    draw.num_post_bind_cx_registers = 1u;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndexAuto(&cb, &draw), AGC_OK,
+        "gfx1013 baseline wrapper accepts post-bind overrides");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 47u,
+        "gfx1013 baseline post-bind override exact dword count");
+    TEST_ASSERT_EQ(agcPm4Opcode(buffer[36]), AGC_PM4_OP_SET_CONTEXT_REG,
+        "gfx1013 baseline post-bind override opcode");
+    TEST_ASSERT_EQ(buffer[37], AGC_REG_DB_DEPTH_CONTROL,
+        "gfx1013 baseline post-bind override register");
+    TEST_ASSERT_EQ(buffer[38], 0u,
+        "gfx1013 baseline post-bind override value");
+
+    draw.post_bind_cx_registers = NULL;
+    draw.num_post_bind_cx_registers = 0u;
+    agcCbInit(&cb, buffer, 43u * sizeof(uint32_t));
+    TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndexAuto(&cb, &draw),
+        AGC_ERROR_BUFFER_TOO_SMALL,
+        "gfx1013 baseline wrapper rejects short buffer");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "gfx1013 baseline short buffer is atomic");
+
+    draw.index_type = 2u;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndexAuto(&cb, &draw),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "gfx1013 baseline wrapper rejects invalid index type");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "gfx1013 baseline invalid state is atomic");
+}
+
 static void test_gfx1013_wave32_rejects_but_generic_accepts_wave64(void)
 {
     uint32_t buffer[128] = {0};
@@ -590,6 +671,7 @@ void test_suite_graphics(void)
 {
     TEST_SUITE("GFX1013 Graphics State");
     TEST_RUN(test_gfx1013_wave32_vs_ps_binding);
+    TEST_RUN(test_gfx1013_baseline_draw_wrapper);
     TEST_RUN(test_gfx1013_wave32_rejects_but_generic_accepts_wave64);
     TEST_RUN(test_gfx1013_wave32_rejects_small_buffer_atomically);
     TEST_RUN(test_gfx1013_wave32_tessellation_binding);
