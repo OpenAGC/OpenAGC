@@ -43,16 +43,43 @@
 #ifndef AGC_NGG_AMPLIFY
 #define AGC_NGG_AMPLIFY 0
 #endif
-#if AGC_NGG_AMPLIFY
+#ifndef AGC_NGG_INPUT_LINES
+#define AGC_NGG_INPUT_LINES 0
+#endif
+#ifndef AGC_NGG_INVOCATIONS
+#define AGC_NGG_INVOCATIONS 0
+#endif
+#if (AGC_NGG_AMPLIFY + AGC_NGG_INPUT_LINES + AGC_NGG_INVOCATIONS) > 1
+#error "select only one NGG geometry variant"
+#endif
+#if AGC_NGG_INPUT_LINES
+#include "shaders/triangle_ngg_lines_front_sb.h"
+#include "shaders/triangle_ngg_lines_back_sb.h"
+#define NGG_FRONT_DATA triangle_ngg_lines_front_data
+#define NGG_BACK_DATA triangle_ngg_lines_back_data
+#define NGG_DRAW_VERTEX_COUNT 2u
+#define NGG_INPUT_PRIMITIVE_TYPE 2u
+#elif AGC_NGG_INVOCATIONS
+#include "shaders/triangle_ngg_invocations_front_sb.h"
+#include "shaders/triangle_ngg_invocations_back_sb.h"
+#define NGG_FRONT_DATA triangle_ngg_invocations_front_data
+#define NGG_BACK_DATA triangle_ngg_invocations_back_data
+#define NGG_DRAW_VERTEX_COUNT 3u
+#define NGG_INPUT_PRIMITIVE_TYPE 4u
+#elif AGC_NGG_AMPLIFY
 #include "shaders/triangle_ngg_amplify_front_sb.h"
 #include "shaders/triangle_ngg_amplify_back_sb.h"
 #define NGG_FRONT_DATA triangle_ngg_amplify_front_data
 #define NGG_BACK_DATA triangle_ngg_amplify_back_data
+#define NGG_DRAW_VERTEX_COUNT 3u
+#define NGG_INPUT_PRIMITIVE_TYPE 4u
 #else
 #include "shaders/triangle_ngg_front_sb.h"
 #include "shaders/triangle_ngg_back_sb.h"
 #define NGG_FRONT_DATA triangle_ngg_front_data
 #define NGG_BACK_DATA triangle_ngg_back_data
+#define NGG_DRAW_VERTEX_COUNT 3u
+#define NGG_INPUT_PRIMITIVE_TYPE 4u
 #endif
 #include "shaders/triangle_frag_sb.h"
 
@@ -782,10 +809,11 @@ static void setup_render_target(SceAgcCb *cb, void *rt_addr,
 
 /* Set up viewport (scale + offset + zmin/zmax) */
 static void setup_viewport(SceAgcCb *cb, uint32_t width, uint32_t height) {
-    /* Viewport: scale = (w/2, -h/2, 0.5), offset = (w/2, h/2, 0.5)
-     * This maps clip space [-1, 1] to screen space [0, w] x [0, h] */
-    float scale_x = (float)width * 0.5f;
-    float scale_y = -(float)height * 0.5f;
+    /* Preserve NDC aspect ratio on non-square targets by centering a square
+     * viewport inside the full render-target/scissor extent. */
+    const uint32_t extent = width < height ? width : height;
+    float scale_x = (float)extent * 0.5f;
+    float scale_y = -(float)extent * 0.5f;
     float scale_z = 0.5f;
     float offset_x = (float)width * 0.5f;
     float offset_y = (float)height * 0.5f;
@@ -1314,13 +1342,21 @@ static bool dispatch_graphics(GraphicsTest *test,
 
     /* 7. Establish the NGG stage ABI with canonical auto-generated vertex
      * IDs. Indexed offset semantics are a separate PM4 validation case. */
+#if AGC_NGG_INPUT_LINES
+    const AgcRegisterValue input_primitive = {
+        AGC_REG_VGT_PRIMITIVE_TYPE, NGG_INPUT_PRIMITIVE_TYPE
+    };
+    sceAgcCbSetUcRegistersDirect(&cb, &input_primitive, 1);
+    printf("[Draw] Input primitive: line-list (2 vertices)\n");
+#endif
     sceAgcDcbSetNumInstances(&cb, 1);
     printf("[Draw] NumInstances(1)\n");
-    if (!sceAgcDcbDrawIndexAuto(&cb, 3, 0x40000000u)) {
+    if (!sceAgcDcbDrawIndexAuto(
+            &cb, NGG_DRAW_VERTEX_COUNT, 0x40000000u)) {
         printf("[Draw] auto-index packet allocation failed\n");
         return false;
     }
-    printf("[Draw] DrawIndexAuto(3)\n");
+    printf("[Draw] DrawIndexAuto(%u)\n", NGG_DRAW_VERTEX_COUNT);
 
     /* 8b. WRITE_DATA marker — verify GPU is alive after draw. Keep it near
      * the end of this 32 KiB allocation, outside the active command stream. */
@@ -1415,7 +1451,7 @@ static bool dispatch_graphics(GraphicsTest *test,
         }
         /* Equilateral NDC triangle covers sqrt(3)/16 of a square target.
          * 1774/16384 is a close integer approximation. */
-#if AGC_NGG_AMPLIFY
+#if AGC_NGG_AMPLIFY || AGC_NGG_INVOCATIONS
         /* Two half-scale copies cover half the pass-through triangle area. */
         const uint32_t expected_changed = (uint32_t)
             (((uint64_t)target_pixels * 887u) / 16384u);
@@ -1474,9 +1510,17 @@ static bool dispatch_graphics(GraphicsTest *test,
     printf("[Texture] Distinct sampled colors: %u\n", unique_color_count);
     for (uint32_t i = 0; i < unique_color_count; i++)
         printf("  color[%u] = 0x%08x\n", i, unique_colors[i]);
+    const uint32_t viewport_extent =
+        target->width < target->height ? target->width : target->height;
+    const uint32_t expected_changed = (uint32_t)
+        (((uint64_t)viewport_extent * viewport_extent * 1774u) / 16384u);
+    const uint32_t coverage_tolerance = 1024u;
+    printf("[Readback] Expected triangle coverage: about %u (+/-%u)\n",
+           expected_changed, coverage_tolerance);
     const bool vertex_fetch_pass = changed != 0 && unique_color_count >= 3;
-    const bool indexed_draw_pass = changed >= 1036700u &&
-                                   changed <= 1036900u &&
+    const bool indexed_draw_pass =
+                                   changed + coverage_tolerance >= expected_changed &&
+                                   changed <= expected_changed + coverage_tolerance &&
                                    unique_color_count >= 3;
     const bool texture_sampler_pass = indexed_draw_pass &&
                                       unique_color_count >= 8;
@@ -1484,11 +1528,12 @@ static bool dispatch_graphics(GraphicsTest *test,
            vertex_fetch_pass ? "PASS" : "FAIL");
     printf("[Index] Bound u16 indexed draw: %s\n",
            indexed_draw_pass ? "PASS" : "FAIL");
-    printf("[Texture] GFX10.3 image + bilinear sampler: %s\n",
+    printf("[Texture] gfx1013 image + bilinear sampler: %s\n",
            texture_sampler_pass ? "PASS" : "FAIL");
     return vertex_fetch_pass && indexed_draw_pass && texture_sampler_pass;
 }
 
+#if !AGC_VALIDATE_RGBA8_REFERENCE
 static uint8_t half_to_unorm8(uint16_t half) {
     uint32_t exponent = (half >> 10) & 0x1fu;
     uint32_t mantissa = half & 0x3ffu;
@@ -1535,6 +1580,7 @@ static void visualize_fp16(GraphicsTest *test) {
     printf("[FP16] CPU preview: %ux%u centered on RGBA8 display\n",
            preview_width, preview_height);
 }
+#endif
 
 /* ======================================================================== */
 /* Flip helper                                                               */
@@ -1613,12 +1659,6 @@ int main(void) {
     if (!validate_shader_records(&back, &ps))
         return 1;
 
-    RenderTargetConfig fp16_target = {
-        test.render_target, FP16_TARGET_WIDTH, FP16_TARGET_HEIGHT,
-        COLOR_16_16_16_16, SURF_NUMBER_FLOAT, SURF_SWAP_STD,
-        true, "offscreen FP16"
-    };
-
 #if AGC_VALIDATE_RGBA8_REFERENCE
     RenderTargetConfig rgba8_target = {
         test.buffers[0], test.width, test.height,
@@ -1630,16 +1670,23 @@ int main(void) {
         printf("FATAL: RGBA8 reference draw failed\n");
         return 1;
     }
-#endif
-
+    memcpy(test.buffers[1], test.buffers[0],
+           (size_t)test.width * test.height * BYTES_PER_PIXEL);
+#else
+    RenderTargetConfig fp16_target = {
+        test.render_target, FP16_TARGET_WIDTH, FP16_TARGET_HEIGHT,
+        COLOR_16_16_16_16, SURF_NUMBER_FLOAT, SURF_SWAP_STD,
+        true, "offscreen FP16"
+    };
     printf("\n--- Step 4: RGBA16F offscreen draw ---\n");
     if (!dispatch_graphics(&test, &front, &back, &ps, &fp16_target)) {
         printf("FATAL: RGBA16F render-target validation failed\n");
         return 1;
     }
     visualize_fp16(&test);
+#endif
 
-    printf("\n--- Step 5: Display FP16 preview ---\n");
+    printf("\n--- Step 5: Display target preview ---\n");
     if (!present_preview(&test)) {
         printf("FATAL: no VideoOut preview flip was accepted\n");
         return 1;

@@ -20,7 +20,7 @@ Work proceeds in this order. Later items must not displace an earlier item
 unless the earlier item is explicitly blocked on unavailable firmware or
 hardware.
 
-1. **NGG geometry amplification is complete on FW 5.50 gfx1013 hardware.** The
+1. **Extended NGG geometry coverage is complete on FW 5.50 gfx1013 hardware.** The
    pass-through baseline remains stable, and the six-vertex GS emits two
    half-scale colorful triangles. Repeated captured runs produce identical
    coverage, interpolation, marker, and sustained-flip results, with three
@@ -1152,8 +1152,15 @@ Current FW 5.50 gfx1013 sequence:
    produce 127,488 changed pixels, bounds `x=346..1189, y=602..933`, eight
    sampled colors, zero out-of-range components, a live marker, and
    1,800/1,800 completed flips; the physical display was confirmed three times.
-4. **Extend geometry coverage.** Add varied input/output topology, invocation,
-   and render-target cases after amplification is stable.
+4. **Extended geometry coverage validated.** A line-list input (`VGT_PRIMITIVE_TYPE=2`,
+   two input vertices) reconstructs the full triangle; `invocations=2` emits two
+   half-scale copies with deterministic 127,488-pixel FP16 coverage; and the
+   isolated RGBA8 target produces 126,360 changed pixels against a
+   dimension-derived expectation of 126,293 +/- 1,024. All three cases preserve
+   eight sampled colors, a live marker, and 1,800/1,800 flips, and were confirmed
+   on the physical display. The centered square viewport prevents 16:9 scanout
+   stretching. Keep render-target variants isolated to one draw per process until
+   same-process second-submit sequencing is characterized independently.
 5. **Proceed to tessellation only after geometry passes.** Geometry remains
    ahead of tessellation and combined tessellation-plus-geometry so later
    failures do not conflate hull/domain ABI work with geometry ABI work.

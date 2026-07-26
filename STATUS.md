@@ -52,6 +52,18 @@ interpolated colors, no out-of-range components, a live post-draw marker, and
 allocation, remap, and export probes have been removed. The physical display
 confirmed the expected centered colorful triangle on a gray background.
 
+Extended geometry coverage is hardware-validated on FW 5.500.008. A line-list
+input programs `VGT_PRIMITIVE_TYPE=2`, submits two vertices, and reconstructs the
+full centered triangle with 255,744 changed FP16 pixels. A separate
+`invocations=2` fixture programs `VGT_GS_INSTANCE_CNT=0x9` and emits two
+half-scale copies with deterministic 127,488-pixel FP16 coverage. An isolated
+RGBA8 single-draw variant produces 126,360 changed pixels against a
+dimension-derived expectation of 126,293 +/- 1,024, with eight sampled colors
+and an aspect-correct centered square viewport. Each case retains the live
+post-draw marker, completes 1,800/1,800 flips, and has matching physical-display
+confirmation. Render-target variants remain isolated to one draw per process so
+same-process second-submit sequencing is not conflated with format coverage.
+
 Two-triangle geometry amplification is hardware-validated on FW 5.500.008. The
 six-vertex GS emits two color-preserving half-scale copies at horizontal offsets
 `-0.3` and `+0.3`. Repeated captured runs produce exactly 127,488 changed FP16
