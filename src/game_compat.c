@@ -854,6 +854,32 @@ int32_t PS5_SYSV_ABI sceAgcGetDataPacketPayloadAddress_0090(
     return AGC_OK;
 }
 
+int32_t PS5_SYSV_ABI sceAgcGetDataPacketPayloadRange(
+    SceAgcMemoryRange *range, uint32_t *cmd, uint32_t type)
+{
+    uint32_t header;
+
+    if (!range || !cmd)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    header = cmd[0];
+    if (type != 0) {
+        range->base = cmd + 2;
+        range->size = (header >> 14) & 0xFFFCu;
+        return AGC_OK;
+    }
+
+    if ((~header & 0x3FFF0000u) == 0) {
+        range->base = NULL;
+        range->size = 0;
+        return AGC_OK;
+    }
+
+    range->base = cmd + 1;
+    range->size = 4u * (((header >> 16) & 0x3FFFu) + 1u);
+    return AGC_OK;
+}
+
 /* ===================================================================== */
 /* Shader and primitive state creation                                   */
 /* ===================================================================== */

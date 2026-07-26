@@ -164,8 +164,9 @@ Convert the conclusions into permanent capability/profile regressions:
 
 Dragon Quest VII Reimagined (`PPSA17942`) is the fifth target in progress. It
 is hardware-proven on FW `0x0550` and bundles AGC compatibility SPRXs despite
-declaring `0x1202`. Its 253 imports currently have 198 covered and 55 unresolved
-after completing the FW 5.50 GetSize imports and seven packet patchers.
+declaring `0x1202`. Its 253 imports currently have 199 covered and 54 unresolved
+after completing the FW 5.50 GetSize imports, seven packet patchers, and the
+data-packet payload-range ABI.
 AcquireMem sizes follow the
 firmware title-workaround mode: mode 1 returns 64 bytes and modes 0/2 return 32,
 instead of hard-coding the emulator's 32-byte path. Implement the remaining

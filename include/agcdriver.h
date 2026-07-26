@@ -496,6 +496,16 @@ uint32_t *PS5_SYSV_ABI sceAgcGetDataPacketPayload(
     uint64_t *out_addr, uint32_t *cmd, uint32_t skip_header);
 int32_t PS5_SYSV_ABI sceAgcGetDataPacketPayloadAddress_0090(
     uint64_t *out_addr, uint32_t *cmd, uint32_t skip_header);
+typedef struct SceAgcMemoryRange {
+    uint32_t *base;
+    uint64_t size;
+} SceAgcMemoryRange;
+_Static_assert(sizeof(SceAgcMemoryRange) == 16,
+    "SceAgcMemoryRange size mismatch");
+_Static_assert(offsetof(SceAgcMemoryRange, size) == 8,
+    "SceAgcMemoryRange size offset mismatch");
+int32_t PS5_SYSV_ABI sceAgcGetDataPacketPayloadRange(
+    SceAgcMemoryRange *range, uint32_t *cmd, uint32_t type);
 
 /* Shader and primitive state creation. */
 int32_t PS5_SYSV_ABI sceAgcCreateShader(void *shader_record, uint32_t type);

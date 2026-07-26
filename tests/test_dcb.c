@@ -489,6 +489,30 @@ static void test_game_compat_init(void) {
         "GetDataPacketPayloadAddress_0090 returns AGC_OK");
     TEST_ASSERT_EQ(payload, (uint64_t)(uintptr_t)&packet[1],
         "GetDataPacketPayloadAddress_0090 preserves payload address ABI");
+
+    SceAgcMemoryRange payload_range = {0};
+    packet[0] = agcPm4Header3(AGC_PM4_OP_NOP, 3);
+    r = sceAgcGetDataPacketPayloadRange(&payload_range, packet, 0);
+    TEST_ASSERT_EQ(r, AGC_OK, "GetDataPacketPayloadRange type 0");
+    TEST_ASSERT(payload_range.base == &packet[1],
+        "GetDataPacketPayloadRange type 0 base");
+    TEST_ASSERT_EQ(payload_range.size, 8u,
+        "GetDataPacketPayloadRange type 0 size");
+
+    r = sceAgcGetDataPacketPayloadRange(&payload_range, packet, 1);
+    TEST_ASSERT_EQ(r, AGC_OK, "GetDataPacketPayloadRange type 1");
+    TEST_ASSERT(payload_range.base == &packet[2],
+        "GetDataPacketPayloadRange type 1 base");
+    TEST_ASSERT_EQ(payload_range.size, 4u,
+        "GetDataPacketPayloadRange type 1 size");
+
+    packet[0] = 0xFFFF1000u;
+    r = sceAgcGetDataPacketPayloadRange(&payload_range, packet, 0);
+    TEST_ASSERT_EQ(r, AGC_OK, "GetDataPacketPayloadRange max NOP");
+    TEST_ASSERT(payload_range.base == NULL,
+        "GetDataPacketPayloadRange max NOP base");
+    TEST_ASSERT_EQ(payload_range.size, 0u,
+        "GetDataPacketPayloadRange max NOP size");
 }
 
 /* ===================================================================== */
