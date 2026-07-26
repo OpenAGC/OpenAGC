@@ -1,0 +1,5 @@
+title_id	title	version	engine	sdk	binary_size	sha256	agc_imports	implemented	unresolved	evidence
+PPSA02801	New Joe & Mac: Caveman Ninja	01.003	Unity IL2CPP	5.00	29.7 MB	legacy-analysis-only	70	70	0	analysis/game_agc_usage.md
+PPSA09076	Unknown backport	01.000.000	unknown	unknown	unknown	legacy-analysis-only	69	69	0	legacy import inventory
+PPSA03157	Unknown	unknown	unknown	unknown	unknown	legacy-analysis-only	58	58	0	legacy import inventory
+PPSA02453	Subnautica	01.022.394	Unity IL2CPP	4.00	27750350	8d5cd4b6417363a0568ea8d3c28ebdbad01e9725edaf39c614d303b352dcaf07	63	63	0	tools/analyze_game_agc.py

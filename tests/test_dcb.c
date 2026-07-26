@@ -461,6 +461,11 @@ static void test_game_compat_init(void) {
     TEST_ASSERT_EQ(r, AGC_OK, "sceAgcInit returns OK");
     TEST_ASSERT_EQ(out_val, 0u, "sceAgcInit sets out_value to 0");
 
+    out_val = 0xDEAD;
+    r = sceAgcInit_0090(0, 0, &out_val);
+    TEST_ASSERT_EQ(r, AGC_OK, "sceAgcInit_0090 forwards to current ABI");
+    TEST_ASSERT_EQ(out_val, 0u, "sceAgcInit_0090 preserves output ABI");
+
     /* sceAgcInit with invalid init_level */
     r = sceAgcInit(10, 0, NULL);
     TEST_ASSERT(r < 0, "sceAgcInit invalid level fails");
@@ -476,6 +481,14 @@ static void test_game_compat_init(void) {
     /* CreateShader with NULL fails */
     r = sceAgcCreateShader(NULL, 0);
     TEST_ASSERT(r < 0, "CreateShader NULL fails");
+
+    uint32_t packet[3] = {0xC0001000u, 0x12345678u, 0u};
+    uint64_t payload = 0;
+    r = sceAgcGetDataPacketPayloadAddress_0090(&payload, packet, 0);
+    TEST_ASSERT_EQ(r, AGC_OK,
+        "GetDataPacketPayloadAddress_0090 returns AGC_OK");
+    TEST_ASSERT_EQ(payload, (uint64_t)(uintptr_t)&packet[1],
+        "GetDataPacketPayloadAddress_0090 preserves payload address ABI");
 }
 
 /* ===================================================================== */

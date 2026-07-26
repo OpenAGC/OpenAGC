@@ -43,6 +43,14 @@ static void test_known_nids(void) {
     TEST_ASSERT(strcmp(AGC_NID_SCE_AGC_CB_NOP, "LtTouSCZjHM") == 0, "sceAgcCbNop NID");
     TEST_ASSERT(strcmp(AGC_NID_SCE_AGC_DCB_SET_FLIP, "YUeqkyT7mEQ") == 0, "sceAgcDcbSetFlip NID");
     TEST_ASSERT(strcmp(AGC_NID_SCE_AGC_DRIVER_SUBMIT_DCB, "UglJIZjGssM") == 0, "submit DCB NID");
+    TEST_ASSERT(strcmp(AGC_NID_SCE_AGC_CREATE_INTERPOLANT_MAPPING_0100,
+        "HV4j+E0MBHE") == 0, "CreateInterpolantMapping_0100 NID");
+    TEST_ASSERT(strcmp(AGC_NID_SCE_AGC_GET_DATA_PACKET_PAYLOAD_ADDRESS_0090,
+        "V++UgBtQhn0") == 0, "GetDataPacketPayloadAddress_0090 NID");
+    TEST_ASSERT(strcmp(AGC_NID_SCE_AGC_GET_FUSED_SHADER_SIZE_0080,
+        "dolOmWH+huQ") == 0, "GetFusedShaderSize_0080 NID");
+    TEST_ASSERT(strcmp(AGC_NID_SCE_AGC_INIT_0090,
+        "23LRUSvYu1M") == 0, "Init_0090 NID");
 }
 
 void test_suite_types(void) {

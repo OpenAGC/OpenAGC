@@ -1,114 +1,52 @@
-# Game Binary AGC Usage Analysis
+# FW 5.50 Game AGC Compatibility Corpus
 
-## Source
-- Game: "New Joe & Mac Caveman Ninja" (PPSA02801, v01.003)
-- ELF size: 29.7 MB (Unity IL2CPP engine)
-- SDK: PS5 5.00 (based on build path `PS5_5_00_nondev_i_m`)
+## Method
 
-## AGC Import Summary
+`tools/analyze_game_agc.py` reads the program headers and dynamic tables from a
+decrypted PS5 ELF. It does not require section headers, which are commonly
+removed or point beyond the distributed image. The tool resolves SCE import
+library identifiers, maps AGC NIDs through `analysis/agc_known_nids.tsv`, and
+classifies coverage from OpenAGC's public declarations.
 
-The game imports **71 AGC functions** across two SPRX modules:
+Only metadata, hashes, and import inventories are committed. Game executables
+remain external reference material.
 
-### libSceAgc.sprx (user-facing API): 62 functions
-- **38 implemented** in openagc
-- **22 missing** (some are wrappers around libSceAgcDriver)
+## Coverage
 
-### libSceAgcDriver.sprx (driver-facing API): 9 functions
-- **2 implemented** (sceAgcDriverSubmitDcb, sceAgcDriverSubmitAcb)
-- **7 missing** (but 2 are trivial stubs)
+| Game | Title ID | Engine | SDK | AGC imports | Covered | Unresolved |
+|------|----------|--------|-----|-------------|---------|------------|
+| New Joe & Mac: Caveman Ninja 01.003 | PPSA02801 | Unity IL2CPP | 5.00 | 70 | 70 | 0 |
+| Unknown backport 01.000.000 | PPSA09076 | Unknown | Unknown | 69 | 69 | 0 |
+| Unknown | PPSA03157 | Unknown | Unknown | 58 | 58 | 0 |
+| Subnautica 01.022.394 | PPSA02453 | Unity IL2CPP | 4.00 | 63 | 63 | 0 |
 
-## Missing libSceAgcDriver Functions
+The four-title corpus contains **73 unique AGC functions, all implemented**.
+The release target remains at least ten representative FW 5.50-compatible
+titles across multiple engines and SDK vintages.
 
-### sceAgcDriverRegisterOwner (NID: X-Nm5KLREeg)
-- **STUB**: Returns `0x8a6c9018` (AGC_ERROR_NOT_SUPPORTED)
-- Size: 6 bytes (`mov eax, 0x8a6c9018; ret`)
+## PPSA02453 evidence
 
-### sceAgcDriverRegisterResource (NID: W5z4eZrjEas)
-- **STUB**: Returns `0x8a6c9018` (AGC_ERROR_NOT_SUPPORTED)
-- Size: 6 bytes (`mov eax, 0x8a6c9018; ret`)
+- Binary size: 27,750,350 bytes.
+- SHA-256: `8d5cd4b6417363a0568ea8d3c28ebdbad01e9725edaf39c614d303b352dcaf07`.
+- Unity build path identifies `PS5_4_00_nondev_i_m`.
+- The exact 63-symbol inventory is in `analysis/game_compat_imports.tsv`.
+- NID `HV4j+E0MBHE` is `sceAgcCreateInterpolantMapping_0100`, not
+  `sceAgcDcbWaitFlip`. The name hashes to that NID, and FW 5.50 ordinal 133 at
+  `0xdd60` implements the same three-argument interpolant-mapping ABI as the
+  current export.
+- OpenAGC exposes `_0100` as a forwarding wrapper to the already tested current
+  implementation. Its output has an exact host fixture.
 
-### sceAgcDriverGetEqContextId (NID: Zw7uUVPulbw)
-- Calls internal function at 0xad00, right-shifts result by 16
-- Returns the EQ (event queue) context ID
+Reproduce the inventory without writing game data into the repository:
 
-### sceAgcDriverSetTFRing (NID: XlNp7jzGiPo)
-- Non-Direct variant. Checks SDK version, clamps TF ring size to 0x4000
-- Jumps through function pointer table based on SDK version
+```sh
+tools/analyze_game_agc.py --require-covered /path/to/decrypted/eboot.bin
+```
 
-### sceAgcDriverSetHsOffchipParam (NID: MM4IZSEYytQ)
-- Non-Direct variant. Trampoline through function pointer table.
-- Different from sceAgcDriverSetHsOffchipParamDirect (NID: DPcAnsOlTQs)
+## Existing three-title provenance
 
-### sceAgcDriverAgrSubmitDcb (NID: AhGvpITrf4M)
-- Checks a flag at [global + 0x148]. If set, submits via internal path.
-- If not set, returns `0x8a6d0003` (AGR not initialized)
-
-### sceAgcDriverAddEqEvent (NID: w2rJhmD+dsE)
-- Sets up an event queue with type 0x1fff2
-- Calls internal function at 0xace0
-
-## Missing libSceAgc Functions
-
-### Packet Builders (DCB)
-- **sceAgcDcbAcquireMem** (0x02f30, 0x02af bytes) — IT_ACQUIRE_MEM for DCB
-- **sceAgcDcbCopyData** (0x03c10, 0x0131 bytes) — IT_COPY_DATA for DCB
-- **sceAgcDcbJump** (0x03b30, 0x00d4 bytes) — IT_JUMP for DCB
-- **sceAgcDcbResetQueue** (0x064d0, 0x0051 bytes) — queue reset for DCB
-- **sceAgcDcbSetIndexCount** (0x05ec0, 0x008e bytes) — set index count
-- **sceAgcDcbSetIndexSize** (0x05d70, 0x00ab bytes) — set index size
-- **sceAgcDcbSetNumInstances** (0x05f50, 0x0085 bytes) — set instance count
-- **sceAgcDcbStallCommandBufferParser** (0x05fe0, 0x0081 bytes) — stall parser
-- **sceAgcDcbDrawIndex** (0x04760, 0x00d5 bytes) — indexed draw
-
-### Packet Builders (CB)
-- **sceAgcCbSetShRegisterRangeDirect** (0x02570, 0x00d8 bytes) — set SH reg range
-- **sceAgcCbSetUcRegistersDirect** (0x029f0, 0x02c3 bytes) — set UC regs
-
-### Patcher Functions
-- **sceAgcSetShRegIndirectPatchSetAddress** (0x0b0d0, 0x0038 bytes)
-- **sceAgcSetShRegIndirectPatchAddRegisters** (0x0b150, 0x0048 bytes)
-- **sceAgcSetCxRegIndirectPatchSetAddress** (0x0b1a0, 0x0038 bytes)
-- **sceAgcSetCxRegIndirectPatchAddRegisters** (0x0b220, 0x0048 bytes)
-- **sceAgcSetUcRegIndirectPatchSetAddress** (0x0b270, 0x0038 bytes)
-- **sceAgcSetUcRegIndirectPatchAddRegisters** (0x0b2f0, 0x0048 bytes)
-
-### Utility Functions
-- **sceAgcSetNop** (0x0b530, 0x0007 bytes) — 7-byte NOP setter
-- **sceAgcCreateShader** (0x0c380, 0x036a bytes) — shader record parser
-- **sceAgcCreatePrimState** (0x0e2d0, 0x00ff bytes) — primitive state builder
-- **sceAgcDebugRaiseException** (0x08970, 0x0005 bytes) — 5-byte debug stub
-- **sceAgcGetDataPacketPayload** — data packet payload getter
-
-### Init/Config Functions
-- **sceAgcInit** (0x084a0, 0x0033 bytes) — user-facing init wrapper
-  - Calls internal init at 0x75e0 which:
-    1. Locks mutex
-    2. Checks SDK version via sceKernelGetProsperoCompiledSdkVersion
-    3. Gets app info via sceKernelGetAppInfo
-    4. Checks title workarounds (0x52, 0x53)
-    5. Calls internal register defaults init (0xe8f0)
-    6. Calls internal register defaults internal init (0x119a0)
-- **sceAgcGetRegisterDefaults2** (NID: 2JtWUUiYBXs) — get register defaults
-- **sceAgcGetRegisterDefaults2Internal** (NID: wRbq6ZjNop4) — get internal defaults
-
-### Wrapper Functions
-- **sceAgcSuspendPoint** (0x07560, 0x0074 bytes) — wrapper that calls
-  sceAgcDriverSuspendPointSubmit (NID: QcmHLO2n7mk) via PLT
-
-## Architecture Insight
-
-The PS5 AGC stack has two layers:
-
-1. **libSceAgc.sprx** — User-facing API that games link against.
-   Contains packet builders (sceAgcDcb*, sceAgcCb*, sceAgcAcb*),
-   patchers, shader/state creators, and init wrappers.
-
-2. **libSceAgcDriver.sprx** — Driver-facing API for ioctl submission.
-   Contains submit functions, queue management, and hardware control.
-   Games also link some of these directly.
-
-For openagc to work with real games, we need to provide exports from
-**both** modules. The libSceAgc functions are mostly packet builders
-(which we already have for many), while the libSceAgcDriver functions
-are the ioctl wrappers (which we have for the Direct variants but not
-the non-Direct variants).
+The original three binaries are no longer present in the indexed local game
+trees. Their retained summaries remain valid compatibility evidence, but their
+exact import lists must be regenerated if the binaries become available again.
+The corpus manifest records those rows as `legacy-analysis-only` rather than
+inventing hashes or provenance.

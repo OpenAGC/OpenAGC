@@ -404,6 +404,13 @@ int32_t PS5_SYSV_ABI sceAgcGetFusedShaderSize(
     return AGC_OK;
 }
 
+int32_t PS5_SYSV_ABI sceAgcGetFusedShaderSize_0080(
+    AgcSizeAlign *dst, const AgcShaderRecord *front,
+    const AgcShaderRecord *back)
+{
+    return sceAgcGetFusedShaderSize(dst, front, back);
+}
+
 static int32_t agcFuseShaderHalvesImpl(
     AgcShaderRecord *fused_result, const AgcShaderRecord *front,
     const AgcShaderRecord *back, void *scratch_mem, bool revision_0200)

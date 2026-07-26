@@ -371,6 +371,14 @@ static void test_fused_shader_get_size_gs(void) {
     TEST_ASSERT_EQ(sa.size, (uint64_t)(10 * sizeof(AgcShaderRegister)),
         "GetFusedShaderSize GS size");
     TEST_ASSERT_EQ(sa.align, 4u, "GetFusedShaderSize GS align");
+
+    AgcSizeAlign legacy_sa = {0};
+    ret = sceAgcGetFusedShaderSize_0080(&legacy_sa, &front, &back);
+    TEST_ASSERT_EQ(ret, AGC_OK, "GetFusedShaderSize_0080 forwards");
+    TEST_ASSERT_EQ(legacy_sa.size, sa.size,
+        "GetFusedShaderSize_0080 preserves size ABI");
+    TEST_ASSERT_EQ(legacy_sa.align, sa.align,
+        "GetFusedShaderSize_0080 preserves alignment ABI");
 }
 
 static void test_fused_shader_get_size_hs(void) {
@@ -782,8 +790,14 @@ static void build_interpolant_shader(
 
 static void test_create_interpolant_mapping_identity(void) {
     AgcShaderRegister regs[32] = {0};
+    AgcShaderRegister legacy_regs[32] = {0};
     TEST_ASSERT_EQ(sceAgcCreateInterpolantMapping(regs, NULL, NULL),
         AGC_OK, "CreateInterpolantMapping null PS uses identity state");
+    TEST_ASSERT_EQ(sceAgcCreateInterpolantMapping_0100(
+        legacy_regs, NULL, NULL), AGC_OK,
+        "CreateInterpolantMapping_0100 forwards to current ABI");
+    TEST_ASSERT(memcmp(regs, legacy_regs, sizeof(regs)) == 0,
+        "CreateInterpolantMapping_0100 emits the proven identity mapping");
     for (uint32_t i = 0; i < 32u; i++) {
         TEST_ASSERT_EQ(regs[i].offset,
             AGC_INTERPOLANT_REGISTER_DESCRIPTOR_BASE + i,

@@ -1026,9 +1026,10 @@ NID databases or firmware dumps.
 | Joe & Mac Caveman Ninja | PPSA02801 | 70 | 70 | 0 |
 | PPSA09076 (backport) | PPSA09076 | 69 | 69 | 0 |
 | PPSA03157 | PPSA03157 | 58 | 58 | 0 |
+| Subnautica 01.022.394 | PPSA02453 | 63 | 63 | 0 |
 
-**Total unique AGC functions across all 3 games: 72**
-**All 72 implemented.** 100% coverage.
+**Total unique AGC functions across all 4 games: 73**
+**All 73 implemented.** 100% observed-import coverage.
 
 ### Joe & Mac Caveman Ninja (PPSA02801, v01.003)
 - **Engine:** Unity IL2CPP

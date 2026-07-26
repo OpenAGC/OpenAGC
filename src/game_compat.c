@@ -311,6 +311,12 @@ int32_t PS5_SYSV_ABI sceAgcInit(uint32_t init_level, uint32_t flags, uint32_t *o
     return AGC_OK;
 }
 
+int32_t PS5_SYSV_ABI sceAgcInit_0090(
+    uint32_t init_level, uint32_t flags, uint32_t *out_value)
+{
+    return sceAgcInit(init_level, flags, out_value);
+}
+
 /* sceAgcSuspendPoint (NID: h9z6+0hEydk)
  * SPRX: wrapper that calls sceAgcDriverSuspendPointSubmit (NID: QcmHLO2n7mk)
  * via PLT. The wrapper checks a global flag and builds a 12-byte arg
@@ -802,6 +808,13 @@ uint32_t *PS5_SYSV_ABI sceAgcGetDataPacketPayload(
     return 0;
 }
 
+int32_t PS5_SYSV_ABI sceAgcGetDataPacketPayloadAddress_0090(
+    uint64_t *out_addr, uint32_t *cmd, uint32_t skip_header)
+{
+    (void)sceAgcGetDataPacketPayload(out_addr, cmd, skip_header);
+    return AGC_OK;
+}
+
 /* ===================================================================== */
 /* Shader and primitive state creation                                   */
 /* ===================================================================== */
@@ -1003,6 +1016,16 @@ int32_t PS5_SYSV_ABI sceAgcCreateInterpolantMapping(
     }
 
     return AGC_OK;
+}
+
+/* SDK 1.00 ABI alias retained by FW 5.50 and imported by PPSA02453. */
+int32_t PS5_SYSV_ABI sceAgcCreateInterpolantMapping_0100(
+    AgcShaderRegister *cx_registers,
+    const AgcShaderRecord *geometry_shader,
+    const AgcShaderRecord *pixel_shader)
+{
+    return sceAgcCreateInterpolantMapping(
+        cx_registers, geometry_shader, pixel_shader);
 }
 
 /* ===================================================================== */

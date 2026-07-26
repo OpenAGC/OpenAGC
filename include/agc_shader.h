@@ -293,6 +293,8 @@ typedef struct AgcShaderRegister {
  */
 int32_t PS5_SYSV_ABI sceAgcGetFusedShaderSize(
     AgcSizeAlign *dst, const AgcShaderRecord *front, const AgcShaderRecord *back);
+int32_t PS5_SYSV_ABI sceAgcGetFusedShaderSize_0080(
+    AgcSizeAlign *dst, const AgcShaderRecord *front, const AgcShaderRecord *back);
 
 /*
  * sceAgcFuseShaderHalves (NID: nApJjpKNBl4) and its FW 5.50 _0200 variant
