@@ -85,23 +85,50 @@ typedef struct {
     size_t buffer_stride;
 } VideoOutTest;
 
+int kernel_dynlib_handle(int pid, const char *name, uint32_t *handle);
+intptr_t kernel_dynlib_mapbase_addr(int pid, uint32_t handle);
+int kernel_mprotect(int pid, intptr_t addr, size_t size, int prot);
+
+static bool patch_videoout_linear(void) {
+    uint32_t handle = 0;
+    intptr_t base;
+    intptr_t address;
+    volatile uint8_t *code;
+
+    if (kernel_dynlib_handle(-1, "libSceVideoOut.sprx", &handle) != 0 ||
+        handle == 0) {
+        printf("libSceVideoOut handle lookup failed\n");
+        return false;
+    }
+    base = kernel_dynlib_mapbase_addr(-1, handle);
+    if (base == 0) {
+        printf("libSceVideoOut base lookup failed\n");
+        return false;
+    }
+
+    address = base + 0x7e61;
+    if (kernel_mprotect(
+            -1, address & ~(intptr_t)0xfff, 0x2000,
+            SCE_KERNEL_PROT_CPU_READ | SCE_KERNEL_PROT_CPU_RW | 0x4) != 0) {
+        printf("libSceVideoOut patch mprotect(RWX) failed\n");
+        return false;
+    }
+    code = (volatile uint8_t *)address;
+    for (uint32_t i = 0; i < 6u; ++i)
+        code[i] = 0x90;
+    if (kernel_mprotect(
+            -1, address & ~(intptr_t)0xfff, 0x2000,
+            SCE_KERNEL_PROT_CPU_READ | 0x4) != 0) {
+        printf("libSceVideoOut patch mprotect(RX) failed\n");
+        return false;
+    }
+    printf("Patched libSceVideoOut linear check at +0x7e61\n");
+    return true;
+}
+
 static size_t align_up(size_t value, size_t alignment) {
     const size_t remainder = value % alignment;
     return remainder == 0 ? value : value + (alignment - remainder);
-}
-
-static uint32_t pack_a8r8g8b8(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
-    return (uint32_t)r | ((uint32_t)g << 8) | ((uint32_t)b << 16) |
-           ((uint32_t)a << 24);
-}
-
-static uint32_t color_bar(unsigned index, uint64_t frame) {
-    static const uint32_t colors[] = {
-        0xff0000ff, 0xff00ff00, 0xffff0000, 0xffffffff,
-        0xff00ffff, 0xffffff00, 0xffff00ff, 0xff000000,
-    };
-    const unsigned count = sizeof(colors) / sizeof(colors[0]);
-    return colors[(index + (unsigned)(frame / 60)) % count];
 }
 
 static void fill_pattern(uint8_t *buffer, uint32_t width, uint32_t height,
@@ -122,6 +149,7 @@ static void fill_pattern(uint8_t *buffer, uint32_t width, uint32_t height,
     /* Fast memset-style fill using 32-bit writes */
     uint32_t *p = (uint32_t *)buffer;
     const size_t count = total / 4;
+    (void)width;
     for (size_t i = 0; i < count; i++)
         p[i] = color;
 }
@@ -206,13 +234,11 @@ static bool init_video(VideoOutTest *test) {
      *   offset 16: height
      *   offset 20: pitch_in_pixel
      *
-     * NOTE: Linear mode requires "Enhanced Display Buffer Attribute" to be
-     * enabled in Debug Settings, OR a runtime patch to libSceVideoOut.sprx
-     * (NOP the je at offset 0x7e61 on FW 5.50). We sleep 10s to allow the
-     * patch to be applied externally via ps5debug-NG (port 744). */
-    printf("Sleeping 10s for external patch — run patch_videoout.py now!\n");
-    sceKernelUsleep(10 * 1000 * 1000);
-    printf("Woke up, proceeding with RegisterBuffers...\n");
+     * FW 5.50 requires either the debug setting or the same runtime branch
+     * patch used by the GPU validation samples. Keep this smoke test
+     * self-contained so websrv qualification needs no external debugger. */
+    if (!patch_videoout_linear())
+        return false;
 
     uint8_t attr_raw[64];
     memset(attr_raw, 0, sizeof(attr_raw));
@@ -273,16 +299,13 @@ int main(void) {
     printf("=== openagc VideoOut linear smoke test ===\n");
 
     if (!init_video(&test)) {
-        /* Clean up VideoOut handle before exiting to avoid leaking it. */
         shutdown_video(&test);
-        long state = 0;
-        thr_exit(&state);
-        __builtin_unreachable();
+        return 1;
     }
 
-    printf("Display initialized, starting flip loop...\n");
+    printf("Display initialized, starting 600-frame flip loop...\n");
 
-    for (uint64_t frame = 0;; frame++) {
+    for (uint64_t frame = 0; frame < 600u; frame++) {
         const unsigned index = (unsigned)(frame % BUFFER_COUNT);
         fill_pattern(test.buffers[index], test.width, test.height,
                      test.pitch_pixels, frame);
@@ -293,7 +316,8 @@ int main(void) {
         );
         if (res != 0) {
             printf("sceVideoOutSubmitFlip failed: 0x%x\n", res);
-            break;
+            shutdown_video(&test);
+            return 1;
         }
 
         SceKernelEvent event = {0};
@@ -301,16 +325,15 @@ int main(void) {
         res = sceKernelWaitEqueue(test.flipqueue, &event, 1, &out, NULL);
         if (res != 0) {
             printf("sceKernelWaitEqueue failed: 0x%x\n", res);
-            break;
+            shutdown_video(&test);
+            return 1;
         }
 
-        if ((frame % 60) == 0) {
+        if ((frame % 60) == 0)
             printf("Frame %llu\n", (unsigned long long)frame);
-        }
     }
 
-    /* Don't shutdown — just exit the thread to keep the host process alive */
-    long state = 0;
-    thr_exit(&state);
-    __builtin_unreachable();
+    printf("VideoOut sustained smoke: 600/600 flips completed\n");
+    shutdown_video(&test);
+    return 0;
 }

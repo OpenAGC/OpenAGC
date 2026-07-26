@@ -42,6 +42,15 @@ checks. Physical display validation showed the gray background with the
 colorful triangle in both modes. The specialized tessellation sample still
 builds with its existing binder and direct post-bind override path.
 
+FW 5.50 qualification samples now have deterministic websrv lifecycles.
+`videoout_linear.elf` applies the known FW 5.50 VideoOut linear-buffer patch
+internally, completes 600 flips, releases its resources, and returns instead
+of relying on an external debugger or persistent thread. `agc_compute.elf`
+submits and completes the display flip after its full-buffer readback. The
+qualification runner must observe foreground `/hbldr` completion before
+starting another ELF; a curl timeout halts the sequence to prevent overlapping
+homebrew-loader processes.
+
 Complete and hardware-validated on standard PS5 gfx1013, raw firmware
 `0x05500008`. `agcGfx1013ValidateWave32VsPs` and
 `agcGfx1013BindWave32VsPs` now provide a reusable path for fused NGG Gs(2)

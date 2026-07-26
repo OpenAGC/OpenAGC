@@ -727,7 +727,14 @@ int main(void) {
     /* Copy rendered output to display buffer */
     memcpy(test.buffers[0], buf0, total_pixels * 4);
 
+    int flip_result = sceVideoOutSubmitFlip(
+        test.handle, 0, SCE_VIDEO_OUT_FLIP_MODE_VSYNC, 0);
+    if (flip_result != 0) {
+        printf("[Display] sceVideoOutSubmitFlip failed: 0x%x\n", flip_result);
+        return 1;
+    }
     wait_for_flip(&test);
+    printf("[Display] GPU output flip completed\n");
     sceKernelUsleep(1000000);
 
     return 0;

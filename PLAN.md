@@ -133,6 +133,15 @@ consecutive times from identical ELFs. The exit gate is all deterministic
 oracles passing, 1,800/1,800 flips where applicable, and no hang, panic, or UI
 crash. Use curl/websrv only; do not use `prospero-deploy`.
 
+Qualification runners must wait for a successful foreground HTTP completion
+before launching the next ELF. A timeout or disconnected `/hbldr` request is a
+hard stop, not permission to overlap another homebrew process. The standalone
+VideoOut smoke test patches the FW 5.50 linear-buffer check internally, runs a
+finite 600-flip window, cleans up, and exits. The compute test submits and
+waits for its display flip before returning. These lifecycle rules prevent a
+successful persistent display case from occupying websrv during the next
+qualification launch.
+
 ### 4. Preserve the closed FW 5.50 driver-gap results
 
 Do not reopen PA-debug or `FRAME_OPEN` without contradictory firmware evidence.
