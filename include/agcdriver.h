@@ -705,6 +705,11 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbContextStateOp(
     SceAgcCb *cb, uint32_t op, uint32_t reg_type,
     uint32_t reg_offset, uint32_t reg_count, const void *reg_data);
 
+/* NID qj7QZpgr9Uw: exact two-argument context-state transition ABI used by
+ * compatibility SPRXs. The official Sony export name remains unknown. */
+uint32_t *PS5_SYSV_ABI sceAgcUnknownQj7QZpgr9Uw(
+    SceAgcCb *cb, uint32_t operation);
+
 /* DCB workload helpers (delegate to ACB-style packets) */
 uint32_t *PS5_SYSV_ABI sceAgcDcbSetWorkloadsActive(
     SceAgcCb *cb, uint32_t flags, const void *data, uint32_t data_size);

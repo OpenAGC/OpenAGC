@@ -42,7 +42,8 @@ titles across multiple engines and SDK vintages.
   controls, and the clean-room gfx1013 compute-backed
   `sceAgcCbMemsetExclusive` builder plus three NID-exact indirect-buffer field
   patchers, the NID-exact four-argument `SET_INDEX_SIZE` variant, and the full
-  12-argument atomic-GDS builder cover 249 imports; 4 remain under analysis,
+  12-argument atomic-GDS builder plus the exact two-argument `qj7QZpgr9Uw`
+  context-state transition builder cover 250 imports; 3 remain under analysis,
   so the title is tracked
   separately from the four fully covered titles. AcquireMem packet size follows
   the FW 5.50 title
@@ -55,6 +56,9 @@ titles across multiple engines and SDK vintages.
   11.60 bodies prove behavior and calling convention but not official names.
   The version-specific index-size and atomic-GDS builders likewise retain
   NID-derived labels and coexist with their older named compatibility APIs.
+  The `qj7QZpgr9Uw` builder emits the firmware-sized `5/27/27/32`-dword modes
+  and uses a GPU-visible `{0,1}` label plus a flattened FW 5.50 v8 CX restore
+  list. Its packet layouts are host-proven but not yet hardware-promoted.
 - The durable exclusion list is `analysis/game_compat_exclusions.tsv`.
 
 ## PPSA02453 evidence

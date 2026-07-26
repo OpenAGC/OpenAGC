@@ -33,6 +33,7 @@
 #include "agc_registers.h"
 #include "agc_shader.h"
 #include "agc_types.h"
+#include "game_compat_internal.h"
 
 #include <stdlib.h>
 #include "agcdriver.h"
@@ -2898,3 +2899,129 @@ AGC_DEFINE_FIXED_GET_SIZE(sceAgcDcbSetZPassPredicationEnableGetSize, 16u)
 AGC_DEFINE_FIXED_GET_SIZE(sceAgcDcbStallCommandBufferParserGetSize, 8u)
 
 #undef AGC_DEFINE_FIXED_GET_SIZE
+
+typedef struct AgcCompatContextState {
+    uint64_t sync_label_gpu_address;
+    uint64_t restore_list_gpu_address;
+    uint32_t restore_count;
+    uint32_t append_restore;
+} AgcCompatContextState;
+
+static AgcCompatContextState g_compat_context_state;
+
+void agcGameCompatConfigureContextState(
+    uint64_t sync_label_gpu_address,
+    uint64_t restore_list_gpu_address,
+    uint32_t restore_count,
+    uint32_t append_restore)
+{
+    g_compat_context_state.sync_label_gpu_address = sync_label_gpu_address;
+    g_compat_context_state.restore_list_gpu_address =
+        restore_list_gpu_address;
+    g_compat_context_state.restore_count = restore_count & 0x3fffu;
+    g_compat_context_state.append_restore = append_restore != 0u;
+}
+
+static void agcCompatWriteRestorePacket(uint32_t *cmd)
+{
+    uint64_t address = g_compat_context_state.restore_list_gpu_address;
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG_INDIRECT, 5u);
+    cmd[1] = (uint32_t)address & ~3u;
+    cmd[2] = (uint32_t)(address >> 32);
+    cmd[3] = UINT32_C(0x80000000);
+    cmd[4] = g_compat_context_state.restore_count;
+}
+
+static void agcCompatWriteContextSyncBlock(
+    uint32_t *cmd, uint32_t operation)
+{
+    uint64_t label = g_compat_context_state.sync_label_gpu_address;
+    uint32_t special = operation == 1u || operation == 3u;
+    uint64_t atomic_data = special ? UINT64_C(1) : UINT64_C(0x100000000);
+
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_COND_EXEC, 5u);
+    cmd[1] = ((uint32_t)label + (special ? 0u : 4u)) & ~3u;
+    cmd[2] = (uint32_t)(label >> 32);
+    cmd[3] = 0u;
+    cmd[4] = 8u;
+
+    cmd[5] = agcPm4Header3(AGC_PM4_OP_RELEASE_MEM, 8u);
+    cmd[6] = UINT32_C(0x06000528);
+    cmd[7] = UINT32_C(0x04010000);
+    cmd[8] = 0u;
+    cmd[9] = 0u;
+    cmd[10] = 0u;
+    cmd[11] = 0u;
+    cmd[12] = UINT32_C(0x08100000) | (operation & 0xfffffu);
+
+    cmd[13] = agcPm4Header3(AGC_PM4_OP_ATOMIC_MEM, 9u);
+    cmd[14] = UINT32_C(0x40000267);
+    cmd[15] = (uint32_t)label;
+    cmd[16] = (uint32_t)(label >> 32);
+    cmd[17] = (uint32_t)atomic_data;
+    cmd[18] = (uint32_t)(atomic_data >> 32);
+    cmd[19] = 0u;
+    cmd[20] = 0u;
+    cmd[21] = 6u;
+}
+
+uint32_t *PS5_SYSV_ABI sceAgcUnknownQj7QZpgr9Uw(
+    SceAgcCb *cb, uint32_t operation)
+{
+    uint32_t *cmd;
+    uint32_t total;
+    uint32_t offset = 0u;
+
+    if (operation > 3u)
+        return 0;
+    if (operation == 0u) {
+        if (g_compat_context_state.restore_list_gpu_address == 0u ||
+            g_compat_context_state.restore_count == 0u)
+            return 0;
+        total = 5u;
+    } else {
+        if (g_compat_context_state.sync_label_gpu_address == 0u)
+            return 0;
+        total = operation == 3u && g_compat_context_state.append_restore
+            ? 32u : 27u;
+        if (total == 32u &&
+            (g_compat_context_state.restore_list_gpu_address == 0u ||
+             g_compat_context_state.restore_count == 0u))
+            return 0;
+    }
+
+    cmd = agcCbAllocDwords(cb, total);
+    if (!cmd)
+        return 0;
+
+    if (operation == 0u) {
+        agcCompatWriteRestorePacket(cmd);
+        return cmd;
+    }
+
+    if (operation == 2u) {
+        cmd[0] = agcPm4Header3(AGC_PM4_OP_CONTEXT_CONTROL, 3u);
+        cmd[1] = 0u;
+        cmd[2] = UINT32_C(0x80018003);
+        offset = 3u;
+    }
+
+    agcCompatWriteContextSyncBlock(cmd + offset, operation);
+    offset += 22u;
+
+    if (operation != 2u) {
+        cmd[offset++] = agcPm4Header3(AGC_PM4_OP_CONTEXT_CONTROL, 3u);
+        cmd[offset++] = 0u;
+        cmd[offset++] = UINT32_C(0x80018001);
+    }
+    cmd[offset++] = agcPm4Header3(AGC_PM4_OP_CLEAR_STATE_AGC, 2u);
+    cmd[offset++] = operation == 3u
+        ? (g_compat_context_state.append_restore ? 1u : 3u)
+        : operation;
+
+    if (operation == 3u && g_compat_context_state.append_restore)
+        agcCompatWriteRestorePacket(cmd + offset);
+
+    return cmd;
+}

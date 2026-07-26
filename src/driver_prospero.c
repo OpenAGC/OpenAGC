@@ -38,6 +38,7 @@
  */
 
 #include "agcdriver.h"
+#include "game_compat_internal.h"
 #include "driver_ops.h"
 #include "driver_registry.h"
 #include "agc_types.h"
@@ -997,6 +998,37 @@ int32_t PS5_SYSV_ABI agcProsperoNotifyDefaultStates(uint32_t flags)
         agcProsperoFreeRegion(&g_prospero.internal_defaults);
         agcProsperoFreeRegion(&g_prospero.primary_defaults);
         return ret;
+    }
+
+    /* The compatibility context-state ABI uses an 8-byte GPU-visible label
+     * followed by a flat CX register restore list. Firmware allocates the
+     * label as {0, 1}; SceGnmMisc is otherwise unused by OpenAGC and has
+     * enough room for all FW 5.50 v8 CX pairs. */
+    {
+        uint32_t *storage = (uint32_t *)g_prospero.misc.cpu_addr;
+        size_t pair_capacity = (g_prospero.misc.size - 8u) /
+            (2u * sizeof(uint32_t));
+        uint32_t pair_count = 0u;
+
+        storage[0] = 0u;
+        storage[1] = 1u;
+        for (uint32_t i = 0u; i < primary_count; ++i) {
+            const AgcRegisterDefaultsGroup *group = &primary_groups[i];
+            if (group->space != kAgcRegisterDefaultSpaceCx)
+                continue;
+            for (uint32_t j = 0u; j < group->register_count; ++j) {
+                if (pair_count >= pair_capacity)
+                    return AGC_ERROR_OUT_OF_MEMORY;
+                storage[2u + pair_count * 2u] = group->registers[j].offset;
+                storage[3u + pair_count * 2u] = group->registers[j].value;
+                ++pair_count;
+            }
+        }
+        agcGameCompatConfigureContextState(
+            g_prospero.misc.gpu_addr,
+            g_prospero.misc.gpu_addr + 8u,
+            pair_count,
+            1u);
     }
 
     /*

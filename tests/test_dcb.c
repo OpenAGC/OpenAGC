@@ -2,6 +2,7 @@
 #include "agcdriver.h"
 #include "agc_pm4.h"
 #include "agc_cb.h"
+#include "game_compat_internal.h"
 
 static void test_dcb_init_null(void) {
     int32_t r = sceAgcDcbInitializeDefaultHardwareState(NULL, 100);
@@ -1053,6 +1054,81 @@ static void test_nid_specific_builder_variants(void) {
     TEST_ASSERT(cmd == NULL, "zARR rejects short command buffer");
     TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
                    "zARR short-buffer failure is atomic");
+
+    agcGameCompatConfigureContextState(
+        UINT64_C(0x1122334455667780), UINT64_C(0x8877665544332200),
+        0x123u, 1u);
+
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    cmd = sceAgcUnknownQj7QZpgr9Uw(&cb, 0u);
+    TEST_ASSERT(cmd != NULL, "qj7 restore operation returns packet");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]),
+                   AGC_PM4_OP_SET_CONTEXT_REG_INDIRECT,
+                   "qj7 restore opcode");
+    TEST_ASSERT_EQ(cmd[1], UINT32_C(0x44332200),
+                   "qj7 restore address low");
+    TEST_ASSERT_EQ(cmd[2], UINT32_C(0x88776655),
+                   "qj7 restore address high");
+    TEST_ASSERT_EQ(cmd[3], UINT32_C(0x80000000),
+                   "qj7 restore control");
+    TEST_ASSERT_EQ(cmd[4], UINT32_C(0x123), "qj7 restore count");
+
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    cmd = sceAgcUnknownQj7QZpgr9Uw(&cb, 1u);
+    TEST_ASSERT(cmd != NULL, "qj7 operation 1 returns packet sequence");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 27u, "qj7 operation 1 size");
+    TEST_ASSERT_EQ(cmd[1], UINT32_C(0x55667780),
+                   "qj7 operation 1 condition label");
+    TEST_ASSERT_EQ(cmd[6], UINT32_C(0x06000528),
+                   "qj7 release-memory control low");
+    TEST_ASSERT_EQ(cmd[7], UINT32_C(0x04010000),
+                   "qj7 release-memory control high");
+    TEST_ASSERT_EQ(cmd[12], UINT32_C(0x08100001),
+                   "qj7 release-memory operation tag");
+    TEST_ASSERT_EQ(cmd[14], UINT32_C(0x40000267),
+                   "qj7 atomic-memory control");
+    TEST_ASSERT_EQ(cmd[17], 1u, "qj7 operation 1 atomic data");
+    TEST_ASSERT_EQ(cmd[21], 6u, "qj7 atomic loop count");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[22]), AGC_PM4_OP_CONTEXT_CONTROL,
+                   "qj7 operation 1 context control");
+    TEST_ASSERT_EQ(cmd[24], UINT32_C(0x80018001),
+                   "qj7 operation 1 context-control data");
+    TEST_ASSERT_EQ(cmd[26], 1u, "qj7 operation 1 clear-state flag");
+
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    cmd = sceAgcUnknownQj7QZpgr9Uw(&cb, 2u);
+    TEST_ASSERT(cmd != NULL, "qj7 operation 2 returns packet sequence");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 27u, "qj7 operation 2 size");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_CONTEXT_CONTROL,
+                   "qj7 operation 2 leading context control");
+    TEST_ASSERT_EQ(cmd[2], UINT32_C(0x80018003),
+                   "qj7 operation 2 leading control data");
+    TEST_ASSERT_EQ(cmd[4], UINT32_C(0x55667784),
+                   "qj7 operation 2 second condition label");
+    TEST_ASSERT_EQ(cmd[15], UINT32_C(0x08100002),
+                   "qj7 operation 2 release-memory tag");
+    TEST_ASSERT_EQ(cmd[20], 0u, "qj7 operation 2 atomic data low");
+    TEST_ASSERT_EQ(cmd[21], 1u, "qj7 operation 2 atomic data high");
+    TEST_ASSERT_EQ(cmd[26], 2u, "qj7 operation 2 clear-state flag");
+
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    cmd = sceAgcUnknownQj7QZpgr9Uw(&cb, 3u);
+    TEST_ASSERT(cmd != NULL, "qj7 operation 3 returns packet sequence");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 32u, "qj7 operation 3 size");
+    TEST_ASSERT_EQ(cmd[26], 1u, "qj7 operation 3 transition flag");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[27]),
+                   AGC_PM4_OP_SET_CONTEXT_REG_INDIRECT,
+                   "qj7 operation 3 appends restore packet");
+    TEST_ASSERT_EQ(cmd[31], UINT32_C(0x123),
+                   "qj7 operation 3 restore count");
+
+    agcCbInit(&cb, short_buffer, sizeof(short_buffer));
+    cmd = sceAgcUnknownQj7QZpgr9Uw(&cb, 3u);
+    TEST_ASSERT(cmd == NULL, "qj7 rejects short command buffer");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+                   "qj7 short-buffer failure is atomic");
+    TEST_ASSERT(sceAgcUnknownQj7QZpgr9Uw(&cb, 4u) == NULL,
+                "qj7 rejects invalid operation");
 }
 
 static void test_batch3_ref_patchers(void);

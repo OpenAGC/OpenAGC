@@ -164,7 +164,7 @@ Convert the conclusions into permanent capability/profile regressions:
 
 Dragon Quest VII Reimagined (`PPSA17942`) is the fifth target in progress. It
 is hardware-proven on FW `0x0550` and bundles AGC compatibility SPRXs despite
-declaring `0x1202`. Its 253 imports currently have 249 covered and 4 unresolved
+declaring `0x1202`. Its 253 imports currently have 250 covered and 3 unresolved
 after completing the FW 5.50 GetSize imports, seven packet patchers, and the
 data-packet payload-range, primitive-state update, and constant driver-status
 ABIs. Its FW 5.50 workload-stream register/unregister pair and AGR multi-DCB
@@ -225,10 +225,19 @@ named source-compatible entry points. `-KRzWekV120` emits the exact four-argumen
 `zARR5aCmkoY` emits the exact 12-argument, 11-dword full atomic-GDS packet.
 Both retain NID-derived public labels because matching firmware bodies prove
 their packet layouts and SysV signatures but not their official names.
+The NID-specific `qj7QZpgr9Uw` context-state transition ABI is recovered as an
+exact two-argument builder. Its four operations emit the firmware-sized
+`5/27/27/32`-dword sequences composed of `CONTEXT_CONTROL`, `COND_EXEC`,
+`RELEASE_MEM`, `ATOMIC_MEM`, clear-state, and optional indirect CX restore
+packets. The Prospero backend initializes the firmware-format `{0,1}`
+GPU-visible synchronization label and flattened FW 5.50 v8 CX restore list in
+`SceGnmMisc`. Host packet fixtures cover every mode and atomic short-buffer
+failure; a focused FW `0x0550` hardware run remains required before this path
+is labeled hardware-validated.
 AcquireMem sizes follow the
 firmware title-workaround mode: mode 1 returns 64 bytes and modes 0/2 return 32,
-instead of hard-coding the emulator's 32-byte path. Resolve the remaining four
-imports (`dbOlWdppb4o`, `vieBRwlh1Lw`, `qj7QZpgr9Uw`, and
+instead of hard-coding the emulator's 32-byte path. Resolve the remaining three
+imports (`dbOlWdppb4o`, `vieBRwlh1Lw`, and
 `sceAgcDriverFindResourcesPublic`) from game call sites or independently
 corroborated public prototypes; preserve unknown NIDs for evidence-driven
 resolution.

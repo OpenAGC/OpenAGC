@@ -35,6 +35,7 @@ typedef enum AgcPm4Opcode {
     /* AGC-custom clear-state opcode (not standard AMD 0x14).
      * RE: SPRX sceAgcDcbClearState emits header 0xc0001200. */
     AGC_PM4_OP_CLEAR_STATE_AGC           = 0x12,
+    AGC_PM4_OP_CONTEXT_CONTROL           = 0x28,
     AGC_PM4_OP_CLEAR_STATE               = 0x14,
     AGC_PM4_OP_INDEX_BUFFER_SIZE         = 0x13,
     AGC_PM4_OP_DISPATCH_DIRECT           = 0x15,
