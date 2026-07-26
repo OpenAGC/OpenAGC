@@ -40,7 +40,8 @@ titles across multiple engines and SDK vintages.
   primitive-payload and full GS-oversubscription occupancy queries, five
   submit-validation stubs, eight resource/GDS status exports, three capture
   controls, and the clean-room gfx1013 compute-backed
-  `sceAgcCbMemsetExclusive` builder cover 244 imports; 9 remain under analysis,
+  `sceAgcCbMemsetExclusive` builder plus three NID-exact indirect-buffer field
+  patchers cover 247 imports; 6 remain under analysis,
   so the title is tracked
   separately from the four fully covered titles. AcquireMem packet size follows
   the FW 5.50 title
@@ -49,6 +50,8 @@ titles across multiple engines and SDK vintages.
   `0x8A6C9018` status; capture start, stop, and trigger return `0x8A6C1000`.
   `sceAgcDriverFindResourcesPublic` remains unresolved because its constant
   firmware stub does not reveal the public argument ABI.
+  The three packet patchers retain NID-derived labels because their FW 5.50 and
+  11.60 bodies prove behavior and calling convention but not official names.
 - The durable exclusion list is `analysis/game_compat_exclusions.tsv`.
 
 ## PPSA02453 evidence

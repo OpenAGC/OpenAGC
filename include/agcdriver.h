@@ -852,6 +852,18 @@ int32_t PS5_SYSV_ABI sceAgcAsyncWriteDataPatchSetDst(
 int32_t PS5_SYSV_ABI sceAgcJumpPatchSetTarget(
     uint32_t *cmd, const uint32_t *target, uint32_t size_in_dwords);
 
+/* NID-specific FW 5.50/11.60 IT_INDIRECT_BUFFER field patchers. The official
+ * export names are not yet known; the NIDs and four-argument ABIs are exact. */
+int32_t PS5_SYSV_ABI sceAgcUnknown7Wa3aeJgeVU(
+    uint32_t *cmd, uint32_t cache_policy, uint64_t address,
+    uint32_t size_in_dwords);
+int32_t PS5_SYSV_ABI sceAgcUnknownRP5xLdOf26k(
+    uint32_t *cmd, uint32_t cache_policy, uint64_t address,
+    uint32_t size_in_dwords);
+int32_t PS5_SYSV_ABI sceAgcUnknownIkfdtRIqCE(
+    uint32_t *cmd, uint32_t cache_policy, uint64_t address,
+    uint32_t size_in_dwords);
+
 /* SetNumRegisters patchers for indirect register packets. NIDs:
  * Cx: whb1RL7K4Ss, Sh: nCUgItdN2ms, Uc: fRG-JOH5+sI
  * reference-confirmed: patches cmd[4] bits 13:0 with num_regs. */

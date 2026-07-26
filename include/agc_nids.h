@@ -246,6 +246,8 @@
 #define AGC_NID_SCE_AGC_SET_UC_REG_INDIRECT_PATCH_SET_NUM_REGISTERS                 "fRG-JOH5+sI"
 #define AGC_NID_SCE_AGC_SUSPEND_POINT                                               "h9z6+0hEydk"
 #define AGC_NID_SCE_AGC_SUSPEND_POINT_AND_CHECK_STATUS                              "b+fis+WZ3Ig"
+#define AGC_NID_SCE_AGC_UNKNOWN_7_WA3AE_JGE_VU                                      "7Wa3aeJgeVU"
+#define AGC_NID_SCE_AGC_UNKNOWN_R_P5X_LD_OF26K                                      "rP5xLdOf26k"
 #define AGC_NID_SCE_AGC_UNKNOWN_IKFDT_R_IQ_C_E                                      "Ikfdt-rIqCE"
 #define AGC_NID_SCE_AGC_UNKNOWN_K0_E7VKGQ_AU_E                                      "k0E7vkgqAuE"
 #define AGC_NID_SCE_AGC_UNKNOWN_QJ7_Q_ZPGR9_UW                                      "qj7QZpgr9Uw"

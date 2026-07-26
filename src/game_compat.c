@@ -2547,6 +2547,52 @@ int32_t PS5_SYSV_ABI sceAgcAsyncWriteDataPatchSetDst(
     return AGC_OK;
 }
 
+static int32_t agcPatchIndirectBufferFields(
+    uint32_t *cmd, uint32_t address_dword, uint32_t cache_policy,
+    uint64_t address, uint32_t size_in_dwords)
+{
+    int32_t result = agcCompatibilityPacketCheck(
+        cmd, AGC_PM4_OP_INDIRECT_BUFFER);
+    if (result != AGC_OK)
+        return result;
+
+    cmd[address_dword] =
+        (cmd[address_dword] & 0x3u) | ((uint32_t)address & ~0x3u);
+    cmd[address_dword + 1u] = (uint32_t)(address >> 32u);
+    cmd[address_dword + 2u] =
+        (cmd[address_dword + 2u] & 0xCFF00000u) |
+        (size_in_dwords & 0xFFFFFu) |
+        ((cache_policy & 0x3u) << 28u);
+    return AGC_OK;
+}
+
+/* NIDs 7Wa3aeJgeVU, rP5xLdOf26k, and Ikfdt-rIqCE. FW 5.50 and
+ * FW 11.60 export the same IT_INDIRECT_BUFFER field operation at three
+ * packet-relative offsets. Official names remain unknown. */
+int32_t PS5_SYSV_ABI sceAgcUnknown7Wa3aeJgeVU(
+    uint32_t *cmd, uint32_t cache_policy, uint64_t address,
+    uint32_t size_in_dwords)
+{
+    return agcPatchIndirectBufferFields(
+        cmd, 8u, cache_policy, address, size_in_dwords);
+}
+
+int32_t PS5_SYSV_ABI sceAgcUnknownRP5xLdOf26k(
+    uint32_t *cmd, uint32_t cache_policy, uint64_t address,
+    uint32_t size_in_dwords)
+{
+    return agcPatchIndirectBufferFields(
+        cmd, 11u, cache_policy, address, size_in_dwords);
+}
+
+int32_t PS5_SYSV_ABI sceAgcUnknownIkfdtRIqCE(
+    uint32_t *cmd, uint32_t cache_policy, uint64_t address,
+    uint32_t size_in_dwords)
+{
+    return agcPatchIndirectBufferFields(
+        cmd, 1u, cache_policy, address, size_in_dwords);
+}
+
 /* sceAgcJumpPatchSetTarget (NID: 2BS4EtAaF28)
  * Patches IT_INDIRECT_BUFFER cmd[1] lo, cmd[2] hi (bits 15:0),
  * cmd[3] size (bits 19:0). */

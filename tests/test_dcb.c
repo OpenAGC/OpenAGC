@@ -950,6 +950,64 @@ static void test_batch2_dcb_workload_helpers(void) {
 }
 
 /* Forward declarations for batch 3 tests (defined after test_suite_dcb). */
+static void test_nid_specific_indirect_buffer_patchers(void) {
+    uint32_t first[14] = {0};
+    uint32_t middle[14] = {0};
+    uint32_t direct[14] = {0};
+    uint32_t rejected[14] = {0};
+    const uint64_t address = UINT64_C(0x0000123456789abc);
+
+    first[0] = agcPm4Header3(AGC_PM4_OP_INDIRECT_BUFFER, 14);
+    first[8] = 3u;
+    first[10] = UINT32_C(0xffffffff);
+    first[11] = UINT32_C(0xa5a5a5a5);
+    TEST_ASSERT_EQ((uint32_t)sceAgcUnknown7Wa3aeJgeVU(
+                       first, 2u, address, UINT32_C(0x154321)),
+                   (uint32_t)AGC_OK, "7Wa indirect-buffer patch status");
+    TEST_ASSERT_EQ(first[8], UINT32_C(0x56789abf),
+                   "7Wa address low and preserved flags");
+    TEST_ASSERT_EQ(first[9], UINT32_C(0x00001234), "7Wa address high");
+    TEST_ASSERT_EQ(first[10], UINT32_C(0xeff54321),
+                   "7Wa size and cache policy");
+    TEST_ASSERT_EQ(first[11], UINT32_C(0xa5a5a5a5),
+                   "7Wa preserves following dword");
+
+    middle[0] = agcPm4Header3(AGC_PM4_OP_INDIRECT_BUFFER, 14);
+    middle[10] = UINT32_C(0xcafebabe);
+    middle[11] = 2u;
+    middle[13] = UINT32_C(0xdffabcde);
+    TEST_ASSERT_EQ((uint32_t)sceAgcUnknownRP5xLdOf26k(
+                       middle, 1u, address, UINT32_C(0x123456)),
+                   (uint32_t)AGC_OK, "rP5 indirect-buffer patch status");
+    TEST_ASSERT_EQ(middle[10], UINT32_C(0xcafebabe),
+                   "rP5 preserves preceding dword");
+    TEST_ASSERT_EQ(middle[11], UINT32_C(0x56789abe),
+                   "rP5 address low and preserved flags");
+    TEST_ASSERT_EQ(middle[12], UINT32_C(0x00001234), "rP5 address high");
+    TEST_ASSERT_EQ(middle[13], UINT32_C(0xdff23456),
+                   "rP5 size and cache policy");
+
+    direct[0] = agcPm4Header3(AGC_PM4_OP_INDIRECT_BUFFER, 4);
+    direct[1] = 1u;
+    direct[3] = UINT32_C(0x8aa00000);
+    TEST_ASSERT_EQ((uint32_t)sceAgcUnknownIkfdtRIqCE(
+                       direct, 3u, address, UINT32_C(0x1fffff)),
+                   (uint32_t)AGC_OK, "Ikfdt indirect-buffer patch status");
+    TEST_ASSERT_EQ(direct[1], UINT32_C(0x56789abd),
+                   "Ikfdt address low and preserved flags");
+    TEST_ASSERT_EQ(direct[2], UINT32_C(0x00001234), "Ikfdt address high");
+    TEST_ASSERT_EQ(direct[3], UINT32_C(0xbaafffff),
+                   "Ikfdt size and cache policy");
+
+    rejected[0] = agcPm4Header3(AGC_PM4_OP_NOP, 14);
+    rejected[8] = UINT32_C(0x11223344);
+    TEST_ASSERT_EQ((uint32_t)sceAgcUnknown7Wa3aeJgeVU(
+                       rejected, 2u, address, 7u),
+                   UINT32_C(0x8a6c000c), "NID patcher rejects wrong opcode");
+    TEST_ASSERT_EQ(rejected[8], UINT32_C(0x11223344),
+                   "NID patcher rejection preserves packet");
+}
+
 static void test_batch3_ref_patchers(void);
 static void test_batch3_ref_getsize_helpers(void);
 static void test_batch3_ref_driver_stubs(void);
@@ -986,6 +1044,7 @@ void test_suite_dcb(void) {
     TEST_RUN(test_game_compat_cb_set_sh_reg_range);
     TEST_RUN(test_game_compat_set_nop);
     TEST_RUN(test_game_compat_patchers);
+    TEST_RUN(test_nid_specific_indirect_buffer_patchers);
     TEST_RUN(test_game_compat_driver_stubs);
     TEST_RUN(test_game_compat_init);
     TEST_RUN(test_batch2_dcb_clear_state);
