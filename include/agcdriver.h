@@ -438,6 +438,10 @@ int32_t PS5_SYSV_ABI sceAgcInit(uint32_t init_level, uint32_t flags, uint32_t *o
 int32_t PS5_SYSV_ABI sceAgcInit_0090(
     uint32_t init_level, uint32_t flags, uint32_t *out_value);
 
+/* Compatibility-SPRX query. Writes one boolean byte; FW 5.50 standard PS5
+ * reports false. NID: BfBDZGbti7A. */
+void PS5_SYSV_ABI sceAgcGetIsTrinityMode(uint8_t *is_trinity);
+
 /* libSceAgc SuspendPoint wrapper (calls sceAgcDriverSuspendPointSubmit) */
 int32_t PS5_SYSV_ABI sceAgcSuspendPoint(
     uint32_t field0, uint32_t field1, uint32_t field2, uint32_t field3);

@@ -29,7 +29,7 @@ firmware	library	name	nid	notes
 11.60	libSceAgc	sceAgcUnknown_11.60	6nths4DHNrs	11.60 SPRX export
 11.60	libSceAgc	sceAgcUnknown_11.60	shuFv6ZAOsI	11.60 SPRX export
 11.60	libSceAgc	sceAgcUnknown_11.60	8Kly1JrJUlw	11.60 SPRX export
-11.60	libSceAgc	sceAgcGetIsTrinityMode	BfBDZGbti7A	11.60 SPRX export; identified from sharpemu commit 0c467e8 (DOOM + DOOM II PPSA21444 import); returns 0 on base PS5, non-zero on PS5 Pro (Trinity)
+11.60	libSceAgc	sceAgcGetIsTrinityMode	BfBDZGbti7A	11.60 compatibility SPRX export; Dragon Quest VII body writes sceKernelHasTrinityMode result through one-byte RDI output pointer; sole game caller ignores RAX; FW 5.50 standard PS5 reports false
 11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	J6S2TMmGWgA	11.60 SPRX export
 11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	kAPt2J4U3v8	11.60 SPRX export
 11.60	libSceAgcDriver	sceAgcDriverUnknown_11.60	1l15IdtXNWw	11.60 SPRX export

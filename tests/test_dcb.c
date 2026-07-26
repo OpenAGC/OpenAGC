@@ -1380,6 +1380,11 @@ static void test_batch3_ref_driver_stubs(void) {
     TEST_ASSERT_EQ(sceAgcDriverUnregisterOwnerAndResources(7u),
         AGC_ERROR_NOT_SUPPORTED,
         "UnregisterOwnerAndResources matches FW 5.50 stub");
+
+    uint8_t is_trinity = 1u;
+    sceAgcGetIsTrinityMode(&is_trinity);
+    TEST_ASSERT_EQ(is_trinity, 0u,
+        "GetIsTrinityMode reports standard FW 5.50 hardware");
 }
 
 static void test_batch3_submit_wrappers(void) {

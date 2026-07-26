@@ -367,6 +367,20 @@ int32_t PS5_SYSV_ABI sceAgcDriverSubmitMultiAcbs(
 
 static uint32_t g_agc_packet_mode;
 
+/* sceAgcGetIsTrinityMode (compatibility NID: BfBDZGbti7A)
+ *
+ * Dragon Quest VII's bundled compatibility SPRX takes a one-byte output
+ * pointer in RDI, calls sceKernelHasTrinityMode, and stores AL through that
+ * pointer. Its only game call site ignores RAX and later reads the stored
+ * byte. FW 5.50 predates Trinity hardware, so the standard PS5 result is
+ * false. Keep this pointer-output ABI rather than the stale no-argument HLE
+ * approximation. */
+void PS5_SYSV_ABI sceAgcGetIsTrinityMode(uint8_t *is_trinity)
+{
+    if (is_trinity)
+        *is_trinity = 0;
+}
+
 #ifdef OPENAGC_PROSPERO
 extern int getpid(void);
 extern int PS5_SYSV_ABI sceKernelGetAppInfo(int pid, void *app_info);
