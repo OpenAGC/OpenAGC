@@ -124,7 +124,7 @@ official SDK parity, all-firmware support, VRS, or ray-tracing completeness.
 | 2. Add exact Wave32 and fixed-function host fixtures | **Complete** | Exact fixtures cover the Wave32 VS/PS binder, hardware-proven RT/viewport/scissor/depth/default streams, and the 44-dword baseline draw wrapper, including post-bind overrides and atomic short-buffer rejection. |
 | 3. Re-run the complete FW 5.50 websrv suite | **Complete** | Revision `c0633c7` passed the dependency-ordered base, compute, baseline/NGG, tessellation, and combined-stage matrix through curl/websrv. Required three-run repeats were deterministic, every applicable case completed 1,800/1,800 flips, and the sequential run had no hang, panic, or UI crash. |
 | 4. Investigate FRAME_OPEN EINVAL and PA-debug EPERM | **Complete** | FW 5.50 `FRAME_OPEN` is absent from the kernel dispatcher. The PA-debug export is a userspace permission stub returning `0x8A6D0001`; neither result is an unresolved graphics blocker. |
-| 5. Publish a homebrew-facing example | **Complete for the minimal baseline** | `samples/triangle` demonstrates atomic composition of the public frame, Wave32 baseline draw, and render-to-present APIs, host-builds, and cross-builds with the Prospero toolchain. The focused `agc_graphics.elf` payload passed curl/websrv with exact shader, draw, fence, FP16, and 1,800-flip oracles. A larger standalone application with its own allocation and continuous frame loop remains a later representative-homebrew milestone, not a blocker for this minimal baseline. Retail import audits remain bounded ABI evidence only. |
+| 5. Publish a homebrew-facing example | **Complete** | `samples/triangle` retains the minimal command-recording example. `examples/cube` is a separate installed-package consumer that owns allocation, shader upload, resource tables, triple-buffered frame resources, bounded fences, continuous vertex/index updates, VideoOut presentation, and cleanup. Its staged Prospero install/consumer build passes without repository include or library paths. Two FW `0x05500008` curl/websrv runs presented 3,600 rotating-cube frames and exited cleanly. Retail import audits remain bounded ABI evidence only. |
 | 6. Defer FW 3.20 | **Complete policy** | FW 3.20 remains the lowest active future target, but implementation and hardware work begin only after the FW 5.50 core satisfies the release gates above. |
 
 ### 1. Promote the hardware-proven graphics state into OpenAGC
@@ -275,6 +275,15 @@ Work in this order:
    outside `samples/hw_test` that uses the installed OpenAGC SDK. It must render
    continuously, upload/update resources, compile/load shaders, recover cleanly
    from application errors, and contain no copied sample-private PM4 setup.
+   **Complete:** `examples/cube` is an
+   independent installed-package consumer with application-owned PS5 memory,
+   Wave32 shader upload/fusion, a public descriptor-backed indexed draw,
+   three frame slots, two-second fence bounds, per-frame rotating-cube updates,
+   finite VideoOut presentation, and teardown. The separate Prospero consumer
+   build passes. Two consecutive FW `0x05500008` websrv runs presented all
+   3,600 frames, showed the rotating colored cube, and exited cleanly without a
+   hang, reset, or panic. Qualification evidence is in
+   `analysis/fw550_standalone_cube_qualification_20260727.md`.
 7. **Broaden capability after the vertical slice.** Reusable standard-swap
    RGBA8, RGB10A2, and R11G11B10 color targets are now host-tested and FW 5.50
    hardware-qualified, alongside the earlier alternate-swap BGRA8 and RGBA16F

@@ -16,6 +16,36 @@ correctly classifies `sceAgcDriverSetHsOffchipParam` and
 This is static ABI evidence and makes no claim that Subnautica runs through
 OpenAGC or on FW `0x0550`.
 
+## Standalone rotating-cube homebrew (2026-07-27)
+
+`examples/cube` is the first complete application outside `samples/hw_test`.
+It configures only against an installed OpenAGC package through
+`find_package(OpenAGC)`, then owns its flexible and garlic allocations, shader
+record parsing and upload, resource table, DCBs, VideoOut buffers, and cleanup.
+No repository-private header, in-tree library target, or sample-local PM4 setup
+is consumed.
+
+The application uses three independent frame slots. Each owns a linear BGRA8
+render target, command buffer, continuously updated 24-vertex/36-index cube,
+buffer descriptor, and EOP completion fence. Reuse and completion waits are
+bounded to two seconds. Completed flexible-memory images are copied to three
+registered garlic buffers and presented through VideoOut. The finite 3,600-frame
+loop restores its launch-context state, closes VideoOut, releases direct memory,
+unmaps flexible memory, and exits on both success and application errors.
+
+The GLSL vertex/pass-through-geometry/pixel shaders compile into a gfx1013
+Wave32 NGG pair and descriptor-free pixel record. A staged Prospero install and
+separate consumer configure/build completed without warnings and linked only
+the installed `libopenagc.a`.
+
+The FW `0x05500008` curl/websrv gate now passes. Two consecutive executions
+accepted the 2,467-dword first-frame DCB, reached every EOP fence, presented all
+3,600 frames, and completed teardown without a hang, reset, panic, UI crash, or
+stuck process. The display and live Chiaki capture showed the rotating colored
+cube on dark gray. The 1920x1080 projection scales X and Y within 0.27%, so the
+changing tall/wide silhouette is perspective foreshortening rather than aspect
+stretch. See `analysis/fw550_standalone_cube_qualification_20260727.md`.
+
 ## Minimal public graphics example (2026-07-27)
 
 `samples/triangle` is the small homebrew-facing counterpart to the FW 5.50
@@ -26,10 +56,9 @@ platform allocation, shader upload, submission, bounded waits, and VideoOut in
 the application layer. It contains no raw or sample-private PM4 construction.
 
 The command-recording layer is host-buildable through
-`OPENAGC_BUILD_EXAMPLES=ON`. Standalone Prospero application integration and a
-curl/websrv run remain required before the representative-homebrew gate is
-complete. A clean generic build with examples enabled passed the complete host
-suite at 4,127 passed and 0 failed.
+`OPENAGC_BUILD_EXAMPLES=ON`. The standalone Prospero integration and FW 5.50
+hardware gate are complete in `examples/cube`. A clean generic build with
+examples enabled passed the complete host suite at 4,127 passed and 0 failed.
 
 The same public example cross-builds cleanly with the Prospero Clang 18
 toolchain as `build-prospero/libopenagc_triangle_example.a`. The focused FW

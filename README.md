@@ -56,6 +56,9 @@ builds with ps5-payload-sdk; hardware validation is the remaining step.
 - **Binary-compatible struct layouts** — `_Static_assert` verified sizes
 - **Hardware validation samples** — `samples/hw_test/` builds ELF + fake-SELF
   packages for VideoOut and AGC init smoke tests
+- **Standalone homebrew example** — `examples/cube/` consumes an installed
+  OpenAGC package and owns a FW 5.50 hardware-validated triple-buffered
+  rotating-cube render loop
 
 ## Architecture Differences from opengnm (PS4)
 
@@ -284,6 +287,13 @@ The installed package exports `OpenAGC::openagc`, `OpenAGC::psbc`,
 `OpenAGC_PSBC_EXECUTABLE`, and `openagc_compile_shader()`. Set
 `CMAKE_PREFIX_PATH` to the install prefix, or pass
 `-DOpenAGC_DIR=<prefix>/lib/cmake/OpenAGC`.
+
+The complete independent Prospero consumer is in `examples/cube`. Its README
+documents staged installation, shader regeneration, and foreground curl/websrv
+deployment. Unlike `samples/hw_test`, it contains an application-owned finite
+frame loop with per-frame resource updates and cleanup. Two FW `0x05500008`
+runs presented all 3,600 frames and exited cleanly; see
+`analysis/fw550_standalone_cube_qualification_20260727.md`.
 
 ## Project Structure
 
