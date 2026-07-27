@@ -1236,6 +1236,99 @@ int32_t PS5_SYSV_ABI agcGfx1013GetDepthSurfaceLayout(
     return AGC_OK;
 }
 
+int32_t PS5_SYSV_ABI agcGfx1013GetHtileLayout(
+    const AgcGfx1013HtileLayoutInput *input,
+    AgcGfx1013HtileLayout *layout)
+{
+    AgcGfx1013HtileLayout result = {0};
+    uint32_t pipe_count;
+    uint32_t pipe_log2 = 0u;
+    uint32_t meta_pixels_log2;
+    uint64_t slice_size = 0u;
+    uint64_t allocation_size;
+
+    if (!input || !layout || input->width == 0u || input->height == 0u ||
+        input->width > 0x4000u || input->height > 0x4000u ||
+        input->layer_count == 0u || input->layer_count > 0x2000u ||
+        input->mip_level_count == 0u || input->mip_level_count > 16u ||
+        input->first_mip_in_tail > input->mip_level_count ||
+        input->pipe_count == 0u || input->pipe_count > 64u ||
+        (input->pipe_count & (input->pipe_count - 1u)) != 0u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (input->swizzle_mode != AGC_GFX1013_SWIZZLE_64KB_Z_X)
+        return AGC_ERROR_NOT_SUPPORTED;
+
+    pipe_count = input->pipe_count;
+    while (pipe_count > 1u) {
+        pipe_count >>= 1u;
+        ++pipe_log2;
+    }
+
+    /* gfx1013 is non-RB+ with 256-byte pipe interleave. AddrLib pads
+     * pipe-aligned HTILE metadata blocks to 2 KiB per address pipe. */
+    result.meta_block_size = 1u << (11u + pipe_log2);
+    result.alignment = result.meta_block_size;
+    meta_pixels_log2 = 15u + pipe_log2;
+    result.meta_block_width = 1u <<
+        ((meta_pixels_log2 >> 1u) + (meta_pixels_log2 & 1u));
+    result.meta_block_height = 1u << (meta_pixels_log2 >> 1u);
+    result.pitch = agcGfx1013AlignPow2(
+        input->width, result.meta_block_width);
+    result.padded_height = agcGfx1013AlignPow2(
+        input->height, result.meta_block_height);
+
+    if (input->mip_level_count == 1u) {
+        uint64_t blocks;
+
+        if (!agcGfx1013MulU64(
+                result.pitch / result.meta_block_width,
+                result.padded_height / result.meta_block_height, &blocks) ||
+            !agcGfx1013MulU64(
+                blocks, result.meta_block_size, &slice_size))
+            return AGC_ERROR_INVALID_ARGUMENT;
+    } else {
+        uint32_t mip;
+
+        if (input->first_mip_in_tail < input->mip_level_count)
+            slice_size = result.meta_block_size;
+        for (mip = 0u; mip < input->first_mip_in_tail; ++mip) {
+            uint32_t mip_width = input->width >> mip;
+            uint32_t mip_height = input->height >> mip;
+            uint64_t blocks;
+            uint64_t mip_size;
+
+            if (mip_width == 0u)
+                mip_width = 1u;
+            if (mip_height == 0u)
+                mip_height = 1u;
+            if (!agcGfx1013MulU64(
+                    agcGfx1013AlignPow2(mip_width,
+                        result.meta_block_width) /
+                        result.meta_block_width,
+                    agcGfx1013AlignPow2(mip_height,
+                        result.meta_block_height) /
+                        result.meta_block_height,
+                    &blocks) ||
+                !agcGfx1013MulU64(
+                    blocks, result.meta_block_size, &mip_size) ||
+                slice_size > UINT64_MAX - mip_size)
+                return AGC_ERROR_INVALID_ARGUMENT;
+            slice_size += mip_size;
+        }
+    }
+
+    if (!agcGfx1013MulU64(
+            slice_size, input->layer_count, &allocation_size) ||
+        slice_size / result.meta_block_size > UINT32_MAX)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    result.slice_size = slice_size;
+    result.allocation_size = allocation_size;
+    result.meta_blocks_per_slice =
+        (uint32_t)(slice_size / result.meta_block_size);
+    *layout = result;
+    return AGC_OK;
+}
+
 int32_t PS5_SYSV_ABI agcGfx1013SetDepthSurface(
     SceAgcCb *cb, const AgcGfx1013DepthSurfaceState *state)
 {

@@ -222,6 +222,7 @@ int sceKernelWaitEqueue(SceKernelEqueue equeue, SceKernelEvent *events,
 #define TEXTURE_DESC_OFFSET 0xC000u
 #define INDEX_TYPE_16      0u
 #define DEPTH_SWIZZLE_64KB_Z_X AGC_GFX1013_SWIZZLE_64KB_Z_X
+#define DEPTH_HTILE_PROVISIONAL_PIPE_COUNT 8u
 
 #if AGC_TESSELLATION
 #define GRAPHICS_POOL_PREFIX 0x30000u
@@ -292,6 +293,8 @@ typedef struct {
     void *render_target;    /* Points into compute_buffer */
     void *depth_surface;    /* Optional uncompressed D32 validation image */
     size_t depth_surface_size;
+    void *htile_surface;    /* Reserved metadata; disabled in the D32 gate */
+    size_t htile_surface_size;
     uint32_t width;
     uint32_t height;
     uint32_t pitch_pixels;
@@ -433,13 +436,32 @@ static bool allocate_display_buffers(GraphicsTest *test) {
     size_t rt_size = (size_t)depth_layout.depth.allocation_size;
     size_t rt_alignment = depth_layout.depth.alignment;
     test->depth_surface_size = rt_size;
+    const AgcGfx1013HtileLayoutInput htile_input = {
+        .width = test->width, .height = test->height, .layer_count = 1u,
+        .mip_level_count = 1u,
+        .first_mip_in_tail = depth_layout.depth.first_mip_in_tail,
+        .pipe_count = DEPTH_HTILE_PROVISIONAL_PIPE_COUNT,
+        .swizzle_mode = DEPTH_SWIZZLE_64KB_Z_X,
+    };
+    AgcGfx1013HtileLayout htile_layout;
+    layout_ret = agcGfx1013GetHtileLayout(&htile_input, &htile_layout);
+    if (layout_ret != AGC_OK || htile_layout.allocation_size > SIZE_MAX) {
+        printf("HTILE layout query failed: 0x%08x\n", (unsigned)layout_ret);
+        return false;
+    }
+    size_t htile_size = (size_t)htile_layout.allocation_size;
+    size_t htile_alignment = htile_layout.alignment;
+    test->htile_surface_size = htile_size;
 #else
     size_t rt_size = (size_t)FP16_TARGET_WIDTH * FP16_TARGET_HEIGHT *
                      sizeof(uint64_t);
     size_t rt_alignment = 1u;
+    size_t htile_size = 0u;
+    size_t htile_alignment = 1u;
 #endif
     size_t pool_size = align_up(
-                                GRAPHICS_POOL_PREFIX + rt_alignment - 1u + rt_size,
+                                GRAPHICS_POOL_PREFIX + rt_alignment - 1u + rt_size +
+                                htile_alignment - 1u + htile_size,
                                 1024 * 1024);
     void *pool_addr = NULL;
     int pool_ret = sceKernelMapNamedSystemFlexibleMemory(
@@ -455,6 +477,10 @@ static bool allocate_display_buffers(GraphicsTest *test) {
 #if AGC_DEPTH_VALIDATION
     test->depth_surface = (void *)(uintptr_t)align_up(
         (size_t)(uintptr_t)test->render_target, rt_alignment);
+    test->htile_surface = (void *)(uintptr_t)align_up(
+        (size_t)(uintptr_t)test->depth_surface + test->depth_surface_size,
+        htile_alignment);
+    memset(test->htile_surface, 0, test->htile_surface_size);
 #endif
 
     printf("Command buffer: %zu bytes at %p (flexible)\n", cb_size, cb_buffer);
@@ -464,6 +490,9 @@ static bool allocate_display_buffers(GraphicsTest *test) {
     printf("Depth surface: %zu bytes at %p (D32, swizzle=%u, HTILE off)\n",
            test->depth_surface_size, test->depth_surface,
            DEPTH_SWIZZLE_64KB_Z_X);
+    printf("HTILE reserve: %zu bytes at %p (provisional pipes=%u, disabled)\n",
+           test->htile_surface_size, test->htile_surface,
+           DEPTH_HTILE_PROVISIONAL_PIPE_COUNT);
 #endif
     printf("Display buffers: %zu bytes each, %d buffers at %p (garlic)\n",
            test->buffer_stride, BUFFER_COUNT, test->mapped);

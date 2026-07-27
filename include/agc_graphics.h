@@ -289,10 +289,34 @@ typedef struct AgcGfx1013DepthSurfaceLayout {
     AgcGfx1013DepthPlaneLayout stencil;
 } AgcGfx1013DepthSurfaceLayout;
 
+typedef struct AgcGfx1013HtileLayoutInput {
+    uint32_t width;
+    uint32_t height;
+    uint32_t layer_count;
+    uint32_t mip_level_count;
+    uint32_t first_mip_in_tail;
+    uint32_t pipe_count;
+    uint32_t swizzle_mode;
+} AgcGfx1013HtileLayoutInput;
+
+typedef struct AgcGfx1013HtileLayout {
+    uint64_t allocation_size;
+    uint64_t slice_size;
+    uint32_t pitch;
+    uint32_t padded_height;
+    uint32_t alignment;
+    uint32_t meta_block_size;
+    uint32_t meta_block_width;
+    uint32_t meta_block_height;
+    uint32_t meta_blocks_per_slice;
+} AgcGfx1013HtileLayout;
+
 _Static_assert(sizeof(AgcGfx1013DepthPlaneLayout) == 40,
     "gfx1013 depth plane layout must be 40 bytes");
 _Static_assert(sizeof(AgcGfx1013DepthSurfaceLayout) == 80,
     "gfx1013 depth surface layout must be 80 bytes");
+_Static_assert(sizeof(AgcGfx1013HtileLayout) == 48,
+    "gfx1013 HTILE layout must be 48 bytes");
 
 typedef struct AgcGfx1013ViewportState {
     uint32_t width;
@@ -480,6 +504,9 @@ int32_t PS5_SYSV_ABI agcGfx1013SetDepthSurface(
 int32_t PS5_SYSV_ABI agcGfx1013GetDepthSurfaceLayout(
     const AgcGfx1013DepthSurfaceLayoutInput *input,
     AgcGfx1013DepthSurfaceLayout *layout);
+int32_t PS5_SYSV_ABI agcGfx1013GetHtileLayout(
+    const AgcGfx1013HtileLayoutInput *input,
+    AgcGfx1013HtileLayout *layout);
 int32_t PS5_SYSV_ABI agcGfx1013SetViewport(
     SceAgcCb *cb, const AgcGfx1013ViewportState *state);
 int32_t PS5_SYSV_ABI agcGfx1013SetScissor(

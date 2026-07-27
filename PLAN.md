@@ -29,6 +29,19 @@ AMD PM4 packet ancestry overlap in useful ways.
   16 MiB depth image.
 - Hardware promotion remains deferred until the FW `0x0550` PS5 is available.
 
+### Host-complete: gfx1013 HTILE layout and ordered qualification
+
+- `agcGfx1013GetHtileLayout` models non-RB+ gfx1013 pipe-aligned
+  `64KB_Z_X` metadata. Address-pipe count is explicit because the FW `0x0550`
+  PS5 `GB_ADDR_CONFIG` value has not yet been captured.
+- Exact fixtures cover metadata pitch, padded height, block geometry,
+  alignment, slice size, layers, packed mip-tail accounting, multiple pipe
+  profiles, the largest bindable 64-bit allocation, and atomic rejection.
+- `agc_depth.elf` reserves and zeroes typed HTILE metadata but keeps it disabled.
+- Hardware qualification is split into stencil, then MSAA, then HTILE gates;
+  each has independent readback, responsiveness, and promotion criteria in
+  `samples/hw_test/DEPTH_VALIDATION.md`.
+
 This section is the authoritative completion plan. The later phase sections
 retain detailed history and evidence; they do not override this order.
 

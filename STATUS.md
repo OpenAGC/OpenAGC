@@ -1320,6 +1320,14 @@ largest bindable layout without truncation. The depth hardware sample now uses
 the query instead of a fixed 16 MiB reservation. Hardware validation remains
 pending because the PS5 is unavailable.
 
+The companion typed HTILE layout is host-complete for non-RB+ gfx1013
+`64KB_Z_X`. It reports metadata pitch, padded height, block geometry,
+alignment, per-layer slice size, full allocation size, and packed mip-tail
+accounting. Address-pipe count remains explicit pending a FW `0x0550`
+`GB_ADDR_CONFIG` capture. The depth sample reserves and zeroes the calculated
+metadata but leaves HTILE disabled. Stencil, MSAA, and HTILE are documented as
+separate ordered hardware gates and none is claimed hardware-validated.
+
 Host implementation is complete for typed gfx1013 depth-surface memory state.
 `agcGfx1013SetDepthSurface` emits a deterministic 24-dword packet stream for
 `DB_DEPTH_VIEW`, `DB_HTILE_DATA_BASE`, `DB_DEPTH_SIZE_XY`, `DB_Z_INFO`,

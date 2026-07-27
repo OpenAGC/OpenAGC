@@ -1363,6 +1363,106 @@ static void test_gfx1013_depth_surface_layout(void)
         AGC_ERROR_NOT_SUPPORTED, "unimplemented depth swizzle rejects");
 }
 
+static void test_gfx1013_htile_layout(void)
+{
+    AgcGfx1013HtileLayoutInput input = {
+        .width = 1920u,
+        .height = 1080u,
+        .layer_count = 1u,
+        .mip_level_count = 1u,
+        .first_mip_in_tail = 1u,
+        .pipe_count = 8u,
+        .swizzle_mode = AGC_GFX1013_SWIZZLE_64KB_Z_X,
+    };
+    AgcGfx1013HtileLayout layout = {0};
+
+    TEST_ASSERT_EQ(agcGfx1013GetHtileLayout(&input, &layout), AGC_OK,
+        "gfx1013 HTILE layout queries");
+    TEST_ASSERT_EQ(layout.pitch, 2048u, "HTILE exact pitch");
+    TEST_ASSERT_EQ(layout.padded_height, 1536u,
+        "HTILE exact padded height");
+    TEST_ASSERT_EQ(layout.alignment, 0x4000u,
+        "eight-pipe HTILE exact alignment");
+    TEST_ASSERT_EQ(layout.meta_block_size, 0x4000u,
+        "eight-pipe HTILE exact metadata block size");
+    TEST_ASSERT_EQ(layout.meta_block_width, 512u,
+        "eight-pipe HTILE exact metadata block width");
+    TEST_ASSERT_EQ(layout.meta_block_height, 512u,
+        "eight-pipe HTILE exact metadata block height");
+    TEST_ASSERT_EQ(layout.meta_blocks_per_slice, 12u,
+        "HTILE exact metadata blocks per slice");
+    TEST_ASSERT_EQ(layout.slice_size, 0x30000ull,
+        "HTILE exact slice size");
+    TEST_ASSERT_EQ(layout.allocation_size, 0x30000ull,
+        "HTILE exact allocation size");
+
+    input.layer_count = 3u;
+    TEST_ASSERT_EQ(agcGfx1013GetHtileLayout(&input, &layout), AGC_OK,
+        "gfx1013 HTILE array layout queries");
+    TEST_ASSERT_EQ(layout.slice_size, 0x30000ull,
+        "HTILE array preserves slice size");
+    TEST_ASSERT_EQ(layout.allocation_size, 0x90000ull,
+        "HTILE array exact allocation size");
+
+    input.width = 1024u;
+    input.height = 1024u;
+    input.layer_count = 2u;
+    input.mip_level_count = 11u;
+    input.first_mip_in_tail = 4u;
+    TEST_ASSERT_EQ(agcGfx1013GetHtileLayout(&input, &layout), AGC_OK,
+        "gfx1013 HTILE mip layout queries");
+    TEST_ASSERT_EQ(layout.meta_blocks_per_slice, 8u,
+        "HTILE mip chain exact block count");
+    TEST_ASSERT_EQ(layout.slice_size, 0x20000ull,
+        "HTILE mip chain exact slice size");
+    TEST_ASSERT_EQ(layout.allocation_size, 0x40000ull,
+        "HTILE mip array exact allocation size");
+
+    input.width = 1920u;
+    input.height = 1080u;
+    input.layer_count = 1u;
+    input.mip_level_count = 1u;
+    input.first_mip_in_tail = 1u;
+    input.pipe_count = 16u;
+    TEST_ASSERT_EQ(agcGfx1013GetHtileLayout(&input, &layout), AGC_OK,
+        "gfx1013 sixteen-pipe HTILE layout queries");
+    TEST_ASSERT_EQ(layout.alignment, 0x8000u,
+        "sixteen-pipe HTILE exact alignment");
+    TEST_ASSERT_EQ(layout.meta_block_width, 1024u,
+        "sixteen-pipe HTILE exact metadata block width");
+    TEST_ASSERT_EQ(layout.meta_block_height, 512u,
+        "sixteen-pipe HTILE exact metadata block height");
+    TEST_ASSERT_EQ(layout.slice_size, 0x30000ull,
+        "sixteen-pipe HTILE exact slice size");
+
+    input.width = 0x4000u;
+    input.height = 0x4000u;
+    input.layer_count = 0x2000u;
+    input.pipe_count = 64u;
+    TEST_ASSERT_EQ(agcGfx1013GetHtileLayout(&input, &layout), AGC_OK,
+        "largest bindable HTILE layout retains 64-bit size");
+    TEST_ASSERT_EQ(layout.slice_size, 0x1000000ull,
+        "largest bindable HTILE exact slice size");
+    TEST_ASSERT_EQ(layout.allocation_size, 0x2000000000ull,
+        "largest bindable HTILE allocation does not truncate");
+
+    layout.allocation_size = 0x1122334455667788ull;
+    input.pipe_count = 3u;
+    TEST_ASSERT_EQ(agcGfx1013GetHtileLayout(&input, &layout),
+        AGC_ERROR_INVALID_ARGUMENT, "non-power-of-two HTILE pipe count rejects");
+    TEST_ASSERT_EQ(layout.allocation_size, 0x1122334455667788ull,
+        "invalid HTILE layout preserves output");
+    input.pipe_count = 8u;
+    input.mip_level_count = 4u;
+    input.first_mip_in_tail = 5u;
+    TEST_ASSERT_EQ(agcGfx1013GetHtileLayout(&input, &layout),
+        AGC_ERROR_INVALID_ARGUMENT, "invalid HTILE mip-tail level rejects");
+    input.first_mip_in_tail = 4u;
+    input.swizzle_mode = 23u;
+    TEST_ASSERT_EQ(agcGfx1013GetHtileLayout(&input, &layout),
+        AGC_ERROR_NOT_SUPPORTED, "unimplemented HTILE swizzle rejects");
+}
+
 static void test_gfx1013_graphics_defaults_v8(void)
 {
     uint32_t buffer[2184] = {0};
@@ -1853,6 +1953,7 @@ void test_suite_graphics(void)
     TEST_RUN(test_gfx1013_blend_depth_stencil_packets);
     TEST_RUN(test_gfx1013_depth_surface_packets);
     TEST_RUN(test_gfx1013_depth_surface_layout);
+    TEST_RUN(test_gfx1013_htile_layout);
     TEST_RUN(test_gfx1013_frame_state);
     TEST_RUN(test_gfx1013_graphics_defaults_v8);
     TEST_RUN(test_gfx1013_fixed_function_rejects_atomically);

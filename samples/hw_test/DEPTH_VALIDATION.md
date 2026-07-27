@@ -5,6 +5,28 @@ slice size, and allocation size from `agcGfx1013GetDepthSurfaceLayout`. It no
 longer reserves a sample-local fixed 16 MiB image. This changes allocation
 only; PS5 execution remains pending while hardware is unavailable.
 
+The sample also reserves and zeroes a separately aligned HTILE allocation from
+`agcGfx1013GetHtileLayout`, but it deliberately leaves `htile_enable` clear.
+The provisional eight-address-pipe input must be checked against the PS5's
+`GB_ADDR_CONFIG` before the metadata gate is enabled.
+
+## Ordered follow-up gates
+
+1. **Stencil gate:** keep 1x sampling and HTILE disabled, bind separate D32 and
+   S8 `64KB_Z_X` planes, exercise compare/write masks and replace operations,
+   and require deterministic color plus raw stencil readback.
+2. **MSAA gate:** keep HTILE disabled, use a 4x D32 surface and matching color
+   sample state, resolve to a 1x target, and require edge/sample and raw-depth
+   checks. Do not combine this first MSAA run with stencil.
+3. **HTILE gate:** return to 1x D32, confirm the address-pipe count from
+   `GB_ADDR_CONFIG`, initialize the typed metadata allocation, and enable HTILE
+   first without expclear. Require the EOP fence, unchanged PS5 responsiveness,
+   deterministic color/depth readback, and metadata changes before testing
+   expclear or combined stencil.
+
+Each gate is promoted independently. A failure or kernel panic stops the
+sequence and does not invalidate the earlier gate.
+
 `agc_depth.elf` is the first hardware qualification sample for OpenAGC's typed
 gfx1013 depth-surface and depth/stencil-control builders. It is prepared for FW
 `0x0550`, but has not yet been run on a real PS5.
