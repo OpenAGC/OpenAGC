@@ -567,7 +567,7 @@ int32_t PS5_SYSV_ABI agcGfx1013DrawBaselineIndirect(
              cb, state->index_buffer_address, state->index_buffer_count)))
         return AGC_ERROR_INTERNAL;
     if (!sceAgcDcbSetBaseIndirectArgs(
-            cb, 1u, state->argument_buffer_address))
+            cb, 0u, state->argument_buffer_address))
         return AGC_ERROR_INTERNAL;
     if (state->draw_count == 1u) {
         if (state->indexed) {

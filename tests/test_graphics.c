@@ -389,6 +389,9 @@ static void test_gfx1013_indexed_indirect_draw_wrappers(void)
         "gfx1013 non-indexed indirect exact dword count");
     TEST_ASSERT_EQ(agcPm4Opcode(buffer[36]), AGC_PM4_OP_SET_BASE,
         "gfx1013 indirect argument base opcode");
+    TEST_ASSERT_EQ(buffer[36],
+        agcPm4Header3(AGC_PM4_OP_SET_BASE, 4u),
+        "gfx1013 indirect argument base uses canonical header controls");
     TEST_ASSERT_EQ(agcPm4Opcode(buffer[40]), AGC_PM4_OP_DRAW_INDIRECT,
         "gfx1013 indirect draw opcode");
     TEST_ASSERT_EQ(buffer[41], 0x20u,

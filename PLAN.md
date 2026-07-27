@@ -2093,9 +2093,12 @@ Next execution order:
    alignment, stride validation, register locations, and exact golden streams.
    Count-buffer-driven draws remain a later extension because the recovered
    FW 5.50 packet builders currently expose fixed draw counts only.
-6. **Next:** hardware-qualify indexed, indirect, and indexed-indirect cases separately
-   on FW `0x0550` through curl/websrv before combining them in one frame.
-7. Expand color targets in hardware-risk order: BGRA8 UNORM/SRGB, RGBA8 SRGB,
+6. **Hardware complete:** direct u16 indexed, non-indexed indirect, and u16
+   indexed-indirect each passed separately on FW `0x0550` through curl/websrv
+   with exact FP16 coverage, completion fence, Wave32 audit, and 1,800 flips.
+   The recovered `SET_BASE` wrapper requires canonical header control zero;
+   passing one timed out and is now covered by an exact regression fixture.
+7. **Next:** expand color targets in hardware-risk order: BGRA8 UNORM/SRGB, RGBA8 SRGB,
    RGB10A2 UNORM, R11G11B10 FLOAT, then additional 16-bit tuples. Each format
    requires typed layout/descriptor fixtures, shader write/readback oracles,
    exact coverage, a completion fence, and sustained VideoOut presentation.

@@ -55,6 +55,19 @@
 #define AGC_TESSELLATION 0
 #endif
 
+#ifndef AGC_DRAW_INDEXED
+#define AGC_DRAW_INDEXED 0
+#endif
+#ifndef AGC_DRAW_INDIRECT
+#define AGC_DRAW_INDIRECT 0
+#endif
+#ifndef AGC_DRAW_INDEXED_INDIRECT
+#define AGC_DRAW_INDEXED_INDIRECT 0
+#endif
+#if (AGC_DRAW_INDEXED + AGC_DRAW_INDIRECT + AGC_DRAW_INDEXED_INDIRECT) > 1
+#error "select only one isolated application draw mode"
+#endif
+
 #ifndef AGC_DEPTH_VALIDATION
 #define AGC_DEPTH_VALIDATION 0
 #endif
@@ -331,6 +344,7 @@ int sceKernelWaitEqueue(SceKernelEqueue equeue, SceKernelEvent *events,
 #define INDEX_DATA_OFFSET  0xA000u
 #define TEXTURE_DATA_OFFSET 0xB000u
 #define TEXTURE_DESC_OFFSET 0xC000u
+#define DRAW_ARGS_OFFSET    0xD000u
 #define INDEX_TYPE_16      0u
 #define DEPTH_SWIZZLE_64KB_Z_X AGC_GFX1013_SWIZZLE_64KB_Z_X
 #define DEPTH_HTILE_PROVISIONAL_PIPE_COUNT 8u
@@ -1510,6 +1524,21 @@ static bool dispatch_graphics(GraphicsTest *test,
         ((uint8_t *)test->compute_buffer + TEXTURE_DESC_OFFSET);
     memcpy(gpu_vertices, vertices, sizeof(vertices));
     memcpy(gpu_indices, indices, sizeof(indices));
+#if AGC_DRAW_INDIRECT || AGC_DRAW_INDEXED_INDIRECT
+    uint32_t *draw_args = (uint32_t *)
+        ((uint8_t *)test->compute_buffer + DRAW_ARGS_OFFSET);
+#if AGC_DRAW_INDEXED_INDIRECT
+    static const uint32_t indexed_indirect_args[5] = {
+        3u, 1u, 0u, 0u, 0u,
+    };
+    memcpy(draw_args, indexed_indirect_args, sizeof(indexed_indirect_args));
+#else
+    static const uint32_t indirect_args[4] = {3u, 1u, 0u, 0u};
+    memcpy(draw_args, indirect_args, sizeof(indirect_args));
+#endif
+    printf("[Indirect] args=%p count=3 instances=1 first=0 base=0\n",
+           draw_args);
+#endif
     /* RGBA8 texels: red, green / blue, white. Bilinear sampling produces a
      * visibly distinct two-dimensional gradient inside the triangle. */
     static const uint32_t texture_pixels[4] = {
@@ -1970,9 +1999,44 @@ static bool dispatch_graphics(GraphicsTest *test,
         .vertex_count = NGG_DRAW_VERTEX_COUNT,
         .draw_modifier = 0x40000000u,
     };
+#if AGC_DRAW_INDEXED
+    const AgcGfx1013IndexedDrawState indexed_draw = {
+        .draw = baseline_draw,
+        .index_buffer_address = (uint64_t)(uintptr_t)gpu_indices,
+        .index_buffer_count = 3u,
+        .first_index = 0u,
+        .index_count = 3u,
+        .draw_initiator = 0u,
+    };
+    state_error = agcGfx1013DrawBaselineIndexed(&cb, &indexed_draw);
+    printf("[Draw] reusable baseline direct u16 indexed: 0x%08x\n",
+           (unsigned)state_error);
+#elif AGC_DRAW_INDIRECT || AGC_DRAW_INDEXED_INDIRECT
+    const AgcGfx1013IndirectDrawState indirect_draw = {
+        .draw = baseline_draw,
+        .argument_buffer_address = (uint64_t)(uintptr_t)draw_args,
+        .index_buffer_address = AGC_DRAW_INDEXED_INDIRECT ?
+            (uint64_t)(uintptr_t)gpu_indices : 0u,
+        .argument_offset = 0u,
+        .index_buffer_count = AGC_DRAW_INDEXED_INDIRECT ? 3u : 0u,
+        .draw_count = 1u,
+        .stride = 0u,
+        .base_vertex_location =
+            AGC_REG_SPI_SHADER_USER_DATA_GS_0 + 3u,
+        .start_instance_location =
+            AGC_REG_SPI_SHADER_USER_DATA_GS_0 + 4u,
+        .draw_initiator = AGC_DRAW_INDEXED_INDIRECT ? 0u : 2u,
+        .indexed = AGC_DRAW_INDEXED_INDIRECT,
+    };
+    state_error = agcGfx1013DrawBaselineIndirect(&cb, &indirect_draw);
+    printf("[Draw] reusable baseline %s indirect: 0x%08x\n",
+           AGC_DRAW_INDEXED_INDIRECT ? "u16 indexed" : "non-indexed",
+           (unsigned)state_error);
+#else
     state_error = agcGfx1013DrawBaselineIndexAuto(&cb, &baseline_draw);
     printf("[Draw] reusable baseline bind/index/instance/auto: 0x%08x\n",
            (unsigned)state_error);
+#endif
     if (state_error != AGC_OK)
         return false;
 #endif

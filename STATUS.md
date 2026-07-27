@@ -15,8 +15,18 @@ and optional index-buffer state before emitting `SET_BASE` plus the appropriate
 single or multi draw packet. Exact host fixtures lock the 47-dword direct
 indexed, 45-dword non-indexed indirect, and 55-dword indexed multi-indirect
 streams. Short buffers, invalid ranges, and invalid strides leave the command
-cursor unchanged. The clean generic suite and Prospero library build pass;
-isolated FW 5.50 hardware qualification remains the next gate.
+cursor unchanged.
+
+All three isolated FW `0x05500008` hardware gates pass through curl/websrv.
+Direct u16 indexed, non-indexed indirect, and u16 indexed-indirect each changed
+255,744 FP16 pixels with the exact 768x665 coverage bounds, produced eight
+sampled colors, reached the EOP fence, passed the Wave32 PM4 audit, and
+completed 1,800/1,800 flips. The first indirect attempt exposed a wrapper bug:
+passing control value `1` to `sceAgcDcbSetBaseIndirectArgs` produced a
+noncanonical `SET_BASE` header and timed out the fence. The console recovered;
+using canonical control value zero passed, and an exact host assertion now
+locks that header. Full evidence is in
+`analysis/fw550_indexed_indirect_qualification_20260727.md`.
 
 ## FW 5.50 combined stencil/HTILE expclear qualification (2026-07-27)
 

@@ -397,15 +397,16 @@ not recover missing legacy-only ABIs or advertise those versions as supported.
 
 See `STATUS.md` and `PLAN.md`. Next RE tasks, by priority:
 
-1. **Application-facing indexed/indirect drawing** — typed u16/u32 indexed,
-   indirect, and indexed-indirect composition plus exact host fixtures are
-   complete. Build isolated FW 5.50 hardware gates next.
-2. **Additional render-target formats** — qualify BGRA8, SRGB, RGB10A2,
+1. **Additional render-target formats** — qualify BGRA8, SRGB, RGB10A2,
    R11G11B10, and further 16-bit tuples in increasing hardware-risk order.
-3. **Additional depth/stencil formats** — qualify D16, S8-only, and D16+S8
+2. **Additional depth/stencil formats** — qualify D16, S8-only, and D16+S8
    independently before enabling compressed combinations.
-4. **Game compatibility** — continue expanding the observed-title corpus and
+3. **Game compatibility** — continue expanding the observed-title corpus and
    resolve useful imports only from evidence.
+
+Application-facing direct indexed, indirect, and indexed-indirect drawing is
+host-tested and hardware-qualified on FW 5.50. Preserve canonical `SET_BASE`
+header controls; setting its low control modifier caused a fence timeout.
 
 Closed background RE: FW 5.50 `sceAgcDriverGetPaDebugInterfaceVersion` is a
 userspace permission stub returning `0x8A6D0001` without an ioctl, and

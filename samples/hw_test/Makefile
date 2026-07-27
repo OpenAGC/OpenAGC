@@ -321,6 +321,15 @@ shaders_ngg_invocations: shaders/triangle_vert.spv shaders/triangle_invocations.
 agc_graphics.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -o $@ agc_graphics.c $(AGC_LDFLAGS)
 
+agc_graphics_indexed.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_DRAW_INDEXED=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_graphics_indirect.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_DRAW_INDIRECT=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_graphics_indexed_indirect.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_DRAW_INDEXED_INDIRECT=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
+
 agc_graphics_amplify.elf: shaders_ngg_amplify agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_NGG_AMPLIFY=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
 
