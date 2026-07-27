@@ -1,5 +1,17 @@
 # openagc Status
 
+## Hardware-sample PM4 promotion checkpoint (2026-07-27)
+
+The current hardware-proven compute, graphics, tessellation, depth, stencil,
+MSAA, and HTILE paths contain no hand-packed PM4 headers, no direct command
+buffer allocation, and no raw register emission. Normal command construction
+uses public typed OpenAGC builders. Remaining low-level calls are intentional
+public diagnostic markers, repeated diagnostic draws, the read-only PM4 audit,
+or the SharpEmu export-conformance program. Adding a wrapper around those
+sample policies would not improve the application API. The reconciled evidence
+and remaining non-blocking feature work are documented in
+`analysis/sample_pm4_public_api_audit.md`.
+
 ## FW 5.50 HTILE subresource qualification (2026-07-27)
 
 Nonzero mip and array-layer HTILE binding are now independently

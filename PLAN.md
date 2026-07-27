@@ -2066,9 +2066,13 @@ extent; using the base extent legitimately rasterized beyond the mip attachment
 and changed adjacent metadata. See
 `analysis/fw550_htile_subresources_20260727.md`.
 
-1. Move any PM4 still open-coded by the hardware-proven samples into public
-   typed builders with exact host fixtures and atomic failure behavior.
-2. Keep combined stencil/HTILE expclear disabled until it has a dedicated
+The hardware-sample PM4 promotion audit is also complete. Normal real-PS5
+sample paths contain no hand-packed headers, direct command allocation, or raw
+register emission. Intentional markers, repeated diagnostic draws, the PM4
+decoder, and emulator export-conformance calls remain low-level by design; see
+`analysis/sample_pm4_public_api_audit.md`.
+
+1. Keep combined stencil/HTILE expclear disabled until it has a dedicated
    metadata-mask design and independent hardware gate; do not infer it from
    the now-proven ordinary combined compression path.
 4. Expand typed depth/HTILE support to mip and array-layer hardware fixtures
