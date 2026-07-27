@@ -2048,15 +2048,25 @@ words; all 49,152 HTILE words changed after resummarization; and the FW
 `0x05500008` run completed 1,800/1,800 flips. The physical display showed the
 expected green and red triangles on dark gray.
 
-1. Run the complete 16-sample deterministic FW `0x0550` websrv matrix on the
+Combined D32+S8 HTILE is hardware-validated separately with expclear disabled.
+Shared metadata starts at gfx10.3 combined uncompressed `0xfffff30f`. The
+typed combined decompression mode emits
+`STENCIL_COMPRESS_DISABLE | DEPTH_COMPRESS_DISABLE | DECOMPRESS_ENABLE`
+(`0x1060`), followed by the proven resummarization and neutral-state restore.
+FW `0x05500008` recovered 909,792 clear, 128,304 near, and 128,304 far D32
+words; raw S8 contained 2,364,832 zero bytes, 256,608 `0x5a` bytes, and no
+other values; all 49,152 HTILE words changed; and VideoOut completed
+1,800/1,800 flips without a hang or reset.
+
+1. Run the complete 17-sample deterministic FW `0x0550` websrv matrix on the
    next available real PS5 and retain its raw logs as qualification evidence.
 2. If instant-close behavior recurs after a fresh launcher session, isolate it
    as a loader lifecycle failure before changing GPU PM4 or shader state.
-3. Add combined stencil/HTILE now that depth-only expclear has an independent
-   passing fixture, preserving exact aspect-specific metadata initialization,
-   raw S8 validation, depth decompression, and recovery checks.
-4. Keep combined stencil/HTILE expclear disabled until ordinary combined
-   compression is independently hardware-proven.
+3. Keep combined stencil/HTILE expclear disabled until it has a dedicated
+   metadata-mask design and independent hardware gate; do not infer it from
+   the now-proven ordinary combined compression path.
+4. Expand typed depth/HTILE support to mip and array-layer hardware fixtures
+   before combining additional depth features.
 5. Move remaining hardware-proven sample PM4 into public typed builders and
    fixtures, continuing with synchronization and additional format state.
 6. Correct and document Subnautica wrapper coverage, then inventory the provided

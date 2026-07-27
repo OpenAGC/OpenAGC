@@ -79,6 +79,10 @@
 #define AGC_EXPCLEAR_VALIDATION 0
 #endif
 
+#ifndef AGC_STENCIL_HTILE_VALIDATION
+#define AGC_STENCIL_HTILE_VALIDATION 0
+#endif
+
 #if AGC_STENCIL_VALIDATION && !AGC_DEPTH_VALIDATION
 #error "stencil validation requires depth validation"
 #endif
@@ -95,8 +99,8 @@
 #error "HTILE validation requires depth validation"
 #endif
 
-#if AGC_HTILE_VALIDATION && (AGC_STENCIL_VALIDATION || AGC_MSAA_VALIDATION)
-#error "the isolated HTILE gate keeps stencil and MSAA disabled"
+#if AGC_HTILE_VALIDATION && AGC_MSAA_VALIDATION
+#error "the isolated HTILE gates keep MSAA disabled"
 #endif
 
 #if AGC_HTILE_OPERATION_VALIDATION && !AGC_HTILE_VALIDATION
@@ -105,6 +109,19 @@
 
 #if AGC_EXPCLEAR_VALIDATION && !AGC_HTILE_OPERATION_VALIDATION
 #error "expclear validation requires HTILE decompression/resummarization"
+#endif
+
+#if AGC_STENCIL_VALIDATION && AGC_HTILE_VALIDATION && !AGC_STENCIL_HTILE_VALIDATION
+#error "combined stencil/HTILE requires its isolated validation gate"
+#endif
+
+#if AGC_STENCIL_HTILE_VALIDATION && \
+    (!AGC_STENCIL_VALIDATION || !AGC_HTILE_OPERATION_VALIDATION)
+#error "stencil/HTILE validation requires stencil and HTILE operations"
+#endif
+
+#if AGC_STENCIL_HTILE_VALIDATION && AGC_EXPCLEAR_VALIDATION
+#error "combined stencil/HTILE expclear is a later isolated gate"
 #endif
 
 #if AGC_DEPTH_VALIDATION && AGC_TESSELLATION
@@ -595,7 +612,9 @@ static bool allocate_display_buffers(GraphicsTest *test) {
              i < test->htile_surface_size / sizeof(uint32_t); ++i)
             htile[i] = AGC_EXPCLEAR_VALIDATION ?
                 AGC_GFX1013_HTILE_CLEAR_DEPTH_ONE :
-                AGC_GFX1013_HTILE_UNCOMPRESSED_DEPTH;
+                (AGC_STENCIL_HTILE_VALIDATION ?
+                    AGC_GFX1013_HTILE_UNCOMPRESSED_DEPTH_STENCIL :
+                    AGC_GFX1013_HTILE_UNCOMPRESSED_DEPTH);
     } else {
         memset(test->htile_surface, 0, test->htile_surface_size);
     }
@@ -1597,7 +1616,9 @@ static bool dispatch_graphics(GraphicsTest *test,
             &cb, &baseline_shaders.primitive,
             &htile_full_surface_table, 1u) != AGC_OK ||
         agcGfx1013SetHtileOperation(
-            &cb, AGC_GFX1013_HTILE_OPERATION_DECOMPRESS_DEPTH) != AGC_OK ||
+            &cb, AGC_STENCIL_HTILE_VALIDATION ?
+                AGC_GFX1013_HTILE_OPERATION_DECOMPRESS_DEPTH_STENCIL :
+                AGC_GFX1013_HTILE_OPERATION_DECOMPRESS_DEPTH) != AGC_OK ||
         !sceAgcDcbDrawIndexAuto(&cb, 3u, 0x40000000u) ||
         agcGfx1013TransitionResource(
             &cb, &htile_operation_barrier) != AGC_OK ||
@@ -1880,7 +1901,9 @@ static bool dispatch_graphics(GraphicsTest *test,
          i < test->htile_surface_size / sizeof(uint32_t); ++i) {
         const uint32_t htile_initial = AGC_EXPCLEAR_VALIDATION ?
             AGC_GFX1013_HTILE_CLEAR_DEPTH_ONE :
-            AGC_GFX1013_HTILE_UNCOMPRESSED_DEPTH;
+            (AGC_STENCIL_HTILE_VALIDATION ?
+                AGC_GFX1013_HTILE_UNCOMPRESSED_DEPTH_STENCIL :
+                AGC_GFX1013_HTILE_UNCOMPRESSED_DEPTH);
         htile_changed += htile[i] != htile_initial;
         htile_other += htile[i] != htile_initial &&
             htile[i] != 0xfffffff0u && htile[i] != 0x00000000u;
@@ -1889,7 +1912,9 @@ static bool dispatch_graphics(GraphicsTest *test,
     printf("[HTILE Readback] changed=%u other=%u initial=%08x\n",
            htile_changed, htile_other,
            AGC_EXPCLEAR_VALIDATION ? AGC_GFX1013_HTILE_CLEAR_DEPTH_ONE :
-               AGC_GFX1013_HTILE_UNCOMPRESSED_DEPTH);
+               (AGC_STENCIL_HTILE_VALIDATION ?
+                    AGC_GFX1013_HTILE_UNCOMPRESSED_DEPTH_STENCIL :
+                    AGC_GFX1013_HTILE_UNCOMPRESSED_DEPTH));
 #else
     const bool htile_pass = true;
 #endif

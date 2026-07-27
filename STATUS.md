@@ -1393,6 +1393,23 @@ encoding after resummarization, all markers passed, and VideoOut completed
 1,800/1,800 flips without a hang, reset, or kernel panic. The physical display
 showed green and red triangles on a dark-gray background.
 
+The sixth follow-up gate is hardware-validated on FW `0x05500008`.
+`agc_depth_stencil_htile.elf` binds separate D32 and S8 `64KB_Z_X` planes to
+one pipe-aligned HTILE allocation initialized with the gfx10.3 combined
+uncompressed word `0xfffff30f`; expclear and MSAA remain disabled. The typed
+combined decompression operation emits `DB_RENDER_CONTROL=0x1060`
+(`STENCIL_COMPRESS_DISABLE | DEPTH_COMPRESS_DISABLE | DECOMPRESS_ENABLE`).
+Host fixtures lock this encoding alongside depth-only decompression,
+resummarization, and neutral restoration.
+
+The real-console curl/websrv run accepted the 2,695-dword DCB and reached its
+fence in 1 ms. Raw D32 contained 909,792 clear, 128,304 near, and 128,304 far
+words. Raw S8 contained 2,364,832 zero bytes, 256,608 replacement `0x5a`
+bytes, and no other values. Color readback retained 128,304 green and 128,304
+red pixels, all 49,152 HTILE words changed after resummarization, every marker
+passed, and VideoOut completed 1,800/1,800 flips without a hang, reset, or
+kernel panic.
+
 An earlier diagnostic `COPY_DATA` read of global register `0x13de`
 (`GB_ADDR_CONFIG`) is permanently excluded. FW logged `GPU Bad packet error:
 Privilege reg` for the game VMID, stopped the process, and automatically reset
@@ -1414,9 +1431,9 @@ the cursor. The stale gfx103 `DB_Z_INFO[8:4]` tile-mode-index name was corrected
 to the hardware-defined `SW_MODE` field.
 
 The baseline D32, isolated stencil, isolated 4x MSAA, compressed HTILE, typed
-HTILE decompression/resummarization, and depth-only expclear PS5 hardware
-gates are complete on FW `0x05500008`. Combined stencil/HTILE remains the next
-separate gate; combined stencil/HTILE expclear remains disabled.
+HTILE decompression/resummarization, depth-only expclear, and combined
+stencil/HTILE PS5 hardware gates are complete on FW `0x05500008`. Combined
+stencil/HTILE expclear remains disabled and unclaimed.
 
 `samples/hw_test/agc_depth.elf` hardware-validates a dedicated baseline-NGG
 mode with an uncompressed D32-only

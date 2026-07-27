@@ -1313,6 +1313,13 @@ static void test_gfx1013_htile_operation_packets(void)
 
     agcCbReset(&cb, buffer, sizeof(buffer));
     TEST_ASSERT_EQ(agcGfx1013SetHtileOperation(
+        &cb, AGC_GFX1013_HTILE_OPERATION_DECOMPRESS_DEPTH_STENCIL), AGC_OK,
+        "gfx1013 typed HTILE depth-stencil decompress emits");
+    TEST_ASSERT_EQ(buffer[2], 0x00001060u,
+        "HTILE depth-stencil decompress exact render-control value");
+
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetHtileOperation(
         &cb, AGC_GFX1013_HTILE_OPERATION_RESUMMARIZE_DEPTH), AGC_OK,
         "gfx1013 typed HTILE depth resummarize emits");
     TEST_ASSERT_EQ(buffer[2], 0x00000010u,

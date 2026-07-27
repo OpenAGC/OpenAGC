@@ -271,3 +271,30 @@ Repeat through websrv only:
 make agc_depth_expclear.elf
 make deploy_agc_depth_expclear PS5_HOST=<address>
 ```
+
+## Combined stencil/HTILE gate contract
+
+- `agc_depth_stencil_htile.elf` uses separate 1x D32 and S8 `64KB_Z_X`
+  allocations with one pipe-aligned HTILE allocation. MSAA and expclear are
+  disabled.
+- Shared metadata starts at gfx10.3 combined uncompressed `0xfffff30f`.
+- The existing depth pass/fail geometry and S8 `REPLACE 0x5a` operations run
+  while both aspects are HTILE-compressed.
+- Combined decompression uses `DB_RENDER_CONTROL=0x1060`, enabling the shared
+  decompress mode while disabling depth and stencil compression writeback.
+- Passing requires exact raw D32 classes, raw S8 containing only zero and
+  `0x5a`, changed metadata after resummarization, all markers, and 1,800 flips.
+
+FW `0x05500008` passed on 2026-07-27. The 2,695-dword DCB reached its fence in
+1 ms. Raw D32 contained 909,792 clear, 128,304 near, and 128,304 far words.
+Raw S8 contained 2,364,832 zero bytes, 256,608 `0x5a` bytes, and no other
+values. Color readback contained 128,304 green and 128,304 red pixels; all
+49,152 HTILE words changed from `0xfffff30f`; and VideoOut completed
+1,800/1,800 flips without a hang, reset, or kernel panic.
+
+Repeat through websrv only:
+
+```sh
+make agc_depth_stencil_htile.elf
+make deploy_agc_depth_stencil_htile PS5_HOST=<address>
+```
