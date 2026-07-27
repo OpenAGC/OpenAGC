@@ -1944,6 +1944,14 @@ hardware-ready, add a minimal FW `0x0550` depth sample, verify depth writes and
 comparisons by GPU readback, exercise read-only transitions, then qualify
 stencil and HTILE separately. Keep HTILE disabled for the first hardware run.
 
+The first hardware sample is now prepared as `samples/hw_test/agc_depth.elf`.
+It uses an uncompressed D32-only 64KB-Z-X surface with HTILE disabled, performs
+GPU initialization plus deterministic near-pass, overlap-fail, and independent
+far-pass draws, and checks four stage markers, an EOP completion marker, RGBA8
+samples, coverage, and raw D32 values. The Prospero artifact is build-qualified
+only; it remains outside the passing conformance matrix until FW `0x0550`
+hardware produces the documented screen and readback evidence.
+
 1. Run the complete 14-sample deterministic FW `0x0550` websrv matrix on the
    next available real PS5 and retain its raw logs as qualification evidence.
 2. If instant-close behavior recurs after a fresh launcher session, isolate it

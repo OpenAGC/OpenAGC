@@ -1330,6 +1330,15 @@ No PS5 hardware claim is made yet. FW `0x0550` qualification must begin with an
 uncompressed depth-only sample and GPU readback, then add stencil, MSAA, and
 HTILE as separate gates when a real PS5 is available.
 
+That first hardware gate is now prepared. `samples/hw_test/agc_depth.elf`
+cross-builds a dedicated baseline-NGG mode with an uncompressed D32-only
+64KB-Z-X surface, HTILE disabled, deterministic depth initialization and
+pass/fail geometry, four post-draw markers, an EOP completion marker, and both
+color and raw-depth readback checks. Its expected screen and curl/websrv launch
+procedure are documented in `samples/hw_test/DEPTH_VALIDATION.md`. Status is
+hardware-ready, not hardware-validated, and it is intentionally excluded from
+the passing FW `0x0550` conformance matrix.
+
 ## Non-Goals For Current Milestone
 
 - No firmware blobs or proprietary microcode are embedded.

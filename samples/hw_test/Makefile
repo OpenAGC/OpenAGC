@@ -52,7 +52,7 @@ AGC_LDFLAGS := $(OPENAGC_LIB) -lSceVideoOut -lkernel
 
 # === Targets ===
 
-all: videoout_linear.elf agc_init.elf agc_videoout.elf agc_compute.elf agc_graphics.elf agc_tessellation.elf agc_tess_geometry.elf agc_tess_geometry_invocations.elf agc_tess_geometry_lines.elf agc_tess_geometry_rgba8.elf
+all: videoout_linear.elf agc_init.elf agc_videoout.elf agc_compute.elf agc_graphics.elf agc_depth.elf agc_tessellation.elf agc_tess_geometry.elf agc_tess_geometry_invocations.elf agc_tess_geometry_lines.elf agc_tess_geometry_rgba8.elf
 
 FW550_CONFORMANCE_ELFS := \
 	videoout_linear.elf agc_init.elf agc_videoout.elf agc_compute.elf \
@@ -121,6 +121,35 @@ shaders/triangle_line_frag.sb: shaders/triangle_line_frag.spv
 
 shaders/triangle_line_frag_sb.h: shaders/triangle_line_frag.sb
 	xxd -i -n triangle_line_frag_data $< $@
+
+shaders/depth_triangle_vert.spv: shaders/depth_triangle.vert
+	$(GLSLANG) -V --target-env vulkan1.2 $< -o $@
+
+shaders/depth_triangle_frag.spv: shaders/depth_triangle.frag
+	$(GLSLANG) -V --target-env vulkan1.2 $< -o $@
+
+shaders/depth_triangle_frag.sb: shaders/depth_triangle_frag.spv
+	$(PSBC) -f $< -s fragment -o $@
+
+shaders/depth_triangle_frag_sb.h: shaders/depth_triangle_frag.sb
+	xxd -i -n depth_triangle_frag_data $< $@
+
+.PHONY: shaders_depth
+shaders_depth: shaders/depth_triangle_vert.spv shaders/triangle_geom.spv \
+               shaders/depth_triangle_frag_sb.h
+	$(PSBC) -f shaders/triangle_geom.spv -s geometry \
+	    --pre-vertex shaders/depth_triangle_vert.spv \
+	    --wave32 \
+	    -o shaders/depth_triangle_ngg_back.sb \
+	    --ngg-front shaders/depth_triangle_ngg_front.sb \
+	    --vertex-attribute 0:0:0:24:r32g32b32_float \
+	    --vertex-attribute 1:0:12:24:r32g32b32_float
+	xxd -i -n depth_triangle_ngg_front_data \
+	    shaders/depth_triangle_ngg_front.sb \
+	    shaders/depth_triangle_ngg_front_sb.h
+	xxd -i -n depth_triangle_ngg_back_data \
+	    shaders/depth_triangle_ngg_back.sb \
+	    shaders/depth_triangle_ngg_back_sb.h
 
 # Regenerate a merged gfx1013 VS+GS NGG program and C headers.
 shaders_ngg: shaders/triangle_vert.spv shaders/triangle_geom.spv
@@ -281,6 +310,9 @@ agc_graphics_invocations.elf: shaders_ngg_invocations agc_graphics.c ps5_video_o
 agc_graphics_rgba8.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_VALIDATE_RGBA8_REFERENCE=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
 
+agc_depth.elf: shaders_depth agc_graphics.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_DEPTH_VALIDATION=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
+
 agc_tessellation.elf: shaders_tess agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_TESSELLATION=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
 
@@ -366,6 +398,13 @@ deploy_agc_compute: agc_compute.elf
 
 deploy_agc_graphics: agc_graphics.elf
 	PS5_HOST=$(PS5_HOST) ./run_fw550_conformance.sh --sample agc_graphics
+
+deploy_agc_depth: agc_depth.elf
+	-curl -s "ftp://$(PS5_HOST):2121/" --quote "MKD /data/homebrew/agc_depth"
+	-curl -s "ftp://$(PS5_HOST):2121/" --quote "MKD /data/homebrew/agc_depth/sce_sys"
+	curl -T agc_depth.elf "ftp://$(PS5_HOST):2121/data/homebrew/agc_depth/eboot.elf"
+	curl -T sce_sys/icon0.png "ftp://$(PS5_HOST):2121/data/homebrew/agc_depth/sce_sys/icon0.png"
+	curl -s "http://$(PS5_HOST):8080/hbldr?pipe=1&daemon=0&path=/data/homebrew/agc_depth/eboot.elf"
 
 # === Install (debug-mode PS5 via FTP) ===
 

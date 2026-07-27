@@ -55,6 +55,14 @@
 #define AGC_TESSELLATION 0
 #endif
 
+#ifndef AGC_DEPTH_VALIDATION
+#define AGC_DEPTH_VALIDATION 0
+#endif
+
+#if AGC_DEPTH_VALIDATION && AGC_TESSELLATION
+#error "depth validation uses the baseline NGG path"
+#endif
+
 #ifndef AGC_TESS_GEOMETRY
 #define AGC_TESS_GEOMETRY 0
 #endif
@@ -80,7 +88,14 @@
 #define AGC_TESS_DISTRIBUTION_MODE 0u
 #endif
 
-#if AGC_TESSELLATION
+#if AGC_DEPTH_VALIDATION
+#include "shaders/depth_triangle_ngg_front_sb.h"
+#include "shaders/depth_triangle_ngg_back_sb.h"
+#define NGG_FRONT_DATA depth_triangle_ngg_front_data
+#define NGG_BACK_DATA depth_triangle_ngg_back_data
+#define NGG_DRAW_VERTEX_COUNT 3u
+#define NGG_INPUT_PRIMITIVE_TYPE 4u
+#elif AGC_TESSELLATION
 #include "shaders/triangle_tess_hs_front_sb.h"
 #include "shaders/triangle_tess_hs_back_sb.h"
 #if AGC_TESS_GEOMETRY
@@ -137,7 +152,10 @@
 #define NGG_DRAW_VERTEX_COUNT 3u
 #define NGG_INPUT_PRIMITIVE_TYPE 4u
 #endif
-#if AGC_NGG_INPUT_LINES || AGC_TESS_GEOMETRY_LINES
+#if AGC_DEPTH_VALIDATION
+#include "shaders/depth_triangle_frag_sb.h"
+#define FRAGMENT_DATA depth_triangle_frag_data
+#elif AGC_NGG_INPUT_LINES || AGC_TESS_GEOMETRY_LINES
 #include "shaders/triangle_line_frag_sb.h"
 #define FRAGMENT_DATA triangle_line_frag_data
 #else
@@ -203,6 +221,8 @@ int sceKernelWaitEqueue(SceKernelEqueue equeue, SceKernelEvent *events,
 #define TEXTURE_DATA_OFFSET 0xB000u
 #define TEXTURE_DESC_OFFSET 0xC000u
 #define INDEX_TYPE_16      0u
+#define DEPTH_SURFACE_BYTES 0x01000000u
+#define DEPTH_SWIZZLE_64KB_Z_X 24u
 
 #if AGC_TESSELLATION
 #define GRAPHICS_POOL_PREFIX 0x30000u
@@ -253,8 +273,15 @@ typedef struct {
     float color[3];
 } GraphicsVertex;
 
+typedef struct {
+    float position[3];
+    float color[3];
+} GraphicsDepthVertex;
+
 _Static_assert(sizeof(GraphicsVertex) == 20,
     "interleaved graphics vertex must have a 20-byte stride");
+_Static_assert(sizeof(GraphicsDepthVertex) == 24,
+    "depth validation vertex must have a 24-byte stride");
 
 typedef struct {
     int32_t handle;
@@ -264,6 +291,7 @@ typedef struct {
     uint8_t *buffers[BUFFER_COUNT];
     void *compute_buffer;   /* Flexible memory pool for RT + shader code */
     void *render_target;    /* Points into compute_buffer */
+    void *depth_surface;    /* Optional uncompressed D32 validation image */
     uint32_t width;
     uint32_t height;
     uint32_t pitch_pixels;
@@ -388,10 +416,14 @@ static bool allocate_display_buffers(GraphicsTest *test) {
     cb_buffer = (uint32_t *)cb_addr;
 
     /* The offscreen FP16 target is independent of the VideoOut dimensions.
-     * Reserve its full 8-byte pixel span after the 64 KiB shader/descriptor
-     * prefix instead of deriving this pool from the RGBA8 scanout size. */
+     * The depth build instead reserves a conservative 16 MiB 64K-Z-X image
+     * after the shader/descriptor prefix. */
+#if AGC_DEPTH_VALIDATION
+    size_t rt_size = DEPTH_SURFACE_BYTES;
+#else
     size_t rt_size = (size_t)FP16_TARGET_WIDTH * FP16_TARGET_HEIGHT *
                      sizeof(uint64_t);
+#endif
     size_t pool_size = align_up(GRAPHICS_POOL_PREFIX + rt_size,
                                 1024 * 1024);
     void *pool_addr = NULL;
@@ -405,10 +437,19 @@ static bool allocate_display_buffers(GraphicsTest *test) {
 
     /* Render target follows shader data and any tessellation rings. */
     test->render_target = (uint8_t *)pool_addr + GRAPHICS_POOL_PREFIX;
+#if AGC_DEPTH_VALIDATION
+    test->depth_surface = (void *)(uintptr_t)align_up(
+        (size_t)(uintptr_t)test->render_target, 0x10000u);
+#endif
 
     printf("Command buffer: %zu bytes at %p (flexible)\n", cb_size, cb_buffer);
     printf("Compute pool: %zu bytes at %p (flexible)\n", pool_size, pool_addr);
     printf("Render target: at %p (flexible)\n", test->render_target);
+#if AGC_DEPTH_VALIDATION
+    printf("Depth surface: %u bytes at %p (D32, swizzle=%u, HTILE off)\n",
+           DEPTH_SURFACE_BYTES, test->depth_surface,
+           DEPTH_SWIZZLE_64KB_Z_X);
+#endif
     printf("Display buffers: %zu bytes each, %d buffers at %p (garlic)\n",
            test->buffer_stride, BUFFER_COUNT, test->mapped);
     return true;
@@ -999,6 +1040,46 @@ static bool dispatch_graphics(GraphicsTest *test,
             rt[i] = DIAGNOSTIC_CLEAR_COLOR;
     }
 
+#if AGC_DEPTH_VALIDATION
+    /* Four independent triangles: full-screen depth initialization, a near
+     * green left triangle, the same left triangle farther away (must fail),
+     * and a far red right triangle over untouched depth (must pass). */
+    static const GraphicsDepthVertex depth_vertices[12] = {
+        {{-1.0f, -1.0f, 1.00f}, {0.0f, 0.0f, 0.0f}},
+        {{ 3.0f, -1.0f, 1.00f}, {0.0f, 0.0f, 0.0f}},
+        {{-1.0f,  3.0f, 1.00f}, {0.0f, 0.0f, 0.0f}},
+        {{-0.85f, -0.55f, 0.25f}, {0.0f, 1.0f, 0.0f}},
+        {{-0.05f, -0.55f, 0.25f}, {0.0f, 1.0f, 0.0f}},
+        {{-0.45f,  0.55f, 0.25f}, {0.0f, 1.0f, 0.0f}},
+        {{-0.85f, -0.55f, 0.75f}, {1.0f, 0.0f, 0.0f}},
+        {{-0.05f, -0.55f, 0.75f}, {1.0f, 0.0f, 0.0f}},
+        {{-0.45f,  0.55f, 0.75f}, {1.0f, 0.0f, 0.0f}},
+        {{ 0.05f, -0.55f, 0.75f}, {1.0f, 0.0f, 0.0f}},
+        {{ 0.85f, -0.55f, 0.75f}, {1.0f, 0.0f, 0.0f}},
+        {{ 0.45f,  0.55f, 0.75f}, {1.0f, 0.0f, 0.0f}},
+    };
+    GraphicsDepthVertex *gpu_vertices = (GraphicsDepthVertex *)
+        ((uint8_t *)test->compute_buffer + VERTEX_DATA_OFFSET);
+    uint32_t *vertex_desc = (uint32_t *)
+        ((uint8_t *)test->compute_buffer + VERTEX_DESC_OFFSET);
+    memcpy(gpu_vertices, depth_vertices, sizeof(depth_vertices));
+    for (uint32_t draw = 0u; draw < 4u; ++draw) {
+        int32_t descriptor_error = agcGfx1013BufferDescriptorEncode(
+            (AgcGfx1013BufferDescriptor *)&vertex_desc[draw * 4u],
+            (uint64_t)(uintptr_t)&gpu_vertices[draw * 3u],
+            (uint32_t)sizeof(GraphicsDepthVertex), 3u);
+        if (descriptor_error != AGC_OK) {
+            printf("[Depth] vertex descriptor %u failed: 0x%08x\n",
+                   draw, (unsigned)descriptor_error);
+            return false;
+        }
+    }
+    uint32_t *depth_words = (uint32_t *)test->depth_surface;
+    for (uint32_t i = 0u; i < DEPTH_SURFACE_BYTES / sizeof(uint32_t); ++i)
+        depth_words[i] = 0x7fc00000u;
+    printf("[Depth] uploaded four float3 position/color triangles at %p\n",
+           gpu_vertices);
+#else
     /* Upload one interleaved binding: float2 position + float3 color. The
      * compiler uses a single static binding descriptor for both attributes. */
     static const GraphicsVertex vertices[8] = {
@@ -1078,6 +1159,7 @@ static bool dispatch_graphics(GraphicsTest *test,
     printf("[Texture] image=%08x %08x %08x %08x sampler=%08x %08x %08x %08x\n",
            texture_desc[0], texture_desc[1], texture_desc[2], texture_desc[3],
            texture_desc[8], texture_desc[9], texture_desc[10], texture_desc[11]);
+#endif
 
         /* Use a distinct command-buffer address for each hardware submission.
      * Reusing the first IB address immediately can leave the second direct
@@ -1189,10 +1271,12 @@ static bool dispatch_graphics(GraphicsTest *test,
         OPENAGC_VERTEX_BUFFER_TABLE_PLACEHOLDER,
         (uint64_t)(uintptr_t)vertex_desc,
     };
+#if !AGC_DEPTH_VALIDATION
     const AgcGfx1013ResourceTableBinding pixel_resource_table = {
         OPENAGC_DESCRIPTOR_SET_PLACEHOLDER(0u),
         (uint64_t)(uintptr_t)texture_desc,
     };
+#endif
 
     /* 6b. Post-bind depth and rasterizer overrides remain application state.
      * Shader formats,
@@ -1200,7 +1284,70 @@ static bool dispatch_graphics(GraphicsTest *test,
      * records and the OpenAGC state builders above. */
     /* 7. Establish the NGG stage ABI with canonical auto-generated vertex
      * IDs. Indexed offset semantics are a separate PM4 validation case. */
-#if AGC_TESSELLATION
+#if AGC_DEPTH_VALIDATION
+    volatile uint32_t *depth_markers = (volatile uint32_t *)
+        ((uint8_t *)dispatch_cb + 0x7000u);
+    static const uint32_t depth_marker_values[4] = {
+        0xD3200001u, 0xD3200002u, 0xD3200003u, 0xD3200004u,
+    };
+    memset((void *)depth_markers, 0, 4u * sizeof(uint32_t));
+
+    if (agcGfx1013BindVsPs(&cb, &baseline_shaders) != AGC_OK ||
+        agcGfx1013BindResourceTables(
+            &cb, &baseline_shaders.primitive,
+            &primitive_resource_table, 1u) != AGC_OK ||
+        agcGfx1013ApplyFramePostBind(&cb, &frame_state) != AGC_OK)
+        return false;
+
+    const AgcGfx1013DepthSurfaceState depth_surface = {
+        .depth_read_address = (uint64_t)(uintptr_t)test->depth_surface,
+        .depth_write_address = (uint64_t)(uintptr_t)test->depth_surface,
+        .width = target->width,
+        .height = target->height,
+        .format = AGC_GFX1013_DEPTH_FORMAT_D32_FLOAT,
+        .depth_swizzle_mode = DEPTH_SWIZZLE_64KB_Z_X,
+        .mip_level_count = 1u,
+        .sample_count = 1u,
+    };
+    AgcGfx1013DepthStencilState depth_control = {
+        .depth_test_enable = 1u,
+        .depth_write_enable = 1u,
+        .depth_compare_operation = AGC_GFX1013_COMPARE_ALWAYS,
+    };
+    AgcGfx1013ColorBlendState blend = {
+        .target_count = 1u,
+    };
+    if (agcGfx1013SetDepthSurface(&cb, &depth_surface) != AGC_OK ||
+        agcGfx1013SetDepthStencilState(&cb, &depth_control) != AGC_OK ||
+        agcGfx1013SetColorBlendState(&cb, &blend) != AGC_OK ||
+        !sceAgcDcbSetIndexSize(&cb, kAgcIndexSize16, 0u) ||
+        !sceAgcDcbSetNumInstances(&cb, 1u) ||
+        !sceAgcDcbDrawIndexAuto(&cb, 3u, 0x40000000u) ||
+        !sceAgcDcbWriteData(&cb, 2u, 0u,
+            (uint64_t)(uintptr_t)&depth_markers[0],
+            &depth_marker_values[0], 1u, 0u, 0u))
+        return false;
+
+    blend.targets[0].write_mask = 0xfu;
+    depth_control.depth_compare_operation = AGC_GFX1013_COMPARE_LESS;
+    if (agcGfx1013SetColorBlendState(&cb, &blend) != AGC_OK ||
+        agcGfx1013SetDepthStencilState(&cb, &depth_control) != AGC_OK)
+        return false;
+    for (uint32_t draw = 1u; draw < 4u; ++draw) {
+        const AgcGfx1013ResourceTableBinding draw_table = {
+            OPENAGC_VERTEX_BUFFER_TABLE_PLACEHOLDER,
+            (uint64_t)(uintptr_t)&vertex_desc[draw * 4u],
+        };
+        if (agcGfx1013BindResourceTables(
+                &cb, &baseline_shaders.primitive, &draw_table, 1u) != AGC_OK ||
+            !sceAgcDcbDrawIndexAuto(&cb, 3u, 0x40000000u) ||
+            !sceAgcDcbWriteData(&cb, 2u, 0u,
+                (uint64_t)(uintptr_t)&depth_markers[draw],
+                &depth_marker_values[draw], 1u, 0u, 0u))
+            return false;
+    }
+    printf("[Depth] emitted init, near-pass, overlap-fail, and far-pass draws\n");
+#elif AGC_TESSELLATION
     const AgcGfx1013TessDrawState tess_draw = {
         .shaders = tess_shaders,
         .frame = &frame_state,
@@ -1245,11 +1392,17 @@ static bool dispatch_graphics(GraphicsTest *test,
 
     /* 8b. WRITE_DATA marker — verify GPU is alive after draw. Keep it near
      * the end of this 32 KiB allocation, outside the active command stream. */
+#if AGC_DEPTH_VALIDATION
+    uint64_t marker_target =
+        (uint64_t)(uintptr_t)dispatch_cb + 0x7020u;
+    uint32_t marker_value = 0xD32FFFFFu;
+#else
     uint64_t marker_target =
         (uint64_t)(uintptr_t)dispatch_cb + 0x7000u;
+    uint32_t marker_value = 0xDEADCAFEu;
+#endif
     volatile uint32_t *marker =
         (volatile uint32_t *)(uintptr_t)marker_target;
-    uint32_t marker_value = 0xDEADCAFEu;
     *marker = 0u;
     printf("[Draw] WRITE_DATA marker at 0x%llx\n", (unsigned long long)marker_target);
 
@@ -1289,7 +1442,16 @@ static bool dispatch_graphics(GraphicsTest *test,
     }
     printf("[Draw] GPU completion fence reached after %u us\n", waited_us);
 
-    printf("[Marker] WRITE_DATA marker = 0x%08x (expected 0xDEADCAFE)\n", *marker);
+    printf("[Marker] WRITE_DATA marker = 0x%08x (expected 0x%08x)\n",
+           *marker, marker_value);
+#if AGC_DEPTH_VALIDATION
+    bool markers_pass = true;
+    for (uint32_t i = 0u; i < 4u; ++i) {
+        printf("[Depth Marker] stage[%u]=0x%08x expected=0x%08x\n",
+               i, depth_markers[i], depth_marker_values[i]);
+        markers_pass &= depth_markers[i] == depth_marker_values[i];
+    }
+#endif
 #if AGC_TESSELLATION
     uint32_t offchip_changed = 0;
     uint32_t factor_changed = 0;
@@ -1313,6 +1475,41 @@ static bool dispatch_graphics(GraphicsTest *test,
             ++dumped;
         }
     }
+#endif
+
+#if AGC_DEPTH_VALIDATION
+    const uint32_t *color = (const uint32_t *)rt_addr;
+    const uint32_t *depth = (const uint32_t *)test->depth_surface;
+    uint32_t green_pixels = 0u;
+    uint32_t red_pixels = 0u;
+    uint32_t depth_one = 0u;
+    uint32_t depth_near = 0u;
+    uint32_t depth_far = 0u;
+    for (uint32_t i = 0u; i < target_pixels; ++i) {
+        green_pixels += color[i] == 0xFF00FF00u;
+        red_pixels += color[i] == 0xFF0000FFu;
+    }
+    for (uint32_t i = 0u; i < DEPTH_SURFACE_BYTES / sizeof(uint32_t); ++i) {
+        depth_one += depth[i] == 0x3f800000u;
+        /* The reusable viewport maps clip Z with scale/offset 0.5/0.5. */
+        depth_near += depth[i] == 0x3f200000u;
+        depth_far += depth[i] == 0x3f600000u;
+    }
+    const uint32_t left_sample = color[639u * target->width + 717u];
+    const uint32_t right_sample = color[639u * target->width + 1203u];
+    const bool color_pass = green_pixels > 1000u && red_pixels > 1000u &&
+        left_sample == 0xFF00FF00u && right_sample == 0xFF0000FFu;
+    const bool depth_pass = depth_one != 0u && depth_near != 0u &&
+        depth_far != 0u;
+    printf("[Depth Readback] green=%u red=%u left=%08x right=%08x\n",
+           green_pixels, red_pixels, left_sample, right_sample);
+    printf("[Depth Readback] raw D32: one=%u near=%u far=%u\n",
+           depth_one, depth_near, depth_far);
+    printf("[Depth Result] markers=%s color=%s raw-depth=%s\n",
+           markers_pass ? "PASS" : "FAIL",
+           color_pass ? "PASS" : "FAIL",
+           depth_pass ? "PASS" : "FAIL");
+    return markers_pass && color_pass && depth_pass;
 #endif
 
     if (target->fp16) {
@@ -1471,7 +1668,7 @@ static bool dispatch_graphics(GraphicsTest *test,
     return vertex_fetch_pass && indexed_draw_pass && texture_sampler_pass;
 }
 
-#if !AGC_VALIDATE_RGBA8_REFERENCE
+#if !AGC_VALIDATE_RGBA8_REFERENCE && !AGC_DEPTH_VALIDATION
 static uint8_t half_to_unorm8(uint16_t half) {
     uint32_t exponent = (half >> 10) & 0x1fu;
     uint32_t mantissa = half & 0x3ffu;
@@ -1597,7 +1794,22 @@ int main(void) {
     if (!validate_shader_records(&back, &ps))
         return 1;
 
-#if AGC_VALIDATE_RGBA8_REFERENCE
+#if AGC_DEPTH_VALIDATION
+    RenderTargetConfig depth_target = {
+        test.buffers[0], test.width, test.height,
+        AGC_GFX1013_COLOR_FORMAT_8_8_8_8,
+        AGC_GFX1013_SURFACE_NUMBER_UNORM,
+        AGC_GFX1013_SURFACE_SWAP_ALT,
+        false, "depth validation RGBA8"
+    };
+    printf("\n--- Step 4: D32 depth pass/fail draw ---\n");
+    if (!dispatch_graphics(&test, &front, &back, &ps, &depth_target)) {
+        printf("FATAL: D32 depth validation failed\n");
+        return 1;
+    }
+    memcpy(test.buffers[1], test.buffers[0],
+           (size_t)test.width * test.height * BYTES_PER_PIXEL);
+#elif AGC_VALIDATE_RGBA8_REFERENCE
     RenderTargetConfig rgba8_target = {
         test.buffers[0], test.width, test.height,
         AGC_GFX1013_COLOR_FORMAT_8_8_8_8,
@@ -1633,7 +1845,11 @@ int main(void) {
         printf("FATAL: no VideoOut preview flip was accepted\n");
         return 1;
     }
+#if AGC_DEPTH_VALIDATION
+    printf("Displayed green depth-pass and red independent-pass triangles for 30 seconds.\n");
+#else
     printf("Displayed the compiler-generated NGG triangle for 30 seconds.\n");
+#endif
 
     printf("\nDone.\n");
     return 0;
