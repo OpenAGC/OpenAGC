@@ -1,5 +1,30 @@
 # openagc Status
 
+## FW 5.50 render-target format expansion (2026-07-27)
+
+The typed gfx1013 color-target table and dedicated hardware fixtures now cover
+the standard-swap `RGBA8_UNORM`, `RGB10A2_UNORM`, and
+`R11G11B10_FLOAT` tuples in addition to the previously proven alternate-swap
+BGRA8 and `R16G16B16A16_FLOAT` paths. Host golden fixtures lock each raw CB
+format, number type, component swap, byte size, shader export, and resulting
+`CB_COLOR0_INFO` value. `R11G11B10_FLOAT` uses gfx1013 CB format `0x06`, FLOAT
+number type `7`, standard swap, and FP16_ABGR export.
+
+All three dedicated samples passed on standard PS5 FW `0x05500008` through
+foreground curl/websrv. RGBA8 standard swap changed 126,360 pixels in the
+1920x1080 display target. RGB10A2 and R11G11B10 each changed 255,744 pixels in
+the 1536x1536 offscreen target, passed the expected coverage window, produced
+at least eight sampled colors, reached the EOP fence, and completed
+1,800/1,800 flips. RGB10A2 matched the exact packed top-two-bit histogram
+`{35857,27914,36523,155450}`. Two R11G11B10 runs matched packed-color FNV64
+`0x4b75c00e8a6bb04d`; the second run enforced that value as a hard oracle.
+No timeout, GPU reset, kernel panic, metadata fault, or UI crash occurred.
+
+Full evidence and artifact hashes are in
+`analysis/fw550_render_target_formats_20260727.md`. Raw logs remain under
+`samples/hw_test/conformance-logs/formats-20260727/`. sRGB and further 16-bit
+tuples remain pending and are not advertised as hardware-qualified.
+
 ## Application-facing indexed/indirect draw composition (2026-07-27)
 
 The gfx1013 baseline graphics API now composes the existing hardware-oriented

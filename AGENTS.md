@@ -397,8 +397,10 @@ not recover missing legacy-only ABIs or advertise those versions as supported.
 
 See `STATUS.md` and `PLAN.md`. Next RE tasks, by priority:
 
-1. **Additional render-target formats** — qualify BGRA8, SRGB, RGB10A2,
-   R11G11B10, and further 16-bit tuples in increasing hardware-risk order.
+1. **Additional render-target formats** — standard-swap RGBA8, RGB10A2, and
+   R11G11B10 are now FW 5.50 hardware-qualified, alongside the earlier
+   alternate-swap BGRA8 and RGBA16F paths. Qualify sRGB next, then further
+   16-bit tuples in increasing hardware-risk order.
 2. **Additional depth/stencil formats** — qualify D16, S8-only, and D16+S8
    independently before enabling compressed combinations.
 3. **Game compatibility** — continue expanding the observed-title corpus and

@@ -266,10 +266,14 @@ Work in this order:
    outside `samples/hw_test` that uses the installed OpenAGC SDK. It must render
    continuously, upload/update resources, compile/load shaders, recover cleanly
    from application errors, and contain no copied sample-private PM4 setup.
-7. **Broaden capability after the vertical slice.** Prioritize reusable texture
-   and sampler descriptors, additional render-target/depth formats, blending,
-   resource transitions, multi-buffer frame scheduling, timestamps/queries,
-   and stable NGG geometry/tessellation APIs according to homebrew needs.
+7. **Broaden capability after the vertical slice.** Reusable standard-swap
+   RGBA8, RGB10A2, and R11G11B10 color targets are now host-tested and FW 5.50
+   hardware-qualified, alongside the earlier alternate-swap BGRA8 and RGBA16F
+   paths. Next qualify sRGB encode behavior, then additional 16-bit color
+   tuples. After the color matrix is stable, qualify D16, S8-only, and D16+S8
+   before compressed variants. Continue with blending, resource transitions,
+   multi-buffer frame scheduling, timestamps/queries, and stable NGG
+   geometry/tessellation APIs according to homebrew needs.
 8. **Firmware and retail ABI evidence.** Preserve numeric firmware profiles and
    expand below/above FW `0x0550` only after the primary path is mature. Analyze
    retail binaries when they reveal an API contract needed by homebrew; do not

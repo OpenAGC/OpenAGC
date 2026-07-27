@@ -1039,6 +1039,8 @@ static void test_gfx1013_fixed_function_packets(void)
          0x0001072cu},
         {AGC_GFX1013_RT_FORMAT_RGBA32_FLOAT, 0x0eu, 7u, 0u, 16u, 9u,
          0x00010738u},
+        {AGC_GFX1013_RT_FORMAT_R11G11B10_FLOAT, 0x06u, 7u, 0u, 4u, 4u,
+         0x00010718u},
     };
     uint32_t buffer[64] = {0};
     uint32_t expected_format[28];

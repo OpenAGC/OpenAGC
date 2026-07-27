@@ -384,6 +384,19 @@ int sceKernelWaitEqueue(SceKernelEqueue equeue, SceKernelEvent *events,
 #ifndef AGC_VALIDATE_RGBA8_REFERENCE
 #define AGC_VALIDATE_RGBA8_REFERENCE 0
 #endif
+#ifndef AGC_VALIDATE_RGBA8_STD
+#define AGC_VALIDATE_RGBA8_STD 0
+#endif
+#ifndef AGC_VALIDATE_RGB10A2
+#define AGC_VALIDATE_RGB10A2 0
+#endif
+#ifndef AGC_VALIDATE_R11G11B10
+#define AGC_VALIDATE_R11G11B10 0
+#endif
+#if (AGC_VALIDATE_RGBA8_REFERENCE + AGC_VALIDATE_RGBA8_STD + \
+     AGC_VALIDATE_RGB10A2 + AGC_VALIDATE_R11G11B10) > 1
+#error "select only one isolated color-target fixture"
+#endif
 
 /* RADV's static GFX10 VBO descriptor word 3: identity DST_SEL,
  * FORMAT=32_UINT, RESOURCE_LEVEL=1, OOB_SELECT=structured. Attribute formats
@@ -1437,9 +1450,9 @@ static bool dispatch_graphics(GraphicsTest *test,
     ngg.num_sh_regs = fused_record.num_sh_registers;
 
     void *rt_addr = target->address;
-    printf("Render target %s at %p (%ux%u, %s)\n",
+    printf("Render target %s at %p (%ux%u, format=0x%x number=%u swap=%u)\n",
            target->name, rt_addr, target->width, target->height,
-           target->fp16 ? "RGBA16_FLOAT" : "RGBA8_UNORM");
+           target->color_format, target->number_type, target->component_swap);
 
     /* Use a diagnostic sentinel absent from the texture so every rasterized
      * pixel contributes to the exact indexed-triangle coverage count. */
@@ -2351,11 +2364,24 @@ static bool dispatch_graphics(GraphicsTest *test,
     uint32_t changed = 0;
     uint32_t unique_colors[8] = {0};
     uint32_t unique_color_count = 0;
+#if AGC_VALIDATE_RGB10A2
+    uint32_t packed_top2_histogram[4] = {0u};
+#endif
+#if AGC_VALIDATE_R11G11B10
+    uint64_t packed_color_hash = UINT64_C(1469598103934665603);
+#endif
     for (uint32_t i = 0; i < target_pixels; i++) {
         uint32_t color = rt[i];
         if (color == DIAGNOSTIC_CLEAR_COLOR)
             continue;
         changed++;
+#if AGC_VALIDATE_RGB10A2
+        packed_top2_histogram[(color >> 30) & 3u]++;
+#endif
+#if AGC_VALIDATE_R11G11B10
+        packed_color_hash ^= color;
+        packed_color_hash *= UINT64_C(1099511628211);
+#endif
         if (unique_color_count < 8) {
             bool seen = false;
             for (uint32_t j = 0; j < unique_color_count; j++) {
@@ -2400,10 +2426,42 @@ static bool dispatch_graphics(GraphicsTest *test,
            indexed_draw_pass ? "PASS" : "FAIL");
     printf("[Texture] gfx1013 image + bilinear sampler: %s\n",
            texture_sampler_pass ? "PASS" : "FAIL");
+#if AGC_VALIDATE_RGB10A2
+    const uint32_t packed_histogram_sum =
+        packed_top2_histogram[0] + packed_top2_histogram[1] +
+        packed_top2_histogram[2] + packed_top2_histogram[3];
+    const bool packed_histogram_pass =
+        packed_top2_histogram[0] == 35857u &&
+        packed_top2_histogram[1] == 27914u &&
+        packed_top2_histogram[2] == 36523u &&
+        packed_top2_histogram[3] == 155450u;
+    printf("[RGB10A2] Packed top2 histogram: {%u,%u,%u,%u} sum=%u: %s\n",
+           packed_top2_histogram[0], packed_top2_histogram[1],
+           packed_top2_histogram[2], packed_top2_histogram[3],
+           packed_histogram_sum,
+           packed_histogram_pass ? "PASS" : "FAIL");
+    return vertex_fetch_pass && indexed_draw_pass && texture_sampler_pass &&
+           packed_histogram_sum == changed && packed_histogram_pass;
+#elif AGC_VALIDATE_R11G11B10
+    const uint64_t expected_packed_color_hash =
+        UINT64_C(0x4b75c00e8a6bb04d);
+    const bool packed_hash_pass =
+        packed_color_hash == expected_packed_color_hash;
+    printf("[R11G11B10] Packed color FNV64: 0x%016llx "
+           "expected=0x%016llx: %s\n",
+           (unsigned long long)packed_color_hash,
+           (unsigned long long)expected_packed_color_hash,
+           packed_hash_pass ? "PASS" : "FAIL");
+    return vertex_fetch_pass && indexed_draw_pass && texture_sampler_pass &&
+           packed_hash_pass;
+#else
     return vertex_fetch_pass && indexed_draw_pass && texture_sampler_pass;
+#endif
 }
 
-#if !AGC_VALIDATE_RGBA8_REFERENCE && !AGC_DEPTH_VALIDATION
+#if !AGC_VALIDATE_RGBA8_REFERENCE && !AGC_VALIDATE_RGBA8_STD && \
+    !AGC_VALIDATE_RGB10A2 && !AGC_VALIDATE_R11G11B10 && \
+    !AGC_DEPTH_VALIDATION
 static uint8_t half_to_unorm8(uint16_t half) {
     uint32_t exponent = (half >> 10) & 0x1fu;
     uint32_t mantissa = half & 0x3ffu;
@@ -2452,6 +2510,43 @@ static void visualize_fp16(GraphicsTest *test) {
 }
 #endif
 
+#if AGC_VALIDATE_RGB10A2
+static void visualize_rgb10a2(GraphicsTest *test)
+{
+    const uint32_t *source = (const uint32_t *)test->render_target;
+    uint32_t *display = (uint32_t *)test->buffers[0];
+    const uint32_t preview_width =
+        FP16_TARGET_WIDTH / FP16_PREVIEW_DIVISOR;
+    const uint32_t preview_height =
+        FP16_TARGET_HEIGHT / FP16_PREVIEW_DIVISOR;
+    const uint32_t origin_x = (test->width - preview_width) / 2u;
+    const uint32_t origin_y = (test->height - preview_height) / 2u;
+
+    for (uint32_t i = 0u; i < test->width * test->height; ++i)
+        display[i] = DIAGNOSTIC_CLEAR_COLOR;
+    for (uint32_t y = 0u; y < preview_height; ++y) {
+        const uint32_t source_y = y * FP16_PREVIEW_DIVISOR;
+        for (uint32_t x = 0u; x < preview_width; ++x) {
+            const uint32_t packed = source[source_y * FP16_TARGET_WIDTH +
+                x * FP16_PREVIEW_DIVISOR];
+            if (packed == DIAGNOSTIC_CLEAR_COLOR)
+                continue;
+            const uint32_t r = ((packed & 0x3ffu) * 255u + 511u) / 1023u;
+            const uint32_t g = (((packed >> 10) & 0x3ffu) * 255u + 511u) /
+                1023u;
+            const uint32_t b = (((packed >> 20) & 0x3ffu) * 255u + 511u) /
+                1023u;
+            const uint32_t a = ((packed >> 30) & 3u) * 85u;
+            display[(origin_y + y) * test->width + origin_x + x] =
+                (a << 24) | (b << 16) | (g << 8) | r;
+        }
+    }
+    memcpy(test->buffers[1], test->buffers[0], test->buffer_stride);
+    printf("[RGB10A2] CPU preview: %ux%u centered on RGBA8 display\n",
+           preview_width, preview_height);
+}
+#endif
+
 /* ======================================================================== */
 /* Flip helper                                                               */
 /* ======================================================================== */
@@ -2488,6 +2583,57 @@ static bool present_preview(GraphicsTest *test) {
            accepted, completed);
     return completed == FP16_PREVIEW_FRAMES;
 }
+
+#if AGC_VALIDATE_R11G11B10
+static uint8_t ufloat_to_unorm8(uint32_t bits, uint32_t mantissa_bits)
+{
+    const uint32_t mantissa_mask = (1u << mantissa_bits) - 1u;
+    const uint32_t exponent = bits >> mantissa_bits;
+    const uint32_t mantissa = bits & mantissa_mask;
+    if (exponent == 0u)
+        return 0u;
+    if (exponent >= 15u)
+        return 255u;
+    const uint32_t significand = (1u << mantissa_bits) + mantissa;
+    const uint32_t shift = mantissa_bits + 15u - exponent;
+    const uint32_t scaled = (significand * 255u) >> shift;
+    return scaled > 255u ? 255u : (uint8_t)scaled;
+}
+
+static void visualize_r11g11b10(GraphicsTest *test)
+{
+    const uint32_t *source = (const uint32_t *)test->render_target;
+    uint32_t *display = (uint32_t *)test->buffers[0];
+    const uint32_t preview_width =
+        FP16_TARGET_WIDTH / FP16_PREVIEW_DIVISOR;
+    const uint32_t preview_height =
+        FP16_TARGET_HEIGHT / FP16_PREVIEW_DIVISOR;
+    const uint32_t origin_x = (test->width - preview_width) / 2u;
+    const uint32_t origin_y = (test->height - preview_height) / 2u;
+
+    for (uint32_t i = 0u; i < test->width * test->height; ++i)
+        display[i] = DIAGNOSTIC_CLEAR_COLOR;
+    for (uint32_t y = 0u; y < preview_height; ++y) {
+        const uint32_t source_y = y * FP16_PREVIEW_DIVISOR;
+        for (uint32_t x = 0u; x < preview_width; ++x) {
+            const uint32_t packed = source[source_y * FP16_TARGET_WIDTH +
+                x * FP16_PREVIEW_DIVISOR];
+            if (packed == DIAGNOSTIC_CLEAR_COLOR)
+                continue;
+            const uint32_t r = ufloat_to_unorm8(packed & 0x7ffu, 6u);
+            const uint32_t g = ufloat_to_unorm8(
+                (packed >> 11) & 0x7ffu, 6u);
+            const uint32_t b = ufloat_to_unorm8(
+                (packed >> 22) & 0x3ffu, 5u);
+            display[(origin_y + y) * test->width + origin_x + x] =
+                0xff000000u | (b << 16) | (g << 8) | r;
+        }
+    }
+    memcpy(test->buffers[1], test->buffers[0], test->buffer_stride);
+    printf("[R11G11B10] CPU preview: %ux%u centered on RGBA8 display\n",
+           preview_width, preview_height);
+}
+#endif
 
 /* ======================================================================== */
 /* Main                                                                      */
@@ -2545,6 +2691,51 @@ int main(void) {
     if (!dispatch_graphics(&test, &front, &back, &ps, &depth_target)) {
         printf("FATAL: D32%s validation failed\n",
                AGC_STENCIL_VALIDATION ? "+S8 stencil" : " depth");
+        return 1;
+    }
+    memcpy(test.buffers[1], test.buffers[0],
+           (size_t)test.width * test.height * BYTES_PER_PIXEL);
+#elif AGC_VALIDATE_R11G11B10
+    RenderTargetConfig r11g11b10_target = {
+        test.render_target, FP16_TARGET_WIDTH, FP16_TARGET_HEIGHT,
+        AGC_GFX1013_COLOR_FORMAT_10_11_11,
+        AGC_GFX1013_SURFACE_NUMBER_FLOAT,
+        AGC_GFX1013_SURFACE_SWAP_STD,
+        false, "offscreen R11G11B10 FLOAT"
+    };
+    printf("\n--- Step 4: R11G11B10 FLOAT offscreen draw ---\n");
+    if (!dispatch_graphics(
+            &test, &front, &back, &ps, &r11g11b10_target)) {
+        printf("FATAL: R11G11B10 render-target validation failed\n");
+        return 1;
+    }
+    visualize_r11g11b10(&test);
+#elif AGC_VALIDATE_RGB10A2
+    RenderTargetConfig rgb10a2_target = {
+        test.render_target, FP16_TARGET_WIDTH, FP16_TARGET_HEIGHT,
+        AGC_GFX1013_COLOR_FORMAT_10_10_10_2,
+        AGC_GFX1013_SURFACE_NUMBER_UNORM,
+        AGC_GFX1013_SURFACE_SWAP_STD,
+        false, "offscreen RGB10A2"
+    };
+    printf("\n--- Step 4: RGB10A2 offscreen draw ---\n");
+    if (!dispatch_graphics(
+            &test, &front, &back, &ps, &rgb10a2_target)) {
+        printf("FATAL: RGB10A2 render-target validation failed\n");
+        return 1;
+    }
+    visualize_rgb10a2(&test);
+#elif AGC_VALIDATE_RGBA8_STD
+    RenderTargetConfig rgba8_target = {
+        test.buffers[0], test.width, test.height,
+        AGC_GFX1013_COLOR_FORMAT_8_8_8_8,
+        AGC_GFX1013_SURFACE_NUMBER_UNORM,
+        AGC_GFX1013_SURFACE_SWAP_STD,
+        false, "display RGBA8 standard swap"
+    };
+    printf("\n--- Step 4: RGBA8 standard-swap draw ---\n");
+    if (!dispatch_graphics(&test, &front, &back, &ps, &rgba8_target)) {
+        printf("FATAL: RGBA8 standard-swap draw failed\n");
         return 1;
     }
     memcpy(test.buffers[1], test.buffers[0],
