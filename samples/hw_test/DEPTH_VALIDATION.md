@@ -214,3 +214,32 @@ Repeat through websrv only:
 make agc_depth_htile.elf
 make deploy_agc_depth_htile PS5_HOST=<address>
 ```
+
+## HTILE decompression/resummarization gate contract
+
+- `agc_depth_htile_ops.elf` starts from the passing depth-only compressed
+  HTILE gate; stencil, MSAA, and expclear remain disabled.
+- `agcGfx1013SetHtileOperation` emits one typed three-dword
+  `DB_RENDER_CONTROL` write: decompress depth is `0x1040`, resummarize depth
+  is `0x0010`, and neutral restoration is `0x0000`.
+- Decompression and resummarization are separate full-surface raster passes.
+  Color writes and ordinary depth testing/writes are disabled.
+- Typed DB metadata/data release and GCR acquire transitions precede
+  decompression and separate it from resummarization. Neutral render control
+  is restored before the final depth-to-host transition.
+- Passing requires four stage markers, the EOP fence, exact green/red color
+  checks, exact raw D32 clear/near/far values after decompression, non-initial
+  HTILE metadata after resummarization, and 1,800 completed flips.
+
+FW `0x05500008` passed on 2026-07-27. The 2,695-dword DCB reached its fence in
+1 ms. Raw D32 contained 909,792 clear, 128,304 near, and 128,304 far words;
+color readback contained 128,304 green and 128,304 red pixels; 4,226 HTILE
+words differed from `0xfffc000f`; and VideoOut completed 1,800/1,800 flips
+without a hang, reset, or kernel panic.
+
+Repeat through websrv only:
+
+```sh
+make agc_depth_htile_ops.elf
+make deploy_agc_depth_htile_ops PS5_HOST=<address>
+```

@@ -1358,6 +1358,24 @@ depth outcomes passed, 18,013 of 49,152 metadata words changed from
 informational until a decompression path exists. The physical display showed
 green and red triangles on dark gray without a hang or panic.
 
+The fourth follow-up gate is hardware-validated on FW `0x05500008`.
+`agc_depth_htile_ops.elf` uses the same isolated depth-only HTILE surface and
+adds full-surface decompression and resummarization raster passes. The public
+`agcGfx1013SetHtileOperation` builder emits a three-dword
+`DB_RENDER_CONTROL` write for neutral (`0x0000`), depth decompression
+(`DEPTH_COMPRESS_DISABLE | DECOMPRESS_ENABLE`, `0x1040`), or depth
+resummarization (`RESUMMARIZE_ENABLE`, `0x0010`). Exact fixtures cover all
+three encodings, invalid modes, short-buffer rejection, and atomic cursor
+behavior. The sample disables ordinary color/depth writes, places typed DB
+release/acquire transitions between modes, and restores neutral state.
+
+The real-console curl/websrv run accepted the 2,695-dword DCB, reached all
+four stage markers and the completion fence in 1 ms, recovered exact raw D32
+counts of 909,792 clear, 128,304 near, and 128,304 far words, retained 128,304
+green and 128,304 red pixels, and found 4,226 non-initial HTILE words after
+resummarization. VideoOut completed 1,800/1,800 flips without a hang, reset,
+or kernel panic.
+
 An earlier diagnostic `COPY_DATA` read of global register `0x13de`
 (`GB_ADDR_CONFIG`) is permanently excluded. FW logged `GPU Bad packet error:
 Privilege reg` for the game VMID, stopped the process, and automatically reset
@@ -1378,9 +1396,10 @@ HTILE state; unsupported formats; and short command buffers without advancing
 the cursor. The stale gfx103 `DB_Z_INFO[8:4]` tile-mode-index name was corrected
 to the hardware-defined `SW_MODE` field.
 
-The baseline D32, isolated stencil, isolated 4x MSAA, and isolated compressed
-HTILE PS5 hardware gates are complete on FW `0x05500008`. HTILE decompression,
-expclear, and combined stencil/HTILE remain separate future gates.
+The baseline D32, isolated stencil, isolated 4x MSAA, compressed HTILE, and
+typed HTILE decompression/resummarization PS5 hardware gates are complete on
+FW `0x05500008`. Expclear and combined stencil/HTILE remain separate future
+gates, in that order.
 
 `samples/hw_test/agc_depth.elf` hardware-validates a dedicated baseline-NGG
 mode with an uncompressed D32-only

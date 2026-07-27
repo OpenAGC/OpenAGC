@@ -1291,6 +1291,56 @@ static void test_gfx1013_depth_surface_packets(void)
         "misaligned 64KB_Z_X depth is atomic");
 }
 
+static void test_gfx1013_htile_operation_packets(void)
+{
+    uint32_t buffer[AGC_GFX1013_HTILE_OPERATION_DWORDS] = {0};
+    SceAgcCb cb;
+    const uint32_t header = agcPm4Header3(
+        AGC_PM4_OP_SET_CONTEXT_REG, AGC_GFX1013_HTILE_OPERATION_DWORDS);
+
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetHtileOperation(
+        &cb, AGC_GFX1013_HTILE_OPERATION_DECOMPRESS_DEPTH), AGC_OK,
+        "gfx1013 typed HTILE depth decompress emits");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb),
+        AGC_GFX1013_HTILE_OPERATION_DWORDS,
+        "gfx1013 HTILE operation exact dword count");
+    TEST_ASSERT_EQ(buffer[0], header, "HTILE decompress context header");
+    TEST_ASSERT_EQ(buffer[1], AGC_REG_DB_RENDER_CONTROL,
+        "HTILE decompress render-control register");
+    TEST_ASSERT_EQ(buffer[2], 0x00001040u,
+        "HTILE decompress exact render-control value");
+
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetHtileOperation(
+        &cb, AGC_GFX1013_HTILE_OPERATION_RESUMMARIZE_DEPTH), AGC_OK,
+        "gfx1013 typed HTILE depth resummarize emits");
+    TEST_ASSERT_EQ(buffer[2], 0x00000010u,
+        "HTILE resummarize exact render-control value");
+
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetHtileOperation(
+        &cb, AGC_GFX1013_HTILE_OPERATION_NONE), AGC_OK,
+        "gfx1013 typed HTILE neutral state emits");
+    TEST_ASSERT_EQ(buffer[2], 0u,
+        "HTILE neutral state clears render control");
+
+    agcCbReset(&cb, buffer,
+        (AGC_GFX1013_HTILE_OPERATION_DWORDS - 1u) * sizeof(uint32_t));
+    TEST_ASSERT_EQ(agcGfx1013SetHtileOperation(
+        &cb, AGC_GFX1013_HTILE_OPERATION_DECOMPRESS_DEPTH),
+        AGC_ERROR_BUFFER_TOO_SMALL, "short HTILE operation rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "short HTILE operation is atomic");
+
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetHtileOperation(&cb,
+        (AgcGfx1013HtileOperation)AGC_GFX1013_HTILE_OPERATION_COUNT),
+        AGC_ERROR_INVALID_ARGUMENT, "invalid HTILE operation rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "invalid HTILE operation is atomic");
+}
+
 static void test_gfx1013_depth_surface_layout(void)
 {
     AgcGfx1013DepthSurfaceLayoutInput input = {
@@ -2185,6 +2235,7 @@ void test_suite_graphics(void)
     TEST_RUN(test_gfx1013_fixed_function_packets);
     TEST_RUN(test_gfx1013_blend_depth_stencil_packets);
     TEST_RUN(test_gfx1013_depth_surface_packets);
+    TEST_RUN(test_gfx1013_htile_operation_packets);
     TEST_RUN(test_gfx1013_depth_surface_layout);
     TEST_RUN(test_gfx1013_htile_layout);
     TEST_RUN(test_gfx1013_stencil_gate_fixture);

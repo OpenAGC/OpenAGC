@@ -1722,6 +1722,35 @@ int32_t PS5_SYSV_ABI agcGfx1013SetDepthSurface(
     return AGC_OK;
 }
 
+int32_t PS5_SYSV_ABI agcGfx1013SetHtileOperation(
+    SceAgcCb *cb, AgcGfx1013HtileOperation operation)
+{
+    uint32_t value = 0u;
+
+    if (!cb || operation >= AGC_GFX1013_HTILE_OPERATION_COUNT)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (agcCbRemainingDwords(cb) < AGC_GFX1013_HTILE_OPERATION_DWORDS)
+        return AGC_ERROR_BUFFER_TOO_SMALL;
+
+    switch (operation) {
+    case AGC_GFX1013_HTILE_OPERATION_NONE:
+        break;
+    case AGC_GFX1013_HTILE_OPERATION_DECOMPRESS_DEPTH:
+        value = AGC_REG_SET(DB_RENDER_CONTROL, DEPTH_COMPRESS_DISABLE, 1u) |
+            AGC_REG_SET(DB_RENDER_CONTROL, DECOMPRESS_ENABLE, 1u);
+        break;
+    case AGC_GFX1013_HTILE_OPERATION_RESUMMARIZE_DEPTH:
+        value = AGC_REG_SET(DB_RENDER_CONTROL, RESUMMARIZE_ENABLE, 1u);
+        break;
+    default:
+        return AGC_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (!agcGfx1013EmitCx(cb, AGC_REG_DB_RENDER_CONTROL, value))
+        return AGC_ERROR_INTERNAL;
+    return AGC_OK;
+}
+
 int32_t PS5_SYSV_ABI agcGfx1013SetViewport(
     SceAgcCb *cb, const AgcGfx1013ViewportState *state)
 {

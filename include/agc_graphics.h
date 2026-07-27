@@ -66,6 +66,7 @@ extern "C" {
 #define AGC_GFX1013_BLEND_STATE_DWORDS            19u
 #define AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS    14u
 #define AGC_GFX1013_DEPTH_SURFACE_DWORDS           27u
+#define AGC_GFX1013_HTILE_OPERATION_DWORDS          3u
 #define AGC_GFX1013_HTILE_UNCOMPRESSED_DEPTH       0xfffc000fu
 #define AGC_GFX1013_SWIZZLE_64KB_Z_X               24u
 #define AGC_GFX1013_SWIZZLE_64KB_R_X               27u
@@ -271,6 +272,13 @@ typedef enum AgcGfx1013DepthSurfaceFormat {
     AGC_GFX1013_DEPTH_FORMAT_D32_FLOAT_S8_UINT,
     AGC_GFX1013_DEPTH_FORMAT_COUNT
 } AgcGfx1013DepthSurfaceFormat;
+
+typedef enum AgcGfx1013HtileOperation {
+    AGC_GFX1013_HTILE_OPERATION_NONE = 0,
+    AGC_GFX1013_HTILE_OPERATION_DECOMPRESS_DEPTH,
+    AGC_GFX1013_HTILE_OPERATION_RESUMMARIZE_DEPTH,
+    AGC_GFX1013_HTILE_OPERATION_COUNT
+} AgcGfx1013HtileOperation;
 
 typedef struct AgcGfx1013DepthSurfaceState {
     uint64_t depth_read_address;
@@ -551,6 +559,8 @@ int32_t PS5_SYSV_ABI agcGfx1013ResolveColor4x(
     SceAgcCb *cb, const AgcGfx1013ColorResolveState *state);
 int32_t PS5_SYSV_ABI agcGfx1013SetDepthSurface(
     SceAgcCb *cb, const AgcGfx1013DepthSurfaceState *state);
+int32_t PS5_SYSV_ABI agcGfx1013SetHtileOperation(
+    SceAgcCb *cb, AgcGfx1013HtileOperation operation);
 int32_t PS5_SYSV_ABI agcGfx1013GetDepthSurfaceLayout(
     const AgcGfx1013DepthSurfaceLayoutInput *input,
     AgcGfx1013DepthSurfaceLayout *layout);

@@ -2002,10 +2002,11 @@ address splitting, and negative
 fixtures prove that malformed formats, aspect/address combinations, sample
 counts, alignment, and undersized command buffers fail atomically.
 
-The isolated FW `0x0550` D32, stencil, 4x MSAA, and compressed HTILE
-qualifications are complete. Raw D32 inspection remains exact with HTILE off;
-with compression enabled, logical depth is validated through deterministic
-color outcomes and changed metadata until a decompression path is added.
+The isolated FW `0x0550` D32, stencil, 4x MSAA, compressed HTILE, and typed
+HTILE decompress/resummarize qualifications are complete. Compressed depth is
+validated through deterministic color outcomes and changed metadata. The
+typed operation gate then expands it to exact host-readable D32 and rebuilds
+nontrivial HTILE ranges in a separate full-surface raster pass.
 
 The first hardware sample is `samples/hw_test/agc_depth.elf`.
 It uses an uncompressed D32-only 64KB-Z-X surface with HTILE disabled, performs
@@ -2023,16 +2024,29 @@ remain explicit zero-dword transitions. Exact host fixtures cover DB-to-DB,
 DB-to-host, read-to-read, and undersized atomic failure paths. The depth sample
 uses separate color and depth-to-host transitions before CPU readback.
 
-1. Run the complete 14-sample deterministic FW `0x0550` websrv matrix on the
+The reusable `agcGfx1013SetHtileOperation` builder emits an atomic three-dword
+`DB_RENDER_CONTROL` packet. Depth decompression uses
+`DEPTH_COMPRESS_DISABLE | DECOMPRESS_ENABLE` (`0x1040`), depth
+resummarization uses `RESUMMARIZE_ENABLE` (`0x0010`), and the neutral state
+restores zero. The hardware sample disables ordinary depth and color writes,
+uses full-surface raster passes, brackets the modes with typed DB
+release/acquire transitions, and restores neutral state before completion.
+FW `0x05500008` accepted the 2,695-dword DCB, reached its fence in 1 ms,
+recovered exact D32 counts of 909,792 clear, 128,304 near, and 128,304 far
+words, produced 4,226 non-initial HTILE words after resummarization, and
+completed 1,800/1,800 flips.
+
+1. Run the complete 15-sample deterministic FW `0x0550` websrv matrix on the
    next available real PS5 and retain its raw logs as qualification evidence.
 2. If instant-close behavior recurs after a fresh launcher session, isolate it
    as a loader lifecycle failure before changing GPU PM4 or shader state.
-3. Add a typed HTILE decompression/resummarization path before requiring raw
-   D32 host readback from compressed surfaces; keep expclear and combined
-   stencil/HTILE as later isolated gates.
-4. Move remaining hardware-proven sample PM4 into public typed builders and
+3. Add an isolated depth-only expclear gate using the now-proven HTILE
+   operation and synchronization path; do not combine stencil in this gate.
+4. Add combined stencil/HTILE only after expclear has an independent passing
+   fixture, preserving exact aspect-specific validation and recovery checks.
+5. Move remaining hardware-proven sample PM4 into public typed builders and
    fixtures, continuing with synchronization and additional format state.
-5. Correct and document Subnautica wrapper coverage, then inventory the provided
+6. Correct and document Subnautica wrapper coverage, then inventory the provided
    DRAGON QUEST VII Reimagined executable for required AGC API coverage.
 
 ## Gfx1013 4x MSAA depth gate (hardware validated)

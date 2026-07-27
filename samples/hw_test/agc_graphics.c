@@ -71,6 +71,10 @@
 #define AGC_HTILE_VALIDATION 0
 #endif
 
+#ifndef AGC_HTILE_OPERATION_VALIDATION
+#define AGC_HTILE_OPERATION_VALIDATION 0
+#endif
+
 #if AGC_STENCIL_VALIDATION && !AGC_DEPTH_VALIDATION
 #error "stencil validation requires depth validation"
 #endif
@@ -89,6 +93,10 @@
 
 #if AGC_HTILE_VALIDATION && (AGC_STENCIL_VALIDATION || AGC_MSAA_VALIDATION)
 #error "the isolated HTILE gate keeps stencil and MSAA disabled"
+#endif
+
+#if AGC_HTILE_OPERATION_VALIDATION && !AGC_HTILE_VALIDATION
+#error "HTILE operation validation requires the isolated HTILE gate"
 #endif
 
 #if AGC_DEPTH_VALIDATION && AGC_TESSELLATION
@@ -1550,6 +1558,42 @@ static bool dispatch_graphics(GraphicsTest *test,
                 &depth_marker_values[draw], 1u, 0u, 0u))
             return false;
     }
+#if AGC_HTILE_OPERATION_VALIDATION
+    /* Expand compressed depth into the D32 plane, then rebuild HTILE ranges.
+     * Both operations are full-surface DB raster passes. Color writes and
+     * ordinary depth testing stay disabled; explicit DB release/acquire
+     * transitions separate the producer and the two metadata modes. */
+    const AgcGfx1013ResourceTransition htile_operation_barrier = {
+        .before = AGC_GFX1013_RESOURCE_USAGE_DEPTH_STENCIL_WRITE,
+        .after = AGC_GFX1013_RESOURCE_USAGE_DEPTH_STENCIL_READ,
+    };
+    const AgcGfx1013DepthStencilState htile_operation_depth = {0};
+    const AgcGfx1013ResourceTableBinding htile_full_surface_table = {
+        OPENAGC_VERTEX_BUFFER_TABLE_PLACEHOLDER,
+        (uint64_t)(uintptr_t)&vertex_desc[0],
+    };
+    blend.targets[0].write_mask = 0u;
+    if (agcGfx1013TransitionResource(
+            &cb, &htile_operation_barrier) != AGC_OK ||
+        agcGfx1013SetColorBlendState(&cb, &blend) != AGC_OK ||
+        agcGfx1013SetDepthStencilState(
+            &cb, &htile_operation_depth) != AGC_OK ||
+        agcGfx1013BindResourceTables(
+            &cb, &baseline_shaders.primitive,
+            &htile_full_surface_table, 1u) != AGC_OK ||
+        agcGfx1013SetHtileOperation(
+            &cb, AGC_GFX1013_HTILE_OPERATION_DECOMPRESS_DEPTH) != AGC_OK ||
+        !sceAgcDcbDrawIndexAuto(&cb, 3u, 0x40000000u) ||
+        agcGfx1013TransitionResource(
+            &cb, &htile_operation_barrier) != AGC_OK ||
+        agcGfx1013SetHtileOperation(
+            &cb, AGC_GFX1013_HTILE_OPERATION_RESUMMARIZE_DEPTH) != AGC_OK ||
+        !sceAgcDcbDrawIndexAuto(&cb, 3u, 0x40000000u) ||
+        agcGfx1013SetHtileOperation(
+            &cb, AGC_GFX1013_HTILE_OPERATION_NONE) != AGC_OK)
+        return false;
+    printf("[HTILE] full-surface depth decompress + resummarize emitted\n");
+#endif
     printf("[Depth%s] emitted init, near-pass, overlap-fail, and far-pass draws\n",
            AGC_STENCIL_VALIDATION ? "+Stencil" : "");
 #if AGC_MSAA_VALIDATION
@@ -1793,7 +1837,8 @@ static bool dispatch_graphics(GraphicsTest *test,
     const uint32_t right_sample = color[639u * target->width + 1203u];
     const bool color_pass = green_pixels > 1000u && red_pixels > 1000u &&
         left_sample == 0xFF00FF00u && right_sample == expected_red;
-    const bool depth_pass = AGC_HTILE_VALIDATION ||
+    const bool depth_pass =
+        (AGC_HTILE_VALIDATION && !AGC_HTILE_OPERATION_VALIDATION) ||
         (depth_one != 0u && depth_near != 0u && depth_far != 0u);
 #if AGC_STENCIL_VALIDATION
     const uint8_t *stencil = (const uint8_t *)test->stencil_surface;
@@ -1832,7 +1877,7 @@ static bool dispatch_graphics(GraphicsTest *test,
            green_pixels, red_pixels, left_sample, right_sample);
     printf("[Depth Readback] raw D32: one=%u near=%u far=%u\n",
            depth_one, depth_near, depth_far);
-#if AGC_HTILE_VALIDATION
+#if AGC_HTILE_VALIDATION && !AGC_HTILE_OPERATION_VALIDATION
     printf("[Depth Readback] raw D32 is compressed; logical depth is "
            "validated by color outcomes and HTILE metadata\n");
 #endif
@@ -1845,7 +1890,8 @@ static bool dispatch_graphics(GraphicsTest *test,
            AGC_MSAA_VALIDATION ? "+4xMSAA" : "",
            markers_pass ? "PASS" : "FAIL",
            color_pass ? "PASS" : "FAIL",
-           AGC_HTILE_VALIDATION ? "COMPRESSED" :
+           (AGC_HTILE_VALIDATION && !AGC_HTILE_OPERATION_VALIDATION) ?
+               "COMPRESSED" :
                (depth_pass ? "PASS" : "FAIL"),
            stencil_pass ? "PASS" : "FAIL");
     return markers_pass && color_pass && depth_pass && stencil_pass &&
