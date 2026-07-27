@@ -63,8 +63,20 @@
 #define AGC_STENCIL_VALIDATION 0
 #endif
 
+#ifndef AGC_MSAA_VALIDATION
+#define AGC_MSAA_VALIDATION 0
+#endif
+
 #if AGC_STENCIL_VALIDATION && !AGC_DEPTH_VALIDATION
 #error "stencil validation requires depth validation"
+#endif
+
+#if AGC_MSAA_VALIDATION && !AGC_DEPTH_VALIDATION
+#error "MSAA validation requires depth validation"
+#endif
+
+#if AGC_MSAA_VALIDATION && AGC_STENCIL_VALIDATION
+#error "the isolated MSAA gate keeps stencil disabled"
 #endif
 
 #if AGC_DEPTH_VALIDATION && AGC_TESSELLATION
@@ -169,6 +181,9 @@
 #else
 #include "shaders/triangle_frag_sb.h"
 #define FRAGMENT_DATA triangle_frag_data
+#endif
+#if AGC_MSAA_VALIDATION
+#include "shaders/depth_resolve_frag_sb.h"
 #endif
 
 /* Kernel constants fallbacks (if ps5/kernel.h doesn't define them) */
@@ -299,6 +314,8 @@ typedef struct {
     uint8_t *buffers[BUFFER_COUNT];
     void *compute_buffer;   /* Flexible memory pool for RT + shader code */
     void *render_target;    /* Points into compute_buffer */
+    void *msaa_color_surface; /* Optional 4x 64KB_R_X color image */
+    size_t msaa_color_surface_size;
     void *depth_surface;    /* Optional uncompressed D32 validation image */
     size_t depth_surface_size;
     void *stencil_surface;  /* Optional separate S8 validation image */
@@ -432,7 +449,8 @@ static bool allocate_display_buffers(GraphicsTest *test) {
 #if AGC_DEPTH_VALIDATION
     const AgcGfx1013DepthSurfaceLayoutInput depth_input = {
         .width = test->width, .height = test->height, .layer_count = 1u,
-        .mip_level_count = 1u, .sample_count = 1u,
+        .mip_level_count = 1u,
+        .sample_count = AGC_MSAA_VALIDATION ? 4u : 1u,
         .format = AGC_STENCIL_VALIDATION ?
             AGC_GFX1013_DEPTH_FORMAT_D32_FLOAT_S8_UINT :
             AGC_GFX1013_DEPTH_FORMAT_D32_FLOAT,
@@ -450,6 +468,27 @@ static bool allocate_display_buffers(GraphicsTest *test) {
     size_t rt_size = (size_t)depth_layout.depth.allocation_size;
     size_t rt_alignment = depth_layout.depth.alignment;
     test->depth_surface_size = rt_size;
+#if AGC_MSAA_VALIDATION
+    const AgcGfx1013ColorSurfaceLayoutInput color_input = {
+        .width = test->width, .height = test->height, .layer_count = 1u,
+        .mip_level_count = 1u, .sample_count = 4u,
+        .format = AGC_GFX1013_RT_FORMAT_RGBA8_UNORM,
+        .swizzle_mode = AGC_GFX1013_SWIZZLE_64KB_R_X,
+    };
+    AgcGfx1013ColorSurfaceLayout color_layout;
+    layout_ret = agcGfx1013GetColorSurfaceLayout(&color_input, &color_layout);
+    if (layout_ret != AGC_OK || color_layout.allocation_size > SIZE_MAX) {
+        printf("4x RGBA8 layout query failed: 0x%08x\n",
+               (unsigned)layout_ret);
+        return false;
+    }
+    size_t msaa_color_size = (size_t)color_layout.allocation_size;
+    size_t msaa_color_alignment = color_layout.alignment;
+    test->msaa_color_surface_size = msaa_color_size;
+#else
+    size_t msaa_color_size = 0u;
+    size_t msaa_color_alignment = 1u;
+#endif
     size_t stencil_size = (size_t)depth_layout.stencil.allocation_size;
     size_t stencil_alignment = AGC_STENCIL_VALIDATION ?
         depth_layout.stencil.alignment : 1u;
@@ -480,7 +519,9 @@ static bool allocate_display_buffers(GraphicsTest *test) {
     size_t htile_alignment = 1u;
 #endif
     size_t pool_size = align_up(
-                                GRAPHICS_POOL_PREFIX + rt_alignment - 1u + rt_size +
+                                GRAPHICS_POOL_PREFIX +
+                                msaa_color_alignment - 1u + msaa_color_size +
+                                rt_alignment - 1u + rt_size +
                                 stencil_alignment - 1u + stencil_size +
                                 htile_alignment - 1u + htile_size,
                                 1024 * 1024);
@@ -496,8 +537,17 @@ static bool allocate_display_buffers(GraphicsTest *test) {
     /* Render target follows shader data and any tessellation rings. */
     test->render_target = (uint8_t *)pool_addr + GRAPHICS_POOL_PREFIX;
 #if AGC_DEPTH_VALIDATION
+#if AGC_MSAA_VALIDATION
+    test->msaa_color_surface = (void *)(uintptr_t)align_up(
+        (size_t)(uintptr_t)test->render_target, msaa_color_alignment);
+    test->depth_surface = (void *)(uintptr_t)align_up(
+        (size_t)(uintptr_t)test->msaa_color_surface +
+            test->msaa_color_surface_size,
+        rt_alignment);
+#else
     test->depth_surface = (void *)(uintptr_t)align_up(
         (size_t)(uintptr_t)test->render_target, rt_alignment);
+#endif
     test->stencil_surface = (void *)(uintptr_t)align_up(
         (size_t)(uintptr_t)test->depth_surface + test->depth_surface_size,
         stencil_alignment);
@@ -517,6 +567,10 @@ static bool allocate_display_buffers(GraphicsTest *test) {
     printf("Depth surface: %zu bytes at %p (D32, swizzle=%u, HTILE off)\n",
            test->depth_surface_size, test->depth_surface,
            DEPTH_SWIZZLE_64KB_Z_X);
+#if AGC_MSAA_VALIDATION
+    printf("MSAA color: %zu bytes at %p (RGBA8, 4x, 64KB_R_X)\n",
+           test->msaa_color_surface_size, test->msaa_color_surface);
+#endif
 #if AGC_STENCIL_VALIDATION
     printf("Stencil surface: %zu bytes at %p (S8, swizzle=%u)\n",
            test->stencil_surface_size, test->stencil_surface,
@@ -1012,6 +1066,15 @@ static bool dispatch_graphics(GraphicsTest *test,
         back->code, back->code_size, test->compute_buffer, 0x1000);
     void *ps_code = upload_shader(
         ps->code, ps->code_size, test->compute_buffer, 0x4000);
+#if AGC_MSAA_VALIDATION
+    ParsedGraphicsShader resolve_ps;
+    if (!parse_graphics_shader(
+            &resolve_ps, depth_resolve_frag_data,
+            sizeof(depth_resolve_frag_data), "4x resolve PS"))
+        return false;
+    void *resolve_ps_code = upload_shader(
+        resolve_ps.code, resolve_ps.code_size, test->compute_buffer, 0x5000);
+#endif
     printf("NGG front ACO code at %p (%zu bytes)\n",
            front_code, front->code_size);
     printf("NGG back ACO code at %p (%zu bytes)\n",
@@ -1138,6 +1201,10 @@ static bool dispatch_graphics(GraphicsTest *test,
         ((uint8_t *)test->compute_buffer + VERTEX_DATA_OFFSET);
     uint32_t *vertex_desc = (uint32_t *)
         ((uint8_t *)test->compute_buffer + VERTEX_DESC_OFFSET);
+#if AGC_MSAA_VALIDATION
+    uint32_t *texture_desc = (uint32_t *)
+        ((uint8_t *)test->compute_buffer + TEXTURE_DESC_OFFSET);
+#endif
     memcpy(gpu_vertices, depth_vertices, sizeof(depth_vertices));
     for (uint32_t draw = 0u; draw < 4u; ++draw) {
         int32_t descriptor_error = agcGfx1013BufferDescriptorEncode(
@@ -1249,12 +1316,16 @@ static bool dispatch_graphics(GraphicsTest *test,
 
     const AgcGfx1013FrameState frame_state = {
         .color_target = {
-            (uint64_t)(uintptr_t)rt_addr,
-            target->width,
-            target->height,
-            target->color_format,
-            target->number_type,
-            target->component_swap,
+            .address = (uint64_t)(uintptr_t)rt_addr,
+            .width = target->width,
+            .height = target->height,
+            .color_format = target->color_format,
+            .number_type = target->number_type,
+            .component_swap = target->component_swap,
+            .sample_count = AGC_MSAA_VALIDATION ? 4u : 1u,
+            .fragment_count = AGC_MSAA_VALIDATION ? 4u : 1u,
+            .swizzle_mode = AGC_MSAA_VALIDATION ?
+                AGC_GFX1013_SWIZZLE_64KB_R_X : 0u,
         },
         .viewport = {target->width, target->height},
         .scissor = {0u, 0u, target->width, target->height},
@@ -1375,6 +1446,12 @@ static bool dispatch_graphics(GraphicsTest *test,
         agcGfx1013ApplyFramePostBind(&cb, &frame_state) != AGC_OK)
         return false;
 
+#if AGC_MSAA_VALIDATION
+    const AgcGfx1013SampleState sample_state_4x = {4u, 1u, 0xFu};
+    if (agcGfx1013SetSampleState(&cb, &sample_state_4x) != AGC_OK)
+        return false;
+#endif
+
     const AgcGfx1013DepthSurfaceState depth_surface = {
         .depth_read_address = (uint64_t)(uintptr_t)test->depth_surface,
         .depth_write_address = (uint64_t)(uintptr_t)test->depth_surface,
@@ -1391,7 +1468,8 @@ static bool dispatch_graphics(GraphicsTest *test,
         .stencil_swizzle_mode = AGC_STENCIL_VALIDATION ?
             DEPTH_SWIZZLE_64KB_Z_X : 0u,
         .mip_level_count = 1u,
-        .sample_count = 1u,
+        .sample_count = AGC_MSAA_VALIDATION ? 4u : 1u,
+        .htile_enable = 0u,
     };
     AgcGfx1013DepthStencilState depth_control = {
         .depth_test_enable = 1u,
@@ -1401,6 +1479,9 @@ static bool dispatch_graphics(GraphicsTest *test,
     AgcGfx1013ColorBlendState blend = {
         .target_count = 1u,
     };
+#if AGC_MSAA_VALIDATION
+    blend.targets[0].write_mask = 0xfu;
+#endif
     if (agcGfx1013SetDepthSurface(&cb, &depth_surface) != AGC_OK ||
         agcGfx1013SetDepthStencilState(&cb, &depth_control) != AGC_OK ||
         agcGfx1013SetColorBlendState(&cb, &blend) != AGC_OK ||
@@ -1442,6 +1523,72 @@ static bool dispatch_graphics(GraphicsTest *test,
     }
     printf("[Depth%s] emitted init, near-pass, overlap-fail, and far-pass draws\n",
            AGC_STENCIL_VALIDATION ? "+Stencil" : "");
+#if AGC_MSAA_VALIDATION
+    AgcGfx1013ImageDescriptor *msaa_descriptor =
+        (AgcGfx1013ImageDescriptor *)texture_desc;
+    const AgcGfx1013Image2DState msaa_image = {
+        .address = (uint64_t)(uintptr_t)test->msaa_color_surface,
+        .width = target->width,
+        .height = target->height,
+        .format = AGC_GFX1013_IMAGE_FORMAT_RGBA8_UNORM,
+        .image_type = AGC_GFX1013_IMAGE_TYPE_2D_MSAA,
+        .dst_sel_x = 4u, .dst_sel_y = 5u,
+        .dst_sel_z = 6u, .dst_sel_w = 7u,
+        .sample_count = 4u,
+        .swizzle_mode = AGC_GFX1013_SWIZZLE_64KB_R_X,
+    };
+    memset(texture_desc, 0, sizeof(AgcGfx1013CombinedImageSamplerDescriptor));
+    if (agcGfx1013Image2DDescriptorEncode(
+            msaa_descriptor, &msaa_image) != AGC_OK)
+        return false;
+
+    AgcGfx1013Wave32VsPsState resolve_shaders;
+    setup_shader_stages(&resolve_shaders, &ngg, back_code,
+                        &resolve_ps, resolve_ps_code);
+    const AgcGfx1013FrameState resolve_frame = {
+        .color_target = {
+            .address = (uint64_t)(uintptr_t)test->buffers[0],
+            .width = target->width,
+            .height = target->height,
+            .color_format = AGC_GFX1013_COLOR_FORMAT_8_8_8_8,
+            .number_type = AGC_GFX1013_SURFACE_NUMBER_UNORM,
+            .component_swap = AGC_GFX1013_SURFACE_SWAP_ALT,
+            .sample_count = 1u,
+            .fragment_count = 1u,
+        },
+        .viewport = {target->width, target->height},
+        .scissor = {0u, 0u, target->width, target->height},
+        .target_mask = AGC_GFX1013_TARGET_MASK_RGBA0,
+        .context_load_control = AGC_GFX1013_CONTEXT_CONTROL_ENABLE,
+        .context_shadow_control = AGC_GFX1013_CONTEXT_CONTROL_ENABLE,
+        .max_vertex_index = 0xffffffffu,
+        .ngg_mode_control = AGC_GFX1013_NGG_MODE_CONTROL,
+        .vertex_reuse_block_control = AGC_GFX1013_VERTEX_REUSE_BLOCK,
+        .instance_step_rate = 1u,
+    };
+    const AgcGfx1013ResourceTableBinding resolve_pixel_table = {
+        OPENAGC_DESCRIPTOR_SET_PLACEHOLDER(0u),
+        (uint64_t)(uintptr_t)texture_desc,
+    };
+    const AgcGfx1013BaselineDrawState resolve_draw = {
+        .shaders = resolve_shaders,
+        .frame = &resolve_frame,
+        .primitive_resource_tables = &primitive_resource_table,
+        .num_primitive_resource_tables = 1u,
+        .pixel_resource_tables = &resolve_pixel_table,
+        .num_pixel_resource_tables = 1u,
+        .index_type = kAgcIndexSize16,
+        .instance_count = 1u,
+        .vertex_count = 3u,
+        .draw_modifier = 0x40000000u,
+    };
+    const AgcGfx1013ColorResolveState resolve = {
+        &frame_state.color_target, &resolve_draw,
+    };
+    if (agcGfx1013ResolveColor4x(&cb, &resolve) != AGC_OK)
+        return false;
+    printf("[MSAA] shader-resolved 4x RGBA8 to 1x VideoOut target\n");
+#endif
 #elif AGC_TESSELLATION
     const AgcGfx1013TessDrawState tess_draw = {
         .shaders = tess_shaders,
@@ -1587,7 +1734,8 @@ static bool dispatch_graphics(GraphicsTest *test,
 #endif
 
 #if AGC_DEPTH_VALIDATION
-    const uint32_t *color = (const uint32_t *)rt_addr;
+    const uint32_t *color = (const uint32_t *)(AGC_MSAA_VALIDATION ?
+        test->buffers[0] : rt_addr);
     const uint32_t *depth = (const uint32_t *)test->depth_surface;
     uint32_t green_pixels = 0u;
     uint32_t red_pixels = 0u;
@@ -1633,8 +1781,9 @@ static bool dispatch_graphics(GraphicsTest *test,
     printf("[Stencil Readback] zero=%u replace-5a=%u other=%u\n",
            stencil_zero, stencil_replace, stencil_other);
 #endif
-    printf("[Depth%s Result] markers=%s color=%s raw-depth=%s stencil=%s\n",
+    printf("[Depth%s%s Result] markers=%s color=%s raw-depth=%s stencil=%s\n",
            AGC_STENCIL_VALIDATION ? "+Stencil" : "",
+           AGC_MSAA_VALIDATION ? "+4xMSAA" : "",
            markers_pass ? "PASS" : "FAIL",
            color_pass ? "PASS" : "FAIL",
            depth_pass ? "PASS" : "FAIL",
@@ -1926,14 +2075,17 @@ int main(void) {
 
 #if AGC_DEPTH_VALIDATION
     RenderTargetConfig depth_target = {
-        test.buffers[0], test.width, test.height,
+        AGC_MSAA_VALIDATION ? test.msaa_color_surface : test.buffers[0],
+        test.width, test.height,
         AGC_GFX1013_COLOR_FORMAT_8_8_8_8,
         AGC_GFX1013_SURFACE_NUMBER_UNORM,
         AGC_GFX1013_SURFACE_SWAP_ALT,
-        false, "depth validation RGBA8"
+        false, AGC_MSAA_VALIDATION ?
+            "4x depth validation RGBA8" : "depth validation RGBA8"
     };
-    printf("\n--- Step 4: D32%s depth pass/fail draw ---\n",
-           AGC_STENCIL_VALIDATION ? "+S8 stencil" : "");
+    printf("\n--- Step 4: D32%s%s depth pass/fail draw ---\n",
+           AGC_STENCIL_VALIDATION ? "+S8 stencil" : "",
+           AGC_MSAA_VALIDATION ? "+4x MSAA" : "");
     if (!dispatch_graphics(&test, &front, &back, &ps, &depth_target)) {
         printf("FATAL: D32%s validation failed\n",
                AGC_STENCIL_VALIDATION ? "+S8 stencil" : " depth");
@@ -1978,8 +2130,9 @@ int main(void) {
         return 1;
     }
 #if AGC_DEPTH_VALIDATION
-    printf("Displayed green depth-pass and red independent-pass triangles%s for 30 seconds.\n",
-           AGC_STENCIL_VALIDATION ? " with S8 replace validation" : "");
+    printf("Displayed green depth-pass and red independent-pass triangles%s%s for 30 seconds.\n",
+           AGC_STENCIL_VALIDATION ? " with S8 replace validation" : "",
+           AGC_MSAA_VALIDATION ? " resolved from 4x MSAA" : "");
 #else
     printf("Displayed the compiler-generated NGG triangle for 30 seconds.\n");
 #endif

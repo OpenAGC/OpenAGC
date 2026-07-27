@@ -391,6 +391,8 @@ int32_t PS5_SYSV_ABI agcGfx1013Image2DDescriptorEncode(
 {
     AgcGfx1013ImageDescriptor encoded = {{0}};
     uint32_t width_minus_one;
+    uint32_t sample_count;
+    uint32_t sample_log2;
 
     if (!descriptor || !state || state->address == 0u ||
         state->width == 0u || state->height == 0u)
@@ -404,6 +406,21 @@ int32_t PS5_SYSV_ABI agcGfx1013Image2DDescriptorEncode(
         state->dst_sel_w > 7u)
         return AGC_ERROR_VALIDATION_FAILED;
 
+    sample_count = state->sample_count == 0u ? 1u : state->sample_count;
+    if (sample_count == 1u) {
+        sample_log2 = 0u;
+        if (state->image_type != AGC_GFX1013_IMAGE_TYPE_2D ||
+            state->swizzle_mode != 0u)
+            return AGC_ERROR_NOT_SUPPORTED;
+    } else if (sample_count == 4u) {
+        sample_log2 = 2u;
+        if (state->image_type != AGC_GFX1013_IMAGE_TYPE_2D_MSAA ||
+            state->swizzle_mode != 27u)
+            return AGC_ERROR_NOT_SUPPORTED;
+    } else {
+        return AGC_ERROR_NOT_SUPPORTED;
+    }
+
     width_minus_one = state->width - 1u;
     encoded.words[0] = (uint32_t)(state->address >> 8u);
     encoded.words[1] = ((uint32_t)(state->address >> 40u) & 0xffu) |
@@ -412,7 +429,9 @@ int32_t PS5_SYSV_ABI agcGfx1013Image2DDescriptorEncode(
         ((state->height - 1u) << 14u) | (1u << 31u);
     encoded.words[3] = state->dst_sel_x | (state->dst_sel_y << 3u) |
         (state->dst_sel_z << 6u) | (state->dst_sel_w << 9u) |
+        (sample_log2 << 16u) | (state->swizzle_mode << 20u) |
         (state->image_type << 28u);
+    encoded.words[5] = sample_log2 << 4u;
     *descriptor = encoded;
     return AGC_OK;
 }

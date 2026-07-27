@@ -1401,3 +1401,28 @@ Validation completed on 2026-07-27:
   the installed host compiler during the cross build.
 - CPack generates `openagc-0.1.0-generic.tar.gz` and
   `openagc-0.1.0-prospero.tar.gz`.
+
+## Gfx1013 4x MSAA preparation
+
+Host implementation and Prospero compilation are complete; PS5 validation is
+pending because hardware is unavailable.
+
+The typed 29-dword sample-state builder programs gfx1013 4x AA with
+`PA_SC_AA_CONFIG=0x2020c002`, `DB_EQAA=0x00002202`, standard DX sample
+locations `0xe62a62ae`, centroid priority `0x3210321032103210`, and full
+coverage masks. The color binder programs log2 sample/fragment fields and
+`64KB_R_X`; typed layout fixtures lock a 1920x1080 RGBA8 4x surface to
+1920x1088 and 33,423,360 bytes. D32 4x allocation continues through the
+existing `64KB_Z_X` layout API.
+
+Gfx10.3 does not support the legacy fixed-function `CB_RESOLVE` mode. The new
+resolve wrapper therefore transitions the 4x image to shader-read, binds a 1x
+destination frame, restores 1x raster state after register defaults, and runs
+a caller-supplied fullscreen draw. `agc_depth_msaa.elf` supplies a psbc-built
+`sampler2DMS` fragment shader that averages samples 0-3 into the VideoOut
+buffer. Stencil, HTILE, expclear, CMASK, FMASK, and DCC stay disabled.
+
+Host result: 3878 passed, 0 failed. Both the Prospero library and
+`samples/hw_test/agc_depth_msaa.elf` cross-build without warnings. These
+results prove packet/layout encoding and build integration, not real-PS5
+execution.

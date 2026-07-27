@@ -67,7 +67,9 @@ extern "C" {
 #define AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS    14u
 #define AGC_GFX1013_DEPTH_SURFACE_DWORDS           24u
 #define AGC_GFX1013_SWIZZLE_64KB_Z_X               24u
+#define AGC_GFX1013_SWIZZLE_64KB_R_X               27u
 #define AGC_GFX1013_64KB_SURFACE_ALIGNMENT    0x10000u
+#define AGC_GFX1013_SAMPLE_STATE_DWORDS             29u
 #define AGC_GFX1013_MAX_COLOR_TARGETS              8u
 #define AGC_GFX1013_CONTEXT_CONTROL_ENABLE 0x80000000u
 #define AGC_GFX1013_NGG_MODE_CONTROL        0x00000200u
@@ -228,7 +230,37 @@ typedef struct AgcGfx1013ColorTargetState {
     uint32_t color_format;
     uint32_t number_type;
     uint32_t component_swap;
+    uint32_t sample_count;
+    uint32_t fragment_count;
+    uint32_t swizzle_mode;
 } AgcGfx1013ColorTargetState;
+
+typedef struct AgcGfx1013ColorSurfaceLayoutInput {
+    uint32_t width;
+    uint32_t height;
+    uint32_t layer_count;
+    uint32_t mip_level_count;
+    uint32_t sample_count;
+    AgcGfx1013ColorTargetFormat format;
+    uint32_t swizzle_mode;
+} AgcGfx1013ColorSurfaceLayoutInput;
+
+typedef struct AgcGfx1013ColorSurfaceLayout {
+    uint64_t allocation_size;
+    uint64_t slice_size;
+    uint32_t pitch;
+    uint32_t padded_height;
+    uint32_t alignment;
+    uint32_t block_width;
+    uint32_t block_height;
+    uint32_t first_mip_in_tail;
+} AgcGfx1013ColorSurfaceLayout;
+
+typedef struct AgcGfx1013SampleState {
+    uint32_t sample_count;
+    uint32_t pixel_shader_sample_count;
+    uint32_t sample_mask;
+} AgcGfx1013SampleState;
 
 typedef enum AgcGfx1013DepthSurfaceFormat {
     AGC_GFX1013_DEPTH_FORMAT_D16_UNORM = 0,
@@ -317,6 +349,8 @@ _Static_assert(sizeof(AgcGfx1013DepthSurfaceLayout) == 80,
     "gfx1013 depth surface layout must be 80 bytes");
 _Static_assert(sizeof(AgcGfx1013HtileLayout) == 48,
     "gfx1013 HTILE layout must be 48 bytes");
+_Static_assert(sizeof(AgcGfx1013ColorSurfaceLayout) == 40,
+    "gfx1013 color surface layout must be 40 bytes");
 
 typedef struct AgcGfx1013ViewportState {
     uint32_t width;
@@ -448,6 +482,14 @@ typedef struct AgcGfx1013BaselineDrawState {
     uint64_t draw_modifier;
 } AgcGfx1013BaselineDrawState;
 
+/* Shader-driven resolve. The draw must bind a sampler2DMS pixel shader and
+ * its descriptor table; OpenAGC supplies the cache transition, restores 1x
+ * raster state, and executes the caller's fullscreen draw. */
+typedef struct AgcGfx1013ColorResolveState {
+    const AgcGfx1013ColorTargetState *source;
+    const AgcGfx1013BaselineDrawState *draw;
+} AgcGfx1013ColorResolveState;
+
 typedef struct AgcGfx1013TessDrawState {
     AgcGfx1013Wave32TessVsPsState shaders;
     const AgcGfx1013FrameState *frame;
@@ -499,6 +541,13 @@ int32_t PS5_SYSV_ABI agcGfx1013InitColorTarget(
     uint32_t height, AgcGfx1013ColorTargetFormat format);
 int32_t PS5_SYSV_ABI agcGfx1013SetColorTarget(
     SceAgcCb *cb, const AgcGfx1013ColorTargetState *state);
+int32_t PS5_SYSV_ABI agcGfx1013GetColorSurfaceLayout(
+    const AgcGfx1013ColorSurfaceLayoutInput *input,
+    AgcGfx1013ColorSurfaceLayout *layout);
+int32_t PS5_SYSV_ABI agcGfx1013SetSampleState(
+    SceAgcCb *cb, const AgcGfx1013SampleState *state);
+int32_t PS5_SYSV_ABI agcGfx1013ResolveColor4x(
+    SceAgcCb *cb, const AgcGfx1013ColorResolveState *state);
 int32_t PS5_SYSV_ABI agcGfx1013SetDepthSurface(
     SceAgcCb *cb, const AgcGfx1013DepthSurfaceState *state);
 int32_t PS5_SYSV_ABI agcGfx1013GetDepthSurfaceLayout(

@@ -484,6 +484,7 @@ void agcSamplerDescriptorSetAnisotropy(AgcSamplerDescriptor *desc,
 #define AGC_GFX1013_BUFFER_WORD3_STRUCTURED 0x11014FACu
 #define AGC_GFX1013_IMAGE_FORMAT_RGBA8_UNORM 56u
 #define AGC_GFX1013_IMAGE_TYPE_2D 9u
+#define AGC_GFX1013_IMAGE_TYPE_2D_MSAA 14u
 
 typedef struct AgcGfx1013BufferDescriptor {
     uint32_t words[4];
@@ -503,6 +504,8 @@ typedef struct AgcGfx1013Image2DState {
     uint32_t dst_sel_y;
     uint32_t dst_sel_z;
     uint32_t dst_sel_w;
+    uint32_t sample_count;
+    uint32_t swizzle_mode;
 } AgcGfx1013Image2DState;
 
 typedef struct AgcGfx1013CombinedImageSamplerDescriptor {

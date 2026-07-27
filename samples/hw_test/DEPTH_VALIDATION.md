@@ -112,3 +112,58 @@ Expected additional terminal result:
 [Stencil Readback] zero=<nonzero> replace-5a=<more than 1000> other=0
 [Depth+Stencil Result] markers=PASS color=PASS raw-depth=PASS stencil=PASS
 ```
+
+## 4x MSAA gate contract
+
+`agc_depth_msaa.elf` is the isolated gfx1013 4x gate. It is host-tested and
+Prospero-cross-built; real FW `0x0550` execution remains pending while the PS5
+is unavailable.
+
+- The color image is a separately allocated, 64 KiB-aligned `64KB_R_X`
+  RGBA8 surface. At 1920x1080 its typed layout is 1920x1088 pixels and
+  33,423,360 bytes for four stored fragments.
+- D32 uses the existing typed `64KB_Z_X` layout with `sample_count=4`.
+- `PA_SC_AA_CONFIG=0x2020c002`, `DB_EQAA=0x00002202`, and
+  `PA_SC_MODE_CNTL_0=0x3` select 4x rasterization with one pixel-shader
+  iteration per pixel.
+- Standard DX sample positions `(-2,-6), (2,6), (-6,2), (6,-2)` are packed
+  as `0xe62a62ae` in all four pixel-quadrant registers. Centroid priority is
+  `0x3210321032103210`; both coverage registers are `0x000f000f`.
+- `CB_COLOR0_ATTRIB.NUM_SAMPLES=2` and `NUM_FRAGMENTS=2` encode log2(4), and
+  `CB_COLOR0_ATTRIB3.COLOR_SW_MODE=27` selects `64KB_R_X`.
+- A `sampler2DMS` fragment shader fetches samples 0 through 3, averages them,
+  and draws a fullscreen triangle into the registered 1x VideoOut buffer.
+  Gfx10.3 has no supported legacy fixed-function `CB_RESOLVE` path.
+- Stencil addresses remain zero, stencil testing stays disabled, and
+  `htile_enable`, expclear, compression, CMASK, FMASK, and DCC remain clear.
+- A render-target-to-shader-read transition precedes the resolve. The resolve
+  frame prologue binds the 1x destination, then restores 1x AA state after
+  defaults and before the fullscreen draw.
+
+Expected display: the existing dark background with green depth-pass and red
+independent-pass triangles, with antialiased edges. Interior readback samples
+must remain exact green/red, raw 4x D32 must contain initialization, near, and
+far values, all stage markers must match, and the console must remain
+responsive.
+
+Expected terminal result:
+
+```text
+[MSAA] shader-resolved 4x RGBA8 to 1x VideoOut target
+[Depth+4xMSAA Result] markers=PASS color=PASS raw-depth=PASS stencil=PASS
+```
+
+Build and deploy only when the PS5 is ready:
+
+```sh
+export PS5_PAYLOAD_SDK=~/ps5-payload-sdk
+export LLVM_CONFIG=/opt/homebrew/opt/llvm@18/bin/llvm-config
+cmake --build ../../build-prospero
+make agc_depth_msaa.elf
+make deploy_agc_depth_msaa PS5_HOST=<address>
+```
+
+The deployment target uses only curl with websrv FTP/HTTP. Do not use
+`prospero-deploy`, and do not add this gate to the passing FW `0x0550`
+conformance matrix until the visual, marker, raw-depth, and responsiveness
+checks pass on hardware.

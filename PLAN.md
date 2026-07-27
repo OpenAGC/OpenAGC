@@ -2008,3 +2008,28 @@ uses separate color and depth-to-host transitions before CPU readback.
    fixtures, continuing with synchronization and additional format state.
 5. Correct and document Subnautica wrapper coverage, then inventory the provided
    DRAGON QUEST VII Reimagined executable for required AGC API coverage.
+
+## Gfx1013 4x MSAA depth gate (host complete, hardware pending)
+
+The reusable FW `0x0550` preparation for the isolated 4x gate is complete:
+
+- Typed `agcGfx1013SetSampleState` emits `PA_SC_AA_CONFIG`, `DB_EQAA`,
+  `PA_SC_MODE_CNTL_0`, four sample-location registers, centroid priority, and
+  both coverage masks for exact 1x/4x state.
+- Typed `agcGfx1013GetColorSurfaceLayout` covers 4x `64KB_R_X` color
+  allocations, while the existing D32 layout covers 4x `64KB_Z_X`.
+- Color-target binding now types the sample/fragment counts and swizzle mode;
+  gfx1013 image descriptors type 2D-MSAA, log2 sample count, and R_X swizzle.
+- `agcGfx1013ResolveColor4x` performs the render-to-shader transition, builds
+  the 1x destination frame, restores 1x state after defaults, and executes a
+  caller-supplied fullscreen shader draw. It intentionally does not use the
+  unsupported gfx10 legacy `CB_RESOLVE` mode.
+- `agc_depth_msaa.elf` renders the D32 pass/fail fixture into separate 4x
+  color/depth images and averages four samples into the 1x VideoOut buffer.
+  Stencil and HTILE are explicitly disabled.
+
+Next action when the PS5 is ready: deploy only `agc_depth_msaa.elf` through
+curl/websrv, require the expected antialiased green/red depth image, exact
+markers and interior colors, nonzero raw 4x D32 values, and a responsive
+console. A failure or kernel panic stops the gate. Until that run succeeds,
+the milestone is prepared rather than hardware-supported.

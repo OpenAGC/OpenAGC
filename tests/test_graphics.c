@@ -2000,6 +2000,79 @@ static void test_gfx1013_tessellation_state_rejects_atomically(void)
         "short tessellation context is atomic");
 }
 
+static void test_gfx1013_msaa_state_and_layout(void)
+{
+    uint32_t buffer[AGC_GFX1013_SAMPLE_STATE_DWORDS] = {0};
+    SceAgcCb cb;
+    AgcGfx1013SampleState samples = {4u, 1u, 0xFu};
+    AgcGfx1013ColorSurfaceLayoutInput input = {
+        1920u, 1080u, 1u, 1u, 4u,
+        AGC_GFX1013_RT_FORMAT_RGBA8_UNORM,
+        AGC_GFX1013_SWIZZLE_64KB_R_X,
+    };
+    AgcGfx1013ColorSurfaceLayout layout;
+    AgcGfx1013ColorTargetState target;
+
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetSampleState(&cb, &samples), AGC_OK,
+        "gfx1013 4x sample state emits");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb),
+        AGC_GFX1013_SAMPLE_STATE_DWORDS, "gfx1013 sample-state size");
+    TEST_ASSERT_EQ(buffer[1], AGC_REG_PA_SC_AA_CONFIG,
+        "gfx1013 PA_SC_AA_CONFIG register");
+    TEST_ASSERT_EQ(buffer[2], 0x2020C002u,
+        "gfx1013 exact 4x PA_SC_AA_CONFIG");
+    TEST_ASSERT_EQ(buffer[4], AGC_REG_DB_EQAA,
+        "gfx1013 DB_EQAA register");
+    TEST_ASSERT_EQ(buffer[5], 0x00002202u,
+        "gfx1013 exact 4x DB_EQAA");
+    TEST_ASSERT_EQ(buffer[15], 0xE62A62AEu,
+        "gfx1013 standard DX 4x sample locations");
+    TEST_ASSERT_EQ(buffer[27], 0x000F000Fu,
+        "gfx1013 full 4x coverage mask 0");
+    TEST_ASSERT_EQ(buffer[28], 0x000F000Fu,
+        "gfx1013 full 4x coverage mask 1");
+
+    TEST_ASSERT_EQ(agcGfx1013GetColorSurfaceLayout(&input, &layout),
+        AGC_OK, "gfx1013 4x RGBA8 color layout computes");
+    TEST_ASSERT_EQ(layout.pitch, 1920u, "gfx1013 4x color pitch");
+    TEST_ASSERT_EQ(layout.padded_height, 1088u,
+        "gfx1013 4x color padded height");
+    TEST_ASSERT_EQ(layout.block_width, 64u,
+        "gfx1013 4x color block width");
+    TEST_ASSERT_EQ(layout.block_height, 64u,
+        "gfx1013 4x color block height");
+    TEST_ASSERT_EQ(layout.allocation_size, UINT64_C(33423360),
+        "gfx1013 4x color allocation size");
+
+    TEST_ASSERT_EQ(agcGfx1013InitColorTarget(&target,
+        0x0000000203000000ull, 1920u, 1080u,
+        AGC_GFX1013_RT_FORMAT_RGBA8_UNORM), AGC_OK,
+        "gfx1013 4x target initializes from typed format");
+    target.sample_count = 4u;
+    target.fragment_count = 4u;
+    target.swizzle_mode = AGC_GFX1013_SWIZZLE_64KB_R_X;
+    agcCbReset(&cb, buffer, 27u * sizeof(uint32_t));
+    TEST_ASSERT_EQ(agcGfx1013SetColorTarget(&cb, &target),
+        AGC_ERROR_BUFFER_TOO_SMALL,
+        "gfx1013 4x target preserves atomic short-buffer behavior");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "gfx1013 short 4x target emits nothing");
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetColorTarget(&cb, &target), AGC_OK,
+        "gfx1013 4x color target emits");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 28u,
+        "gfx1013 4x color-target exact size");
+    TEST_ASSERT_EQ(buffer[3], 0x000000EFu,
+        "gfx1013 4x color pitch tiles");
+    TEST_ASSERT_EQ(buffer[4], 0x000FEFFFu,
+        "gfx1013 4x color slice tiles and samples");
+    TEST_ASSERT_EQ(buffer[7], 0x00012000u,
+        "gfx1013 color NUM_SAMPLES and NUM_FRAGMENTS");
+    TEST_ASSERT_EQ(buffer[24], 0x0906C001u,
+        "gfx1013 color 64KB_R_X attrib3");
+}
+
 void test_suite_graphics(void)
 {
     TEST_SUITE("GFX1013 Graphics State");
@@ -2026,4 +2099,5 @@ void test_suite_graphics(void)
     TEST_RUN(test_gfx1013_baseline_draw_binds_resources);
     TEST_RUN(test_gfx1013_tessellation_state_builders);
     TEST_RUN(test_gfx1013_tessellation_state_rejects_atomically);
+    TEST_RUN(test_gfx1013_msaa_state_and_layout);
 }

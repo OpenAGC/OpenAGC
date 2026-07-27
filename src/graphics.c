@@ -963,6 +963,58 @@ int32_t PS5_SYSV_ABI agcGfx1013InitColorTarget(
     state->color_format = info.color_format;
     state->number_type = info.number_type;
     state->component_swap = info.component_swap;
+    state->sample_count = 1u;
+    state->fragment_count = 1u;
+    state->swizzle_mode = 0u;
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013GetColorSurfaceLayout(
+    const AgcGfx1013ColorSurfaceLayoutInput *input,
+    AgcGfx1013ColorSurfaceLayout *layout)
+{
+    AgcGfx1013ColorTargetFormatInfo info;
+    AgcGfx1013ColorSurfaceLayout result = {0};
+    uint32_t element_log2;
+    uint32_t sample_log2;
+    uint32_t element_count_log2;
+    uint32_t width_log2;
+    uint64_t slice_size;
+
+    if (!input || !layout || input->width == 0u || input->height == 0u ||
+        input->width > 0x4000u || input->height > 0x4000u ||
+        input->layer_count == 0u || input->layer_count > 0x2000u ||
+        input->mip_level_count != 1u || input->sample_count != 4u ||
+        input->swizzle_mode != AGC_GFX1013_SWIZZLE_64KB_R_X)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (agcGfx1013GetColorTargetFormatInfo(input->format, &info) != AGC_OK)
+        return AGC_ERROR_NOT_SUPPORTED;
+    switch (info.bytes_per_pixel) {
+    case 1u: element_log2 = 0u; break;
+    case 2u: element_log2 = 1u; break;
+    case 4u: element_log2 = 2u; break;
+    case 8u: element_log2 = 3u; break;
+    case 16u: element_log2 = 4u; break;
+    default: return AGC_ERROR_NOT_SUPPORTED;
+    }
+    sample_log2 = 2u;
+    element_count_log2 = 16u - element_log2 - sample_log2;
+    width_log2 = (element_count_log2 + 1u) / 2u;
+    result.block_width = 1u << width_log2;
+    result.block_height = 1u << (element_count_log2 - width_log2);
+    result.pitch = (input->width + result.block_width - 1u) &
+        ~(result.block_width - 1u);
+    result.padded_height = (input->height + result.block_height - 1u) &
+        ~(result.block_height - 1u);
+    result.alignment = AGC_GFX1013_64KB_SURFACE_ALIGNMENT;
+    result.first_mip_in_tail = 1u;
+    slice_size = (uint64_t)result.pitch * result.padded_height *
+        info.bytes_per_pixel * input->sample_count;
+    if (slice_size == 0u || input->layer_count > UINT64_MAX / slice_size)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    result.slice_size = slice_size;
+    result.allocation_size = slice_size * input->layer_count;
+    *layout = result;
     return AGC_OK;
 }
 
@@ -993,6 +1045,11 @@ int32_t PS5_SYSV_ABI agcGfx1013SetColorTarget(
     uint32_t tiles_per_row;
     uint64_t tile_count;
     AgcGfx1013ColorTargetFormatInfo format_info;
+    uint32_t sample_count;
+    uint32_t fragment_count;
+    uint32_t sample_log2;
+    uint32_t fragment_log2;
+    uint32_t padded_height;
 
     if (!cb || !state || state->address == 0u || state->width == 0u ||
         state->height == 0u || state->width > 0x4000u ||
@@ -1003,11 +1060,46 @@ int32_t PS5_SYSV_ABI agcGfx1013SetColorTarget(
 
     if (!agcGfx1013FindColorTargetFormat(state, &format_info))
         return AGC_ERROR_NOT_SUPPORTED;
+    sample_count = state->sample_count == 0u ? 1u : state->sample_count;
+    fragment_count = state->fragment_count == 0u ? 1u : state->fragment_count;
+    if (sample_count == 1u && fragment_count == 1u &&
+        state->swizzle_mode == 0u) {
+        sample_log2 = 0u;
+        fragment_log2 = 0u;
+        padded_height = state->height;
+    } else if (sample_count == 4u && fragment_count == 4u &&
+               state->swizzle_mode == AGC_GFX1013_SWIZZLE_64KB_R_X) {
+        AgcGfx1013ColorSurfaceLayoutInput input = {
+            state->width, state->height, 1u, 1u, 4u,
+            AGC_GFX1013_RT_FORMAT_COUNT,
+            AGC_GFX1013_SWIZZLE_64KB_R_X,
+        };
+        AgcGfx1013ColorSurfaceLayout layout;
+        uint32_t i;
+        for (i = 0u; i < (uint32_t)AGC_GFX1013_RT_FORMAT_COUNT; ++i) {
+            const AgcGfx1013ColorTargetFormatInfo *candidate =
+                &kAgcGfx1013ColorTargetFormats[i].info;
+            if (candidate->color_format == state->color_format &&
+                candidate->number_type == state->number_type &&
+                candidate->component_swap == state->component_swap) {
+                input.format = kAgcGfx1013ColorTargetFormats[i].format;
+                break;
+            }
+        }
+        if (input.format == AGC_GFX1013_RT_FORMAT_COUNT ||
+            agcGfx1013GetColorSurfaceLayout(&input, &layout) != AGC_OK)
+            return AGC_ERROR_NOT_SUPPORTED;
+        sample_log2 = 2u;
+        fragment_log2 = 2u;
+        padded_height = layout.padded_height;
+    } else {
+        return AGC_ERROR_NOT_SUPPORTED;
+    }
     if (((uint64_t)state->width * format_info.bytes_per_pixel & 0xffu) != 0u)
         return AGC_ERROR_INVALID_ALIGNMENT;
 
     tiles_per_row = state->width / 8u;
-    tile_count = (uint64_t)tiles_per_row * state->height;
+    tile_count = (uint64_t)tiles_per_row * padded_height * sample_count;
     if (tiles_per_row > 0x800u || tile_count == 0u || tile_count > 0x400000u)
         return AGC_ERROR_INVALID_ARGUMENT;
     if (agcCbRemainingDwords(cb) < 28u)
@@ -1020,6 +1112,9 @@ int32_t PS5_SYSV_ABI agcGfx1013SetColorTarget(
         (state->color_format << AGC_REG_CB_COLOR0_INFO_FORMAT_SHIFT) |
         (state->number_type << AGC_REG_CB_COLOR0_INFO_NUMBER_TYPE_SHIFT) |
         (state->component_swap << 11) | (1u << 16);
+    regs[5] =
+        (sample_log2 << AGC_REG_CB_COLOR0_ATTRIB_NUM_SAMPLES_SHIFT) |
+        (fragment_log2 << AGC_REG_CB_COLOR0_ATTRIB_NUM_FRAGMENTS_SHIFT);
 
     cmd = agcCbAllocDwords(cb, 16u);
     if (!cmd)
@@ -1036,11 +1131,126 @@ int32_t PS5_SYSV_ABI agcGfx1013SetColorTarget(
             ((state->height - 1u) & 0x3fffu) |
             (((state->width - 1u) & 0x3fffu) << 14)) ||
         !agcGfx1013EmitCx(
-            cb, AGC_REG_CB_COLOR0_ATTRIB3, 0x09000001u) ||
+            cb, AGC_REG_CB_COLOR0_ATTRIB3,
+            0x09000001u | (state->swizzle_mode <<
+                AGC_REG_CB_COLOR0_ATTRIB3_COLOR_SW_MODE_SHIFT)) ||
         !agcGfx1013EmitCx(
             cb, AGC_REG_CB_COLOR_CONTROL, 0x00cc0010u))
         return AGC_ERROR_INTERNAL;
     return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013SetSampleState(
+    SceAgcCb *cb, const AgcGfx1013SampleState *state)
+{
+    uint32_t sample_log2;
+    uint32_t ps_iter_log2;
+    uint32_t max_distance;
+    uint32_t sample_locations;
+    uint64_t centroid_priority;
+    uint32_t mask;
+
+    if (!cb || !state || (state->sample_count != 1u &&
+        state->sample_count != 4u) ||
+        (state->pixel_shader_sample_count != 1u &&
+         state->pixel_shader_sample_count != state->sample_count) ||
+        (state->sample_mask & ~((1u << state->sample_count) - 1u)) != 0u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (agcCbRemainingDwords(cb) < AGC_GFX1013_SAMPLE_STATE_DWORDS)
+        return AGC_ERROR_BUFFER_TOO_SMALL;
+
+    sample_log2 = state->sample_count == 4u ? 2u : 0u;
+    ps_iter_log2 = state->pixel_shader_sample_count == 4u ? 2u : 0u;
+    max_distance = state->sample_count == 4u ? 6u : 0u;
+    /* Standard DX 4x positions: (-2,-6), (2,6), (-6,2), (6,-2). */
+    sample_locations = state->sample_count == 4u ? 0xE62A62AEu : 0u;
+    centroid_priority = state->sample_count == 4u ?
+        UINT64_C(0x3210321032103210) : 0u;
+    mask = (state->sample_mask & 0xffffu) |
+        ((state->sample_mask & 0xffffu) << 16u);
+
+    if (!agcGfx1013EmitCx(cb, AGC_REG_PA_SC_AA_CONFIG,
+            (sample_log2 << AGC_REG_PA_SC_AA_CONFIG_MSAA_NUM_SAMPLES_SHIFT) |
+            (max_distance << AGC_REG_PA_SC_AA_CONFIG_MAX_SAMPLE_DIST_SHIFT) |
+            (sample_log2 << AGC_REG_PA_SC_AA_CONFIG_MSAA_EXPOSED_SAMPLES_SHIFT) |
+            (state->sample_count == 4u ? (1u <<
+                AGC_REG_PA_SC_AA_CONFIG_COVERED_CENTROID_IS_CENTER_SHIFT) : 0u)) ||
+        !agcGfx1013EmitCx(cb, AGC_REG_DB_EQAA,
+            (sample_log2 << AGC_REG_DB_EQAA_MAX_ANCHOR_SAMPLES_SHIFT) |
+            (ps_iter_log2 << AGC_REG_DB_EQAA_PS_ITER_SAMPLES_SHIFT) |
+            (sample_log2 << AGC_REG_DB_EQAA_MASK_EXPORT_NUM_SAMPLES_SHIFT) |
+            (sample_log2 << AGC_REG_DB_EQAA_ALPHA_TO_MASK_NUM_SAMPLES_SHIFT)) ||
+        !agcGfx1013EmitCx(cb, AGC_REG_PA_SC_MODE_CNTL_0,
+            (state->sample_count == 4u ? 1u : 0u) |
+            (1u << AGC_REG_PA_SC_MODE_CNTL_0_VPORT_SCISSOR_ENABLE_SHIFT)))
+        return AGC_ERROR_INTERNAL;
+    {
+        uint32_t *cmd = agcCbAllocDwords(cb, 4u);
+        if (!cmd) return AGC_ERROR_INTERNAL;
+        cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 4u);
+        cmd[1] = AGC_REG_PA_SC_CENTROID_PRIORITY_0;
+        cmd[2] = (uint32_t)centroid_priority;
+        cmd[3] = (uint32_t)(centroid_priority >> 32u);
+    }
+    if (!agcGfx1013EmitCx(cb, AGC_REG_PA_SC_AA_SAMPLE_LOCS_PIXEL_X0Y0_0,
+            sample_locations) ||
+        !agcGfx1013EmitCx(cb, AGC_REG_PA_SC_AA_SAMPLE_LOCS_PIXEL_X1Y0_0,
+            sample_locations) ||
+        !agcGfx1013EmitCx(cb, AGC_REG_PA_SC_AA_SAMPLE_LOCS_PIXEL_X0Y1_0,
+            sample_locations) ||
+        !agcGfx1013EmitCx(cb, AGC_REG_PA_SC_AA_SAMPLE_LOCS_PIXEL_X1Y1_0,
+            sample_locations))
+        return AGC_ERROR_INTERNAL;
+    {
+        uint32_t *cmd = agcCbAllocDwords(cb, 4u);
+        if (!cmd) return AGC_ERROR_INTERNAL;
+        cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 4u);
+        cmd[1] = AGC_REG_PA_SC_AA_MASK_X0Y0_X1Y0;
+        cmd[2] = mask;
+        cmd[3] = mask;
+    }
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013ResolveColor4x(
+    SceAgcCb *cb, const AgcGfx1013ColorResolveState *state)
+{
+    AgcGfx1013ResourceTransition transition = {
+        AGC_GFX1013_RESOURCE_USAGE_RENDER_TARGET,
+        AGC_GFX1013_RESOURCE_USAGE_SHADER_READ, 0u, 0u,
+    };
+    AgcGfx1013SampleState samples = {1u, 1u, 1u};
+    AgcGfx1013GraphicsDefaultStats stats;
+    SceAgcCb probe;
+    int32_t error;
+
+    if (!cb || !state || !state->source || !state->draw ||
+        !state->draw->frame || state->source->sample_count != 4u ||
+        state->source->fragment_count != 4u ||
+        state->source->swizzle_mode != AGC_GFX1013_SWIZZLE_64KB_R_X ||
+        (state->draw->frame->color_target.sample_count != 0u &&
+         state->draw->frame->color_target.sample_count != 1u))
+        return AGC_ERROR_INVALID_ARGUMENT;
+    probe = *cb;
+    error = agcGfx1013TransitionResource(&probe, &transition);
+    if (error == AGC_OK)
+        error = agcGfx1013BuildFramePrologue(
+            &probe, state->draw->frame, &stats);
+    if (error == AGC_OK)
+        error = agcGfx1013SetSampleState(&probe, &samples);
+    if (error == AGC_OK)
+        error = agcGfx1013DrawBaselineIndexAuto(&probe, state->draw);
+    if (error != AGC_OK)
+        return error;
+    error = agcGfx1013TransitionResource(cb, &transition);
+    if (error == AGC_OK)
+        error = agcGfx1013BuildFramePrologue(
+            cb, state->draw->frame, &stats);
+    if (error == AGC_OK)
+        error = agcGfx1013SetSampleState(cb, &samples);
+    if (error == AGC_OK)
+        error = agcGfx1013DrawBaselineIndexAuto(cb, state->draw);
+    return error;
 }
 
 static bool agcGfx1013DepthAddressValid(uint64_t address)

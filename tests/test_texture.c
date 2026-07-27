@@ -895,6 +895,29 @@ static void test_gfx1013_hardware_descriptor_validation(void)
         "invalid image encoding preserves destination");
 }
 
+static void test_gfx1013_msaa_image_descriptor(void)
+{
+    AgcGfx1013ImageDescriptor image = {{0}};
+    AgcGfx1013Image2DState state = {
+        .address = 0x0000000203000000ull,
+        .width = 1920u,
+        .height = 1080u,
+        .format = AGC_GFX1013_IMAGE_FORMAT_RGBA8_UNORM,
+        .image_type = AGC_GFX1013_IMAGE_TYPE_2D_MSAA,
+        .dst_sel_x = 4u, .dst_sel_y = 5u,
+        .dst_sel_z = 6u, .dst_sel_w = 7u,
+        .sample_count = 4u,
+        .swizzle_mode = 27u,
+    };
+
+    TEST_ASSERT_EQ(agcGfx1013Image2DDescriptorEncode(&image, &state),
+        AGC_OK, "gfx1013 4x image descriptor encodes");
+    TEST_ASSERT_EQ(image.words[3], 0xE1B20FACu,
+        "gfx1013 4x image type, R_X swizzle, and sample count");
+    TEST_ASSERT_EQ(image.words[5], 0x20u,
+        "gfx1013 4x image max mip mirrors log2 samples");
+}
+
 void test_suite_texture(void) {
     TEST_SUITE("Texture Descriptors");
     TEST_RUN(test_texture_descriptor_size);
@@ -972,4 +995,5 @@ void test_suite_texture(void) {
     TEST_RUN(test_texture_format_roundtrip_all_number_types);
     TEST_RUN(test_gfx1013_hardware_descriptors);
     TEST_RUN(test_gfx1013_hardware_descriptor_validation);
+    TEST_RUN(test_gfx1013_msaa_image_descriptor);
 }
