@@ -1220,6 +1220,8 @@ static void test_gfx1013_depth_surface_packets(void)
         agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
         AGC_REG_DB_DEPTH_VIEW, 0x8d004801u,
         agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
+        AGC_REG_DB_HTILE_SURFACE, 0x00040000u,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
         AGC_REG_DB_HTILE_DATA_BASE, 0x34568200u,
         agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
         AGC_REG_DB_DEPTH_SIZE_XY, 0x0437077fu,

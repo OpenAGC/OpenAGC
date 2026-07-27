@@ -328,6 +328,9 @@ agc_depth_stencil.elf: shaders_depth agc_graphics.c ps5_video_out.h gpu_credenti
 agc_depth_msaa.elf: shaders_depth shaders/depth_resolve_frag_sb.h agc_graphics.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_DEPTH_VALIDATION=1 -DAGC_MSAA_VALIDATION=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
 
+agc_depth_htile.elf: shaders_depth agc_graphics.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_DEPTH_VALIDATION=1 -DAGC_HTILE_VALIDATION=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
+
 agc_tessellation.elf: shaders_tess agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_TESSELLATION=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
 
@@ -509,6 +512,14 @@ deploy_agc_depth_msaa: agc_depth_msaa.elf
 	curl -T agc_depth_msaa.elf "ftp://$(PS5_HOST):2121/data/homebrew/agc_depth_msaa/eboot.elf"
 	curl -T sce_sys/icon0.png "ftp://$(PS5_HOST):2121/data/homebrew/agc_depth_msaa/sce_sys/icon0.png"
 	curl -s "http://$(PS5_HOST):8080/hbldr?pipe=1&daemon=0&path=/data/homebrew/agc_depth_msaa/eboot.elf"
+
+.PHONY: deploy_agc_depth_htile
+deploy_agc_depth_htile: agc_depth_htile.elf
+	-curl -s "ftp://$(PS5_HOST):2121/" --quote "MKD /data/homebrew/agc_depth_htile"
+	-curl -s "ftp://$(PS5_HOST):2121/" --quote "MKD /data/homebrew/agc_depth_htile/sce_sys"
+	curl -T agc_depth_htile.elf "ftp://$(PS5_HOST):2121/data/homebrew/agc_depth_htile/eboot.elf"
+	curl -T sce_sys/icon0.png "ftp://$(PS5_HOST):2121/data/homebrew/agc_depth_htile/sce_sys/icon0.png"
+	curl -s "http://$(PS5_HOST):8080/hbldr?pipe=1&daemon=0&path=/data/homebrew/agc_depth_htile/eboot.elf"
 
 clean:
 	rm -f *.elf *.bin

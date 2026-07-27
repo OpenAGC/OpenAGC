@@ -1697,6 +1697,9 @@ int32_t PS5_SYSV_ABI agcGfx1013SetDepthSurface(
     bases_hi[4] = (uint32_t)(state->htile_address >> 40);
 
     if (!agcGfx1013EmitCx(cb, AGC_REG_DB_DEPTH_VIEW, depth_view) ||
+        !agcGfx1013EmitCx(cb, AGC_REG_DB_HTILE_SURFACE,
+            AGC_REG_SET(DB_HTILE_SURFACE, PIPE_ALIGNED,
+                state->htile_enable)) ||
         !agcGfx1013EmitCx(cb, AGC_REG_DB_HTILE_DATA_BASE,
             (uint32_t)(state->htile_address >> 8)) ||
         !agcGfx1013EmitCx(cb, AGC_REG_DB_DEPTH_SIZE_XY, depth_size))

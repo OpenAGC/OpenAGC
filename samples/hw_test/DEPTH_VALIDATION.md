@@ -5,10 +5,10 @@ slice size, and allocation size from `agcGfx1013GetDepthSurfaceLayout`. It no
 longer reserves a sample-local fixed 16 MiB image. FW `0x05500008` hardware
 execution passed through curl/websrv on 2026-07-27.
 
-The sample also reserves and zeroes a separately aligned HTILE allocation from
-`agcGfx1013GetHtileLayout`, but it deliberately leaves `htile_enable` clear.
-The provisional eight-address-pipe input must be checked against the PS5's
-`GB_ADDR_CONFIG` before the metadata gate is enabled.
+The baseline sample reserves a separately aligned HTILE allocation from
+`agcGfx1013GetHtileLayout` but leaves it disabled. The isolated HTILE sample
+uses the now hardware-proven eight-pipe FW `0x0550` layout and initializes it
+to depth-only uncompressed `0xfffc000f`.
 
 ## Ordered follow-up gates
 
@@ -22,11 +22,11 @@ The provisional eight-address-pipe input must be checked against the PS5's
    disabled, uses 4x D32 and matching RGBA8 state, shader-resolves to a 1x
    target, and requires edge/sample and raw-depth checks. FW `0x05500008`
    passed all marker, color/depth, visual, and responsiveness requirements.
-3. **HTILE gate:** return to 1x D32, confirm the address-pipe count from
-   `GB_ADDR_CONFIG`, initialize the typed metadata allocation, and enable HTILE
-   first without expclear. Require the EOP fence, unchanged PS5 responsiveness,
-   deterministic color/depth readback, and metadata changes before testing
-   expclear or combined stencil.
+3. **HTILE gate (passed):** `agc_depth_htile.elf` returns to 1x D32, uses the
+   eight-pipe layout, initializes metadata to `0xfffc000f`, and enables
+   pipe-aligned HTILE without expclear or stencil. It requires the EOP fence,
+   deterministic logical depth/color, metadata changes, completed flips, and
+   unchanged console responsiveness.
 
 Each gate is promoted independently. A failure or kernel panic stops the
 sequence and does not invalidate the earlier gate.
@@ -183,4 +183,34 @@ make deploy_agc_depth_msaa PS5_HOST=<address>
 
 The deployment target uses only curl with websrv FTP/HTTP. Do not use
 `prospero-deploy`. This gate may now be included in the passing FW `0x0550`
-conformance matrix; HTILE remains excluded until separately qualified.
+conformance matrix.
+
+## HTILE gate contract
+
+- `agc_depth_htile.elf` uses 1x D32 `64KB_Z_X`, a 196,608-byte eight-pipe
+  pipe-aligned HTILE allocation, and no stencil or MSAA.
+- Every metadata word starts as gfx10.3 depth-only uncompressed `0xfffc000f`.
+- `DB_HTILE_SURFACE.PIPE_ALIGNED` and `DB_Z_INFO.TILE_SURFACE_ENABLE` are set;
+  expclear, CMASK, FMASK, and DCC remain disabled.
+- All four draw markers, the EOP fence, exact green/red interior samples,
+  nonzero metadata changes, and 1,800 completed flips are mandatory.
+- Raw D32 words are informational while compression is enabled. Logical depth
+  is validated by the overlap-fail/independent-pass colors and metadata writes;
+  exact raw host readback requires a future decompression path.
+
+FW `0x05500008` passed on 2026-07-27. The 2,604-dword DCB reached its fence in
+1 ms, 18,013 of 49,152 metadata words changed, color readback found 128,304
+green and 128,304 red pixels, and VideoOut completed 1,800/1,800 flips. The
+screen showed green and red triangles on a dark-gray background.
+
+Do not attempt to capture `GB_ADDR_CONFIG` with user-ring `COPY_DATA`. The FW
+kernel logged `GPU Bad packet error: Privilege reg` for register `0x13de`,
+stopped the homebrew process, and automatically reset the GPU. The diagnostic
+probe was removed; a baseline D32 rerun passed after recovery.
+
+Repeat through websrv only:
+
+```sh
+make agc_depth_htile.elf
+make deploy_agc_depth_htile PS5_HOST=<address>
+```

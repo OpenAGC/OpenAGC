@@ -31,18 +31,23 @@ AMD PM4 packet ancestry overlap in useful ways.
   all markers, color coverage, raw depth values, and 1,800/1,800 flips passed
   without a hang or kernel panic.
 
-### Host-complete: gfx1013 HTILE layout and ordered qualification
+### Hardware-validated: gfx1013 HTILE layout and compressed-depth gate
 
 - `agcGfx1013GetHtileLayout` models non-RB+ gfx1013 pipe-aligned
-  `64KB_Z_X` metadata. Address-pipe count is explicit because the FW `0x0550`
-  PS5 `GB_ADDR_CONFIG` value has not yet been captured.
+  `64KB_Z_X` metadata. Address-pipe count remains an explicit input; the FW
+  `0x0550` sample uses the hardware-proven eight-pipe layout.
 - Exact fixtures cover metadata pitch, padded height, block geometry,
   alignment, slice size, layers, packed mip-tail accounting, multiple pipe
   profiles, the largest bindable 64-bit allocation, and atomic rejection.
-- `agc_depth.elf` reserves and zeroes typed HTILE metadata but keeps it disabled.
-- Hardware qualification is split into stencil, then MSAA, then HTILE gates;
-  each has independent readback, responsiveness, and promotion criteria in
-  `samples/hw_test/DEPTH_VALIDATION.md`.
+- `agcGfx1013SetDepthSurface` explicitly emits
+  `DB_HTILE_SURFACE.PIPE_ALIGNED`. The isolated sample initializes depth-only
+  metadata to the gfx10.3 uncompressed value `0xfffc000f`.
+- FW `0x05500008` passed `agc_depth_htile.elf`: all draw/fence/color checks,
+  18,013 changed HTILE words, and 1,800/1,800 flips completed. The screen
+  showed the expected green/red triangles on dark gray.
+- User-ring `COPY_DATA` reads of privileged `GB_ADDR_CONFIG` are prohibited.
+  The attempted diagnostic produced `GPU Bad packet error: Privilege reg` for
+  register `0x13de`; FW reset and recovered the graphics rings automatically.
 
 ### Hardware-validated: isolated stencil gate
 
@@ -1992,13 +1997,15 @@ gfx1013 depth/stencil memory state. It covers typed D16, D32, S8, D16+S8, and
 D32+S8 surfaces; independent depth/stencil read and write bases; gfx103
 swizzle modes; mip and array-layer views; 1x/2x/4x/8x samples; read-only
 aspects; and optional HTILE/expclear state. Exact host fixtures lock the
-24-dword register stream, including 48-bit address splitting, and negative
+27-dword register stream, including explicit `DB_HTILE_SURFACE`, 48-bit
+address splitting, and negative
 fixtures prove that malformed formats, aspect/address combinations, sample
 counts, alignment, and undersized command buffers fail atomically.
 
-The isolated FW `0x0550` D32 qualification is complete. Depth writes and
-comparisons passed GPU/CPU readback with HTILE disabled. Read-only transitions,
-stencil, MSAA, and HTILE retain separate qualification gates.
+The isolated FW `0x0550` D32, stencil, 4x MSAA, and compressed HTILE
+qualifications are complete. Raw D32 inspection remains exact with HTILE off;
+with compression enabled, logical depth is validated through deterministic
+color outcomes and changed metadata until a decompression path is added.
 
 The first hardware sample is `samples/hw_test/agc_depth.elf`.
 It uses an uncompressed D32-only 64KB-Z-X surface with HTILE disabled, performs
@@ -2020,8 +2027,9 @@ uses separate color and depth-to-host transitions before CPU readback.
    next available real PS5 and retain its raw logs as qualification evidence.
 2. If instant-close behavior recurs after a fresh launcher session, isolate it
    as a loader lifecycle failure before changing GPU PM4 or shader state.
-3. Hardware-qualify the typed depth-surface and depth/stencil-control builders
-   on FW `0x0550`, first uncompressed, then stencil, multisampling, and HTILE.
+3. Add a typed HTILE decompression/resummarization path before requiring raw
+   D32 host readback from compressed surfaces; keep expclear and combined
+   stencil/HTILE as later isolated gates.
 4. Move remaining hardware-proven sample PM4 into public typed builders and
    fixtures, continuing with synchronization and additional format state.
 5. Correct and document Subnautica wrapper coverage, then inventory the provided

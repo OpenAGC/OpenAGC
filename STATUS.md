@@ -1320,13 +1320,13 @@ array layers, mip chains, and 1x-8x samples. Checked 64-bit sizing covers the
 largest bindable layout without truncation. The depth hardware sample now uses
 the query instead of a fixed 16 MiB reservation.
 
-The companion typed HTILE layout is host-complete for non-RB+ gfx1013
+The companion typed HTILE layout is hardware-validated for non-RB+ gfx1013
 `64KB_Z_X`. It reports metadata pitch, padded height, block geometry,
 alignment, per-layer slice size, full allocation size, and packed mip-tail
-accounting. Address-pipe count remains explicit pending a FW `0x0550`
-`GB_ADDR_CONFIG` capture. The depth sample reserves and zeroes the calculated
-metadata but leaves HTILE disabled. Stencil and 4x MSAA have passed their
-separate hardware gates; HTILE remains isolated and pending.
+accounting. Address-pipe count remains explicit; FW `0x0550` hardware validates
+the sample's eight-pipe layout. `agcGfx1013SetDepthSurface` now emits
+`DB_HTILE_SURFACE.PIPE_ALIGNED`, and the sample initializes depth-only metadata
+to gfx10.3 uncompressed `0xfffc000f` rather than zero.
 
 The first follow-up gate is hardware-validated on FW `0x05500008`.
 `agc_depth_stencil.elf` uses separate typed D32/S8 `64KB_Z_X` allocations,
@@ -1349,9 +1349,24 @@ pixels, retained all three raw D32 classes, and completed 1,800/1,800 flips.
 The captured framebuffer showed the expected resolved green/red triangles on
 dark gray without a hang or kernel panic.
 
+The third follow-up gate is hardware-validated on FW `0x05500008`.
+`agc_depth_htile.elf` enables pipe-aligned HTILE for 1x D32 while stencil,
+MSAA, expclear, CMASK, FMASK, and DCC remain disabled. Its 2,604-dword DCB
+reached the fence in 1 ms, all four stage markers and exact green/red logical
+depth outcomes passed, 18,013 of 49,152 metadata words changed from
+`0xfffc000f`, and VideoOut completed 1,800/1,800 flips. Compressed raw D32 is
+informational until a decompression path exists. The physical display showed
+green and red triangles on dark gray without a hang or panic.
+
+An earlier diagnostic `COPY_DATA` read of global register `0x13de`
+(`GB_ADDR_CONFIG`) is permanently excluded. FW logged `GPU Bad packet error:
+Privilege reg` for the game VMID, stopped the process, and automatically reset
+the graphics rings and microcode. Baseline D32 passed after recovery. User
+graphics queues must not read privileged global registers.
+
 Host implementation is complete for typed gfx1013 depth-surface memory state.
-`agcGfx1013SetDepthSurface` emits a deterministic 24-dword packet stream for
-`DB_DEPTH_VIEW`, `DB_HTILE_DATA_BASE`, `DB_DEPTH_SIZE_XY`, `DB_Z_INFO`,
+`agcGfx1013SetDepthSurface` emits a deterministic 27-dword packet stream for
+`DB_DEPTH_VIEW`, `DB_HTILE_SURFACE`, `DB_HTILE_DATA_BASE`, `DB_DEPTH_SIZE_XY`, `DB_Z_INFO`,
 `DB_STENCIL_INFO`, four depth/stencil read/write bases, and their five high
 address fields. Supported typed combinations are D16, D32 float, S8, D16+S8,
 and D32 float+S8, with gfx103 swizzle modes, mip/layer selection, 1x through
@@ -1363,9 +1378,9 @@ HTILE state; unsupported formats; and short command buffers without advancing
 the cursor. The stale gfx103 `DB_Z_INFO[8:4]` tile-mode-index name was corrected
 to the hardware-defined `SW_MODE` field.
 
-The baseline D32, isolated stencil, and isolated 4x MSAA PS5 hardware gates
-are complete on FW `0x05500008`. HTILE remains the next ordered gate and must
-not be enabled until the address-pipe count is captured.
+The baseline D32, isolated stencil, isolated 4x MSAA, and isolated compressed
+HTILE PS5 hardware gates are complete on FW `0x05500008`. HTILE decompression,
+expclear, and combined stencil/HTILE remain separate future gates.
 
 `samples/hw_test/agc_depth.elf` hardware-validates a dedicated baseline-NGG
 mode with an uncompressed D32-only

@@ -397,6 +397,10 @@
 #define AGC_REG_DB_SRESULTS_COMPARE_STATE0          0x2B0u
 #define AGC_REG_DB_SRESULTS_COMPARE_STATE1          0x2B1u
 #define AGC_REG_DB_HTILE_SURFACE                    0x2AFu
+#define AGC_REG_DB_HTILE_SURFACE_FULL_CACHE_SHIFT   1u
+#define AGC_REG_DB_HTILE_SURFACE_FULL_CACHE_MASK    0x1u
+#define AGC_REG_DB_HTILE_SURFACE_PIPE_ALIGNED_SHIFT 18u
+#define AGC_REG_DB_HTILE_SURFACE_PIPE_ALIGNED_MASK  0x1u
 
 /* PA (Primitive Assembly) — viewport / clip / raster */
 #define AGC_REG_PA_CL_CLIP_CNTL                     0x204u

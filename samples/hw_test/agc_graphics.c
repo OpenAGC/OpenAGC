@@ -67,6 +67,10 @@
 #define AGC_MSAA_VALIDATION 0
 #endif
 
+#ifndef AGC_HTILE_VALIDATION
+#define AGC_HTILE_VALIDATION 0
+#endif
+
 #if AGC_STENCIL_VALIDATION && !AGC_DEPTH_VALIDATION
 #error "stencil validation requires depth validation"
 #endif
@@ -77,6 +81,14 @@
 
 #if AGC_MSAA_VALIDATION && AGC_STENCIL_VALIDATION
 #error "the isolated MSAA gate keeps stencil disabled"
+#endif
+
+#if AGC_HTILE_VALIDATION && !AGC_DEPTH_VALIDATION
+#error "HTILE validation requires depth validation"
+#endif
+
+#if AGC_HTILE_VALIDATION && (AGC_STENCIL_VALIDATION || AGC_MSAA_VALIDATION)
+#error "the isolated HTILE gate keeps stencil and MSAA disabled"
 #endif
 
 #if AGC_DEPTH_VALIDATION && AGC_TESSELLATION
@@ -561,16 +573,24 @@ static bool allocate_display_buffers(GraphicsTest *test) {
         htile_alignment);
     if (test->stencil_surface_size != 0u)
         memset(test->stencil_surface, 0, test->stencil_surface_size);
-    memset(test->htile_surface, 0, test->htile_surface_size);
+    if (AGC_HTILE_VALIDATION) {
+        uint32_t *htile = (uint32_t *)test->htile_surface;
+        for (size_t i = 0u;
+             i < test->htile_surface_size / sizeof(uint32_t); ++i)
+            htile[i] = AGC_GFX1013_HTILE_UNCOMPRESSED_DEPTH;
+    } else {
+        memset(test->htile_surface, 0, test->htile_surface_size);
+    }
 #endif
 
     printf("Command buffer: %zu bytes at %p (flexible)\n", cb_size, cb_buffer);
     printf("Compute pool: %zu bytes at %p (flexible)\n", pool_size, pool_addr);
     printf("Render target: at %p (flexible)\n", test->render_target);
 #if AGC_DEPTH_VALIDATION
-    printf("Depth surface: %zu bytes at %p (D32, swizzle=%u, HTILE off)\n",
+    printf("Depth surface: %zu bytes at %p (D32, swizzle=%u, HTILE %s)\n",
            test->depth_surface_size, test->depth_surface,
-           DEPTH_SWIZZLE_64KB_Z_X);
+           DEPTH_SWIZZLE_64KB_Z_X,
+           AGC_HTILE_VALIDATION ? "on" : "off");
 #if AGC_MSAA_VALIDATION
     printf("MSAA color: %zu bytes at %p (RGBA8, 4x, 64KB_R_X)\n",
            test->msaa_color_surface_size, test->msaa_color_surface);
@@ -580,9 +600,10 @@ static bool allocate_display_buffers(GraphicsTest *test) {
            test->stencil_surface_size, test->stencil_surface,
            DEPTH_SWIZZLE_64KB_Z_X);
 #endif
-    printf("HTILE reserve: %zu bytes at %p (provisional pipes=%u, disabled)\n",
+    printf("HTILE reserve: %zu bytes at %p (FW 5.50 pipes=%u, %s)\n",
            test->htile_surface_size, test->htile_surface,
-           DEPTH_HTILE_PROVISIONAL_PIPE_COUNT);
+           DEPTH_HTILE_PROVISIONAL_PIPE_COUNT,
+           AGC_HTILE_VALIDATION ? "enabled" : "disabled");
 #endif
     printf("Display buffers: %zu bytes each, %d buffers at %p (garlic)\n",
            test->buffer_stride, BUFFER_COUNT, test->mapped);
@@ -1475,7 +1496,9 @@ static bool dispatch_graphics(GraphicsTest *test,
             DEPTH_SWIZZLE_64KB_Z_X : 0u,
         .mip_level_count = 1u,
         .sample_count = AGC_MSAA_VALIDATION ? 4u : 1u,
-        .htile_enable = 0u,
+        .htile_address = AGC_HTILE_VALIDATION ?
+            (uint64_t)(uintptr_t)test->htile_surface : 0u,
+        .htile_enable = AGC_HTILE_VALIDATION,
     };
     AgcGfx1013DepthStencilState depth_control = {
         .depth_test_enable = 1u,
@@ -1770,8 +1793,8 @@ static bool dispatch_graphics(GraphicsTest *test,
     const uint32_t right_sample = color[639u * target->width + 1203u];
     const bool color_pass = green_pixels > 1000u && red_pixels > 1000u &&
         left_sample == 0xFF00FF00u && right_sample == expected_red;
-    const bool depth_pass = depth_one != 0u && depth_near != 0u &&
-        depth_far != 0u;
+    const bool depth_pass = AGC_HTILE_VALIDATION ||
+        (depth_one != 0u && depth_near != 0u && depth_far != 0u);
 #if AGC_STENCIL_VALIDATION
     const uint8_t *stencil = (const uint8_t *)test->stencil_surface;
     uint32_t stencil_zero = 0u;
@@ -1787,10 +1810,32 @@ static bool dispatch_graphics(GraphicsTest *test,
 #else
     const bool stencil_pass = true;
 #endif
+#if AGC_HTILE_VALIDATION
+    const uint32_t *htile = (const uint32_t *)test->htile_surface;
+    uint32_t htile_changed = 0u;
+    uint32_t htile_other = 0u;
+    for (size_t i = 0u;
+         i < test->htile_surface_size / sizeof(uint32_t); ++i) {
+        htile_changed +=
+            htile[i] != AGC_GFX1013_HTILE_UNCOMPRESSED_DEPTH;
+        htile_other += htile[i] != AGC_GFX1013_HTILE_UNCOMPRESSED_DEPTH &&
+            htile[i] != 0xfffffff0u && htile[i] != 0x00000000u;
+    }
+    const bool htile_pass = htile_changed > 0u;
+    printf("[HTILE Readback] changed=%u other=%u initial=%08x\n",
+           htile_changed, htile_other,
+           AGC_GFX1013_HTILE_UNCOMPRESSED_DEPTH);
+#else
+    const bool htile_pass = true;
+#endif
     printf("[Depth Readback] green=%u red=%u left=%08x right=%08x\n",
            green_pixels, red_pixels, left_sample, right_sample);
     printf("[Depth Readback] raw D32: one=%u near=%u far=%u\n",
            depth_one, depth_near, depth_far);
+#if AGC_HTILE_VALIDATION
+    printf("[Depth Readback] raw D32 is compressed; logical depth is "
+           "validated by color outcomes and HTILE metadata\n");
+#endif
 #if AGC_STENCIL_VALIDATION
     printf("[Stencil Readback] zero=%u replace-5a=%u other=%u\n",
            stencil_zero, stencil_replace, stencil_other);
@@ -1800,9 +1845,11 @@ static bool dispatch_graphics(GraphicsTest *test,
            AGC_MSAA_VALIDATION ? "+4xMSAA" : "",
            markers_pass ? "PASS" : "FAIL",
            color_pass ? "PASS" : "FAIL",
-           depth_pass ? "PASS" : "FAIL",
+           AGC_HTILE_VALIDATION ? "COMPRESSED" :
+               (depth_pass ? "PASS" : "FAIL"),
            stencil_pass ? "PASS" : "FAIL");
-    return markers_pass && color_pass && depth_pass && stencil_pass;
+    return markers_pass && color_pass && depth_pass && stencil_pass &&
+           htile_pass;
 #endif
 
     if (target->fp16) {
