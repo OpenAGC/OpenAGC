@@ -51,6 +51,9 @@ extern "C" {
 #define AGC_GFX1013_RAW_R32_DESCRIPTOR_WORD3 0x31016FACu
 
 #define AGC_GFX1013_EOP_FENCE_DWORDS             10u
+#define AGC_GFX1013_OCCLUSION_SNAPSHOT_DWORDS      4u
+#define AGC_GFX1013_OCCLUSION_QUERY_MAX_RBS       16u
+#define AGC_GFX1013_OCCLUSION_QUERY_STRIDE       256u
 #define AGC_GFX1013_EOP_CACHE_FLUSH_EVENT      0x14u
 #define AGC_GFX1013_DB_META_FLUSH_DWORDS           2u
 #define AGC_GFX1013_DB_DATA_FLUSH_EVENT          0x2Bu
@@ -651,6 +654,8 @@ int32_t PS5_SYSV_ABI agcGfx1013DrawTessIndexAuto(
     SceAgcCb *cb, const AgcGfx1013TessDrawState *state);
 int32_t PS5_SYSV_ABI agcGfx1013SignalEopFence(
     SceAgcCb *cb, const AgcGfx1013EopFenceState *state);
+int32_t PS5_SYSV_ABI agcGfx1013WriteOcclusionSnapshot(
+    SceAgcCb *cb, uint64_t address);
 int32_t PS5_SYSV_ABI agcGfx1013GetResourceTransitionDwords(
     const AgcGfx1013ResourceTransition *transition, uint32_t *dword_count);
 int32_t PS5_SYSV_ABI agcGfx1013TransitionResource(

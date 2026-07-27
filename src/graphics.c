@@ -1075,6 +1075,31 @@ int32_t PS5_SYSV_ABI agcGfx1013SignalEopFence(
     return agcGfx1013TransitionResource(cb, &transition);
 }
 
+int32_t PS5_SYSV_ABI agcGfx1013WriteOcclusionSnapshot(
+    SceAgcCb *cb, uint64_t address)
+{
+    uint32_t *cmd;
+
+    if (!cb || address == 0u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if ((address & 7u) != 0u)
+        return AGC_ERROR_INVALID_ALIGNMENT;
+    if ((address >> 48u) != 0u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (agcCbRemainingDwords(cb) < AGC_GFX1013_OCCLUSION_SNAPSHOT_DWORDS)
+        return AGC_ERROR_BUFFER_TOO_SMALL;
+
+    cmd = agcCbAllocDwords(cb, AGC_GFX1013_OCCLUSION_SNAPSHOT_DWORDS);
+    if (!cmd)
+        return AGC_ERROR_INTERNAL;
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_EVENT_WRITE,
+                           AGC_GFX1013_OCCLUSION_SNAPSHOT_DWORDS);
+    cmd[1] = 0x15u | (1u << 8u); /* ZPASS_DONE, event index 1. */
+    cmd[2] = (uint32_t)address;
+    cmd[3] = (uint32_t)(address >> 32u);
+    return AGC_OK;
+}
+
 static uint32_t agcGfx1013FloatBits(float value)
 {
     uint32_t bits;

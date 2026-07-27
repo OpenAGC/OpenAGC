@@ -952,6 +952,38 @@ static void test_gfx1013_eop_completion_fence(void)
         "unaligned EOP fence is atomic");
 }
 
+static void test_gfx1013_occlusion_snapshot(void)
+{
+    uint32_t buffer[8] = {0};
+    SceAgcCb cb;
+    const uint64_t address = 0x00000002014bc008ull;
+
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013WriteOcclusionSnapshot(&cb, address), AGC_OK,
+        "gfx1013 occlusion snapshot emits");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb),
+        AGC_GFX1013_OCCLUSION_SNAPSHOT_DWORDS,
+        "gfx1013 occlusion snapshot exact dword count");
+    TEST_ASSERT_EQ(buffer[0], agcPm4Header3(AGC_PM4_OP_EVENT_WRITE, 4u),
+        "gfx1013 occlusion event header");
+    TEST_ASSERT_EQ(buffer[1], 0x115u,
+        "gfx1013 occlusion ZPASS event control");
+    TEST_ASSERT_EQ(buffer[2], 0x014bc008u,
+        "gfx1013 occlusion address low");
+    TEST_ASSERT_EQ(buffer[3], 2u, "gfx1013 occlusion address high");
+
+    agcCbReset(&cb, buffer, 3u * sizeof(uint32_t));
+    TEST_ASSERT_EQ(agcGfx1013WriteOcclusionSnapshot(&cb, address),
+        AGC_ERROR_BUFFER_TOO_SMALL, "short occlusion snapshot rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "short occlusion snapshot is atomic");
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013WriteOcclusionSnapshot(&cb, address + 1u),
+        AGC_ERROR_INVALID_ALIGNMENT, "unaligned occlusion snapshot rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "unaligned occlusion snapshot emits nothing");
+}
+
 static void test_gfx1013_resource_transitions(void)
 {
     uint32_t buffer[AGC_GFX1013_TRANSITION_MAX_DWORDS] = {0};
@@ -3025,6 +3057,7 @@ void test_suite_graphics(void)
     TEST_RUN(test_gfx1013_wave32_rejects_small_buffer_atomically);
     TEST_RUN(test_gfx1013_wave32_tessellation_binding);
     TEST_RUN(test_gfx1013_eop_completion_fence);
+    TEST_RUN(test_gfx1013_occlusion_snapshot);
     TEST_RUN(test_gfx1013_resource_transitions);
     TEST_RUN(test_gfx1013_fixed_function_packets);
     TEST_RUN(test_gfx1013_blend_depth_stencil_packets);
