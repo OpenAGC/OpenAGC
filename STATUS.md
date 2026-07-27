@@ -1,5 +1,22 @@
 # openagc Status
 
+## Combined stencil/HTILE expclear design gate (2026-07-27)
+
+The combined depth/stencil expclear path now has an explicit aspect-masked
+design but remains hardware-disabled. `agcGfx1013BuildHtileExpclearPlan`
+produces the gfx10 depth mask `0xfffff00f`, stencil mask `0x000003f0`, masked
+clear value, and mandatory read-modify-write flag while preserving reserved and
+unselected-aspect bits. Every plan for an HTILE surface containing stencil
+reports `hardware_enabled=0`; the PS5 fixture also fails compilation if its
+dedicated combined gate is requested while
+`AGC_GFX1013_COMBINED_HTILE_EXPCLEAR_ENABLED` remains zero.
+
+The existing hardware-proven depth-only expclear path is unchanged and remains
+enabled. Clean host tests, the Prospero library, depth-only expclear sample, and
+ordinary combined stencil/HTILE sample all build successfully. No combined
+expclear hardware claim is made. The synchronization design and independent
+activation criteria are in `analysis/combined_htile_expclear_design.md`.
+
 ## Hardware-sample PM4 promotion checkpoint (2026-07-27)
 
 The current hardware-proven compute, graphics, tessellation, depth, stencil,

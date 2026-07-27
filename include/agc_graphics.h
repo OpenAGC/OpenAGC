@@ -72,6 +72,9 @@ extern "C" {
 #define AGC_GFX1013_HTILE_UNCOMPRESSED_DEPTH_STENCIL 0xfffff30fu
 #define AGC_GFX1013_HTILE_CLEAR_DEPTH_ZERO          0x00000000u
 #define AGC_GFX1013_HTILE_CLEAR_DEPTH_ONE           0xfffffff0u
+#define AGC_GFX1013_HTILE_DEPTH_ASPECT_MASK          0xfffff00fu
+#define AGC_GFX1013_HTILE_STENCIL_ASPECT_MASK        0x000003f0u
+#define AGC_GFX1013_COMBINED_HTILE_EXPCLEAR_ENABLED          0u
 #define AGC_GFX1013_SWIZZLE_64KB_Z_X               24u
 #define AGC_GFX1013_SWIZZLE_64KB_R_X               27u
 #define AGC_GFX1013_64KB_SURFACE_ALIGNMENT    0x10000u
@@ -288,6 +291,30 @@ typedef enum AgcGfx1013HtileOperation {
 typedef struct AgcGfx1013DepthExpclearState {
     float clear_depth;
 } AgcGfx1013DepthExpclearState;
+
+typedef enum AgcGfx1013DepthStencilAspect {
+    AGC_GFX1013_DEPTH_STENCIL_ASPECT_DEPTH = 1u << 0,
+    AGC_GFX1013_DEPTH_STENCIL_ASPECT_STENCIL = 1u << 1,
+} AgcGfx1013DepthStencilAspect;
+
+typedef struct AgcGfx1013HtileExpclearPlanState {
+    uint32_t aspects;
+    float clear_depth;
+    uint32_t clear_stencil;
+    uint32_t has_stencil;
+} AgcGfx1013HtileExpclearPlanState;
+
+typedef struct AgcGfx1013HtileExpclearPlan {
+    uint32_t write_value;
+    uint32_t write_mask;
+    uint32_t requires_read_modify_write;
+    uint32_t hardware_enabled;
+} AgcGfx1013HtileExpclearPlan;
+
+_Static_assert(sizeof(AgcGfx1013HtileExpclearPlanState) == 16,
+    "gfx1013 HTILE expclear plan state must be 16 bytes");
+_Static_assert(sizeof(AgcGfx1013HtileExpclearPlan) == 16,
+    "gfx1013 HTILE expclear plan must be 16 bytes");
 
 typedef struct AgcGfx1013DepthSurfaceState {
     uint64_t depth_read_address;
@@ -585,6 +612,9 @@ int32_t PS5_SYSV_ABI agcGfx1013SetHtileOperation(
     SceAgcCb *cb, AgcGfx1013HtileOperation operation);
 int32_t PS5_SYSV_ABI agcGfx1013SetDepthExpclear(
     SceAgcCb *cb, const AgcGfx1013DepthExpclearState *state);
+int32_t PS5_SYSV_ABI agcGfx1013BuildHtileExpclearPlan(
+    const AgcGfx1013HtileExpclearPlanState *state,
+    AgcGfx1013HtileExpclearPlan *plan);
 int32_t PS5_SYSV_ABI agcGfx1013GetDepthSurfaceLayout(
     const AgcGfx1013DepthSurfaceLayoutInput *input,
     AgcGfx1013DepthSurfaceLayout *layout);

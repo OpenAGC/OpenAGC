@@ -1388,6 +1388,76 @@ static void test_gfx1013_depth_expclear_packets(void)
         AGC_ERROR_BUFFER_TOO_SMALL, "short depth expclear rejects");
     TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
         "short depth expclear is atomic");
+
+    AgcGfx1013HtileExpclearPlanState plan_state = {
+        .aspects = AGC_GFX1013_DEPTH_STENCIL_ASPECT_DEPTH,
+        .clear_depth = 1.0f,
+    };
+    AgcGfx1013HtileExpclearPlan plan = {0};
+    TEST_ASSERT_EQ(agcGfx1013BuildHtileExpclearPlan(
+        &plan_state, &plan), AGC_OK,
+        "depth-only HTILE expclear plan builds");
+    TEST_ASSERT_EQ(plan.write_value, 0xfffffff0u,
+        "depth-only plan uses hardware-proven clear-one word");
+    TEST_ASSERT_EQ(plan.write_mask, 0xffffffffu,
+        "depth-only plan replaces the whole Z-only word");
+    TEST_ASSERT_EQ(plan.requires_read_modify_write, 0u,
+        "depth-only plan needs no read-modify-write");
+    TEST_ASSERT_EQ(plan.hardware_enabled, 1u,
+        "hardware-proven depth-only plan stays enabled");
+
+    plan_state.has_stencil = 1u;
+    TEST_ASSERT_EQ(agcGfx1013BuildHtileExpclearPlan(
+        &plan_state, &plan), AGC_OK,
+        "combined HTILE depth-aspect plan builds");
+    TEST_ASSERT_EQ(plan.write_value, 0xfffc0000u,
+        "combined depth-one plan value excludes stencil bits");
+    TEST_ASSERT_EQ(plan.write_mask, 0xfffff00fu,
+        "combined depth plan exact aspect mask");
+    TEST_ASSERT_EQ((0xfffff30fu & ~plan.write_mask) |
+        (plan.write_value & plan.write_mask), 0xfffc0300u,
+        "combined depth plan preserves stencil metadata");
+    TEST_ASSERT_EQ(plan.requires_read_modify_write, 1u,
+        "combined depth plan requires read-modify-write");
+    TEST_ASSERT_EQ(plan.hardware_enabled, 0u,
+        "combined depth plan remains hardware-disabled");
+
+    plan_state.aspects = AGC_GFX1013_DEPTH_STENCIL_ASPECT_STENCIL;
+    plan_state.clear_stencil = 0x5au;
+    TEST_ASSERT_EQ(agcGfx1013BuildHtileExpclearPlan(
+        &plan_state, &plan), AGC_OK,
+        "combined HTILE stencil-aspect plan builds");
+    TEST_ASSERT_EQ(plan.write_value, 0x000000f0u,
+        "stencil plan records cleared pretest state");
+    TEST_ASSERT_EQ(plan.write_mask, 0x000003f0u,
+        "combined stencil plan exact aspect mask");
+    TEST_ASSERT_EQ((0xfffff30fu & ~plan.write_mask) |
+        (plan.write_value & plan.write_mask), 0xfffff0ffu,
+        "combined stencil plan preserves depth metadata");
+    TEST_ASSERT_EQ(plan.hardware_enabled, 0u,
+        "combined stencil plan remains hardware-disabled");
+
+    plan_state.aspects =
+        AGC_GFX1013_DEPTH_STENCIL_ASPECT_DEPTH |
+        AGC_GFX1013_DEPTH_STENCIL_ASPECT_STENCIL;
+    plan_state.clear_depth = 1.0f;
+    TEST_ASSERT_EQ(agcGfx1013BuildHtileExpclearPlan(
+        &plan_state, &plan), AGC_OK,
+        "combined two-aspect HTILE expclear plan builds");
+    TEST_ASSERT_EQ(plan.write_value, 0xfffc00f0u,
+        "combined two-aspect clear-one value");
+    TEST_ASSERT_EQ(plan.write_mask, 0xfffff3ffu,
+        "combined two-aspect mask preserves reserved bits");
+    TEST_ASSERT_EQ(plan.hardware_enabled, 0u,
+        "combined two-aspect plan remains hardware-disabled");
+
+    plan.write_value = 0x11223344u;
+    plan_state.clear_stencil = 0x100u;
+    TEST_ASSERT_EQ(agcGfx1013BuildHtileExpclearPlan(
+        &plan_state, &plan), AGC_ERROR_INVALID_ARGUMENT,
+        "out-of-range stencil clear rejects");
+    TEST_ASSERT_EQ(plan.write_value, 0x11223344u,
+        "invalid combined plan preserves output");
 }
 
 static void test_gfx1013_depth_surface_layout(void)

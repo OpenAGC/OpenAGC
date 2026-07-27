@@ -1864,6 +1864,56 @@ int32_t PS5_SYSV_ABI agcGfx1013SetDepthExpclear(
     return AGC_OK;
 }
 
+int32_t PS5_SYSV_ABI agcGfx1013BuildHtileExpclearPlan(
+    const AgcGfx1013HtileExpclearPlanState *state,
+    AgcGfx1013HtileExpclearPlan *plan)
+{
+    AgcGfx1013HtileExpclearPlan result = {0};
+    const uint32_t valid_aspects =
+        AGC_GFX1013_DEPTH_STENCIL_ASPECT_DEPTH |
+        AGC_GFX1013_DEPTH_STENCIL_ASPECT_STENCIL;
+
+    if (!state || !plan || state->aspects == 0u ||
+        (state->aspects & ~valid_aspects) != 0u ||
+        state->has_stencil > 1u ||
+        ((state->aspects & AGC_GFX1013_DEPTH_STENCIL_ASPECT_STENCIL) != 0u &&
+         (!state->has_stencil || state->clear_stencil > 0xffu)) ||
+        ((state->aspects & AGC_GFX1013_DEPTH_STENCIL_ASPECT_DEPTH) != 0u &&
+         state->clear_depth != 0.0f && state->clear_depth != 1.0f))
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    if (!state->has_stencil) {
+        if (state->aspects != AGC_GFX1013_DEPTH_STENCIL_ASPECT_DEPTH)
+            return AGC_ERROR_INVALID_ARGUMENT;
+        result.write_value = state->clear_depth == 1.0f ?
+            AGC_GFX1013_HTILE_CLEAR_DEPTH_ONE :
+            AGC_GFX1013_HTILE_CLEAR_DEPTH_ZERO;
+        result.write_mask = UINT32_MAX;
+        result.hardware_enabled = 1u;
+        *plan = result;
+        return AGC_OK;
+    }
+
+    if ((state->aspects &
+         AGC_GFX1013_DEPTH_STENCIL_ASPECT_DEPTH) != 0u) {
+        result.write_mask |= AGC_GFX1013_HTILE_DEPTH_ASPECT_MASK;
+        if (state->clear_depth == 1.0f)
+            result.write_value |= 0xfffc0000u;
+    }
+    if ((state->aspects &
+         AGC_GFX1013_DEPTH_STENCIL_ASPECT_STENCIL) != 0u) {
+        result.write_mask |= AGC_GFX1013_HTILE_STENCIL_ASPECT_MASK;
+        /* The actual S8 clear value lives in DB_STENCIL_CLEAR. HTILE records
+         * the cleared pretest state, independent of that 8-bit value. */
+        result.write_value |= 0x000000f0u;
+    }
+    result.requires_read_modify_write = result.write_mask != UINT32_MAX;
+    result.hardware_enabled =
+        AGC_GFX1013_COMBINED_HTILE_EXPCLEAR_ENABLED;
+    *plan = result;
+    return AGC_OK;
+}
+
 int32_t PS5_SYSV_ABI agcGfx1013SetViewport(
     SceAgcCb *cb, const AgcGfx1013ViewportState *state)
 {

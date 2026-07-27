@@ -2072,9 +2072,12 @@ register emission. Intentional markers, repeated diagnostic draws, the PM4
 decoder, and emulator export-conformance calls remain low-level by design; see
 `analysis/sample_pm4_public_api_audit.md`.
 
-1. Keep combined stencil/HTILE expclear disabled until it has a dedicated
-   metadata-mask design and independent hardware gate; do not infer it from
-   the now-proven ordinary combined compression path.
+The combined stencil/HTILE expclear design is complete but intentionally
+disabled. The typed plan owns exact depth/stencil masks, values, RMW signaling,
+and output atomicity; both the public enable constant and dedicated PS5 sample
+gate remain zero/closed. Independent hardware activation must follow the
+sequence and pass criteria in `analysis/combined_htile_expclear_design.md` and
+must not be inferred from ordinary combined HTILE qualification.
 4. Expand typed depth/HTILE support to mip and array-layer hardware fixtures
    before combining additional depth features.
 5. Move remaining hardware-proven sample PM4 into public typed builders and

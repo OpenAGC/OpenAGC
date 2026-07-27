@@ -83,6 +83,10 @@
 #define AGC_STENCIL_HTILE_VALIDATION 0
 #endif
 
+#ifndef AGC_STENCIL_HTILE_EXPCLEAR_VALIDATION
+#define AGC_STENCIL_HTILE_EXPCLEAR_VALIDATION 0
+#endif
+
 #ifndef AGC_HTILE_MIP_VALIDATION
 #define AGC_HTILE_MIP_VALIDATION 0
 #endif
@@ -128,8 +132,14 @@
 #error "stencil/HTILE validation requires stencil and HTILE operations"
 #endif
 
-#if AGC_STENCIL_HTILE_VALIDATION && AGC_EXPCLEAR_VALIDATION
-#error "combined stencil/HTILE expclear is a later isolated gate"
+#if AGC_STENCIL_HTILE_VALIDATION && AGC_EXPCLEAR_VALIDATION && \
+    !AGC_STENCIL_HTILE_EXPCLEAR_VALIDATION
+#error "combined expclear requires its dedicated isolated gate"
+#endif
+
+#if AGC_STENCIL_HTILE_EXPCLEAR_VALIDATION && \
+    !AGC_GFX1013_COMBINED_HTILE_EXPCLEAR_ENABLED
+#error "combined stencil/HTILE expclear is not hardware validated"
 #endif
 
 #if (AGC_HTILE_MIP_VALIDATION + AGC_HTILE_ARRAY_VALIDATION) > 1
