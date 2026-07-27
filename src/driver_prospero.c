@@ -735,7 +735,11 @@ int32_t PS5_SYSV_ABI agcProsperoSubmitMultiCommandBuffersDirect(
 /*
  * Submit a single DCB (draw command buffer) to the GPU.
  *
- * Wraps the single CB in a submit ioctl call.
+ * Wraps the caller CB and the FW 5.50 completion trailer in one frame. The
+ * exploited-payload graphics ring defers the final descriptor, so submitting
+ * the caller CB alone can return success without executing it until a later
+ * submit. Keeping the workaround here preserves a synchronous public DCB
+ * contract for application-neutral clients such as Vulkan.
  */
 int32_t PS5_SYSV_ABI agcProsperoSubmitDcb(const AgcCommandBufferSubmit *packet)
 {
@@ -744,15 +748,28 @@ int32_t PS5_SYSV_ABI agcProsperoSubmitDcb(const AgcCommandBufferSubmit *packet)
     if (!packet || packet->command_address == 0 || packet->dword_count == 0)
         return AGC_ERROR_INVALID_ARGUMENT;
 
-    AgcGcCommandBuffer cb_desc;
-    agcProsperoBuildCbDescriptor(&cb_desc,
+    if (!g_prospero.mem_initialized ||
+        g_prospero.multi_trailer.gpu_addr == 0)
+        return AGC_ERROR_NOT_INITIALIZED;
+
+    AgcGcCommandBuffer cb_desc_storage[3];
+    AgcGcCommandBuffer *cb_descs = (AgcGcCommandBuffer *)
+        (((uintptr_t)cb_desc_storage + 15u) & ~(uintptr_t)15u);
+    agcProsperoBuildCbDescriptor(&cb_descs[0],
                                (uint64_t)packet->command_address,
                                packet->dword_count, false);
+    agcProsperoBuildCbDescriptor(&cb_descs[1],
+                               g_prospero.multi_trailer.gpu_addr, 16, false);
 
     AgcGcSubmitArgs submit_arg = {0};
     submit_arg.queue_type = 3;  /* 3 = graphics queue (SPRX-confirmed) */
-    submit_arg.num_cbs = 1;
-    submit_arg.cb_array = (uint64_t)(uintptr_t)&cb_desc;
+    submit_arg.num_cbs = 2;
+    submit_arg.cb_array = (uint64_t)(uintptr_t)cb_descs;
+
+    uint32_t frame_arg[2] = {3u, 0u};
+    int frame_ret = agcProsperoIoctl(AGC_GC_IOCTL_CLOSE, frame_arg);
+    if (frame_ret < 0)
+        return AGC_ERROR_SUBMIT_FAILED;
 
     int ret = agcProsperoIoctl(AGC_GC_IOCTL_SUBMIT_16, &submit_arg);
     if (ret < 0)

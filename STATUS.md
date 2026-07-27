@@ -1352,7 +1352,9 @@ payload-context graphics ring defers the final descriptor in each nr=0x02
 submit until a later submit advances the ring. The Prospero backend therefore
 appends a dedicated GPU-visible NOP IB trailer after all caller DCB/ACB
 descriptors; the deferred descriptor is harmless and all caller work executes
-in the current frame. Two immediate public-wrapper deployments each completed
+in the current frame. The standalone `sceAgcDriverSubmitDcb` path now uses the
+same frame-state operation and trailer so its caller DCB also executes in the
+current submit. Two immediate public-wrapper deployments each completed
 three unique-marker iterations with zero polling delay, then completed async
 setup, queue operations, suspend submission, and workload begin/end without a
 freeze.

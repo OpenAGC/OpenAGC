@@ -51,6 +51,10 @@ Observed on a real PS5 running FW 5.50:
   memory initialization and appends its descriptor after every caller DCB/ACB.
   Two immediate deployments each passed three unique-marker iterations with
   zero polling delay.
+- The standalone `sceAgcDriverSubmitDcb` backend path uses the same nr=1
+  frame-state operation and appends the same trailer. This prevents a public
+  single-DCB submission from returning success while leaving the caller's work
+  deferred until another submission.
 
 The repeated result proves that the kernel copies and queues the complete
 descriptor array in order, but the exploited-payload graphics-ring context

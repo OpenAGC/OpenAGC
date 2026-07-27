@@ -1368,7 +1368,9 @@ After interpolants pass, proceed in this order:
    Unique-marker runs proved the FW 5.50 exploited-payload graphics ring defers
    the final descriptor until the next submit. The Prospero backend now appends
    a dedicated GPU-visible NOP IB trailer, making the deferred descriptor
-   harmless. Two immediate deployments each passed three repeated two-DCB
+   harmless. Standalone `sceAgcDriverSubmitDcb` also emits the frame-state
+   operation and trailer so its caller DCB executes in the current submit. Two
+   immediate deployments each passed three repeated two-DCB
    iterations with unique ordered markers and zero polling delay.
 8. ✅ Validate isolated Wave32 tessellation. Fused HS and TES records execute
    through the reusable gfx1013 binder and the recovered non-Direct TF-ring

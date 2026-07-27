@@ -120,6 +120,8 @@ Completed and tested:
   end-of-pipe action addresses
 - Generic `sceAgcDriverSubmitDcb` and `sceAgcDriverSubmitAcb` validation for
   recovered submit descriptors
+- FW 5.50 single-DCB framing with a GPU-visible NOP trailer so the caller DCB
+  executes immediately in the exploited-payload graphics-ring context
 - Generic backend with host-side validation/debug capture
 - ACB and DCB raw pointer helpers with basic packet emission
 - Texture/buffer descriptor helpers
