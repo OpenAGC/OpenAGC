@@ -389,20 +389,11 @@ static int32_t agcGfx1013ValidateBaselineDrawState(
     return AGC_OK;
 }
 
-int32_t PS5_SYSV_ABI agcGfx1013DrawBaselineIndexAuto(
+static int32_t agcGfx1013EmitBaselineDrawPrefix(
     SceAgcCb *cb, const AgcGfx1013BaselineDrawState *state)
 {
-    uint32_t required_dwords;
     uint32_t i;
     int32_t error;
-
-    if (!cb)
-        return AGC_ERROR_INVALID_ARGUMENT;
-    error = agcGfx1013ValidateBaselineDrawState(state, &required_dwords);
-    if (error != AGC_OK)
-        return error;
-    if (agcCbRemainingDwords(cb) < required_dwords)
-        return AGC_ERROR_BUFFER_TOO_SMALL;
 
     error = agcGfx1013BindVsPs(cb, &state->shaders);
     if (error != AGC_OK)
@@ -427,28 +418,186 @@ int32_t PS5_SYSV_ABI agcGfx1013DrawBaselineIndexAuto(
         return AGC_ERROR_INTERNAL;
     for (i = 0; i < state->num_post_bind_sh_registers; ++i) {
         if (!sceAgcCbSetShRegistersDirect(
-                cb, &state->post_bind_sh_registers[i], 1u)) {
+                cb, &state->post_bind_sh_registers[i], 1u))
             return AGC_ERROR_INTERNAL;
-        }
     }
     for (i = 0; i < state->num_post_bind_cx_registers; ++i) {
         if (!sceAgcCbSetCxRegistersDirect(
-                cb, &state->post_bind_cx_registers[i], 1u)) {
+                cb, &state->post_bind_cx_registers[i], 1u))
             return AGC_ERROR_INTERNAL;
-        }
     }
     for (i = 0; i < state->num_post_bind_uc_registers; ++i) {
         if (!sceAgcCbSetUcRegistersDirect(
-                cb, &state->post_bind_uc_registers[i], 1u)) {
+                cb, &state->post_bind_uc_registers[i], 1u))
             return AGC_ERROR_INTERNAL;
-        }
     }
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013DrawBaselineIndexAuto(
+    SceAgcCb *cb, const AgcGfx1013BaselineDrawState *state)
+{
+    uint32_t required_dwords;
+    int32_t error;
+
+    if (!cb)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    error = agcGfx1013ValidateBaselineDrawState(state, &required_dwords);
+    if (error != AGC_OK)
+        return error;
+    if (agcCbRemainingDwords(cb) < required_dwords)
+        return AGC_ERROR_BUFFER_TOO_SMALL;
+
+    error = agcGfx1013EmitBaselineDrawPrefix(cb, state);
+    if (error != AGC_OK)
+        return error;
     if (!sceAgcDcbSetIndexSize(cb, state->index_type, state->index_swap) ||
         !sceAgcDcbSetNumInstances(cb, state->instance_count) ||
         !sceAgcDcbDrawIndexAuto(
             cb, state->vertex_count, state->draw_modifier)) {
         return AGC_ERROR_INTERNAL;
     }
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013DrawBaselineIndexed(
+    SceAgcCb *cb, const AgcGfx1013IndexedDrawState *state)
+{
+    AgcGfx1013BaselineDrawState validation;
+    uint32_t required_dwords;
+    uint32_t element_size;
+    uint64_t byte_offset;
+    uint64_t draw_address;
+    int32_t error;
+
+    if (!cb || !state || state->index_buffer_address == 0u ||
+        state->index_buffer_count == 0u || state->index_count == 0u ||
+        state->draw.instance_count == 0u ||
+        state->draw.index_type > (uint32_t)kAgcIndexSize32 ||
+        state->first_index >= state->index_buffer_count ||
+        state->index_count > state->index_buffer_count - state->first_index)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    element_size = state->draw.index_type == (uint32_t)kAgcIndexSize32 ?
+        4u : 2u;
+    if ((state->index_buffer_address & (element_size - 1u)) != 0u ||
+        (state->index_buffer_address >> 48) != 0u)
+        return AGC_ERROR_INVALID_ALIGNMENT;
+    byte_offset = (uint64_t)state->first_index * element_size;
+    draw_address = state->index_buffer_address + byte_offset;
+    if (draw_address < state->index_buffer_address ||
+        (draw_address >> 48) != 0u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    validation = state->draw;
+    validation.vertex_count = state->index_count;
+    error = agcGfx1013ValidateBaselineDrawState(
+        &validation, &required_dwords);
+    if (error != AGC_OK)
+        return error;
+    required_dwords += 3u;
+    if (agcCbRemainingDwords(cb) < required_dwords)
+        return AGC_ERROR_BUFFER_TOO_SMALL;
+    error = agcGfx1013EmitBaselineDrawPrefix(cb, &state->draw);
+    if (error != AGC_OK)
+        return error;
+    if (!sceAgcDcbSetIndexSize(
+            cb, state->draw.index_type, state->draw.index_swap) ||
+        !sceAgcDcbSetNumInstances(cb, state->draw.instance_count) ||
+        !sceAgcDcbDrawIndex2(
+            cb, state->index_buffer_count - state->first_index,
+            draw_address, state->index_count, state->draw_initiator))
+        return AGC_ERROR_INTERNAL;
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013DrawBaselineIndirect(
+    SceAgcCb *cb, const AgcGfx1013IndirectDrawState *state)
+{
+    AgcGfx1013BaselineDrawState validation;
+    uint32_t required_dwords;
+    uint32_t tail_dwords;
+    uint32_t minimum_stride;
+    uint32_t element_size;
+    int32_t error;
+
+    if (!cb || !state || state->argument_buffer_address == 0u ||
+        state->draw_count == 0u || state->indexed > 1u ||
+        state->base_vertex_location > 0xffffu ||
+        state->start_instance_location > 0xffffu ||
+        (state->argument_buffer_address & 7u) != 0u ||
+        (state->argument_buffer_address >> 48) != 0u ||
+        (state->argument_offset & 3u) != 0u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    minimum_stride = state->indexed ? 20u : 16u;
+    if (state->draw_count > 1u &&
+        (state->stride < minimum_stride || (state->stride & 3u) != 0u))
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (state->indexed) {
+        if (state->index_buffer_address == 0u ||
+            state->index_buffer_count == 0u ||
+            state->draw.index_type > (uint32_t)kAgcIndexSize32)
+            return AGC_ERROR_INVALID_ARGUMENT;
+        element_size = state->draw.index_type == (uint32_t)kAgcIndexSize32 ?
+            4u : 2u;
+        if ((state->index_buffer_address & (element_size - 1u)) != 0u ||
+            (state->index_buffer_address >> 48) != 0u)
+            return AGC_ERROR_INVALID_ALIGNMENT;
+    }
+
+    validation = state->draw;
+    validation.instance_count = 1u;
+    validation.vertex_count = 1u;
+    error = agcGfx1013ValidateBaselineDrawState(
+        &validation, &required_dwords);
+    if (error != AGC_OK)
+        return error;
+    tail_dwords = 4u + (state->draw_count == 1u ? 5u : 7u);
+    if (state->indexed)
+        tail_dwords += 8u;
+    required_dwords = required_dwords - 8u + tail_dwords;
+    if (agcCbRemainingDwords(cb) < required_dwords)
+        return AGC_ERROR_BUFFER_TOO_SMALL;
+    error = agcGfx1013EmitBaselineDrawPrefix(cb, &state->draw);
+    if (error != AGC_OK)
+        return error;
+    if (state->indexed &&
+        (!sceAgcDcbSetIndexSize(
+             cb, state->draw.index_type, state->draw.index_swap) ||
+         !sceAgcDcbSetIndexBuffer(
+             cb, state->index_buffer_address, state->index_buffer_count)))
+        return AGC_ERROR_INTERNAL;
+    if (!sceAgcDcbSetBaseIndirectArgs(
+            cb, 1u, state->argument_buffer_address))
+        return AGC_ERROR_INTERNAL;
+    if (state->draw_count == 1u) {
+        if (state->indexed) {
+            if (!sceAgcDcbDrawIndexIndirect(
+                    cb, state->argument_offset,
+                    state->base_vertex_location,
+                    state->start_instance_location,
+                    state->draw_initiator))
+                return AGC_ERROR_INTERNAL;
+        } else if (!sceAgcDcbDrawIndirect(
+                       cb, state->argument_offset,
+                       state->base_vertex_location,
+                       state->start_instance_location,
+                       state->draw_initiator))
+            return AGC_ERROR_INTERNAL;
+    } else if (state->indexed) {
+        if (!sceAgcDcbDrawIndexIndirectMulti(
+                cb, state->argument_offset,
+                state->base_vertex_location,
+                state->start_instance_location,
+                state->draw_count, state->stride,
+                state->draw_initiator))
+            return AGC_ERROR_INTERNAL;
+    } else if (!sceAgcDcbDrawIndirectMulti(
+                   cb, state->argument_offset,
+                   state->base_vertex_location,
+                   state->start_instance_location,
+                   state->draw_count, state->stride,
+                   state->draw_initiator))
+        return AGC_ERROR_INTERNAL;
     return AGC_OK;
 }
 

@@ -1,5 +1,23 @@
 # openagc Status
 
+## Application-facing indexed/indirect draw composition (2026-07-27)
+
+The gfx1013 baseline graphics API now composes the existing hardware-oriented
+packet builders into atomic direct-indexed, indirect, and indexed-indirect
+draw calls. `agcGfx1013DrawBaselineIndexed` validates u16/u32 index alignment,
+first-index range and address adjustment, maximum accessible index count,
+instance count, and the complete shader/frame/resource prefix before emitting
+`DRAW_INDEX_2`.
+
+`agcGfx1013DrawBaselineIndirect` validates the indirect argument base and
+offset, single/multi stride, base-vertex and start-instance register locations,
+and optional index-buffer state before emitting `SET_BASE` plus the appropriate
+single or multi draw packet. Exact host fixtures lock the 47-dword direct
+indexed, 45-dword non-indexed indirect, and 55-dword indexed multi-indirect
+streams. Short buffers, invalid ranges, and invalid strides leave the command
+cursor unchanged. The clean generic suite and Prospero library build pass;
+isolated FW 5.50 hardware qualification remains the next gate.
+
 ## FW 5.50 combined stencil/HTILE expclear qualification (2026-07-27)
 
 Combined D32+S8 HTILE expclear is enabled after independent qualification on a

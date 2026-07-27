@@ -2083,14 +2083,17 @@ reserved-bit preservation, D32/S8 readback, fences, draw markers, and
 
 Next execution order:
 
-4. Add application-facing typed indexed draw composition for bound u16/u32
-   index buffers, base vertex, first index, instance count, and draw count.
-   Preserve the existing low-level packet builders and add exact fixtures for
-   packet order, address/count encoding, and atomic short-buffer rejection.
-5. Add application-facing direct and multi-draw indirect composition for
-   indexed and non-indexed arguments, including argument/count-buffer
-   alignment, stride validation, resource transitions, and host golden streams.
-6. Hardware-qualify indexed, indirect, and indexed-indirect cases separately
+4. **Host complete:** application-facing typed indexed drawing now composes
+   u16/u32 buffers, first-index address adjustment, instance count, and
+   `DRAW_INDEX_2`. Exact fixtures lock packet order, range encoding, and atomic
+   short-buffer rejection. Base-vertex values remain shader ABI state; the PM4
+   packet exposes no direct base-vertex value field.
+5. **Host complete:** application-facing single/multi indirect composition now
+   covers indexed and non-indexed arguments, argument-base and offset
+   alignment, stride validation, register locations, and exact golden streams.
+   Count-buffer-driven draws remain a later extension because the recovered
+   FW 5.50 packet builders currently expose fixed draw counts only.
+6. **Next:** hardware-qualify indexed, indirect, and indexed-indirect cases separately
    on FW `0x0550` through curl/websrv before combining them in one frame.
 7. Expand color targets in hardware-risk order: BGRA8 UNORM/SRGB, RGBA8 SRGB,
    RGB10A2 UNORM, R11G11B10 FLOAT, then additional 16-bit tuples. Each format

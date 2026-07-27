@@ -567,6 +567,29 @@ typedef struct AgcGfx1013BaselineDrawState {
     uint64_t draw_modifier;
 } AgcGfx1013BaselineDrawState;
 
+typedef struct AgcGfx1013IndexedDrawState {
+    AgcGfx1013BaselineDrawState draw;
+    uint64_t index_buffer_address;
+    uint32_t index_buffer_count;
+    uint32_t first_index;
+    uint32_t index_count;
+    uint32_t draw_initiator;
+} AgcGfx1013IndexedDrawState;
+
+typedef struct AgcGfx1013IndirectDrawState {
+    AgcGfx1013BaselineDrawState draw;
+    uint64_t argument_buffer_address;
+    uint64_t index_buffer_address;
+    uint32_t argument_offset;
+    uint32_t index_buffer_count;
+    uint32_t draw_count;
+    uint32_t stride;
+    uint32_t base_vertex_location;
+    uint32_t start_instance_location;
+    uint32_t draw_initiator;
+    uint32_t indexed;
+} AgcGfx1013IndirectDrawState;
+
 /* Shader-driven resolve. The draw must bind a sampler2DMS pixel shader and
  * its descriptor table; OpenAGC supplies the cache transition, restores 1x
  * raster state, and executes the caller's fullscreen draw. */
@@ -606,6 +629,10 @@ int32_t PS5_SYSV_ABI agcGfx1013BindVsPs(
     SceAgcCb *cb, const AgcGfx1013Wave32VsPsState *state);
 int32_t PS5_SYSV_ABI agcGfx1013DrawBaselineIndexAuto(
     SceAgcCb *cb, const AgcGfx1013BaselineDrawState *state);
+int32_t PS5_SYSV_ABI agcGfx1013DrawBaselineIndexed(
+    SceAgcCb *cb, const AgcGfx1013IndexedDrawState *state);
+int32_t PS5_SYSV_ABI agcGfx1013DrawBaselineIndirect(
+    SceAgcCb *cb, const AgcGfx1013IndirectDrawState *state);
 int32_t PS5_SYSV_ABI agcGfx1013DrawTessIndexAuto(
     SceAgcCb *cb, const AgcGfx1013TessDrawState *state);
 int32_t PS5_SYSV_ABI agcGfx1013SignalEopFence(

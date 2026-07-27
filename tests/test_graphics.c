@@ -319,6 +319,122 @@ static void test_gfx1013_baseline_draw_wrapper(void)
         "gfx1013 baseline invalid state is atomic");
 }
 
+static void test_gfx1013_indexed_indirect_draw_wrappers(void)
+{
+    uint32_t buffer[128] = {0};
+    SceAgcCb cb;
+    AgcGfx1013IndexedDrawState indexed;
+    AgcGfx1013IndirectDrawState indirect;
+    AgcShaderRecord primitive_record;
+    AgcShaderRecord pixel_record;
+    AgcShaderSpecials specials;
+    AgcRegisterValue primitive_sh[2];
+    AgcRegisterValue pixel_sh[2];
+    AgcRegisterValue pixel_cx[1];
+
+    memset(&indexed, 0, sizeof(indexed));
+    make_wave32_state(&indexed.draw.shaders, &primitive_record, &pixel_record,
+        &specials, primitive_sh, pixel_sh, pixel_cx);
+    indexed.draw.index_type = kAgcIndexSize16;
+    indexed.draw.instance_count = 2u;
+    indexed.index_buffer_address = UINT64_C(0x200010000);
+    indexed.index_buffer_count = 12u;
+    indexed.first_index = 3u;
+    indexed.index_count = 6u;
+    indexed.draw_initiator = 2u;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndexed(&cb, &indexed), AGC_OK,
+        "gfx1013 direct indexed wrapper succeeds");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 47u,
+        "gfx1013 direct indexed exact dword count");
+    TEST_ASSERT_EQ(agcPm4Opcode(buffer[41]), AGC_PM4_OP_DRAW_INDEX_2,
+        "gfx1013 direct indexed draw opcode");
+    TEST_ASSERT_EQ(buffer[42], 9u,
+        "gfx1013 direct indexed remaining max count");
+    TEST_ASSERT_EQ(buffer[43], 0x00010006u,
+        "gfx1013 direct indexed first-index address adjustment");
+    TEST_ASSERT_EQ(buffer[44], 2u,
+        "gfx1013 direct indexed high address");
+    TEST_ASSERT_EQ(buffer[45], 6u,
+        "gfx1013 direct indexed draw count");
+    TEST_ASSERT_EQ(buffer[46], 2u,
+        "gfx1013 direct indexed initiator");
+
+    agcCbInit(&cb, buffer, 46u * sizeof(uint32_t));
+    TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndexed(&cb, &indexed),
+        AGC_ERROR_BUFFER_TOO_SMALL,
+        "gfx1013 direct indexed short buffer rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "gfx1013 direct indexed rejection is atomic");
+    indexed.index_count = 10u;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndexed(&cb, &indexed),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "gfx1013 direct indexed out-of-range draw rejects");
+
+    memset(&indirect, 0, sizeof(indirect));
+    make_wave32_state(&indirect.draw.shaders, &primitive_record, &pixel_record,
+        &specials, primitive_sh, pixel_sh, pixel_cx);
+    indirect.draw.index_type = kAgcIndexSize16;
+    indirect.argument_buffer_address = UINT64_C(0x200020000);
+    indirect.argument_offset = 0x20u;
+    indirect.draw_count = 1u;
+    indirect.base_vertex_location = 5u;
+    indirect.start_instance_location = 6u;
+    indirect.draw_initiator = 2u;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndirect(&cb, &indirect), AGC_OK,
+        "gfx1013 non-indexed indirect wrapper succeeds");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 45u,
+        "gfx1013 non-indexed indirect exact dword count");
+    TEST_ASSERT_EQ(agcPm4Opcode(buffer[36]), AGC_PM4_OP_SET_BASE,
+        "gfx1013 indirect argument base opcode");
+    TEST_ASSERT_EQ(agcPm4Opcode(buffer[40]), AGC_PM4_OP_DRAW_INDIRECT,
+        "gfx1013 indirect draw opcode");
+    TEST_ASSERT_EQ(buffer[41], 0x20u,
+        "gfx1013 indirect argument offset");
+    TEST_ASSERT_EQ(buffer[42], 5u,
+        "gfx1013 indirect base-vertex register location");
+    TEST_ASSERT_EQ(buffer[43], 6u,
+        "gfx1013 indirect start-instance register location");
+
+    indirect.indexed = 1u;
+    indirect.index_buffer_address = UINT64_C(0x200030000);
+    indirect.index_buffer_count = 64u;
+    indirect.draw_count = 3u;
+    indirect.stride = 20u;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndirect(&cb, &indirect), AGC_OK,
+        "gfx1013 indexed multi-indirect wrapper succeeds");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 55u,
+        "gfx1013 indexed multi-indirect exact dword count");
+    TEST_ASSERT_EQ(agcPm4Opcode(buffer[36]), AGC_PM4_OP_SET_INDEX_SIZE,
+        "gfx1013 indexed indirect index type precedes buffer");
+    TEST_ASSERT_EQ(agcPm4Opcode(buffer[39]), AGC_PM4_OP_INDEX_BASE,
+        "gfx1013 indexed indirect index base opcode");
+    TEST_ASSERT_EQ(agcPm4Opcode(buffer[44]), AGC_PM4_OP_SET_BASE,
+        "gfx1013 indexed indirect argument base opcode");
+    TEST_ASSERT_EQ(agcPm4Opcode(buffer[48]),
+        AGC_PM4_OP_DRAW_INDEX_INDIRECT_MULTI,
+        "gfx1013 indexed multi-indirect draw opcode");
+    TEST_ASSERT_EQ(buffer[52], 3u,
+        "gfx1013 indexed multi-indirect draw count");
+    TEST_ASSERT_EQ(buffer[53], 20u,
+        "gfx1013 indexed multi-indirect stride");
+
+    agcCbInit(&cb, buffer, 54u * sizeof(uint32_t));
+    TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndirect(&cb, &indirect),
+        AGC_ERROR_BUFFER_TOO_SMALL,
+        "gfx1013 indexed multi-indirect short buffer rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "gfx1013 indexed multi-indirect rejection is atomic");
+    indirect.stride = 16u;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndirect(&cb, &indirect),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "gfx1013 indexed multi-indirect short stride rejects");
+}
+
 static void test_gfx1013_wave32_rejects_but_generic_accepts_wave64(void)
 {
     uint32_t buffer[128] = {0};
@@ -2575,6 +2691,7 @@ void test_suite_graphics(void)
     TEST_SUITE("GFX1013 Graphics State");
     TEST_RUN(test_gfx1013_wave32_vs_ps_binding);
     TEST_RUN(test_gfx1013_baseline_draw_wrapper);
+    TEST_RUN(test_gfx1013_indexed_indirect_draw_wrappers);
     TEST_RUN(test_gfx1013_wave32_rejects_but_generic_accepts_wave64);
     TEST_RUN(test_gfx1013_wave32_rejects_small_buffer_atomically);
     TEST_RUN(test_gfx1013_wave32_tessellation_binding);

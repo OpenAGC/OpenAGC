@@ -397,10 +397,9 @@ not recover missing legacy-only ABIs or advertise those versions as supported.
 
 See `STATUS.md` and `PLAN.md`. Next RE tasks, by priority:
 
-1. **Application-facing indexed/indirect drawing** — compose the proven
-   low-level packets into typed u16/u32 indexed, indirect, and
-   indexed-indirect draw APIs with exact host fixtures and isolated FW 5.50
-   hardware gates.
+1. **Application-facing indexed/indirect drawing** — typed u16/u32 indexed,
+   indirect, and indexed-indirect composition plus exact host fixtures are
+   complete. Build isolated FW 5.50 hardware gates next.
 2. **Additional render-target formats** — qualify BGRA8, SRGB, RGB10A2,
    R11G11B10, and further 16-bit tuples in increasing hardware-risk order.
 3. **Additional depth/stencil formats** — qualify D16, S8-only, and D16+S8
