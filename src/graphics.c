@@ -825,3 +825,226 @@ int32_t PS5_SYSV_ABI agcGfx1013ApplyGraphicsDefaultsV8(
         *stats = counts;
     return AGC_OK;
 }
+
+static bool agcGfx1013FindComputeRegister(
+    const AgcGfx1013ComputeState *state, uint32_t offset, uint32_t *value)
+{
+    uint32_t i;
+
+    for (i = 0; i < state->num_sh_registers; ++i) {
+        if (state->sh_registers[i].offset == offset) {
+            *value = state->sh_registers[i].value;
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool agcGfx1013EmitComputeRegisters(
+    SceAgcCb *cb, uint32_t first_offset, const uint32_t *values,
+    uint32_t value_count)
+{
+    uint32_t *cmd = agcCbAllocDwords(cb, value_count + 2u);
+    uint32_t i;
+
+    if (!cmd)
+        return false;
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_SH_REG, value_count + 2u) | 1u;
+    cmd[1] = first_offset & 0xffffu;
+    for (i = 0; i < value_count; ++i)
+        cmd[2u + i] = values[i];
+    return true;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013SetContextControl(
+    SceAgcCb *cb, uint32_t load_control, uint32_t shadow_control)
+{
+    uint32_t *cmd;
+
+    if (!cb)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (agcCbRemainingDwords(cb) < 3u)
+        return AGC_ERROR_BUFFER_TOO_SMALL;
+    cmd = agcCbAllocDwords(cb, 3u);
+    if (!cmd)
+        return AGC_ERROR_INTERNAL;
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_CONTEXT_CONTROL, 3u);
+    cmd[1] = load_control;
+    cmd[2] = shadow_control;
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013ValidateCompute(
+    const AgcGfx1013ComputeState *state)
+{
+    uint32_t value;
+    uint64_t local_invocations;
+
+    if (!state || !state->record || !state->sh_registers ||
+        state->num_sh_registers == 0u ||
+        state->num_sh_registers != state->record->num_sh_registers ||
+        (state->num_user_data != 0u && !state->user_data) ||
+        state->num_user_data > 16u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (state->record->magic != AGC_SHADER_RECORD_MAGIC ||
+        state->record->version != AGC_SHADER_RECORD_VERSION_GEN5)
+        return AGC_ERROR_SHADER_INVALID;
+    if (state->record->shader_type != kAgcShaderTypeCs)
+        return AGC_ERROR_SHADER_INVALID_TYPE;
+    if (!agcGfx1013AddressIsProgramCompatible(state->code_address))
+        return AGC_ERROR_INVALID_ALIGNMENT;
+    if (state->local_size_x == 0u || state->local_size_y == 0u ||
+        state->local_size_z == 0u || state->group_count_x == 0u ||
+        state->group_count_y == 0u || state->group_count_z == 0u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    local_invocations = (uint64_t)state->local_size_x *
+        state->local_size_y * state->local_size_z;
+    if (local_invocations > 1024u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (!agcGfx1013FindComputeRegister(
+            state, AGC_REG_COMPUTE_PGM_RSRC1, &value) ||
+        !agcGfx1013FindComputeRegister(
+            state, AGC_REG_COMPUTE_PGM_RSRC2, &value) ||
+        !agcGfx1013FindComputeRegister(
+            state, AGC_REG_COMPUTE_PGM_RSRC3, &value))
+        return AGC_ERROR_SHADER_INVALID;
+    return AGC_OK;
+}
+
+static uint32_t agcGfx1013ComputeDefaultsDwords(
+    const AgcRegisterDefaultsGroup *groups, uint32_t group_count,
+    AgcGfx1013ComputeDefaultStats *stats)
+{
+    uint32_t dwords = 0u;
+    uint32_t i;
+
+    for (i = 0; i < group_count; ++i) {
+        if (groups[i].space != kAgcRegisterDefaultSpaceSh ||
+            groups[i].register_count == 0u)
+            continue;
+        dwords += groups[i].register_count + 2u;
+        stats->sh_register_count += groups[i].register_count;
+        stats->packet_count++;
+    }
+    return dwords;
+}
+
+static bool agcGfx1013EmitComputeDefaults(
+    SceAgcCb *cb, const AgcRegisterDefaultsGroup *groups,
+    uint32_t group_count)
+{
+    uint32_t i;
+    uint32_t j;
+
+    for (i = 0; i < group_count; ++i) {
+        uint32_t values[64];
+        if (groups[i].space != kAgcRegisterDefaultSpaceSh ||
+            groups[i].register_count == 0u)
+            continue;
+        if (groups[i].register_count > 64u)
+            return false;
+        for (j = 0; j < groups[i].register_count; ++j)
+            values[j] = groups[i].registers[j].value;
+        if (!agcGfx1013EmitComputeRegisters(cb,
+                groups[i].registers[0].offset, values,
+                groups[i].register_count))
+            return false;
+    }
+    return true;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013ApplyComputeDefaultsV8(
+    SceAgcCb *cb, AgcGfx1013ComputeDefaultStats *stats)
+{
+    const AgcRegisterDefaultsGroup *primary;
+    const AgcRegisterDefaultsGroup *internal;
+    AgcGfx1013ComputeDefaultStats counts = {0};
+    uint32_t primary_count;
+    uint32_t internal_count;
+    uint32_t required_dwords;
+
+    if (!cb)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    primary = agcRegisterDefaultsV8GetPrimaryGroups(&primary_count);
+    internal = agcRegisterDefaultsV8GetInternalGroups(&internal_count);
+    if (!primary || !internal)
+        return AGC_ERROR_INTERNAL;
+    required_dwords = agcGfx1013ComputeDefaultsDwords(
+        primary, primary_count, &counts);
+    required_dwords += agcGfx1013ComputeDefaultsDwords(
+        internal, internal_count, &counts);
+    if (agcCbRemainingDwords(cb) < required_dwords)
+        return AGC_ERROR_BUFFER_TOO_SMALL;
+    if (!agcGfx1013EmitComputeDefaults(cb, primary, primary_count) ||
+        !agcGfx1013EmitComputeDefaults(cb, internal, internal_count))
+        return AGC_ERROR_INTERNAL;
+    if (stats)
+        *stats = counts;
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013DispatchCompute(
+    SceAgcCb *cb, const AgcGfx1013ComputeState *state)
+{
+    uint32_t limits0[3] = {0x3fffffffu, 0xffffffffu, 0xffffffffu};
+    uint32_t limits1[2] = {0xffffffffu, 0xffffffffu};
+    uint32_t threads[6];
+    uint32_t program[2];
+    uint32_t resources[2];
+    uint32_t resource3;
+    uint32_t *dispatch;
+    int32_t result;
+    uint32_t required_dwords;
+
+    if (!cb)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    result = agcGfx1013ValidateCompute(state);
+    if (result != AGC_OK)
+        return result;
+    required_dwords = 38u + state->num_user_data;
+    if (agcCbRemainingDwords(cb) < required_dwords)
+        return AGC_ERROR_BUFFER_TOO_SMALL;
+
+    threads[0] = 0u;
+    threads[1] = 0u;
+    threads[2] = 0u;
+    threads[3] = state->local_size_x;
+    threads[4] = state->local_size_y;
+    threads[5] = state->local_size_z;
+    program[0] = (uint32_t)(state->code_address >> 8u);
+    program[1] = (uint32_t)(state->code_address >> 40u) & 0xffu;
+    (void)agcGfx1013FindComputeRegister(
+        state, AGC_REG_COMPUTE_PGM_RSRC1, &resources[0]);
+    (void)agcGfx1013FindComputeRegister(
+        state, AGC_REG_COMPUTE_PGM_RSRC2, &resources[1]);
+    (void)agcGfx1013FindComputeRegister(
+        state, AGC_REG_COMPUTE_PGM_RSRC3, &resource3);
+
+    if (agcGfx1013SetContextControl(
+            cb, 0x80000000u, 0x80000000u) != AGC_OK ||
+        !agcGfx1013EmitComputeRegisters(
+            cb, AGC_REG_COMPUTE_RESOURCE_LIMITS, limits0, 3u) ||
+        !agcGfx1013EmitComputeRegisters(cb, 0x219u, limits1, 2u) ||
+        !agcGfx1013EmitComputeRegisters(
+            cb, AGC_REG_COMPUTE_START_X, threads, 6u) ||
+        !agcGfx1013EmitComputeRegisters(
+            cb, AGC_REG_COMPUTE_PGM_LO, program, 2u) ||
+        !agcGfx1013EmitComputeRegisters(
+            cb, AGC_REG_COMPUTE_PGM_RSRC1, resources, 2u) ||
+        !agcGfx1013EmitComputeRegisters(
+            cb, AGC_REG_COMPUTE_PGM_RSRC3, &resource3, 1u) ||
+        (state->num_user_data != 0u &&
+            !agcGfx1013EmitComputeRegisters(cb,
+                AGC_REG_COMPUTE_USER_DATA_0, state->user_data,
+                state->num_user_data)))
+        return AGC_ERROR_INTERNAL;
+    dispatch = agcCbAllocDwords(cb, 5u);
+    if (!dispatch)
+        return AGC_ERROR_INTERNAL;
+    dispatch[0] = agcPm4Header3(AGC_PM4_OP_DISPATCH_DIRECT, 5u) | 1u;
+    dispatch[1] = state->group_count_x;
+    dispatch[2] = state->group_count_y;
+    dispatch[3] = state->group_count_z;
+    dispatch[4] = (state->modifier & 0xa038u) | 0x41u;
+    return AGC_OK;
+}

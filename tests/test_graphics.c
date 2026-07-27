@@ -667,6 +667,124 @@ static void test_gfx1013_fixed_function_rejects_atomically(void)
         "invalid target emits no packets");
 }
 
+static void test_gfx1013_compute_packets(void)
+{
+    uint32_t buffer[256] = {0};
+    uint32_t user_data[6] = {
+        0u, 0u, 0x01600000u, 0x00000002u, 2073600u, 0xff00ff00u,
+    };
+    AgcRegisterValue sh[3] = {
+        {AGC_REG_COMPUTE_PGM_RSRC1, 0x000000c0u},
+        {AGC_REG_COMPUTE_PGM_RSRC2, 0x0000008cu},
+        {AGC_REG_COMPUTE_PGM_RSRC3, 0x00000000u},
+    };
+    AgcShaderRecord record;
+    AgcGfx1013ComputeState state;
+    SceAgcCb cb;
+
+    memset(&record, 0, sizeof(record));
+    record.magic = AGC_SHADER_RECORD_MAGIC;
+    record.version = AGC_SHADER_RECORD_VERSION_GEN5;
+    record.shader_type = kAgcShaderTypeCs;
+    record.num_sh_registers = 3u;
+    memset(&state, 0, sizeof(state));
+    state.record = &record;
+    state.sh_registers = sh;
+    state.num_sh_registers = 3u;
+    state.code_address = 0x0000000201de9000ull;
+    state.user_data = user_data;
+    state.num_user_data = 6u;
+    state.local_size_x = 64u;
+    state.local_size_y = 1u;
+    state.local_size_z = 1u;
+    state.group_count_x = 32400u;
+    state.group_count_y = 1u;
+    state.group_count_z = 1u;
+
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013ValidateCompute(&state), AGC_OK,
+        "gfx1013 compute state validates");
+    TEST_ASSERT_EQ(agcGfx1013DispatchCompute(&cb, &state), AGC_OK,
+        "gfx1013 compute dispatch emits");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 44u,
+        "gfx1013 compute exact dword count");
+    TEST_ASSERT_EQ(buffer[0],
+        agcPm4Header3(AGC_PM4_OP_CONTEXT_CONTROL, 3u),
+        "gfx1013 context-control header");
+    TEST_ASSERT_EQ(buffer[1], 0x80000000u,
+        "gfx1013 context-control load value");
+    TEST_ASSERT_EQ(buffer[2], 0x80000000u,
+        "gfx1013 context-control shadow value");
+    TEST_ASSERT_EQ(buffer[3] & 1u, 1u,
+        "gfx1013 compute limits select compute shader");
+    TEST_ASSERT_EQ(buffer[4], AGC_REG_COMPUTE_RESOURCE_LIMITS,
+        "gfx1013 compute limits offset");
+    TEST_ASSERT_EQ(buffer[12] & 1u, 1u,
+        "gfx1013 thread packet selects compute shader");
+    TEST_ASSERT_EQ(buffer[13], AGC_REG_COMPUTE_START_X,
+        "gfx1013 compute start offset");
+    TEST_ASSERT_EQ(buffer[17], 64u, "gfx1013 local size X");
+    TEST_ASSERT_EQ(buffer[20] & 1u, 1u,
+        "gfx1013 program packet selects compute shader");
+    TEST_ASSERT_EQ(buffer[22], 0x0201de90u,
+        "gfx1013 compute program low encoding");
+    TEST_ASSERT_EQ(buffer[23], 0x00000000u,
+        "gfx1013 compute program high encoding");
+    TEST_ASSERT_EQ(buffer[31] & 1u, 1u,
+        "gfx1013 user-data packet selects compute shader");
+    TEST_ASSERT_EQ(buffer[32], AGC_REG_COMPUTE_USER_DATA_0,
+        "gfx1013 user-data offset");
+    TEST_ASSERT_EQ(buffer[35], 0x01600000u,
+        "gfx1013 buffer address low in s2");
+    TEST_ASSERT_EQ(buffer[36], 0x00000002u,
+        "gfx1013 buffer address high in s3");
+    TEST_ASSERT_EQ(buffer[39] & 1u, 1u,
+        "gfx1013 dispatch selects compute shader");
+    TEST_ASSERT_EQ(agcPm4Opcode(buffer[39]), AGC_PM4_OP_DISPATCH_DIRECT,
+        "gfx1013 dispatch opcode");
+    TEST_ASSERT_EQ(buffer[40], 32400u, "gfx1013 dispatch group X");
+    TEST_ASSERT_EQ(buffer[43], 0x41u, "gfx1013 dispatch initiator");
+
+    agcCbReset(&cb, buffer, 43u * sizeof(uint32_t));
+    TEST_ASSERT_EQ(agcGfx1013DispatchCompute(&cb, &state),
+        AGC_ERROR_BUFFER_TOO_SMALL, "short compute buffer rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "short compute dispatch is atomic");
+    state.code_address++;
+    TEST_ASSERT_EQ(agcGfx1013ValidateCompute(&state),
+        AGC_ERROR_INVALID_ALIGNMENT, "unaligned compute program rejects");
+}
+
+static void test_gfx1013_compute_defaults_v8(void)
+{
+    uint32_t buffer[1024] = {0};
+    AgcGfx1013ComputeDefaultStats stats = {0};
+    SceAgcCb cb;
+    uint32_t cursor = 0u;
+    uint32_t registers = 0u;
+    uint32_t packets = 0u;
+
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013ApplyComputeDefaultsV8(&cb, &stats), AGC_OK,
+        "gfx1013 compute defaults emit");
+    while (cursor < agcCbUsedDwords(&cb)) {
+        uint32_t length = agcPm4Length(buffer[cursor]);
+        TEST_ASSERT_EQ(agcPm4Opcode(buffer[cursor]), AGC_PM4_OP_SET_SH_REG,
+            "compute default uses SET_SH_REG");
+        TEST_ASSERT_EQ(buffer[cursor] & 1u, 1u,
+            "compute default selects compute shader");
+        registers += length - 2u;
+        packets++;
+        cursor += length;
+    }
+    TEST_ASSERT_EQ(stats.sh_register_count, 174u,
+        "gfx1013 compute SH default count");
+    TEST_ASSERT_EQ(registers, stats.sh_register_count,
+        "compute defaults emitted register count");
+    TEST_ASSERT_EQ(packets, stats.packet_count,
+        "compute defaults emitted packet count");
+}
+
 void test_suite_graphics(void)
 {
     TEST_SUITE("GFX1013 Graphics State");
@@ -678,4 +796,6 @@ void test_suite_graphics(void)
     TEST_RUN(test_gfx1013_fixed_function_packets);
     TEST_RUN(test_gfx1013_graphics_defaults_v8);
     TEST_RUN(test_gfx1013_fixed_function_rejects_atomically);
+    TEST_RUN(test_gfx1013_compute_packets);
+    TEST_RUN(test_gfx1013_compute_defaults_v8);
 }

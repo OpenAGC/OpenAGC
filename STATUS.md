@@ -1042,6 +1042,13 @@ six-byte `0x8A6C1000` stubs and leave caller state untouched.
 Eight resource/GDS exports match the bundled FW 5.50 driver's six-byte
 `0x8A6C9018` stubs with recovered SysV signatures, and the three capture
 controls return the exact `0x8A6C1000` status. All preserve caller outputs.
+The first compute API promotion is implemented: public gfx1013 state now
+validates and atomically emits the hardware-proven context-control, resource
+limits, thread dimensions, program/RSRC registers, user SGPRs, and direct
+dispatch packets. FW 5.50 SH defaults also have a compute-safe emitter that
+sets packet shader type internally, so applications no longer need to mutate
+emitted headers. Exact host fixtures cover the packet stream and atomic failure.
+
 The hardware-sample PM4 audit is complete. Existing gfx1013 VS/PS,
 tessellation, render-target, viewport, scissor, and baseline draw helpers are
 reusable. Blocking homebrew API gaps are a typed compute binder, gfx1013

@@ -74,6 +74,27 @@ typedef struct AgcGfx1013GraphicsDefaultStats {
     uint32_t uc_register_count;
 } AgcGfx1013GraphicsDefaultStats;
 
+typedef struct AgcGfx1013ComputeDefaultStats {
+    uint32_t sh_register_count;
+    uint32_t packet_count;
+} AgcGfx1013ComputeDefaultStats;
+
+typedef struct AgcGfx1013ComputeState {
+    const AgcShaderRecord *record;
+    const AgcRegisterValue *sh_registers;
+    uint32_t num_sh_registers;
+    uint64_t code_address;
+    const uint32_t *user_data;
+    uint32_t num_user_data;
+    uint32_t local_size_x;
+    uint32_t local_size_y;
+    uint32_t local_size_z;
+    uint32_t group_count_x;
+    uint32_t group_count_y;
+    uint32_t group_count_z;
+    uint32_t modifier;
+} AgcGfx1013ComputeState;
+
 typedef struct AgcGfx1013BaselineDrawState {
     AgcGfx1013Wave32VsPsState shaders;
     const AgcRegisterValue *post_bind_sh_registers;
@@ -112,6 +133,14 @@ int32_t PS5_SYSV_ABI agcGfx1013SetScissor(
 int32_t PS5_SYSV_ABI agcGfx1013SetTargetMask(
     SceAgcCb *cb, uint32_t mask);
 int32_t PS5_SYSV_ABI agcGfx1013SetDepthDisabled(SceAgcCb *cb);
+int32_t PS5_SYSV_ABI agcGfx1013SetContextControl(
+    SceAgcCb *cb, uint32_t load_control, uint32_t shadow_control);
+int32_t PS5_SYSV_ABI agcGfx1013ValidateCompute(
+    const AgcGfx1013ComputeState *state);
+int32_t PS5_SYSV_ABI agcGfx1013ApplyComputeDefaultsV8(
+    SceAgcCb *cb, AgcGfx1013ComputeDefaultStats *stats);
+int32_t PS5_SYSV_ABI agcGfx1013DispatchCompute(
+    SceAgcCb *cb, const AgcGfx1013ComputeState *state);
 int32_t PS5_SYSV_ABI agcGfx1013ApplyGraphicsDefaultsV8(
     SceAgcCb *cb, AgcGfx1013GraphicsDefaultStats *stats);
 
