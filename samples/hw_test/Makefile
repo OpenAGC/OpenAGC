@@ -257,19 +257,19 @@ agc_graphics_invocations.elf: shaders_ngg_invocations agc_graphics.c ps5_video_o
 agc_graphics_rgba8.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_VALIDATE_RGBA8_REFERENCE=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
 
-agc_tessellation.elf: shaders_tess agc_graphics.c gfx1013_tess_ring.h ps5_video_out.h gpu_credentials.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+agc_tessellation.elf: shaders_tess agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_TESSELLATION=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
 
-agc_tess_geometry.elf: shaders_tess_geometry agc_graphics.c gfx1013_tess_ring.h ps5_video_out.h gpu_credentials.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+agc_tess_geometry.elf: shaders_tess_geometry agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_TESSELLATION=1 -DAGC_TESS_GEOMETRY=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
 
-agc_tess_geometry_invocations.elf: shaders_tess_geometry_invocations agc_graphics.c gfx1013_tess_ring.h ps5_video_out.h gpu_credentials.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+agc_tess_geometry_invocations.elf: shaders_tess_geometry_invocations agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_TESSELLATION=1 -DAGC_TESS_GEOMETRY=1 -DAGC_TESS_GEOMETRY_INVOCATIONS=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
 
-agc_tess_geometry_lines.elf: shaders_tess_geometry_lines agc_graphics.c gfx1013_tess_ring.h ps5_video_out.h gpu_credentials.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+agc_tess_geometry_lines.elf: shaders_tess_geometry_lines agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_TESSELLATION=1 -DAGC_TESS_GEOMETRY=1 -DAGC_TESS_GEOMETRY_LINES=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
 
-agc_tess_geometry_rgba8.elf: shaders_tess_geometry agc_graphics.c gfx1013_tess_ring.h ps5_video_out.h gpu_credentials.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+agc_tess_geometry_rgba8.elf: shaders_tess_geometry agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_TESSELLATION=1 -DAGC_TESS_GEOMETRY=1 -DAGC_VALIDATE_RGBA8_REFERENCE=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
 
 # === eboot.bin versions (for debug-mode PS5) ===

@@ -21,6 +21,16 @@ extern "C" {
 #define AGC_GFX1013_SURFACE_SWAP_ALT            1u
 #define AGC_GFX1013_TARGET_MASK_RGBA0            0x0Fu
 
+#define AGC_GFX1013_TESS_FACTOR_RING_SLOT         5u
+#define AGC_GFX1013_TESS_OFFCHIP_RING_SLOT        6u
+#define AGC_GFX1013_TESS_RING_DESCRIPTOR_DWORDS   4u
+#define AGC_GFX1013_TESS_RING_TABLE_DWORDS       32u
+#define AGC_GFX1013_TESS_OFFCHIP_RING_SIZE   0x8000u
+#define AGC_GFX1013_TESS_FACTOR_RING_SIZE   0x10000u
+#define AGC_GFX1013_TESS_OFFCHIP_PARAM            0u
+#define AGC_GFX1013_TESS_OFFCHIP_LAYOUT   0x21042108u
+#define AGC_GFX1013_RAW_R32_DESCRIPTOR_WORD3 0x31016FACu
+
 typedef struct AgcGfx1013ShaderBinding {
     const AgcShaderRecord *record;
     const AgcRegisterValue *sh_registers;
@@ -103,6 +113,26 @@ typedef struct AgcGfx1013ResourceTableBinding {
     uint64_t address;
 } AgcGfx1013ResourceTableBinding;
 
+typedef struct AgcGfx1013TessellationRingTable {
+    uint32_t words[AGC_GFX1013_TESS_RING_TABLE_DWORDS];
+} AgcGfx1013TessellationRingTable;
+
+typedef struct AgcGfx1013TessellationState {
+    uint64_t offchip_ring_address;
+    uint64_t factor_ring_address;
+    uint32_t offchip_ring_size;
+    uint32_t factor_ring_size;
+    uint32_t offchip_param;
+    uint32_t max_tess_level;
+    uint32_t min_tess_level;
+    uint32_t esgs_ring_itemsize;
+    uint32_t distribution;
+    uint32_t tf_param;
+} AgcGfx1013TessellationState;
+
+_Static_assert(sizeof(AgcGfx1013TessellationRingTable) == 128,
+    "gfx1013 tessellation ring table must be 128 bytes");
+
 typedef struct AgcGfx1013BaselineDrawState {
     AgcGfx1013Wave32VsPsState shaders;
     const AgcGfx1013ResourceTableBinding *primitive_resource_tables;
@@ -160,6 +190,13 @@ int32_t PS5_SYSV_ABI agcGfx1013ValidateResourceTables(
     const AgcGfx1013ShaderBinding *shader,
     const AgcGfx1013ResourceTableBinding *tables, uint32_t table_count,
     uint32_t *binding_count);
+int32_t PS5_SYSV_ABI agcGfx1013BuildTessellationRingTable(
+    AgcGfx1013TessellationRingTable *table,
+    const AgcGfx1013TessellationState *state);
+int32_t PS5_SYSV_ABI agcGfx1013SetTessellationRings(
+    SceAgcCb *cb, const AgcGfx1013TessellationState *state);
+int32_t PS5_SYSV_ABI agcGfx1013SetTessellationContext(
+    SceAgcCb *cb, const AgcGfx1013TessellationState *state);
 int32_t PS5_SYSV_ABI agcGfx1013ApplyGraphicsDefaultsV8(
     SceAgcCb *cb, AgcGfx1013GraphicsDefaultStats *stats);
 

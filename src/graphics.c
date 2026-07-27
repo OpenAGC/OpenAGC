@@ -1208,3 +1208,126 @@ int32_t PS5_SYSV_ABI agcGfx1013BindResourceTables(
     }
     return AGC_OK;
 }
+
+static int32_t agcGfx1013ValidateTessellationState(
+    const AgcGfx1013TessellationState *state)
+{
+    if (!state || state->offchip_ring_address == 0u ||
+        state->factor_ring_address == 0u ||
+        state->offchip_ring_size == 0u || state->factor_ring_size == 0u ||
+        (state->offchip_ring_size & 3u) != 0u ||
+        (state->factor_ring_size & 3u) != 0u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if ((state->offchip_ring_address & 0xffu) != 0u ||
+        (state->factor_ring_address & 0xffu) != 0u)
+        return AGC_ERROR_INVALID_ALIGNMENT;
+    if ((state->offchip_ring_address >> 48u) != 0u ||
+        (state->factor_ring_address >> 48u) != 0u)
+        return AGC_ERROR_VALIDATION_FAILED;
+    return AGC_OK;
+}
+
+static void agcGfx1013BuildRawRingDescriptor(
+    uint32_t words[4], uint64_t address, uint32_t size)
+{
+    words[0] = (uint32_t)address;
+    words[1] = (uint32_t)(address >> 32u);
+    words[2] = size;
+    words[3] = AGC_GFX1013_RAW_R32_DESCRIPTOR_WORD3;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013BuildTessellationRingTable(
+    AgcGfx1013TessellationRingTable *table,
+    const AgcGfx1013TessellationState *state)
+{
+    AgcGfx1013TessellationRingTable encoded;
+    int32_t result;
+
+    if (!table)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    result = agcGfx1013ValidateTessellationState(state);
+    if (result != AGC_OK)
+        return result;
+    memset(&encoded, 0, sizeof(encoded));
+    agcGfx1013BuildRawRingDescriptor(
+        &encoded.words[AGC_GFX1013_TESS_FACTOR_RING_SLOT *
+            AGC_GFX1013_TESS_RING_DESCRIPTOR_DWORDS],
+        state->factor_ring_address, state->factor_ring_size);
+    agcGfx1013BuildRawRingDescriptor(
+        &encoded.words[AGC_GFX1013_TESS_OFFCHIP_RING_SLOT *
+            AGC_GFX1013_TESS_RING_DESCRIPTOR_DWORDS],
+        state->offchip_ring_address, state->offchip_ring_size);
+    *table = encoded;
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013SetTessellationRings(
+    SceAgcCb *cb, const AgcGfx1013TessellationState *state)
+{
+    AgcRegisterValue registers[4];
+    uint32_t i;
+    int32_t result;
+
+    if (!cb)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    result = agcGfx1013ValidateTessellationState(state);
+    if (result != AGC_OK)
+        return result;
+    if (agcCbRemainingDwords(cb) < 12u)
+        return AGC_ERROR_BUFFER_TOO_SMALL;
+    registers[0] = (AgcRegisterValue){
+        AGC_REG_VGT_TF_RING_SIZE, state->factor_ring_size / 4u,
+    };
+    registers[1] = (AgcRegisterValue){
+        AGC_REG_VGT_HS_OFFCHIP_PARAM, state->offchip_param,
+    };
+    registers[2] = (AgcRegisterValue){
+        AGC_REG_VGT_TF_MEMORY_BASE,
+        (uint32_t)(state->factor_ring_address >> 8u),
+    };
+    registers[3] = (AgcRegisterValue){
+        AGC_REG_VGT_TF_MEMORY_BASE_HI,
+        (uint32_t)(state->factor_ring_address >> 40u),
+    };
+    for (i = 0; i < 4u; ++i) {
+        if (!sceAgcCbSetUcRegistersDirect(cb, &registers[i], 1u))
+            return AGC_ERROR_INTERNAL;
+    }
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013SetTessellationContext(
+    SceAgcCb *cb, const AgcGfx1013TessellationState *state)
+{
+    AgcRegisterValue registers[5];
+    uint32_t i;
+    int32_t result;
+
+    if (!cb)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    result = agcGfx1013ValidateTessellationState(state);
+    if (result != AGC_OK)
+        return result;
+    if (agcCbRemainingDwords(cb) < 15u)
+        return AGC_ERROR_BUFFER_TOO_SMALL;
+    registers[0] = (AgcRegisterValue){
+        AGC_REG_VGT_HOS_MAX_TESS_LEVEL, state->max_tess_level,
+    };
+    registers[1] = (AgcRegisterValue){
+        AGC_REG_VGT_HOS_MIN_TESS_LEVEL, state->min_tess_level,
+    };
+    registers[2] = (AgcRegisterValue){
+        AGC_REG_VGT_ESGS_RING_ITEMSIZE, state->esgs_ring_itemsize,
+    };
+    registers[3] = (AgcRegisterValue){
+        AGC_REG_VGT_TESS_DISTRIBUTION, state->distribution,
+    };
+    registers[4] = (AgcRegisterValue){
+        AGC_REG_VGT_TF_PARAM, state->tf_param,
+    };
+    for (i = 0; i < 5u; ++i) {
+        if (!sceAgcCbSetCxRegistersDirect(cb, &registers[i], 1u))
+            return AGC_ERROR_INTERNAL;
+    }
+    return AGC_OK;
+}

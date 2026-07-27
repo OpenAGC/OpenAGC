@@ -959,6 +959,101 @@ static void test_gfx1013_baseline_draw_binds_resources(void)
         "baseline descriptor placeholder resolved after shader bind");
 }
 
+static void test_gfx1013_tessellation_state_builders(void)
+{
+    uint32_t buffer[32] = {0};
+    AgcGfx1013TessellationRingTable table;
+    const AgcGfx1013TessellationState state = {
+        .offchip_ring_address = 0x0000000202610000ull,
+        .factor_ring_address = 0x0000000202618000ull,
+        .offchip_ring_size = AGC_GFX1013_TESS_OFFCHIP_RING_SIZE,
+        .factor_ring_size = AGC_GFX1013_TESS_FACTOR_RING_SIZE,
+        .offchip_param = AGC_GFX1013_TESS_OFFCHIP_PARAM,
+        .max_tess_level = 0x42800000u,
+        .min_tess_level = 0u,
+        .esgs_ring_itemsize = 1u,
+        .distribution = 0xd8181e0cu,
+        .tf_param = 0x00000061u,
+    };
+    const uint32_t factor_slot = AGC_GFX1013_TESS_FACTOR_RING_SLOT * 4u;
+    const uint32_t offchip_slot = AGC_GFX1013_TESS_OFFCHIP_RING_SLOT * 4u;
+    SceAgcCb cb;
+
+    TEST_ASSERT_EQ(agcGfx1013BuildTessellationRingTable(&table, &state),
+        AGC_OK, "gfx1013 tessellation ring table builds");
+    TEST_ASSERT_EQ(table.words[factor_slot], 0x02618000u,
+        "tess factor descriptor address low");
+    TEST_ASSERT_EQ(table.words[factor_slot + 1u], 2u,
+        "tess factor descriptor address high");
+    TEST_ASSERT_EQ(table.words[factor_slot + 2u], 0x10000u,
+        "tess factor descriptor size");
+    TEST_ASSERT_EQ(table.words[factor_slot + 3u], 0x31016facu,
+        "tess factor descriptor controls");
+    TEST_ASSERT_EQ(table.words[offchip_slot], 0x02610000u,
+        "tess offchip descriptor address low");
+    TEST_ASSERT_EQ(table.words[offchip_slot + 2u], 0x8000u,
+        "tess offchip descriptor size");
+    TEST_ASSERT_EQ(table.words[0], 0u,
+        "unused tessellation table slots clear");
+
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetTessellationRings(&cb, &state), AGC_OK,
+        "gfx1013 tessellation ring registers emit");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 12u,
+        "tessellation ring state exact dword count");
+    TEST_ASSERT_EQ(buffer[1], AGC_REG_VGT_TF_RING_SIZE,
+        "tessellation factor ring size register");
+    TEST_ASSERT_EQ(buffer[2], 0x4000u,
+        "tessellation factor ring size in dwords");
+    TEST_ASSERT_EQ(buffer[7], AGC_REG_VGT_TF_MEMORY_BASE,
+        "tessellation factor base register");
+    TEST_ASSERT_EQ(buffer[8], 0x02026180u,
+        "tessellation factor base encoding");
+
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetTessellationContext(&cb, &state), AGC_OK,
+        "gfx1013 tessellation context emits");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 15u,
+        "tessellation context exact dword count");
+    TEST_ASSERT_EQ(buffer[1], AGC_REG_VGT_HOS_MAX_TESS_LEVEL,
+        "tessellation max level register");
+    TEST_ASSERT_EQ(buffer[2], 0x42800000u,
+        "tessellation max level value");
+    TEST_ASSERT_EQ(buffer[13], AGC_REG_VGT_TF_PARAM,
+        "tessellation parameter register");
+    TEST_ASSERT_EQ(buffer[14], 0x61u,
+        "tessellation parameter value");
+}
+
+static void test_gfx1013_tessellation_state_rejects_atomically(void)
+{
+    uint32_t buffer[16] = {0};
+    AgcGfx1013TessellationRingTable table = {{1u}};
+    AgcGfx1013TessellationState state = {
+        .offchip_ring_address = 0x0000000202610001ull,
+        .factor_ring_address = 0x0000000202618000ull,
+        .offchip_ring_size = AGC_GFX1013_TESS_OFFCHIP_RING_SIZE,
+        .factor_ring_size = AGC_GFX1013_TESS_FACTOR_RING_SIZE,
+    };
+    SceAgcCb cb;
+
+    TEST_ASSERT_EQ(agcGfx1013BuildTessellationRingTable(&table, &state),
+        AGC_ERROR_INVALID_ALIGNMENT, "unaligned tessellation ring rejects");
+    TEST_ASSERT_EQ(table.words[0], 1u,
+        "invalid tessellation table preserves output");
+    state.offchip_ring_address--;
+    agcCbInit(&cb, buffer, 11u * sizeof(uint32_t));
+    TEST_ASSERT_EQ(agcGfx1013SetTessellationRings(&cb, &state),
+        AGC_ERROR_BUFFER_TOO_SMALL, "short tessellation ring state rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "short tessellation ring state is atomic");
+    agcCbReset(&cb, buffer, 14u * sizeof(uint32_t));
+    TEST_ASSERT_EQ(agcGfx1013SetTessellationContext(&cb, &state),
+        AGC_ERROR_BUFFER_TOO_SMALL, "short tessellation context rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "short tessellation context is atomic");
+}
+
 void test_suite_graphics(void)
 {
     TEST_SUITE("GFX1013 Graphics State");
@@ -975,4 +1070,6 @@ void test_suite_graphics(void)
     TEST_RUN(test_gfx1013_resource_table_binding);
     TEST_RUN(test_gfx1013_resource_table_binding_rejects);
     TEST_RUN(test_gfx1013_baseline_draw_binds_resources);
+    TEST_RUN(test_gfx1013_tessellation_state_builders);
+    TEST_RUN(test_gfx1013_tessellation_state_rejects_atomically);
 }

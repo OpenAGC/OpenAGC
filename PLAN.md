@@ -243,9 +243,11 @@ and tessellation builds use typed resource encoders, state-owned placeholder
 resolution, public context/default/fixed-function/draw calls, public cache and
 marker packets, and bounded completion. FW 5.50 validated the baseline fence at
 4 ms and tessellation at 9 ms; both passed FP16 validation, and tessellation
-produced the expected ring writes. The next API-hardening step is promoting the
-remaining tessellation ring/context register arrays from the public
-direct-register escape hatch into typed gfx1013 state.
+produced the expected ring writes. Tessellation ring promotion is now complete:
+the public API owns the 128-byte descriptor table, ring sizes/slots, four UC
+ring registers, and five post-bind CX registers. The sample-local ring header
+and its Makefile dependencies are removed. A repeated FW 5.50 run retained the
+9 ms fence, 24 offchip changes, four factor changes, and passing FP16 output.
 Each closed goal must update the
 documentation, pass clean generic and Prospero builds, pass host fixtures, and
 be committed before hardware promotion.

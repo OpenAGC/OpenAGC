@@ -106,7 +106,6 @@
 #define NGG_FRONT_DATA triangle_tess_es_front_data
 #define NGG_BACK_DATA triangle_tess_es_back_data
 #endif
-#include "gfx1013_tess_ring.h"
 #define NGG_DRAW_VERTEX_COUNT 3u
 #define NGG_INPUT_PRIMITIVE_TYPE 9u
 #elif AGC_NGG_INPUT_LINES
@@ -716,7 +715,7 @@ static bool setup_tess_shader_stages(
         .primitive_back_code_address =
             (uint64_t)(uintptr_t)primitive_back_code,
         .ring_descriptor_address = ring_descriptor_address,
-        .tcs_offchip_layout = GFX1013_TESS_OFFCHIP_LAYOUT,
+        .tcs_offchip_layout = AGC_GFX1013_TESS_OFFCHIP_LAYOUT,
         .primitive_type = 9u,
     };
     int32_t err = agcGfx1013BindWave32TessVsPs(cb, &state);
@@ -1197,45 +1196,39 @@ static bool dispatch_graphics(GraphicsTest *test,
         (uint8_t *)test->compute_buffer + TESS_OFFCHIP_OFFSET;
     void *factor_ring =
         (uint8_t *)test->compute_buffer + TESS_FACTOR_OFFSET;
-    uint32_t *ring_table = (uint32_t *)
+    AgcGfx1013TessellationRingTable *ring_table =
+        (AgcGfx1013TessellationRingTable *)
         ((uint8_t *)test->compute_buffer + TESS_RING_TABLE_OFFSET);
     uint32_t *offchip_words = (uint32_t *)offchip_ring;
-    for (uint32_t i = 0; i < GFX1013_TESS_OFFCHIP_RING_SIZE / 4u; ++i)
+    for (uint32_t i = 0; i < AGC_GFX1013_TESS_OFFCHIP_RING_SIZE / 4u; ++i)
         offchip_words[i] = 0xDEADBEEFu;
-    memset(factor_ring, 0, GFX1013_TESS_FACTOR_RING_SIZE);
+    memset(factor_ring, 0, AGC_GFX1013_TESS_FACTOR_RING_SIZE);
     int32_t tf_ring_err = sceAgcDriverSetTFRing(
-        (uintptr_t)factor_ring, GFX1013_TESS_FACTOR_RING_SIZE);
+        (uintptr_t)factor_ring, AGC_GFX1013_TESS_FACTOR_RING_SIZE);
     printf("[Tess] FW 5.50 TF-ring address setup: 0x%08x\n",
            (unsigned)tf_ring_err);
     if (tf_ring_err != AGC_OK)
         return false;
-    gfx1013BuildTessRingTable(
-        ring_table, (uint64_t)(uintptr_t)offchip_ring,
-        (uint64_t)(uintptr_t)factor_ring);
-
-    const uint64_t factor_address = (uint64_t)(uintptr_t)factor_ring;
-    const AgcRegisterValue tess_ring_state[] = {
-        {AGC_REG_VGT_TF_RING_SIZE, GFX1013_TESS_FACTOR_RING_SIZE / 4u},
-        {AGC_REG_VGT_HS_OFFCHIP_PARAM, GFX1013_TESS_OFFCHIP_PARAM},
-        {AGC_REG_VGT_TF_MEMORY_BASE, (uint32_t)(factor_address >> 8)},
-        {AGC_REG_VGT_TF_MEMORY_BASE_HI,
-         (uint32_t)(factor_address >> 40)},
+    const AgcGfx1013TessellationState tess_state = {
+        .offchip_ring_address = (uint64_t)(uintptr_t)offchip_ring,
+        .factor_ring_address = (uint64_t)(uintptr_t)factor_ring,
+        .offchip_ring_size = AGC_GFX1013_TESS_OFFCHIP_RING_SIZE,
+        .factor_ring_size = AGC_GFX1013_TESS_FACTOR_RING_SIZE,
+        .offchip_param = AGC_GFX1013_TESS_OFFCHIP_PARAM,
+        .max_tess_level = 0x42800000u,
+        .min_tess_level = 0u,
+        .esgs_ring_itemsize = 1u,
+        .distribution = 0xD8181E0Cu,
+        .tf_param = 0x00000061u |
+            ((AGC_TESS_DISTRIBUTION_MODE & 3u) << 17),
     };
-    for (uint32_t i = 0;
-         i < sizeof(tess_ring_state) / sizeof(tess_ring_state[0]); ++i) {
-        sceAgcCbSetUcRegistersDirect(&cb, &tess_ring_state[i], 1);
-    }
-    const AgcRegisterValue tess_context_state[] = {
-        {AGC_REG_VGT_HOS_MAX_TESS_LEVEL, 0x42800000u}, /* 64.0f */
-        {AGC_REG_VGT_HOS_MIN_TESS_LEVEL, 0u},
-        {AGC_REG_VGT_ESGS_RING_ITEMSIZE, 1u},
-        {AGC_REG_VGT_TESS_DISTRIBUTION, 0xD8181E0Cu},
-        {AGC_REG_VGT_TF_PARAM,
-         0x00000061u | ((AGC_TESS_DISTRIBUTION_MODE & 3u) << 17)},
-    };
+    if (agcGfx1013BuildTessellationRingTable(
+            ring_table, &tess_state) != AGC_OK ||
+        agcGfx1013SetTessellationRings(&cb, &tess_state) != AGC_OK)
+        return false;
     printf("[Tess] offchip=%p size=0x%x factor=%p size=0x%x table=%p\n",
-           offchip_ring, GFX1013_TESS_OFFCHIP_RING_SIZE,
-           factor_ring, GFX1013_TESS_FACTOR_RING_SIZE, ring_table);
+           offchip_ring, AGC_GFX1013_TESS_OFFCHIP_RING_SIZE,
+           factor_ring, AGC_GFX1013_TESS_FACTOR_RING_SIZE, ring_table);
     if (!setup_tess_shader_stages(
             &cb, &hull, hs_back_code,
             &ngg, back_code, ps, ps_code,
@@ -1246,10 +1239,8 @@ static bool dispatch_graphics(GraphicsTest *test,
     }
     /* The compiled TES record carries generic CX defaults, including an
      * ESGS item size of zero. Reapply the GFX10 tessellation context last. */
-    for (uint32_t i = 0;
-         i < sizeof(tess_context_state) / sizeof(tess_context_state[0]); ++i) {
-        sceAgcCbSetCxRegistersDirect(&cb, &tess_context_state[i], 1);
-    }
+    if (agcGfx1013SetTessellationContext(&cb, &tess_state) != AGC_OK)
+        return false;
 #else
     AgcGfx1013Wave32VsPsState baseline_shaders;
     setup_shader_stages(&baseline_shaders, &ngg, back_code, ps, ps_code);
@@ -1377,9 +1368,9 @@ static bool dispatch_graphics(GraphicsTest *test,
     uint32_t offchip_changed = 0;
     uint32_t factor_changed = 0;
     const uint32_t *factor_words = (const uint32_t *)factor_ring;
-    for (uint32_t i = 0; i < GFX1013_TESS_OFFCHIP_RING_SIZE / 4u; ++i)
+    for (uint32_t i = 0; i < AGC_GFX1013_TESS_OFFCHIP_RING_SIZE / 4u; ++i)
         offchip_changed += offchip_words[i] != 0xDEADBEEFu;
-    for (uint32_t i = 0; i < GFX1013_TESS_FACTOR_RING_SIZE / 4u; ++i)
+    for (uint32_t i = 0; i < AGC_GFX1013_TESS_FACTOR_RING_SIZE / 4u; ++i)
         factor_changed += factor_words[i] != 0u;
     printf("[Tess Rings] offchip changed=%u factor changed=%u\n",
            offchip_changed, factor_changed);
@@ -1390,7 +1381,7 @@ static bool dispatch_graphics(GraphicsTest *test,
            factor_words[2], factor_words[3]);
     uint32_t dumped = 0;
     for (uint32_t i = 0;
-         i < GFX1013_TESS_OFFCHIP_RING_SIZE / 4u && dumped < 32u; ++i) {
+         i < AGC_GFX1013_TESS_OFFCHIP_RING_SIZE / 4u && dumped < 32u; ++i) {
         if (offchip_words[i] != 0xDEADBEEFu) {
             printf("[Tess Offchip] word[%u]=%08x\n", i, offchip_words[i]);
             ++dumped;

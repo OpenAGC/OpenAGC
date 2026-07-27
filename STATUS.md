@@ -402,6 +402,15 @@ Cursor-based builders:
 - `sceAgcDcbSetCxRegistersIndirect` — opcode 0x9F, 5 dwords (SPRX-confirmed)
 - `sceAgcDcbSetUcRegistersIndirect` — opcode 0x64, 5 dwords (SPRX-confirmed)
 
+Typed gfx1013 state builders:
+
+- `agcGfx1013BuildTessellationRingTable` — validates and builds the exact
+  128-byte factor/offchip descriptor table atomically
+- `agcGfx1013SetTessellationRings` — emits the four hardware-proven UC ring
+  registers with complete buffer preflight
+- `agcGfx1013SetTessellationContext` — emits the five post-shader CX
+  tessellation registers with complete buffer preflight
+
 Old-style ACB stubs (from `src/acb.c`) and DCB raw-buffer variants (from `src/dcb.c`):
 
 - `sceAgcAcbInitializeDefaultHardwareState_pre0090`
@@ -1084,9 +1093,11 @@ alignment validation and an exact host fixture.
 scans shader registers. The baseline FW 5.50 websrv run reached its completion
 fence after 4 ms and passed FP16 coverage, bounds, color, opacity, and VideoOut
 checks. Tessellation reached its fence after 9 ms, changed 24 offchip words and
-four factor-ring words, and passed the same FP16 checks. Direct register
-builders remain only as the public escape hatch for fixed-function and
-tessellation state awaiting typed promotion.
+four factor-ring words, and passed the same FP16 checks. Tessellation ring and
+context setup is now fully typed: OpenAGC builds the 128-byte ring table and
+emits all four UC plus five CX registers. The sample-local
+`gfx1013_tess_ring.h` was deleted. Revalidation retained the 9 ms fence, 24
+offchip changes, four factor changes, and passing FP16 output.
 
 Subnautica (`PPSA02453`) content `01.022.394` passes the strict analyzer with
 63/63 AGC imports covered. The exact executable hash, SDK `0x0400` metadata,

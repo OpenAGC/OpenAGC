@@ -25,7 +25,7 @@ they do not determine implementation order.
 | Texture descriptors | Abstract texture state does not serialize the sample's image descriptor | Partial, blocking | Add explicit image descriptor encoding and fixtures |
 | Samplers | Four-dword sampler helper works in the sample | Reusable | Validate and pair with descriptor tables |
 | Descriptor tables | Samples lay out tables and patch shader placeholders manually | Missing, blocking | Add typed table layout and resource binding |
-| Tessellation rings | Driver registration and tess binder exist; table construction is sample-local | Partial | Promote ring descriptor/table construction |
+| Tessellation rings | Typed table, ring-register, context-register, driver registration, and shader bind APIs | Reusable, hardware-proven | Extend only when new tessellation modes require it |
 | Barriers | `sceAgcDcbAcquireMem` exists; samples duplicate raw packets/constants | Partial | Use public builder; add a documented visibility helper if required |
 | Diagnostic GPU writes | `sceAgcDcbWriteData` exists; samples duplicate it | Reusable but unused | Replace sample packets and fixture exact proven form |
 | Completion | Samples sleep 200 ms; low-level suspend points exist | Partial, blocking | Add bounded submit/wait or the smallest missing fence primitive |
@@ -118,8 +118,9 @@ resources without constructing SQ descriptor words.
 Status: the hardware sample now uses public APIs exclusively for command
 construction, resource encoding/binding, drawing, barriers, completion, and
 submission. FW 5.50 baseline and tessellation runs passed. Remaining direct
-register calls use the public escape hatch; tessellation ring/context arrays are
-the next typed-state promotion rather than a raw-PM4 blocker.
+register calls use the public escape hatch for non-tessellation fixed-function
+state. Tessellation ring/context arrays and table construction are now typed and
+hardware-validated.
 
 1. Add typed indexed and indirect draw state above existing packet builders.
 2. Add raster, depth/stencil, blend, and primitive state needed by normal render
@@ -135,8 +136,8 @@ without raw PM4.
 
 ### Goal 4: Tessellation and NGG geometry
 
-1. Promote the sample tessellation ring descriptor, table layout, sizing, and
-   state setup into gfx1013 public helpers.
+1. ~~Promote the sample tessellation ring descriptor, table layout, sizing, and
+   state setup into gfx1013 public helpers.~~ Complete and FW 5.50 validated.
 2. Stabilize pass-through NGG geometry before broader geometry expansion.
 3. Add tessellation-plus-geometry fixtures and repeated-draw FW 5.50 tests.
 
