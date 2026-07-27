@@ -53,6 +53,10 @@ extern "C" {
 #define AGC_GFX1013_EOP_CACHE_FLUSH_EVENT      0x14u
 #define AGC_GFX1013_EOP_GCR_CONTROL            0x603u
 #define AGC_GFX1013_EOP_CACHE_POLICY_LRU          3u
+#define AGC_GFX1013_ACQUIRE_MEM_DWORDS             8u
+#define AGC_GFX1013_TRANSITION_MAX_DWORDS          18u
+#define AGC_GFX1013_ACQUIRE_POLL_INTERVAL        0x0Au
+#define AGC_GFX1013_ACQUIRE_GCR_ALL            0xC3B1u
 
 #define AGC_GFX1013_FRAME_PROLOGUE_DWORDS       2275u
 #define AGC_GFX1013_FRAME_POST_BIND_DWORDS        21u
@@ -181,6 +185,25 @@ typedef struct AgcGfx1013EopFenceState {
     uint32_t value;
 } AgcGfx1013EopFenceState;
 
+typedef enum AgcGfx1013ResourceUsage {
+    AGC_GFX1013_RESOURCE_USAGE_UNDEFINED = 0,
+    AGC_GFX1013_RESOURCE_USAGE_RENDER_TARGET,
+    AGC_GFX1013_RESOURCE_USAGE_COMPUTE_WRITE,
+    AGC_GFX1013_RESOURCE_USAGE_COPY_SOURCE,
+    AGC_GFX1013_RESOURCE_USAGE_COPY_DESTINATION,
+    AGC_GFX1013_RESOURCE_USAGE_SHADER_READ,
+    AGC_GFX1013_RESOURCE_USAGE_PRESENT,
+    AGC_GFX1013_RESOURCE_USAGE_HOST_READ,
+    AGC_GFX1013_RESOURCE_USAGE_COUNT
+} AgcGfx1013ResourceUsage;
+
+typedef struct AgcGfx1013ResourceTransition {
+    AgcGfx1013ResourceUsage before;
+    AgcGfx1013ResourceUsage after;
+    uint64_t completion_address;
+    uint32_t completion_value;
+} AgcGfx1013ResourceTransition;
+
 #define AGC_GFX1013_ADDRESS32_HIGH 0x00000002u
 
 typedef struct AgcGfx1013ResourceTableBinding {
@@ -263,6 +286,10 @@ int32_t PS5_SYSV_ABI agcGfx1013DrawTessIndexAuto(
     SceAgcCb *cb, const AgcGfx1013TessDrawState *state);
 int32_t PS5_SYSV_ABI agcGfx1013SignalEopFence(
     SceAgcCb *cb, const AgcGfx1013EopFenceState *state);
+int32_t PS5_SYSV_ABI agcGfx1013GetResourceTransitionDwords(
+    const AgcGfx1013ResourceTransition *transition, uint32_t *dword_count);
+int32_t PS5_SYSV_ABI agcGfx1013TransitionResource(
+    SceAgcCb *cb, const AgcGfx1013ResourceTransition *transition);
 int32_t PS5_SYSV_ABI agcGfx1013ValidateWave32TessVsPs(
     const AgcGfx1013Wave32TessVsPsState *state);
 int32_t PS5_SYSV_ABI agcGfx1013BindWave32TessVsPs(

@@ -874,6 +874,17 @@ encodings and rejects linear rows that violate the gfx103 256-byte pitch
 alignment. All 11 encodings have exact 28-dword host fixtures. RGBA8/BGRA8 and
 RGBA16 FLOAT retain hardware evidence; the other presets await PS5 validation.
 
+Typed gfx1013 resource transitions now model render-target, compute-write,
+copy-source/destination, shader-read, presentation, and host-read usage. Writer
+transitions use the hardware-proven 10-dword `RELEASE_MEM + NOP` EOP sequence;
+GPU consumers then receive the full eight-dword gfx103 `ACQUIRE_MEM` layout with
+all GLI/GLM/GLK/GLV/GL1/GL2 visibility operations (`GCR_CNTL=0xC3B1`). Exact
+fixtures cover release/acquire ordering, render-to-present, compute-to-copy,
+copy-to-shader, present-to-render, explicit read-only no-ops, and atomic error
+paths. The compute and graphics samples use typed host-read transitions without
+changing their hardware-proven completion packet bytes. Acquire-bearing paths
+remain host-encoded and Prospero-compiled but await real PS5 qualification.
+
 Multiple DCB submission in one process is hardware-validated on FW 5.50.
 Separate `sceAgcDriverSubmitDcb` ioctls accepted both buffers but advanced
 only the first GPU marker. The correct contract for related DCBs is one

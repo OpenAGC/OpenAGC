@@ -714,6 +714,117 @@ static void test_gfx1013_eop_completion_fence(void)
         "unaligned EOP fence is atomic");
 }
 
+static void test_gfx1013_resource_transitions(void)
+{
+    uint32_t buffer[AGC_GFX1013_TRANSITION_MAX_DWORDS] = {0};
+    uint32_t expected[AGC_GFX1013_TRANSITION_MAX_DWORDS] = {0};
+    SceAgcCb cb;
+    uint32_t dword_count = 0u;
+    AgcGfx1013ResourceTransition transition = {
+        .before = AGC_GFX1013_RESOURCE_USAGE_RENDER_TARGET,
+        .after = AGC_GFX1013_RESOURCE_USAGE_SHADER_READ,
+        .completion_address = 0x00000002014bb000ull,
+        .completion_value = 0x1234abcdu,
+    };
+    const uint32_t release[AGC_GFX1013_EOP_FENCE_DWORDS] = {
+        agcPm4Header3(AGC_PM4_OP_RELEASE_MEM, 8u),
+        0x06603514u, 0x20000000u, 0x014bb000u, 0x00000002u,
+        0x1234abcdu, 0u, 0u,
+        agcPm4Header3(AGC_PM4_OP_NOP, 2u), 0u,
+    };
+    const uint32_t acquire[AGC_GFX1013_ACQUIRE_MEM_DWORDS] = {
+        agcPm4Header3(AGC_PM4_OP_ACQUIRE_MEM, 8u),
+        0u, 0xffffffffu, 0x00ffffffu, 0u, 0u,
+        AGC_GFX1013_ACQUIRE_POLL_INTERVAL,
+        AGC_GFX1013_ACQUIRE_GCR_ALL,
+    };
+
+    memcpy(expected, release, sizeof(release));
+    memcpy(&expected[AGC_GFX1013_EOP_FENCE_DWORDS], acquire,
+        sizeof(acquire));
+    TEST_ASSERT_EQ(agcGfx1013GetResourceTransitionDwords(
+        &transition, &dword_count), AGC_OK,
+        "render-to-shader transition sizes");
+    TEST_ASSERT_EQ(dword_count, AGC_GFX1013_TRANSITION_MAX_DWORDS,
+        "render-to-shader release and acquire size");
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013TransitionResource(&cb, &transition), AGC_OK,
+        "render-to-shader transition emits");
+    TEST_ASSERT(memcmp(buffer, expected, sizeof(expected)) == 0,
+        "render-to-shader exact release/acquire order");
+
+    transition.after = AGC_GFX1013_RESOURCE_USAGE_PRESENT;
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013TransitionResource(&cb, &transition), AGC_OK,
+        "render-to-present transition emits");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), AGC_GFX1013_EOP_FENCE_DWORDS,
+        "render-to-present release-only size");
+    TEST_ASSERT(memcmp(buffer, release, sizeof(release)) == 0,
+        "render-to-present exact EOP stream");
+
+    transition.before = AGC_GFX1013_RESOURCE_USAGE_COMPUTE_WRITE;
+    transition.after = AGC_GFX1013_RESOURCE_USAGE_COPY_DESTINATION;
+    transition.completion_address = 0u;
+    transition.completion_value = 0u;
+    expected[2] = 0u;
+    expected[3] = 0u;
+    expected[4] = 0u;
+    expected[5] = 0u;
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013TransitionResource(&cb, &transition), AGC_OK,
+        "compute-to-copy transition emits");
+    TEST_ASSERT(memcmp(buffer, expected, sizeof(expected)) == 0,
+        "compute-to-copy exact release/acquire order");
+
+    transition.before = AGC_GFX1013_RESOURCE_USAGE_COPY_DESTINATION;
+    transition.after = AGC_GFX1013_RESOURCE_USAGE_SHADER_READ;
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013TransitionResource(&cb, &transition), AGC_OK,
+        "copy-to-shader transition emits");
+    TEST_ASSERT(memcmp(buffer, expected, sizeof(expected)) == 0,
+        "copy-to-shader exact release/acquire order");
+
+    transition.before = AGC_GFX1013_RESOURCE_USAGE_PRESENT;
+    transition.after = AGC_GFX1013_RESOURCE_USAGE_RENDER_TARGET;
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013TransitionResource(&cb, &transition), AGC_OK,
+        "present-to-render transition emits");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), AGC_GFX1013_ACQUIRE_MEM_DWORDS,
+        "present-to-render acquire-only size");
+    TEST_ASSERT(memcmp(buffer, acquire, sizeof(acquire)) == 0,
+        "present-to-render exact acquire stream");
+
+    transition.before = AGC_GFX1013_RESOURCE_USAGE_COPY_SOURCE;
+    transition.after = AGC_GFX1013_RESOURCE_USAGE_SHADER_READ;
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013TransitionResource(&cb, &transition), AGC_OK,
+        "read-to-read transition succeeds");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "read-to-read transition is an explicit no-op");
+
+    transition.before = AGC_GFX1013_RESOURCE_USAGE_RENDER_TARGET;
+    transition.after = AGC_GFX1013_RESOURCE_USAGE_SHADER_READ;
+    agcCbReset(&cb, buffer,
+        (AGC_GFX1013_TRANSITION_MAX_DWORDS - 1u) * sizeof(uint32_t));
+    TEST_ASSERT_EQ(agcGfx1013TransitionResource(&cb, &transition),
+        AGC_ERROR_BUFFER_TOO_SMALL, "short transition rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "short transition is atomic");
+
+    transition.before = AGC_GFX1013_RESOURCE_USAGE_COUNT;
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013TransitionResource(&cb, &transition),
+        AGC_ERROR_INVALID_ARGUMENT, "invalid source usage rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "invalid usage is atomic");
+    transition.before = AGC_GFX1013_RESOURCE_USAGE_RENDER_TARGET;
+    transition.completion_address = 3u;
+    TEST_ASSERT_EQ(agcGfx1013TransitionResource(&cb, &transition),
+        AGC_ERROR_INVALID_ALIGNMENT, "unaligned transition signal rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "unaligned signal is atomic");
+}
+
 static void test_gfx1013_fixed_function_packets(void)
 {
     static const struct {
@@ -1374,6 +1485,7 @@ void test_suite_graphics(void)
     TEST_RUN(test_gfx1013_wave32_rejects_small_buffer_atomically);
     TEST_RUN(test_gfx1013_wave32_tessellation_binding);
     TEST_RUN(test_gfx1013_eop_completion_fence);
+    TEST_RUN(test_gfx1013_resource_transitions);
     TEST_RUN(test_gfx1013_fixed_function_packets);
     TEST_RUN(test_gfx1013_frame_state);
     TEST_RUN(test_gfx1013_graphics_defaults_v8);

@@ -1253,13 +1253,14 @@ static bool dispatch_graphics(GraphicsTest *test,
     *marker = 0u;
     printf("[Draw] WRITE_DATA marker at 0x%llx\n", (unsigned long long)marker_target);
 
-    /* WRITE_DATA is not an EOP fence. Signal the reusable hardware-proven
-     * gfx1013 completion sequence before CPU readback. */
-    const AgcGfx1013EopFenceState completion = {
-        .address = marker_target,
-        .value = marker_value,
+    /* Complete render-target writes before CPU readback and conversion. */
+    const AgcGfx1013ResourceTransition completion = {
+        .before = AGC_GFX1013_RESOURCE_USAGE_RENDER_TARGET,
+        .after = AGC_GFX1013_RESOURCE_USAGE_HOST_READ,
+        .completion_address = marker_target,
+        .completion_value = marker_value,
     };
-    if (agcGfx1013SignalEopFence(&cb, &completion) != AGC_OK)
+    if (agcGfx1013TransitionResource(&cb, &completion) != AGC_OK)
         return false;
 
     /* Submit DCB */

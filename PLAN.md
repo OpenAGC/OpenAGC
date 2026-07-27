@@ -1713,6 +1713,15 @@ RGBA8/BGRA8 and RGBA16 FLOAT paths remain explicitly hardware-unqualified;
 future websrv runs should advance them individually before enabling compression
 or multisampling.
 
+The host-side synchronization milestone is implemented as typed gfx1013
+resource transitions spanning render, compute, copy, shader-read, presentation,
+and host-read usage. Producer completion preserves the hardware-proven
+`RELEASE_MEM + NOP` stream, while GPU consumers append the authoritative full
+gfx103 `ACQUIRE_MEM` packet and cache controls. Exact order, no-op, and atomic
+failure fixtures are required gates. The acquire-bearing transitions remain
+hardware-unqualified until the FW `0x0550` websrv matrix can exercise
+render-to-shader, compute-to-copy, copy-to-shader, and present-to-render cases.
+
 This is the authoritative execution order for OpenAGC. The product goal is a
 clean, redistributable GPU API that lets homebrew applications and game ports
 compile shaders, allocate GPU resources, build command buffers, submit work,

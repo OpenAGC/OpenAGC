@@ -728,25 +728,126 @@ int32_t PS5_SYSV_ABI agcGfx1013DrawTessIndexAuto(
     return AGC_OK;
 }
 
+static bool agcGfx1013UsageWrites(AgcGfx1013ResourceUsage usage)
+{
+    return usage == AGC_GFX1013_RESOURCE_USAGE_RENDER_TARGET ||
+        usage == AGC_GFX1013_RESOURCE_USAGE_COMPUTE_WRITE ||
+        usage == AGC_GFX1013_RESOURCE_USAGE_COPY_DESTINATION;
+}
+
+static int32_t agcGfx1013ValidateTransition(
+    const AgcGfx1013ResourceTransition *transition, bool *release,
+    bool *acquire)
+{
+    if (!transition || !release || !acquire)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (transition->before >= AGC_GFX1013_RESOURCE_USAGE_COUNT ||
+        transition->after == AGC_GFX1013_RESOURCE_USAGE_UNDEFINED ||
+        transition->after >= AGC_GFX1013_RESOURCE_USAGE_COUNT)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    *release = transition->before != transition->after &&
+        agcGfx1013UsageWrites(transition->before);
+    *acquire = transition->before != transition->after &&
+        transition->before != AGC_GFX1013_RESOURCE_USAGE_UNDEFINED &&
+        transition->after != AGC_GFX1013_RESOURCE_USAGE_PRESENT &&
+        transition->after != AGC_GFX1013_RESOURCE_USAGE_HOST_READ &&
+        (*release ||
+         transition->before == AGC_GFX1013_RESOURCE_USAGE_PRESENT);
+
+    if (transition->completion_address == 0u) {
+        if (transition->completion_value != 0u)
+            return AGC_ERROR_INVALID_ARGUMENT;
+    } else if (!*release) {
+        return AGC_ERROR_INVALID_ARGUMENT;
+    } else if ((transition->completion_address & 3u) != 0u) {
+        return AGC_ERROR_INVALID_ALIGNMENT;
+    } else if ((transition->completion_address >> 48u) != 0u) {
+        return AGC_ERROR_VALIDATION_FAILED;
+    }
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013GetResourceTransitionDwords(
+    const AgcGfx1013ResourceTransition *transition, uint32_t *dword_count)
+{
+    bool release;
+    bool acquire;
+    int32_t error;
+
+    if (!dword_count)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    error = agcGfx1013ValidateTransition(transition, &release, &acquire);
+    if (error != AGC_OK)
+        return error;
+    *dword_count = (release ? AGC_GFX1013_EOP_FENCE_DWORDS : 0u) +
+        (acquire ? AGC_GFX1013_ACQUIRE_MEM_DWORDS : 0u);
+    return AGC_OK;
+}
+
+static bool agcGfx1013EmitAcquireAll(SceAgcCb *cb)
+{
+    uint32_t *cmd = agcCbAllocDwords(cb, AGC_GFX1013_ACQUIRE_MEM_DWORDS);
+
+    if (!cmd)
+        return false;
+    cmd[0] = agcPm4Header3(
+        AGC_PM4_OP_ACQUIRE_MEM, AGC_GFX1013_ACQUIRE_MEM_DWORDS);
+    cmd[1] = 0u;
+    cmd[2] = 0xffffffffu;
+    cmd[3] = 0x00ffffffu;
+    cmd[4] = 0u;
+    cmd[5] = 0u;
+    cmd[6] = AGC_GFX1013_ACQUIRE_POLL_INTERVAL;
+    cmd[7] = AGC_GFX1013_ACQUIRE_GCR_ALL;
+    return true;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013TransitionResource(
+    SceAgcCb *cb, const AgcGfx1013ResourceTransition *transition)
+{
+    uint32_t dword_count;
+    bool release;
+    bool acquire;
+    int32_t error;
+
+    if (!cb)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    error = agcGfx1013ValidateTransition(transition, &release, &acquire);
+    if (error != AGC_OK)
+        return error;
+    dword_count = (release ? AGC_GFX1013_EOP_FENCE_DWORDS : 0u) +
+        (acquire ? AGC_GFX1013_ACQUIRE_MEM_DWORDS : 0u);
+    if (agcCbRemainingDwords(cb) < dword_count)
+        return AGC_ERROR_BUFFER_TOO_SMALL;
+
+    if (release &&
+        (!sceAgcCbReleaseMem(
+            cb, AGC_GFX1013_EOP_CACHE_FLUSH_EVENT,
+            AGC_GFX1013_EOP_GCR_CONTROL, 0u,
+            AGC_GFX1013_EOP_CACHE_POLICY_LRU,
+            transition->completion_address,
+            transition->completion_address != 0u ? 1u : 0u,
+            transition->completion_value, 0u, 0u, 0u, 0u) ||
+         !sceAgcCbNop(cb, 2u)))
+        return AGC_ERROR_INTERNAL;
+    if (acquire && !agcGfx1013EmitAcquireAll(cb))
+        return AGC_ERROR_INTERNAL;
+    return AGC_OK;
+}
+
 int32_t PS5_SYSV_ABI agcGfx1013SignalEopFence(
     SceAgcCb *cb, const AgcGfx1013EopFenceState *state)
 {
-    if (!cb || !state || state->address == 0u)
+    AgcGfx1013ResourceTransition transition;
+
+    if (!state || state->address == 0u)
         return AGC_ERROR_INVALID_ARGUMENT;
-    if ((state->address & 3u) != 0u)
-        return AGC_ERROR_INVALID_ALIGNMENT;
-    if ((state->address >> 48u) != 0u)
-        return AGC_ERROR_VALIDATION_FAILED;
-    if (agcCbRemainingDwords(cb) < AGC_GFX1013_EOP_FENCE_DWORDS)
-        return AGC_ERROR_BUFFER_TOO_SMALL;
-    if (!sceAgcCbReleaseMem(
-            cb, AGC_GFX1013_EOP_CACHE_FLUSH_EVENT,
-            AGC_GFX1013_EOP_GCR_CONTROL, 0u,
-            AGC_GFX1013_EOP_CACHE_POLICY_LRU, state->address, 1u,
-            state->value, 0u, 0u, 0u, 0u) ||
-        !sceAgcCbNop(cb, 2u))
-        return AGC_ERROR_INTERNAL;
-    return AGC_OK;
+    transition.before = AGC_GFX1013_RESOURCE_USAGE_COMPUTE_WRITE;
+    transition.after = AGC_GFX1013_RESOURCE_USAGE_HOST_READ;
+    transition.completion_address = state->address;
+    transition.completion_value = state->value;
+    return agcGfx1013TransitionResource(cb, &transition);
 }
 
 static uint32_t agcGfx1013FloatBits(float value)

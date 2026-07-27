@@ -504,13 +504,14 @@ static bool dispatch_compute(ComputeTest *test, void *shader_addr,
         return false;
     }
 
-    /* A following WRITE_DATA packet can execute before all compute waves have
-     * retired. Use the reusable hardware-proven gfx1013 EOP fence instead. */
-    const AgcGfx1013EopFenceState completion = {
-        .address = post_dispatch,
-        .value = post_marker,
+    /* Complete compute writes before the CPU validates the output. */
+    const AgcGfx1013ResourceTransition completion = {
+        .before = AGC_GFX1013_RESOURCE_USAGE_COMPUTE_WRITE,
+        .after = AGC_GFX1013_RESOURCE_USAGE_HOST_READ,
+        .completion_address = post_dispatch,
+        .completion_value = post_marker,
     };
-    if (agcGfx1013SignalEopFence(&cb, &completion) != AGC_OK) {
+    if (agcGfx1013TransitionResource(&cb, &completion) != AGC_OK) {
         printf("[Dispatch] completion packet emission failed\n");
         return false;
     }
