@@ -1699,7 +1699,7 @@ the GPU, freeze the UI, or panic the kernel.
 
 ## Execution plan
 
-### Phase 1: Ship a consumable SDK
+### Phase 1: Ship a consumable SDK (complete)
 
 1. Finish and validate install/export support for both `generic` and
    `prospero` builds.
@@ -1712,8 +1712,11 @@ the GPU, freeze the UI, or panic the kernel.
 5. Keep the public package free of firmware blobs, decrypted modules,
    launcher-specific credential code, and host-machine paths.
 
-Exit criteria: clean generic and Prospero installs, downstream build and shader
-compilation pass, package archive is generated, and the workflow is documented.
+Exit criteria met: clean generic and Prospero installs and downstream builds
+pass; the installed host compiler compiles the real compute SPIR-V fixture from
+both consumer configurations; and versioned generic and Prospero TGZ archives
+are generated. The package contains the public headers, `libopenagc.a`,
+`openagc-psbc`, relocatable CMake metadata, license, and documentation.
 
 ### Phase 2: Stabilize the FW 5.50 runtime boundary
 
@@ -1861,14 +1864,12 @@ safely, and adding a profile does not fork the public API.
 
 ## Immediate next goals
 
-1. Complete the installable SDK/package goal already in progress, including
-   generic and Prospero downstream validation and installed shader compilation.
-2. Reconcile stale documentation that still says compute or graphics execution
+1. Reconcile stale documentation that still says compute or graphics execution
    is unproven with the recorded FW 5.50 hardware results, while distinguishing
    one-off success from stability.
-3. Move all currently hardware-proven sample PM4 into public typed builders and
+2. Move all currently hardware-proven sample PM4 into public typed builders and
    fixtures, starting with the exact compute and Wave32 VS/PS paths.
-4. Run the FW 5.50 stability matrix through websrv, emphasizing repeat launch,
+3. Run the FW 5.50 stability matrix through websrv, emphasizing repeat launch,
    teardown, NGG safety, and prior kernel-panic scenarios.
-5. Correct and document Subnautica wrapper coverage, then inventory the provided
+4. Correct and document Subnautica wrapper coverage, then inventory the provided
    DRAGON QUEST VII Reimagined executable for required AGC API coverage.

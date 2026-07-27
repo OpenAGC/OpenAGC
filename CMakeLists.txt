@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.15)
-project(openagc C)
+project(OpenAGC VERSION 0.1.0 LANGUAGES C)
+
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
 
 # openagc — clean-rewrite PS5 AGC library
 # sceAgc*/sceAgcDriver* drop-in API compatibility with the Sony PS5 SDK.
@@ -57,9 +60,12 @@ else()
 endif()
 
 add_library(openagc STATIC ${OPENAGC_SOURCES})
+add_library(OpenAGC::openagc ALIAS openagc)
+set_target_properties(openagc PROPERTIES EXPORT_NAME openagc)
 
 target_include_directories(openagc PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
 target_include_directories(openagc PRIVATE
@@ -107,8 +113,90 @@ if(OPENAGC_BUILD_TESTS)
     add_test(NAME openagc_all_tests COMMAND openagc_tests)
 endif()
 
-# === Install ===
-include(GNUInstallDirs)
+# === Host shader compiler packaging ===
+set(OPENAGC_PSBC_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../openagc-psbc"
+    CACHE PATH "Path to the openagc-psbc source tree")
+set(_OPENAGC_PSBC_DEFAULT "")
+if(EXISTS "${OPENAGC_PSBC_SOURCE_DIR}/psbc")
+    set(_OPENAGC_PSBC_DEFAULT "${OPENAGC_PSBC_SOURCE_DIR}/psbc")
+endif()
+set(OPENAGC_PSBC_EXECUTABLE "${_OPENAGC_PSBC_DEFAULT}" CACHE FILEPATH
+    "Host openagc-psbc executable to install")
+set(_OPENAGC_PACKAGE_PSBC_DEFAULT OFF)
+if(OPENAGC_PSBC_EXECUTABLE OR EXISTS "${OPENAGC_PSBC_SOURCE_DIR}/Makefile")
+    set(_OPENAGC_PACKAGE_PSBC_DEFAULT ON)
+endif()
+option(OPENAGC_PACKAGE_PSBC
+    "Install the host openagc-psbc compiler with OpenAGC"
+    ${_OPENAGC_PACKAGE_PSBC_DEFAULT})
+option(OPENAGC_BUILD_PSBC
+    "Build openagc-psbc through its Makefile before installation" OFF)
+
+if(OPENAGC_PACKAGE_PSBC)
+    if(OPENAGC_BUILD_PSBC)
+        find_program(OPENAGC_MAKE_EXECUTABLE NAMES gmake make REQUIRED)
+        if(NOT EXISTS "${OPENAGC_PSBC_SOURCE_DIR}/Makefile")
+            message(FATAL_ERROR
+                "OPENAGC_BUILD_PSBC requires OPENAGC_PSBC_SOURCE_DIR with a Makefile")
+        endif()
+        set(OPENAGC_PSBC_EXECUTABLE "${OPENAGC_PSBC_SOURCE_DIR}/psbc")
+        add_custom_target(openagc_psbc_host ALL
+            COMMAND "${OPENAGC_MAKE_EXECUTABLE}" -C
+                "${OPENAGC_PSBC_SOURCE_DIR}" psbc
+            BYPRODUCTS "${OPENAGC_PSBC_EXECUTABLE}"
+            COMMENT "Building host openagc-psbc"
+            VERBATIM)
+    elseif(NOT EXISTS "${OPENAGC_PSBC_EXECUTABLE}")
+        message(FATAL_ERROR
+            "OPENAGC_PACKAGE_PSBC requires an existing OPENAGC_PSBC_EXECUTABLE or OPENAGC_BUILD_PSBC=ON")
+    endif()
+    add_executable(OpenAGC::psbc IMPORTED GLOBAL)
+    set_target_properties(OpenAGC::psbc PROPERTIES
+        IMPORTED_LOCATION "${OPENAGC_PSBC_EXECUTABLE}")
+endif()
+
+# === Install and CMake package ===
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
         FILES_MATCHING PATTERN "*.h")
-install(TARGETS openagc ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+install(TARGETS openagc EXPORT OpenAGCTargets
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+if(OPENAGC_PACKAGE_PSBC)
+    install(PROGRAMS "${OPENAGC_PSBC_EXECUTABLE}"
+        DESTINATION ${CMAKE_INSTALL_BINDIR}
+        RENAME openagc-psbc)
+endif()
+install(FILES LICENSE README.md
+    DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/doc/OpenAGC)
+
+set(OPENAGC_CMAKE_INSTALL_DIR
+    "${CMAKE_INSTALL_LIBDIR}/cmake/OpenAGC")
+configure_package_config_file(
+    cmake/OpenAGCConfig.cmake.in
+    "${CMAKE_CURRENT_BINARY_DIR}/OpenAGCConfig.cmake"
+    INSTALL_DESTINATION "${OPENAGC_CMAKE_INSTALL_DIR}"
+    PATH_VARS CMAKE_INSTALL_BINDIR CMAKE_INSTALL_INCLUDEDIR)
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/OpenAGCConfigVersion.cmake"
+    VERSION "${PROJECT_VERSION}"
+    COMPATIBILITY SameMajorVersion)
+export(EXPORT OpenAGCTargets
+    FILE "${CMAKE_CURRENT_BINARY_DIR}/OpenAGCTargets.cmake"
+    NAMESPACE OpenAGC::)
+install(EXPORT OpenAGCTargets
+    FILE OpenAGCTargets.cmake
+    NAMESPACE OpenAGC::
+    DESTINATION "${OPENAGC_CMAKE_INSTALL_DIR}")
+install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/OpenAGCConfig.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/OpenAGCConfigVersion.cmake"
+    DESTINATION "${OPENAGC_CMAKE_INSTALL_DIR}")
+
+set(CPACK_PACKAGE_NAME OpenAGC)
+set(CPACK_PACKAGE_VENDOR "OpenAGC")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+set(CPACK_PACKAGE_FILE_NAME
+    "openagc-${PROJECT_VERSION}-${OPENAGC_PLATFORM}")
+set(CPACK_GENERATOR TGZ)
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+include(CPack)

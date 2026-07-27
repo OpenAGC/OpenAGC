@@ -1247,3 +1247,23 @@ verified from SPRX/kernel disassembly.
   NGG VS+PS sample with linear RGBA8 and `R16G16B16A16_FLOAT` color targets.
   This does not yet claim all color/depth formats, compression, complete
   tessellation, geometry-shader, mesh-shader, or game-wide compatibility.
+# Installable SDK package
+
+The OpenAGC 0.1.0 SDK packaging goal is complete. Generic and Prospero builds
+install the public headers, platform-specific `libopenagc.a`, host-native
+`openagc-psbc`, license, README, and relocatable `OpenAGCConfig.cmake` metadata.
+Downstream projects consume `OpenAGC::openagc` and `OpenAGC::psbc` through
+`find_package(OpenAGC CONFIG REQUIRED)` and may compile SPIR-V with
+`openagc_compile_shader()`.
+
+Validation completed on 2026-07-27:
+
+- Clean generic configure/build and the complete CTest suite pass.
+- Generic install is consumed by a separate CMake project and links/runs.
+- The installed generic compiler converts the hardware compute SPIR-V fixture.
+- Prospero configure/build/install passes with the ps5-payload-sdk toolchain.
+- A separate Prospero consumer finds the installed package through
+  `OpenAGC_DIR`, compiles and links against the installed archive, and invokes
+  the installed host compiler during the cross build.
+- CPack generates `openagc-0.1.0-generic.tar.gz` and
+  `openagc-0.1.0-prospero.tar.gz`.

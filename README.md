@@ -207,6 +207,67 @@ implements ioctl submission, internal memory allocation, default-state
 submission, and suspend-point submission. It requires hardware validation
 before it can be considered production-ready.
 
+## Installable SDK and CMake package
+
+Packaging is validated for both the generic host build and the Prospero
+cross-toolchain. Each install contains the public headers, `libopenagc.a`, the
+host-native `openagc-psbc` executable, relocatable CMake package metadata,
+license, and documentation. The `package` target generates a versioned TGZ for
+the selected platform.
+
+When consuming a Prospero install outside the toolchain sysroot, pass the
+package directory explicitly because the PS5 toolchain intentionally root-paths
+package searches:
+
+```sh
+cmake -S app -B build-app \
+    -DCMAKE_TOOLCHAIN_FILE=$PS5_PAYLOAD_SDK/toolchain/prospero.cmake \
+    -DOpenAGC_DIR=/path/to/openagc/lib/cmake/OpenAGC
+```
+
+OpenAGC installs the public headers, `libopenagc.a`, relocatable CMake package
+metadata, documentation, and the host `openagc-psbc` shader compiler through
+one workflow. When the sibling `../openagc-psbc/psbc` exists, compiler
+packaging is enabled automatically:
+
+```sh
+cmake -S . -B build-sdk \
+    -DOPENAGC_PLATFORM=prospero \
+    -DOPENAGC_BUILD_TESTS=OFF \
+    -DCMAKE_TOOLCHAIN_FILE="$PS5_PAYLOAD_SDK/toolchain/prospero.cmake" \
+    -DCMAKE_INSTALL_PREFIX="$PWD/openagc-sdk"
+cmake --build build-sdk
+cmake --install build-sdk
+```
+
+For a fresh compiler checkout without a built `psbc`, add
+`-DOPENAGC_BUILD_PSBC=ON`. To supply another host build, set
+`-DOPENAGC_PSBC_EXECUTABLE=/absolute/path/to/psbc`. The shader compiler is a
+host program even when `libopenagc.a` targets Prospero; it is never compiled by
+the PS5 cross-toolchain. `cmake --build build-sdk --target package` produces a
+TGZ archive from the same install rules.
+
+Downstream homebrew CMake usage:
+
+```cmake
+find_package(OpenAGC 0.1 CONFIG REQUIRED)
+
+target_link_libraries(my_homebrew PRIVATE OpenAGC::openagc)
+
+openagc_compile_shader(
+    OUTPUT shaders/fill.sb
+    SOURCE shaders/fill.spv
+    STAGE compute
+    RESULT FILL_SHADER)
+add_custom_target(my_homebrew_shaders DEPENDS "${FILL_SHADER}")
+add_dependencies(my_homebrew my_homebrew_shaders)
+```
+
+The installed package exports `OpenAGC::openagc`, `OpenAGC::psbc`,
+`OpenAGC_PSBC_EXECUTABLE`, and `openagc_compile_shader()`. Set
+`CMAKE_PREFIX_PATH` to the install prefix, or pass
+`-DOpenAGC_DIR=<prefix>/lib/cmake/OpenAGC`.
+
 ## Project Structure
 
 ```
