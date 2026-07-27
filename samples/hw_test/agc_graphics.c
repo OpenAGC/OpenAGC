@@ -221,8 +221,7 @@ int sceKernelWaitEqueue(SceKernelEqueue equeue, SceKernelEvent *events,
 #define TEXTURE_DATA_OFFSET 0xB000u
 #define TEXTURE_DESC_OFFSET 0xC000u
 #define INDEX_TYPE_16      0u
-#define DEPTH_SURFACE_BYTES 0x01000000u
-#define DEPTH_SWIZZLE_64KB_Z_X 24u
+#define DEPTH_SWIZZLE_64KB_Z_X AGC_GFX1013_SWIZZLE_64KB_Z_X
 
 #if AGC_TESSELLATION
 #define GRAPHICS_POOL_PREFIX 0x30000u
@@ -292,6 +291,7 @@ typedef struct {
     void *compute_buffer;   /* Flexible memory pool for RT + shader code */
     void *render_target;    /* Points into compute_buffer */
     void *depth_surface;    /* Optional uncompressed D32 validation image */
+    size_t depth_surface_size;
     uint32_t width;
     uint32_t height;
     uint32_t pitch_pixels;
@@ -415,16 +415,31 @@ static bool allocate_display_buffers(GraphicsTest *test) {
     }
     cb_buffer = (uint32_t *)cb_addr;
 
-    /* The offscreen FP16 target is independent of the VideoOut dimensions.
-     * The depth build instead reserves a conservative 16 MiB 64K-Z-X image
-     * after the shader/descriptor prefix. */
+    /* The offscreen FP16 target is independent of the VideoOut dimensions. */
 #if AGC_DEPTH_VALIDATION
-    size_t rt_size = DEPTH_SURFACE_BYTES;
+    const AgcGfx1013DepthSurfaceLayoutInput depth_input = {
+        .width = test->width, .height = test->height, .layer_count = 1u,
+        .mip_level_count = 1u, .sample_count = 1u,
+        .format = AGC_GFX1013_DEPTH_FORMAT_D32_FLOAT,
+        .depth_swizzle_mode = DEPTH_SWIZZLE_64KB_Z_X,
+    };
+    AgcGfx1013DepthSurfaceLayout depth_layout;
+    int32_t layout_ret = agcGfx1013GetDepthSurfaceLayout(
+        &depth_input, &depth_layout);
+    if (layout_ret != AGC_OK || depth_layout.depth.allocation_size > SIZE_MAX) {
+        printf("D32 layout query failed: 0x%08x\n", (unsigned)layout_ret);
+        return false;
+    }
+    size_t rt_size = (size_t)depth_layout.depth.allocation_size;
+    size_t rt_alignment = depth_layout.depth.alignment;
+    test->depth_surface_size = rt_size;
 #else
     size_t rt_size = (size_t)FP16_TARGET_WIDTH * FP16_TARGET_HEIGHT *
                      sizeof(uint64_t);
+    size_t rt_alignment = 1u;
 #endif
-    size_t pool_size = align_up(GRAPHICS_POOL_PREFIX + rt_size,
+    size_t pool_size = align_up(
+                                GRAPHICS_POOL_PREFIX + rt_alignment - 1u + rt_size,
                                 1024 * 1024);
     void *pool_addr = NULL;
     int pool_ret = sceKernelMapNamedSystemFlexibleMemory(
@@ -439,15 +454,15 @@ static bool allocate_display_buffers(GraphicsTest *test) {
     test->render_target = (uint8_t *)pool_addr + GRAPHICS_POOL_PREFIX;
 #if AGC_DEPTH_VALIDATION
     test->depth_surface = (void *)(uintptr_t)align_up(
-        (size_t)(uintptr_t)test->render_target, 0x10000u);
+        (size_t)(uintptr_t)test->render_target, rt_alignment);
 #endif
 
     printf("Command buffer: %zu bytes at %p (flexible)\n", cb_size, cb_buffer);
     printf("Compute pool: %zu bytes at %p (flexible)\n", pool_size, pool_addr);
     printf("Render target: at %p (flexible)\n", test->render_target);
 #if AGC_DEPTH_VALIDATION
-    printf("Depth surface: %u bytes at %p (D32, swizzle=%u, HTILE off)\n",
-           DEPTH_SURFACE_BYTES, test->depth_surface,
+    printf("Depth surface: %zu bytes at %p (D32, swizzle=%u, HTILE off)\n",
+           test->depth_surface_size, test->depth_surface,
            DEPTH_SWIZZLE_64KB_Z_X);
 #endif
     printf("Display buffers: %zu bytes each, %d buffers at %p (garlic)\n",
@@ -1075,7 +1090,7 @@ static bool dispatch_graphics(GraphicsTest *test,
         }
     }
     uint32_t *depth_words = (uint32_t *)test->depth_surface;
-    for (uint32_t i = 0u; i < DEPTH_SURFACE_BYTES / sizeof(uint32_t); ++i)
+    for (size_t i = 0u; i < test->depth_surface_size / sizeof(uint32_t); ++i)
         depth_words[i] = 0x7fc00000u;
     printf("[Depth] uploaded four float3 position/color triangles at %p\n",
            gpu_vertices);
@@ -1503,7 +1518,7 @@ static bool dispatch_graphics(GraphicsTest *test,
         green_pixels += color[i] == 0xFF00FF00u;
         red_pixels += color[i] == 0xFF0000FFu;
     }
-    for (uint32_t i = 0u; i < DEPTH_SURFACE_BYTES / sizeof(uint32_t); ++i) {
+    for (size_t i = 0u; i < test->depth_surface_size / sizeof(uint32_t); ++i) {
         depth_one += depth[i] == 0x3f800000u;
         /* The reusable viewport maps clip Z with scale/offset 0.5/0.5. */
         depth_near += depth[i] == 0x3f200000u;

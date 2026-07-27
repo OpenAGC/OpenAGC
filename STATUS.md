@@ -1312,6 +1312,14 @@ verified from SPRX/kernel disassembly.
 
 ## Typed gfx1013 depth-surface binding
 
+The companion gfx1013 `64KB_Z_X` layout query is host-complete. It reports
+separate depth/stencil plane pitch, padded height, block geometry, mip-tail
+entry, 64 KiB alignment, slice size, and allocation size for D16, D32, S8,
+array layers, mip chains, and 1x-8x samples. Checked 64-bit sizing covers the
+largest bindable layout without truncation. The depth hardware sample now uses
+the query instead of a fixed 16 MiB reservation. Hardware validation remains
+pending because the PS5 is unavailable.
+
 Host implementation is complete for typed gfx1013 depth-surface memory state.
 `agcGfx1013SetDepthSurface` emits a deterministic 24-dword packet stream for
 `DB_DEPTH_VIEW`, `DB_HTILE_DATA_BASE`, `DB_DEPTH_SIZE_XY`, `DB_Z_INFO`,

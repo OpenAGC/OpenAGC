@@ -1,5 +1,10 @@
 # FW 0x0550 D32 depth validation
 
+The sample obtains its D32 `64KB_Z_X` pitch, padded height, 64 KiB alignment,
+slice size, and allocation size from `agcGfx1013GetDepthSurfaceLayout`. It no
+longer reserves a sample-local fixed 16 MiB image. This changes allocation
+only; PS5 execution remains pending while hardware is unavailable.
+
 `agc_depth.elf` is the first hardware qualification sample for OpenAGC's typed
 gfx1013 depth-surface and depth/stencil-control builders. It is prepared for FW
 `0x0550`, but has not yet been run on a real PS5.

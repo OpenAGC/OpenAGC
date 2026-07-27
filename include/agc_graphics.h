@@ -66,6 +66,8 @@ extern "C" {
 #define AGC_GFX1013_BLEND_STATE_DWORDS            19u
 #define AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS    14u
 #define AGC_GFX1013_DEPTH_SURFACE_DWORDS           24u
+#define AGC_GFX1013_SWIZZLE_64KB_Z_X               24u
+#define AGC_GFX1013_64KB_SURFACE_ALIGNMENT    0x10000u
 #define AGC_GFX1013_MAX_COLOR_TARGETS              8u
 #define AGC_GFX1013_CONTEXT_CONTROL_ENABLE 0x80000000u
 #define AGC_GFX1013_NGG_MODE_CONTROL        0x00000200u
@@ -260,6 +262,38 @@ typedef struct AgcGfx1013DepthSurfaceState {
     uint32_t htile_stencil_disable;
 } AgcGfx1013DepthSurfaceState;
 
+typedef struct AgcGfx1013DepthSurfaceLayoutInput {
+    uint32_t width;
+    uint32_t height;
+    uint32_t layer_count;
+    uint32_t mip_level_count;
+    uint32_t sample_count;
+    AgcGfx1013DepthSurfaceFormat format;
+    uint32_t depth_swizzle_mode;
+    uint32_t stencil_swizzle_mode;
+} AgcGfx1013DepthSurfaceLayoutInput;
+
+typedef struct AgcGfx1013DepthPlaneLayout {
+    uint64_t allocation_size;
+    uint64_t slice_size;
+    uint32_t pitch;
+    uint32_t padded_height;
+    uint32_t alignment;
+    uint32_t block_width;
+    uint32_t block_height;
+    uint32_t first_mip_in_tail;
+} AgcGfx1013DepthPlaneLayout;
+
+typedef struct AgcGfx1013DepthSurfaceLayout {
+    AgcGfx1013DepthPlaneLayout depth;
+    AgcGfx1013DepthPlaneLayout stencil;
+} AgcGfx1013DepthSurfaceLayout;
+
+_Static_assert(sizeof(AgcGfx1013DepthPlaneLayout) == 40,
+    "gfx1013 depth plane layout must be 40 bytes");
+_Static_assert(sizeof(AgcGfx1013DepthSurfaceLayout) == 80,
+    "gfx1013 depth surface layout must be 80 bytes");
+
 typedef struct AgcGfx1013ViewportState {
     uint32_t width;
     uint32_t height;
@@ -443,6 +477,9 @@ int32_t PS5_SYSV_ABI agcGfx1013SetColorTarget(
     SceAgcCb *cb, const AgcGfx1013ColorTargetState *state);
 int32_t PS5_SYSV_ABI agcGfx1013SetDepthSurface(
     SceAgcCb *cb, const AgcGfx1013DepthSurfaceState *state);
+int32_t PS5_SYSV_ABI agcGfx1013GetDepthSurfaceLayout(
+    const AgcGfx1013DepthSurfaceLayoutInput *input,
+    AgcGfx1013DepthSurfaceLayout *layout);
 int32_t PS5_SYSV_ABI agcGfx1013SetViewport(
     SceAgcCb *cb, const AgcGfx1013ViewportState *state);
 int32_t PS5_SYSV_ABI agcGfx1013SetScissor(

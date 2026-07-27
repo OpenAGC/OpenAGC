@@ -1091,6 +1091,151 @@ static bool agcGfx1013DepthSampleLog2(
     }
 }
 
+static bool agcGfx1013MulU64(uint64_t a, uint64_t b, uint64_t *result)
+{
+    if (a != 0u && b > UINT64_MAX / a)
+        return false;
+    *result = a * b;
+    return true;
+}
+
+static uint32_t agcGfx1013AlignPow2(uint32_t value, uint32_t alignment)
+{
+    return (value + alignment - 1u) & ~(alignment - 1u);
+}
+
+static bool agcGfx1013CalculateDepthPlaneLayout(
+    const AgcGfx1013DepthSurfaceLayoutInput *input, uint32_t bytes_per_element,
+    AgcGfx1013DepthPlaneLayout *layout)
+{
+    uint32_t element_log2 = bytes_per_element == 1u ? 0u :
+                            bytes_per_element == 2u ? 1u : 2u;
+    uint32_t sample_log2;
+    uint32_t element_count_log2;
+    uint32_t width_log2;
+    uint32_t mip_width;
+    uint32_t mip_height;
+    uint32_t tail_width;
+    uint32_t tail_height;
+    uint64_t slice_size = 0u;
+    uint64_t allocation_size;
+
+    if (!agcGfx1013DepthSampleLog2(input->sample_count, &sample_log2))
+        return false;
+    element_count_log2 = 16u - element_log2 - sample_log2;
+    width_log2 = (element_count_log2 +
+        (((sample_log2 & 1u) == 0u) ? 1u : 0u)) / 2u;
+    layout->block_width = 1u << width_log2;
+    layout->block_height = 1u << (element_count_log2 - width_log2);
+    layout->pitch = agcGfx1013AlignPow2(input->width, layout->block_width);
+    layout->padded_height = agcGfx1013AlignPow2(
+        input->height, layout->block_height);
+    layout->alignment = AGC_GFX1013_64KB_SURFACE_ALIGNMENT;
+    layout->first_mip_in_tail = input->mip_level_count;
+
+    if (input->mip_level_count == 1u) {
+        if (!agcGfx1013MulU64(layout->pitch, layout->padded_height,
+                &slice_size) ||
+            !agcGfx1013MulU64(slice_size, bytes_per_element, &slice_size) ||
+            !agcGfx1013MulU64(slice_size, input->sample_count, &slice_size))
+            return false;
+    } else {
+        uint32_t mip;
+
+        tail_width = layout->block_width >> 1u;
+        tail_height = layout->block_height;
+        /* gfx10 dsMipmapHtileFix adjusts Z-order tails for 8/16-bit planes. */
+        if (bytes_per_element == 1u) {
+            tail_width >>= 1u;
+            tail_height >>= 1u;
+        } else if (bytes_per_element == 2u) {
+            tail_width >>= 1u;
+        }
+        mip_width = input->width;
+        mip_height = input->height;
+        for (mip = 0u; mip < input->mip_level_count; ++mip) {
+            uint32_t remaining = input->mip_level_count - mip;
+            uint64_t mip_size;
+
+            if (mip_width <= tail_width && mip_height <= tail_height &&
+                remaining <= 12u) {
+                layout->first_mip_in_tail = mip;
+                if (slice_size > UINT64_MAX -
+                        AGC_GFX1013_64KB_SURFACE_ALIGNMENT)
+                    return false;
+                slice_size += AGC_GFX1013_64KB_SURFACE_ALIGNMENT;
+                break;
+            }
+            if (!agcGfx1013MulU64(
+                    agcGfx1013AlignPow2(mip_width, layout->block_width),
+                    agcGfx1013AlignPow2(mip_height, layout->block_height),
+                    &mip_size) ||
+                !agcGfx1013MulU64(mip_size, bytes_per_element, &mip_size) ||
+                slice_size > UINT64_MAX - mip_size)
+                return false;
+            slice_size += mip_size;
+            mip_width = mip_width > 1u ? mip_width >> 1u : 1u;
+            mip_height = mip_height > 1u ? mip_height >> 1u : 1u;
+        }
+    }
+    if (!agcGfx1013MulU64(slice_size, input->layer_count,
+            &allocation_size))
+        return false;
+    layout->slice_size = slice_size;
+    layout->allocation_size = allocation_size;
+    return true;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013GetDepthSurfaceLayout(
+    const AgcGfx1013DepthSurfaceLayoutInput *input,
+    AgcGfx1013DepthSurfaceLayout *layout)
+{
+    AgcGfx1013DepthSurfaceLayout result = {0};
+    uint32_t sample_log2;
+    uint32_t max_dimension;
+    uint32_t max_mips = 1u;
+    uint32_t depth_bytes = 0u;
+    uint32_t stencil_bytes = 0u;
+
+    if (!input || !layout || input->width == 0u || input->height == 0u ||
+        input->width > 0x4000u || input->height > 0x4000u ||
+        input->layer_count == 0u || input->layer_count > 0x2000u ||
+        input->mip_level_count == 0u || input->mip_level_count > 16u ||
+        (input->sample_count > 1u && input->mip_level_count > 1u) ||
+        !agcGfx1013DepthSampleLog2(input->sample_count, &sample_log2))
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    max_dimension = input->width > input->height ? input->width : input->height;
+    while (max_dimension > 1u) {
+        max_dimension >>= 1u;
+        ++max_mips;
+    }
+    if (input->mip_level_count > max_mips)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    switch (input->format) {
+    case AGC_GFX1013_DEPTH_FORMAT_D16_UNORM: depth_bytes = 2u; break;
+    case AGC_GFX1013_DEPTH_FORMAT_D32_FLOAT: depth_bytes = 4u; break;
+    case AGC_GFX1013_DEPTH_FORMAT_S8_UINT: stencil_bytes = 1u; break;
+    case AGC_GFX1013_DEPTH_FORMAT_D16_UNORM_S8_UINT:
+        depth_bytes = 2u; stencil_bytes = 1u; break;
+    case AGC_GFX1013_DEPTH_FORMAT_D32_FLOAT_S8_UINT:
+        depth_bytes = 4u; stencil_bytes = 1u; break;
+    default: return AGC_ERROR_NOT_SUPPORTED;
+    }
+    if ((depth_bytes != 0u &&
+         input->depth_swizzle_mode != AGC_GFX1013_SWIZZLE_64KB_Z_X) ||
+        (stencil_bytes != 0u &&
+         input->stencil_swizzle_mode != AGC_GFX1013_SWIZZLE_64KB_Z_X))
+        return AGC_ERROR_NOT_SUPPORTED;
+    if ((depth_bytes != 0u && !agcGfx1013CalculateDepthPlaneLayout(
+             input, depth_bytes, &result.depth)) ||
+        (stencil_bytes != 0u && !agcGfx1013CalculateDepthPlaneLayout(
+             input, stencil_bytes, &result.stencil)))
+        return AGC_ERROR_INVALID_ARGUMENT;
+    *layout = result;
+    return AGC_OK;
+}
+
 int32_t PS5_SYSV_ABI agcGfx1013SetDepthSurface(
     SceAgcCb *cb, const AgcGfx1013DepthSurfaceState *state)
 {

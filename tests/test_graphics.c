@@ -1273,6 +1273,96 @@ static void test_gfx1013_depth_surface_packets(void)
         "unsupported depth format is atomic");
 }
 
+static void test_gfx1013_depth_surface_layout(void)
+{
+    AgcGfx1013DepthSurfaceLayoutInput input = {
+        .width = 1920u, .height = 1080u, .layer_count = 1u,
+        .mip_level_count = 1u, .sample_count = 1u,
+        .format = AGC_GFX1013_DEPTH_FORMAT_D32_FLOAT,
+        .depth_swizzle_mode = AGC_GFX1013_SWIZZLE_64KB_Z_X,
+    };
+    AgcGfx1013DepthSurfaceLayout layout = {0};
+
+    TEST_ASSERT_EQ(agcGfx1013GetDepthSurfaceLayout(&input, &layout), AGC_OK,
+        "gfx1013 D32 64KB-Z-X layout queries");
+    TEST_ASSERT_EQ(layout.depth.pitch, 1920u, "D32 layout exact pitch");
+    TEST_ASSERT_EQ(layout.depth.padded_height, 1152u,
+        "D32 layout exact padded height");
+    TEST_ASSERT_EQ(layout.depth.slice_size, 0x870000ull,
+        "D32 layout exact slice size");
+    TEST_ASSERT_EQ(layout.depth.allocation_size, 0x870000ull,
+        "D32 layout exact allocation size");
+    TEST_ASSERT_EQ(layout.depth.alignment, 0x10000u,
+        "D32 layout exact alignment");
+    TEST_ASSERT_EQ(layout.depth.block_width, 128u,
+        "D32 layout exact block width");
+    TEST_ASSERT_EQ(layout.depth.block_height, 128u,
+        "D32 layout exact block height");
+    TEST_ASSERT_EQ(layout.depth.first_mip_in_tail, 1u,
+        "single-level D32 has no mip tail");
+    TEST_ASSERT_EQ(layout.stencil.allocation_size, 0u,
+        "D32 layout leaves stencil plane empty");
+
+    input.layer_count = 3u;
+    input.sample_count = 4u;
+    TEST_ASSERT_EQ(agcGfx1013GetDepthSurfaceLayout(&input, &layout), AGC_OK,
+        "gfx1013 multisampled array layout queries");
+    TEST_ASSERT_EQ(layout.depth.block_width, 64u,
+        "4x D32 layout exact block width");
+    TEST_ASSERT_EQ(layout.depth.block_height, 64u,
+        "4x D32 layout exact block height");
+    TEST_ASSERT_EQ(layout.depth.slice_size, 0x1fe0000ull,
+        "4x D32 layout exact slice size");
+    TEST_ASSERT_EQ(layout.depth.allocation_size, 0x5fa0000ull,
+        "4x D32 array exact allocation size");
+
+    input.width = 1024u; input.height = 1024u; input.layer_count = 2u;
+    input.mip_level_count = 11u; input.sample_count = 1u;
+    TEST_ASSERT_EQ(agcGfx1013GetDepthSurfaceLayout(&input, &layout), AGC_OK,
+        "gfx1013 D32 mip-chain layout queries");
+    TEST_ASSERT_EQ(layout.depth.first_mip_in_tail, 4u,
+        "D32 mip tail begins at exact level");
+    TEST_ASSERT_EQ(layout.depth.slice_size, 0x560000ull,
+        "D32 mip chain exact slice size");
+    TEST_ASSERT_EQ(layout.depth.allocation_size, 0xac0000ull,
+        "D32 mip array exact allocation size");
+
+    input.width = 640u; input.height = 480u; input.layer_count = 1u;
+    input.mip_level_count = 1u;
+    input.format = AGC_GFX1013_DEPTH_FORMAT_D16_UNORM_S8_UINT;
+    input.stencil_swizzle_mode = AGC_GFX1013_SWIZZLE_64KB_Z_X;
+    TEST_ASSERT_EQ(agcGfx1013GetDepthSurfaceLayout(&input, &layout), AGC_OK,
+        "gfx1013 split depth/stencil layout queries");
+    TEST_ASSERT_EQ(layout.depth.allocation_size, 0xc0000ull,
+        "D16 plane exact allocation size");
+    TEST_ASSERT_EQ(layout.stencil.allocation_size, 0x60000ull,
+        "S8 plane exact allocation size");
+
+    input.width = 0x4000u; input.height = 0x4000u;
+    input.layer_count = 0x2000u; input.sample_count = 8u;
+    input.format = AGC_GFX1013_DEPTH_FORMAT_D32_FLOAT;
+    input.stencil_swizzle_mode = 0u;
+    TEST_ASSERT_EQ(agcGfx1013GetDepthSurfaceLayout(&input, &layout), AGC_OK,
+        "largest bindable D32 layout retains 64-bit size");
+    TEST_ASSERT_EQ(layout.depth.allocation_size, 0x400000000000ull,
+        "largest bindable D32 allocation does not truncate");
+
+    layout.depth.allocation_size = 0x1122334455667788ull;
+    input.layer_count = 0x2001u;
+    TEST_ASSERT_EQ(agcGfx1013GetDepthSurfaceLayout(&input, &layout),
+        AGC_ERROR_INVALID_ARGUMENT, "unrepresentable layer count rejects");
+    TEST_ASSERT_EQ(layout.depth.allocation_size, 0x1122334455667788ull,
+        "invalid large layout preserves output");
+    input.layer_count = 1u; input.width = 1920u; input.height = 1080u;
+    input.mip_level_count = 2u;
+    TEST_ASSERT_EQ(agcGfx1013GetDepthSurfaceLayout(&input, &layout),
+        AGC_ERROR_INVALID_ARGUMENT, "multisampled mip chain rejects");
+    input.sample_count = 1u; input.mip_level_count = 1u;
+    input.depth_swizzle_mode = 23u;
+    TEST_ASSERT_EQ(agcGfx1013GetDepthSurfaceLayout(&input, &layout),
+        AGC_ERROR_NOT_SUPPORTED, "unimplemented depth swizzle rejects");
+}
+
 static void test_gfx1013_graphics_defaults_v8(void)
 {
     uint32_t buffer[2184] = {0};
@@ -1762,6 +1852,7 @@ void test_suite_graphics(void)
     TEST_RUN(test_gfx1013_fixed_function_packets);
     TEST_RUN(test_gfx1013_blend_depth_stencil_packets);
     TEST_RUN(test_gfx1013_depth_surface_packets);
+    TEST_RUN(test_gfx1013_depth_surface_layout);
     TEST_RUN(test_gfx1013_frame_state);
     TEST_RUN(test_gfx1013_graphics_defaults_v8);
     TEST_RUN(test_gfx1013_fixed_function_rejects_atomically);

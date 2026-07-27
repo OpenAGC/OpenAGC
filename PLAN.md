@@ -16,6 +16,19 @@ AMD PM4 packet ancestry overlap in useful ways.
 
 ## Current Execution Order
 
+### Host-complete: gfx1013 depth-surface layout
+
+- `agcGfx1013GetDepthSurfaceLayout` calculates separate depth and stencil
+  plane layouts for gfx1013 `64KB_Z_X`, including pitch, padded height,
+  64 KiB alignment, per-layer mip-chain size, full array allocation, macroblock
+  dimensions, and the first packed mip-tail level.
+- Exact host fixtures cover D32, 4x MSAA arrays, D32 mip tails, split D16/S8
+  planes, the largest bindable 64-bit allocation, invalid large dimensions,
+  unsupported swizzles, and invalid multisampled mip chains.
+- `agc_depth.elf` now consumes the query instead of reserving a hardcoded
+  16 MiB depth image.
+- Hardware promotion remains deferred until the FW `0x0550` PS5 is available.
+
 This section is the authoritative completion plan. The later phase sections
 retain detailed history and evidence; they do not override this order.
 
