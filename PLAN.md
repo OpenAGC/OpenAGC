@@ -2155,9 +2155,14 @@ Next execution order:
    reusable frame post-bind builder. Two identical runs per format produced
    stable 255,043/255,744-pixel coverage and FNV64
    `0x6fe253259c7b0455`/`0x6babce1afaa81b2c`, passed Wave32/marker/fence checks,
-   completed 1,800/1,800 flips, and left clean live kernel logs. Continue the
-   isolated format gate with R32, RG32, and RGBA32.
-15. Continue game-import coverage after the reusable draw/format APIs land;
+   completed 1,800/1,800 flips, and left clean live kernel logs.
+15. **Hardware complete:** linear R32 FLOAT uses CB format `0x04`, FLOAT number
+   type `7`, standard swap, and the format-derived 32_R shader export. Two
+   identical runs each stored 255,744 complete pixels, eight distinct values,
+   no invalid float components, and FNV64 `0x43e0f1986c4ec883`; all checks and
+   1,800/1,800 flips passed with clean kernel logs. Continue with RG32 and
+   RGBA32.
+16. Continue game-import coverage after the reusable draw/format APIs land;
    correct Subnautica wrapper coverage and inventory DRAGON QUEST VII
    Reimagined against the new application-facing surface.
 
