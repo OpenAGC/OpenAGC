@@ -2610,6 +2610,109 @@ int32_t PS5_SYSV_ABI agcGfx1013DispatchCompute(
     return AGC_OK;
 }
 
+int32_t PS5_SYSV_ABI agcGfx1013RmwHtile(
+    SceAgcCb *cb, const AgcGfx1013HtileRmwState *state)
+{
+    AgcGfx1013ResourceTransition before = {
+        AGC_GFX1013_RESOURCE_USAGE_DEPTH_STENCIL_WRITE,
+        AGC_GFX1013_RESOURCE_USAGE_COMPUTE_WRITE, 0u, 0u,
+    };
+    AgcGfx1013ResourceTransition after = {
+        AGC_GFX1013_RESOURCE_USAGE_COMPUTE_WRITE,
+        AGC_GFX1013_RESOURCE_USAGE_DEPTH_STENCIL_WRITE, 0u, 0u,
+    };
+    AgcGfx1013ComputeState compute = {0};
+    uint32_t user_data[7];
+    uint32_t before_dwords;
+    uint32_t after_dwords;
+    uint32_t rsrc2;
+    uint32_t word_count;
+    uint64_t end;
+    uint64_t address;
+    uint64_t required_dwords;
+    int32_t error;
+
+    if (!cb || !state || !state->record || !state->sh_registers ||
+        !state->subresource || !state->plan ||
+        state->htile_address == 0u || state->htile_allocation_size == 0u ||
+        state->subresource->size == 0u || state->plan->write_mask == 0u ||
+        state->plan->requires_read_modify_write > 1u ||
+        state->plan->hardware_enabled > 1u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (state->subresource->in_mip_tail)
+        return AGC_ERROR_NOT_SUPPORTED;
+    if ((state->htile_address & 3u) != 0u ||
+        (state->subresource->offset & 3u) != 0u ||
+        (state->subresource->size & 3u) != 0u)
+        return AGC_ERROR_INVALID_ALIGNMENT;
+    if (state->subresource->offset > state->htile_allocation_size ||
+        state->subresource->size >
+            state->htile_allocation_size - state->subresource->offset)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (state->htile_address > UINT64_MAX - state->subresource->offset)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    address = state->htile_address + state->subresource->offset;
+    end = address + state->subresource->size;
+    if (end < address || (address >> 48u) != 0u || (end >> 48u) != 0u)
+        return AGC_ERROR_VALIDATION_FAILED;
+    if (state->subresource->size / sizeof(uint32_t) > UINT32_MAX)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    word_count = (uint32_t)(
+        state->subresource->size / sizeof(uint32_t));
+
+    compute.record = state->record;
+    compute.sh_registers = state->sh_registers;
+    compute.num_sh_registers = state->num_sh_registers;
+    compute.code_address = state->code_address;
+    compute.user_data = user_data;
+    compute.num_user_data = 7u;
+    compute.local_size_x = AGC_GFX1013_HTILE_RMW_LOCAL_SIZE;
+    compute.local_size_y = 1u;
+    compute.local_size_z = 1u;
+    compute.group_count_x =
+        (word_count + AGC_GFX1013_HTILE_RMW_LOCAL_SIZE - 1u) /
+        AGC_GFX1013_HTILE_RMW_LOCAL_SIZE;
+    compute.group_count_y = 1u;
+    compute.group_count_z = 1u;
+
+    error = agcGfx1013ValidateCompute(&compute);
+    if (error != AGC_OK)
+        return error;
+    if (!agcGfx1013FindComputeRegister(
+            &compute, AGC_REG_COMPUTE_PGM_RSRC2, &rsrc2) ||
+        ((rsrc2 >> 1u) & 0x1fu) != 7u || (rsrc2 & 0x80u) == 0u)
+        return AGC_ERROR_SHADER_INVALID;
+    error = agcGfx1013GetResourceTransitionDwords(
+        &before, &before_dwords);
+    if (error != AGC_OK)
+        return error;
+    error = agcGfx1013GetResourceTransitionDwords(
+        &after, &after_dwords);
+    if (error != AGC_OK)
+        return error;
+    required_dwords = (uint64_t)before_dwords + 38u +
+        compute.num_user_data + after_dwords;
+    if (required_dwords != AGC_GFX1013_HTILE_RMW_DWORDS)
+        return AGC_ERROR_INTERNAL;
+    if (required_dwords > agcCbRemainingDwords(cb))
+        return AGC_ERROR_BUFFER_TOO_SMALL;
+
+    user_data[0] = 0u;
+    user_data[1] = 0u;
+    user_data[2] = (uint32_t)address;
+    user_data[3] = (uint32_t)(address >> 32u);
+    user_data[4] = word_count;
+    user_data[5] = state->plan->write_value;
+    user_data[6] = state->plan->write_mask;
+
+    error = agcGfx1013TransitionResource(cb, &before);
+    if (error == AGC_OK)
+        error = agcGfx1013DispatchCompute(cb, &compute);
+    if (error == AGC_OK)
+        error = agcGfx1013TransitionResource(cb, &after);
+    return error;
+}
+
 static bool agcGfx1013IsResourcePlaceholder(uint32_t value)
 {
     return value == OPENAGC_VERTEX_BUFFER_TABLE_PLACEHOLDER ||

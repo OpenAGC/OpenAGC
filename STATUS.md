@@ -1,5 +1,23 @@
 # openagc Status
 
+## Typed HTILE compute RMW checkpoint (2026-07-27)
+
+The exact-range HTILE compute read-modify-write path is now implemented and
+host-qualified. `agcGfx1013RmwHtile` consumes a validated non-tail HTILE
+subresource and aspect plan, derives the exact address/word count, and
+atomically emits the 83-dword DB release/acquire, Wave32 compute dispatch, and
+compute release/DB acquire sequence. It rejects shared mip tails,
+out-of-allocation ranges, short command buffers, and shaders that do not expose
+the required seven user SGPRs plus TGID_X.
+
+The new `htile_rmw.comp` shader performs the masked word update while preserving
+reserved and unselected-aspect bits. Its psbc record encodes RSRC2 `0x0000008e`
+and the expected five compute registers. Clean generic build/CTest passes, and
+exact host fixtures cover address derivation, word/group counts, user data,
+both synchronization boundaries, atomic failures, and the already-defined
+depth-only, stencil-only, and combined masks. The combined expclear public
+enable constant remains zero.
+
 ## Combined stencil/HTILE expclear design gate (2026-07-27)
 
 The combined depth/stencil expclear path now has an explicit aspect-masked

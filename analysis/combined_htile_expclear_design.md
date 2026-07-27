@@ -54,7 +54,17 @@ does not write metadata or emit PM4.
 - Invalid aspects, noncanonical depth, an absent stencil aspect, or an S8 clear
   outside 0-255 reject without modifying the output plan.
 
-## Future hardware sequence
+## Implemented RMW stage
+
+`agcGfx1013RmwHtile` and `htile_rmw.comp` now implement steps 2 through 4
+below as one atomically preflighted command sequence. The composer accepts only
+an exact ordinary-mip/layer range returned by the HTILE layout API; shared mip
+tails and ranges outside the allocation reject. Its shader record is fixed to
+seven user SGPRs plus TGID_X and receives address, word count, value, and mask.
+This generic metadata operation does not change the combined expclear enable
+gate by itself.
+
+## Hardware sequence
 
 Independent validation must use an isolated fixture and this order:
 

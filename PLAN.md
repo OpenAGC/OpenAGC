@@ -2078,6 +2078,14 @@ and output atomicity; both the public enable constant and dedicated PS5 sample
 gate remain zero/closed. Independent hardware activation must follow the
 sequence and pass criteria in `analysis/combined_htile_expclear_design.md` and
 must not be inferred from ordinary combined HTILE qualification.
+
+The generic exact-range GPU RMW stage is now complete on the host.
+`agcGfx1013RmwHtile` owns the non-tail range validation and the full
+DB-to-compute-to-DB synchronization stream; `htile_rmw.comp` owns the masked
+word update with the exact seven-user-SGPR contract. The next action is the
+dedicated FW `0x0550` combined-expclear fixture with the public enable gate
+still off, followed by two sequential runs each for depth-only, stencil-only,
+and both-aspect cases.
 4. Expand typed depth/HTILE support to mip and array-layer hardware fixtures
    before combining additional depth features.
 5. Move remaining hardware-proven sample PM4 into public typed builders and

@@ -1,0 +1,34 @@
+#version 450
+#extension GL_EXT_buffer_reference : enable
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+layout(buffer_reference, std430) buffer HtileWords {
+    uint data[];
+};
+
+/* Runtime user SGPR contract:
+ *   s0-s1: ring offsets (unused)
+ *   s2-s3: exact HTILE subresource address
+ *   s4: word count
+ *   s5: masked write value
+ *   s6: aspect mask
+ *   s7: workgroup_id_x
+ */
+layout(push_constant) uniform PushConstants {
+    HtileWords words;
+    uint word_count;
+    uint write_value;
+    uint write_mask;
+} pc;
+
+void main() {
+    uint index = gl_GlobalInvocationID.x;
+    if (index >= pc.word_count)
+        return;
+
+    uint old_word = pc.words.data[index];
+    pc.words.data[index] =
+        (old_word & ~pc.write_mask) |
+        (pc.write_value & pc.write_mask);
+}

@@ -58,6 +58,8 @@ extern "C" {
 #define AGC_GFX1013_EOP_CACHE_POLICY_LRU          3u
 #define AGC_GFX1013_ACQUIRE_MEM_DWORDS             8u
 #define AGC_GFX1013_TRANSITION_MAX_DWORDS          20u
+#define AGC_GFX1013_HTILE_RMW_DWORDS                83u
+#define AGC_GFX1013_HTILE_RMW_LOCAL_SIZE            64u
 #define AGC_GFX1013_ACQUIRE_POLL_INTERVAL        0x0Au
 #define AGC_GFX1013_ACQUIRE_GCR_ALL            0xC3B1u
 
@@ -467,6 +469,20 @@ typedef struct AgcGfx1013ComputeState {
     uint32_t modifier;
 } AgcGfx1013ComputeState;
 
+typedef struct AgcGfx1013HtileRmwState {
+    const AgcShaderRecord *record;
+    const AgcRegisterValue *sh_registers;
+    uint32_t num_sh_registers;
+    uint64_t code_address;
+    uint64_t htile_address;
+    uint64_t htile_allocation_size;
+    const AgcGfx1013HtileSubresourceLayout *subresource;
+    const AgcGfx1013HtileExpclearPlan *plan;
+} AgcGfx1013HtileRmwState;
+
+_Static_assert(sizeof(AgcGfx1013HtileRmwState) == 64,
+    "gfx1013 HTILE RMW state must be 64 bytes");
+
 typedef struct AgcGfx1013EopFenceState {
     uint64_t address;
     uint32_t value;
@@ -648,6 +664,8 @@ int32_t PS5_SYSV_ABI agcGfx1013ApplyComputeDefaultsV8(
     SceAgcCb *cb, AgcGfx1013ComputeDefaultStats *stats);
 int32_t PS5_SYSV_ABI agcGfx1013DispatchCompute(
     SceAgcCb *cb, const AgcGfx1013ComputeState *state);
+int32_t PS5_SYSV_ABI agcGfx1013RmwHtile(
+    SceAgcCb *cb, const AgcGfx1013HtileRmwState *state);
 int32_t PS5_SYSV_ABI agcGfx1013BindResourceTables(
     SceAgcCb *cb, const AgcGfx1013ShaderBinding *shader,
     const AgcGfx1013ResourceTableBinding *tables, uint32_t table_count);

@@ -87,6 +87,18 @@ agc_videoout.elf: agc_videoout.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB
 agc_compute.elf: agc_compute.c ps5_video_out.h gpu_credentials.h shaders/fill_color_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -o $@ agc_compute.c $(AGC_LDFLAGS)
 
+shaders/htile_rmw.spv: shaders/htile_rmw.comp
+	$(GLSLANG) -V --target-env vulkan1.2 $< -o $@
+
+shaders/htile_rmw.sb: shaders/htile_rmw.spv
+	$(PSBC) -f $< -s compute -o $@
+
+shaders/htile_rmw_sb.h: shaders/htile_rmw.sb
+	xxd -i -n htile_rmw_sb $< $@
+
+.PHONY: shaders_htile_rmw
+shaders_htile_rmw: shaders/htile_rmw_sb.h
+
 # Regenerate SPIR-V whenever the editable vertex shader changes.
 shaders/triangle_vert.spv: shaders/triangle.vert
 	$(GLSLANG) -V --target-env vulkan1.2 $< -o $@

@@ -1964,6 +1964,105 @@ static void test_gfx1013_compute_defaults_v8(void)
         "compute defaults emitted packet count");
 }
 
+static void test_gfx1013_htile_rmw_packets(void)
+{
+    uint32_t buffer[AGC_GFX1013_HTILE_RMW_DWORDS] = {0};
+    AgcRegisterValue sh[3] = {
+        {AGC_REG_COMPUTE_PGM_RSRC1, 0x000000c0u},
+        {AGC_REG_COMPUTE_PGM_RSRC2, 0x0000008eu},
+        {AGC_REG_COMPUTE_PGM_RSRC3, 0x00000000u},
+    };
+    AgcShaderRecord record;
+    AgcGfx1013HtileSubresourceLayout subresource = {
+        .offset = 0x30000u,
+        .size = 0x30000u,
+        .width = 1920u,
+        .height = 1080u,
+        .pitch = 2048u,
+        .padded_height = 1536u,
+    };
+    AgcGfx1013HtileExpclearPlan plan = {
+        .write_value = 0xfffc00f0u,
+        .write_mask = 0xfffff3ffu,
+        .requires_read_modify_write = 1u,
+        .hardware_enabled = 0u,
+    };
+    AgcGfx1013HtileRmwState state;
+    SceAgcCb cb;
+
+    memset(&record, 0, sizeof(record));
+    record.magic = AGC_SHADER_RECORD_MAGIC;
+    record.version = AGC_SHADER_RECORD_VERSION_GEN5;
+    record.shader_type = kAgcShaderTypeCs;
+    record.num_sh_registers = 3u;
+    memset(&state, 0, sizeof(state));
+    state.record = &record;
+    state.sh_registers = sh;
+    state.num_sh_registers = 3u;
+    state.code_address = 0x0000000201de9000ull;
+    state.htile_address = 0x00000002036f0000ull;
+    state.htile_allocation_size = 0x60000u;
+    state.subresource = &subresource;
+    state.plan = &plan;
+
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013RmwHtile(&cb, &state), AGC_OK,
+        "gfx1013 exact-range HTILE RMW emits");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb),
+        AGC_GFX1013_HTILE_RMW_DWORDS,
+        "HTILE RMW exact synchronized dword count");
+    TEST_ASSERT_EQ(agcPm4Opcode(buffer[0]), AGC_PM4_OP_EVENT_WRITE,
+        "HTILE RMW begins with DB metadata flush");
+    TEST_ASSERT_EQ(agcPm4Opcode(buffer[20]), AGC_PM4_OP_CONTEXT_CONTROL,
+        "HTILE RMW compute begins after DB release/acquire");
+    TEST_ASSERT_EQ(buffer[55], 0x03720000u,
+        "HTILE RMW exact subresource address low in s2");
+    TEST_ASSERT_EQ(buffer[56], 0x00000002u,
+        "HTILE RMW exact subresource address high in s3");
+    TEST_ASSERT_EQ(buffer[57], 0x0000c000u,
+        "HTILE RMW exact word count in s4");
+    TEST_ASSERT_EQ(buffer[58], plan.write_value,
+        "HTILE RMW masked value in s5");
+    TEST_ASSERT_EQ(buffer[59], plan.write_mask,
+        "HTILE RMW aspect mask in s6");
+    TEST_ASSERT_EQ(agcPm4Opcode(buffer[60]),
+        AGC_PM4_OP_DISPATCH_DIRECT,
+        "HTILE RMW dispatch follows user data");
+    TEST_ASSERT_EQ(buffer[61], 768u,
+        "HTILE RMW dispatch covers exact word range");
+    TEST_ASSERT_EQ(agcPm4Opcode(buffer[65]), AGC_PM4_OP_RELEASE_MEM,
+        "HTILE RMW compute release precedes DB acquire");
+    TEST_ASSERT_EQ(agcPm4Opcode(buffer[75]), AGC_PM4_OP_ACQUIRE_MEM,
+        "HTILE RMW ends with DB-visible acquire");
+
+    agcCbReset(&cb, buffer,
+        (AGC_GFX1013_HTILE_RMW_DWORDS - 1u) * sizeof(uint32_t));
+    TEST_ASSERT_EQ(agcGfx1013RmwHtile(&cb, &state),
+        AGC_ERROR_BUFFER_TOO_SMALL, "short HTILE RMW buffer rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "short HTILE RMW is atomic");
+
+    subresource.in_mip_tail = 1u;
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013RmwHtile(&cb, &state),
+        AGC_ERROR_NOT_SUPPORTED, "shared HTILE mip tail rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "unsupported HTILE tail is atomic");
+    subresource.in_mip_tail = 0u;
+    subresource.offset = 0x50000u;
+    TEST_ASSERT_EQ(agcGfx1013RmwHtile(&cb, &state),
+        AGC_ERROR_INVALID_ARGUMENT, "out-of-allocation HTILE range rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "invalid HTILE range is atomic");
+    subresource.offset = 0x30000u;
+    sh[1].value = 0x0000008cu;
+    TEST_ASSERT_EQ(agcGfx1013RmwHtile(&cb, &state),
+        AGC_ERROR_SHADER_INVALID,
+        "HTILE RMW rejects wrong user-SGPR shader contract");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "invalid HTILE shader contract is atomic");
+}
+
 static void test_gfx1013_resource_table_binding(void)
 {
     uint32_t buffer[16] = {0};
@@ -2397,6 +2496,7 @@ void test_suite_graphics(void)
     TEST_RUN(test_gfx1013_fixed_function_rejects_atomically);
     TEST_RUN(test_gfx1013_compute_packets);
     TEST_RUN(test_gfx1013_compute_defaults_v8);
+    TEST_RUN(test_gfx1013_htile_rmw_packets);
     TEST_RUN(test_gfx1013_resource_table_binding);
     TEST_RUN(test_gfx1013_resource_table_binding_rejects);
     TEST_RUN(test_gfx1013_baseline_draw_binds_resources);
