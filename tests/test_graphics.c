@@ -1041,6 +1041,10 @@ static void test_gfx1013_fixed_function_packets(void)
          0x00010738u},
         {AGC_GFX1013_RT_FORMAT_R11G11B10_FLOAT, 0x06u, 7u, 0u, 4u, 4u,
          0x00010718u},
+        {AGC_GFX1013_RT_FORMAT_RGBA8_SRGB, 0x0au, 6u, 0u, 4u, 4u,
+         0x00010628u},
+        {AGC_GFX1013_RT_FORMAT_BGRA8_SRGB, 0x0au, 6u, 1u, 4u, 4u,
+         0x00010e28u},
     };
     uint32_t buffer[64] = {0};
     uint32_t expected_format[28];
@@ -1109,6 +1113,13 @@ static void test_gfx1013_fixed_function_packets(void)
         agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
         AGC_REG_DB_DEPTH_CONTROL, 0u,
     };
+
+    TEST_ASSERT_EQ((uint32_t)AGC_GFX1013_RT_FORMAT_R11G11B10_FLOAT,
+        11u, "gfx1013 existing color-format enum value is stable");
+    TEST_ASSERT_EQ((uint32_t)AGC_GFX1013_RT_FORMAT_RGBA8_SRGB,
+        12u, "gfx1013 RGBA8 SRGB enum is appended");
+    TEST_ASSERT_EQ((uint32_t)AGC_GFX1013_RT_FORMAT_BGRA8_SRGB,
+        13u, "gfx1013 BGRA8 SRGB enum is appended");
 
     agcCbInit(&cb, buffer, sizeof(buffer));
     TEST_ASSERT_EQ(agcGfx1013SetColorTarget(&cb, &color), AGC_OK,

@@ -1,5 +1,28 @@
 # openagc Status
 
+## FW 5.50 sRGB render-target qualification (2026-07-27)
+
+Append-only public presets `RGBA8_SRGB` and `BGRA8_SRGB` are host-tested and
+hardware-qualified on standard PS5 FW `0x05500008`. They retain CB format
+`0x0a` and FP16_ABGR shader export, select CB number type `6`, and use standard
+and alternate component swaps respectively. Exact 28-dword fixtures lock
+`CB_COLOR0_INFO = 0x00010628` and `0x00010e28`; existing enum values remain
+unchanged and the new values are 12 and 13.
+
+Each isolated sample renders identical Wave32 content first to a native UNORM
+control and then to native sRGB memory. All four runs changed 126,360 pixels in
+both targets with zero coverage mismatches, zero alpha mismatches, zero RGB
+values outside the quantization-aware IEC 61966-2-1 transfer envelope, and
+157,421 non-identity converted channels. Both draws in every run passed the
+Wave32 audit and EOP fence, followed by 1,800/1,800 flips. Repeated identical
+ELFs reproduced their exact native packed hashes. User captures confirmed the
+centered textured triangle on dark gray and the expected standard/alternate
+color ordering. No timeout, GPU reset, kernel panic, or UI crash occurred.
+
+Full evidence and artifact hashes are in
+`analysis/fw550_srgb_qualification_20260727.md`; raw logs remain local under
+`samples/hw_test/conformance-logs/srgb-20260727/`.
+
 ## FW 5.50 render-target format expansion (2026-07-27)
 
 The typed gfx1013 color-target table and dedicated hardware fixtures now cover
@@ -22,8 +45,8 @@ No timeout, GPU reset, kernel panic, metadata fault, or UI crash occurred.
 
 Full evidence and artifact hashes are in
 `analysis/fw550_render_target_formats_20260727.md`. Raw logs remain under
-`samples/hw_test/conformance-logs/formats-20260727/`. sRGB and further 16-bit
-tuples remain pending and are not advertised as hardware-qualified.
+`samples/hw_test/conformance-logs/formats-20260727/`. Further 16-bit tuples
+remain pending and are not advertised as hardware-qualified.
 
 ## Application-facing indexed/indirect draw composition (2026-07-27)
 
@@ -484,7 +507,7 @@ make -B test
 Current expected result:
 
 ```text
-4057 passed, 0 failed
+4080 passed, 0 failed
 ```
 
 PS5 prospero backend (cross-compiled, no tests):
@@ -992,15 +1015,16 @@ CPU conversion to the registered RGBA8 display buffer was visually confirmed
 as a centered, smoothly color-textured triangle with equal sides on a
 dark-gray background.
 
-The public gfx1013 color-target layer now resolves 12 typed linear presets:
+The public gfx1013 color-target layer now resolves 14 typed linear presets:
 R8, RG8, RGBA8, BGRA8, and RGB10A2 UNORM plus R16, RG16, RGBA16, R32, RG32,
-RGBA32, and R11G11B10 FLOAT. `agcGfx1013GetColorTargetFormatInfo` exposes each preset's
+RGBA32, and R11G11B10 FLOAT, plus RGBA8 and BGRA8 SRGB.
+`agcGfx1013GetColorTargetFormatInfo` exposes each preset's
 exact gfx103 CB format, number type, component swap, byte size, and compatible
 SPI shader-export format; `agcGfx1013InitColorTarget` converts it into the
 existing ABI-stable target state. The packet builder accepts only table-backed
 encodings and rejects linear rows that violate the gfx103 256-byte pitch
-alignment. All 12 encodings have exact 28-dword host fixtures. RGBA8/BGRA8,
-RGB10A2, RGBA16 FLOAT, and R11G11B10 FLOAT have PS5 hardware evidence; R8,
+alignment. All 14 encodings have exact 28-dword host fixtures. RGBA8/BGRA8
+UNORM and SRGB, RGB10A2, RGBA16 FLOAT, and R11G11B10 FLOAT have PS5 hardware evidence; R8,
 RG8, R16, RG16, R32, RG32, and RGBA32 await hardware qualification.
 
 Typed gfx1013 resource transitions now model render-target, compute-write,

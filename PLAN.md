@@ -269,8 +269,9 @@ Work in this order:
 7. **Broaden capability after the vertical slice.** Reusable standard-swap
    RGBA8, RGB10A2, and R11G11B10 color targets are now host-tested and FW 5.50
    hardware-qualified, alongside the earlier alternate-swap BGRA8 and RGBA16F
-   paths. Next qualify sRGB encode behavior, then additional 16-bit color
-   tuples. After the color matrix is stable, qualify D16, S8-only, and D16+S8
+   paths. RGBA8/BGRA8 sRGB encode behavior is also hardware-qualified. Next
+   qualify additional 16-bit color tuples. After the color matrix is stable,
+   qualify D16, S8-only, and D16+S8
    before compressed variants. Continue with blending, resource transitions,
    multi-buffer frame scheduling, timestamps/queries, and stable NGG
    geometry/tessellation APIs according to homebrew needs.
@@ -651,7 +652,7 @@ Implemented and host-tested:
 Current expected host test result:
 
 ```text
-4057 passed, 0 failed
+4080 passed, 0 failed
 ```
 
 ## Phase 0: RE Groundwork
@@ -2102,15 +2103,13 @@ Next execution order:
    with exact FP16 coverage, completion fence, Wave32 audit, and 1,800 flips.
    The recovered `SET_BASE` wrapper requires canonical header control zero;
    passing one timed out and is now covered by an exact regression fixture.
-7. **Next:** qualify RGBA8 SRGB and BGRA8 SRGB. Append their public enum values
-   without renumbering existing formats; lock CB format `0x0a`, CB sRGB number
-   type `6`, standard/alternate component swaps, byte size, SPI export, and
-   exact `CB_COLOR0_INFO` streams in host fixtures. Each isolated FW 5.50 case
-   must validate native packed render-target memory against the sRGB transfer
-   oracle, exact coverage, Wave32 PM4 state, completion fence, and 1,800 flips.
-   Repeat the final identical ELFs and require deterministic packed readback
-   before advertising either tuple. Then continue with additional 16-bit
-   color formats.
+7. **Hardware complete:** RGBA8 SRGB and BGRA8 SRGB append public enum values
+   12 and 13 without renumbering existing formats. Exact fixtures lock CB
+   format `0x0a`, CB sRGB number type `6`, standard/alternate component swaps,
+   FP16_ABGR export, and `CB_COLOR0_INFO` values `0x00010628`/`0x00010e28`.
+   Both identical ELFs passed twice on FW 5.50 with native packed-memory
+   transfer oracles, exact coverage, Wave32 PM4 state, two completion fences,
+   and 1,800/1,800 flips. Next qualify additional 16-bit color formats.
 8. Expand depth/stencil formats after color qualification: D16, S8-only, and
    D16+S8, with independent compressed/uncompressed gates and no reuse of D32
    HTILE encodings without hardware evidence.

@@ -351,6 +351,12 @@ agc_graphics_rgb10a2.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shade
 agc_graphics_r11g11b10.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_VALIDATE_R11G11B10=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
 
+agc_graphics_rgba8_srgb.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_VALIDATE_RGBA8_SRGB=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_graphics_bgra8_srgb.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_VALIDATE_BGRA8_SRGB=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
+
 agc_depth.elf: shaders_depth agc_graphics.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_DEPTH_VALIDATION=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
 

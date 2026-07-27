@@ -69,7 +69,8 @@ Raw logs remain local under
 
 ## Remaining format work
 
-sRGB encode behavior is next because it can reuse the validated 8_8_8_8
-storage path while adding a semantic conversion oracle. Further 16-bit color
-tuples follow. Depth/stencil expansion begins afterward with isolated D16 and
-S8-only targets, then D16+S8, before enabling any compressed combination.
+RGBA8/BGRA8 sRGB encode behavior is now independently hardware-qualified with
+a native packed-memory semantic oracle; see
+`analysis/fw550_srgb_qualification_20260727.md`. Further 16-bit color tuples
+follow. Depth/stencil expansion begins afterward with isolated D16 and S8-only
+targets, then D16+S8, before enabling any compressed combination.

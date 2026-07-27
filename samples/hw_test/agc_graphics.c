@@ -393,8 +393,15 @@ int sceKernelWaitEqueue(SceKernelEqueue equeue, SceKernelEvent *events,
 #ifndef AGC_VALIDATE_R11G11B10
 #define AGC_VALIDATE_R11G11B10 0
 #endif
+#ifndef AGC_VALIDATE_RGBA8_SRGB
+#define AGC_VALIDATE_RGBA8_SRGB 0
+#endif
+#ifndef AGC_VALIDATE_BGRA8_SRGB
+#define AGC_VALIDATE_BGRA8_SRGB 0
+#endif
 #if (AGC_VALIDATE_RGBA8_REFERENCE + AGC_VALIDATE_RGBA8_STD + \
-     AGC_VALIDATE_RGB10A2 + AGC_VALIDATE_R11G11B10) > 1
+     AGC_VALIDATE_RGB10A2 + AGC_VALIDATE_R11G11B10 + \
+     AGC_VALIDATE_RGBA8_SRGB + AGC_VALIDATE_BGRA8_SRGB) > 1
 #error "select only one isolated color-target fixture"
 #endif
 
@@ -2461,6 +2468,7 @@ static bool dispatch_graphics(GraphicsTest *test,
 
 #if !AGC_VALIDATE_RGBA8_REFERENCE && !AGC_VALIDATE_RGBA8_STD && \
     !AGC_VALIDATE_RGB10A2 && !AGC_VALIDATE_R11G11B10 && \
+    !AGC_VALIDATE_RGBA8_SRGB && !AGC_VALIDATE_BGRA8_SRGB && \
     !AGC_DEPTH_VALIDATION
 static uint8_t half_to_unorm8(uint16_t half) {
     uint32_t exponent = (half >> 10) & 0x1fu;
@@ -2507,6 +2515,98 @@ static void visualize_fp16(GraphicsTest *test) {
            (size_t)test->width * test->height * BYTES_PER_PIXEL);
     printf("[FP16] CPU preview: %ux%u centered on RGBA8 display\n",
            preview_width, preview_height);
+}
+#endif
+
+#if AGC_VALIDATE_RGBA8_SRGB || AGC_VALIDATE_BGRA8_SRGB
+/* Inclusive packed-byte bounds for IEC 61966-2-1 encoding over the complete
+ * linear interval that can quantize to each UNORM8 control byte. Alpha is
+ * checked separately because CB sRGB conversion applies only to RGB. */
+static const uint8_t kSrgbLowerBound[256] = {
+      0,   6,  17,  25,  31,  36,  40,  44,  47,  51,  54,  57,  59,  62,  65,  67,
+     69,  71,  74,  76,  78,  80,  81,  83,  85,  87,  89,  90,  92,  93,  95,  97,
+     98, 100, 101, 102, 104, 105, 107, 108, 109, 110, 112, 113, 114, 115, 117, 118,
+    119, 120, 121, 122, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135,
+    136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 147, 148, 149, 150,
+    151, 152, 153, 154, 154, 155, 156, 157, 158, 159, 159, 160, 161, 162, 163, 163,
+    164, 165, 166, 166, 167, 168, 169, 169, 170, 171, 172, 172, 173, 174, 175, 175,
+    176, 177, 177, 178, 179, 180, 180, 181, 182, 182, 183, 184, 184, 185, 186, 186,
+    187, 188, 188, 189, 190, 190, 191, 192, 192, 193, 193, 194, 195, 195, 196, 197,
+    197, 198, 198, 199, 200, 200, 201, 201, 202, 203, 203, 204, 204, 205, 206, 206,
+    207, 207, 208, 208, 209, 210, 210, 211, 211, 212, 212, 213, 214, 214, 215, 215,
+    216, 216, 217, 217, 218, 218, 219, 219, 220, 221, 221, 222, 222, 223, 223, 224,
+    224, 225, 225, 226, 226, 227, 227, 228, 228, 229, 229, 230, 230, 231, 231, 232,
+    232, 233, 233, 234, 234, 235, 235, 236, 236, 237, 237, 238, 238, 239, 239, 240,
+    240, 241, 241, 242, 242, 242, 243, 243, 244, 244, 245, 245, 246, 246, 247, 247,
+    248, 248, 248, 249, 249, 250, 250, 251, 251, 252, 252, 253, 253, 253, 254, 254,
+};
+
+static const uint8_t kSrgbUpperBound[256] = {
+      7,  18,  26,  32,  37,  41,  45,  48,  52,  55,  58,  60,  63,  66,  68,  70,
+     72,  75,  77,  79,  81,  82,  84,  86,  88,  90,  91,  93,  94,  96,  98,  99,
+    101, 102, 103, 105, 106, 108, 109, 110, 111, 113, 114, 115, 116, 118, 119, 120,
+    121, 122, 123, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137,
+    138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 148, 149, 150, 151, 152,
+    153, 154, 155, 155, 156, 157, 158, 159, 160, 160, 161, 162, 163, 164, 164, 165,
+    166, 167, 167, 168, 169, 170, 170, 171, 172, 173, 173, 174, 175, 176, 176, 177,
+    178, 178, 179, 180, 181, 181, 182, 183, 183, 184, 185, 185, 186, 187, 187, 188,
+    189, 189, 190, 191, 191, 192, 193, 193, 194, 194, 195, 196, 196, 197, 198, 198,
+    199, 199, 200, 201, 201, 202, 202, 203, 204, 204, 205, 205, 206, 207, 207, 208,
+    208, 209, 209, 210, 211, 211, 212, 212, 213, 213, 214, 215, 215, 216, 216, 217,
+    217, 218, 218, 219, 219, 220, 220, 221, 222, 222, 223, 223, 224, 224, 225, 225,
+    226, 226, 227, 227, 228, 228, 229, 229, 230, 230, 231, 231, 232, 232, 233, 233,
+    234, 234, 235, 235, 236, 236, 237, 237, 238, 238, 239, 239, 240, 240, 241, 241,
+    242, 242, 243, 243, 243, 244, 244, 245, 245, 246, 246, 247, 247, 248, 248, 249,
+    249, 249, 250, 250, 251, 251, 252, 252, 253, 253, 254, 254, 254, 255, 255, 255,
+};
+
+static bool validate_srgb_transfer(const GraphicsTest *test)
+{
+    const uint32_t *linear = (const uint32_t *)test->buffers[0];
+    const uint32_t *srgb = (const uint32_t *)test->render_target;
+    const uint32_t pixels = test->width * test->height;
+    uint32_t changed = 0u;
+    uint32_t coverage_mismatch = 0u;
+    uint32_t alpha_mismatch = 0u;
+    uint32_t transfer_mismatch = 0u;
+    uint32_t converted_channels = 0u;
+    uint64_t linear_hash = UINT64_C(1469598103934665603);
+    uint64_t srgb_hash = UINT64_C(1469598103934665603);
+
+    for (uint32_t i = 0u; i < pixels; ++i) {
+        const bool linear_changed = linear[i] != DIAGNOSTIC_CLEAR_COLOR;
+        const bool srgb_changed = srgb[i] != DIAGNOSTIC_CLEAR_COLOR;
+        if (linear_changed != srgb_changed) {
+            coverage_mismatch++;
+            continue;
+        }
+        if (!linear_changed)
+            continue;
+        changed++;
+        linear_hash = (linear_hash ^ linear[i]) * UINT64_C(1099511628211);
+        srgb_hash = (srgb_hash ^ srgb[i]) * UINT64_C(1099511628211);
+        alpha_mismatch += (uint8_t)(linear[i] >> 24) !=
+                          (uint8_t)(srgb[i] >> 24);
+        for (uint32_t lane = 0u; lane < 3u; ++lane) {
+            const uint8_t linear_byte = (uint8_t)(linear[i] >> (lane * 8u));
+            const uint8_t srgb_byte = (uint8_t)(srgb[i] >> (lane * 8u));
+            transfer_mismatch += srgb_byte < kSrgbLowerBound[linear_byte] ||
+                                 srgb_byte > kSrgbUpperBound[linear_byte];
+            converted_channels += srgb_byte != linear_byte;
+        }
+    }
+
+    const bool pass = changed != 0u && coverage_mismatch == 0u &&
+        alpha_mismatch == 0u && transfer_mismatch == 0u &&
+        converted_channels > 1000u;
+    printf("[sRGB] changed=%u coverage-mismatch=%u alpha-mismatch=%u\n",
+           changed, coverage_mismatch, alpha_mismatch);
+    printf("[sRGB] transfer-mismatch=%u converted-channels=%u: %s\n",
+           transfer_mismatch, converted_channels, pass ? "PASS" : "FAIL");
+    printf("[sRGB] native packed FNV64 linear=0x%016llx srgb=0x%016llx\n",
+           (unsigned long long)linear_hash,
+           (unsigned long long)srgb_hash);
+    return pass;
 }
 #endif
 
@@ -2695,6 +2795,39 @@ int main(void) {
     }
     memcpy(test.buffers[1], test.buffers[0],
            (size_t)test.width * test.height * BYTES_PER_PIXEL);
+#elif AGC_VALIDATE_RGBA8_SRGB || AGC_VALIDATE_BGRA8_SRGB
+    const uint32_t swap = AGC_VALIDATE_BGRA8_SRGB ?
+        AGC_GFX1013_SURFACE_SWAP_ALT : AGC_GFX1013_SURFACE_SWAP_STD;
+    RenderTargetConfig linear_target = {
+        test.buffers[0], test.width, test.height,
+        AGC_GFX1013_COLOR_FORMAT_8_8_8_8,
+        AGC_GFX1013_SURFACE_NUMBER_UNORM, swap,
+        false, AGC_VALIDATE_BGRA8_SRGB ?
+            "BGRA8 UNORM control" : "RGBA8 UNORM control"
+    };
+    RenderTargetConfig srgb_target = {
+        test.render_target, test.width, test.height,
+        AGC_GFX1013_COLOR_FORMAT_8_8_8_8,
+        AGC_GFX1013_SURFACE_NUMBER_SRGB, swap,
+        false, AGC_VALIDATE_BGRA8_SRGB ?
+            "BGRA8 SRGB" : "RGBA8 SRGB"
+    };
+    printf("\n--- Step 4a: linear UNORM control draw ---\n");
+    if (!dispatch_graphics(&test, &front, &back, &ps, &linear_target)) {
+        printf("FATAL: sRGB linear control draw failed\n");
+        return 1;
+    }
+    printf("\n--- Step 4b: native sRGB target draw ---\n");
+    if (!dispatch_graphics(&test, &front, &back, &ps, &srgb_target)) {
+        printf("FATAL: sRGB render-target draw failed\n");
+        return 1;
+    }
+    if (!validate_srgb_transfer(&test)) {
+        printf("FATAL: native packed-memory sRGB transfer failed\n");
+        return 1;
+    }
+    memcpy(test.buffers[0], test.render_target, test.buffer_stride);
+    memcpy(test.buffers[1], test.render_target, test.buffer_stride);
 #elif AGC_VALIDATE_R11G11B10
     RenderTargetConfig r11g11b10_target = {
         test.render_target, FP16_TARGET_WIDTH, FP16_TARGET_HEIGHT,
