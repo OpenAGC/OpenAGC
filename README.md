@@ -106,13 +106,14 @@ Completed and tested:
   default-state `CLEAR_STATE` submission, and suspend-point submit/query
 - Hardware validation samples (`samples/hw_test/`) built as ELF and fake-SELF
 - Build system (CMake + Makefile)
-- Test suite with 2110 passing assertions on the host generic backend
+- Test suite with 4057 passing assertions on the host generic backend
 
 Hardware-validated on real PS5 gfx1013 hardware running FW 5.50:
 - Native `/dev/gc` initialization, queue setup, default states, and submission
 - Compute dispatch and no-GS NGG indexed graphics with GPU readback
 - Wave32 NGG and pixel execution, including compiler-record and final-PM4 checks
-- Linear RGBA8 and `R16G16B16A16_FLOAT` render targets
+- Linear standard/alternate-swap RGBA8, RGB10A2,
+  `R11G11B10_FLOAT`, and `R16G16B16A16_FLOAT` render targets
 
 Firmware policy: FW 3.20 is the lowest active compatibility target. FW 1.00
 and 2.x aliases are retained only as archival RE data and are not advertised
@@ -205,7 +206,7 @@ make test
 Current expected host result:
 
 ```text
-581 passed, 0 failed
+4057 passed, 0 failed
 ```
 
 ### PS5

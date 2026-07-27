@@ -481,10 +481,10 @@ ctest --test-dir build --output-on-failure
 make -B test
 ```
 
-Expected result:
+Current expected result:
 
 ```text
-3366 passed, 0 failed
+4057 passed, 0 failed
 ```
 
 PS5 prospero backend (cross-compiled, no tests):
@@ -992,15 +992,16 @@ CPU conversion to the registered RGBA8 display buffer was visually confirmed
 as a centered, smoothly color-textured triangle with equal sides on a
 dark-gray background.
 
-The public gfx1013 color-target layer now resolves 11 typed linear presets:
+The public gfx1013 color-target layer now resolves 12 typed linear presets:
 R8, RG8, RGBA8, BGRA8, and RGB10A2 UNORM plus R16, RG16, RGBA16, R32, RG32,
-and RGBA32 FLOAT. `agcGfx1013GetColorTargetFormatInfo` exposes each preset's
+RGBA32, and R11G11B10 FLOAT. `agcGfx1013GetColorTargetFormatInfo` exposes each preset's
 exact gfx103 CB format, number type, component swap, byte size, and compatible
 SPI shader-export format; `agcGfx1013InitColorTarget` converts it into the
 existing ABI-stable target state. The packet builder accepts only table-backed
 encodings and rejects linear rows that violate the gfx103 256-byte pitch
-alignment. All 11 encodings have exact 28-dword host fixtures. RGBA8/BGRA8 and
-RGBA16 FLOAT retain hardware evidence; the other presets await PS5 validation.
+alignment. All 12 encodings have exact 28-dword host fixtures. RGBA8/BGRA8,
+RGB10A2, RGBA16 FLOAT, and R11G11B10 FLOAT have PS5 hardware evidence; R8,
+RG8, R16, RG16, R32, RG32, and RGBA32 await hardware qualification.
 
 Typed gfx1013 resource transitions now model render-target, compute-write,
 copy-source/destination, shader-read, presentation, and host-read usage. Writer
@@ -1559,9 +1560,12 @@ the cursor. The stale gfx103 `DB_Z_INFO[8:4]` tile-mode-index name was corrected
 to the hardware-defined `SW_MODE` field.
 
 The baseline D32, isolated stencil, isolated 4x MSAA, compressed HTILE, typed
-HTILE decompression/resummarization, depth-only expclear, and combined
-stencil/HTILE PS5 hardware gates are complete on FW `0x05500008`. Combined
-stencil/HTILE expclear remains disabled and unclaimed.
+HTILE decompression/resummarization, depth-only expclear, combined
+stencil/HTILE, and combined stencil/HTILE expclear PS5 hardware gates are
+complete on FW `0x05500008`. Combined expclear is enabled after depth-only,
+stencil-only, and both-aspect cases each passed twice with exact metadata,
+D32/S8, fence, and 1,800-flip oracles; see
+`analysis/fw550_combined_expclear_qualification_20260727.md`.
 
 `samples/hw_test/agc_depth.elf` hardware-validates a dedicated baseline-NGG
 mode with an uncompressed D32-only
@@ -1582,7 +1586,7 @@ read-only usage. Exact fixtures lock the 20-dword DB write-to-read stream, the
 12-dword DB write-to-host stream, read-to-read no-op behavior, and atomic short
 buffer rejection. `agc_depth.elf` now uses the typed DB transition in addition
 to a separate color-target transition before CPU readback. Hardware execution
-remains pending.
+is covered by the passing FW 5.50 depth, HTILE, and expclear gates.
 
 ## Non-Goals For Current Milestone
 

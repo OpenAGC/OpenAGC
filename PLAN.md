@@ -651,7 +651,7 @@ Implemented and host-tested:
 Current expected host test result:
 
 ```text
-2110 passed, 0 failed
+4057 passed, 0 failed
 ```
 
 ## Phase 0: RE Groundwork
@@ -2102,10 +2102,15 @@ Next execution order:
    with exact FP16 coverage, completion fence, Wave32 audit, and 1,800 flips.
    The recovered `SET_BASE` wrapper requires canonical header control zero;
    passing one timed out and is now covered by an exact regression fixture.
-7. **Next:** expand color targets in hardware-risk order: BGRA8 UNORM/SRGB, RGBA8 SRGB,
-   RGB10A2 UNORM, R11G11B10 FLOAT, then additional 16-bit tuples. Each format
-   requires typed layout/descriptor fixtures, shader write/readback oracles,
-   exact coverage, a completion fence, and sustained VideoOut presentation.
+7. **Next:** qualify RGBA8 SRGB and BGRA8 SRGB. Append their public enum values
+   without renumbering existing formats; lock CB format `0x0a`, CB sRGB number
+   type `6`, standard/alternate component swaps, byte size, SPI export, and
+   exact `CB_COLOR0_INFO` streams in host fixtures. Each isolated FW 5.50 case
+   must validate native packed render-target memory against the sRGB transfer
+   oracle, exact coverage, Wave32 PM4 state, completion fence, and 1,800 flips.
+   Repeat the final identical ELFs and require deterministic packed readback
+   before advertising either tuple. Then continue with additional 16-bit
+   color formats.
 8. Expand depth/stencil formats after color qualification: D16, S8-only, and
    D16+S8, with independent compressed/uncompressed gates and no reuse of D32
    HTILE encodings without hardware evidence.

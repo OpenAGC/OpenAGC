@@ -50,7 +50,7 @@ cmake --build build-prospero
 The prospero build compiles `driver_prospero.c` with native `/dev/gc` ioctl calls.
 It links against `kernel` and `SceAgcDriver` stubs from the SDK.
 
-Expected host test result: `2129 passed, 0 failed`. Any change that drops this
+Expected host test result: `4057 passed, 0 failed`. Any change that drops this
 count is a regression — fix it before declaring the task done.
 
 ## Verification Checklist
@@ -507,10 +507,11 @@ the openagc-psbc shader compiler (Mesa NIR + ACO → AgcShaderRecord) are
 implemented and build. Hardware validation confirmed that init, memory
 allocation, default states, NOP submit, async graphics setup, queue
 create/destroy, suspend point submit, workload tracking, and **compute
-dispatch DCB submission** all work correctly with the GPU credential
-bypass (cr_sceAuthId = 0x4801000000000000). The remaining failures are the
-PA debug ioctl (EPERM) and the compute shader not writing to the display
-buffer (under active investigation).
+dispatch and shader writes**, indexed/indirect graphics, depth/stencil,
+combined HTILE expclear, and the qualified color formats all work correctly
+with the GPU credential bypass (cr_sceAuthId = 0x4801000000000000). The PA
+debug export is a userspace permission stub and FRAME_OPEN is absent from the
+FW 5.50 kernel dispatcher; neither is a graphics blocker.
 
 ## Non-Goals
 
