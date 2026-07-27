@@ -1407,12 +1407,26 @@ static bool dispatch_graphics(GraphicsTest *test,
     printf("[Draw] WRITE_DATA marker at 0x%llx\n", (unsigned long long)marker_target);
 
     /* Complete render-target writes before CPU readback and conversion. */
-    const AgcGfx1013ResourceTransition completion = {
+#if AGC_DEPTH_VALIDATION
+    const AgcGfx1013ResourceTransition color_completion = {
         .before = AGC_GFX1013_RESOURCE_USAGE_RENDER_TARGET,
+        .after = AGC_GFX1013_RESOURCE_USAGE_HOST_READ,
+    };
+#endif
+    const AgcGfx1013ResourceTransition completion = {
+#if AGC_DEPTH_VALIDATION
+        .before = AGC_GFX1013_RESOURCE_USAGE_DEPTH_STENCIL_WRITE,
+#else
+        .before = AGC_GFX1013_RESOURCE_USAGE_RENDER_TARGET,
+#endif
         .after = AGC_GFX1013_RESOURCE_USAGE_HOST_READ,
         .completion_address = marker_target,
         .completion_value = marker_value,
     };
+#if AGC_DEPTH_VALIDATION
+    if (agcGfx1013TransitionResource(&cb, &color_completion) != AGC_OK)
+        return false;
+#endif
     if (agcGfx1013TransitionResource(&cb, &completion) != AGC_OK)
         return false;
 

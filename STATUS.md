@@ -1339,6 +1339,16 @@ procedure are documented in `samples/hw_test/DEPTH_VALIDATION.md`. Status is
 hardware-ready, not hardware-validated, and it is intentionally excluded from
 the passing FW `0x0550` conformance matrix.
 
+Explicit depth/stencil resource usages are host-complete. A transition away
+from `DEPTH_STENCIL_WRITE` emits gfx1013 `FLUSH_AND_INV_DB_META` (`0x2c`), then
+`FLUSH_AND_INV_DB_DATA_TS` (`0x2b`), followed by the existing GCR acquire when
+the destination is another GPU usage. `DEPTH_STENCIL_READ` is modeled as a
+read-only usage. Exact fixtures lock the 20-dword DB write-to-read stream, the
+12-dword DB write-to-host stream, read-to-read no-op behavior, and atomic short
+buffer rejection. `agc_depth.elf` now uses the typed DB transition in addition
+to a separate color-target transition before CPU readback. Hardware execution
+remains pending.
+
 ## Non-Goals For Current Milestone
 
 - No firmware blobs or proprietary microcode are embedded.

@@ -738,6 +738,16 @@ static void test_gfx1013_resource_transitions(void)
         AGC_GFX1013_ACQUIRE_POLL_INTERVAL,
         AGC_GFX1013_ACQUIRE_GCR_ALL,
     };
+    const uint32_t depth_release[
+        AGC_GFX1013_DB_META_FLUSH_DWORDS +
+        AGC_GFX1013_EOP_FENCE_DWORDS] = {
+        agcPm4Header3(AGC_PM4_OP_EVENT_WRITE, 2u),
+        AGC_GFX1013_DB_META_FLUSH_EVENT,
+        agcPm4Header3(AGC_PM4_OP_RELEASE_MEM, 8u),
+        0x0660352bu, 0x20000000u, 0x014bb000u, 0x00000002u,
+        0x1234abcdu, 0u, 0u,
+        agcPm4Header3(AGC_PM4_OP_NOP, 2u), 0u,
+    };
 
     memcpy(expected, release, sizeof(release));
     memcpy(&expected[AGC_GFX1013_EOP_FENCE_DWORDS], acquire,
@@ -745,7 +755,8 @@ static void test_gfx1013_resource_transitions(void)
     TEST_ASSERT_EQ(agcGfx1013GetResourceTransitionDwords(
         &transition, &dword_count), AGC_OK,
         "render-to-shader transition sizes");
-    TEST_ASSERT_EQ(dword_count, AGC_GFX1013_TRANSITION_MAX_DWORDS,
+    TEST_ASSERT_EQ(dword_count,
+        AGC_GFX1013_EOP_FENCE_DWORDS + AGC_GFX1013_ACQUIRE_MEM_DWORDS,
         "render-to-shader release and acquire size");
     agcCbInit(&cb, buffer, sizeof(buffer));
     TEST_ASSERT_EQ(agcGfx1013TransitionResource(&cb, &transition), AGC_OK,
@@ -802,14 +813,65 @@ static void test_gfx1013_resource_transitions(void)
     TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
         "read-to-read transition is an explicit no-op");
 
+    transition.before = AGC_GFX1013_RESOURCE_USAGE_DEPTH_STENCIL_WRITE;
+    transition.after = AGC_GFX1013_RESOURCE_USAGE_DEPTH_STENCIL_READ;
+    transition.completion_address = 0x00000002014bb000ull;
+    transition.completion_value = 0x1234abcdu;
+    memcpy(expected, depth_release, sizeof(depth_release));
+    memcpy(&expected[sizeof(depth_release) / sizeof(uint32_t)], acquire,
+        sizeof(acquire));
+    TEST_ASSERT_EQ(agcGfx1013GetResourceTransitionDwords(
+        &transition, &dword_count), AGC_OK,
+        "depth-write-to-depth-read transition sizes");
+    TEST_ASSERT_EQ(dword_count, AGC_GFX1013_TRANSITION_MAX_DWORDS,
+        "depth transition includes metadata, data, and acquire packets");
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013TransitionResource(&cb, &transition), AGC_OK,
+        "depth-write-to-depth-read transition emits");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb),
+        AGC_GFX1013_TRANSITION_MAX_DWORDS,
+        "depth transition exact dword count");
+    TEST_ASSERT(memcmp(buffer, expected, sizeof(expected)) == 0,
+        "depth transition exact metadata/release/acquire stream");
+
+    transition.after = AGC_GFX1013_RESOURCE_USAGE_HOST_READ;
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013TransitionResource(&cb, &transition), AGC_OK,
+        "depth-write-to-host transition emits");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb),
+        AGC_GFX1013_DB_META_FLUSH_DWORDS +
+        AGC_GFX1013_EOP_FENCE_DWORDS,
+        "depth-to-host is metadata plus release only");
+    TEST_ASSERT(memcmp(buffer, depth_release, sizeof(depth_release)) == 0,
+        "depth-to-host exact DB flush stream");
+
+    transition.before = AGC_GFX1013_RESOURCE_USAGE_DEPTH_STENCIL_READ;
+    transition.after = AGC_GFX1013_RESOURCE_USAGE_SHADER_READ;
+    transition.completion_address = 0u;
+    transition.completion_value = 0u;
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013TransitionResource(&cb, &transition), AGC_OK,
+        "depth-read-to-shader-read transition succeeds");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "depth-read-to-shader-read is an explicit no-op");
+
     transition.before = AGC_GFX1013_RESOURCE_USAGE_RENDER_TARGET;
     transition.after = AGC_GFX1013_RESOURCE_USAGE_SHADER_READ;
     agcCbReset(&cb, buffer,
-        (AGC_GFX1013_TRANSITION_MAX_DWORDS - 1u) * sizeof(uint32_t));
+        (AGC_GFX1013_EOP_FENCE_DWORDS +
+         AGC_GFX1013_ACQUIRE_MEM_DWORDS - 1u) * sizeof(uint32_t));
     TEST_ASSERT_EQ(agcGfx1013TransitionResource(&cb, &transition),
         AGC_ERROR_BUFFER_TOO_SMALL, "short transition rejects");
     TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
         "short transition is atomic");
+
+    transition.before = AGC_GFX1013_RESOURCE_USAGE_DEPTH_STENCIL_WRITE;
+    agcCbReset(&cb, buffer,
+        (AGC_GFX1013_TRANSITION_MAX_DWORDS - 1u) * sizeof(uint32_t));
+    TEST_ASSERT_EQ(agcGfx1013TransitionResource(&cb, &transition),
+        AGC_ERROR_BUFFER_TOO_SMALL, "short depth transition rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "short depth transition is atomic");
 
     transition.before = AGC_GFX1013_RESOURCE_USAGE_COUNT;
     agcCbReset(&cb, buffer, sizeof(buffer));

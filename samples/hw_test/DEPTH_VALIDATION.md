@@ -16,6 +16,9 @@ gfx1013 depth-surface and depth/stencil-control builders. It is prepared for FW
 - A separate red triangle at Z `0.75` must pass over depth `1.0`.
 - Four `WRITE_DATA` stage markers prove that the command processor progressed
   through every draw; the final EOP marker proves completion and cache flush.
+- The final typed `DEPTH_STENCIL_WRITE` to `HOST_READ` transition emits the
+  gfx1013 DB metadata event (`0x2c`) and DB data timestamp event (`0x2b`). A
+  separate color-to-host transition preserves RGBA8 readback coherence.
 - CPU readback requires nonzero green and red coverage, a green sample in the
   overlap region, a red sample in the independent region, and raw D32 words for
   `1.0`, `0.625`, and `0.875`. The latter values are the `0.25` and `0.75`

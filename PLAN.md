@@ -1952,6 +1952,14 @@ samples, coverage, and raw D32 values. The Prospero artifact is build-qualified
 only; it remains outside the passing conformance matrix until FW `0x0550`
 hardware produces the documented screen and readback evidence.
 
+Depth/stencil synchronization is also typed. `DEPTH_STENCIL_WRITE` releases
+gfx1013 DB metadata with event `0x2c`, releases DB data with timestamp event
+`0x2b`, and uses the shared GCR acquire when the consumer remains on-GPU.
+`DEPTH_STENCIL_READ` participates as a read-only usage, so read-to-read changes
+remain explicit zero-dword transitions. Exact host fixtures cover DB-to-DB,
+DB-to-host, read-to-read, and undersized atomic failure paths. The depth sample
+uses separate color and depth-to-host transitions before CPU readback.
+
 1. Run the complete 14-sample deterministic FW `0x0550` websrv matrix on the
    next available real PS5 and retain its raw logs as qualification evidence.
 2. If instant-close behavior recurs after a fresh launcher session, isolate it

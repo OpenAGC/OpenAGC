@@ -732,7 +732,13 @@ static bool agcGfx1013UsageWrites(AgcGfx1013ResourceUsage usage)
 {
     return usage == AGC_GFX1013_RESOURCE_USAGE_RENDER_TARGET ||
         usage == AGC_GFX1013_RESOURCE_USAGE_COMPUTE_WRITE ||
-        usage == AGC_GFX1013_RESOURCE_USAGE_COPY_DESTINATION;
+        usage == AGC_GFX1013_RESOURCE_USAGE_COPY_DESTINATION ||
+        usage == AGC_GFX1013_RESOURCE_USAGE_DEPTH_STENCIL_WRITE;
+}
+
+static bool agcGfx1013UsageWritesDepth(AgcGfx1013ResourceUsage usage)
+{
+    return usage == AGC_GFX1013_RESOURCE_USAGE_DEPTH_STENCIL_WRITE;
 }
 
 static int32_t agcGfx1013ValidateTransition(
@@ -780,7 +786,10 @@ int32_t PS5_SYSV_ABI agcGfx1013GetResourceTransitionDwords(
     error = agcGfx1013ValidateTransition(transition, &release, &acquire);
     if (error != AGC_OK)
         return error;
-    *dword_count = (release ? AGC_GFX1013_EOP_FENCE_DWORDS : 0u) +
+    *dword_count =
+        (release && agcGfx1013UsageWritesDepth(transition->before) ?
+            AGC_GFX1013_DB_META_FLUSH_DWORDS : 0u) +
+        (release ? AGC_GFX1013_EOP_FENCE_DWORDS : 0u) +
         (acquire ? AGC_GFX1013_ACQUIRE_MEM_DWORDS : 0u);
     return AGC_OK;
 }
@@ -816,14 +825,23 @@ int32_t PS5_SYSV_ABI agcGfx1013TransitionResource(
     error = agcGfx1013ValidateTransition(transition, &release, &acquire);
     if (error != AGC_OK)
         return error;
-    dword_count = (release ? AGC_GFX1013_EOP_FENCE_DWORDS : 0u) +
+    dword_count =
+        (release && agcGfx1013UsageWritesDepth(transition->before) ?
+            AGC_GFX1013_DB_META_FLUSH_DWORDS : 0u) +
+        (release ? AGC_GFX1013_EOP_FENCE_DWORDS : 0u) +
         (acquire ? AGC_GFX1013_ACQUIRE_MEM_DWORDS : 0u);
     if (agcCbRemainingDwords(cb) < dword_count)
         return AGC_ERROR_BUFFER_TOO_SMALL;
 
+    if (release && agcGfx1013UsageWritesDepth(transition->before) &&
+        !sceAgcDcbEventWrite(
+            cb, AGC_GFX1013_DB_META_FLUSH_EVENT, 0u))
+        return AGC_ERROR_INTERNAL;
     if (release &&
         (!sceAgcCbReleaseMem(
-            cb, AGC_GFX1013_EOP_CACHE_FLUSH_EVENT,
+            cb, agcGfx1013UsageWritesDepth(transition->before) ?
+                AGC_GFX1013_DB_DATA_FLUSH_EVENT :
+                AGC_GFX1013_EOP_CACHE_FLUSH_EVENT,
             AGC_GFX1013_EOP_GCR_CONTROL, 0u,
             AGC_GFX1013_EOP_CACHE_POLICY_LRU,
             transition->completion_address,
