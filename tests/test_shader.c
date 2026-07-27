@@ -81,6 +81,46 @@ static void test_shader_record_layout(void) {
     TEST_ASSERT_EQ(agcShaderRecordGetNumShRegisters(&rec), 16, "SH register count");
 }
 
+static void test_shader_record_relocate_binary(void) {
+    _Alignas(8) uint8_t binary[0x100] = {0};
+    AgcShaderRecord *serialized = (AgcShaderRecord *)binary;
+    AgcShaderRecord runtime = {0};
+
+    serialized->magic = AGC_SHADER_RECORD_MAGIC;
+    serialized->version = AGC_SHADER_RECORD_VERSION_GEN5;
+    serialized->shader_type = kAgcShaderTypeCs;
+    serialized->sh_registers = 0x60;
+    serialized->num_sh_registers = 2;
+    serialized->cx_registers = 0x70;
+    serialized->num_cx_registers = 1;
+    serialized->user_data = 0x78;
+    serialized->specials = 0x80;
+    serialized->input_semantics = 0xb0;
+    serialized->output_semantics = 0xb4;
+    serialized->code = 0xc0;
+    set_u32(serialized->num_input_semantics, 1);
+    set_u32(serialized->num_output_semantics, 1);
+
+    TEST_ASSERT_EQ(agcShaderRecordRelocateBinary(
+        &runtime, binary, sizeof(binary)), AGC_OK,
+        "serialized shader record relocates");
+    TEST_ASSERT(runtime.sh_registers == (uint64_t)(uintptr_t)(binary + 0x60),
+        "SH register offset relocates");
+    TEST_ASSERT(runtime.cx_registers == (uint64_t)(uintptr_t)(binary + 0x70),
+        "CX register offset relocates");
+    TEST_ASSERT(runtime.specials == (uint64_t)(uintptr_t)(binary + 0x80),
+        "specials offset relocates");
+    TEST_ASSERT(runtime.code == (uint64_t)(uintptr_t)(binary + 0xc0),
+        "code offset relocates");
+
+    serialized->sh_registers = sizeof(binary) - 4u;
+    TEST_ASSERT_EQ(agcShaderRecordRelocateBinary(
+        &runtime, binary, sizeof(binary)), AGC_ERROR_SHADER_INVALID,
+        "out-of-bounds register block is rejected");
+    TEST_ASSERT(runtime.code == (uint64_t)(uintptr_t)(binary + 0xc0),
+        "failed relocation leaves destination unchanged");
+}
+
 static void test_shader_specials_struct_layout(void) {
     TEST_ASSERT_EQ(sizeof(AgcShaderSpecialRegister), 0x08u,
         "Special register pair = 8 bytes");
@@ -1184,6 +1224,7 @@ void test_suite_shader(void) {
     TEST_RUN(test_shader_record_invalid_version);
     TEST_RUN(test_shader_record_invalid_type);
     TEST_RUN(test_shader_record_layout);
+    TEST_RUN(test_shader_record_relocate_binary);
     TEST_RUN(test_shader_specials_struct_layout);
     TEST_RUN(test_shader_userdata_struct_size);
     TEST_RUN(test_shader_specials_typed_accessor);

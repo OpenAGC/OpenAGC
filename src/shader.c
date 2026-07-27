@@ -94,6 +94,68 @@ bool agcShaderRecordIsValid(const AgcShaderRecord *record) {
     return true;
 }
 
+static bool agcShaderBinarySpanIsValid(
+    size_t binary_size, uint64_t offset, size_t span, size_t alignment)
+{
+    if (offset == 0)
+        return span == 0;
+    if (offset > SIZE_MAX || (alignment > 1 && offset % alignment != 0))
+        return false;
+    return (size_t)offset <= binary_size && span <= binary_size - (size_t)offset;
+}
+
+int32_t PS5_SYSV_ABI agcShaderRecordRelocateBinary(
+    AgcShaderRecord *dst, const void *binary, size_t binary_size)
+{
+    AgcShaderRecord record;
+    const uint8_t *base = (const uint8_t *)binary;
+    uint32_t num_inputs;
+    uint32_t num_outputs;
+
+    if (!dst || !binary)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (binary_size < sizeof(record))
+        return AGC_ERROR_SHADER_INVALID;
+
+    memcpy(&record, binary, sizeof(record));
+    if (!agcShaderRecordIsValid(&record))
+        return AGC_ERROR_SHADER_INVALID;
+    memcpy(&num_inputs, record.num_input_semantics, sizeof(num_inputs));
+    memcpy(&num_outputs, record.num_output_semantics, sizeof(num_outputs));
+
+    if (!agcShaderBinarySpanIsValid(binary_size, record.code, 4u, 4u) ||
+        !agcShaderBinarySpanIsValid(binary_size, record.sh_registers,
+            (size_t)record.num_sh_registers * sizeof(AgcRegisterValue), 4u) ||
+        !agcShaderBinarySpanIsValid(binary_size, record.cx_registers,
+            (size_t)record.num_cx_registers * sizeof(AgcRegisterValue), 4u) ||
+        !agcShaderBinarySpanIsValid(binary_size, record.specials,
+            record.specials ? sizeof(AgcShaderSpecials) : 0u, 4u) ||
+        !agcShaderBinarySpanIsValid(binary_size, record.input_semantics,
+            (size_t)num_inputs * sizeof(AgcShaderSemantic), 4u) ||
+        !agcShaderBinarySpanIsValid(binary_size, record.output_semantics,
+            (size_t)num_outputs * sizeof(AgcShaderSemantic), 4u) ||
+        !agcShaderBinarySpanIsValid(binary_size, record.user_data,
+            record.user_data ? sizeof(uint64_t) : 0u, 8u))
+        return AGC_ERROR_SHADER_INVALID;
+
+#define AGC_RELOCATE_FIELD(field) \
+    do { \
+        if (record.field) \
+            record.field = (uint64_t)(uintptr_t)(base + (size_t)record.field); \
+    } while (0)
+    AGC_RELOCATE_FIELD(user_data);
+    AGC_RELOCATE_FIELD(code);
+    AGC_RELOCATE_FIELD(cx_registers);
+    AGC_RELOCATE_FIELD(sh_registers);
+    AGC_RELOCATE_FIELD(specials);
+    AGC_RELOCATE_FIELD(input_semantics);
+    AGC_RELOCATE_FIELD(output_semantics);
+#undef AGC_RELOCATE_FIELD
+
+    *dst = record;
+    return AGC_OK;
+}
+
 const void *agcShaderRecordGetUserData(const AgcShaderRecord *record) {
     if (!record || !agcShaderRecordIsValid(record))
         return NULL;

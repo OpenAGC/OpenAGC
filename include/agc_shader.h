@@ -220,6 +220,15 @@ uint32_t    agcShaderRecordGetNumInputSemantics(const AgcShaderRecord *record);
 uint32_t    agcShaderRecordGetNumOutputSemantics(const AgcShaderRecord *record);
 uint8_t     agcShaderRecordGetNumShRegisters(const AgcShaderRecord *record);
 
+/*
+ * Converts a serialized AGC shader binary whose record pointer fields are
+ * byte offsets from binary into a caller-owned runtime record.  All referenced
+ * blocks are bounds-checked before dst is modified.  The binary must remain
+ * alive while the relocated record is used.
+ */
+int32_t PS5_SYSV_ABI agcShaderRecordRelocateBinary(
+    AgcShaderRecord *dst, const void *binary, size_t binary_size);
+
 /* Typed accessors for sub-blocks (return NULL if record is invalid). */
 const AgcShaderSpecials *agcShaderRecordGetSpecialsTyped(const AgcShaderRecord *record);
 const AgcShaderUserData *agcShaderRecordGetUserDataTyped(const AgcShaderRecord *record);

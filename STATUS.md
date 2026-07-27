@@ -722,6 +722,9 @@ The host-generic implementation now has a tested model for:
 - DCB/ACB submit descriptor layout
 - Generic submit validation and debug capture
 - AGC shader record parser (magic, pointer fields, semantics counts, shader type)
+- Bounds-checked serialized shader relocation (`agcShaderRecordRelocateBinary`),
+  converting compiler file offsets into a caller-owned runtime record without
+  mutating the compiler binary
 - FW 5.50 AGC shader Specials block struct (`AgcShaderSpecials`: 0x30-byte sparse register/value layout with fields at 0x00, 0x08, 0x20, and 0x28)
 - AGC shader User Data Table struct (`AgcShaderUserData`: 5× 64-bit entries)
 - Typed accessors for shader sub-blocks (`agcShaderRecordGetSpecialsTyped`, `agcShaderRecordGetUserDataTyped`, `agcShaderRecordGetShRegisterValues`, `agcShaderRecordGetCxRegisterValues`)
