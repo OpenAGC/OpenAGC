@@ -80,7 +80,7 @@ endif()
 
 if(OPENAGC_PROSPERO_PLATFORM)
     target_compile_definitions(openagc PUBLIC OPENAGC_PROSPERO OPENAGC_REQUIRE_ABI)
-    target_link_libraries(openagc PUBLIC kernel SceAgcDriver)
+    target_link_libraries(openagc PUBLIC kernel SceAgcDriver SceVideoOut)
 else()
     target_compile_definitions(openagc PUBLIC OPENAGC_GENERIC)
 endif()

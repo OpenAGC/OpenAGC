@@ -299,6 +299,10 @@ add_custom_target(my_homebrew_shaders DEPENDS "${FILL_SHADER}")
 add_dependencies(my_homebrew my_homebrew_shaders)
 ```
 
+On Prospero, `OpenAGC::openagc` also exports the required `kernel`,
+`SceAgcDriver`, and `SceVideoOut` system libraries transitively, including the
+VideoOut dependency used by EOP/flip submission.
+
 The installed package exports `OpenAGC::openagc`, `OpenAGC::psbc`,
 `OpenAGC_PSBC_EXECUTABLE`, and `openagc_compile_shader()`. Set
 `CMAKE_PREFIX_PATH` to the install prefix, or pass
