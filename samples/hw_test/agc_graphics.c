@@ -323,6 +323,7 @@ int sceKernelMapNamedSystemFlexibleMemory(
 int sceKernelCreateEqueue(SceKernelEqueue *equeue, const char *name);
 int sceKernelWaitEqueue(SceKernelEqueue equeue, SceKernelEvent *events,
     int count, void *timeout, void *result);
+int sceKernelDeleteEqueue(SceKernelEqueue equeue);
 #endif
 
 /* ======================================================================== */
@@ -393,6 +394,12 @@ int sceKernelWaitEqueue(SceKernelEqueue equeue, SceKernelEvent *events,
 #ifndef AGC_VALIDATE_R11G11B10
 #define AGC_VALIDATE_R11G11B10 0
 #endif
+#ifndef AGC_VALIDATE_R16_FLOAT
+#define AGC_VALIDATE_R16_FLOAT 0
+#endif
+#ifndef AGC_VALIDATE_RG16_FLOAT
+#define AGC_VALIDATE_RG16_FLOAT 0
+#endif
 #ifndef AGC_VALIDATE_RGBA8_SRGB
 #define AGC_VALIDATE_RGBA8_SRGB 0
 #endif
@@ -401,7 +408,8 @@ int sceKernelWaitEqueue(SceKernelEqueue equeue, SceKernelEvent *events,
 #endif
 #if (AGC_VALIDATE_RGBA8_REFERENCE + AGC_VALIDATE_RGBA8_STD + \
      AGC_VALIDATE_RGB10A2 + AGC_VALIDATE_R11G11B10 + \
-     AGC_VALIDATE_RGBA8_SRGB + AGC_VALIDATE_BGRA8_SRGB) > 1
+     AGC_VALIDATE_RGBA8_SRGB + AGC_VALIDATE_BGRA8_SRGB + \
+     AGC_VALIDATE_R16_FLOAT + AGC_VALIDATE_RG16_FLOAT) > 1
 #error "select only one isolated color-target fixture"
 #endif
 
@@ -487,7 +495,7 @@ typedef struct {
     uint32_t color_format;
     uint32_t number_type;
     uint32_t component_swap;
-    bool fp16;
+    uint32_t fp16_components;
     const char *name;
 } RenderTargetConfig;
 
@@ -802,9 +810,25 @@ static bool init_videoout(GraphicsTest *test) {
         return false;
     }
 
-    sceKernelCreateEqueue(&test->flipqueue, "agc_graphics flips");
-    sceVideoOutAddFlipEvent((void *)(uintptr_t)test->flipqueue, test->handle, NULL);
-    sceVideoOutSetFlipRate(test->handle, 0);
+    int32_t event_err = sceKernelCreateEqueue(&test->flipqueue,
+        "agc_graphics flips");
+    if (event_err != 0) {
+        printf("sceKernelCreateEqueue failed: 0x%08x\n", (unsigned)event_err);
+        return false;
+    }
+    event_err = sceVideoOutAddFlipEvent(
+        (void *)(uintptr_t)test->flipqueue, test->handle, NULL);
+    if (event_err != 0) {
+        printf("sceVideoOutAddFlipEvent failed: 0x%08x\n", (unsigned)event_err);
+        sceKernelDeleteEqueue(test->flipqueue);
+        return false;
+    }
+    event_err = sceVideoOutSetFlipRate(test->handle, 0);
+    if (event_err != 0) {
+        printf("sceVideoOutSetFlipRate failed: 0x%08x\n", (unsigned)event_err);
+        sceKernelDeleteEqueue(test->flipqueue);
+        return false;
+    }
 
     return true;
 }
@@ -1464,10 +1488,11 @@ static bool dispatch_graphics(GraphicsTest *test,
     /* Use a diagnostic sentinel absent from the texture so every rasterized
      * pixel contributes to the exact indexed-triangle coverage count. */
     const uint32_t target_pixels = target->width * target->height;
-    if (target->fp16) {
-        uint64_t *rt = (uint64_t *)rt_addr;
-        for (uint32_t i = 0; i < target_pixels; i++)
-            rt[i] = FP16_CLEAR_SENTINEL;
+    if (target->fp16_components != 0u) {
+        uint16_t *rt = (uint16_t *)rt_addr;
+        for (uint32_t i = 0;
+             i < target_pixels * target->fp16_components; i++)
+            rt[i] = 0x3555u;
     } else {
         uint32_t *rt = (uint32_t *)rt_addr;
         for (uint32_t i = 0; i < target_pixels; i++)
@@ -1619,7 +1644,7 @@ static bool dispatch_graphics(GraphicsTest *test,
      * Reusing the first IB address immediately can leave the second direct
      * submit indistinguishable from the prior work in the native queue. */
     uint32_t *dispatch_cb = (uint32_t *)((uint8_t *)cb_buffer +
-        (target->fp16 ? DCB_SECOND_OFFSET : 0u));
+        (target->fp16_components != 0u ? DCB_SECOND_OFFSET : 0u));
 
     /* Build DCB */
     SceAgcCb cb;
@@ -2267,31 +2292,39 @@ static bool dispatch_graphics(GraphicsTest *test,
            htile_pass;
 #endif
 
-    if (target->fp16) {
-        const uint64_t *rt = (const uint64_t *)rt_addr;
+    if (target->fp16_components != 0u) {
+        const uint16_t *rt = (const uint16_t *)rt_addr;
+        const uint32_t components = target->fp16_components;
+        const uint64_t sentinel = FP16_CLEAR_SENTINEL &
+            (components == 4u ? UINT64_MAX :
+             ((UINT64_C(1) << (components * 16u)) - 1u));
         uint64_t unique_colors[8] = {0};
         uint32_t unique_color_count = 0;
         uint32_t changed = 0;
-        uint32_t opaque_samples = 0;
+        uint32_t complete_samples = 0;
         uint32_t out_of_range_components = 0;
+        uint64_t packed_hash = UINT64_C(1469598103934665603);
         uint32_t min_x = target->width;
         uint32_t min_y = target->height;
         uint32_t max_x = 0;
         uint32_t max_y = 0;
         for (uint32_t i = 0; i < target_pixels; i++) {
-            uint64_t color = rt[i];
-            if (color == FP16_CLEAR_SENTINEL)
+            uint64_t color = 0u;
+            for (uint32_t lane = 0u; lane < components; ++lane)
+                color |= (uint64_t)rt[i * components + lane] << (lane * 16u);
+            if (color == sentinel)
                 continue;
             changed++;
+            packed_hash = (packed_hash ^ color) * UINT64_C(1099511628211);
             const uint32_t x = i % target->width;
             const uint32_t y = i / target->width;
             if (x < min_x) min_x = x;
             if (y < min_y) min_y = y;
             if (x > max_x) max_x = x;
             if (y > max_y) max_y = y;
-            if ((uint16_t)(color >> 48) == 0x3c00u)
-                opaque_samples++;
-            for (uint32_t lane = 0; lane < 4u; lane++) {
+            if (components < 4u || (uint16_t)(color >> 48) == 0x3c00u)
+                complete_samples++;
+            for (uint32_t lane = 0; lane < components; lane++) {
                 uint16_t component = (uint16_t)(color >> (lane * 16u));
                 if ((component & 0x8000u) != 0u || component > 0x3c00u)
                     out_of_range_components++;
@@ -2347,8 +2380,11 @@ static bool dispatch_graphics(GraphicsTest *test,
         for (uint32_t i = 0; i < unique_color_count; i++)
             printf("  fp16_color[%u] = 0x%016llx\n", i,
                    (unsigned long long)unique_colors[i]);
-        printf("[FP16] Opaque samples: %u; out-of-range components: %u\n",
-               opaque_samples, out_of_range_components);
+        printf("[FP16] Stored components: %u; complete samples: %u; "
+               "out-of-range components: %u\n",
+               components, complete_samples, out_of_range_components);
+        printf("[FP16] Native packed FNV64: 0x%016llx\n",
+               (unsigned long long)packed_hash);
 #if AGC_NGG_INPUT_LINES || AGC_TESS_GEOMETRY_LINES
         const bool color_pass = unique_color_count == 1u &&
                                 unique_colors[0] == 0x3c003c003c003c00ull;
@@ -2359,10 +2395,10 @@ static bool dispatch_graphics(GraphicsTest *test,
                                changed + coverage_tolerance >= expected_changed &&
                                changed <= expected_changed + coverage_tolerance &&
                                color_pass &&
-                               opaque_samples != 0u &&
+                               complete_samples == changed &&
                                out_of_range_components == 0u;
-        printf("[FP16] GFX1013 R16G16B16A16_FLOAT target: %s\n",
-               fp16_pass ? "PASS" : "FAIL");
+        printf("[FP16] GFX1013 %s target: %s\n",
+               target->name, fp16_pass ? "PASS" : "FAIL");
         return fp16_pass;
     }
 
@@ -2485,8 +2521,8 @@ static uint8_t half_to_unorm8(uint16_t half) {
     return scaled > 255u ? 255u : (uint8_t)scaled;
 }
 
-static void visualize_fp16(GraphicsTest *test) {
-    const uint64_t *source = (const uint64_t *)test->render_target;
+static void visualize_fp16(GraphicsTest *test, uint32_t components) {
+    const uint16_t *source = (const uint16_t *)test->render_target;
     uint32_t *display = (uint32_t *)test->buffers[0];
     const uint32_t preview_width = FP16_TARGET_WIDTH / FP16_PREVIEW_DIVISOR;
     const uint32_t preview_height = FP16_TARGET_HEIGHT / FP16_PREVIEW_DIVISOR;
@@ -2498,14 +2534,25 @@ static void visualize_fp16(GraphicsTest *test) {
     for (uint32_t y = 0; y < preview_height; y++) {
         const uint32_t source_y = y * FP16_PREVIEW_DIVISOR;
         for (uint32_t x = 0; x < preview_width; x++) {
-            uint64_t pixel = source[source_y * FP16_TARGET_WIDTH +
-                                    x * FP16_PREVIEW_DIVISOR];
-            if (pixel == FP16_CLEAR_SENTINEL)
+            const size_t pixel_index =
+                (source_y * FP16_TARGET_WIDTH +
+                 x * FP16_PREVIEW_DIVISOR) * components;
+            uint64_t pixel = 0u;
+            for (uint32_t lane = 0u; lane < components; ++lane)
+                pixel |= (uint64_t)source[pixel_index + lane] <<
+                         (lane * 16u);
+            const uint64_t sentinel = FP16_CLEAR_SENTINEL &
+                (components == 4u ? UINT64_MAX :
+                 ((UINT64_C(1) << (components * 16u)) - 1u));
+            if (pixel == sentinel)
                 continue;
             uint8_t r = half_to_unorm8((uint16_t)pixel);
-            uint8_t g = half_to_unorm8((uint16_t)(pixel >> 16));
-            uint8_t b = half_to_unorm8((uint16_t)(pixel >> 32));
-            uint8_t a = half_to_unorm8((uint16_t)(pixel >> 48));
+            uint8_t g = components > 1u ?
+                half_to_unorm8((uint16_t)(pixel >> 16)) : 0u;
+            uint8_t b = components > 2u ?
+                half_to_unorm8((uint16_t)(pixel >> 32)) : 0u;
+            uint8_t a = components > 3u ?
+                half_to_unorm8((uint16_t)(pixel >> 48)) : 255u;
             display[(origin_y + y) * test->width + origin_x + x] =
                 ((uint32_t)a << 24) | ((uint32_t)b << 16) |
                 ((uint32_t)g << 8) | r;
@@ -2513,8 +2560,8 @@ static void visualize_fp16(GraphicsTest *test) {
     }
     memcpy(test->buffers[1], test->buffers[0],
            (size_t)test->width * test->height * BYTES_PER_PIXEL);
-    printf("[FP16] CPU preview: %ux%u centered on RGBA8 display\n",
-           preview_width, preview_height);
+    printf("[FP16] %u-component CPU preview: %ux%u centered on RGBA8 display\n",
+           components, preview_width, preview_height);
 }
 #endif
 
@@ -2782,7 +2829,7 @@ int main(void) {
         AGC_GFX1013_COLOR_FORMAT_8_8_8_8,
         AGC_GFX1013_SURFACE_NUMBER_UNORM,
         AGC_GFX1013_SURFACE_SWAP_ALT,
-        false, AGC_MSAA_VALIDATION ?
+        0u, AGC_MSAA_VALIDATION ?
             "4x depth validation RGBA8" : "depth validation RGBA8"
     };
     printf("\n--- Step 4: D32%s%s depth pass/fail draw ---\n",
@@ -2802,14 +2849,14 @@ int main(void) {
         test.buffers[0], test.width, test.height,
         AGC_GFX1013_COLOR_FORMAT_8_8_8_8,
         AGC_GFX1013_SURFACE_NUMBER_UNORM, swap,
-        false, AGC_VALIDATE_BGRA8_SRGB ?
+        0u, AGC_VALIDATE_BGRA8_SRGB ?
             "BGRA8 UNORM control" : "RGBA8 UNORM control"
     };
     RenderTargetConfig srgb_target = {
         test.render_target, test.width, test.height,
         AGC_GFX1013_COLOR_FORMAT_8_8_8_8,
         AGC_GFX1013_SURFACE_NUMBER_SRGB, swap,
-        false, AGC_VALIDATE_BGRA8_SRGB ?
+        0u, AGC_VALIDATE_BGRA8_SRGB ?
             "BGRA8 SRGB" : "RGBA8 SRGB"
     };
     printf("\n--- Step 4a: linear UNORM control draw ---\n");
@@ -2828,13 +2875,33 @@ int main(void) {
     }
     memcpy(test.buffers[0], test.render_target, test.buffer_stride);
     memcpy(test.buffers[1], test.render_target, test.buffer_stride);
+#elif AGC_VALIDATE_R16_FLOAT || AGC_VALIDATE_RG16_FLOAT
+    const uint32_t components = AGC_VALIDATE_RG16_FLOAT ? 2u : 1u;
+    RenderTargetConfig fp16_narrow_target = {
+        test.render_target, FP16_TARGET_WIDTH, FP16_TARGET_HEIGHT,
+        AGC_VALIDATE_RG16_FLOAT ? AGC_GFX1013_COLOR_FORMAT_16_16 :
+            AGC_GFX1013_COLOR_FORMAT_16,
+        AGC_GFX1013_SURFACE_NUMBER_FLOAT,
+        AGC_GFX1013_SURFACE_SWAP_STD,
+        components, AGC_VALIDATE_RG16_FLOAT ?
+            "RG16_FLOAT" : "R16_FLOAT"
+    };
+    printf("\n--- Step 4: %s offscreen draw ---\n",
+           fp16_narrow_target.name);
+    if (!dispatch_graphics(
+            &test, &front, &back, &ps, &fp16_narrow_target)) {
+        printf("FATAL: %s render-target validation failed\n",
+               fp16_narrow_target.name);
+        return 1;
+    }
+    visualize_fp16(&test, components);
 #elif AGC_VALIDATE_R11G11B10
     RenderTargetConfig r11g11b10_target = {
         test.render_target, FP16_TARGET_WIDTH, FP16_TARGET_HEIGHT,
         AGC_GFX1013_COLOR_FORMAT_10_11_11,
         AGC_GFX1013_SURFACE_NUMBER_FLOAT,
         AGC_GFX1013_SURFACE_SWAP_STD,
-        false, "offscreen R11G11B10 FLOAT"
+        0u, "offscreen R11G11B10 FLOAT"
     };
     printf("\n--- Step 4: R11G11B10 FLOAT offscreen draw ---\n");
     if (!dispatch_graphics(
@@ -2849,7 +2916,7 @@ int main(void) {
         AGC_GFX1013_COLOR_FORMAT_10_10_10_2,
         AGC_GFX1013_SURFACE_NUMBER_UNORM,
         AGC_GFX1013_SURFACE_SWAP_STD,
-        false, "offscreen RGB10A2"
+        0u, "offscreen RGB10A2"
     };
     printf("\n--- Step 4: RGB10A2 offscreen draw ---\n");
     if (!dispatch_graphics(
@@ -2864,7 +2931,7 @@ int main(void) {
         AGC_GFX1013_COLOR_FORMAT_8_8_8_8,
         AGC_GFX1013_SURFACE_NUMBER_UNORM,
         AGC_GFX1013_SURFACE_SWAP_STD,
-        false, "display RGBA8 standard swap"
+        0u, "display RGBA8 standard swap"
     };
     printf("\n--- Step 4: RGBA8 standard-swap draw ---\n");
     if (!dispatch_graphics(&test, &front, &back, &ps, &rgba8_target)) {
@@ -2879,7 +2946,7 @@ int main(void) {
         AGC_GFX1013_COLOR_FORMAT_8_8_8_8,
         AGC_GFX1013_SURFACE_NUMBER_UNORM,
         AGC_GFX1013_SURFACE_SWAP_ALT,
-        false, "display RGBA8"
+        0u, "display RGBA8"
     };
     printf("\n--- Step 4: RGBA8 reference draw ---\n");
     if (!dispatch_graphics(&test, &front, &back, &ps, &rgba8_target)) {
@@ -2894,14 +2961,14 @@ int main(void) {
         AGC_GFX1013_COLOR_FORMAT_16_16_16_16,
         AGC_GFX1013_SURFACE_NUMBER_FLOAT,
         AGC_GFX1013_SURFACE_SWAP_STD,
-        true, "offscreen FP16"
+        4u, "offscreen FP16"
     };
     printf("\n--- Step 4: RGBA16F offscreen draw ---\n");
     if (!dispatch_graphics(&test, &front, &back, &ps, &fp16_target)) {
         printf("FATAL: RGBA16F render-target validation failed\n");
         return 1;
     }
-    visualize_fp16(&test);
+    visualize_fp16(&test, 4u);
 #endif
 
     printf("\n--- Step 5: Display target preview ---\n");
@@ -2916,6 +2983,15 @@ int main(void) {
 #else
     printf("Displayed the compiler-generated NGG triangle for 30 seconds.\n");
 #endif
+
+    const int equeue_ret = sceKernelDeleteEqueue(test.flipqueue);
+    const int close_ret = sceVideoOutClose(test.handle);
+    printf("VideoOut cleanup: close=0x%08x equeue=0x%08x\n",
+           (unsigned)close_ret, (unsigned)equeue_ret);
+    if (close_ret != 0) {
+        printf("FATAL: VideoOut close failed\n");
+        return 1;
+    }
 
     printf("\nDone.\n");
     return 0;

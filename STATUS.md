@@ -1,5 +1,31 @@
 # openagc Status
 
+## FW 5.50 narrow FP16 render-target qualification (2026-07-27)
+
+The typed gfx1013 `R16_FLOAT` and `RG16_FLOAT` presets are now
+hardware-qualified on standard PS5 FW `0x05500008`. The isolated fixtures use
+CB formats `0x02` and `0x05`, FLOAT number type `7`, standard component swap,
+and FP16_ABGR shader export. Both reuse the proven Wave32 NGG+PS draw path and
+validate native packed memory before converting the result to RGBA8 for
+VideoOut inspection.
+
+Two R16 runs each changed 255,680 pixels, stored one complete component per
+covered pixel with no value outside `[0,1]`, and produced native FNV64
+`0xedd26b35cf6fe81a`. Two RG16 runs each changed 255,744 pixels, stored two
+complete components per covered pixel with no value outside `[0,1]`, and
+produced native FNV64 `0xcf48c2eb4f12bc26`. Every qualifying run reached its
+GPU fence, passed the post-draw marker and Wave32 audit, completed 1,800/1,800
+flips, and had no panic, bad-packet, page-fault, GPU-reset, or process-stop
+signature in the live ps5debug-NG kernel log.
+
+An unchanged second R16 launch before live logging coincided with the console
+shutting down. The reboot discarded its kernel evidence, so no packet-level
+root cause is claimed. The sample now checks equeue creation, flip-event
+registration, and flip-rate setup and explicitly closes VideoOut. The four
+subsequent qualifying runs were stable; `sceKernelDeleteEqueue` consistently
+returned `0x80020009` after a successful 1,800-flip session and is retained as
+a non-fatal teardown diagnostic.
+
 ## FW 5.50 sRGB render-target qualification (2026-07-27)
 
 Append-only public presets `RGBA8_SRGB` and `BGRA8_SRGB` are host-tested and
@@ -195,7 +221,8 @@ Host fixtures verify the exact Wave32 graphics streams and dword budgets:
 28 dwords for a color target, 15 for the viewport, 22 for scissors, 3 for the
 target mask, 15 for depth-disabled state, and 2184 for the V8 defaults
 (174 SH, 493 CX, and 61 UC register writes). The supported, hardware-proven
-color-target tuples are RGBA16F FLOAT/STD and RGBA8 UNORM/ALT.
+color-target tuples include R16, RG16, and RGBA16 FLOAT/STD plus RGBA8
+UNORM/ALT.
 
 FW 5.50 gfx1013 hardware validation passed through websrv for both paths. The
 RGBA16F baseline rendered the centered blended-color triangle for all 1800
@@ -1024,8 +1051,9 @@ SPI shader-export format; `agcGfx1013InitColorTarget` converts it into the
 existing ABI-stable target state. The packet builder accepts only table-backed
 encodings and rejects linear rows that violate the gfx103 256-byte pitch
 alignment. All 14 encodings have exact 28-dword host fixtures. RGBA8/BGRA8
-UNORM and SRGB, RGB10A2, RGBA16 FLOAT, and R11G11B10 FLOAT have PS5 hardware evidence; R8,
-RG8, R16, RG16, R32, RG32, and RGBA32 await hardware qualification.
+UNORM and SRGB, RGB10A2, R16, RG16, RGBA16 FLOAT, and R11G11B10 FLOAT have
+PS5 hardware evidence; R8, RG8, R32, RG32, and RGBA32 await hardware
+qualification.
 
 Typed gfx1013 resource transitions now model render-target, compute-write,
 copy-source/destination, shader-read, presentation, and host-read usage. Writer
@@ -1617,7 +1645,8 @@ is covered by the passing FW 5.50 depth, HTILE, and expclear gates.
 - No firmware blobs or proprietary microcode are embedded.
 - No claim of official SDK drop-in completeness.
 - Graphics draw calls are hardware-validated for the current gfx1013 no-GS
-  NGG VS+PS sample with linear RGBA8 and `R16G16B16A16_FLOAT` color targets.
+  NGG VS+PS sample with linear RGBA8, R16_FLOAT, RG16_FLOAT, and
+  `R16G16B16A16_FLOAT` color targets.
   This does not yet claim all color/depth formats, compression, complete
   tessellation, geometry-shader, mesh-shader, or game-wide compatibility.
 # Installable SDK package

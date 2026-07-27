@@ -2109,11 +2109,19 @@ Next execution order:
    FP16_ABGR export, and `CB_COLOR0_INFO` values `0x00010628`/`0x00010e28`.
    Both identical ELFs passed twice on FW 5.50 with native packed-memory
    transfer oracles, exact coverage, Wave32 PM4 state, two completion fences,
-   and 1,800/1,800 flips. Next qualify additional 16-bit color formats.
-8. Expand depth/stencil formats after color qualification: D16, S8-only, and
+   and 1,800/1,800 flips.
+8. **Hardware complete:** R16_FLOAT and RG16_FLOAT use typed CB formats `0x02`
+   and `0x05`, FLOAT number type `7`, standard swap, and FP16_ABGR export.
+   Each format passed twice on FW `0x05500008` with deterministic native
+   packed-memory hashes, exact complete-component checks, Wave32 audits,
+   completion fences, and 1,800/1,800 flips. Live ps5debug-NG logs contained
+   no GPU fault or reset signatures. One earlier R16 launch coincided with an
+   unlogged console shutdown, so its cause remains unproven; event setup and
+   VideoOut teardown are now checked explicitly.
+9. Expand depth/stencil formats after color qualification: D16, S8-only, and
    D16+S8, with independent compressed/uncompressed gates and no reuse of D32
    HTILE encodings without hardware evidence.
-9. Continue game-import coverage after the reusable draw/format APIs land;
+10. Continue game-import coverage after the reusable draw/format APIs land;
    correct Subnautica wrapper coverage and inventory DRAGON QUEST VII
    Reimagined against the new application-facing surface.
 
