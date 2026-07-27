@@ -864,6 +864,16 @@ CPU conversion to the registered RGBA8 display buffer was visually confirmed
 as a centered, smoothly color-textured triangle with equal sides on a
 dark-gray background.
 
+The public gfx1013 color-target layer now resolves 11 typed linear presets:
+R8, RG8, RGBA8, BGRA8, and RGB10A2 UNORM plus R16, RG16, RGBA16, R32, RG32,
+and RGBA32 FLOAT. `agcGfx1013GetColorTargetFormatInfo` exposes each preset's
+exact gfx103 CB format, number type, component swap, byte size, and compatible
+SPI shader-export format; `agcGfx1013InitColorTarget` converts it into the
+existing ABI-stable target state. The packet builder accepts only table-backed
+encodings and rejects linear rows that violate the gfx103 256-byte pitch
+alignment. All 11 encodings have exact 28-dword host fixtures. RGBA8/BGRA8 and
+RGBA16 FLOAT retain hardware evidence; the other presets await PS5 validation.
+
 Multiple DCB submission in one process is hardware-validated on FW 5.50.
 Separate `sceAgcDriverSubmitDcb` ioctls accepted both buffers but advanced
 only the first GPU marker. The correct contract for related DCBs is one

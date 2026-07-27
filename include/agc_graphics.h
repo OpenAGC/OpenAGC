@@ -13,12 +13,30 @@ extern "C" {
 #define AGC_GFX1013_VGT_SHADER_STAGES_EN_HS_W32_EN 0x00200000u
 #define AGC_GFX1013_VGT_SHADER_STAGES_EN_GS_W32_EN 0x00400000u
 
+#define AGC_GFX1013_COLOR_FORMAT_8             0x01u
+#define AGC_GFX1013_COLOR_FORMAT_16            0x02u
+#define AGC_GFX1013_COLOR_FORMAT_8_8           0x03u
+#define AGC_GFX1013_COLOR_FORMAT_32            0x04u
+#define AGC_GFX1013_COLOR_FORMAT_16_16         0x05u
+#define AGC_GFX1013_COLOR_FORMAT_10_10_10_2    0x08u
 #define AGC_GFX1013_COLOR_FORMAT_8_8_8_8       0x0Au
+#define AGC_GFX1013_COLOR_FORMAT_32_32         0x0Bu
 #define AGC_GFX1013_COLOR_FORMAT_16_16_16_16   0x0Cu
+#define AGC_GFX1013_COLOR_FORMAT_32_32_32_32   0x0Eu
 #define AGC_GFX1013_SURFACE_NUMBER_UNORM        0u
+#define AGC_GFX1013_SURFACE_NUMBER_SNORM        1u
+#define AGC_GFX1013_SURFACE_NUMBER_UINT         4u
+#define AGC_GFX1013_SURFACE_NUMBER_SINT         5u
+#define AGC_GFX1013_SURFACE_NUMBER_SRGB         6u
 #define AGC_GFX1013_SURFACE_NUMBER_FLOAT        7u
 #define AGC_GFX1013_SURFACE_SWAP_STD            0u
 #define AGC_GFX1013_SURFACE_SWAP_ALT            1u
+#define AGC_GFX1013_SURFACE_SWAP_STD_REV        2u
+#define AGC_GFX1013_SURFACE_SWAP_ALT_REV        3u
+#define AGC_GFX1013_SPI_EXPORT_32_R              1u
+#define AGC_GFX1013_SPI_EXPORT_32_GR             2u
+#define AGC_GFX1013_SPI_EXPORT_FP16_ABGR         4u
+#define AGC_GFX1013_SPI_EXPORT_32_ABGR           9u
 #define AGC_GFX1013_TARGET_MASK_RGBA0            0x0Fu
 
 #define AGC_GFX1013_TESS_FACTOR_RING_SLOT         5u
@@ -68,6 +86,29 @@ typedef struct AgcGfx1013Wave32TessVsPsState {
     uint32_t tcs_offchip_layout;
     uint32_t primitive_type;
 } AgcGfx1013Wave32TessVsPsState;
+
+typedef enum AgcGfx1013ColorTargetFormat {
+    AGC_GFX1013_RT_FORMAT_R8_UNORM = 0,
+    AGC_GFX1013_RT_FORMAT_RG8_UNORM,
+    AGC_GFX1013_RT_FORMAT_RGBA8_UNORM,
+    AGC_GFX1013_RT_FORMAT_BGRA8_UNORM,
+    AGC_GFX1013_RT_FORMAT_RGB10A2_UNORM,
+    AGC_GFX1013_RT_FORMAT_R16_FLOAT,
+    AGC_GFX1013_RT_FORMAT_RG16_FLOAT,
+    AGC_GFX1013_RT_FORMAT_RGBA16_FLOAT,
+    AGC_GFX1013_RT_FORMAT_R32_FLOAT,
+    AGC_GFX1013_RT_FORMAT_RG32_FLOAT,
+    AGC_GFX1013_RT_FORMAT_RGBA32_FLOAT,
+    AGC_GFX1013_RT_FORMAT_COUNT
+} AgcGfx1013ColorTargetFormat;
+
+typedef struct AgcGfx1013ColorTargetFormatInfo {
+    uint32_t color_format;
+    uint32_t number_type;
+    uint32_t component_swap;
+    uint32_t bytes_per_pixel;
+    uint32_t spi_shader_export_format;
+} AgcGfx1013ColorTargetFormatInfo;
 
 typedef struct AgcGfx1013ColorTargetState {
     uint64_t address;
@@ -226,6 +267,12 @@ int32_t PS5_SYSV_ABI agcGfx1013ValidateWave32TessVsPs(
     const AgcGfx1013Wave32TessVsPsState *state);
 int32_t PS5_SYSV_ABI agcGfx1013BindWave32TessVsPs(
     SceAgcCb *cb, const AgcGfx1013Wave32TessVsPsState *state);
+int32_t PS5_SYSV_ABI agcGfx1013GetColorTargetFormatInfo(
+    AgcGfx1013ColorTargetFormat format,
+    AgcGfx1013ColorTargetFormatInfo *info);
+int32_t PS5_SYSV_ABI agcGfx1013InitColorTarget(
+    AgcGfx1013ColorTargetState *state, uint64_t address, uint32_t width,
+    uint32_t height, AgcGfx1013ColorTargetFormat format);
 int32_t PS5_SYSV_ABI agcGfx1013SetColorTarget(
     SceAgcCb *cb, const AgcGfx1013ColorTargetState *state);
 int32_t PS5_SYSV_ABI agcGfx1013SetViewport(

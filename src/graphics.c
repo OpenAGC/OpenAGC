@@ -756,6 +756,116 @@ static uint32_t agcGfx1013FloatBits(float value)
     return bits;
 }
 
+typedef struct AgcGfx1013ColorTargetFormatEntry {
+    AgcGfx1013ColorTargetFormat format;
+    AgcGfx1013ColorTargetFormatInfo info;
+} AgcGfx1013ColorTargetFormatEntry;
+
+static const AgcGfx1013ColorTargetFormatEntry
+    kAgcGfx1013ColorTargetFormats[] = {
+        {AGC_GFX1013_RT_FORMAT_R8_UNORM,
+         {AGC_GFX1013_COLOR_FORMAT_8, AGC_GFX1013_SURFACE_NUMBER_UNORM,
+          AGC_GFX1013_SURFACE_SWAP_STD, 1u,
+          AGC_GFX1013_SPI_EXPORT_FP16_ABGR}},
+        {AGC_GFX1013_RT_FORMAT_RG8_UNORM,
+         {AGC_GFX1013_COLOR_FORMAT_8_8, AGC_GFX1013_SURFACE_NUMBER_UNORM,
+          AGC_GFX1013_SURFACE_SWAP_STD, 2u,
+          AGC_GFX1013_SPI_EXPORT_FP16_ABGR}},
+        {AGC_GFX1013_RT_FORMAT_RGBA8_UNORM,
+         {AGC_GFX1013_COLOR_FORMAT_8_8_8_8,
+          AGC_GFX1013_SURFACE_NUMBER_UNORM, AGC_GFX1013_SURFACE_SWAP_STD,
+          4u, AGC_GFX1013_SPI_EXPORT_FP16_ABGR}},
+        {AGC_GFX1013_RT_FORMAT_BGRA8_UNORM,
+         {AGC_GFX1013_COLOR_FORMAT_8_8_8_8,
+          AGC_GFX1013_SURFACE_NUMBER_UNORM, AGC_GFX1013_SURFACE_SWAP_ALT,
+          4u, AGC_GFX1013_SPI_EXPORT_FP16_ABGR}},
+        {AGC_GFX1013_RT_FORMAT_RGB10A2_UNORM,
+         {AGC_GFX1013_COLOR_FORMAT_10_10_10_2,
+          AGC_GFX1013_SURFACE_NUMBER_UNORM, AGC_GFX1013_SURFACE_SWAP_STD,
+          4u, AGC_GFX1013_SPI_EXPORT_FP16_ABGR}},
+        {AGC_GFX1013_RT_FORMAT_R16_FLOAT,
+         {AGC_GFX1013_COLOR_FORMAT_16, AGC_GFX1013_SURFACE_NUMBER_FLOAT,
+          AGC_GFX1013_SURFACE_SWAP_STD, 2u,
+          AGC_GFX1013_SPI_EXPORT_FP16_ABGR}},
+        {AGC_GFX1013_RT_FORMAT_RG16_FLOAT,
+         {AGC_GFX1013_COLOR_FORMAT_16_16,
+          AGC_GFX1013_SURFACE_NUMBER_FLOAT, AGC_GFX1013_SURFACE_SWAP_STD,
+          4u, AGC_GFX1013_SPI_EXPORT_FP16_ABGR}},
+        {AGC_GFX1013_RT_FORMAT_RGBA16_FLOAT,
+         {AGC_GFX1013_COLOR_FORMAT_16_16_16_16,
+          AGC_GFX1013_SURFACE_NUMBER_FLOAT, AGC_GFX1013_SURFACE_SWAP_STD,
+          8u, AGC_GFX1013_SPI_EXPORT_FP16_ABGR}},
+        {AGC_GFX1013_RT_FORMAT_R32_FLOAT,
+         {AGC_GFX1013_COLOR_FORMAT_32, AGC_GFX1013_SURFACE_NUMBER_FLOAT,
+          AGC_GFX1013_SURFACE_SWAP_STD, 4u,
+          AGC_GFX1013_SPI_EXPORT_32_R}},
+        {AGC_GFX1013_RT_FORMAT_RG32_FLOAT,
+         {AGC_GFX1013_COLOR_FORMAT_32_32,
+          AGC_GFX1013_SURFACE_NUMBER_FLOAT, AGC_GFX1013_SURFACE_SWAP_STD,
+          8u, AGC_GFX1013_SPI_EXPORT_32_GR}},
+        {AGC_GFX1013_RT_FORMAT_RGBA32_FLOAT,
+         {AGC_GFX1013_COLOR_FORMAT_32_32_32_32,
+          AGC_GFX1013_SURFACE_NUMBER_FLOAT, AGC_GFX1013_SURFACE_SWAP_STD,
+          16u, AGC_GFX1013_SPI_EXPORT_32_ABGR}},
+};
+
+int32_t PS5_SYSV_ABI agcGfx1013GetColorTargetFormatInfo(
+    AgcGfx1013ColorTargetFormat format,
+    AgcGfx1013ColorTargetFormatInfo *info)
+{
+    uint32_t i;
+
+    if (!info)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    for (i = 0u; i < (uint32_t)AGC_GFX1013_RT_FORMAT_COUNT; ++i) {
+        if (kAgcGfx1013ColorTargetFormats[i].format == format) {
+            *info = kAgcGfx1013ColorTargetFormats[i].info;
+            return AGC_OK;
+        }
+    }
+    return AGC_ERROR_NOT_SUPPORTED;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013InitColorTarget(
+    AgcGfx1013ColorTargetState *state, uint64_t address, uint32_t width,
+    uint32_t height, AgcGfx1013ColorTargetFormat format)
+{
+    AgcGfx1013ColorTargetFormatInfo info;
+    int32_t error;
+
+    if (!state)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    error = agcGfx1013GetColorTargetFormatInfo(format, &info);
+    if (error != AGC_OK)
+        return error;
+    state->address = address;
+    state->width = width;
+    state->height = height;
+    state->color_format = info.color_format;
+    state->number_type = info.number_type;
+    state->component_swap = info.component_swap;
+    return AGC_OK;
+}
+
+static bool agcGfx1013FindColorTargetFormat(
+    const AgcGfx1013ColorTargetState *state,
+    AgcGfx1013ColorTargetFormatInfo *info)
+{
+    uint32_t i;
+
+    for (i = 0u; i < (uint32_t)AGC_GFX1013_RT_FORMAT_COUNT; ++i) {
+        const AgcGfx1013ColorTargetFormatInfo *candidate =
+            &kAgcGfx1013ColorTargetFormats[i].info;
+        if (candidate->color_format == state->color_format &&
+            candidate->number_type == state->number_type &&
+            candidate->component_swap == state->component_swap) {
+            *info = *candidate;
+            return true;
+        }
+    }
+    return false;
+}
+
 int32_t PS5_SYSV_ABI agcGfx1013SetColorTarget(
     SceAgcCb *cb, const AgcGfx1013ColorTargetState *state)
 {
@@ -763,7 +873,7 @@ int32_t PS5_SYSV_ABI agcGfx1013SetColorTarget(
     uint32_t regs[14] = {0};
     uint32_t tiles_per_row;
     uint64_t tile_count;
-    bool supported;
+    AgcGfx1013ColorTargetFormatInfo format_info;
 
     if (!cb || !state || state->address == 0u || state->width == 0u ||
         state->height == 0u || state->width > 0x4000u ||
@@ -772,15 +882,10 @@ int32_t PS5_SYSV_ABI agcGfx1013SetColorTarget(
     if ((state->address & 0xffu) != 0u || (state->address >> 48) != 0u)
         return AGC_ERROR_INVALID_ALIGNMENT;
 
-    supported =
-        (state->color_format == AGC_GFX1013_COLOR_FORMAT_8_8_8_8 &&
-         state->number_type == AGC_GFX1013_SURFACE_NUMBER_UNORM &&
-         state->component_swap == AGC_GFX1013_SURFACE_SWAP_ALT) ||
-        (state->color_format == AGC_GFX1013_COLOR_FORMAT_16_16_16_16 &&
-         state->number_type == AGC_GFX1013_SURFACE_NUMBER_FLOAT &&
-         state->component_swap == AGC_GFX1013_SURFACE_SWAP_STD);
-    if (!supported)
+    if (!agcGfx1013FindColorTargetFormat(state, &format_info))
         return AGC_ERROR_NOT_SUPPORTED;
+    if (((uint64_t)state->width * format_info.bytes_per_pixel & 0xffu) != 0u)
+        return AGC_ERROR_INVALID_ALIGNMENT;
 
     tiles_per_row = state->width / 8u;
     tile_count = (uint64_t)tiles_per_row * state->height;

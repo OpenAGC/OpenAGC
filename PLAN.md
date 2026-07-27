@@ -1704,6 +1704,15 @@ Five post-fence format/tessellation reruns remain pending because real PS5
 hardware is temporarily unavailable. Do not mark the new synchronization
 checkpoint fully qualified until the runner completes all 14 samples.
 
+The additional render-target host milestone is implemented as a typed gfx1013
+format table rather than more sample-local CB constants. Eleven linear UNORM
+and FLOAT presets resolve their exact CB format, number type, component swap,
+pixel size, and SPI export format, and every resulting 28-dword color-target
+stream is locked by a host fixture. New presets beyond the hardware-proven
+RGBA8/BGRA8 and RGBA16 FLOAT paths remain explicitly hardware-unqualified;
+future websrv runs should advance them individually before enabling compression
+or multisampling.
+
 This is the authoritative execution order for OpenAGC. The product goal is a
 clean, redistributable GPU API that lets homebrew applications and game ports
 compile shaders, allocate GPU resources, build command buffers, submit work,

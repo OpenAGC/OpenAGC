@@ -716,8 +716,44 @@ static void test_gfx1013_eop_completion_fence(void)
 
 static void test_gfx1013_fixed_function_packets(void)
 {
+    static const struct {
+        AgcGfx1013ColorTargetFormat format;
+        uint32_t color_format;
+        uint32_t number_type;
+        uint32_t component_swap;
+        uint32_t bytes_per_pixel;
+        uint32_t spi_export;
+        uint32_t color_info;
+    } format_cases[] = {
+        {AGC_GFX1013_RT_FORMAT_R8_UNORM, 0x01u, 0u, 0u, 1u, 4u,
+         0x00010004u},
+        {AGC_GFX1013_RT_FORMAT_RG8_UNORM, 0x03u, 0u, 0u, 2u, 4u,
+         0x0001000cu},
+        {AGC_GFX1013_RT_FORMAT_RGBA8_UNORM, 0x0au, 0u, 0u, 4u, 4u,
+         0x00010028u},
+        {AGC_GFX1013_RT_FORMAT_BGRA8_UNORM, 0x0au, 0u, 1u, 4u, 4u,
+         0x00010828u},
+        {AGC_GFX1013_RT_FORMAT_RGB10A2_UNORM, 0x08u, 0u, 0u, 4u, 4u,
+         0x00010020u},
+        {AGC_GFX1013_RT_FORMAT_R16_FLOAT, 0x02u, 7u, 0u, 2u, 4u,
+         0x00010708u},
+        {AGC_GFX1013_RT_FORMAT_RG16_FLOAT, 0x05u, 7u, 0u, 4u, 4u,
+         0x00010714u},
+        {AGC_GFX1013_RT_FORMAT_RGBA16_FLOAT, 0x0cu, 7u, 0u, 8u, 4u,
+         0x00010730u},
+        {AGC_GFX1013_RT_FORMAT_R32_FLOAT, 0x04u, 7u, 0u, 4u, 1u,
+         0x00010710u},
+        {AGC_GFX1013_RT_FORMAT_RG32_FLOAT, 0x0bu, 7u, 0u, 8u, 2u,
+         0x0001072cu},
+        {AGC_GFX1013_RT_FORMAT_RGBA32_FLOAT, 0x0eu, 7u, 0u, 16u, 9u,
+         0x00010738u},
+    };
     uint32_t buffer[64] = {0};
+    uint32_t expected_format[28];
     SceAgcCb cb;
+    AgcGfx1013ColorTargetState typed_color;
+    AgcGfx1013ColorTargetFormatInfo format_info;
+    uint32_t i;
     const AgcGfx1013ColorTargetState color = {
         0x0000000201600000ull, 1920u, 1080u,
         AGC_GFX1013_COLOR_FORMAT_8_8_8_8,
@@ -787,6 +823,39 @@ static void test_gfx1013_fixed_function_packets(void)
         "gfx1013 color target exact dword count");
     TEST_ASSERT(memcmp(buffer, expected_color, sizeof(expected_color)) == 0,
         "gfx1013 color target exact packet stream");
+
+    for (i = 0u; i < sizeof(format_cases) / sizeof(format_cases[0]); ++i) {
+        TEST_ASSERT_EQ(agcGfx1013GetColorTargetFormatInfo(
+            format_cases[i].format, &format_info), AGC_OK,
+            "gfx1013 color format resolves");
+        TEST_ASSERT_EQ(format_info.color_format,
+            format_cases[i].color_format, "gfx1013 exact CB format");
+        TEST_ASSERT_EQ(format_info.number_type,
+            format_cases[i].number_type, "gfx1013 exact number type");
+        TEST_ASSERT_EQ(format_info.component_swap,
+            format_cases[i].component_swap, "gfx1013 exact component swap");
+        TEST_ASSERT_EQ(format_info.bytes_per_pixel,
+            format_cases[i].bytes_per_pixel, "gfx1013 exact pixel size");
+        TEST_ASSERT_EQ(format_info.spi_shader_export_format,
+            format_cases[i].spi_export, "gfx1013 matching SPI export");
+        TEST_ASSERT_EQ(agcGfx1013InitColorTarget(
+            &typed_color, color.address, 2048u, color.height,
+            format_cases[i].format), AGC_OK,
+            "gfx1013 typed color target initializes");
+        memcpy(expected_format, expected_color, sizeof(expected_format));
+        expected_format[3] = 0x000000ffu;
+        expected_format[4] = 0x000437ffu;
+        expected_format[6] = format_cases[i].color_info;
+        expected_format[21] = 0x01ffc437u;
+        agcCbReset(&cb, buffer, sizeof(buffer));
+        TEST_ASSERT_EQ(agcGfx1013SetColorTarget(&cb, &typed_color), AGC_OK,
+            "gfx1013 typed color target emits");
+        TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 28u,
+            "gfx1013 typed color target exact dword count");
+        TEST_ASSERT(memcmp(buffer, expected_format,
+            sizeof(expected_format)) == 0,
+            "gfx1013 typed color target exact packet stream");
+    }
 
     agcCbReset(&cb, buffer, sizeof(buffer));
     TEST_ASSERT_EQ(agcGfx1013SetViewport(&cb, &viewport), AGC_OK,
@@ -873,6 +942,7 @@ static void test_gfx1013_fixed_function_rejects_atomically(void)
     };
     const AgcGfx1013ViewportState viewport = {1920u, 1080u};
     const AgcGfx1013ScissorState scissor = {0u, 0u, 1920u, 1080u};
+    AgcGfx1013ColorTargetFormatInfo format_info;
 
     agcCbInit(&cb, buffer, 27u * sizeof(uint32_t));
     TEST_ASSERT_EQ(agcGfx1013SetColorTarget(&cb, &color),
@@ -906,6 +976,19 @@ static void test_gfx1013_fixed_function_rejects_atomically(void)
         AGC_ERROR_INVALID_ALIGNMENT, "unaligned target rejects");
     TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
         "invalid target emits no packets");
+
+    TEST_ASSERT_EQ(agcGfx1013GetColorTargetFormatInfo(
+        AGC_GFX1013_RT_FORMAT_COUNT, &format_info),
+        AGC_ERROR_NOT_SUPPORTED, "unknown color format rejects");
+    TEST_ASSERT_EQ(agcGfx1013GetColorTargetFormatInfo(
+        AGC_GFX1013_RT_FORMAT_RGBA8_UNORM, NULL),
+        AGC_ERROR_INVALID_ARGUMENT, "null color format output rejects");
+    color.address--;
+    color.width = 8u;
+    TEST_ASSERT_EQ(agcGfx1013SetColorTarget(&cb, &color),
+        AGC_ERROR_INVALID_ALIGNMENT, "unaligned linear row pitch rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "invalid row pitch emits no packets");
 }
 
 static void test_gfx1013_compute_packets(void)
