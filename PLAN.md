@@ -160,7 +160,66 @@ Convert the conclusions into permanent capability/profile regressions:
 - Unsupported optional operations return a stable fail-closed AGC error and do
   not mutate backend state.
 
-### 5. Expand FW 5.50 game compatibility
+### 5. Deliver OpenAGC as a homebrew GPU API
+
+OpenAGC's primary product is a clean, usable GPU API and shader toolchain for
+native homebrew applications and games running on jailbroken PS5 hardware. The
+FW `0x0550` console in hand is the first qualification target. Compatibility
+with official `sceAgc*` / `sceAgcDriver*` entry points remains important, but
+retail-title import counts are supporting ABI evidence rather than the product
+goal or a release gate.
+
+Work in this order:
+
+1. **Public-API vertical-slice audit.** Inventory the hardware samples and move
+   every generally useful shader upload, resource binding, render-target,
+   viewport/scissor, draw/dispatch, barrier, synchronization, and queue-submit
+   operation out of sample-local raw PM4 into public OpenAGC builders or
+   documented low-level escape hatches. VideoOut lifecycle remains platform
+   integration rather than AGC command construction.
+2. **Graphics and compute application path.** Provide one minimal graphics path
+   and one compute path that use installed OpenAGC headers and `libopenagc.a`
+   only. The application must not reproduce private register sequences from
+   `samples/hw_test`. Cover shader records, GPU memory ownership/alignment,
+   Wave32 VS/PS, render targets, viewport/scissor, indexed and non-indexed draw,
+   dispatch, cache visibility, suspend points, and error propagation.
+3. **Shader toolchain usability.** Make `openagc-psbc` a documented part of the
+   homebrew SDK flow: GLSL or SPIR-V to gfx1013 shader records, deterministic
+   artifacts, stage/link diagnostics, and examples for compute, VS/PS, NGG
+   geometry, and tessellation. Keep PS5 gfx1013 behavior distinct from generic
+   gfx1030 assumptions.
+4. **SDK packaging.** Install public headers, `libopenagc.a`, CMake package
+   metadata, and compiler tooling through one supported workflow. Document the
+   public API boundary, ownership/lifetime rules, alignment requirements,
+   numeric firmware profiles, error codes, raw-PM4 escape hatch, and websrv
+   deployment without requiring proprietary SDK headers or firmware blobs.
+5. **FW 5.50 conformance suite.** Run the display, initialization, compute,
+   graphics, indexed draw, indirect draw, NGG geometry, and tessellation tests
+   through curl/websrv. Add bounded waits and fail-closed state validation so a
+   malformed builder input cannot submit a kernel-panic-prone packet. Record
+   visual expectations and console results separately from host packet tests.
+6. **Representative homebrew proof.** Build and run a small application or game
+   outside `samples/hw_test` that uses the installed OpenAGC SDK. It must render
+   continuously, upload/update resources, compile/load shaders, recover cleanly
+   from application errors, and contain no copied sample-private PM4 setup.
+7. **Broaden capability after the vertical slice.** Prioritize reusable texture
+   and sampler descriptors, additional render-target/depth formats, blending,
+   resource transitions, multi-buffer frame scheduling, timestamps/queries,
+   and stable NGG geometry/tessellation APIs according to homebrew needs.
+8. **Firmware and retail ABI evidence.** Preserve numeric firmware profiles and
+   expand below/above FW `0x0550` only after the primary path is mature. Analyze
+   retail binaries when they reveal an API contract needed by homebrew; do not
+   chase dead imports, guess prototypes, or make a ten-title corpus a release
+   requirement. FW `0x0320` remains the lowest active compatibility target;
+   FW `0x0100` and 2.x remain archival.
+
+The next implementation goal is item 1: produce a table of raw/sample-only
+operations versus reusable public APIs, then close the gaps required for a
+public-API-only triangle and compute application. Each closed goal must update
+the documentation, pass clean generic and Prospero builds, pass host fixtures,
+and be committed before hardware promotion.
+
+#### Retail ABI evidence retained by the project
 
 Subnautica (`PPSA02453`) content `01.022.394` is now re-audited from the
 decrypted executable: all 63 AGC imports pass the strict coverage gate, with 58
@@ -261,7 +320,7 @@ PS5 caller or typed PS5 header becomes available; do not use the PS4 placeholder
 prototype. Corpus expansion therefore requires another decrypted PS5 title
 binary rather than more firmware variants of this stub.
 
-Grow the corpus from three games to at least ten representative,
+When useful to homebrew API work, grow the optional evidence corpus with
 FW 5.50-compatible binaries spanning multiple engines, SDK vintages, and
 graphics workloads. For each title:
 
