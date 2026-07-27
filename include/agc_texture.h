@@ -485,6 +485,8 @@ void agcSamplerDescriptorSetAnisotropy(AgcSamplerDescriptor *desc,
 #define AGC_GFX1013_IMAGE_FORMAT_RGBA8_UNORM 56u
 #define AGC_GFX1013_IMAGE_TYPE_2D 9u
 #define AGC_GFX1013_IMAGE_TYPE_2D_MSAA 14u
+#define AGC_GFX1013_IMAGE_SWIZZLE_64KB_R_X 27u
+#define AGC_GFX1013_IMAGE_64KB_ALIGNMENT 0x10000u
 
 typedef struct AgcGfx1013BufferDescriptor {
     uint32_t words[4];

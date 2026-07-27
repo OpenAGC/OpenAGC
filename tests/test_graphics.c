@@ -1271,6 +1271,22 @@ static void test_gfx1013_depth_surface_packets(void)
         AGC_ERROR_NOT_SUPPORTED, "unknown depth format rejects");
     TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
         "unsupported depth format is atomic");
+
+    surface = (AgcGfx1013DepthSurfaceState){
+        .depth_read_address = 0x0000123456790100ull,
+        .depth_write_address = 0x0000123456790100ull,
+        .width = 1920u,
+        .height = 1080u,
+        .format = AGC_GFX1013_DEPTH_FORMAT_D32_FLOAT,
+        .depth_swizzle_mode = AGC_GFX1013_SWIZZLE_64KB_Z_X,
+        .mip_level_count = 1u,
+        .sample_count = 1u,
+    };
+    TEST_ASSERT_EQ(agcGfx1013SetDepthSurface(&cb, &surface),
+        AGC_ERROR_INVALID_ALIGNMENT,
+        "64KB_Z_X depth requires its layout alignment");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "misaligned 64KB_Z_X depth is atomic");
 }
 
 static void test_gfx1013_depth_surface_layout(void)
@@ -2071,6 +2087,27 @@ static void test_gfx1013_msaa_state_and_layout(void)
         "gfx1013 color NUM_SAMPLES and NUM_FRAGMENTS");
     TEST_ASSERT_EQ(buffer[24], 0x0906C001u,
         "gfx1013 color 64KB_R_X attrib3");
+
+    TEST_ASSERT_EQ(agcGfx1013InitColorTarget(&target,
+        0x0000000203000000ull, 96u, 64u,
+        AGC_GFX1013_RT_FORMAT_RGBA16_FLOAT), AGC_OK,
+        "gfx1013 padded RGBA16F 4x target initializes");
+    target.sample_count = 4u;
+    target.fragment_count = 4u;
+    target.swizzle_mode = AGC_GFX1013_SWIZZLE_64KB_R_X;
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetColorTarget(&cb, &target), AGC_OK,
+        "gfx1013 padded RGBA16F 4x target emits");
+    TEST_ASSERT_EQ(buffer[3], 15u,
+        "gfx1013 4x color pitch uses padded 128-pixel layout");
+
+    target.address += 0x100u;
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetColorTarget(&cb, &target),
+        AGC_ERROR_INVALID_ALIGNMENT,
+        "gfx1013 64KB_R_X target requires 64KB alignment");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "misaligned gfx1013 64KB_R_X target is atomic");
 }
 
 static void test_gfx1013_color_resolve_rejects_atomically(void)

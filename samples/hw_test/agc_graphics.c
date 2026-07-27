@@ -510,6 +510,8 @@ static bool allocate_display_buffers(GraphicsTest *test) {
     size_t htile_alignment = htile_layout.alignment;
     test->htile_surface_size = htile_size;
 #else
+    size_t msaa_color_size = 0u;
+    size_t msaa_color_alignment = 1u;
     size_t rt_size = (size_t)FP16_TARGET_WIDTH * FP16_TARGET_HEIGHT *
                      sizeof(uint64_t);
     size_t rt_alignment = 1u;

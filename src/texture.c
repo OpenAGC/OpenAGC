@@ -415,8 +415,11 @@ int32_t PS5_SYSV_ABI agcGfx1013Image2DDescriptorEncode(
     } else if (sample_count == 4u) {
         sample_log2 = 2u;
         if (state->image_type != AGC_GFX1013_IMAGE_TYPE_2D_MSAA ||
-            state->swizzle_mode != 27u)
+            state->swizzle_mode != AGC_GFX1013_IMAGE_SWIZZLE_64KB_R_X)
             return AGC_ERROR_NOT_SUPPORTED;
+        if ((state->address &
+             (AGC_GFX1013_IMAGE_64KB_ALIGNMENT - 1u)) != 0u)
+            return AGC_ERROR_INVALID_ALIGNMENT;
     } else {
         return AGC_ERROR_NOT_SUPPORTED;
     }

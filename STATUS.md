@@ -1407,6 +1407,11 @@ Validation completed on 2026-07-27:
 Host implementation and Prospero compilation are complete; PS5 validation is
 pending because hardware is unavailable.
 
+The host gate now enforces the 64 KiB base alignment returned by the R_X/Z_X
+layout queries, programs tiled color pitch from the padded layout rather than
+the logical width, and keeps the default non-depth hardware sample build
+independent of the optional MSAA allocation.
+
 The typed 29-dword sample-state builder programs gfx1013 4x AA with
 `PA_SC_AA_CONFIG=0x2020c002`, `DB_EQAA=0x00002202`, standard DX sample
 locations `0xe62a62ae`, centroid priority `0x3210321032103210`, and full

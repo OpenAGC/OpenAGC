@@ -1065,11 +1065,12 @@ int32_t PS5_SYSV_ABI agcGfx1013SetColorTarget(
     uint32_t fragment_count;
     uint32_t sample_log2;
     uint32_t fragment_log2;
+    uint32_t surface_pitch;
     uint32_t padded_height;
 
     if (!cb || !state || state->address == 0u || state->width == 0u ||
         state->height == 0u || state->width > 0x4000u ||
-        state->height > 0x4000u || (state->width & 7u) != 0u)
+        state->height > 0x4000u)
         return AGC_ERROR_INVALID_ARGUMENT;
     if ((state->address & 0xffu) != 0u || (state->address >> 48) != 0u)
         return AGC_ERROR_INVALID_ALIGNMENT;
@@ -1082,7 +1083,13 @@ int32_t PS5_SYSV_ABI agcGfx1013SetColorTarget(
         state->swizzle_mode == 0u) {
         sample_log2 = 0u;
         fragment_log2 = 0u;
+        surface_pitch = state->width;
         padded_height = state->height;
+        if ((state->width & 7u) != 0u)
+            return AGC_ERROR_INVALID_ARGUMENT;
+        if (((uint64_t)surface_pitch * format_info.bytes_per_pixel &
+             0xffu) != 0u)
+            return AGC_ERROR_INVALID_ALIGNMENT;
     } else if (sample_count == 4u && fragment_count == 4u &&
                state->swizzle_mode == AGC_GFX1013_SWIZZLE_64KB_R_X) {
         AgcGfx1013ColorSurfaceLayoutInput input = {
@@ -1107,14 +1114,16 @@ int32_t PS5_SYSV_ABI agcGfx1013SetColorTarget(
             return AGC_ERROR_NOT_SUPPORTED;
         sample_log2 = 2u;
         fragment_log2 = 2u;
+        surface_pitch = layout.pitch;
         padded_height = layout.padded_height;
+        if ((state->address &
+             (AGC_GFX1013_64KB_SURFACE_ALIGNMENT - 1u)) != 0u)
+            return AGC_ERROR_INVALID_ALIGNMENT;
     } else {
         return AGC_ERROR_NOT_SUPPORTED;
     }
-    if (((uint64_t)state->width * format_info.bytes_per_pixel & 0xffu) != 0u)
-        return AGC_ERROR_INVALID_ALIGNMENT;
 
-    tiles_per_row = state->width / 8u;
+    tiles_per_row = surface_pitch / 8u;
     tile_count = (uint64_t)tiles_per_row * padded_height * sample_count;
     if (tiles_per_row > 0x800u || tile_count == 0u || tile_count > 0x400000u)
         return AGC_ERROR_INVALID_ARGUMENT;
@@ -1638,6 +1647,15 @@ int32_t PS5_SYSV_ABI agcGfx1013SetDepthSurface(
          !agcGfx1013DepthAddressValid(state->stencil_write_address)) ||
         (state->htile_address &&
          !agcGfx1013DepthAddressValid(state->htile_address)))
+        return AGC_ERROR_INVALID_ALIGNMENT;
+    if ((state->depth_swizzle_mode == AGC_GFX1013_SWIZZLE_64KB_Z_X &&
+         ((state->depth_read_address |
+           state->depth_write_address) &
+          (AGC_GFX1013_64KB_SURFACE_ALIGNMENT - 1u)) != 0u) ||
+        (state->stencil_swizzle_mode == AGC_GFX1013_SWIZZLE_64KB_Z_X &&
+         ((state->stencil_read_address |
+           state->stencil_write_address) &
+          (AGC_GFX1013_64KB_SURFACE_ALIGNMENT - 1u)) != 0u))
         return AGC_ERROR_INVALID_ALIGNMENT;
     if (agcCbRemainingDwords(cb) < AGC_GFX1013_DEPTH_SURFACE_DWORDS)
         return AGC_ERROR_BUFFER_TOO_SMALL;

@@ -907,7 +907,7 @@ static void test_gfx1013_msaa_image_descriptor(void)
         .dst_sel_x = 4u, .dst_sel_y = 5u,
         .dst_sel_z = 6u, .dst_sel_w = 7u,
         .sample_count = 4u,
-        .swizzle_mode = 27u,
+        .swizzle_mode = AGC_GFX1013_IMAGE_SWIZZLE_64KB_R_X,
     };
 
     TEST_ASSERT_EQ(agcGfx1013Image2DDescriptorEncode(&image, &state),
@@ -916,6 +916,14 @@ static void test_gfx1013_msaa_image_descriptor(void)
         "gfx1013 4x image type, R_X swizzle, and sample count");
     TEST_ASSERT_EQ(image.words[5], 0x20u,
         "gfx1013 4x image max mip mirrors log2 samples");
+
+    state.address += 0x100u;
+    image.words[0] = 0x11223344u;
+    TEST_ASSERT_EQ(agcGfx1013Image2DDescriptorEncode(&image, &state),
+        AGC_ERROR_INVALID_ALIGNMENT,
+        "gfx1013 64KB_R_X image requires 64KB alignment");
+    TEST_ASSERT_EQ(image.words[0], 0x11223344u,
+        "misaligned gfx1013 MSAA image preserves destination");
 }
 
 void test_suite_texture(void) {
