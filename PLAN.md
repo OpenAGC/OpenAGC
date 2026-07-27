@@ -1832,6 +1832,13 @@ Advance only after the preceding rung is stable under repeated FW 5.50 runs:
 6. Tessellation control/evaluation, ring allocation, factor buffers, patch
    constants, and HS/DS linkage.
 7. Offscreen rendering, render-to-texture, mip levels, and copy/resolve paths.
+8. HDR rendering and presentation, kept as two independently qualified gates:
+   add `R11G11B10_FLOAT` and other HDR-capable typed targets; implement FP16
+   or 10-bit presentation buffers; add Rec.2020/PQ conversion and any required
+   VideoOut HDR metadata; lock the color pipeline with deterministic host and
+   GPU-readback fixtures; then verify on FW 5.50 that the connected display
+   enters HDR mode. HDR-range offscreen rendering must not be reported as HDR
+   presentation until the VideoOut signal is hardware-confirmed.
 
 Every rung needs a deterministic host fixture, a minimal hardware sample, a
 documented expected screen/result, repeated websrv validation, and a negative
