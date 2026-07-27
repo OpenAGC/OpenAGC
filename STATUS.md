@@ -727,7 +727,8 @@ The host-generic implementation now has a tested model for:
   mutating the compiler binary
 - Unified CPU/GPU-visible flexible allocation with host parity, explicit
   cache flush/invalidate operations, 16 KiB mapping granularity, deterministic
-  unmapping, and requested alignment validation (`agcGpuMemory*`)
+  unmapping, requested alignment validation, and bounded 32-bit EOP-label
+  waits (`agcGpuMemory*`)
 - FW 5.50 AGC shader Specials block struct (`AgcShaderSpecials`: 0x30-byte sparse register/value layout with fields at 0x00, 0x08, 0x20, and 0x28)
 - AGC shader User Data Table struct (`AgcShaderUserData`: 5× 64-bit entries)
 - Typed accessors for shader sub-blocks (`agcShaderRecordGetSpecialsTyped`, `agcShaderRecordGetUserDataTyped`, `agcShaderRecordGetShRegisterValues`, `agcShaderRecordGetCxRegisterValues`)

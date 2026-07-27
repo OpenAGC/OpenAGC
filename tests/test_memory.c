@@ -23,6 +23,10 @@ static void test_flexible_memory_lifecycle(void)
         "CPU writes flush");
     TEST_ASSERT_EQ(agcGpuMemoryInvalidate(&memory, 12u, 4u), AGC_OK,
         "GPU writes invalidate");
+    TEST_ASSERT_EQ(agcGpuMemoryWait32(&memory, 12u, 0x12345678u, 0u), AGC_OK,
+        "matching label completes immediately");
+    TEST_ASSERT_EQ(agcGpuMemoryWait32(&memory, 12u, 0u, 0u),
+        AGC_ERROR_TIMEOUT, "non-matching label observes bounded timeout");
     TEST_ASSERT_EQ(agcGpuMemoryFlush(&memory, memory.size, 1u),
         AGC_ERROR_INVALID_ARGUMENT, "out-of-bounds cache range rejected");
 

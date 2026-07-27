@@ -30,6 +30,9 @@ int32_t PS5_SYSV_ABI agcGpuMemoryFlush(
     const AgcGpuMemory *memory, size_t offset, size_t size);
 int32_t PS5_SYSV_ABI agcGpuMemoryInvalidate(
     const AgcGpuMemory *memory, size_t offset, size_t size);
+int32_t PS5_SYSV_ABI agcGpuMemoryWait32(
+    const AgcGpuMemory *memory, size_t offset, uint32_t value,
+    uint32_t timeout_microseconds);
 
 #ifdef __cplusplus
 }

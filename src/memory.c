@@ -4,6 +4,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #define AGC_FLEXIBLE_PAGE_SIZE 0x4000u
 #define AGC_CACHE_LINE_SIZE 64u
@@ -12,6 +13,7 @@
 extern int32_t sceKernelMapNamedSystemFlexibleMemory(
     void **addr, size_t size, int type, int flags, const char *name);
 extern int32_t sceKernelMunmap(void *addr, size_t len);
+extern int32_t sceKernelUsleep(uint32_t microseconds);
 #endif
 
 static int32_t agcGpuMemoryValidateRange(
@@ -105,4 +107,38 @@ int32_t PS5_SYSV_ABI agcGpuMemoryInvalidate(
     const AgcGpuMemory *memory, size_t offset, size_t size)
 {
     return agcGpuMemoryCacheOperation(memory, offset, size);
+}
+
+int32_t PS5_SYSV_ABI agcGpuMemoryWait32(
+    const AgcGpuMemory *memory, size_t offset, uint32_t value,
+    uint32_t timeout_microseconds)
+{
+    const uint32_t interval = 50u;
+    uint32_t elapsed = 0u;
+
+    if ((offset & 3u) != 0u ||
+        agcGpuMemoryValidateRange(memory, offset, sizeof(uint32_t)) != AGC_OK)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    for (;;) {
+        if (agcGpuMemoryInvalidate(
+                memory, offset, sizeof(uint32_t)) != AGC_OK)
+            return AGC_ERROR_INTERNAL;
+        if (*(const volatile uint32_t *)
+                ((const uint8_t *)memory->cpu_address + offset) == value)
+            return AGC_OK;
+        if (elapsed >= timeout_microseconds)
+            return AGC_ERROR_TIMEOUT;
+        uint32_t delay = timeout_microseconds - elapsed;
+        if (delay > interval) delay = interval;
+#if defined(OPENAGC_PROSPERO)
+        sceKernelUsleep(delay);
+#else
+        const struct timespec sleep_time = {
+            .tv_sec = 0,
+            .tv_nsec = (long)delay * 1000l,
+        };
+        nanosleep(&sleep_time, NULL);
+#endif
+        elapsed += delay;
+    }
 }
