@@ -1400,6 +1400,12 @@ static bool agcGfx1013CalculateDepthPlaneLayout(
             return false;
     } else {
         uint32_t mip;
+        uint32_t ending_mip;
+        uint32_t mip0_width_blocks;
+        uint32_t mip0_height_blocks;
+        uint32_t mip1_blocks;
+        uint32_t chain_pitch = layout->pitch;
+        uint32_t chain_height = layout->padded_height;
 
         tail_width = layout->block_width >> 1u;
         tail_height = layout->block_height;
@@ -1414,27 +1420,41 @@ static bool agcGfx1013CalculateDepthPlaneLayout(
         mip_height = input->height;
         for (mip = 0u; mip < input->mip_level_count; ++mip) {
             uint32_t remaining = input->mip_level_count - mip;
-            uint64_t mip_size;
 
             if (mip_width <= tail_width && mip_height <= tail_height &&
                 remaining <= 12u) {
                 layout->first_mip_in_tail = mip;
-                if (slice_size > UINT64_MAX -
-                        AGC_GFX1013_64KB_SURFACE_ALIGNMENT)
-                    return false;
-                slice_size += AGC_GFX1013_64KB_SURFACE_ALIGNMENT;
                 break;
             }
-            if (!agcGfx1013MulU64(
-                    agcGfx1013AlignPow2(mip_width, layout->block_width),
-                    agcGfx1013AlignPow2(mip_height, layout->block_height),
-                    &mip_size) ||
-                !agcGfx1013MulU64(mip_size, bytes_per_element, &mip_size) ||
-                slice_size > UINT64_MAX - mip_size)
-                return false;
-            slice_size += mip_size;
             mip_width = mip_width > 1u ? mip_width >> 1u : 1u;
             mip_height = mip_height > 1u ? mip_height >> 1u : 1u;
+        }
+
+        ending_mip = layout->first_mip_in_tail < input->mip_level_count - 1u ?
+            layout->first_mip_in_tail : input->mip_level_count - 1u;
+        if (ending_mip == 0u) {
+            slice_size = AGC_GFX1013_64KB_SURFACE_ALIGNMENT;
+        } else {
+            mip0_width_blocks = layout->pitch / layout->block_width;
+            mip0_height_blocks =
+                layout->padded_height / layout->block_height;
+            if (mip0_width_blocks >= mip0_height_blocks) {
+                mip1_blocks = (mip0_height_blocks + 1u) >> 1u;
+                if (mip1_blocks == 1u && ending_mip > 2u)
+                    ++mip1_blocks;
+                chain_height += mip1_blocks * layout->block_height;
+            } else {
+                mip1_blocks = (mip0_width_blocks + 1u) >> 1u;
+                if (mip1_blocks == 1u && ending_mip > 2u)
+                    ++mip1_blocks;
+                chain_pitch += mip1_blocks * layout->block_width;
+            }
+            if (!agcGfx1013MulU64(chain_pitch, chain_height, &slice_size) ||
+                !agcGfx1013MulU64(
+                    slice_size, bytes_per_element, &slice_size) ||
+                !agcGfx1013MulU64(
+                    slice_size, input->sample_count, &slice_size))
+                return false;
         }
     }
     if (!agcGfx1013MulU64(slice_size, input->layer_count,
@@ -1586,6 +1606,76 @@ int32_t PS5_SYSV_ABI agcGfx1013GetHtileLayout(
         (uint32_t)(slice_size / result.meta_block_size);
     *layout = result;
     return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013GetHtileSubresourceLayout(
+    const AgcGfx1013HtileLayoutInput *input, uint32_t mip_level,
+    uint32_t layer, AgcGfx1013HtileSubresourceLayout *layout)
+{
+    AgcGfx1013HtileLayout aggregate;
+    AgcGfx1013HtileSubresourceLayout result = {0};
+    uint64_t offset;
+    uint64_t mip_size = 0u;
+    uint32_t mip;
+    int32_t error;
+
+    if (!input || !layout || mip_level >= input->mip_level_count ||
+        layer >= input->layer_count)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    error = agcGfx1013GetHtileLayout(input, &aggregate);
+    if (error != AGC_OK)
+        return error;
+
+    result.width = input->width >> mip_level;
+    result.height = input->height >> mip_level;
+    if (result.width == 0u)
+        result.width = 1u;
+    if (result.height == 0u)
+        result.height = 1u;
+    result.pitch = agcGfx1013AlignPow2(
+        result.width, aggregate.meta_block_width);
+    result.padded_height = agcGfx1013AlignPow2(
+        result.height, aggregate.meta_block_height);
+    result.in_mip_tail = mip_level >= input->first_mip_in_tail;
+
+    offset = input->first_mip_in_tail < input->mip_level_count ?
+        aggregate.meta_block_size : 0u;
+    if (result.in_mip_tail) {
+        result.offset = (uint64_t)layer * aggregate.slice_size;
+        result.size = aggregate.meta_block_size;
+        *layout = result;
+        return AGC_OK;
+    }
+
+    for (mip = input->first_mip_in_tail; mip-- > 0u;) {
+        uint32_t width = input->width >> mip;
+        uint32_t height = input->height >> mip;
+        uint64_t blocks;
+
+        if (width == 0u)
+            width = 1u;
+        if (height == 0u)
+            height = 1u;
+        if (!agcGfx1013MulU64(
+                agcGfx1013AlignPow2(width, aggregate.meta_block_width) /
+                    aggregate.meta_block_width,
+                agcGfx1013AlignPow2(height, aggregate.meta_block_height) /
+                    aggregate.meta_block_height,
+                &blocks) ||
+            !agcGfx1013MulU64(
+                blocks, aggregate.meta_block_size, &mip_size))
+            return AGC_ERROR_INVALID_ARGUMENT;
+        if (mip == mip_level) {
+            result.offset = (uint64_t)layer * aggregate.slice_size + offset;
+            result.size = mip_size;
+            *layout = result;
+            return AGC_OK;
+        }
+        if (offset > UINT64_MAX - mip_size)
+            return AGC_ERROR_INVALID_ARGUMENT;
+        offset += mip_size;
+    }
+    return AGC_ERROR_INTERNAL;
 }
 
 int32_t PS5_SYSV_ABI agcGfx1013SetDepthSurface(

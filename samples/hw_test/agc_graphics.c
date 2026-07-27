@@ -83,6 +83,14 @@
 #define AGC_STENCIL_HTILE_VALIDATION 0
 #endif
 
+#ifndef AGC_HTILE_MIP_VALIDATION
+#define AGC_HTILE_MIP_VALIDATION 0
+#endif
+
+#ifndef AGC_HTILE_ARRAY_VALIDATION
+#define AGC_HTILE_ARRAY_VALIDATION 0
+#endif
+
 #if AGC_STENCIL_VALIDATION && !AGC_DEPTH_VALIDATION
 #error "stencil validation requires depth validation"
 #endif
@@ -123,6 +131,20 @@
 #if AGC_STENCIL_HTILE_VALIDATION && AGC_EXPCLEAR_VALIDATION
 #error "combined stencil/HTILE expclear is a later isolated gate"
 #endif
+
+#if (AGC_HTILE_MIP_VALIDATION + AGC_HTILE_ARRAY_VALIDATION) > 1
+#error "select only one HTILE subresource fixture"
+#endif
+
+#if (AGC_HTILE_MIP_VALIDATION || AGC_HTILE_ARRAY_VALIDATION) && \
+    !AGC_HTILE_VALIDATION
+#error "HTILE subresource fixtures require compressed metadata"
+#endif
+
+#define DEPTH_FIXTURE_MIP_COUNT (AGC_HTILE_MIP_VALIDATION ? 2u : 1u)
+#define DEPTH_FIXTURE_MIP_LEVEL (AGC_HTILE_MIP_VALIDATION ? 1u : 0u)
+#define DEPTH_FIXTURE_LAYER_COUNT (AGC_HTILE_ARRAY_VALIDATION ? 2u : 1u)
+#define DEPTH_FIXTURE_LAYER (AGC_HTILE_ARRAY_VALIDATION ? 1u : 0u)
 
 #if AGC_DEPTH_VALIDATION && AGC_TESSELLATION
 #error "depth validation uses the baseline NGG path"
@@ -369,6 +391,7 @@ typedef struct {
     size_t stencil_surface_size;
     void *htile_surface;    /* Reserved metadata; disabled in the D32 gate */
     size_t htile_surface_size;
+    AgcGfx1013HtileSubresourceLayout htile_subresource;
     uint32_t width;
     uint32_t height;
     uint32_t pitch_pixels;
@@ -495,8 +518,9 @@ static bool allocate_display_buffers(GraphicsTest *test) {
     /* The offscreen FP16 target is independent of the VideoOut dimensions. */
 #if AGC_DEPTH_VALIDATION
     const AgcGfx1013DepthSurfaceLayoutInput depth_input = {
-        .width = test->width, .height = test->height, .layer_count = 1u,
-        .mip_level_count = 1u,
+        .width = test->width, .height = test->height,
+        .layer_count = DEPTH_FIXTURE_LAYER_COUNT,
+        .mip_level_count = DEPTH_FIXTURE_MIP_COUNT,
         .sample_count = AGC_MSAA_VALIDATION ? 4u : 1u,
         .format = AGC_STENCIL_VALIDATION ?
             AGC_GFX1013_DEPTH_FORMAT_D32_FLOAT_S8_UINT :
@@ -541,8 +565,9 @@ static bool allocate_display_buffers(GraphicsTest *test) {
         depth_layout.stencil.alignment : 1u;
     test->stencil_surface_size = stencil_size;
     const AgcGfx1013HtileLayoutInput htile_input = {
-        .width = test->width, .height = test->height, .layer_count = 1u,
-        .mip_level_count = 1u,
+        .width = test->width, .height = test->height,
+        .layer_count = DEPTH_FIXTURE_LAYER_COUNT,
+        .mip_level_count = DEPTH_FIXTURE_MIP_COUNT,
         .first_mip_in_tail = depth_layout.depth.first_mip_in_tail,
         .pipe_count = DEPTH_HTILE_PROVISIONAL_PIPE_COUNT,
         .swizzle_mode = DEPTH_SWIZZLE_64KB_Z_X,
@@ -551,6 +576,14 @@ static bool allocate_display_buffers(GraphicsTest *test) {
     layout_ret = agcGfx1013GetHtileLayout(&htile_input, &htile_layout);
     if (layout_ret != AGC_OK || htile_layout.allocation_size > SIZE_MAX) {
         printf("HTILE layout query failed: 0x%08x\n", (unsigned)layout_ret);
+        return false;
+    }
+    layout_ret = agcGfx1013GetHtileSubresourceLayout(
+        &htile_input, DEPTH_FIXTURE_MIP_LEVEL, DEPTH_FIXTURE_LAYER,
+        &test->htile_subresource);
+    if (layout_ret != AGC_OK) {
+        printf("HTILE subresource query failed: 0x%08x\n",
+               (unsigned)layout_ret);
         return false;
     }
     size_t htile_size = (size_t)htile_layout.allocation_size;
@@ -641,6 +674,15 @@ static bool allocate_display_buffers(GraphicsTest *test) {
            test->htile_surface_size, test->htile_surface,
            DEPTH_HTILE_PROVISIONAL_PIPE_COUNT,
            AGC_HTILE_VALIDATION ? "enabled" : "disabled");
+#if AGC_HTILE_MIP_VALIDATION || AGC_HTILE_ARRAY_VALIDATION
+    printf("[HTILE Subresource] kind=%s mip=%u layer=%u offset=0x%llx "
+           "size=0x%llx extent=%ux%u\n",
+           AGC_HTILE_MIP_VALIDATION ? "mip" : "array",
+           DEPTH_FIXTURE_MIP_LEVEL, DEPTH_FIXTURE_LAYER,
+           (unsigned long long)test->htile_subresource.offset,
+           (unsigned long long)test->htile_subresource.size,
+           test->htile_subresource.width, test->htile_subresource.height);
+#endif
 #endif
     printf("Display buffers: %zu bytes each, %d buffers at %p (garlic)\n",
            test->buffer_stride, BUFFER_COUNT, test->mapped);
@@ -1391,8 +1433,19 @@ static bool dispatch_graphics(GraphicsTest *test,
             .swizzle_mode = AGC_MSAA_VALIDATION ?
                 AGC_GFX1013_SWIZZLE_64KB_R_X : 0u,
         },
-        .viewport = {target->width, target->height},
-        .scissor = {0u, 0u, target->width, target->height},
+        .viewport = {
+            AGC_HTILE_MIP_VALIDATION ?
+                test->htile_subresource.width : target->width,
+            AGC_HTILE_MIP_VALIDATION ?
+                test->htile_subresource.height : target->height,
+        },
+        .scissor = {
+            0u, 0u,
+            AGC_HTILE_MIP_VALIDATION ?
+                test->htile_subresource.width : target->width,
+            AGC_HTILE_MIP_VALIDATION ?
+                test->htile_subresource.height : target->height,
+        },
         .target_mask = AGC_GFX1013_TARGET_MASK_RGBA0,
         .context_load_control = AGC_GFX1013_CONTEXT_CONTROL_ENABLE,
         .context_shadow_control = AGC_GFX1013_CONTEXT_CONTROL_ENABLE,
@@ -1531,7 +1584,10 @@ static bool dispatch_graphics(GraphicsTest *test,
         .depth_swizzle_mode = DEPTH_SWIZZLE_64KB_Z_X,
         .stencil_swizzle_mode = AGC_STENCIL_VALIDATION ?
             DEPTH_SWIZZLE_64KB_Z_X : 0u,
-        .mip_level_count = 1u,
+        .mip_level = DEPTH_FIXTURE_MIP_LEVEL,
+        .mip_level_count = DEPTH_FIXTURE_MIP_COUNT,
+        .first_layer = DEPTH_FIXTURE_LAYER,
+        .last_layer = DEPTH_FIXTURE_LAYER,
         .sample_count = AGC_MSAA_VALIDATION ? 4u : 1u,
         .htile_address = AGC_HTILE_VALIDATION ?
             (uint64_t)(uintptr_t)test->htile_surface : 0u,
@@ -1874,7 +1930,8 @@ static bool dispatch_graphics(GraphicsTest *test,
     const uint32_t left_sample = color[639u * target->width + 717u];
     const uint32_t right_sample = color[639u * target->width + 1203u];
     const bool color_pass = green_pixels > 1000u && red_pixels > 1000u &&
-        left_sample == 0xFF00FF00u && right_sample == expected_red;
+        (AGC_HTILE_MIP_VALIDATION ||
+         (left_sample == 0xFF00FF00u && right_sample == expected_red));
     const bool depth_pass =
         (AGC_HTILE_VALIDATION && !AGC_HTILE_OPERATION_VALIDATION) ||
         (depth_one != 0u && depth_near != 0u && depth_far != 0u);
@@ -1897,6 +1954,13 @@ static bool dispatch_graphics(GraphicsTest *test,
     const uint32_t *htile = (const uint32_t *)test->htile_surface;
     uint32_t htile_changed = 0u;
     uint32_t htile_other = 0u;
+    uint32_t htile_selected_changed = 0u;
+    uint32_t htile_outside_changed = 0u;
+    const size_t htile_selected_begin =
+        (size_t)(test->htile_subresource.offset / sizeof(uint32_t));
+    const size_t htile_selected_end = (size_t)(
+        (test->htile_subresource.offset + test->htile_subresource.size) /
+        sizeof(uint32_t));
     for (size_t i = 0u;
          i < test->htile_surface_size / sizeof(uint32_t); ++i) {
         const uint32_t htile_initial = AGC_EXPCLEAR_VALIDATION ?
@@ -1905,16 +1969,27 @@ static bool dispatch_graphics(GraphicsTest *test,
                 AGC_GFX1013_HTILE_UNCOMPRESSED_DEPTH_STENCIL :
                 AGC_GFX1013_HTILE_UNCOMPRESSED_DEPTH);
         htile_changed += htile[i] != htile_initial;
+        htile_selected_changed += htile[i] != htile_initial &&
+            i >= htile_selected_begin && i < htile_selected_end;
+        htile_outside_changed += htile[i] != htile_initial &&
+            (i < htile_selected_begin || i >= htile_selected_end);
         htile_other += htile[i] != htile_initial &&
             htile[i] != 0xfffffff0u && htile[i] != 0x00000000u;
     }
-    const bool htile_pass = htile_changed > 0u;
+    const bool htile_pass = htile_changed > 0u &&
+        (!(AGC_HTILE_MIP_VALIDATION || AGC_HTILE_ARRAY_VALIDATION) ||
+         (htile_selected_changed > 0u && htile_outside_changed == 0u));
     printf("[HTILE Readback] changed=%u other=%u initial=%08x\n",
            htile_changed, htile_other,
            AGC_EXPCLEAR_VALIDATION ? AGC_GFX1013_HTILE_CLEAR_DEPTH_ONE :
                (AGC_STENCIL_HTILE_VALIDATION ?
                     AGC_GFX1013_HTILE_UNCOMPRESSED_DEPTH_STENCIL :
                     AGC_GFX1013_HTILE_UNCOMPRESSED_DEPTH));
+#if AGC_HTILE_MIP_VALIDATION || AGC_HTILE_ARRAY_VALIDATION
+    printf("[HTILE Subresource Readback] selected-changed=%u "
+           "outside-changed=%u\n",
+           htile_selected_changed, htile_outside_changed);
+#endif
 #else
     const bool htile_pass = true;
 #endif

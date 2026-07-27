@@ -1439,9 +1439,9 @@ static void test_gfx1013_depth_surface_layout(void)
         "gfx1013 D32 mip-chain layout queries");
     TEST_ASSERT_EQ(layout.depth.first_mip_in_tail, 4u,
         "D32 mip tail begins at exact level");
-    TEST_ASSERT_EQ(layout.depth.slice_size, 0x560000ull,
+    TEST_ASSERT_EQ(layout.depth.slice_size, 0x600000ull,
         "D32 mip chain exact slice size");
-    TEST_ASSERT_EQ(layout.depth.allocation_size, 0xac0000ull,
+    TEST_ASSERT_EQ(layout.depth.allocation_size, 0xc00000ull,
         "D32 mip array exact allocation size");
 
     input.width = 640u; input.height = 480u; input.layer_count = 1u;
@@ -1534,6 +1534,39 @@ static void test_gfx1013_htile_layout(void)
         "HTILE mip chain exact slice size");
     TEST_ASSERT_EQ(layout.allocation_size, 0x40000ull,
         "HTILE mip array exact allocation size");
+
+    AgcGfx1013HtileSubresourceLayout subresource = {0};
+    TEST_ASSERT_EQ(agcGfx1013GetHtileSubresourceLayout(
+        &input, 0u, 1u, &subresource), AGC_OK,
+        "gfx1013 HTILE mip0 layer1 subresource queries");
+    TEST_ASSERT_EQ(subresource.offset, 0x30000ull,
+        "HTILE mip0 layer1 exact reverse-chain offset");
+    TEST_ASSERT_EQ(subresource.size, 0x10000ull,
+        "HTILE mip0 exact metadata size");
+    TEST_ASSERT_EQ(subresource.in_mip_tail, 0u,
+        "HTILE mip0 is outside tail");
+    TEST_ASSERT_EQ(agcGfx1013GetHtileSubresourceLayout(
+        &input, 1u, 1u, &subresource), AGC_OK,
+        "gfx1013 HTILE mip1 layer1 subresource queries");
+    TEST_ASSERT_EQ(subresource.offset, 0x2c000ull,
+        "HTILE mip1 layer1 exact reverse-chain offset");
+    TEST_ASSERT_EQ(subresource.size, 0x4000ull,
+        "HTILE mip1 exact metadata size");
+    TEST_ASSERT_EQ(agcGfx1013GetHtileSubresourceLayout(
+        &input, 4u, 1u, &subresource), AGC_OK,
+        "gfx1013 HTILE tail layer1 subresource queries");
+    TEST_ASSERT_EQ(subresource.offset, 0x20000ull,
+        "HTILE tail layer1 starts at slice base");
+    TEST_ASSERT_EQ(subresource.size, 0x4000ull,
+        "HTILE tail reports shared metadata block");
+    TEST_ASSERT_EQ(subresource.in_mip_tail, 1u,
+        "HTILE tail is identified explicitly");
+    subresource.offset = 0x1122334455667788ull;
+    TEST_ASSERT_EQ(agcGfx1013GetHtileSubresourceLayout(
+        &input, 11u, 0u, &subresource), AGC_ERROR_INVALID_ARGUMENT,
+        "out-of-range HTILE mip rejects");
+    TEST_ASSERT_EQ(subresource.offset, 0x1122334455667788ull,
+        "invalid HTILE subresource preserves output");
 
     input.width = 1920u;
     input.height = 1080u;

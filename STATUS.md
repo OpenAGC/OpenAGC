@@ -1,5 +1,25 @@
 # openagc Status
 
+## FW 5.50 HTILE subresource qualification (2026-07-27)
+
+Nonzero mip and array-layer HTILE binding are now independently
+hardware-validated on standard PS5 FW `0x05500008`. The isolated mip fixture
+binds mip 1 of a two-level 1920x1080 D32 image, restricts viewport/scissor to
+the 960x540 attachment extent, and changes 4,385 words in the exact 64 KiB
+mip-1 HTILE range with zero changes outside it. The isolated array fixture
+binds layer 1 of a two-layer D32 image and changes 18,013 words in its exact
+192 KiB HTILE slice with layer 0 unchanged. Both runs reached the EOP fence in
+1 ms, passed all four GPU markers and color outcomes, and completed 1,800/1,800
+VideoOut flips.
+
+`agcGfx1013GetHtileSubresourceLayout` exposes gfx10 reverse mip ordering,
+per-layer slice offsets, exact ordinary-mip metadata sizes, and shared mip-tail
+storage. The multi-mip D32 allocation query now uses the gfx10 2D mip-chain
+footprint rather than summing independently aligned levels, which could
+under-allocate real hardware images. Evidence and artifact hashes are recorded
+in `analysis/fw550_htile_subresources_20260727.md`; raw logs remain under
+`samples/hw_test/conformance-logs/htile-subresources-20260727/`.
+
 ## FW 5.50 17-sample qualification checkpoint (2026-07-27)
 
 The authoritative sequential curl/websrv matrix now passes 17/17 on standard

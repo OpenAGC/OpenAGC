@@ -336,6 +336,12 @@ agc_depth_htile.elf: shaders_depth agc_graphics.c ps5_video_out.h gpu_credential
 agc_depth_htile_ops.elf: shaders_depth agc_graphics.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_DEPTH_VALIDATION=1 -DAGC_HTILE_VALIDATION=1 -DAGC_HTILE_OPERATION_VALIDATION=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
 
+agc_depth_htile_mip.elf: shaders_depth agc_graphics.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_DEPTH_VALIDATION=1 -DAGC_HTILE_VALIDATION=1 -DAGC_HTILE_MIP_VALIDATION=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_depth_htile_array.elf: shaders_depth agc_graphics.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_DEPTH_VALIDATION=1 -DAGC_HTILE_VALIDATION=1 -DAGC_HTILE_ARRAY_VALIDATION=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
+
 agc_depth_expclear.elf: shaders_depth agc_graphics.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_DEPTH_VALIDATION=1 -DAGC_HTILE_VALIDATION=1 -DAGC_HTILE_OPERATION_VALIDATION=1 -DAGC_EXPCLEAR_VALIDATION=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
 

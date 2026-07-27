@@ -2058,11 +2058,17 @@ words; raw S8 contained 2,364,832 zero bytes, 256,608 `0x5a` bytes, and no
 other values; all 49,152 HTILE words changed; and VideoOut completed
 1,800/1,800 flips without a hang or reset.
 
-1. Add isolated HTILE mip-level and array-layer hardware fixtures, preserving
-   per-subresource address, view, metadata-offset, and readback evidence.
-2. Move any PM4 still open-coded by the hardware-proven samples into public
+The isolated HTILE subresource milestone is complete on FW `0x05500008`.
+Mip 1 of a two-level D32 image and layer 1 of a two-layer D32 image both passed
+exact selected-versus-untouched metadata readback gates and sustained preview.
+The mip run also established that viewport/scissor must match the selected mip
+extent; using the base extent legitimately rasterized beyond the mip attachment
+and changed adjacent metadata. See
+`analysis/fw550_htile_subresources_20260727.md`.
+
+1. Move any PM4 still open-coded by the hardware-proven samples into public
    typed builders with exact host fixtures and atomic failure behavior.
-3. Keep combined stencil/HTILE expclear disabled until it has a dedicated
+2. Keep combined stencil/HTILE expclear disabled until it has a dedicated
    metadata-mask design and independent hardware gate; do not infer it from
    the now-proven ordinary combined compression path.
 4. Expand typed depth/HTILE support to mip and array-layer hardware fixtures
