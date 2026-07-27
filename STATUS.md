@@ -1,5 +1,19 @@
 # openagc Status
 
+## FW 5.50 RGBA32 FLOAT render-target qualification (2026-07-27)
+
+The typed gfx1013 `RGBA32_FLOAT` linear render-target path is
+hardware-qualified on standard PS5 FW `0x05500008`. It uses CB format `0x0e`,
+FLOAT number type `7`, standard component swap, the format-derived 32_ABGR
+shader export, and a 16-byte-per-pixel offscreen allocation.
+
+Two identical curl/websrv runs each changed and completely stored all four
+float components for 255,744 of 2,359,296 pixels, found eight distinct packed
+values, rejected zero components outside finite `[0,1]`, and produced FNV64
+`0x1e8771ed63381dce`. Both runs passed Wave32, marker, and 1 ms fence checks,
+completed 1,800/1,800 flips, and left live kernel logs free of GPU-fault,
+reset, process-stop, panic, privilege-register, watchdog, and fatal signatures.
+
 ## FW 5.50 RG32 FLOAT render-target qualification (2026-07-27)
 
 The typed gfx1013 `RG32_FLOAT` linear render-target path is
