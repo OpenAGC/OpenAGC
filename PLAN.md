@@ -49,6 +49,13 @@ AMD PM4 packet ancestry overlap in useful ways.
   The attempted diagnostic produced `GPU Bad packet error: Privilege reg` for
   register `0x13de`; FW reset and recovered the graphics rings automatically.
 
+The earlier compressed-D16 deferral is closed for the FW `0x05500008`
+gfx1013 profile. Uncompressed D16 passed twice before HTILE was enabled, and
+two subsequent D16/HTILE runs independently reproduced exact decompressed D16,
+metadata, color, fence, and flip oracles. The bounded evidence, including the
+remaining teardown warnings, is recorded in
+`analysis/fw550_d16_htile_qualification_20260727.md`.
+
 ### Hardware-validated: isolated stencil gate
 
 - `agc_depth_stencil.elf` allocates separate typed D32 and S8 `64KB_Z_X`

@@ -143,6 +143,11 @@ clear-one, 128,304 near, and 128,304 far native D16 values, and produced
 completion fence passed, each run completed 1,800/1,800 flips, and both live
 kernel logs were free of GPU-fault, reset, process-stop, and panic signatures.
 D16 HTILE expclear was subsequently qualified as the separate follow-up gate.
+The independent-run evidence and its exact scope are consolidated in
+`analysis/fw550_d16_htile_qualification_20260727.md`. The paired kernel logs
+have no panic or GPU fault/reset signature, but each contains a generic
+post-run fatal-signal line and a `0x4000` VM resource-leak warning. Those are
+tracked as teardown issues and are not described as a completely clean log.
 
 ## FW 5.50 D16+S8 qualification (2026-07-27)
 
