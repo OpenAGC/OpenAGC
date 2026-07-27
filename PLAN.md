@@ -2160,9 +2160,14 @@ Next execution order:
    type `7`, standard swap, and the format-derived 32_R shader export. Two
    identical runs each stored 255,744 complete pixels, eight distinct values,
    no invalid float components, and FNV64 `0x43e0f1986c4ec883`; all checks and
-   1,800/1,800 flips passed with clean kernel logs. Continue with RG32 and
-   RGBA32.
-16. Continue game-import coverage after the reusable draw/format APIs land;
+   1,800/1,800 flips passed with clean kernel logs.
+16. **Hardware complete:** linear RG32 FLOAT uses CB format `0x0b`, FLOAT
+   number type `7`, standard swap, and the format-derived 32_GR export. Two
+   identical runs each stored two complete components for 255,744 pixels,
+   eight distinct values, no invalid floats, and FNV64 `0x806171be9908c276`;
+   all checks and 1,800/1,800 flips passed with clean logs. RGBA32 is the final
+   isolated format gate.
+17. Continue game-import coverage after the reusable draw/format APIs land;
    correct Subnautica wrapper coverage and inventory DRAGON QUEST VII
    Reimagined against the new application-facing surface.
 
