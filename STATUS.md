@@ -1,5 +1,17 @@
 # openagc Status
 
+## Compute descriptor resource tables (2026-07-27)
+
+`AgcGfx1013ComputeState` now carries application-neutral resource-table
+bindings. `agcGfx1013ValidateCompute` requires every compiler-emitted
+descriptor-set placeholder to resolve to a unique, aligned gfx1013 table
+address. `agcGfx1013DispatchCompute` includes the patch packets in its capacity
+preflight and emits them after the shader/user state and immediately before
+`DISPATCH_DIRECT`, so a compiled compute shader cannot overwrite its own table
+binding. The host packet fixture verifies ordering, register selection, address
+encoding, and the missing-binding rejection. CMake/CTest passes on the generic
+backend and the Prospero static library cross-builds cleanly.
+
 ## Reusable gfx1013 capability query (2026-07-27)
 
 The public `agc_capabilities.h` API now provides a versioned, application-neutral

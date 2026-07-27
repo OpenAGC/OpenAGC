@@ -470,6 +470,11 @@ typedef struct AgcGfx1013ComputeDefaultStats {
     uint32_t packet_count;
 } AgcGfx1013ComputeDefaultStats;
 
+typedef struct AgcGfx1013ResourceTableBinding {
+    uint32_t placeholder;
+    uint64_t address;
+} AgcGfx1013ResourceTableBinding;
+
 typedef struct AgcGfx1013ComputeState {
     const AgcShaderRecord *record;
     const AgcRegisterValue *sh_registers;
@@ -484,6 +489,8 @@ typedef struct AgcGfx1013ComputeState {
     uint32_t group_count_y;
     uint32_t group_count_z;
     uint32_t modifier;
+    const AgcGfx1013ResourceTableBinding *resource_tables;
+    uint32_t num_resource_tables;
 } AgcGfx1013ComputeState;
 
 typedef struct AgcGfx1013HtileRmwState {
@@ -527,11 +534,6 @@ typedef struct AgcGfx1013ResourceTransition {
 } AgcGfx1013ResourceTransition;
 
 #define AGC_GFX1013_ADDRESS32_HIGH 0x00000002u
-
-typedef struct AgcGfx1013ResourceTableBinding {
-    uint32_t placeholder;
-    uint64_t address;
-} AgcGfx1013ResourceTableBinding;
 
 typedef struct AgcGfx1013TessellationRingTable {
     uint32_t words[AGC_GFX1013_TESS_RING_TABLE_DWORDS];

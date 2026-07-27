@@ -2655,6 +2655,8 @@ static bool agcGfx1013EmitComputeRegisters(
     return true;
 }
 
+static bool agcGfx1013IsResourcePlaceholder(uint32_t value);
+
 int32_t PS5_SYSV_ABI agcGfx1013SetContextControl(
     SceAgcCb *cb, uint32_t load_control, uint32_t shadow_control)
 {
@@ -2676,7 +2678,9 @@ int32_t PS5_SYSV_ABI agcGfx1013SetContextControl(
 int32_t PS5_SYSV_ABI agcGfx1013ValidateCompute(
     const AgcGfx1013ComputeState *state)
 {
+    AgcGfx1013ShaderBinding shader;
     uint32_t value;
+    uint32_t i;
     uint64_t local_invocations;
 
     if (!state || !state->record || !state->sh_registers ||
@@ -2707,6 +2711,27 @@ int32_t PS5_SYSV_ABI agcGfx1013ValidateCompute(
         !agcGfx1013FindComputeRegister(
             state, AGC_REG_COMPUTE_PGM_RSRC3, &value))
         return AGC_ERROR_SHADER_INVALID;
+    shader.record = state->record;
+    shader.sh_registers = state->sh_registers;
+    shader.num_sh_registers = state->num_sh_registers;
+    shader.cx_registers = NULL;
+    shader.num_cx_registers = 0u;
+    shader.code_address = state->code_address;
+    if (state->num_resource_tables != 0u) {
+        int32_t result;
+        if (!state->resource_tables)
+            return AGC_ERROR_INVALID_ARGUMENT;
+        result = agcGfx1013ValidateResourceTables(&shader,
+            state->resource_tables, state->num_resource_tables, NULL);
+        if (result != AGC_OK)
+            return result;
+    } else {
+        for (i = 0u; i < state->num_sh_registers; ++i) {
+            if (agcGfx1013IsResourcePlaceholder(
+                    state->sh_registers[i].value))
+                return AGC_ERROR_RESOURCE_NOT_BOUND;
+        }
+    }
     return AGC_OK;
 }
 
@@ -2785,6 +2810,7 @@ int32_t PS5_SYSV_ABI agcGfx1013ApplyComputeDefaultsV8(
 int32_t PS5_SYSV_ABI agcGfx1013DispatchCompute(
     SceAgcCb *cb, const AgcGfx1013ComputeState *state)
 {
+    AgcGfx1013ShaderBinding shader;
     uint32_t limits0[3] = {0x3fffffffu, 0xffffffffu, 0xffffffffu};
     uint32_t limits1[2] = {0xffffffffu, 0xffffffffu};
     uint32_t threads[6];
@@ -2793,6 +2819,7 @@ int32_t PS5_SYSV_ABI agcGfx1013DispatchCompute(
     uint32_t resource3;
     uint32_t *dispatch;
     int32_t result;
+    uint32_t resource_count = 0u;
     uint32_t required_dwords;
 
     if (!cb)
@@ -2800,7 +2827,20 @@ int32_t PS5_SYSV_ABI agcGfx1013DispatchCompute(
     result = agcGfx1013ValidateCompute(state);
     if (result != AGC_OK)
         return result;
-    required_dwords = 38u + state->num_user_data;
+    shader.record = state->record;
+    shader.sh_registers = state->sh_registers;
+    shader.num_sh_registers = state->num_sh_registers;
+    shader.cx_registers = NULL;
+    shader.num_cx_registers = 0u;
+    shader.code_address = state->code_address;
+    if (state->num_resource_tables != 0u) {
+        result = agcGfx1013ValidateResourceTables(&shader,
+            state->resource_tables, state->num_resource_tables,
+            &resource_count);
+        if (result != AGC_OK)
+            return result;
+    }
+    required_dwords = 38u + state->num_user_data + resource_count * 3u;
     if (agcCbRemainingDwords(cb) < required_dwords)
         return AGC_ERROR_BUFFER_TOO_SMALL;
 
@@ -2837,6 +2877,12 @@ int32_t PS5_SYSV_ABI agcGfx1013DispatchCompute(
                 AGC_REG_COMPUTE_USER_DATA_0, state->user_data,
                 state->num_user_data)))
         return AGC_ERROR_INTERNAL;
+    if (state->num_resource_tables != 0u) {
+        result = agcGfx1013BindResourceTables(cb, &shader,
+            state->resource_tables, state->num_resource_tables);
+        if (result != AGC_OK)
+            return result;
+    }
     dispatch = agcCbAllocDwords(cb, 5u);
     if (!dispatch)
         return AGC_ERROR_INTERNAL;

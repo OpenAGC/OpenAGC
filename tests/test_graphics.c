@@ -2365,6 +2365,61 @@ static void test_gfx1013_compute_packets(void)
         AGC_ERROR_INVALID_ALIGNMENT, "unaligned compute program rejects");
 }
 
+static void test_gfx1013_compute_resource_table(void)
+{
+    uint32_t buffer[64] = {0};
+    AgcRegisterValue sh[4] = {
+        {AGC_REG_COMPUTE_PGM_RSRC1, 0x000000c0u},
+        {AGC_REG_COMPUTE_PGM_RSRC2, 0x0000008cu},
+        {AGC_REG_COMPUTE_PGM_RSRC3, 0x00000000u},
+        {AGC_REG_COMPUTE_USER_DATA_0 + 2u,
+            OPENAGC_DESCRIPTOR_SET_PLACEHOLDER(0u)},
+    };
+    AgcGfx1013ResourceTableBinding table = {
+        OPENAGC_DESCRIPTOR_SET_PLACEHOLDER(0u),
+        0x0000000202600000ull,
+    };
+    AgcShaderRecord record;
+    AgcGfx1013ComputeState state;
+    SceAgcCb cb;
+
+    memset(&record, 0, sizeof(record));
+    record.magic = AGC_SHADER_RECORD_MAGIC;
+    record.version = AGC_SHADER_RECORD_VERSION_GEN5;
+    record.shader_type = kAgcShaderTypeCs;
+    record.num_sh_registers = 4u;
+    memset(&state, 0, sizeof(state));
+    state.record = &record;
+    state.sh_registers = sh;
+    state.num_sh_registers = 4u;
+    state.code_address = 0x0000000201de9000ull;
+    state.local_size_x = 64u;
+    state.local_size_y = 1u;
+    state.local_size_z = 1u;
+    state.group_count_x = 1u;
+    state.group_count_y = 1u;
+    state.group_count_z = 1u;
+
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013ValidateCompute(&state),
+        AGC_ERROR_RESOURCE_NOT_BOUND,
+        "compute placeholder requires resource table");
+    state.resource_tables = &table;
+    state.num_resource_tables = 1u;
+    TEST_ASSERT_EQ(agcGfx1013DispatchCompute(&cb, &state), AGC_OK,
+        "compute resource table dispatch emits");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 39u,
+        "compute resource table exact dword count");
+    TEST_ASSERT_EQ(agcPm4Opcode(buffer[31]), AGC_PM4_OP_SET_SH_REG,
+        "compute resource table uses SET_SH_REG");
+    TEST_ASSERT_EQ(buffer[32], AGC_REG_COMPUTE_USER_DATA_0 + 2u,
+        "compute resource table patches compiler register");
+    TEST_ASSERT_EQ(buffer[33], 0x02600000u,
+        "compute resource table patches address low");
+    TEST_ASSERT_EQ(agcPm4Opcode(buffer[34]), AGC_PM4_OP_DISPATCH_DIRECT,
+        "resource table is patched before dispatch");
+}
+
 static void test_gfx1013_compute_defaults_v8(void)
 {
     uint32_t buffer[1024] = {0};
@@ -2930,6 +2985,7 @@ void test_suite_graphics(void)
     TEST_RUN(test_gfx1013_graphics_defaults_v8);
     TEST_RUN(test_gfx1013_fixed_function_rejects_atomically);
     TEST_RUN(test_gfx1013_compute_packets);
+    TEST_RUN(test_gfx1013_compute_resource_table);
     TEST_RUN(test_gfx1013_compute_defaults_v8);
     TEST_RUN(test_gfx1013_htile_rmw_packets);
     TEST_RUN(test_gfx1013_resource_table_binding);

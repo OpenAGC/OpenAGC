@@ -56,6 +56,10 @@ builds with ps5-payload-sdk; hardware validation is the remaining step.
   matching flush, invalidate, and deterministic free operations keep kernel
   mapping details outside applications and higher-level drivers; bounded
   32-bit label waits support EOP completion without platform polling code
+- **Compute resource tables** — `AgcGfx1013ComputeState` accepts compiler
+  descriptor-set placeholder bindings; dispatch validation rejects unbound or
+  malformed tables and patches the exact compute user-SGPR registers after
+  shader state emission and before `DISPATCH_DIRECT`
 - **Write-combined direct memory** —
   `agcGpuMemoryAllocateDirectWriteCombined` owns the 2 MiB-aligned kernel
   physical allocation, CPU/GPU mapping, and paired unmap/release lifecycle used
