@@ -2150,13 +2150,13 @@ Next execution order:
    918,432/128,304/128,304 native D16 counts, produced exact 128,304 green/red
    color counts, passed every marker and 1 ms fence, completed 1,800/1,800
    flips, and left clean live kernel logs.
-14. **Hardware complete:** linear R8 UNORM uses CB format `0x01`, UNORM number
-   type `0`, standard component swap, and FP16_ABGR export selected by the
-   reusable frame post-bind builder. Two identical FW `0x05500008` runs each
-   changed 255,043 native pixels, found eight distinct values, produced FNV64
-   `0x6fe253259c7b0455`, passed Wave32/marker/fence checks, completed
-   1,800/1,800 flips, and left clean live kernel logs. Continue the same
-   isolated gate with RG8, R32, RG32, and RGBA32.
+14. **Hardware complete:** linear R8 and RG8 UNORM use CB formats `0x01` and
+   `0x03`, number type `0`, standard swap, and FP16_ABGR export selected by the
+   reusable frame post-bind builder. Two identical runs per format produced
+   stable 255,043/255,744-pixel coverage and FNV64
+   `0x6fe253259c7b0455`/`0x6babce1afaa81b2c`, passed Wave32/marker/fence checks,
+   completed 1,800/1,800 flips, and left clean live kernel logs. Continue the
+   isolated format gate with R32, RG32, and RGBA32.
 15. Continue game-import coverage after the reusable draw/format APIs land;
    correct Subnautica wrapper coverage and inventory DRAGON QUEST VII
    Reimagined against the new application-facing surface.

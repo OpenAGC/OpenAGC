@@ -1,5 +1,18 @@
 # openagc Status
 
+## FW 5.50 RG8 UNORM render-target qualification (2026-07-27)
+
+The typed gfx1013 `RG8_UNORM` linear render-target path is hardware-qualified
+on standard PS5 FW `0x05500008`. It uses CB format `0x03`, UNORM number type
+`0`, standard component swap, and FP16_ABGR shader export through the reusable
+format-derived frame post-bind state.
+
+Two identical curl/websrv runs each changed 255,744 of 2,359,296 native RG8
+pixels, found eight distinct packed values, and produced deterministic FNV64
+`0x6babce1afaa81b2c`. Both runs passed Wave32, marker, and 1 ms fence checks,
+completed 1,800/1,800 flips, and left live kernel logs free of GPU-fault,
+reset, process-stop, panic, privilege-register, watchdog, and fatal signatures.
+
 ## FW 5.50 R8 UNORM render-target qualification (2026-07-27)
 
 The typed gfx1013 `R8_UNORM` linear render-target path is hardware-qualified
