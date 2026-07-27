@@ -1463,6 +1463,67 @@ static void test_gfx1013_htile_layout(void)
         AGC_ERROR_NOT_SUPPORTED, "unimplemented HTILE swizzle rejects");
 }
 
+static void test_gfx1013_stencil_gate_fixture(void)
+{
+    uint32_t buffer[AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS] = {0};
+    SceAgcCb cb;
+    AgcGfx1013DepthSurfaceLayoutInput input = {
+        .width = 1920u,
+        .height = 1080u,
+        .layer_count = 1u,
+        .mip_level_count = 1u,
+        .sample_count = 1u,
+        .format = AGC_GFX1013_DEPTH_FORMAT_D32_FLOAT_S8_UINT,
+        .depth_swizzle_mode = AGC_GFX1013_SWIZZLE_64KB_Z_X,
+        .stencil_swizzle_mode = AGC_GFX1013_SWIZZLE_64KB_Z_X,
+    };
+    AgcGfx1013DepthSurfaceLayout layout = {0};
+    AgcGfx1013DepthStencilState state = {
+        .depth_test_enable = 1u,
+        .depth_write_enable = 1u,
+        .depth_compare_operation = AGC_GFX1013_COMPARE_LESS,
+        .stencil_test_enable = 1u,
+        .front = {
+            .compare_operation = AGC_GFX1013_COMPARE_ALWAYS,
+            .fail_operation = AGC_GFX1013_STENCIL_KEEP,
+            .depth_fail_operation = AGC_GFX1013_STENCIL_KEEP,
+            .pass_operation = AGC_GFX1013_STENCIL_REPLACE,
+            .reference = 0x5au,
+            .compare_mask = 0xffu,
+            .write_mask = 0xffu,
+        },
+    };
+    const uint32_t expected[AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS] = {
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
+        AGC_REG_DB_DEPTH_CONTROL, 0x00700717u,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
+        AGC_REG_DB_STENCIL_CONTROL, 0x00030030u,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 4u),
+        AGC_REG_DB_STENCILREFMASK, 0x5affff5au, 0x5affff5au,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 4u),
+        AGC_REG_DB_DEPTH_BOUNDS_MIN, 0u, 0u,
+    };
+
+    TEST_ASSERT_EQ(agcGfx1013GetDepthSurfaceLayout(&input, &layout), AGC_OK,
+        "stencil gate split D32/S8 layout queries");
+    TEST_ASSERT_EQ(layout.depth.allocation_size, 0x870000ull,
+        "stencil gate exact D32 allocation");
+    TEST_ASSERT_EQ(layout.stencil.pitch, 2048u,
+        "stencil gate exact S8 pitch");
+    TEST_ASSERT_EQ(layout.stencil.padded_height, 1280u,
+        "stencil gate exact S8 padded height");
+    TEST_ASSERT_EQ(layout.stencil.allocation_size, 0x280000ull,
+        "stencil gate exact S8 allocation");
+    TEST_ASSERT_EQ(layout.stencil.alignment, 0x10000u,
+        "stencil gate exact S8 alignment");
+
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetDepthStencilState(&cb, &state), AGC_OK,
+        "stencil gate compare/write/replace state emits");
+    TEST_ASSERT(memcmp(buffer, expected, sizeof(expected)) == 0,
+        "stencil gate exact packet stream");
+}
+
 static void test_gfx1013_graphics_defaults_v8(void)
 {
     uint32_t buffer[2184] = {0};
@@ -1954,6 +2015,7 @@ void test_suite_graphics(void)
     TEST_RUN(test_gfx1013_depth_surface_packets);
     TEST_RUN(test_gfx1013_depth_surface_layout);
     TEST_RUN(test_gfx1013_htile_layout);
+    TEST_RUN(test_gfx1013_stencil_gate_fixture);
     TEST_RUN(test_gfx1013_frame_state);
     TEST_RUN(test_gfx1013_graphics_defaults_v8);
     TEST_RUN(test_gfx1013_fixed_function_rejects_atomically);

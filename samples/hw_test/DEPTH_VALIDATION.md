@@ -12,9 +12,10 @@ The provisional eight-address-pipe input must be checked against the PS5's
 
 ## Ordered follow-up gates
 
-1. **Stencil gate:** keep 1x sampling and HTILE disabled, bind separate D32 and
-   S8 `64KB_Z_X` planes, exercise compare/write masks and replace operations,
-   and require deterministic color plus raw stencil readback.
+1. **Stencil gate:** `agc_depth_stencil.elf` is cross-build ready. It keeps 1x
+   sampling and HTILE disabled, binds separate D32 and S8 `64KB_Z_X` planes,
+   uses `ALWAYS` comparison with `0xff` compare/write masks and `REPLACE 0x5a`,
+   and requires deterministic color, raw depth, and raw stencil readback.
 2. **MSAA gate:** keep HTILE disabled, use a 4x D32 surface and matching color
    sample state, resolve to a 1x target, and require edge/sample and raw-depth
    checks. Do not combine this first MSAA run with stencil.
@@ -34,7 +35,7 @@ gfx1013 depth-surface and depth/stencil-control builders. It is prepared for FW
 ## Test contract
 
 - D32 float depth-only surface, `ADDR_SW_64KB_Z_X` swizzle mode 24.
-- 16 MiB, 64 KiB-aligned flexible-memory allocation.
+- Typed, 64 KiB-aligned flexible-memory allocation sized for the active plane.
 - HTILE, expclear, stencil, compression, and MSAA are disabled.
 - An always-pass full-screen draw initializes depth to `1.0` with color writes
   disabled.
@@ -70,6 +71,7 @@ export PS5_PAYLOAD_SDK=~/ps5-payload-sdk
 export LLVM_CONFIG=/opt/homebrew/opt/llvm@18/bin/llvm-config
 cmake --build ../../build-prospero
 make agc_depth.elf
+make agc_depth_stencil.elf
 ```
 
 ## Deploy through websrv
@@ -86,5 +88,27 @@ curl -s "http://$PS5_HOST:8080/hbldr?pipe=1&daemon=0&path=/data/homebrew/agc_dep
 ```
 
 The equivalent Make target is `make deploy_agc_depth PS5_HOST=<address>`.
+The stencil equivalent is
+`make deploy_agc_depth_stencil PS5_HOST=<address>` and uses the same curl/websrv
+foreground-launch path.
 Do not add this sample to the passing FW `0x0550` conformance matrix until a
 real-console run records the expected display, marker values, and readback.
+
+## Stencil gate contract
+
+- D32 and S8 are separate typed `64KB_Z_X` allocations.
+- The initialization draw runs with stencil disabled and establishes D32 1.0.
+- The three visible validation draws enable front-face stencil testing with
+  `ALWAYS`, compare mask `0xff`, write mask `0xff`, and `REPLACE 0x5a` on
+  depth pass. The overlapping depth-failed triangle keeps the old stencil.
+- MSAA is fixed at 1x. HTILE and expclear remain disabled.
+- Raw S8 readback must contain both `0x00` and more than 1000 `0x5a` bytes,
+  with no other values. The existing marker, color, and D32 checks must also
+  pass.
+
+Expected additional terminal result:
+
+```text
+[Stencil Readback] zero=<nonzero> replace-5a=<more than 1000> other=0
+[Depth+Stencil Result] markers=PASS color=PASS raw-depth=PASS stencil=PASS
+```

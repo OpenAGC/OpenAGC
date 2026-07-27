@@ -42,6 +42,18 @@ AMD PM4 packet ancestry overlap in useful ways.
   each has independent readback, responsiveness, and promotion criteria in
   `samples/hw_test/DEPTH_VALIDATION.md`.
 
+### Hardware-ready: isolated stencil gate
+
+- `agc_depth_stencil.elf` allocates separate typed D32 and S8 `64KB_Z_X`
+  planes and leaves MSAA, HTILE, and expclear disabled.
+- The gate uses front-face `ALWAYS` compare, `0xff` compare/write masks, and
+  `REPLACE 0x5a` only on depth pass. Exact host fixtures lock the D32/S8
+  layouts and the full 14-dword stencil packet stream.
+- Completion requires the existing deterministic marker/color/D32 checks plus
+  raw S8 containing only zero and the written `0x5a` reference.
+- Cross-build readiness does not promote stencil support; FW `0x0550` websrv
+  execution remains the promotion gate when the PS5 is available.
+
 This section is the authoritative completion plan. The later phase sections
 retain detailed history and evidence; they do not override this order.
 

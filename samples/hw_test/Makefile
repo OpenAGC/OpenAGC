@@ -52,7 +52,7 @@ AGC_LDFLAGS := $(OPENAGC_LIB) -lSceVideoOut -lkernel
 
 # === Targets ===
 
-all: videoout_linear.elf agc_init.elf agc_videoout.elf agc_compute.elf agc_graphics.elf agc_depth.elf agc_tessellation.elf agc_tess_geometry.elf agc_tess_geometry_invocations.elf agc_tess_geometry_lines.elf agc_tess_geometry_rgba8.elf
+all: videoout_linear.elf agc_init.elf agc_videoout.elf agc_compute.elf agc_graphics.elf agc_depth.elf agc_depth_stencil.elf agc_tessellation.elf agc_tess_geometry.elf agc_tess_geometry_invocations.elf agc_tess_geometry_lines.elf agc_tess_geometry_rgba8.elf
 
 FW550_CONFORMANCE_ELFS := \
 	videoout_linear.elf agc_init.elf agc_videoout.elf agc_compute.elf \
@@ -313,6 +313,9 @@ agc_graphics_rgba8.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders
 agc_depth.elf: shaders_depth agc_graphics.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_DEPTH_VALIDATION=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
 
+agc_depth_stencil.elf: shaders_depth agc_graphics.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_DEPTH_VALIDATION=1 -DAGC_STENCIL_VALIDATION=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
+
 agc_tessellation.elf: shaders_tess agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_TESSELLATION=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
 
@@ -405,6 +408,13 @@ deploy_agc_depth: agc_depth.elf
 	curl -T agc_depth.elf "ftp://$(PS5_HOST):2121/data/homebrew/agc_depth/eboot.elf"
 	curl -T sce_sys/icon0.png "ftp://$(PS5_HOST):2121/data/homebrew/agc_depth/sce_sys/icon0.png"
 	curl -s "http://$(PS5_HOST):8080/hbldr?pipe=1&daemon=0&path=/data/homebrew/agc_depth/eboot.elf"
+
+deploy_agc_depth_stencil: agc_depth_stencil.elf
+	-curl -s "ftp://$(PS5_HOST):2121/" --quote "MKD /data/homebrew/agc_depth_stencil"
+	-curl -s "ftp://$(PS5_HOST):2121/" --quote "MKD /data/homebrew/agc_depth_stencil/sce_sys"
+	curl -T agc_depth_stencil.elf "ftp://$(PS5_HOST):2121/data/homebrew/agc_depth_stencil/eboot.elf"
+	curl -T sce_sys/icon0.png "ftp://$(PS5_HOST):2121/data/homebrew/agc_depth_stencil/sce_sys/icon0.png"
+	curl -s "http://$(PS5_HOST):8080/hbldr?pipe=1&daemon=0&path=/data/homebrew/agc_depth_stencil/eboot.elf"
 
 # === Install (debug-mode PS5 via FTP) ===
 
