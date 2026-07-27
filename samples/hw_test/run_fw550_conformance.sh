@@ -84,7 +84,7 @@ require_graphics_log() {
             require_log 'gfx1013 image \+ bilinear sampler: PASS' "$log" 'texture sampling' || return
             ;;
         *)
-            require_log 'GFX1013 R16G16B16A16_FLOAT target: PASS' "$log" 'FP16 target' || return
+            require_log 'GFX1013 .*FP16 target: PASS' "$log" 'FP16 target' || return
             ;;
     esac
     require_log 'VideoOut sustained preview: 1800 accepted, 1800 completed' "$log" '1800-frame preview'

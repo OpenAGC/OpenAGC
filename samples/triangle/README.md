@@ -83,3 +83,7 @@ PS5_HOST=10.0.1.41 \
 The runner uses curl with FTP port 2121 and the websrv HTTP launcher on port
 8080. Run it only after confirming the console is ready; a disconnected or
 timed-out foreground request is a hard stop.
+
+The FW `0x05500008` baseline passed this exact path on 2026-07-27. The retained
+qualification evidence is in
+`analysis/fw550_public_triangle_qualification_20260727.md`.

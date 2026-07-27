@@ -32,12 +32,13 @@ complete. A clean generic build with examples enabled passed the complete host
 suite at 4,127 passed and 0 failed.
 
 The same public example cross-builds cleanly with the Prospero Clang 18
-toolchain as `build-prospero/libopenagc_triangle_example.a`. The focused
-FW 5.50 qualification payload was rebuilt from the same revision as
-`samples/hw_test/agc_graphics.elf`: 508,200 bytes, SHA-256
-`a5f31a3b761476d9438ae34bc31be98c2f158474e70196047381bf2fcc381c3c`.
-Its curl/websrv execution remains pending console readiness; this build result
-is not recorded as hardware validation.
+toolchain as `build-prospero/libopenagc_triangle_example.a`. The focused FW
+5.50 qualification payload then passed through foreground curl/websrv as
+`samples/hw_test/agc_graphics.elf`: 508,248 bytes, SHA-256
+`673bba3e560315e0f1b96ed13a5f9d6db75a022869feb3a7945b41cefdf83d95`.
+The reusable Wave32 draw, fence, marker, 255,744/255,744 complete FP16 stores,
+packed hash, and 1,800/1,800 flips passed. See
+`analysis/fw550_public_triangle_qualification_20260727.md`.
 
 ## FW 5.50 RGBA32 FLOAT render-target qualification (2026-07-27)
 

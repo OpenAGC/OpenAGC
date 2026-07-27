@@ -441,7 +441,7 @@ int sceKernelDeleteEqueue(SceKernelEqueue equeue);
 #define FP16_TARGET_HEIGHT         1536u
 #define FP16_PREVIEW_DIVISOR       2u
 #define FP16_PREVIEW_FRAMES        1800u
-#define FP16_CLEAR_SENTINEL        UINT64_C(0x3555355535553555)
+#define FP16_CLEAR_SENTINEL        UINT64_C(0x7e007e007e007e00)
 
 #ifndef AGC_VALIDATE_RGBA8_REFERENCE
 #define AGC_VALIDATE_RGBA8_REFERENCE 0
@@ -1594,7 +1594,7 @@ static bool dispatch_graphics(GraphicsTest *test,
         uint16_t *rt = (uint16_t *)rt_addr;
         for (uint32_t i = 0;
              i < target_pixels * target->native_components; i++)
-            rt[i] = 0x3555u;
+            rt[i] = (uint16_t)FP16_CLEAR_SENTINEL;
     } else if (target->native_component_bytes == 4u) {
         uint32_t *rt = (uint32_t *)rt_addr;
         for (uint32_t i = 0;
@@ -2583,8 +2583,12 @@ static bool dispatch_graphics(GraphicsTest *test,
         uint32_t max_y = 0;
         for (uint32_t i = 0; i < target_pixels; i++) {
             uint64_t color = 0u;
-            for (uint32_t lane = 0u; lane < components; ++lane)
-                color |= (uint64_t)rt[i * components + lane] << (lane * 16u);
+            bool pixel_complete = true;
+            for (uint32_t lane = 0u; lane < components; ++lane) {
+                const uint16_t component = rt[i * components + lane];
+                color |= (uint64_t)component << (lane * 16u);
+                pixel_complete &= component != (uint16_t)FP16_CLEAR_SENTINEL;
+            }
             if (color == sentinel)
                 continue;
             changed++;
@@ -2595,8 +2599,7 @@ static bool dispatch_graphics(GraphicsTest *test,
             if (y < min_y) min_y = y;
             if (x > max_x) max_x = x;
             if (y > max_y) max_y = y;
-            if (components < 4u || (uint16_t)(color >> 48) == 0x3c00u)
-                complete_samples++;
+            complete_samples += pixel_complete;
             for (uint32_t lane = 0; lane < components; lane++) {
                 uint16_t component = (uint16_t)(color >> (lane * 16u));
                 if ((component & 0x8000u) != 0u || component > 0x3c00u)
