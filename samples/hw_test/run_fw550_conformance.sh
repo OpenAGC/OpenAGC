@@ -12,7 +12,7 @@ OPENAGC_CONFORMANCE_TIMEOUT=${OPENAGC_CONFORMANCE_TIMEOUT:-90}
 RUN_ID=${OPENAGC_CONFORMANCE_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)-$$}
 LOG_DIR=${OPENAGC_CONFORMANCE_LOG_DIR:-$SCRIPT_DIR/conformance-logs/$RUN_ID}
 
-DEFAULT_SAMPLES="videoout_linear agc_init agc_videoout agc_compute agc_graphics agc_graphics_rgba8 agc_graphics_amplify agc_graphics_lines agc_graphics_invocations agc_tessellation agc_tess_geometry agc_tess_geometry_invocations agc_tess_geometry_lines agc_tess_geometry_rgba8"
+DEFAULT_SAMPLES="videoout_linear agc_init agc_videoout agc_compute agc_graphics agc_graphics_rgba8 agc_graphics_amplify agc_graphics_lines agc_graphics_invocations agc_tessellation agc_tess_geometry agc_tess_geometry_invocations agc_tess_geometry_lines agc_tess_geometry_rgba8 agc_depth_htile_ops agc_depth_expclear agc_depth_stencil_htile"
 SAMPLES=$DEFAULT_SAMPLES
 MODE=run
 
@@ -54,7 +54,8 @@ artifact_for() {
         agc_graphics_rgba8|agc_graphics_amplify|agc_graphics_lines|\
         agc_graphics_invocations|agc_tessellation|agc_tess_geometry|\
         agc_tess_geometry_invocations|agc_tess_geometry_lines|\
-        agc_tess_geometry_rgba8)
+        agc_tess_geometry_rgba8|agc_depth_htile_ops|agc_depth_expclear|\
+        agc_depth_stencil_htile)
             printf '%s/%s.elf\n' "$SCRIPT_DIR" "$1"
             ;;
         *) return 1 ;;
@@ -122,6 +123,27 @@ validate_log() {
             require_log 'Total: 2073600/2073600 pixels match' "$log" 'complete compute output' || return
             require_log 'GPU output flip completed' "$log" 'compute display flip'
             ;;
+        agc_depth_htile_ops)
+            require_log '\[Depth Marker\] stage\[3\]=0xd3200004 expected=0xd3200004' "$log" 'four depth stages' || return
+            require_log '\[HTILE Readback\] changed=[1-9][0-9]* .*initial=fffc000f' "$log" 'resummarized depth HTILE' || return
+            require_log 'raw D32: one=909792 near=128304 far=128304' "$log" 'decompressed D32 classes' || return
+            require_log '\[Depth Result\] markers=PASS color=PASS raw-depth=PASS stencil=PASS' "$log" 'depth HTILE operation result' || return
+            require_log 'VideoOut sustained preview: 1800 accepted, 1800 completed' "$log" '1800-frame preview'
+            ;;
+        agc_depth_expclear)
+            require_log '\[Depth\+Expclear\] emitted metadata clear' "$log" 'metadata-only depth initialization' || return
+            require_log '\[HTILE Readback\] changed=49152 .*initial=fffffff0' "$log" 'depth-one expclear metadata' || return
+            require_log 'raw D32: one=918432 near=128304 far=128304' "$log" 'expanded expclear D32 classes' || return
+            require_log '\[Depth Result\] markers=PASS color=PASS raw-depth=PASS stencil=PASS' "$log" 'depth expclear result' || return
+            require_log 'VideoOut sustained preview: 1800 accepted, 1800 completed' "$log" '1800-frame preview'
+            ;;
+        agc_depth_stencil_htile)
+            require_log '\[HTILE Readback\] changed=49152 .*initial=fffff30f' "$log" 'combined resummarized HTILE' || return
+            require_log 'raw D32: one=909792 near=128304 far=128304' "$log" 'combined decompressed D32 classes' || return
+            require_log '\[Stencil Readback\] zero=2364832 replace-5a=256608 other=0' "$log" 'combined decompressed S8 classes' || return
+            require_log '\[Depth\+Stencil Result\] markers=PASS color=PASS raw-depth=PASS stencil=PASS' "$log" 'combined stencil HTILE result' || return
+            require_log 'VideoOut sustained preview: 1800 accepted, 1800 completed' "$log" '1800-frame preview'
+            ;;
         agc_graphics*)
             require_graphics_log "$sample" "$log"
             ;;
@@ -156,8 +178,16 @@ if [ "$MODE" = check ]; then
 fi
 
 mkdir -p "$LOG_DIR" || exit 2
-printf 'run_id=%s\nfw=0x0550\nhost=%s\ntimeout=%s\n' \
-    "$RUN_ID" "$PS5_HOST" "$OPENAGC_CONFORMANCE_TIMEOUT" > "$LOG_DIR/run.env"
+revision=$(git -C "$SCRIPT_DIR/../.." rev-parse --verify HEAD 2>/dev/null || printf unknown)
+printf 'run_id=%s\nfw=0x0550\nhost=%s\ntimeout=%s\nrevision=%s\n' \
+    "$RUN_ID" "$PS5_HOST" "$OPENAGC_CONFORMANCE_TIMEOUT" "$revision" \
+    > "$LOG_DIR/run.env"
+: > "$LOG_DIR/artifacts.sha256"
+: > "$LOG_DIR/logs.sha256"
+for sample in $SAMPLES; do
+    artifact=$(artifact_for "$sample")
+    shasum -a 256 "$artifact" >> "$LOG_DIR/artifacts.sha256" || exit 2
+done
 
 passed=0
 total=0
@@ -190,6 +220,7 @@ for sample in $SAMPLES; do
         echo "  conformance gates failed (elapsed=${elapsed}s); stopping" >&2
         exit 1
     fi
+    shasum -a 256 "$log" >> "$LOG_DIR/logs.sha256" || exit 2
 
     passed=$((passed + 1))
     echo "  PASS ($elapsed seconds)"

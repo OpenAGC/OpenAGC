@@ -1758,13 +1758,13 @@ launch prologue. Both baseline and tessellation draw composers apply its
 depth-disabled and clip/raster state after shader binding, preserving the
 hardware-proven overwrite order.
 
-The next hardware action is one complete invocation of
-`make -C samples/hw_test conformance_fw550` on a fresh FW `0x0550` console
-session. The runner preserves logs and fails closed on a transport timeout,
-instant close, firmware mismatch, missing output gate, or application failure.
-Five post-fence format/tessellation reruns remain pending because real PS5
-hardware is temporarily unavailable. Do not mark the new synchronization
-checkpoint fully qualified until the runner completes all 14 samples.
+The complete 17-sample invocation of
+`make -C samples/hw_test conformance_fw550` now passes on a fresh FW `0x0550`
+console session. The runner preserves logs and fails closed on a transport
+timeout, instant close, firmware mismatch, missing output gate, or application
+failure. Revision `03b43f2` completed 17/17 sequential launches in 434 seconds;
+retained evidence is summarized in
+`analysis/fw550_qualification_03b43f2.md`.
 
 The additional render-target host milestone is implemented as a typed gfx1013
 format table rather than more sample-local CB constants. Eleven linear UNORM
@@ -2058,10 +2058,10 @@ words; raw S8 contained 2,364,832 zero bytes, 256,608 `0x5a` bytes, and no
 other values; all 49,152 HTILE words changed; and VideoOut completed
 1,800/1,800 flips without a hang or reset.
 
-1. Run the complete 17-sample deterministic FW `0x0550` websrv matrix on the
-   next available real PS5 and retain its raw logs as qualification evidence.
-2. If instant-close behavior recurs after a fresh launcher session, isolate it
-   as a loader lifecycle failure before changing GPU PM4 or shader state.
+1. Add isolated HTILE mip-level and array-layer hardware fixtures, preserving
+   per-subresource address, view, metadata-offset, and readback evidence.
+2. Move any PM4 still open-coded by the hardware-proven samples into public
+   typed builders with exact host fixtures and atomic failure behavior.
 3. Keep combined stencil/HTILE expclear disabled until it has a dedicated
    metadata-mask design and independent hardware gate; do not infer it from
    the now-proven ordinary combined compression path.

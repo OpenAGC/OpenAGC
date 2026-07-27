@@ -1,6 +1,18 @@
 # openagc Status
 
-## FW 5.50 post-qualification synchronization checkpoint (2026-07-27)
+## FW 5.50 17-sample qualification checkpoint (2026-07-27)
+
+The authoritative sequential curl/websrv matrix now passes 17/17 on standard
+PS5 FW `0x05500008` at revision `03b43f2`. The prior 14 base, compute,
+graphics, and tessellation cases were followed by typed HTILE operations,
+depth-only expclear, and combined stencil/HTILE. All per-sample machine
+oracles passed in 434 seconds with no timeout, instant close, firmware
+mismatch, loader overlap, GPU hang, reset, kernel panic, or UI crash.
+
+Raw logs, the numeric run environment, ELF SHA-256 manifest, and raw-log
+SHA-256 manifest are retained under
+`samples/hw_test/conformance-logs/fw550-03b43f2-20260727/`. The committed
+qualification summary is `analysis/fw550_qualification_03b43f2.md`.
 
 The compute and graphics hardware samples now terminate GPU work with a gfx1013
 `RELEASE_MEM` end-of-pipe fence using event `0x14`, GCR control `0x603`, cache
@@ -23,11 +35,9 @@ ordered websrv matrix. It uses isolated remote paths, bounded foreground
 launches, persistent logs, numeric FW `0x0550` verification, exact per-sample
 gates, and fail-fast handling for timeouts, disconnects, instant closes, or
 failure markers. The complete clean generic suite passes with zero failures.
-The remaining post-fence RGBA8 and tessellation reruns are explicitly
-pending because the available Homebrew Launcher began closing known-good ELFs
-immediately and real PS5 hardware is no longer available. Earlier hardware
-qualification remains valid historical evidence, but it does not substitute
-for completing this new runner on a fresh console session.
+The earlier instant-close lifecycle condition did not recur. Every foreground
+loader returned before the next isolated remote path launched, so this run
+closes the post-fence matrix checkpoint.
 
 ## FW 5.50 reusable Wave32 VS+PS baseline
 

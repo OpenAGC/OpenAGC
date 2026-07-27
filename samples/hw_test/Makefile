@@ -60,7 +60,9 @@ FW550_CONFORMANCE_ELFS := \
 	agc_graphics_lines.elf agc_graphics_invocations.elf \
 	agc_tessellation.elf agc_tess_geometry.elf \
 	agc_tess_geometry_invocations.elf agc_tess_geometry_lines.elf \
-	agc_tess_geometry_rgba8.elf
+	agc_tess_geometry_rgba8.elf \
+	agc_depth_htile_ops.elf agc_depth_expclear.elf \
+	agc_depth_stencil_htile.elf
 
 .PHONY: conformance_fw550 conformance_fw550_check
 conformance_fw550: $(FW550_CONFORMANCE_ELFS)
