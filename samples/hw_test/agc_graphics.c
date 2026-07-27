@@ -692,8 +692,9 @@ static void setup_shader_stages(
 #endif
 
 #if AGC_TESSELLATION
-static bool setup_tess_shader_stages(
-    SceAgcCb *cb, const ParsedGraphicsShader *hull,
+static void setup_tess_shader_stages(
+    AgcGfx1013Wave32TessVsPsState *state,
+    const ParsedGraphicsShader *hull,
     void *hull_back_code,
     const ParsedGraphicsShader *primitive,
     void *primitive_back_code,
@@ -701,7 +702,7 @@ static bool setup_tess_shader_stages(
     uint64_t ring_descriptor_address, uint64_t vertex_table_address,
     uint64_t texture_table_address)
 {
-    AgcGfx1013Wave32TessVsPsState state = {
+    *state = (AgcGfx1013Wave32TessVsPsState){
         .hull = {
             hull->record, hull->sh_regs, hull->num_sh_regs,
             hull->cx_regs, hull->num_cx_regs,
@@ -724,25 +725,8 @@ static bool setup_tess_shader_stages(
         .tcs_offchip_layout = AGC_GFX1013_TESS_OFFCHIP_LAYOUT,
         .primitive_type = 9u,
     };
-    int32_t err = agcGfx1013BindWave32TessVsPs(cb, &state);
-    printf("[Tess] reusable gfx1013 HS+TES+PS bind: 0x%08x\n",
-           (unsigned)err);
-    if (err != AGC_OK)
-        return false;
-    const AgcGfx1013ResourceTableBinding vertex_table = {
-        OPENAGC_VERTEX_BUFFER_TABLE_PLACEHOLDER, vertex_table_address,
-    };
-    const AgcGfx1013ResourceTableBinding texture_table = {
-        OPENAGC_DESCRIPTOR_SET_PLACEHOLDER(0u), texture_table_address,
-    };
-    err = agcGfx1013BindResourceTables(
-        cb, &state.hull, &vertex_table, 1u);
-    if (err == AGC_OK) {
-        err = agcGfx1013BindResourceTables(
-            cb, &state.pixel, &texture_table, 1u);
-    }
-    printf("[Tess] resource tables bind: 0x%08x\n", (unsigned)err);
-    return err == AGC_OK;
+    (void)vertex_table_address;
+    (void)texture_table_address;
 }
 #endif
 
@@ -1235,18 +1219,13 @@ static bool dispatch_graphics(GraphicsTest *test,
     printf("[Tess] offchip=%p size=0x%x factor=%p size=0x%x table=%p\n",
            offchip_ring, AGC_GFX1013_TESS_OFFCHIP_RING_SIZE,
            factor_ring, AGC_GFX1013_TESS_FACTOR_RING_SIZE, ring_table);
-    if (!setup_tess_shader_stages(
-            &cb, &hull, hs_back_code,
+    AgcGfx1013Wave32TessVsPsState tess_shaders;
+    setup_tess_shader_stages(
+            &tess_shaders, &hull, hs_back_code,
             &ngg, back_code, ps, ps_code,
             (uint64_t)(uintptr_t)ring_table,
             (uint64_t)(uintptr_t)vertex_desc,
-            (uint64_t)(uintptr_t)texture_desc)) {
-        return false;
-    }
-    /* The compiled TES record carries generic CX defaults, including an
-     * ESGS item size of zero. Reapply the GFX10 tessellation context last. */
-    if (agcGfx1013SetTessellationContext(&cb, &tess_state) != AGC_OK)
-        return false;
+            (uint64_t)(uintptr_t)texture_desc);
 #else
     AgcGfx1013Wave32VsPsState baseline_shaders;
     setup_shader_stages(&baseline_shaders, &ngg, back_code, ps, ps_code);
@@ -1255,7 +1234,6 @@ static bool dispatch_graphics(GraphicsTest *test,
     /* 5. Bind the fused state. The ES-front starts the merged wave and uses
      * the address32 AC_UD_NEXT_STAGE_PC value to continue at the GS-back
      * program; ACO supplies the fixed high address dword in the ISA. */
-#if !AGC_TESSELLATION
     const AgcGfx1013ResourceTableBinding primitive_resource_table = {
         OPENAGC_VERTEX_BUFFER_TABLE_PLACEHOLDER,
         (uint64_t)(uintptr_t)vertex_desc,
@@ -1264,7 +1242,6 @@ static bool dispatch_graphics(GraphicsTest *test,
         OPENAGC_DESCRIPTOR_SET_PLACEHOLDER(0u),
         (uint64_t)(uintptr_t)texture_desc,
     };
-#endif
 
     /* 6b. Post-bind depth and rasterizer overrides remain application state.
      * Shader formats,
@@ -1280,24 +1257,31 @@ static bool dispatch_graphics(GraphicsTest *test,
         {AGC_REG_PA_SU_SC_MODE_CNTL, 0u},
     };
 
-#if AGC_TESSELLATION
-    for (uint32_t i = 0u;
-         i < (uint32_t)(sizeof(post_bind_cx) / sizeof(post_bind_cx[0]));
-         ++i) {
-        sceAgcCbSetCxRegistersDirect(&cb, &post_bind_cx[i], 1u);
-    }
-#endif
-
     /* 7. Establish the NGG stage ABI with canonical auto-generated vertex
      * IDs. Indexed offset semantics are a separate PM4 validation case. */
 #if AGC_TESSELLATION
-    sceAgcDcbSetNumInstances(&cb, 1);
-    printf("[Draw] NumInstances(1)\n");
-    if (!sceAgcDcbDrawIndexAuto(
-            &cb, NGG_DRAW_VERTEX_COUNT, 0x40000000u)) {
-        printf("[Draw] auto-index packet allocation failed\n");
+    const AgcGfx1013TessDrawState tess_draw = {
+        .shaders = tess_shaders,
+        .tessellation = &tess_state,
+        .hull_resource_tables = &primitive_resource_table,
+        .num_hull_resource_tables = 1u,
+        .pixel_resource_tables = &pixel_resource_table,
+        .num_pixel_resource_tables = 1u,
+        .post_bind_cx_registers = post_bind_cx,
+        .num_post_bind_cx_registers =
+            (uint32_t)(sizeof(post_bind_cx) / sizeof(post_bind_cx[0])),
+        .instance_count = 1u,
+        .vertex_count = NGG_DRAW_VERTEX_COUNT,
+        .draw_modifier = 0x40000000u,
+    };
+    state_error = agcGfx1013DrawTessIndexAuto(&cb, &tess_draw);
+    printf("[Tess] reusable gfx1013 HS+TES+PS bind: 0x%08x\n",
+           (unsigned)state_error);
+    printf("[Tess] resource tables/context/instance/draw: 0x%08x\n",
+           (unsigned)state_error);
+    if (state_error != AGC_OK)
         return false;
-    }
+    printf("[Draw] NumInstances(1)\n");
     printf("[Draw] DrawIndexAuto(%u)\n", NGG_DRAW_VERTEX_COUNT);
 #else
     const AgcGfx1013BaselineDrawState baseline_draw = {
@@ -1332,17 +1316,13 @@ static bool dispatch_graphics(GraphicsTest *test,
     *marker = 0u;
     printf("[Draw] WRITE_DATA marker at 0x%llx\n", (unsigned long long)marker_target);
 
-    /* 9. ACQUIRE_MEM — flush GPU caches */
-    /* WRITE_DATA after ACQUIRE_MEM is not an EOP fence.  Match the gfx10
-     * RELEASE_MEM sequence used by the AMD driver so CPU readback begins only
-     * after raster work and cache writeback have completed. */
-    if (!sceAgcCbReleaseMem(
-            &cb, 0x14u, 0x603u, 0u, 3u, marker_target, 1u,
-            marker_value, 0u, 0u, 0u, 0u))
-        return false;
-
-    /* Trailing NOP */
-    if (!sceAgcCbNop(&cb, 2u))
+    /* WRITE_DATA is not an EOP fence. Signal the reusable hardware-proven
+     * gfx1013 completion sequence before CPU readback. */
+    const AgcGfx1013EopFenceState completion = {
+        .address = marker_target,
+        .value = marker_value,
+    };
+    if (agcGfx1013SignalEopFence(&cb, &completion) != AGC_OK)
         return false;
 
     /* Submit DCB */

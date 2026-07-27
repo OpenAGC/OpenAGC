@@ -31,6 +31,11 @@ extern "C" {
 #define AGC_GFX1013_TESS_OFFCHIP_LAYOUT   0x21042108u
 #define AGC_GFX1013_RAW_R32_DESCRIPTOR_WORD3 0x31016FACu
 
+#define AGC_GFX1013_EOP_FENCE_DWORDS             10u
+#define AGC_GFX1013_EOP_CACHE_FLUSH_EVENT      0x14u
+#define AGC_GFX1013_EOP_GCR_CONTROL            0x603u
+#define AGC_GFX1013_EOP_CACHE_POLICY_LRU          3u
+
 typedef struct AgcGfx1013ShaderBinding {
     const AgcShaderRecord *record;
     const AgcRegisterValue *sh_registers;
@@ -106,6 +111,11 @@ typedef struct AgcGfx1013ComputeState {
     uint32_t modifier;
 } AgcGfx1013ComputeState;
 
+typedef struct AgcGfx1013EopFenceState {
+    uint64_t address;
+    uint32_t value;
+} AgcGfx1013EopFenceState;
+
 #define AGC_GFX1013_ADDRESS32_HIGH 0x00000002u
 
 typedef struct AgcGfx1013ResourceTableBinding {
@@ -152,6 +162,26 @@ typedef struct AgcGfx1013BaselineDrawState {
     uint64_t draw_modifier;
 } AgcGfx1013BaselineDrawState;
 
+typedef struct AgcGfx1013TessDrawState {
+    AgcGfx1013Wave32TessVsPsState shaders;
+    const AgcGfx1013TessellationState *tessellation;
+    const AgcGfx1013ResourceTableBinding *hull_resource_tables;
+    uint32_t num_hull_resource_tables;
+    const AgcGfx1013ResourceTableBinding *primitive_resource_tables;
+    uint32_t num_primitive_resource_tables;
+    const AgcGfx1013ResourceTableBinding *pixel_resource_tables;
+    uint32_t num_pixel_resource_tables;
+    const AgcRegisterValue *post_bind_sh_registers;
+    uint32_t num_post_bind_sh_registers;
+    const AgcRegisterValue *post_bind_cx_registers;
+    uint32_t num_post_bind_cx_registers;
+    const AgcRegisterValue *post_bind_uc_registers;
+    uint32_t num_post_bind_uc_registers;
+    uint32_t instance_count;
+    uint32_t vertex_count;
+    uint64_t draw_modifier;
+} AgcGfx1013TessDrawState;
+
 int32_t PS5_SYSV_ABI agcGfx1013ValidateWave32VsPs(
     const AgcGfx1013Wave32VsPsState *state);
 int32_t PS5_SYSV_ABI agcGfx1013BindWave32VsPs(
@@ -162,6 +192,10 @@ int32_t PS5_SYSV_ABI agcGfx1013BindVsPs(
     SceAgcCb *cb, const AgcGfx1013Wave32VsPsState *state);
 int32_t PS5_SYSV_ABI agcGfx1013DrawBaselineIndexAuto(
     SceAgcCb *cb, const AgcGfx1013BaselineDrawState *state);
+int32_t PS5_SYSV_ABI agcGfx1013DrawTessIndexAuto(
+    SceAgcCb *cb, const AgcGfx1013TessDrawState *state);
+int32_t PS5_SYSV_ABI agcGfx1013SignalEopFence(
+    SceAgcCb *cb, const AgcGfx1013EopFenceState *state);
 int32_t PS5_SYSV_ABI agcGfx1013ValidateWave32TessVsPs(
     const AgcGfx1013Wave32TessVsPsState *state);
 int32_t PS5_SYSV_ABI agcGfx1013BindWave32TessVsPs(

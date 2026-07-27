@@ -14,6 +14,9 @@
 
 #define AGC_GFX1013_VGT_DRAW_PAYLOAD_EN_VRS_RATE (1u << 6)
 
+static int32_t agcGfx1013ValidateTessellationState(
+    const AgcGfx1013TessellationState *state);
+
 static bool agcGfx1013AddressIsProgramCompatible(uint64_t address)
 {
     return address != 0u && (address & 0xffu) == 0u &&
@@ -586,6 +589,140 @@ int32_t PS5_SYSV_ABI agcGfx1013BindWave32TessVsPs(
         !agcGfx1013EmitShaderPatched(
             cb, &state->primitive, gs_program_lo, &gs_patches) ||
         !agcGfx1013EmitShader(cb, &state->pixel, ps_program_lo))
+        return AGC_ERROR_INTERNAL;
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013DrawTessIndexAuto(
+    SceAgcCb *cb, const AgcGfx1013TessDrawState *state)
+{
+    uint32_t hull_resource_count = 0u;
+    uint32_t primitive_resource_count = 0u;
+    uint32_t pixel_resource_count = 0u;
+    uint32_t input_count;
+    uint32_t required_dwords;
+    uint32_t i;
+    int32_t error;
+
+    if (!cb || !state || !state->tessellation ||
+        state->instance_count == 0u || state->vertex_count == 0u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if ((state->num_post_bind_sh_registers != 0u &&
+         !state->post_bind_sh_registers) ||
+        (state->num_post_bind_cx_registers != 0u &&
+         !state->post_bind_cx_registers) ||
+        (state->num_post_bind_uc_registers != 0u &&
+         !state->post_bind_uc_registers) ||
+        state->num_post_bind_sh_registers > 0x3ffeu ||
+        state->num_post_bind_cx_registers > 0x3ffeu ||
+        state->num_post_bind_uc_registers > 0x3ffeu)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    error = agcGfx1013ValidateWave32TessVsPs(&state->shaders);
+    if (error != AGC_OK)
+        return error;
+    error = agcGfx1013ValidateTessellationState(state->tessellation);
+    if (error != AGC_OK)
+        return error;
+    if (state->num_hull_resource_tables != 0u) {
+        error = agcGfx1013ValidateResourceTables(
+            &state->shaders.hull, state->hull_resource_tables,
+            state->num_hull_resource_tables, &hull_resource_count);
+        if (error != AGC_OK)
+            return error;
+    }
+    if (state->num_primitive_resource_tables != 0u) {
+        error = agcGfx1013ValidateResourceTables(
+            &state->shaders.primitive, state->primitive_resource_tables,
+            state->num_primitive_resource_tables, &primitive_resource_count);
+        if (error != AGC_OK)
+            return error;
+    }
+    if (state->num_pixel_resource_tables != 0u) {
+        error = agcGfx1013ValidateResourceTables(
+            &state->shaders.pixel, state->pixel_resource_tables,
+            state->num_pixel_resource_tables, &pixel_resource_count);
+        if (error != AGC_OK)
+            return error;
+    }
+
+    input_count = agcShaderRecordGetNumInputSemantics(
+        state->shaders.pixel.record);
+    required_dwords = 44u + input_count * 3u +
+        (state->shaders.hull.num_sh_registers +
+         state->shaders.hull.num_cx_registers +
+         state->shaders.primitive.num_sh_registers +
+         state->shaders.primitive.num_cx_registers +
+         state->shaders.pixel.num_sh_registers +
+         state->shaders.pixel.num_cx_registers +
+         hull_resource_count + primitive_resource_count +
+         pixel_resource_count + state->num_post_bind_sh_registers +
+         state->num_post_bind_cx_registers +
+         state->num_post_bind_uc_registers) * 3u;
+    if (agcCbRemainingDwords(cb) < required_dwords)
+        return AGC_ERROR_BUFFER_TOO_SMALL;
+
+    error = agcGfx1013BindWave32TessVsPs(cb, &state->shaders);
+    if (error != AGC_OK)
+        return error;
+    if (state->num_hull_resource_tables != 0u &&
+        agcGfx1013BindResourceTables(
+            cb, &state->shaders.hull, state->hull_resource_tables,
+            state->num_hull_resource_tables) != AGC_OK)
+        return AGC_ERROR_INTERNAL;
+    if (state->num_primitive_resource_tables != 0u &&
+        agcGfx1013BindResourceTables(
+            cb, &state->shaders.primitive,
+            state->primitive_resource_tables,
+            state->num_primitive_resource_tables) != AGC_OK)
+        return AGC_ERROR_INTERNAL;
+    if (state->num_pixel_resource_tables != 0u &&
+        agcGfx1013BindResourceTables(
+            cb, &state->shaders.pixel, state->pixel_resource_tables,
+            state->num_pixel_resource_tables) != AGC_OK)
+        return AGC_ERROR_INTERNAL;
+    if (agcGfx1013SetTessellationContext(
+            cb, state->tessellation) != AGC_OK)
+        return AGC_ERROR_INTERNAL;
+    for (i = 0u; i < state->num_post_bind_sh_registers; ++i) {
+        if (!sceAgcCbSetShRegistersDirect(
+                cb, &state->post_bind_sh_registers[i], 1u))
+            return AGC_ERROR_INTERNAL;
+    }
+    for (i = 0u; i < state->num_post_bind_cx_registers; ++i) {
+        if (!sceAgcCbSetCxRegistersDirect(
+                cb, &state->post_bind_cx_registers[i], 1u))
+            return AGC_ERROR_INTERNAL;
+    }
+    for (i = 0u; i < state->num_post_bind_uc_registers; ++i) {
+        if (!sceAgcCbSetUcRegistersDirect(
+                cb, &state->post_bind_uc_registers[i], 1u))
+            return AGC_ERROR_INTERNAL;
+    }
+    if (!sceAgcDcbSetNumInstances(cb, state->instance_count) ||
+        !sceAgcDcbDrawIndexAuto(
+            cb, state->vertex_count, state->draw_modifier))
+        return AGC_ERROR_INTERNAL;
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013SignalEopFence(
+    SceAgcCb *cb, const AgcGfx1013EopFenceState *state)
+{
+    if (!cb || !state || state->address == 0u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if ((state->address & 3u) != 0u)
+        return AGC_ERROR_INVALID_ALIGNMENT;
+    if ((state->address >> 48u) != 0u)
+        return AGC_ERROR_VALIDATION_FAILED;
+    if (agcCbRemainingDwords(cb) < AGC_GFX1013_EOP_FENCE_DWORDS)
+        return AGC_ERROR_BUFFER_TOO_SMALL;
+    if (!sceAgcCbReleaseMem(
+            cb, AGC_GFX1013_EOP_CACHE_FLUSH_EVENT,
+            AGC_GFX1013_EOP_GCR_CONTROL, 0u,
+            AGC_GFX1013_EOP_CACHE_POLICY_LRU, state->address, 1u,
+            state->value, 0u, 0u, 0u, 0u) ||
+        !sceAgcCbNop(cb, 2u))
         return AGC_ERROR_INTERNAL;
     return AGC_OK;
 }

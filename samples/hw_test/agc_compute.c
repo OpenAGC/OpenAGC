@@ -505,13 +505,12 @@ static bool dispatch_compute(ComputeTest *test, void *shader_addr,
     }
 
     /* A following WRITE_DATA packet can execute before all compute waves have
-     * retired.  Use the gfx10 EOP fence sequence from the AMD driver instead:
-     * CACHE_FLUSH_AND_INV_TS_EVENT, GCR sequence + GL2/GLM writeback and
-     * invalidate, LRU cache policy, and SEND_DATA32. */
-    if (!sceAgcCbReleaseMem(
-            &cb, 0x14u, 0x603u, 0u, 3u, post_dispatch, 1u,
-            post_marker, 0u, 0u, 0u, 0u) ||
-        !sceAgcCbNop(&cb, 2u)) {
+     * retired. Use the reusable hardware-proven gfx1013 EOP fence instead. */
+    const AgcGfx1013EopFenceState completion = {
+        .address = post_dispatch,
+        .value = post_marker,
+    };
+    if (agcGfx1013SignalEopFence(&cb, &completion) != AGC_OK) {
         printf("[Dispatch] completion packet emission failed\n");
         return false;
     }

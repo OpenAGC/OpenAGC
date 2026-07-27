@@ -358,6 +358,7 @@ static void test_gfx1013_wave32_tessellation_binding(void)
          OPENAGC_NEXT_STAGE_PC_PLACEHOLDER},
         {AGC_REG_SPI_SHADER_PGM_LO_HS, 0u},
         {AGC_REG_SPI_SHADER_PGM_HI_HS, 0u},
+        {0x220u, OPENAGC_VERTEX_BUFFER_TABLE_PLACEHOLDER},
     };
     AgcRegisterValue gs_sh[] = {
         {AGC_REG_SPI_SHADER_USER_DATA_ADDR_LO_GS,
@@ -374,6 +375,7 @@ static void test_gfx1013_wave32_tessellation_binding(void)
     AgcRegisterValue ps_sh[] = {
         {AGC_REG_SPI_SHADER_PGM_LO_PS, 0u},
         {AGC_REG_SPI_SHADER_PGM_HI_PS, 0u},
+        {0x221u, OPENAGC_DESCRIPTOR_SET_PLACEHOLDER(0u)},
     };
     AgcRegisterValue gs_cx[] = {
         {AGC_REG_VGT_LS_HS_CONFIG, 0x0000C308u},
@@ -484,6 +486,121 @@ static void test_gfx1013_wave32_tessellation_binding(void)
     TEST_ASSERT_EQ(
         agcGfx1013BindWave32TessVsPs(&cb, &state), AGC_OK,
         "TES front-only record binds without continuation SGPR");
+
+    const AgcGfx1013TessellationState tessellation = {
+        .offchip_ring_address = 0x0000000202610000ull,
+        .factor_ring_address = 0x0000000202618000ull,
+        .offchip_ring_size = AGC_GFX1013_TESS_OFFCHIP_RING_SIZE,
+        .factor_ring_size = AGC_GFX1013_TESS_FACTOR_RING_SIZE,
+        .max_tess_level = 0x42800000u,
+        .esgs_ring_itemsize = 1u,
+        .distribution = 0xd8181e0cu,
+        .tf_param = 0x61u,
+    };
+    const AgcGfx1013ResourceTableBinding hull_table = {
+        OPENAGC_VERTEX_BUFFER_TABLE_PLACEHOLDER,
+        0x0000000202601000ull,
+    };
+    const AgcGfx1013ResourceTableBinding pixel_table = {
+        OPENAGC_DESCRIPTOR_SET_PLACEHOLDER(0u),
+        0x0000000202702000ull,
+    };
+    const AgcRegisterValue post_cx = {AGC_REG_DB_DEPTH_CONTROL, 0u};
+    AgcGfx1013TessDrawState draw = {
+        .shaders = state,
+        .tessellation = &tessellation,
+        .hull_resource_tables = &hull_table,
+        .num_hull_resource_tables = 1u,
+        .pixel_resource_tables = &pixel_table,
+        .num_pixel_resource_tables = 1u,
+        .post_bind_cx_registers = &post_cx,
+        .num_post_bind_cx_registers = 1u,
+        .instance_count = 1u,
+        .vertex_count = 3u,
+        .draw_modifier = 0x40000000u,
+    };
+
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013DrawTessIndexAuto(&cb, &draw), AGC_OK,
+        "gfx1013 tessellation draw composes");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 107u,
+        "gfx1013 tessellation draw exact dword count");
+    TEST_ASSERT(find_last_register(buffer, agcCbUsedDwords(&cb),
+        AGC_PM4_OP_SET_SH_REG, 0x220u, &value),
+        "tessellation hull resource emitted");
+    TEST_ASSERT_EQ(value, 0x02601000u,
+        "tessellation hull resource address32");
+    TEST_ASSERT(find_last_register(buffer, agcCbUsedDwords(&cb),
+        AGC_PM4_OP_SET_SH_REG, 0x221u, &value),
+        "tessellation pixel resource emitted");
+    TEST_ASSERT_EQ(value, 0x02702000u,
+        "tessellation pixel resource address32");
+    TEST_ASSERT(find_last_register(buffer, agcCbUsedDwords(&cb),
+        AGC_PM4_OP_SET_CONTEXT_REG, AGC_REG_VGT_TF_PARAM, &value),
+        "post-bind tessellation context emitted");
+    TEST_ASSERT_EQ(value, 0x61u, "tessellation parameter preserved");
+    TEST_ASSERT_EQ(agcPm4Opcode(buffer[102]), AGC_PM4_OP_NUM_INSTANCES,
+        "tessellation draw instance packet order");
+    TEST_ASSERT_EQ(buffer[103], 1u, "tessellation draw instance count");
+    TEST_ASSERT_EQ(agcPm4Opcode(buffer[104]), AGC_PM4_OP_DRAW_INDEX_AUTO,
+        "tessellation draw packet order");
+    TEST_ASSERT_EQ(buffer[105], 3u, "tessellation draw vertex count");
+
+    agcCbReset(&cb, buffer, 106u * sizeof(uint32_t));
+    TEST_ASSERT_EQ(agcGfx1013DrawTessIndexAuto(&cb, &draw),
+        AGC_ERROR_BUFFER_TOO_SMALL, "short tessellation draw rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "short tessellation draw is atomic");
+    draw.post_bind_cx_registers = NULL;
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013DrawTessIndexAuto(&cb, &draw),
+        AGC_ERROR_INVALID_ARGUMENT, "invalid tessellation override rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "invalid tessellation override is atomic");
+}
+
+static void test_gfx1013_eop_completion_fence(void)
+{
+    uint32_t buffer[16] = {0};
+    SceAgcCb cb;
+    AgcGfx1013EopFenceState fence = {
+        .address = 0x00000002014bb000ull,
+        .value = 0xdeadcafeu,
+    };
+
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SignalEopFence(&cb, &fence), AGC_OK,
+        "gfx1013 EOP completion fence emits");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), AGC_GFX1013_EOP_FENCE_DWORDS,
+        "gfx1013 EOP completion exact dword count");
+    TEST_ASSERT_EQ(buffer[0],
+        agcPm4Header3(AGC_PM4_OP_RELEASE_MEM, 8u),
+        "gfx1013 EOP release header");
+    TEST_ASSERT_EQ(buffer[1], 0x06603514u,
+        "gfx1013 EOP event GCR and LRU policy");
+    TEST_ASSERT_EQ(buffer[2], 0x20000000u,
+        "gfx1013 EOP SEND_DATA32 selection");
+    TEST_ASSERT_EQ(buffer[3], 0x014bb000u,
+        "gfx1013 EOP address low");
+    TEST_ASSERT_EQ(buffer[4], 0x00000002u,
+        "gfx1013 EOP address high");
+    TEST_ASSERT_EQ(buffer[5], 0xdeadcafeu,
+        "gfx1013 EOP fence value");
+    TEST_ASSERT_EQ(buffer[6], 0u, "gfx1013 EOP fence value high");
+    TEST_ASSERT_EQ(buffer[8], agcPm4Header3(AGC_PM4_OP_NOP, 2u),
+        "gfx1013 EOP trailer header");
+
+    agcCbReset(&cb, buffer, 9u * sizeof(uint32_t));
+    TEST_ASSERT_EQ(agcGfx1013SignalEopFence(&cb, &fence),
+        AGC_ERROR_BUFFER_TOO_SMALL, "short EOP fence rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "short EOP fence is atomic");
+    fence.address++;
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SignalEopFence(&cb, &fence),
+        AGC_ERROR_INVALID_ALIGNMENT, "unaligned EOP fence rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "unaligned EOP fence is atomic");
 }
 
 static void test_gfx1013_fixed_function_packets(void)
@@ -1062,6 +1179,7 @@ void test_suite_graphics(void)
     TEST_RUN(test_gfx1013_wave32_rejects_but_generic_accepts_wave64);
     TEST_RUN(test_gfx1013_wave32_rejects_small_buffer_atomically);
     TEST_RUN(test_gfx1013_wave32_tessellation_binding);
+    TEST_RUN(test_gfx1013_eop_completion_fence);
     TEST_RUN(test_gfx1013_fixed_function_packets);
     TEST_RUN(test_gfx1013_graphics_defaults_v8);
     TEST_RUN(test_gfx1013_fixed_function_rejects_atomically);

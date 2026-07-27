@@ -1681,7 +1681,13 @@ globally visible. Compute repeated with 2,073,600/2,073,600 matching pixels;
 the corrected-fence NGG baseline, amplification, line, invocation, and
 tessellation-geometry-line cases also passed. The line case has direct Chiaki
 evidence that the white outer and internal edges connect at the intended
-vertices. The generic suite passes 3,551 checks.
+vertices. The complete generic suite passes.
+
+The hardware-proven completion tail and remaining tessellation draw tail are
+now public typed APIs. `agcGfx1013SignalEopFence` owns the exact gfx1013 EOP
+event/GCR/cache-policy sequence, while `agcGfx1013DrawTessIndexAuto` owns the
+validated HS/TES/GS/PS bind, resource, post-bind context, override, instance,
+and draw ordering. Hardware samples no longer open-code either sequence.
 
 The next hardware action is one complete invocation of
 `make -C samples/hw_test conformance_fw550` on a fresh FW `0x0550` console

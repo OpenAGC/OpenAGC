@@ -22,8 +22,8 @@ completed without a GPU hang or kernel panic.
 ordered websrv matrix. It uses isolated remote paths, bounded foreground
 launches, persistent logs, numeric FW `0x0550` verification, exact per-sample
 gates, and fail-fast handling for timeouts, disconnects, instant closes, or
-failure markers. The clean generic suite passes 3,551 checks with zero
-failures. The remaining post-fence RGBA8 and tessellation reruns are explicitly
+failure markers. The complete clean generic suite passes with zero failures.
+The remaining post-fence RGBA8 and tessellation reruns are explicitly
 pending because the available Homebrew Launcher began closing known-good ELFs
 immediately and real PS5 hardware is no longer available. Earlier hardware
 qualification remains valid historical evidence, but it does not substitute
@@ -433,6 +433,12 @@ Cursor-based builders:
 
 Typed gfx1013 state builders:
 
+- `agcGfx1013SignalEopFence` — atomically emits the hardware-proven 10-dword
+  gfx1013 `RELEASE_MEM` cache-flush/writeback fence and trailer used by both
+  compute and graphics samples
+- `agcGfx1013DrawTessIndexAuto` — atomically composes Wave32 HS/TES/GS/PS
+  binding, stage resource tables, post-bind tessellation context, application
+  overrides, instance count, and auto-index draw in hardware-proven order
 - `agcGfx1013BuildTessellationRingTable` — validates and builds the exact
   128-byte factor/offchip descriptor table atomically
 - `agcGfx1013SetTessellationRings` — emits the four hardware-proven UC ring
