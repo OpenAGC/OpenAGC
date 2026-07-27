@@ -1,5 +1,22 @@
 # openagc Status
 
+## FW 5.50 compressed D16/HTILE qualification (2026-07-27)
+
+The typed gfx1013 `D16_UNORM` plus pipe-aligned HTILE path is
+hardware-qualified on standard PS5 FW `0x05500008` with expclear, stencil,
+and MSAA disabled. The 1920x1080 fixture uses a 2048x1152 D16 allocation
+(`0x480000` bytes, `0x10000` alignment), a 2048x1536 HTILE allocation
+(`0x30000` bytes, `0x4000` alignment), the depth-only uncompressed metadata
+word `0xfffc000f`, and D16 `DB_Z_INFO.ZRANGE_PRECISION`.
+
+Two identical curl/websrv runs each changed 4,226 HTILE words after typed
+full-surface decompression and resummarization, recovered exactly 909,792
+clear-one, 128,304 near, and 128,304 far native D16 values, and produced
+128,304 green plus 128,304 red pixels. All four stage markers and the 1 ms
+completion fence passed, each run completed 1,800/1,800 flips, and both live
+kernel logs were free of GPU-fault, reset, process-stop, and panic signatures.
+D16 HTILE expclear remains a separate follow-up gate.
+
 ## FW 5.50 D16+S8 qualification (2026-07-27)
 
 The typed uncompressed `D16_UNORM_S8_UINT` path is hardware-qualified on

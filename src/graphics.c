@@ -1945,6 +1945,11 @@ int32_t PS5_SYSV_ABI agcGfx1013SetDepthSurface(
         AGC_REG_SET(DB_Z_INFO, NUM_SAMPLES, sample_log2) |
         AGC_REG_SET(DB_Z_INFO, SW_MODE, state->depth_swizzle_mode) |
         AGC_REG_SET(DB_Z_INFO, MAXMIP, state->mip_level_count - 1u) |
+        AGC_REG_SET(DB_Z_INFO, ZRANGE_PRECISION,
+            state->htile_enable &&
+            (state->format == AGC_GFX1013_DEPTH_FORMAT_D16_UNORM ||
+             state->format ==
+                 AGC_GFX1013_DEPTH_FORMAT_D16_UNORM_S8_UINT)) |
         AGC_REG_SET(DB_Z_INFO, ALLOW_EXPCLEAR,
             (expclear_aspects &
              AGC_GFX1013_DEPTH_STENCIL_ASPECT_DEPTH) != 0u) |

@@ -1480,6 +1480,95 @@ static void test_gfx1013_htile_operation_packets(void)
         "invalid HTILE operation is atomic");
 }
 
+static void test_gfx1013_d16_htile_qualification_fixture(void)
+{
+    uint32_t buffer[AGC_GFX1013_DEPTH_SURFACE_DWORDS] = {0};
+    SceAgcCb cb;
+    AgcGfx1013DepthSurfaceLayoutInput depth_input = {
+        .width = 1920u, .height = 1080u, .layer_count = 1u,
+        .mip_level_count = 1u, .sample_count = 1u,
+        .format = AGC_GFX1013_DEPTH_FORMAT_D16_UNORM,
+        .depth_swizzle_mode = AGC_GFX1013_SWIZZLE_64KB_Z_X,
+    };
+    AgcGfx1013DepthSurfaceLayout depth_layout = {0};
+    AgcGfx1013HtileLayoutInput htile_input = {
+        .width = 1920u, .height = 1080u, .layer_count = 1u,
+        .mip_level_count = 1u, .first_mip_in_tail = 1u,
+        .pipe_count = 8u,
+        .swizzle_mode = AGC_GFX1013_SWIZZLE_64KB_Z_X,
+    };
+    AgcGfx1013HtileLayout htile_layout = {0};
+    const AgcGfx1013DepthSurfaceState surface = {
+        .depth_read_address = 0x0000000203000000ull,
+        .depth_write_address = 0x0000000203000000ull,
+        .htile_address = 0x0000000203480000ull,
+        .width = 1920u, .height = 1080u,
+        .format = AGC_GFX1013_DEPTH_FORMAT_D16_UNORM,
+        .depth_swizzle_mode = AGC_GFX1013_SWIZZLE_64KB_Z_X,
+        .mip_level_count = 1u, .sample_count = 1u,
+        .htile_enable = 1u,
+    };
+    const uint32_t expected[AGC_GFX1013_DEPTH_SURFACE_DWORDS] = {
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
+        AGC_REG_DB_DEPTH_VIEW, 0u,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
+        AGC_REG_DB_HTILE_SURFACE, 0x00040000u,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
+        AGC_REG_DB_HTILE_DATA_BASE, 0x02034800u,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
+        AGC_REG_DB_DEPTH_SIZE_XY, 0x0437077fu,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 8u),
+        AGC_REG_DB_Z_INFO, 0xa0000181u, 0u,
+        0x02030000u, 0u, 0x02030000u, 0u,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 7u),
+        AGC_REG_DB_Z_READ_BASE_HI, 0u, 0u, 0u, 0u, 0u,
+    };
+
+    TEST_ASSERT_EQ(AGC_GFX1013_HTILE_UNCOMPRESSED_D16, 0xfffc000fu,
+        "gfx1013 D16 exact uncompressed HTILE word");
+    TEST_ASSERT_EQ(agcGfx1013GetDepthSurfaceLayout(
+        &depth_input, &depth_layout), AGC_OK,
+        "gfx1013 D16 HTILE depth layout queries");
+    TEST_ASSERT_EQ(depth_layout.depth.pitch, 2048u,
+        "D16 HTILE exact depth pitch");
+    TEST_ASSERT_EQ(depth_layout.depth.padded_height, 1152u,
+        "D16 HTILE exact padded depth height");
+    TEST_ASSERT_EQ(depth_layout.depth.allocation_size, 0x480000ull,
+        "D16 HTILE exact depth allocation");
+    TEST_ASSERT_EQ(agcGfx1013GetHtileLayout(
+        &htile_input, &htile_layout), AGC_OK,
+        "gfx1013 D16 HTILE metadata layout queries");
+    TEST_ASSERT_EQ(htile_layout.allocation_size, 0x30000ull,
+        "D16 exact HTILE allocation");
+    TEST_ASSERT_EQ(htile_layout.alignment, 0x4000u,
+        "D16 exact HTILE alignment");
+    TEST_ASSERT_EQ(htile_layout.meta_block_width, 512u,
+        "D16 exact HTILE meta-block width");
+    TEST_ASSERT_EQ(htile_layout.meta_block_height, 512u,
+        "D16 exact HTILE meta-block height");
+    TEST_ASSERT_EQ(htile_layout.meta_blocks_per_slice, 12u,
+        "D16 exact HTILE blocks per slice");
+
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetDepthSurface(&cb, &surface), AGC_OK,
+        "gfx1013 D16 HTILE surface emits");
+    TEST_ASSERT(memcmp(buffer, expected, sizeof(expected)) == 0,
+        "gfx1013 D16 HTILE exact 27-dword bind stream");
+
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetHtileOperation(
+        &cb, AGC_GFX1013_HTILE_OPERATION_DECOMPRESS_DEPTH), AGC_OK,
+        "D16 HTILE decompress operation emits");
+    TEST_ASSERT_EQ(buffer[2], 0x00001040u,
+        "D16 HTILE exact decompress operation");
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetHtileOperation(
+        &cb, AGC_GFX1013_HTILE_OPERATION_RESUMMARIZE_DEPTH), AGC_OK,
+        "D16 HTILE resummarize operation emits");
+    TEST_ASSERT_EQ(buffer[2], 0x00000010u,
+        "D16 HTILE exact resummarize operation");
+}
+
 static void test_gfx1013_depth_expclear_packets(void)
 {
     uint32_t buffer[AGC_GFX1013_DEPTH_STENCIL_EXPCLEAR_MAX_DWORDS] = {0};
@@ -2717,6 +2806,7 @@ void test_suite_graphics(void)
     TEST_RUN(test_gfx1013_blend_depth_stencil_packets);
     TEST_RUN(test_gfx1013_depth_surface_packets);
     TEST_RUN(test_gfx1013_htile_operation_packets);
+    TEST_RUN(test_gfx1013_d16_htile_qualification_fixture);
     TEST_RUN(test_gfx1013_depth_expclear_packets);
     TEST_RUN(test_gfx1013_selective_expclear_surface);
     TEST_RUN(test_gfx1013_depth_surface_layout);

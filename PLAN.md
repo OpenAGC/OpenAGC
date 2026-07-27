@@ -271,8 +271,8 @@ Work in this order:
    hardware-qualified, alongside the earlier alternate-swap BGRA8 and RGBA16F
    paths. RGBA8/BGRA8 sRGB encode behavior is also hardware-qualified. Next
    qualify additional 16-bit color tuples. After the color matrix is stable,
-   qualify D16, S8-only, and D16+S8
-   before compressed variants. Continue with blending, resource transitions,
+   qualify D16, S8-only, D16+S8, and compressed D16/HTILE before enabling
+   D16 HTILE expclear. Continue with blending, resource transitions,
    multi-buffer frame scheduling, timestamps/queries, and stable NGG
    geometry/tessellation APIs according to homebrew needs.
 8. **Firmware and retail ABI evidence.** Preserve numeric firmware profiles and
@@ -2134,10 +2134,20 @@ Next execution order:
    `64KB_Z_X` planes with HTILE, MSAA, and expclear disabled. Two identical FW
    `0x05500008` runs reproduced the exact D16 and S8 native counts from the
    independent gates, exact green/red color counts, all markers/fences,
-   1,800/1,800 flips, and clean live kernel logs. Compressed D16 variants
-   remain unsupported until separately evidenced; D32 HTILE values must not be
-   reused by assumption.
-12. Continue game-import coverage after the reusable draw/format APIs land;
+   1,800/1,800 flips, and clean live kernel logs.
+12. **Hardware complete:** compressed D16/HTILE uses the recovered gfx1013
+   2048x1152 D16 and 2048x1536 metadata layouts, depth-only `0xfffc000f`
+   initialization, D16 `ZRANGE_PRECISION`, and typed depth decompression plus
+   resummarization. Two identical FW `0x05500008` runs each changed 4,226
+   metadata words, recovered exact 909,792/128,304/128,304 native D16 counts,
+   produced exact 128,304 green/red color counts, passed all markers and 1 ms
+   fences, completed 1,800/1,800 flips, and left clean live kernel logs.
+13. Qualify D16 HTILE expclear separately. Add an exact host fixture for
+   `ALLOW_EXPCLEAR`, `DECOMPRESS_ON_N_ZPLANES=15`, and the depth-one metadata
+   encoding before the first hardware run; require two clean native-D16,
+   metadata, color, marker, fence, flip, and live-kernel-log passes before
+   enabling or documenting the capability.
+14. Continue game-import coverage after the reusable draw/format APIs land;
    correct Subnautica wrapper coverage and inventory DRAGON QUEST VII
    Reimagined against the new application-facing surface.
 
