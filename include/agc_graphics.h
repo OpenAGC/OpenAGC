@@ -558,6 +558,7 @@ _Static_assert(sizeof(AgcGfx1013TessellationRingTable) == 128,
 typedef struct AgcGfx1013BaselineDrawState {
     AgcGfx1013Wave32VsPsState shaders;
     const AgcGfx1013FrameState *frame;
+    const AgcGfx1013DepthStencilState *depth_stencil_state;
     const AgcGfx1013ResourceTableBinding *primitive_resource_tables;
     uint32_t num_primitive_resource_tables;
     const AgcGfx1013ResourceTableBinding *pixel_resource_tables;

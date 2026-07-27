@@ -321,6 +321,9 @@ int32_t PS5_SYSV_ABI agcGfx1013BindWave32VsPs(
     return agcGfx1013BindVsPsImpl(cb, state, true);
 }
 
+static bool agcGfx1013StencilFaceValid(
+    const AgcGfx1013StencilFaceState *face);
+
 static int32_t agcGfx1013ValidateBaselineDrawState(
     const AgcGfx1013BaselineDrawState *state, uint32_t *required_dwords_out)
 {
@@ -357,6 +360,25 @@ static int32_t agcGfx1013ValidateBaselineDrawState(
         if (error != AGC_OK)
             return error;
     }
+    if (state->depth_stencil_state) {
+        const AgcGfx1013DepthStencilState *depth =
+            state->depth_stencil_state;
+        if (depth->depth_test_enable > 1u ||
+            depth->depth_write_enable > 1u ||
+            depth->depth_bounds_enable > 1u ||
+            depth->stencil_test_enable > 1u ||
+            depth->back_face_enable > 1u ||
+            depth->depth_compare_operation >= AGC_GFX1013_COMPARE_COUNT ||
+            (depth->depth_write_enable && !depth->depth_test_enable) ||
+            (depth->depth_bounds_enable && !depth->depth_test_enable) ||
+            (depth->back_face_enable && !depth->stencil_test_enable) ||
+            !(depth->min_depth_bounds >= 0.0f &&
+              depth->max_depth_bounds <= 1.0f &&
+              depth->min_depth_bounds <= depth->max_depth_bounds) ||
+            !agcGfx1013StencilFaceValid(&depth->front) ||
+            !agcGfx1013StencilFaceValid(&depth->back))
+            return AGC_ERROR_INVALID_ARGUMENT;
+    }
     if (state->num_primitive_resource_tables != 0u) {
         error = agcGfx1013ValidateResourceTables(
             &state->shaders.primitive, state->primitive_resource_tables,
@@ -385,6 +407,8 @@ static int32_t agcGfx1013ValidateBaselineDrawState(
          state->num_post_bind_uc_registers) * 3u;
     if (state->frame)
         required_dwords += AGC_GFX1013_FRAME_POST_BIND_DWORDS;
+    if (state->depth_stencil_state)
+        required_dwords += AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS;
     *required_dwords_out = required_dwords;
     return AGC_OK;
 }
@@ -415,6 +439,10 @@ static int32_t agcGfx1013EmitBaselineDrawPrefix(
     }
     if (state->frame &&
         agcGfx1013ApplyFramePostBind(cb, state->frame) != AGC_OK)
+        return AGC_ERROR_INTERNAL;
+    if (state->depth_stencil_state &&
+        agcGfx1013SetDepthStencilState(
+            cb, state->depth_stencil_state) != AGC_OK)
         return AGC_ERROR_INTERNAL;
     for (i = 0; i < state->num_post_bind_sh_registers; ++i) {
         if (!sceAgcCbSetShRegistersDirect(
