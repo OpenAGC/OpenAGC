@@ -810,7 +810,7 @@ static void test_gfx1013_frame_state(void)
         &cb, &frame, &stats), AGC_OK,
         "gfx1013 frame prologue composes");
     TEST_ASSERT_EQ(agcCbUsedDwords(&cb),
-        AGC_GFX1013_FRAME_PROLOGUE_DWORDS,
+        AGC_GFX1013_FRAME_PROLOGUE_BASE_DWORDS,
         "gfx1013 frame prologue exact dword count");
     TEST_ASSERT_EQ(stats.sh_register_count, 174u,
         "gfx1013 frame SH defaults count");
@@ -869,8 +869,31 @@ static void test_gfx1013_frame_state(void)
             "gfx1013 qualification exact SPI color export");
     }
 
+    TEST_ASSERT_EQ(agcGfx1013InitColorTarget(&frame.color_target,
+        0x0000000201600000ull, 2048u, 1080u,
+        AGC_GFX1013_RT_FORMAT_RGBA8_UNORM), AGC_OK,
+        "gfx1013 MRT slot zero initializes");
+    TEST_ASSERT_EQ(agcGfx1013InitColorTarget(
+        &frame.additional_color_targets[0], 0x0000000201800000ull,
+        2048u, 1080u, AGC_GFX1013_RT_FORMAT_RGBA8_UNORM), AGC_OK,
+        "gfx1013 MRT slot one initializes");
+    frame.color_target_count = 2u;
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013BuildFramePrologue(&cb, &frame, NULL), AGC_OK,
+        "gfx1013 two-target frame prologue composes");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb),
+        AGC_GFX1013_FRAME_PROLOGUE_BASE_DWORDS + 28u,
+        "gfx1013 two-target prologue exact dword count");
+    TEST_ASSERT_EQ(buffer[2218], AGC_REG_CB_COLOR0_BASE + 15u,
+        "gfx1013 frame binds color slot one after slot zero");
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013ApplyFramePostBind(&cb, &frame), AGC_OK,
+        "gfx1013 two-target post-bind composes");
+    TEST_ASSERT_EQ(buffer[17], 0x44u,
+        "gfx1013 two-target SPI exports contain both slots");
+
     agcCbReset(&cb, buffer,
-        (AGC_GFX1013_FRAME_PROLOGUE_DWORDS - 1u) * sizeof(uint32_t));
+        (AGC_GFX1013_FRAME_PROLOGUE_BASE_DWORDS + 27u) * sizeof(uint32_t));
     TEST_ASSERT_EQ(agcGfx1013BuildFramePrologue(
         &cb, &frame, NULL), AGC_ERROR_BUFFER_TOO_SMALL,
         "short gfx1013 frame prologue rejects");

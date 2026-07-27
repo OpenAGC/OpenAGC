@@ -64,7 +64,8 @@ extern "C" {
 #define AGC_GFX1013_ACQUIRE_POLL_INTERVAL        0x0Au
 #define AGC_GFX1013_ACQUIRE_GCR_ALL            0xC3B1u
 
-#define AGC_GFX1013_FRAME_PROLOGUE_DWORDS       2275u
+#define AGC_GFX1013_FRAME_PROLOGUE_BASE_DWORDS  2275u
+#define AGC_GFX1013_FRAME_PROLOGUE_DWORDS       2471u
 #define AGC_GFX1013_FRAME_POST_BIND_DWORDS        24u
 #define AGC_GFX1013_BLEND_STATE_DWORDS            19u
 #define AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS    14u
@@ -443,6 +444,9 @@ typedef struct AgcGfx1013ScissorState {
 
 typedef struct AgcGfx1013FrameState {
     AgcGfx1013ColorTargetState color_target;
+    AgcGfx1013ColorTargetState additional_color_targets[
+        AGC_GFX1013_MAX_COLOR_TARGETS - 1u];
+    uint32_t color_target_count;
     AgcGfx1013ViewportState viewport;
     AgcGfx1013ScissorState scissor;
     uint32_t target_mask;
@@ -663,6 +667,9 @@ int32_t PS5_SYSV_ABI agcGfx1013InitColorTarget(
     uint32_t height, AgcGfx1013ColorTargetFormat format);
 int32_t PS5_SYSV_ABI agcGfx1013SetColorTarget(
     SceAgcCb *cb, const AgcGfx1013ColorTargetState *state);
+int32_t PS5_SYSV_ABI agcGfx1013SetColorTargetSlot(
+    SceAgcCb *cb, uint32_t slot,
+    const AgcGfx1013ColorTargetState *state);
 int32_t PS5_SYSV_ABI agcGfx1013GetColorSurfaceLayout(
     const AgcGfx1013ColorSurfaceLayoutInput *input,
     AgcGfx1013ColorSurfaceLayout *layout);

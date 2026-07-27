@@ -501,6 +501,13 @@ after the frame post-bind sequence, which otherwise disables depth and clears
 the DB surface registers. Vulkan and other clients therefore do not need to
 duplicate ordering-sensitive DB register emission.
 
+`agcGfx1013SetColorTargetSlot` generalizes the typed color-target builder to
+all eight gfx1013 CB slots while preserving the CB0 wrapper. Frame state accepts
+up to eight same-extent targets, binds each slot after graphics defaults, and
+packs every target's nibble into `SPI_SHADER_COL_FORMAT`. Host tests verify a
+two-target prologue, CB1 register stride, exact stream size, and `0x44` RGBA8
+dual-export state.
+
 FW 5.50 hardware validation uses the wrapper as the real draw path. Both the
 RGBA16F and direct RGBA8 samples submitted a 2473-dword DCB, completed the
 post-draw marker and all 1800 flips, and produced the same validated coverage

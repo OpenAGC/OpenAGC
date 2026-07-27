@@ -1256,8 +1256,9 @@ static bool agcGfx1013FindColorTargetFormat(
     return false;
 }
 
-int32_t PS5_SYSV_ABI agcGfx1013SetColorTarget(
-    SceAgcCb *cb, const AgcGfx1013ColorTargetState *state)
+int32_t PS5_SYSV_ABI agcGfx1013SetColorTargetSlot(
+    SceAgcCb *cb, uint32_t slot,
+    const AgcGfx1013ColorTargetState *state)
 {
     uint32_t *cmd;
     uint32_t regs[14] = {0};
@@ -1271,7 +1272,8 @@ int32_t PS5_SYSV_ABI agcGfx1013SetColorTarget(
     uint32_t surface_pitch;
     uint32_t padded_height;
 
-    if (!cb || !state || state->address == 0u || state->width == 0u ||
+    if (!cb || slot >= AGC_GFX1013_MAX_COLOR_TARGETS || !state ||
+        state->address == 0u || state->width == 0u ||
         state->height == 0u || state->width > 0x4000u ||
         state->height > 0x4000u)
         return AGC_ERROR_INVALID_ARGUMENT;
@@ -1348,24 +1350,30 @@ int32_t PS5_SYSV_ABI agcGfx1013SetColorTarget(
     if (!cmd)
         return AGC_ERROR_INTERNAL;
     cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 16u);
-    cmd[1] = AGC_REG_CB_COLOR0_BASE;
+    cmd[1] = AGC_REG_CB_COLOR0_BASE + slot * 15u;
     memcpy(&cmd[2], regs, sizeof(regs));
 
     if (!agcGfx1013EmitCx(
-            cb, AGC_REG_CB_COLOR0_BASE_EXT,
+            cb, AGC_REG_CB_COLOR0_BASE_EXT + slot,
             (uint32_t)(state->address >> 40)) ||
         !agcGfx1013EmitCx(
-            cb, AGC_REG_CB_COLOR0_ATTRIB2,
+            cb, AGC_REG_CB_COLOR0_ATTRIB2 + slot,
             ((state->height - 1u) & 0x3fffu) |
             (((state->width - 1u) & 0x3fffu) << 14)) ||
         !agcGfx1013EmitCx(
-            cb, AGC_REG_CB_COLOR0_ATTRIB3,
+            cb, AGC_REG_CB_COLOR0_ATTRIB3 + slot,
             0x09000001u | (state->swizzle_mode <<
                 AGC_REG_CB_COLOR0_ATTRIB3_COLOR_SW_MODE_SHIFT)) ||
         !agcGfx1013EmitCx(
             cb, AGC_REG_CB_COLOR_CONTROL, 0x00cc0010u))
         return AGC_ERROR_INTERNAL;
     return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013SetColorTarget(
+    SceAgcCb *cb, const AgcGfx1013ColorTargetState *state)
+{
+    return agcGfx1013SetColorTargetSlot(cb, 0u, state);
 }
 
 int32_t PS5_SYSV_ABI agcGfx1013SetSampleState(
@@ -2471,18 +2479,34 @@ static int32_t agcGfx1013ValidateFrameState(
 {
     uint32_t scratch[28] = {0};
     SceAgcCb probe;
+    uint32_t target_count;
+    uint32_t i;
     int32_t error;
 
-    if (!state || state->min_vertex_index > state->max_vertex_index ||
+    if (!state)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    target_count = state->color_target_count == 0u ?
+        1u : state->color_target_count;
+    if (target_count > AGC_GFX1013_MAX_COLOR_TARGETS ||
+        state->min_vertex_index > state->max_vertex_index ||
         state->instance_step_rate == 0u ||
         state->scissor.right > state->color_target.width ||
         state->scissor.bottom > state->color_target.height)
         return AGC_ERROR_INVALID_ARGUMENT;
 
-    agcCbInit(&probe, scratch, sizeof(scratch));
-    error = agcGfx1013SetColorTarget(&probe, &state->color_target);
-    if (error != AGC_OK)
-        return error;
+    for (i = 0u; i < target_count; ++i) {
+        const AgcGfx1013ColorTargetState *target = i == 0u ?
+            &state->color_target : &state->additional_color_targets[i - 1u];
+        if (target->width != state->color_target.width ||
+            target->height != state->color_target.height ||
+            state->scissor.right > target->width ||
+            state->scissor.bottom > target->height)
+            return AGC_ERROR_INVALID_ARGUMENT;
+        agcCbInit(&probe, scratch, sizeof(scratch));
+        error = agcGfx1013SetColorTargetSlot(&probe, i, target);
+        if (error != AGC_OK)
+            return error;
+    }
     agcCbReset(&probe, scratch, sizeof(scratch));
     error = agcGfx1013SetViewport(&probe, &state->viewport);
     if (error != AGC_OK)
@@ -2513,6 +2537,8 @@ int32_t PS5_SYSV_ABI agcGfx1013BuildFramePrologue(
          state ? state->instance_step_rate : 0u},
     };
     uint32_t i;
+    uint32_t target_count;
+    uint32_t required_dwords;
     int32_t error;
 
     if (!cb)
@@ -2520,7 +2546,11 @@ int32_t PS5_SYSV_ABI agcGfx1013BuildFramePrologue(
     error = agcGfx1013ValidateFrameState(state);
     if (error != AGC_OK)
         return error;
-    if (agcCbRemainingDwords(cb) < AGC_GFX1013_FRAME_PROLOGUE_DWORDS)
+    target_count = state->color_target_count == 0u ?
+        1u : state->color_target_count;
+    required_dwords = AGC_GFX1013_FRAME_PROLOGUE_BASE_DWORDS +
+        (target_count - 1u) * 28u;
+    if (agcCbRemainingDwords(cb) < required_dwords)
         return AGC_ERROR_BUFFER_TOO_SMALL;
 
     if (agcGfx1013SetContextControl(
@@ -2531,8 +2561,13 @@ int32_t PS5_SYSV_ABI agcGfx1013BuildFramePrologue(
     error = agcGfx1013ApplyGraphicsDefaultsV8(cb, &counts);
     if (error != AGC_OK)
         return AGC_ERROR_INTERNAL;
-    if (agcGfx1013SetColorTarget(cb, &state->color_target) != AGC_OK ||
-        agcGfx1013SetViewport(cb, &state->viewport) != AGC_OK ||
+    for (i = 0u; i < target_count; ++i) {
+        const AgcGfx1013ColorTargetState *target = i == 0u ?
+            &state->color_target : &state->additional_color_targets[i - 1u];
+        if (agcGfx1013SetColorTargetSlot(cb, i, target) != AGC_OK)
+            return AGC_ERROR_INTERNAL;
+    }
+    if (agcGfx1013SetViewport(cb, &state->viewport) != AGC_OK ||
         agcGfx1013SetScissor(cb, &state->scissor) != AGC_OK ||
         agcGfx1013SetTargetMask(cb, state->target_mask) != AGC_OK)
         return AGC_ERROR_INTERNAL;
@@ -2553,19 +2588,29 @@ int32_t PS5_SYSV_ABI agcGfx1013ApplyFramePostBind(
     SceAgcCb *cb, const AgcGfx1013FrameState *state)
 {
     AgcGfx1013ColorTargetFormatInfo format_info;
+    uint32_t target_count;
+    uint32_t export_format = 0u;
+    uint32_t i;
 
     if (!cb)
         return AGC_ERROR_INVALID_ARGUMENT;
     int32_t error = agcGfx1013ValidateFrameState(state);
     if (error != AGC_OK)
         return error;
-    if (!agcGfx1013FindColorTargetFormat(&state->color_target, &format_info))
-        return AGC_ERROR_NOT_SUPPORTED;
+    target_count = state->color_target_count == 0u ?
+        1u : state->color_target_count;
+    for (i = 0u; i < target_count; ++i) {
+        const AgcGfx1013ColorTargetState *target = i == 0u ?
+            &state->color_target : &state->additional_color_targets[i - 1u];
+        if (!agcGfx1013FindColorTargetFormat(target, &format_info))
+            return AGC_ERROR_NOT_SUPPORTED;
+        export_format |= format_info.spi_shader_export_format << (i * 4u);
+    }
     if (agcCbRemainingDwords(cb) < AGC_GFX1013_FRAME_POST_BIND_DWORDS)
         return AGC_ERROR_BUFFER_TOO_SMALL;
     if (agcGfx1013SetDepthDisabled(cb) != AGC_OK ||
         !agcGfx1013EmitCx(cb, AGC_REG_SPI_SHADER_COL_FORMAT,
-            format_info.spi_shader_export_format) ||
+            export_format) ||
         !agcGfx1013EmitCx(
             cb, AGC_REG_PA_CL_CLIP_CNTL, state->clip_control) ||
         !agcGfx1013EmitCx(
