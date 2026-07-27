@@ -189,7 +189,9 @@ Work in this order:
    geometry, and tessellation. Keep PS5 gfx1013 behavior distinct from generic
    gfx1030 assumptions.
 4. **SDK packaging.** Install public headers, `libopenagc.a`, CMake package
-   metadata, and compiler tooling through one supported workflow. Document the
+   metadata, and compiler tooling through one supported workflow. This now
+   exports `OpenAGC::openagc`, `OpenAGC::psbc`, a relocatable package config,
+   version metadata, `openagc_compile_shader()`, and TGZ generation. Document the
    public API boundary, ownership/lifetime rules, alignment requirements,
    numeric firmware profiles, error codes, raw-PM4 escape hatch, and websrv
    deployment without requiring proprietary SDK headers or firmware blobs.
@@ -1669,3 +1671,204 @@ Completed (Phase 5-6, hardware validation):
 - Separate raw recovered APIs from convenience wrappers.
 - Treat PS5 hardware validation as a separate milestone with explicit smoke
   tests.
+# Product Roadmap: OpenAGC as a PS5 Homebrew GPU API
+
+This is the authoritative execution order for OpenAGC. The product goal is a
+clean, redistributable GPU API that lets homebrew applications and game ports
+compile shaders, allocate GPU resources, build command buffers, submit work,
+and present frames on a jailbroken PS5 without proprietary SDK headers. FW
+5.50 and the available gfx1013 hardware are the primary implementation and
+validation target. Older roadmap sections remain as technical history; when
+their ordering conflicts with this section, this section wins.
+
+Keep implementation and validation work narrowly focused on GPU ABI
+compatibility, shader compilation, PM4 state, resource management, submission,
+and display integration. Exploit setup and security-bypass mechanics belong to
+the launcher environment and hardware-test scaffolding, not the public OpenAGC
+API.
+
+## Definition of done
+
+OpenAGC reaches its first usable release when a third-party homebrew project
+can install the SDK, use documented public headers and CMake targets, compile
+shaders with `openagc-psbc`, create the required GPU resources, record and
+submit compute or graphics work, synchronize it, and present stable frames on
+FW 5.50. The same application must build against the generic host backend for
+packet and ABI tests. Failures must return documented errors rather than hang
+the GPU, freeze the UI, or panic the kernel.
+
+## Execution plan
+
+### Phase 1: Ship a consumable SDK
+
+1. Finish and validate install/export support for both `generic` and
+   `prospero` builds.
+2. Install public headers, `libopenagc.a`, the host `openagc-psbc` compiler,
+   CMake package metadata, namespaced targets, license, and documentation.
+3. Prove a clean downstream project can use `find_package(OpenAGC)`, link
+   `OpenAGC::openagc`, invoke `OpenAGC::psbc`, and compile a shader through the
+   provided CMake helper.
+4. Produce a relocatable versioned archive suitable for a homebrew toolchain.
+5. Keep the public package free of firmware blobs, decrypted modules,
+   launcher-specific credential code, and host-machine paths.
+
+Exit criteria: clean generic and Prospero installs, downstream build and shader
+compilation pass, package archive is generated, and the workflow is documented.
+
+### Phase 2: Stabilize the FW 5.50 runtime boundary
+
+1. Turn the hardware-proven `/dev/gc` initialization, internal-memory,
+   default-state, queue, submit, suspend-point, and workload paths into a
+   coherent runtime lifecycle.
+2. Define explicit ownership and teardown rules for contexts, queues, mapped
+   memory, command buffers, shaders, and display buffers.
+3. Validate all sizes, alignments, firmware-profile fields, packet capacities,
+   and user pointers before issuing ioctls or submissions.
+4. Add bounded waits, submission diagnostics, and recovery-safe error paths so
+   malformed or unsupported state fails before reaching the kernel.
+5. Treat `FRAME_OPEN` returning `EINVAL` and PA debug returning `EPERM` as
+   documented FW 5.50 capability results unless new firmware evidence proves a
+   supported userspace path.
+6. Audit every path associated with prior UI freezes and kernel panics,
+   especially NGG state, queue lifetime, command-buffer bounds, synchronization,
+   and register programming. Never expose uncertain state as a default builder.
+
+Exit criteria: repeated websrv runs of init, compute, graphics, queue teardown,
+and relaunch complete without a GPU hang, UI crash, or kernel panic.
+
+### Phase 3: Complete reusable command and resource APIs
+
+1. Replace sample-only PM4 sequences with typed OpenAGC builders for shader
+   binding, render targets, viewport, scissor, draw, dispatch, barriers,
+   cache management, events, and synchronization.
+2. Provide resource helpers for garlic/onion memory, GPU virtual addresses,
+   alignment, buffers, textures, render targets, depth targets, and shader
+   records without hiding required hardware constraints.
+3. Add state objects or descriptor structs that separate validation from PM4
+   emission and make command-buffer capacity requirements predictable.
+4. Preserve low-level builders for expert users while offering a documented
+   minimal path for ordinary homebrew applications.
+5. Add host fixtures for every hardware-proven packet stream, including exact
+   Wave32 VS/PS, compute, render-target, viewport, scissor, draw, NGG, geometry,
+   and tessellation state where validated.
+
+Exit criteria: hardware samples use public library builders rather than local
+packet assembly, and generic fixtures lock down headers, payloads, cursor
+advance, rejected inputs, and ABI layouts.
+
+### Phase 4: Make shader compilation a supported pipeline
+
+1. Define and version the `AgcShaderRecord` contract shared by
+   `openagc-psbc`, the public headers, and runtime binders.
+2. Validate gfx1013 explicitly. Do not silently treat the PS5 as gfx1030 or
+   infer behavior solely from a generic `gfx103.json` profile.
+3. Support documented compute, vertex, pixel, NGG, geometry, hull, and domain
+   stage inputs in an incremental feature ladder.
+4. Validate register metadata, user-SGPR layout, Wave32/Wave64 requirements,
+   fused-stage records, resource limits, scratch/LDS use, and stage linkage at
+   compile time whenever possible.
+5. Emit actionable compiler diagnostics for unsupported SPIR-V capabilities,
+   stage combinations, interpolation, tessellation modes, and resource use.
+6. Add compiler fixtures and end-to-end tests from source shader to installed
+   compiler output to runtime binding.
+
+Exit criteria: shader records are reproducible, version checked, rejected when
+incompatible, and consumed without sample-specific register knowledge.
+
+### Phase 5: Finish the graphics feature ladder on gfx1013
+
+Advance only after the preceding rung is stable under repeated FW 5.50 runs:
+
+1. Compute dispatch and memory visibility.
+2. Wave32 VS/PS triangle, indexed and non-indexed draws, multiple draws, and
+   correct render-target synchronization.
+3. Additional render-target, vertex, index, texture, sampler, blend, depth,
+   stencil, and multisample formats/states.
+4. Stable pass-through NGG geometry with conservative, validated defaults.
+5. NGG geometry-shader amplification and stream behavior.
+6. Tessellation control/evaluation, ring allocation, factor buffers, patch
+   constants, and HS/DS linkage.
+7. Offscreen rendering, render-to-texture, mip levels, and copy/resolve paths.
+
+Every rung needs a deterministic host fixture, a minimal hardware sample, a
+documented expected screen/result, repeated websrv validation, and a negative
+test that rejects unsafe configuration. A single successful frame is evidence,
+not completion.
+
+### Phase 6: Build compatibility from real application requirements
+
+1. Maintain a coverage manifest mapping each examined homebrew/game import to
+   its public wrapper, implementation status, firmware evidence, and test.
+2. Correct the Subnautica coverage first, then use DRAGON QUEST VII Reimagined
+   as the next available real-application ABI reference.
+3. Exclude Astro's Playroom from the compatibility target and documentation.
+4. Implement wrappers in dependency order: lifecycle and memory, shaders and
+   resources, command recording, submission and synchronization, presentation,
+   then optional statistics/debug helpers.
+5. Do not add empty success stubs. Unsupported calls must report a stable,
+   documented error until their observable behavior is implemented.
+6. Use game binaries only to identify legitimate API/ABI requirements; do not
+   copy proprietary code or data into the repository.
+
+Exit criteria: selected applications have no unresolved required AGC imports,
+their exercised paths map to tested public behavior, and compatibility claims
+state the exact firmware and feature limits.
+
+### Phase 7: Establish a release-grade validation matrix
+
+1. Keep the generic clean build and complete host suite as the mandatory gate
+   for every goal.
+2. Add ABI size/offset assertions, packet golden fixtures, malformed-input
+   tests, compiler fixtures, and downstream package-consumer tests.
+3. Maintain FW 5.50 websrv tests for VideoOut, initialization, compute,
+   graphics, NGG, geometry, tessellation, stress/relaunch, and teardown.
+4. Record each hardware run with build commit, firmware ID (`0x0550`), sample,
+   expected result, observed result, iteration count, and any crash/hang.
+5. Require repeated cold-launch and relaunch success before marking a hardware
+   feature stable.
+6. Keep hardware-test-only launcher setup outside reusable OpenAGC code.
+
+Exit criteria: a release checklist can be executed from a clean checkout and
+produces traceable host, packaging, compiler, and FW 5.50 hardware evidence.
+
+### Phase 8: Add firmware profiles without destabilizing FW 5.50
+
+1. Identify firmware numerically with four hex digits such as `0x0550` and
+   `0x0320`; aliases are optional display metadata, never lookup keys.
+2. Isolate firmware-dependent ioctls, queue layouts, memory regions, exports,
+   and capabilities behind explicit profiles selected at runtime.
+3. Keep FW 5.50 as the reference profile until the API and graphics ladder are
+   mature.
+4. Bring up FW 3.20 next using the same host fixtures and hardware-validation
+   gates where hardware becomes available.
+5. Preserve FW 1.00 and 2.x evidence as archival data only. Do not spend release
+   work on their legacy special-queue ABI or advertise them as supported.
+6. Refuse unknown firmware conservatively instead of guessing a close profile.
+
+Exit criteria: firmware variation is data-driven, unsupported versions fail
+safely, and adding a profile does not fork the public API.
+
+### Phase 9: Release and maintain
+
+1. Publish versioned API/ABI and shader-record compatibility policies.
+2. Provide minimal compute and graphics starter applications using only the
+   installed SDK surface.
+3. Document supported firmware, hardware, shader stages, formats, known errors,
+   and validation evidence without overclaiming game compatibility.
+4. Add semantic release notes and an upgrade guide for behavior or ABI changes.
+5. Keep `README.md`, `STATUS.md`, this plan, installed package metadata, and
+   samples synchronized at every completed goal.
+
+## Immediate next goals
+
+1. Complete the installable SDK/package goal already in progress, including
+   generic and Prospero downstream validation and installed shader compilation.
+2. Reconcile stale documentation that still says compute or graphics execution
+   is unproven with the recorded FW 5.50 hardware results, while distinguishing
+   one-off success from stability.
+3. Move all currently hardware-proven sample PM4 into public typed builders and
+   fixtures, starting with the exact compute and Wave32 VS/PS paths.
+4. Run the FW 5.50 stability matrix through websrv, emphasizing repeat launch,
+   teardown, NGG safety, and prior kernel-panic scenarios.
+5. Correct and document Subnautica wrapper coverage, then inventory the provided
+   DRAGON QUEST VII Reimagined executable for required AGC API coverage.
