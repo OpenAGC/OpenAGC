@@ -1350,7 +1350,7 @@ static void test_gfx1013_htile_operation_packets(void)
 
 static void test_gfx1013_depth_expclear_packets(void)
 {
-    uint32_t buffer[AGC_GFX1013_DEPTH_EXPCLEAR_DWORDS] = {0};
+    uint32_t buffer[AGC_GFX1013_DEPTH_STENCIL_EXPCLEAR_MAX_DWORDS] = {0};
     SceAgcCb cb;
     AgcGfx1013DepthExpclearState state = {1.0f};
 
@@ -1419,8 +1419,8 @@ static void test_gfx1013_depth_expclear_packets(void)
         "combined depth plan preserves stencil metadata");
     TEST_ASSERT_EQ(plan.requires_read_modify_write, 1u,
         "combined depth plan requires read-modify-write");
-    TEST_ASSERT_EQ(plan.hardware_enabled, 0u,
-        "combined depth plan remains hardware-disabled");
+    TEST_ASSERT_EQ(plan.hardware_enabled, 1u,
+        "combined depth plan is hardware-enabled");
 
     plan_state.aspects = AGC_GFX1013_DEPTH_STENCIL_ASPECT_STENCIL;
     plan_state.clear_stencil = 0x5au;
@@ -1434,8 +1434,8 @@ static void test_gfx1013_depth_expclear_packets(void)
     TEST_ASSERT_EQ((0xfffff30fu & ~plan.write_mask) |
         (plan.write_value & plan.write_mask), 0xfffff0ffu,
         "combined stencil plan preserves depth metadata");
-    TEST_ASSERT_EQ(plan.hardware_enabled, 0u,
-        "combined stencil plan remains hardware-disabled");
+    TEST_ASSERT_EQ(plan.hardware_enabled, 1u,
+        "combined stencil plan is hardware-enabled");
 
     plan_state.aspects =
         AGC_GFX1013_DEPTH_STENCIL_ASPECT_DEPTH |
@@ -1448,8 +1448,8 @@ static void test_gfx1013_depth_expclear_packets(void)
         "combined two-aspect clear-one value");
     TEST_ASSERT_EQ(plan.write_mask, 0xfffff3ffu,
         "combined two-aspect mask preserves reserved bits");
-    TEST_ASSERT_EQ(plan.hardware_enabled, 0u,
-        "combined two-aspect plan remains hardware-disabled");
+    TEST_ASSERT_EQ(plan.hardware_enabled, 1u,
+        "combined two-aspect plan is hardware-enabled");
 
     plan.write_value = 0x11223344u;
     plan_state.clear_stencil = 0x100u;
@@ -1458,6 +1458,103 @@ static void test_gfx1013_depth_expclear_packets(void)
         "out-of-range stencil clear rejects");
     TEST_ASSERT_EQ(plan.write_value, 0x11223344u,
         "invalid combined plan preserves output");
+
+    AgcGfx1013DepthStencilExpclearState clear_state = {
+        .aspects = AGC_GFX1013_DEPTH_STENCIL_ASPECT_DEPTH |
+            AGC_GFX1013_DEPTH_STENCIL_ASPECT_STENCIL,
+        .clear_depth = 1.0f,
+        .clear_stencil = 0x5au,
+    };
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetDepthStencilExpclear(
+        &cb, &clear_state), AGC_OK,
+        "combined clear registers emit");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 4u,
+        "combined clear registers use one contiguous packet");
+    TEST_ASSERT_EQ(buffer[1], AGC_REG_DB_STENCIL_CLEAR,
+        "combined clear begins at stencil register");
+    TEST_ASSERT_EQ(buffer[2], 0x5au,
+        "combined clear exact stencil value");
+    TEST_ASSERT_EQ(buffer[3], 0x3f800000u,
+        "combined clear exact depth value");
+
+    clear_state.aspects = AGC_GFX1013_DEPTH_STENCIL_ASPECT_STENCIL;
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetDepthStencilExpclear(
+        &cb, &clear_state), AGC_OK,
+        "stencil-only clear register emits");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 3u,
+        "stencil-only clear exact packet size");
+    TEST_ASSERT_EQ(buffer[1], AGC_REG_DB_STENCIL_CLEAR,
+        "stencil-only clear exact register");
+    TEST_ASSERT_EQ(buffer[2], 0x5au,
+        "stencil-only clear exact value");
+}
+
+static void test_gfx1013_selective_expclear_surface(void)
+{
+    uint32_t buffer[AGC_GFX1013_DEPTH_SURFACE_DWORDS] = {0};
+    AgcGfx1013DepthSurfaceState surface = {
+        .depth_read_address = 0x0000000202610000ull,
+        .depth_write_address = 0x0000000202610000ull,
+        .stencil_read_address = 0x0000000202e80000ull,
+        .stencil_write_address = 0x0000000202e80000ull,
+        .htile_address = 0x0000000203300000ull,
+        .width = 1920u,
+        .height = 1080u,
+        .format = AGC_GFX1013_DEPTH_FORMAT_D32_FLOAT_S8_UINT,
+        .depth_swizzle_mode = AGC_GFX1013_SWIZZLE_64KB_Z_X,
+        .stencil_swizzle_mode = AGC_GFX1013_SWIZZLE_64KB_Z_X,
+        .mip_level_count = 1u,
+        .sample_count = 1u,
+        .htile_enable = 1u,
+        .allow_expclear = 1u,
+        .expclear_aspects = AGC_GFX1013_DEPTH_STENCIL_ASPECT_DEPTH,
+    };
+    SceAgcCb cb;
+    uint32_t cursor;
+    uint32_t z_info = 0u;
+    uint32_t stencil_info = 0u;
+
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetDepthSurface(&cb, &surface), AGC_OK,
+        "depth-only expclear combined surface emits");
+    for (cursor = 0u; cursor < agcCbUsedDwords(&cb);) {
+        uint32_t length = agcPm4Length(buffer[cursor]);
+        if (buffer[cursor + 1u] == AGC_REG_DB_Z_INFO) {
+            z_info = buffer[cursor + 2u];
+            stencil_info = buffer[cursor + 3u];
+            break;
+        }
+        cursor += length;
+    }
+    TEST_ASSERT((z_info & AGC_REG_SET(
+        DB_Z_INFO, ALLOW_EXPCLEAR, 1u)) != 0u,
+        "depth aspect enables depth expclear");
+    TEST_ASSERT((stencil_info & AGC_REG_SET(
+        DB_STENCIL_INFO, ALLOW_EXPCLEAR, 1u)) == 0u,
+        "depth aspect preserves stencil expclear disable");
+
+    surface.expclear_aspects =
+        AGC_GFX1013_DEPTH_STENCIL_ASPECT_STENCIL;
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetDepthSurface(&cb, &surface), AGC_OK,
+        "stencil-only expclear combined surface emits");
+    for (cursor = 0u; cursor < agcCbUsedDwords(&cb);) {
+        uint32_t length = agcPm4Length(buffer[cursor]);
+        if (buffer[cursor + 1u] == AGC_REG_DB_Z_INFO) {
+            z_info = buffer[cursor + 2u];
+            stencil_info = buffer[cursor + 3u];
+            break;
+        }
+        cursor += length;
+    }
+    TEST_ASSERT((z_info & AGC_REG_SET(
+        DB_Z_INFO, ALLOW_EXPCLEAR, 1u)) == 0u,
+        "stencil aspect preserves depth expclear disable");
+    TEST_ASSERT((stencil_info & AGC_REG_SET(
+        DB_STENCIL_INFO, ALLOW_EXPCLEAR, 1u)) != 0u,
+        "stencil aspect enables stencil expclear");
 }
 
 static void test_gfx1013_depth_surface_layout(void)
@@ -2488,6 +2585,7 @@ void test_suite_graphics(void)
     TEST_RUN(test_gfx1013_depth_surface_packets);
     TEST_RUN(test_gfx1013_htile_operation_packets);
     TEST_RUN(test_gfx1013_depth_expclear_packets);
+    TEST_RUN(test_gfx1013_selective_expclear_surface);
     TEST_RUN(test_gfx1013_depth_surface_layout);
     TEST_RUN(test_gfx1013_htile_layout);
     TEST_RUN(test_gfx1013_stencil_gate_fixture);

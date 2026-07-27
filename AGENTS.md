@@ -386,10 +386,10 @@ Files:
 
 ## Current Roadmap
 
-The reusable FW 5.50 gfx1013 Wave32 VS+PS binder is host-tested and
-hardware-validated. It consumes the fused `kAgcShaderBinaryTypeGs` record
-(type 2), not the GsFront (4) or GsBack (6) half-records. NGG geometry is the
-next graphics milestone.
+The reusable FW 5.50 gfx1013 graphics and compute paths are host-tested and
+hardware-validated. Combined D32+S8 HTILE expclear is enabled after depth-only,
+stencil-only, and both-aspect cases each passed twice with exact metadata,
+D32/S8, fence, and 1,800-flip oracles.
 
 FW 3.20 is the lowest active compatibility target. FW 1.00 and 2.x profiles
 are archival RE data only: preserve their known aliases and evidence, but do
@@ -397,27 +397,25 @@ not recover missing legacy-only ABIs or advertise those versions as supported.
 
 See `STATUS.md` and `PLAN.md`. Next RE tasks, by priority:
 
-1. **Compute shader not writing to display buffer** (Priority 1, blocking) —
-   the GPU accepts the dispatch DCB and the DISPATCH_DIRECT packet is
-   processed (the GPU remains alive after dispatch — a WRITE_DATA placed
-   after the dispatch executes correctly). However, the compute shader
-   itself does not write to the display buffer. Only pixel[0] is written,
-   and that's via a WRITE_DATA PM4 packet, not the shader. See the detailed
-   debugging notes below.
-2. **Graphics draw call** (Priority 2, blocked on #1) — once compute shader
-   execution is confirmed, the next milestone is a real graphics draw call:
-   VS+PS shaders, render target binding, viewport/scissor, blend state, and
-   `IT_DRAW_INDEX_AUTO`. See PLAN.md Phase 7.
-3. **Additional render-target formats** (Priority 3) — expand the validated
-   graphics path beyond the current RGBA8 render target.
-4. **Game compatibility** (Priority 4) — continue analyzing game binaries.
-   Current: 3 games, 72 unique AGC functions, 100% implemented.
+1. **Application-facing indexed/indirect drawing** — compose the proven
+   low-level packets into typed u16/u32 indexed, indirect, and
+   indexed-indirect draw APIs with exact host fixtures and isolated FW 5.50
+   hardware gates.
+2. **Additional render-target formats** — qualify BGRA8, SRGB, RGB10A2,
+   R11G11B10, and further 16-bit tuples in increasing hardware-risk order.
+3. **Additional depth/stencil formats** — qualify D16, S8-only, and D16+S8
+   independently before enabling compressed combinations.
+4. **Game compatibility** — continue expanding the observed-title corpus and
+   resolve useful imports only from evidence.
 
 Closed background RE: FW 5.50 `sceAgcDriverGetPaDebugInterfaceVersion` is a
 userspace permission stub returning `0x8A6D0001` without an ioctl, and
 `FRAME_OPEN` is absent from the FW 5.50 kernel dispatcher.
 
-### Compute shader debugging status (Priority 1)
+### Historical compute shader debugging status (resolved)
+
+The notes below preserve the investigation that preceded the hardware-proven
+compute path. They are not current blockers.
 
 **What works:**
 - AGC init, internal memory allocation, NotifyDefaultStates, async graphics
@@ -515,11 +513,8 @@ buffer (under active investigation).
 ## Non-Goals
 
 - No firmware blobs or proprietary microcode embedded in the repo.
-- No claim that compute shader execution works yet — the DCB submission
-  path is validated, but the shader does not write to the display buffer.
-  See "Compute shader debugging status" above.
-- No claim that graphics draw calls work yet (blocked on compute shader
-  validation — see PLAN.md Phase 7).
+- No claim of support beyond the explicitly hardware-qualified compute,
+  graphics, depth/stencil, HTILE, tessellation, and format paths.
 - No claim of full official SDK drop-in completeness.
 - No PS4 (`sceGnm*`) content here — that belongs in the sibling `opengnm`
   project, not `openagc`.

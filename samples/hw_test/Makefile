@@ -360,6 +360,21 @@ agc_depth_expclear.elf: shaders_depth agc_graphics.c ps5_video_out.h gpu_credent
 agc_depth_stencil_htile.elf: shaders_depth agc_graphics.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_DEPTH_VALIDATION=1 -DAGC_STENCIL_VALIDATION=1 -DAGC_HTILE_VALIDATION=1 -DAGC_HTILE_OPERATION_VALIDATION=1 -DAGC_STENCIL_HTILE_VALIDATION=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
 
+COMBINED_EXPCLEAR_FLAGS := -DAGC_DEPTH_VALIDATION=1 \
+	-DAGC_STENCIL_VALIDATION=1 -DAGC_HTILE_VALIDATION=1 \
+	-DAGC_HTILE_OPERATION_VALIDATION=1 -DAGC_EXPCLEAR_VALIDATION=1 \
+	-DAGC_STENCIL_HTILE_VALIDATION=1 \
+	-DAGC_STENCIL_HTILE_EXPCLEAR_VALIDATION=1
+
+agc_depth_stencil_expclear_depth.elf: shaders_depth shaders_htile_rmw agc_graphics.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(COMBINED_EXPCLEAR_FLAGS) -DAGC_EXPCLEAR_ASPECTS=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_depth_stencil_expclear_stencil.elf: shaders_depth shaders_htile_rmw agc_graphics.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(COMBINED_EXPCLEAR_FLAGS) -DAGC_EXPCLEAR_ASPECTS=2 -o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_depth_stencil_expclear_both.elf: shaders_depth shaders_htile_rmw agc_graphics.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(COMBINED_EXPCLEAR_FLAGS) -DAGC_EXPCLEAR_ASPECTS=3 -o $@ agc_graphics.c $(AGC_LDFLAGS)
+
 agc_tessellation.elf: shaders_tess agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_TESSELLATION=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
 

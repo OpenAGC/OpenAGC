@@ -2072,26 +2072,36 @@ register emission. Intentional markers, repeated diagnostic draws, the PM4
 decoder, and emulator export-conformance calls remain low-level by design; see
 `analysis/sample_pm4_public_api_audit.md`.
 
-The combined stencil/HTILE expclear design is complete but intentionally
-disabled. The typed plan owns exact depth/stencil masks, values, RMW signaling,
-and output atomicity; both the public enable constant and dedicated PS5 sample
-gate remain zero/closed. Independent hardware activation must follow the
-sequence and pass criteria in `analysis/combined_htile_expclear_design.md` and
-must not be inferred from ordinary combined HTILE qualification.
+Combined stencil/HTILE expclear is complete and hardware-enabled. The typed
+plan, exact-range Wave32 compute RMW, selective clear-register and depth-surface
+state, and DB/compute synchronization are covered by exact host fixtures.
+Depth-only, stencil-only, and both-aspect FW `0x0550` cases each passed twice
+with the public gate off: exact selected-range values, zero metadata spill,
+reserved-bit preservation, D32/S8 readback, fences, draw markers, and
+1,800/1,800 flips all passed without a reset or panic. See
+`analysis/fw550_combined_expclear_qualification_20260727.md`.
 
-The generic exact-range GPU RMW stage is now complete on the host.
-`agcGfx1013RmwHtile` owns the non-tail range validation and the full
-DB-to-compute-to-DB synchronization stream; `htile_rmw.comp` owns the masked
-word update with the exact seven-user-SGPR contract. The next action is the
-dedicated FW `0x0550` combined-expclear fixture with the public enable gate
-still off, followed by two sequential runs each for depth-only, stencil-only,
-and both-aspect cases.
-4. Expand typed depth/HTILE support to mip and array-layer hardware fixtures
-   before combining additional depth features.
-5. Move remaining hardware-proven sample PM4 into public typed builders and
-   fixtures, continuing with synchronization and additional format state.
-6. Correct and document Subnautica wrapper coverage, then inventory the provided
-   DRAGON QUEST VII Reimagined executable for required AGC API coverage.
+Next execution order:
+
+4. Add application-facing typed indexed draw composition for bound u16/u32
+   index buffers, base vertex, first index, instance count, and draw count.
+   Preserve the existing low-level packet builders and add exact fixtures for
+   packet order, address/count encoding, and atomic short-buffer rejection.
+5. Add application-facing direct and multi-draw indirect composition for
+   indexed and non-indexed arguments, including argument/count-buffer
+   alignment, stride validation, resource transitions, and host golden streams.
+6. Hardware-qualify indexed, indirect, and indexed-indirect cases separately
+   on FW `0x0550` through curl/websrv before combining them in one frame.
+7. Expand color targets in hardware-risk order: BGRA8 UNORM/SRGB, RGBA8 SRGB,
+   RGB10A2 UNORM, R11G11B10 FLOAT, then additional 16-bit tuples. Each format
+   requires typed layout/descriptor fixtures, shader write/readback oracles,
+   exact coverage, a completion fence, and sustained VideoOut presentation.
+8. Expand depth/stencil formats after color qualification: D16, S8-only, and
+   D16+S8, with independent compressed/uncompressed gates and no reuse of D32
+   HTILE encodings without hardware evidence.
+9. Continue game-import coverage after the reusable draw/format APIs land;
+   correct Subnautica wrapper coverage and inventory DRAGON QUEST VII
+   Reimagined against the new application-facing surface.
 
 ## Gfx1013 4x MSAA depth gate (hardware validated)
 

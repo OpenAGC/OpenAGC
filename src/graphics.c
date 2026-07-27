@@ -1689,6 +1689,7 @@ int32_t PS5_SYSV_ABI agcGfx1013SetDepthSurface(
     uint32_t depth_size;
     uint32_t z_info;
     uint32_t stencil_info;
+    uint32_t expclear_aspects;
     uint32_t bases[4];
     uint32_t bases_hi[5];
 
@@ -1702,6 +1703,10 @@ int32_t PS5_SYSV_ABI agcGfx1013SetDepthSurface(
         state->last_layer > 0x1fffu || state->depth_read_only > 1u ||
         state->stencil_read_only > 1u || state->htile_enable > 1u ||
         state->allow_expclear > 1u || state->htile_stencil_disable > 1u ||
+        (state->expclear_aspects &
+         ~(AGC_GFX1013_DEPTH_STENCIL_ASPECT_DEPTH |
+           AGC_GFX1013_DEPTH_STENCIL_ASPECT_STENCIL)) != 0u ||
+        (state->expclear_aspects != 0u && !state->allow_expclear) ||
         (state->allow_expclear && !state->htile_enable) ||
         (state->htile_stencil_disable && !state->htile_enable) ||
         !agcGfx1013DepthSampleLog2(state->sample_count, &sample_log2))
@@ -1709,6 +1714,19 @@ int32_t PS5_SYSV_ABI agcGfx1013SetDepthSurface(
     if (!agcGfx1013DepthFormatInfo(
             state->format, &z_format, &stencil_format))
         return AGC_ERROR_NOT_SUPPORTED;
+    expclear_aspects = state->expclear_aspects;
+    if (state->allow_expclear && expclear_aspects == 0u) {
+        if (z_format != 0u)
+            expclear_aspects |= AGC_GFX1013_DEPTH_STENCIL_ASPECT_DEPTH;
+        if (stencil_format != 0u && !state->htile_stencil_disable)
+            expclear_aspects |= AGC_GFX1013_DEPTH_STENCIL_ASPECT_STENCIL;
+    }
+    if (((expclear_aspects &
+          AGC_GFX1013_DEPTH_STENCIL_ASPECT_DEPTH) != 0u && z_format == 0u) ||
+        ((expclear_aspects &
+          AGC_GFX1013_DEPTH_STENCIL_ASPECT_STENCIL) != 0u &&
+         (stencil_format == 0u || state->htile_stencil_disable)))
+        return AGC_ERROR_INVALID_ARGUMENT;
 
     if ((z_format != 0u &&
          (!state->depth_read_address || !state->depth_write_address)) ||
@@ -1766,13 +1784,15 @@ int32_t PS5_SYSV_ABI agcGfx1013SetDepthSurface(
         AGC_REG_SET(DB_Z_INFO, NUM_SAMPLES, sample_log2) |
         AGC_REG_SET(DB_Z_INFO, SW_MODE, state->depth_swizzle_mode) |
         AGC_REG_SET(DB_Z_INFO, MAXMIP, state->mip_level_count - 1u) |
-        AGC_REG_SET(DB_Z_INFO, ALLOW_EXPCLEAR, state->allow_expclear) |
+        AGC_REG_SET(DB_Z_INFO, ALLOW_EXPCLEAR,
+            (expclear_aspects &
+             AGC_GFX1013_DEPTH_STENCIL_ASPECT_DEPTH) != 0u) |
         AGC_REG_SET(DB_Z_INFO, TILE_SURFACE_ENABLE, state->htile_enable);
     stencil_info = AGC_REG_SET(DB_STENCIL_INFO, FORMAT, stencil_format) |
         AGC_REG_SET(DB_STENCIL_INFO, SW_MODE, state->stencil_swizzle_mode) |
         AGC_REG_SET(DB_STENCIL_INFO, ALLOW_EXPCLEAR,
-            state->allow_expclear && stencil_format != 0u &&
-            !state->htile_stencil_disable) |
+            (expclear_aspects &
+             AGC_GFX1013_DEPTH_STENCIL_ASPECT_STENCIL) != 0u) |
         AGC_REG_SET(DB_STENCIL_INFO, TILE_STENCIL_DISABLE,
             state->htile_stencil_disable);
 
@@ -1861,6 +1881,46 @@ int32_t PS5_SYSV_ABI agcGfx1013SetDepthExpclear(
     memcpy(&clear_bits, &state->clear_depth, sizeof(clear_bits));
     if (!agcGfx1013EmitCx(cb, AGC_REG_DB_DEPTH_CLEAR, clear_bits))
         return AGC_ERROR_INTERNAL;
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013SetDepthStencilExpclear(
+    SceAgcCb *cb, const AgcGfx1013DepthStencilExpclearState *state)
+{
+    const uint32_t valid_aspects =
+        AGC_GFX1013_DEPTH_STENCIL_ASPECT_DEPTH |
+        AGC_GFX1013_DEPTH_STENCIL_ASPECT_STENCIL;
+    uint32_t *cmd;
+    uint32_t depth_bits;
+
+    if (!cb || !state || state->aspects == 0u ||
+        (state->aspects & ~valid_aspects) != 0u ||
+        ((state->aspects & AGC_GFX1013_DEPTH_STENCIL_ASPECT_DEPTH) != 0u &&
+         state->clear_depth != 0.0f && state->clear_depth != 1.0f) ||
+        ((state->aspects & AGC_GFX1013_DEPTH_STENCIL_ASPECT_STENCIL) != 0u &&
+         state->clear_stencil > 0xffu))
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (agcCbRemainingDwords(cb) <
+        ((state->aspects == valid_aspects) ? 4u : 3u))
+        return AGC_ERROR_BUFFER_TOO_SMALL;
+
+    memcpy(&depth_bits, &state->clear_depth, sizeof(depth_bits));
+    if (state->aspects == valid_aspects) {
+        cmd = agcCbAllocDwords(cb, 4u);
+        if (!cmd)
+            return AGC_ERROR_INTERNAL;
+        cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 4u);
+        cmd[1] = AGC_REG_DB_STENCIL_CLEAR;
+        cmd[2] = state->clear_stencil;
+        cmd[3] = depth_bits;
+    } else if (state->aspects ==
+            AGC_GFX1013_DEPTH_STENCIL_ASPECT_DEPTH) {
+        if (!agcGfx1013EmitCx(cb, AGC_REG_DB_DEPTH_CLEAR, depth_bits))
+            return AGC_ERROR_INTERNAL;
+    } else if (!agcGfx1013EmitCx(
+            cb, AGC_REG_DB_STENCIL_CLEAR, state->clear_stencil)) {
+        return AGC_ERROR_INTERNAL;
+    }
     return AGC_OK;
 }
 

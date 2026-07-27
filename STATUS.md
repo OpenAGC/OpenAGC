@@ -1,39 +1,37 @@
 # openagc Status
 
-## Typed HTILE compute RMW checkpoint (2026-07-27)
+## FW 5.50 combined stencil/HTILE expclear qualification (2026-07-27)
 
-The exact-range HTILE compute read-modify-write path is now implemented and
-host-qualified. `agcGfx1013RmwHtile` consumes a validated non-tail HTILE
-subresource and aspect plan, derives the exact address/word count, and
-atomically emits the 83-dword DB release/acquire, Wave32 compute dispatch, and
-compute release/DB acquire sequence. It rejects shared mip tails,
-out-of-allocation ranges, short command buffers, and shaders that do not expose
-the required seven user SGPRs plus TGID_X.
+Combined D32+S8 HTILE expclear is enabled after independent qualification on a
+standard PS5 running raw FW `0x05500008`. Depth-only, stencil-only, and combined
+aspect masks each passed twice through foreground curl/websrv while the public
+gate was off. Every run updated exactly 49,152 words in the selected `0x30000`
+HTILE range, changed zero words outside it, preserved reserved and unselected
+aspect bits, reached both completion fences, passed all four draw markers, and
+completed 1,800/1,800 VideoOut flips. No GPU reset, kernel panic, metadata
+spill, timeout, or loader failure occurred.
 
-The new `htile_rmw.comp` shader performs the masked word update while preserving
+The exact RMW results were `0xfffc0300` for depth, `0xfffff0ff` for stencil,
+and `0xfffc00f0` for both. Every downstream draw produced 128,304 green and
+128,304 red pixels; raw D32 contained 1,955,232 clear-one, 128,304 near, and
+128,304 far words; raw S8 contained 2,364,832 zero and 256,608 `0x5a` bytes
+with no other values. `AGC_GFX1013_COMBINED_HTILE_EXPCLEAR_ENABLED` is now one.
+Full evidence and hashes are in
+`analysis/fw550_combined_expclear_qualification_20260727.md`.
+
+## Typed HTILE compute RMW implementation
+
+`agcGfx1013RmwHtile` consumes a validated non-tail HTILE subresource and aspect
+plan, derives the exact address and word count, and atomically emits the
+83-dword DB release/acquire, Wave32 compute dispatch, and compute release/DB
+acquire sequence. It rejects shared mip tails, out-of-allocation ranges, short
+command buffers, and shaders that do not expose seven user SGPRs plus TGID_X.
+
+The `htile_rmw.comp` shader performs masked word updates while preserving
 reserved and unselected-aspect bits. Its psbc record encodes RSRC2 `0x0000008e`
-and the expected five compute registers. Clean generic build/CTest passes, and
-exact host fixtures cover address derivation, word/group counts, user data,
-both synchronization boundaries, atomic failures, and the already-defined
-depth-only, stencil-only, and combined masks. The combined expclear public
-enable constant remains zero.
-
-## Combined stencil/HTILE expclear design gate (2026-07-27)
-
-The combined depth/stencil expclear path now has an explicit aspect-masked
-design but remains hardware-disabled. `agcGfx1013BuildHtileExpclearPlan`
-produces the gfx10 depth mask `0xfffff00f`, stencil mask `0x000003f0`, masked
-clear value, and mandatory read-modify-write flag while preserving reserved and
-unselected-aspect bits. Every plan for an HTILE surface containing stencil
-reports `hardware_enabled=0`; the PS5 fixture also fails compilation if its
-dedicated combined gate is requested while
-`AGC_GFX1013_COMBINED_HTILE_EXPCLEAR_ENABLED` remains zero.
-
-The existing hardware-proven depth-only expclear path is unchanged and remains
-enabled. Clean host tests, the Prospero library, depth-only expclear sample, and
-ordinary combined stencil/HTILE sample all build successfully. No combined
-expclear hardware claim is made. The synchronization design and independent
-activation criteria are in `analysis/combined_htile_expclear_design.md`.
+and five compute registers. Exact host fixtures cover depth-only, stencil-only,
+and combined masks, address derivation, dispatch counts, user data, both
+synchronization boundaries, reserved-bit preservation, and atomic failures.
 
 ## Hardware-sample PM4 promotion checkpoint (2026-07-27)
 

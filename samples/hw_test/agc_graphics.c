@@ -87,6 +87,12 @@
 #define AGC_STENCIL_HTILE_EXPCLEAR_VALIDATION 0
 #endif
 
+#ifndef AGC_EXPCLEAR_ASPECTS
+#define AGC_EXPCLEAR_ASPECTS \
+    (AGC_GFX1013_DEPTH_STENCIL_ASPECT_DEPTH | \
+     AGC_GFX1013_DEPTH_STENCIL_ASPECT_STENCIL)
+#endif
+
 #ifndef AGC_HTILE_MIP_VALIDATION
 #define AGC_HTILE_MIP_VALIDATION 0
 #endif
@@ -138,8 +144,8 @@
 #endif
 
 #if AGC_STENCIL_HTILE_EXPCLEAR_VALIDATION && \
-    !AGC_GFX1013_COMBINED_HTILE_EXPCLEAR_ENABLED
-#error "combined stencil/HTILE expclear is not hardware validated"
+    (AGC_EXPCLEAR_ASPECTS < 1 || AGC_EXPCLEAR_ASPECTS > 3)
+#error "combined expclear validation requires depth, stencil, or both aspects"
 #endif
 
 #if (AGC_HTILE_MIP_VALIDATION + AGC_HTILE_ARRAY_VALIDATION) > 1
@@ -262,6 +268,9 @@
 #if AGC_MSAA_VALIDATION
 #include "shaders/depth_resolve_frag_sb.h"
 #endif
+#if AGC_STENCIL_HTILE_EXPCLEAR_VALIDATION
+#include "shaders/htile_rmw_sb.h"
+#endif
 
 /* Kernel constants fallbacks (if ps5/kernel.h doesn't define them) */
 #ifndef SCE_KERNEL_PROT_CPU_READ
@@ -325,6 +334,18 @@ int sceKernelWaitEqueue(SceKernelEqueue equeue, SceKernelEvent *events,
 #define INDEX_TYPE_16      0u
 #define DEPTH_SWIZZLE_64KB_Z_X AGC_GFX1013_SWIZZLE_64KB_Z_X
 #define DEPTH_HTILE_PROVISIONAL_PIPE_COUNT 8u
+
+#if AGC_STENCIL_HTILE_EXPCLEAR_VALIDATION
+#define DEPTH_HTILE_INITIAL_VALUE \
+    AGC_GFX1013_HTILE_UNCOMPRESSED_DEPTH_STENCIL
+#elif AGC_EXPCLEAR_VALIDATION
+#define DEPTH_HTILE_INITIAL_VALUE AGC_GFX1013_HTILE_CLEAR_DEPTH_ONE
+#elif AGC_STENCIL_HTILE_VALIDATION
+#define DEPTH_HTILE_INITIAL_VALUE \
+    AGC_GFX1013_HTILE_UNCOMPRESSED_DEPTH_STENCIL
+#else
+#define DEPTH_HTILE_INITIAL_VALUE AGC_GFX1013_HTILE_UNCOMPRESSED_DEPTH
+#endif
 
 #if AGC_TESSELLATION
 #define GRAPHICS_POOL_PREFIX 0x30000u
@@ -653,11 +674,7 @@ static bool allocate_display_buffers(GraphicsTest *test) {
         uint32_t *htile = (uint32_t *)test->htile_surface;
         for (size_t i = 0u;
              i < test->htile_surface_size / sizeof(uint32_t); ++i)
-            htile[i] = AGC_EXPCLEAR_VALIDATION ?
-                AGC_GFX1013_HTILE_CLEAR_DEPTH_ONE :
-                (AGC_STENCIL_HTILE_VALIDATION ?
-                    AGC_GFX1013_HTILE_UNCOMPRESSED_DEPTH_STENCIL :
-                    AGC_GFX1013_HTILE_UNCOMPRESSED_DEPTH);
+            htile[i] = DEPTH_HTILE_INITIAL_VALUE;
     } else {
         memset(test->htile_surface, 0, test->htile_surface_size);
     }
@@ -1120,6 +1137,120 @@ static bool dump_launch_registers(const uint32_t *dcb, uint32_t dword_count)
     return ps_wave32;
 }
 
+#if AGC_STENCIL_HTILE_EXPCLEAR_VALIDATION
+static bool validate_combined_expclear_rmw(
+    GraphicsTest *test, const ParsedGraphicsShader *shader,
+    const void *code_address)
+{
+    const AgcGfx1013HtileExpclearPlanState plan_state = {
+        .aspects = AGC_EXPCLEAR_ASPECTS,
+        .clear_depth = 1.0f,
+        .clear_stencil = 0u,
+        .has_stencil = 1u,
+    };
+    AgcGfx1013HtileExpclearPlan plan = {0};
+    int32_t error = agcGfx1013BuildHtileExpclearPlan(&plan_state, &plan);
+    if (error != AGC_OK) {
+        printf("[Combined Expclear RMW] plan failed: 0x%08x\n",
+               (unsigned)error);
+        return false;
+    }
+
+    uint32_t *rmw_cb = (uint32_t *)((uint8_t *)cb_buffer +
+                                     DCB_SECOND_OFFSET);
+    volatile uint32_t *fence = (volatile uint32_t *)((uint8_t *)rmw_cb +
+                                                     DCB_MARKER_OFFSET);
+    const uint32_t fence_value = 0x48544c45u;
+    *fence = 0u;
+
+    SceAgcCb cb;
+    AgcGfx1013ComputeDefaultStats default_stats;
+    agcCbInit(&cb, rmw_cb, STANDARD_DCB_CAPACITY_BYTES);
+    if (agcGfx1013ApplyComputeDefaultsV8(&cb, &default_stats) != AGC_OK)
+        return false;
+
+    const AgcGfx1013HtileRmwState rmw = {
+        .record = shader->record,
+        .sh_registers = shader->sh_regs,
+        .num_sh_registers = shader->num_sh_regs,
+        .code_address = (uint64_t)(uintptr_t)code_address,
+        .htile_address = (uint64_t)(uintptr_t)test->htile_surface,
+        .htile_allocation_size = test->htile_surface_size,
+        .subresource = &test->htile_subresource,
+        .plan = &plan,
+    };
+    const AgcGfx1013ResourceTransition completion = {
+        .before = AGC_GFX1013_RESOURCE_USAGE_DEPTH_STENCIL_WRITE,
+        .after = AGC_GFX1013_RESOURCE_USAGE_HOST_READ,
+        .completion_address = (uint64_t)(uintptr_t)fence,
+        .completion_value = fence_value,
+    };
+    if (agcGfx1013RmwHtile(&cb, &rmw) != AGC_OK ||
+        agcGfx1013TransitionResource(&cb, &completion) != AGC_OK)
+        return false;
+
+    const AgcCommandBufferSubmit submit = {
+        .command_address = (uintptr_t)rmw_cb,
+        .dword_count = agcCbUsedDwords(&cb),
+        .reserved = 0u,
+    };
+    error = sceAgcDriverSubmitDcb(&submit);
+    printf("[Combined Expclear RMW] SubmitDcb: 0x%08x (%s), "
+           "dwords=%u defaults=%u/%u\n",
+           (unsigned)error, errstr(error), submit.dword_count,
+           default_stats.sh_register_count, default_stats.packet_count);
+    if (error != AGC_OK)
+        return false;
+
+    uint32_t waited_us = 0u;
+    while (*fence != fence_value && waited_us < 200000u) {
+        sceKernelUsleep(1000u);
+        waited_us += 1000u;
+    }
+    if (*fence != fence_value) {
+        printf("[Combined Expclear RMW] fence timeout after %u us\n",
+               waited_us);
+        return false;
+    }
+
+    const size_t selected_begin =
+        (size_t)(test->htile_subresource.offset / sizeof(uint32_t));
+    const size_t selected_end = (size_t)(
+        (test->htile_subresource.offset + test->htile_subresource.size) /
+        sizeof(uint32_t));
+    const size_t word_count = test->htile_surface_size / sizeof(uint32_t);
+    const uint32_t expected =
+        (DEPTH_HTILE_INITIAL_VALUE & ~plan.write_mask) |
+        (plan.write_value & plan.write_mask);
+    const uint32_t *words = (const uint32_t *)test->htile_surface;
+    uint32_t selected_mismatch = 0u;
+    uint32_t outside_changed = 0u;
+    uint32_t reserved_mismatch = 0u;
+    for (size_t i = 0u; i < word_count; ++i) {
+        const bool selected = i >= selected_begin && i < selected_end;
+        selected_mismatch += selected && words[i] != expected;
+        outside_changed += !selected &&
+            words[i] != DEPTH_HTILE_INITIAL_VALUE;
+        reserved_mismatch += selected &&
+            (words[i] & ~plan.write_mask) !=
+                (DEPTH_HTILE_INITIAL_VALUE & ~plan.write_mask);
+    }
+    const bool pass = selected_mismatch == 0u && outside_changed == 0u &&
+                      reserved_mismatch == 0u;
+    printf("[Combined Expclear RMW] aspects=0x%x gate=%s "
+           "offset=0x%llx size=0x%llx selected=%zu expected=%08x "
+           "mismatch=%u outside-changed=%u reserved=%s fence=%08x: %s\n",
+           AGC_EXPCLEAR_ASPECTS,
+           plan.hardware_enabled ? "ON" : "OFF",
+           (unsigned long long)test->htile_subresource.offset,
+           (unsigned long long)test->htile_subresource.size,
+           selected_end - selected_begin, expected, selected_mismatch,
+           outside_changed, reserved_mismatch == 0u ? "PASS" : "FAIL",
+           *fence, pass ? "PASS" : "FAIL");
+    return pass;
+}
+#endif
+
 static bool dispatch_graphics(GraphicsTest *test,
                                const ParsedGraphicsShader *front,
                                const ParsedGraphicsShader *back,
@@ -1180,6 +1311,15 @@ static bool dispatch_graphics(GraphicsTest *test,
         back->code, back->code_size, test->compute_buffer, 0x1000);
     void *ps_code = upload_shader(
         ps->code, ps->code_size, test->compute_buffer, 0x4000);
+#if AGC_STENCIL_HTILE_EXPCLEAR_VALIDATION
+    ParsedGraphicsShader htile_rmw;
+    if (!parse_graphics_shader(
+            &htile_rmw, htile_rmw_sb, sizeof(htile_rmw_sb),
+            "HTILE RMW CS"))
+        return false;
+    void *htile_rmw_code = upload_shader(
+        htile_rmw.code, htile_rmw.code_size, test->compute_buffer, 0x6000);
+#endif
 #if AGC_MSAA_VALIDATION
     ParsedGraphicsShader resolve_ps;
     if (!parse_graphics_shader(
@@ -1194,6 +1334,13 @@ static bool dispatch_graphics(GraphicsTest *test,
     printf("NGG back ACO code at %p (%zu bytes)\n",
            back_code, back->code_size);
     printf("PS code at %p (%zu bytes)\n", ps_code, ps->code_size);
+#if AGC_STENCIL_HTILE_EXPCLEAR_VALIDATION
+    printf("HTILE RMW compute code at %p (%zu bytes)\n",
+           htile_rmw_code, htile_rmw.code_size);
+    if (!validate_combined_expclear_rmw(
+            test, &htile_rmw, htile_rmw_code))
+        return false;
+#endif
 
     if (back->num_sh_regs > 24u) {
         printf("NGG back has too many SH registers\n");
@@ -1333,7 +1480,8 @@ static bool dispatch_graphics(GraphicsTest *test,
     }
     uint32_t *depth_words = (uint32_t *)test->depth_surface;
     for (size_t i = 0u; i < test->depth_surface_size / sizeof(uint32_t); ++i)
-        depth_words[i] = 0x7fc00000u;
+        depth_words[i] = AGC_STENCIL_HTILE_EXPCLEAR_VALIDATION ?
+            0x3f800000u : 0x7fc00000u;
     printf("[Depth] uploaded four float3 position/color triangles at %p\n",
            gpu_vertices);
 #else
@@ -1603,6 +1751,8 @@ static bool dispatch_graphics(GraphicsTest *test,
             (uint64_t)(uintptr_t)test->htile_surface : 0u,
         .htile_enable = AGC_HTILE_VALIDATION,
         .allow_expclear = AGC_EXPCLEAR_VALIDATION,
+        .expclear_aspects = AGC_STENCIL_HTILE_EXPCLEAR_VALIDATION ?
+            AGC_EXPCLEAR_ASPECTS : 0u,
     };
     AgcGfx1013DepthStencilState depth_control = {
         .depth_test_enable = 1u,
@@ -1615,10 +1765,22 @@ static bool dispatch_graphics(GraphicsTest *test,
 #if AGC_MSAA_VALIDATION
     blend.targets[0].write_mask = 0xfu;
 #endif
+#if AGC_STENCIL_HTILE_EXPCLEAR_VALIDATION
+    const AgcGfx1013DepthStencilExpclearState expclear = {
+        .aspects = AGC_EXPCLEAR_ASPECTS,
+        .clear_depth = 1.0f,
+        .clear_stencil = 0u,
+    };
+#else
     const AgcGfx1013DepthExpclearState expclear = {1.0f};
+#endif
     if (agcGfx1013SetDepthSurface(&cb, &depth_surface) != AGC_OK ||
         (AGC_EXPCLEAR_VALIDATION &&
+#if AGC_STENCIL_HTILE_EXPCLEAR_VALIDATION
+         agcGfx1013SetDepthStencilExpclear(&cb, &expclear) != AGC_OK) ||
+#else
          agcGfx1013SetDepthExpclear(&cb, &expclear) != AGC_OK) ||
+#endif
         agcGfx1013SetDepthStencilState(&cb, &depth_control) != AGC_OK ||
         agcGfx1013SetColorBlendState(&cb, &blend) != AGC_OK ||
         !sceAgcDcbSetIndexSize(&cb, kAgcIndexSize16, 0u) ||
@@ -1973,11 +2135,7 @@ static bool dispatch_graphics(GraphicsTest *test,
         sizeof(uint32_t));
     for (size_t i = 0u;
          i < test->htile_surface_size / sizeof(uint32_t); ++i) {
-        const uint32_t htile_initial = AGC_EXPCLEAR_VALIDATION ?
-            AGC_GFX1013_HTILE_CLEAR_DEPTH_ONE :
-            (AGC_STENCIL_HTILE_VALIDATION ?
-                AGC_GFX1013_HTILE_UNCOMPRESSED_DEPTH_STENCIL :
-                AGC_GFX1013_HTILE_UNCOMPRESSED_DEPTH);
+        const uint32_t htile_initial = DEPTH_HTILE_INITIAL_VALUE;
         htile_changed += htile[i] != htile_initial;
         htile_selected_changed += htile[i] != htile_initial &&
             i >= htile_selected_begin && i < htile_selected_end;
@@ -1991,10 +2149,7 @@ static bool dispatch_graphics(GraphicsTest *test,
          (htile_selected_changed > 0u && htile_outside_changed == 0u));
     printf("[HTILE Readback] changed=%u other=%u initial=%08x\n",
            htile_changed, htile_other,
-           AGC_EXPCLEAR_VALIDATION ? AGC_GFX1013_HTILE_CLEAR_DEPTH_ONE :
-               (AGC_STENCIL_HTILE_VALIDATION ?
-                    AGC_GFX1013_HTILE_UNCOMPRESSED_DEPTH_STENCIL :
-                    AGC_GFX1013_HTILE_UNCOMPRESSED_DEPTH));
+           DEPTH_HTILE_INITIAL_VALUE);
 #if AGC_HTILE_MIP_VALIDATION || AGC_HTILE_ARRAY_VALIDATION
     printf("[HTILE Subresource Readback] selected-changed=%u "
            "outside-changed=%u\n",
