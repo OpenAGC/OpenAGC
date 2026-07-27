@@ -1673,6 +1673,24 @@ Completed (Phase 5-6, hardware validation):
   tests.
 # Product Roadmap: OpenAGC as a PS5 Homebrew GPU API
 
+## Current FW 5.50 conformance checkpoint (2026-07-27)
+
+The sample completion path now uses a gfx1013 `RELEASE_MEM` EOP fence rather
+than treating a later `WRITE_DATA` marker as proof that shader writes are
+globally visible. Compute repeated with 2,073,600/2,073,600 matching pixels;
+the corrected-fence NGG baseline, amplification, line, invocation, and
+tessellation-geometry-line cases also passed. The line case has direct Chiaki
+evidence that the white outer and internal edges connect at the intended
+vertices. The generic suite passes 3,551 checks.
+
+The next hardware action is one complete invocation of
+`make -C samples/hw_test conformance_fw550` on a fresh FW `0x0550` console
+session. The runner preserves logs and fails closed on a transport timeout,
+instant close, firmware mismatch, missing output gate, or application failure.
+Five post-fence format/tessellation reruns remain pending because real PS5
+hardware is temporarily unavailable. Do not mark the new synchronization
+checkpoint fully qualified until the runner completes all 14 samples.
+
 This is the authoritative execution order for OpenAGC. The product goal is a
 clean, redistributable GPU API that lets homebrew applications and game ports
 compile shaders, allocate GPU resources, build command buffers, submit work,
@@ -1864,12 +1882,11 @@ safely, and adding a profile does not fork the public API.
 
 ## Immediate next goals
 
-1. Reconcile stale documentation that still says compute or graphics execution
-   is unproven with the recorded FW 5.50 hardware results, while distinguishing
-   one-off success from stability.
-2. Move all currently hardware-proven sample PM4 into public typed builders and
-   fixtures, starting with the exact compute and Wave32 VS/PS paths.
-3. Run the FW 5.50 stability matrix through websrv, emphasizing repeat launch,
-   teardown, NGG safety, and prior kernel-panic scenarios.
+1. Run the complete 14-sample deterministic FW `0x0550` websrv matrix on the
+   next available real PS5 and retain its raw logs as qualification evidence.
+2. If instant-close behavior recurs after a fresh launcher session, isolate it
+   as a loader lifecycle failure before changing GPU PM4 or shader state.
+3. Move all currently hardware-proven sample PM4 into public typed builders and
+   fixtures, continuing with synchronization and additional format state.
 4. Correct and document Subnautica wrapper coverage, then inventory the provided
    DRAGON QUEST VII Reimagined executable for required AGC API coverage.

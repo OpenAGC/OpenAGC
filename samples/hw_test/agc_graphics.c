@@ -137,7 +137,13 @@
 #define NGG_DRAW_VERTEX_COUNT 3u
 #define NGG_INPUT_PRIMITIVE_TYPE 4u
 #endif
+#if AGC_NGG_INPUT_LINES || AGC_TESS_GEOMETRY_LINES
+#include "shaders/triangle_line_frag_sb.h"
+#define FRAGMENT_DATA triangle_line_frag_data
+#else
 #include "shaders/triangle_frag_sb.h"
+#define FRAGMENT_DATA triangle_frag_data
+#endif
 
 /* Kernel constants fallbacks (if ps5/kernel.h doesn't define them) */
 #ifndef SCE_KERNEL_PROT_CPU_READ
@@ -1327,10 +1333,12 @@ static bool dispatch_graphics(GraphicsTest *test,
     printf("[Draw] WRITE_DATA marker at 0x%llx\n", (unsigned long long)marker_target);
 
     /* 9. ACQUIRE_MEM — flush GPU caches */
-    if (!sceAgcDcbAcquireMem(
-            &cb, 0u, 0x2ec47fc0u, 0xffffffffu, 0u) ||
-        !sceAgcDcbWriteData(
-            &cb, 2u, 0u, marker_target, &marker_value, 1u, 0u, 0u))
+    /* WRITE_DATA after ACQUIRE_MEM is not an EOP fence.  Match the gfx10
+     * RELEASE_MEM sequence used by the AMD driver so CPU readback begins only
+     * after raster work and cache writeback have completed. */
+    if (!sceAgcCbReleaseMem(
+            &cb, 0x14u, 0x603u, 0u, 3u, marker_target, 1u,
+            marker_value, 0u, 0u, 0u, 0u))
         return false;
 
     /* Trailing NOP */
@@ -1471,10 +1479,16 @@ static bool dispatch_graphics(GraphicsTest *test,
                    (unsigned long long)unique_colors[i]);
         printf("[FP16] Opaque samples: %u; out-of-range components: %u\n",
                opaque_samples, out_of_range_components);
+#if AGC_NGG_INPUT_LINES || AGC_TESS_GEOMETRY_LINES
+        const bool color_pass = unique_color_count == 1u &&
+                                unique_colors[0] == 0x3c003c003c003c00ull;
+#else
+        const bool color_pass = unique_color_count >= 8u;
+#endif
         const bool fp16_pass =
                                changed + coverage_tolerance >= expected_changed &&
                                changed <= expected_changed + coverage_tolerance &&
-                               unique_color_count >= 8u &&
+                               color_pass &&
                                opaque_samples != 0u &&
                                out_of_range_components == 0u;
         printf("[FP16] GFX1013 R16G16B16A16_FLOAT target: %s\n",
@@ -1658,8 +1672,8 @@ int main(void) {
         return 1;
     }
     if (!parse_graphics_shader(
-            &ps, triangle_frag_data,
-            sizeof(triangle_frag_data), "PS")) {
+            &ps, FRAGMENT_DATA,
+            sizeof(FRAGMENT_DATA), "PS")) {
         return 1;
     }
     if (!validate_shader_records(&back, &ps))

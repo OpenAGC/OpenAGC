@@ -504,10 +504,13 @@ static bool dispatch_compute(ComputeTest *test, void *shader_addr,
         return false;
     }
 
-    if (!sceAgcDcbAcquireMem(
-            &cb, 0u, 0x2ec47fc0u, 0xffffffffu, 0u) ||
-        !sceAgcDcbWriteData(
-            &cb, 2u, 0u, post_dispatch, &post_marker, 1u, 0u, 0u) ||
+    /* A following WRITE_DATA packet can execute before all compute waves have
+     * retired.  Use the gfx10 EOP fence sequence from the AMD driver instead:
+     * CACHE_FLUSH_AND_INV_TS_EVENT, GCR sequence + GL2/GLM writeback and
+     * invalidate, LRU cache policy, and SEND_DATA32. */
+    if (!sceAgcCbReleaseMem(
+            &cb, 0x14u, 0x603u, 0u, 3u, post_dispatch, 1u,
+            post_marker, 0u, 0u, 0u, 0u) ||
         !sceAgcCbNop(&cb, 2u)) {
         printf("[Dispatch] completion packet emission failed\n");
         return false;
@@ -571,7 +574,8 @@ int main(void) {
     uint32_t *compute_out_pre = (uint32_t *)((uint8_t *)test.compute_buffer + 0x10000);
     for (uint32_t i = 0; i < test.width * test.height; i++) compute_out_pre[i] = 0xDEADBEEF;
 
-    dispatch_compute(&test, shader_gpu_addr, &shader, fill_color);
+    if (!dispatch_compute(&test, shader_gpu_addr, &shader, fill_color))
+        return 1;
 
     /* Step 5: Verify GPU output */
     printf("\n--- Step 5: Verify GPU output ---\n");
@@ -600,6 +604,9 @@ int main(void) {
         if (buf0[i] == expected) match_count++;
     }
     printf("[Readback] Total: %u/%u pixels match\n", match_count, total_pixels);
+    bool output_complete = match_count == total_pixels;
+    if (!output_complete)
+        printf("[Readback] FAIL: compute dispatch did not fill the entire buffer\n");
 
 
     /* Copy rendered output to display buffer */
@@ -615,5 +622,5 @@ int main(void) {
     printf("[Display] GPU output flip completed\n");
     sceKernelUsleep(1000000);
 
-    return 0;
+    return output_complete ? 0 : 1;
 }

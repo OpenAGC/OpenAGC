@@ -1,5 +1,34 @@
 # openagc Status
 
+## FW 5.50 post-qualification synchronization checkpoint (2026-07-27)
+
+The compute and graphics hardware samples now terminate GPU work with a gfx1013
+`RELEASE_MEM` end-of-pipe fence using event `0x14`, GCR control `0x603`, cache
+policy 3, and 32-bit fence data. This replaces the weaker
+`ACQUIRE_MEM`-plus-`WRITE_DATA` diagnostic, which could become visible before
+all shader color writes reached CPU readback. Two consecutive compute runs
+each matched all 2,073,600 pixels. Corrected-fence NGG baseline, amplification,
+line-input, invocation, and tessellation-geometry-line runs reached their
+completion fences, passed target validation, and completed 1,800/1,800 flips.
+
+The line fixtures use a dedicated constant-white pixel shader so interpolation
+cannot hide valid edges. Direct Chiaki capture confirmed that the tessellated
+outer sides and internal line endpoints are connected; the remaining faint
+dotted appearance is one-pixel rasterization plus remote-stream scaling. The
+run changed 6,749 FP16 pixels, emitted one exact opaque-white FP16 color, and
+completed without a GPU hang or kernel panic.
+
+`samples/hw_test/run_fw550_conformance.sh` now defines the authoritative
+ordered websrv matrix. It uses isolated remote paths, bounded foreground
+launches, persistent logs, numeric FW `0x0550` verification, exact per-sample
+gates, and fail-fast handling for timeouts, disconnects, instant closes, or
+failure markers. The clean generic suite passes 3,551 checks with zero
+failures. The remaining post-fence RGBA8 and tessellation reruns are explicitly
+pending because the available Homebrew Launcher began closing known-good ELFs
+immediately and real PS5 hardware is no longer available. Earlier hardware
+qualification remains valid historical evidence, but it does not substitute
+for completing this new runner on a fresh console session.
+
 ## FW 5.50 reusable Wave32 VS+PS baseline
 
 ### Reusable gfx1013 fixed-function state
@@ -189,9 +218,9 @@ microtriangle. Its record programs `out_prim=1`, `max_vert_out=4`, and
 `GE_CNTL=0x40` while retaining the tessellation ring ABI. FW 5.500.008 produced
 6,749 changed FP16 pixels versus the dimension-derived 5,760 estimate within
 the 1,536-pixel rasterization tolerance, bounds `x=384..1151, y=435..1100`,
-eight sampled colors, 3,044 opaque samples, zero out-of-range components, four
+one exact opaque-white FP16 color, 6,749 opaque samples, zero out-of-range components, four
 `4.0` factors, 24 changed offchip dwords, a live post-draw marker, and
-1,800/1,800 display flips. The PS5 display showed the expected colorful
+1,800/1,800 display flips. The PS5 display showed the expected connected white
 equal-sided triangular wire grid on gray without a GPU hang or kernel panic.
 
 The isolated combined-stage RGBA8 target is hardware-validated. The

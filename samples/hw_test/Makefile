@@ -54,6 +54,21 @@ AGC_LDFLAGS := $(OPENAGC_LIB) -lSceVideoOut -lkernel
 
 all: videoout_linear.elf agc_init.elf agc_videoout.elf agc_compute.elf agc_graphics.elf agc_tessellation.elf agc_tess_geometry.elf agc_tess_geometry_invocations.elf agc_tess_geometry_lines.elf agc_tess_geometry_rgba8.elf
 
+FW550_CONFORMANCE_ELFS := \
+	videoout_linear.elf agc_init.elf agc_videoout.elf agc_compute.elf \
+	agc_graphics.elf agc_graphics_rgba8.elf agc_graphics_amplify.elf \
+	agc_graphics_lines.elf agc_graphics_invocations.elf \
+	agc_tessellation.elf agc_tess_geometry.elf \
+	agc_tess_geometry_invocations.elf agc_tess_geometry_lines.elf \
+	agc_tess_geometry_rgba8.elf
+
+.PHONY: conformance_fw550 conformance_fw550_check
+conformance_fw550: $(FW550_CONFORMANCE_ELFS)
+	PS5_HOST=$(PS5_HOST) ./run_fw550_conformance.sh
+
+conformance_fw550_check: $(FW550_CONFORMANCE_ELFS)
+	./run_fw550_conformance.sh --check
+
 # VideoOut linear smoke test (no GPU commands)
 videoout_linear.elf: videoout_linear.c ps5_video_out.h
 	$(CC) $(CFLAGS) -o $@ videoout_linear.c $(VIDEOOUT_LDFLAGS)
@@ -77,6 +92,9 @@ shaders/triangle_vert.spv: shaders/triangle.vert
 shaders/triangle_frag.spv: shaders/triangle.frag
 	$(GLSLANG) -V --target-env vulkan1.2 $< -o $@
 
+shaders/triangle_line_frag.spv: shaders/triangle_line.frag
+	$(GLSLANG) -V --target-env vulkan1.2 $< -o $@
+
 shaders/triangle_geom.spv: shaders/triangle.geom
 	$(GLSLANG) -V --target-env vulkan1.2 $< -o $@
 
@@ -97,6 +115,12 @@ shaders/triangle_frag.sb: shaders/triangle_frag.spv
 
 shaders/triangle_frag_sb.h: shaders/triangle_frag.sb
 	xxd -i -n triangle_frag_data $< $@
+
+shaders/triangle_line_frag.sb: shaders/triangle_line_frag.spv
+	$(PSBC) -f $< -s fragment -o $@
+
+shaders/triangle_line_frag_sb.h: shaders/triangle_line_frag.sb
+	xxd -i -n triangle_line_frag_data $< $@
 
 # Regenerate a merged gfx1013 VS+GS NGG program and C headers.
 shaders_ngg: shaders/triangle_vert.spv shaders/triangle_geom.spv
@@ -248,7 +272,7 @@ agc_graphics.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/trian
 agc_graphics_amplify.elf: shaders_ngg_amplify agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_NGG_AMPLIFY=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
 
-agc_graphics_lines.elf: shaders_ngg_lines agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+agc_graphics_lines.elf: shaders_ngg_lines agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_line_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_NGG_INPUT_LINES=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
 
 agc_graphics_invocations.elf: shaders_ngg_invocations agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
@@ -266,7 +290,7 @@ agc_tess_geometry.elf: shaders_tess_geometry agc_graphics.c ps5_video_out.h gpu_
 agc_tess_geometry_invocations.elf: shaders_tess_geometry_invocations agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_TESSELLATION=1 -DAGC_TESS_GEOMETRY=1 -DAGC_TESS_GEOMETRY_INVOCATIONS=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
 
-agc_tess_geometry_lines.elf: shaders_tess_geometry_lines agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+agc_tess_geometry_lines.elf: shaders_tess_geometry_lines agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_line_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_TESSELLATION=1 -DAGC_TESS_GEOMETRY=1 -DAGC_TESS_GEOMETRY_LINES=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
 
 agc_tess_geometry_rgba8.elf: shaders_tess_geometry agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
@@ -326,22 +350,22 @@ pkg_agc_videoout: agc_videoout.bin
 
 pkg_all: pkg_videoout pkg_agc pkg_agc_videoout
 
-# === Deploy (exploited PS5 via ELF loader) ===
+# === Deploy (exploited PS5 through etaHEN websrv) ===
 
 deploy_videoout: videoout_linear.elf
-	$(PS5_DEPLOY) -h $(PS5_HOST) -p $(PS5_PORT) $<
+	PS5_HOST=$(PS5_HOST) ./run_fw550_conformance.sh --sample videoout_linear
 
 deploy_agc: agc_init.elf
-	$(PS5_DEPLOY) -h $(PS5_HOST) -p $(PS5_PORT) $<
+	PS5_HOST=$(PS5_HOST) ./run_fw550_conformance.sh --sample agc_init
 
 deploy_agc_videoout: agc_videoout.elf
-	$(PS5_DEPLOY) -h $(PS5_HOST) -p $(PS5_PORT) $<
+	PS5_HOST=$(PS5_HOST) ./run_fw550_conformance.sh --sample agc_videoout
 
 deploy_agc_compute: agc_compute.elf
-	$(PS5_DEPLOY) -h $(PS5_HOST) -p $(PS5_PORT) $<
+	PS5_HOST=$(PS5_HOST) ./run_fw550_conformance.sh --sample agc_compute
 
 deploy_agc_graphics: agc_graphics.elf
-	$(PS5_DEPLOY) -h $(PS5_HOST) -p $(PS5_PORT) $<
+	PS5_HOST=$(PS5_HOST) ./run_fw550_conformance.sh --sample agc_graphics
 
 # === Install (debug-mode PS5 via FTP) ===
 

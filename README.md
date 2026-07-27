@@ -149,6 +149,22 @@ curl -sS \
     "http://$PS5_HOST:8080/hbldr?pipe=1&daemon=0&path=/data/homebrew/agc_wave32/eboot.elf"
 ```
 
+For the complete ordered FW 5.50 matrix, use the deterministic runner instead
+of launching samples manually:
+
+```sh
+make -C samples/hw_test conformance_fw550_check
+make -C samples/hw_test conformance_fw550 PS5_HOST="$PS5_HOST"
+```
+
+`conformance_fw550_check` validates that every local ELF in the matrix exists.
+The hardware target uploads each ELF to a fresh per-run directory, launches it
+in the foreground, enforces a bounded timeout, verifies the numeric `0x0550`
+firmware profile and sample-specific output gates, and stops at the first
+failure so loader processes cannot overlap. Raw logs are retained under
+`samples/hw_test/conformance-logs/<run-id>/`. A timeout, disconnected curl,
+instant close, missing gate, `FAIL`, or `FATAL` marker fails the run.
+
 `pipe=1` streams the validation log to curl and `daemon=0` keeps the launch in
 the foreground. The expected display is a dark-gray background with a centered,
 blended-color triangle. The payload must report Wave32 record and PM4 passes,
