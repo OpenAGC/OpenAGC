@@ -80,6 +80,10 @@
 #define AGC_S8_ONLY_VALIDATION 0
 #endif
 
+#ifndef AGC_D16_S8_VALIDATION
+#define AGC_D16_S8_VALIDATION 0
+#endif
+
 #ifndef AGC_STENCIL_VALIDATION
 #define AGC_STENCIL_VALIDATION 0
 #endif
@@ -140,9 +144,15 @@
 #error "the isolated S8 gate keeps depth formats, MSAA, and HTILE disabled"
 #endif
 
-#if AGC_D16_VALIDATION && (AGC_STENCIL_VALIDATION || AGC_MSAA_VALIDATION || \
-                           AGC_HTILE_VALIDATION)
+#if AGC_D16_VALIDATION && !AGC_D16_S8_VALIDATION && \
+    (AGC_STENCIL_VALIDATION || AGC_MSAA_VALIDATION || AGC_HTILE_VALIDATION)
 #error "the isolated D16 gate keeps stencil, MSAA, and HTILE disabled"
+#endif
+
+#if AGC_D16_S8_VALIDATION && \
+    (!AGC_D16_VALIDATION || !AGC_STENCIL_VALIDATION || \
+     AGC_MSAA_VALIDATION || AGC_HTILE_VALIDATION)
+#error "D16+S8 requires typed depth/stencil with MSAA and HTILE disabled"
 #endif
 
 #if AGC_MSAA_VALIDATION && !AGC_DEPTH_VALIDATION
@@ -622,7 +632,9 @@ static bool allocate_display_buffers(GraphicsTest *test) {
         .layer_count = DEPTH_FIXTURE_LAYER_COUNT,
         .mip_level_count = DEPTH_FIXTURE_MIP_COUNT,
         .sample_count = AGC_MSAA_VALIDATION ? 4u : 1u,
-        .format = AGC_S8_ONLY_VALIDATION ?
+        .format = AGC_D16_S8_VALIDATION ?
+            AGC_GFX1013_DEPTH_FORMAT_D16_UNORM_S8_UINT :
+            AGC_S8_ONLY_VALIDATION ?
             AGC_GFX1013_DEPTH_FORMAT_S8_UINT :
             AGC_D16_VALIDATION ?
             AGC_GFX1013_DEPTH_FORMAT_D16_UNORM :
@@ -641,8 +653,9 @@ static bool allocate_display_buffers(GraphicsTest *test) {
         depth_layout.depth.allocation_size > SIZE_MAX ||
         depth_layout.stencil.allocation_size > SIZE_MAX) {
         printf("%s layout query failed: 0x%08x\n",
-               AGC_S8_ONLY_VALIDATION ? "S8" :
-                   (AGC_D16_VALIDATION ? "D16" : "D32"),
+               AGC_D16_S8_VALIDATION ? "D16+S8" :
+                   (AGC_S8_ONLY_VALIDATION ? "S8" :
+                    (AGC_D16_VALIDATION ? "D16" : "D32")),
                (unsigned)layout_ret);
         return false;
     }
@@ -1870,7 +1883,9 @@ static bool dispatch_graphics(GraphicsTest *test,
             (uint64_t)(uintptr_t)test->stencil_surface : 0u,
         .width = target->width,
         .height = target->height,
-        .format = AGC_S8_ONLY_VALIDATION ?
+        .format = AGC_D16_S8_VALIDATION ?
+            AGC_GFX1013_DEPTH_FORMAT_D16_UNORM_S8_UINT :
+            AGC_S8_ONLY_VALIDATION ?
             AGC_GFX1013_DEPTH_FORMAT_S8_UINT :
             AGC_D16_VALIDATION ?
             AGC_GFX1013_DEPTH_FORMAT_D16_UNORM :
@@ -2333,7 +2348,8 @@ static bool dispatch_graphics(GraphicsTest *test,
         stencil_other += stencil[i] != 0u && stencil[i] != 0x5au;
     }
     const bool stencil_pass = stencil_zero != 0u &&
-        (AGC_S8_ONLY_VALIDATION ? stencil_replace == 256608u :
+        ((AGC_S8_ONLY_VALIDATION || AGC_D16_S8_VALIDATION) ?
+            stencil_replace == 256608u :
                                   stencil_replace > 1000u) &&
         stencil_other == 0u;
 #else
@@ -2944,16 +2960,18 @@ int main(void) {
             "4x depth validation RGBA8" : "depth validation RGBA8"
     };
     printf("\n--- Step 4: %s%s%s depth pass/fail draw ---\n",
-           AGC_S8_ONLY_VALIDATION ? "S8-only" :
-               (AGC_D16_VALIDATION ? "D16" : "D32"),
-           AGC_S8_ONLY_VALIDATION ? "" :
+           AGC_D16_S8_VALIDATION ? "D16+S8" :
+               (AGC_S8_ONLY_VALIDATION ? "S8-only" :
+                (AGC_D16_VALIDATION ? "D16" : "D32")),
+           (AGC_S8_ONLY_VALIDATION || AGC_D16_S8_VALIDATION) ? "" :
                (AGC_STENCIL_VALIDATION ? "+S8 stencil" : ""),
            AGC_MSAA_VALIDATION ? "+4x MSAA" : "");
     if (!dispatch_graphics(&test, &front, &back, &ps, &depth_target)) {
         printf("FATAL: %s%s validation failed\n",
-               AGC_S8_ONLY_VALIDATION ? "S8-only" :
-                   (AGC_D16_VALIDATION ? "D16" : "D32"),
-               AGC_S8_ONLY_VALIDATION ? "" :
+               AGC_D16_S8_VALIDATION ? "D16+S8" :
+                   (AGC_S8_ONLY_VALIDATION ? "S8-only" :
+                    (AGC_D16_VALIDATION ? "D16" : "D32")),
+               (AGC_S8_ONLY_VALIDATION || AGC_D16_S8_VALIDATION) ? "" :
                    (AGC_STENCIL_VALIDATION ? "+S8 stencil" : " depth"));
         return 1;
     }

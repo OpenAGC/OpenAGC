@@ -1,5 +1,16 @@
 # openagc Status
 
+## FW 5.50 D16+S8 qualification (2026-07-27)
+
+The typed uncompressed `D16_UNORM_S8_UINT` path is hardware-qualified on
+standard PS5 FW `0x05500008` with separate `64KB_Z_X` depth and stencil
+planes. HTILE, MSAA, and expclear remain disabled. Both websrv runs produced
+exactly 128,304 green and 128,304 red pixels; native D16 contained 909,792
+clear-one, 128,304 near, and 128,304 far values; native S8 contained 2,364,832
+zero and 256,608 `0x5a` bytes with no other values. All markers and 1 ms
+fences passed, each run completed 1,800/1,800 flips, and live kernel logs were
+free of GPU fault, reset, process-stop, and panic signatures.
+
 ## FW 5.50 S8-only stencil qualification (2026-07-27)
 
 The typed gfx1013 uncompressed `S8_UINT` path is hardware-qualified on

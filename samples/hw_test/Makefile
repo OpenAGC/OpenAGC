@@ -372,6 +372,9 @@ agc_depth_d16.elf: shaders_depth agc_graphics.c ps5_video_out.h gpu_credentials.
 agc_stencil_s8.elf: shaders_depth agc_graphics.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_DEPTH_VALIDATION=1 -DAGC_STENCIL_VALIDATION=1 -DAGC_S8_ONLY_VALIDATION=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
 
+agc_depth_stencil_d16_s8.elf: shaders_depth agc_graphics.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_DEPTH_VALIDATION=1 -DAGC_D16_VALIDATION=1 -DAGC_STENCIL_VALIDATION=1 -DAGC_D16_S8_VALIDATION=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
+
 agc_depth_stencil.elf: shaders_depth agc_graphics.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_DEPTH_VALIDATION=1 -DAGC_STENCIL_VALIDATION=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
 
