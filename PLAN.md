@@ -1371,7 +1371,9 @@ After interpolants pass, proceed in this order:
    harmless. Standalone `sceAgcDriverSubmitDcb` also emits the frame-state
    operation and trailer so its caller DCB executes in the current submit. Two
    immediate deployments each passed three repeated two-DCB
-   iterations with unique ordered markers and zero polling delay.
+   iterations with unique ordered markers and zero polling delay. Vulkan-PS5
+   additionally passed two standalone compute and two standalone triangle
+   EOP/readback runs through this path on FW `0x05500008`.
 8. ✅ Validate isolated Wave32 tessellation. Fused HS and TES records execute
    through the reusable gfx1013 binder and the recovered non-Direct TF-ring
    ABI. The factor ring contains four `4.0` factors, readback contains 255,744

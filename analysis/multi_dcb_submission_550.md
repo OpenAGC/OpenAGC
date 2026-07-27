@@ -55,6 +55,10 @@ Observed on a real PS5 running FW 5.50:
   frame-state operation and appends the same trailer. This prevents a public
   single-DCB submission from returning success while leaving the caller's work
   deferred until another submission.
+- On 2026-07-27 UTC, Vulkan-PS5 revision `039fcce` qualified this standalone
+  path against OpenAGC `c893506` on FW `0x05500008`: two compute submissions
+  each reached EOP and verified 1,024 deterministic words, while two graphics
+  submissions each reached EOP and verified exactly 18,432 triangle pixels.
 
 The repeated result proves that the kernel copies and queues the complete
 descriptor array in order, but the exploited-payload graphics-ring context

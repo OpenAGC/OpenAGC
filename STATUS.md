@@ -1354,7 +1354,10 @@ appends a dedicated GPU-visible NOP IB trailer after all caller DCB/ACB
 descriptors; the deferred descriptor is harmless and all caller work executes
 in the current frame. The standalone `sceAgcDriverSubmitDcb` path now uses the
 same frame-state operation and trailer so its caller DCB also executes in the
-current submit. Two immediate public-wrapper deployments each completed
+current submit. Vulkan-PS5 then qualified this standalone path twice with a
+1,024-value compute dispatch and twice with an 18,432-pixel triangle on FW
+`0x05500008`; every run reached its EOP label and deterministic readback oracle.
+Two immediate public-wrapper deployments each completed
 three unique-marker iterations with zero polling delay, then completed async
 setup, queue operations, suspend submission, and workload begin/end without a
 freeze.
