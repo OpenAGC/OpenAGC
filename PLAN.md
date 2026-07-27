@@ -1928,11 +1928,29 @@ safely, and adding a profile does not fork the public API.
 
 ## Immediate next goals
 
+### Completed host goal: typed gfx1013 depth-surface binding
+
+OpenAGC now has a reusable, atomic `agcGfx1013SetDepthSurface` builder for
+gfx1013 depth/stencil memory state. It covers typed D16, D32, S8, D16+S8, and
+D32+S8 surfaces; independent depth/stencil read and write bases; gfx103
+swizzle modes; mip and array-layer views; 1x/2x/4x/8x samples; read-only
+aspects; and optional HTILE/expclear state. Exact host fixtures lock the
+24-dword register stream, including 48-bit address splitting, and negative
+fixtures prove that malformed formats, aspect/address combinations, sample
+counts, alignment, and undersized command buffers fail atomically.
+
+This is host qualification only. Before advertising depth or stencil as
+hardware-ready, add a minimal FW `0x0550` depth sample, verify depth writes and
+comparisons by GPU readback, exercise read-only transitions, then qualify
+stencil and HTILE separately. Keep HTILE disabled for the first hardware run.
+
 1. Run the complete 14-sample deterministic FW `0x0550` websrv matrix on the
    next available real PS5 and retain its raw logs as qualification evidence.
 2. If instant-close behavior recurs after a fresh launcher session, isolate it
    as a loader lifecycle failure before changing GPU PM4 or shader state.
-3. Move all currently hardware-proven sample PM4 into public typed builders and
+3. Hardware-qualify the typed depth-surface and depth/stencil-control builders
+   on FW `0x0550`, first uncompressed, then stencil, multisampling, and HTILE.
+4. Move remaining hardware-proven sample PM4 into public typed builders and
    fixtures, continuing with synchronization and additional format state.
-4. Correct and document Subnautica wrapper coverage, then inventory the provided
+5. Correct and document Subnautica wrapper coverage, then inventory the provided
    DRAGON QUEST VII Reimagined executable for required AGC API coverage.

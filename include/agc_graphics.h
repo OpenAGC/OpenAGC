@@ -62,6 +62,7 @@ extern "C" {
 #define AGC_GFX1013_FRAME_POST_BIND_DWORDS        21u
 #define AGC_GFX1013_BLEND_STATE_DWORDS            19u
 #define AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS    14u
+#define AGC_GFX1013_DEPTH_SURFACE_DWORDS           24u
 #define AGC_GFX1013_MAX_COLOR_TARGETS              8u
 #define AGC_GFX1013_CONTEXT_CONTROL_ENABLE 0x80000000u
 #define AGC_GFX1013_NGG_MODE_CONTROL        0x00000200u
@@ -223,6 +224,38 @@ typedef struct AgcGfx1013ColorTargetState {
     uint32_t number_type;
     uint32_t component_swap;
 } AgcGfx1013ColorTargetState;
+
+typedef enum AgcGfx1013DepthSurfaceFormat {
+    AGC_GFX1013_DEPTH_FORMAT_D16_UNORM = 0,
+    AGC_GFX1013_DEPTH_FORMAT_D32_FLOAT,
+    AGC_GFX1013_DEPTH_FORMAT_S8_UINT,
+    AGC_GFX1013_DEPTH_FORMAT_D16_UNORM_S8_UINT,
+    AGC_GFX1013_DEPTH_FORMAT_D32_FLOAT_S8_UINT,
+    AGC_GFX1013_DEPTH_FORMAT_COUNT
+} AgcGfx1013DepthSurfaceFormat;
+
+typedef struct AgcGfx1013DepthSurfaceState {
+    uint64_t depth_read_address;
+    uint64_t depth_write_address;
+    uint64_t stencil_read_address;
+    uint64_t stencil_write_address;
+    uint64_t htile_address;
+    uint32_t width;
+    uint32_t height;
+    AgcGfx1013DepthSurfaceFormat format;
+    uint32_t depth_swizzle_mode;
+    uint32_t stencil_swizzle_mode;
+    uint32_t mip_level;
+    uint32_t mip_level_count;
+    uint32_t first_layer;
+    uint32_t last_layer;
+    uint32_t sample_count;
+    uint32_t depth_read_only;
+    uint32_t stencil_read_only;
+    uint32_t htile_enable;
+    uint32_t allow_expclear;
+    uint32_t htile_stencil_disable;
+} AgcGfx1013DepthSurfaceState;
 
 typedef struct AgcGfx1013ViewportState {
     uint32_t width;
@@ -403,6 +436,8 @@ int32_t PS5_SYSV_ABI agcGfx1013InitColorTarget(
     uint32_t height, AgcGfx1013ColorTargetFormat format);
 int32_t PS5_SYSV_ABI agcGfx1013SetColorTarget(
     SceAgcCb *cb, const AgcGfx1013ColorTargetState *state);
+int32_t PS5_SYSV_ABI agcGfx1013SetDepthSurface(
+    SceAgcCb *cb, const AgcGfx1013DepthSurfaceState *state);
 int32_t PS5_SYSV_ABI agcGfx1013SetViewport(
     SceAgcCb *cb, const AgcGfx1013ViewportState *state);
 int32_t PS5_SYSV_ABI agcGfx1013SetScissor(

@@ -68,12 +68,12 @@ static void test_register_offsets_uc(void) {
 }
 
 static void test_bitfield_macros(void) {
-    /* DB_Z_INFO: set FORMAT=2 (16-bit depth), TILE_MODE_INDEX=5 */
+    /* gfx103 DB_Z_INFO: set FORMAT=2 and SW_MODE=5 */
     uint32_t z_info = 0;
     z_info |= AGC_REG_SET(DB_Z_INFO, FORMAT, 2u);
-    z_info |= AGC_REG_SET(DB_Z_INFO, TILE_MODE_INDEX, 5u);
+    z_info |= AGC_REG_SET(DB_Z_INFO, SW_MODE, 5u);
     TEST_ASSERT_EQ(AGC_REG_GET(z_info, DB_Z_INFO, FORMAT), 2u, "DB_Z_INFO.FORMAT extract");
-    TEST_ASSERT_EQ(AGC_REG_GET(z_info, DB_Z_INFO, TILE_MODE_INDEX), 5u, "DB_Z_INFO.TILE_MODE_INDEX extract");
+    TEST_ASSERT_EQ(AGC_REG_GET(z_info, DB_Z_INFO, SW_MODE), 5u, "DB_Z_INFO.SW_MODE extract");
 
     /* CB_BLEND0_CONTROL: set ENABLE=1, COLOR_SRCBLEND=2 */
     uint32_t blend = 0;

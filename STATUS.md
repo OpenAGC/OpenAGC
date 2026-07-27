@@ -1310,6 +1310,26 @@ verified from SPRX/kernel disassembly.
   at 0x18, mmio_base at 0x20, queue_id at 0x28. Ring buffer is carved
   from EOP FIFO base + 0x39000, not separately allocated.
 
+## Typed gfx1013 depth-surface binding
+
+Host implementation is complete for typed gfx1013 depth-surface memory state.
+`agcGfx1013SetDepthSurface` emits a deterministic 24-dword packet stream for
+`DB_DEPTH_VIEW`, `DB_HTILE_DATA_BASE`, `DB_DEPTH_SIZE_XY`, `DB_Z_INFO`,
+`DB_STENCIL_INFO`, four depth/stencil read/write bases, and their five high
+address fields. Supported typed combinations are D16, D32 float, S8, D16+S8,
+and D32 float+S8, with gfx103 swizzle modes, mip/layer selection, 1x through
+8x samples, read-only aspects, and optional HTILE/expclear controls.
+
+Validation rejects zero, unaligned, or wider-than-48-bit required addresses;
+unused aspect addresses; invalid extents, views, samples, and flags; ambiguous
+HTILE state; unsupported formats; and short command buffers without advancing
+the cursor. The stale gfx103 `DB_Z_INFO[8:4]` tile-mode-index name was corrected
+to the hardware-defined `SW_MODE` field.
+
+No PS5 hardware claim is made yet. FW `0x0550` qualification must begin with an
+uncompressed depth-only sample and GPU readback, then add stencil, MSAA, and
+HTILE as separate gates when a real PS5 is available.
+
 ## Non-Goals For Current Milestone
 
 - No firmware blobs or proprietary microcode are embedded.

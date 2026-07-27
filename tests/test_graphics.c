@@ -1130,6 +1130,87 @@ static void test_gfx1013_blend_depth_stencil_packets(void)
         "invalid stencil op is atomic");
 }
 
+static void test_gfx1013_depth_surface_packets(void)
+{
+    uint32_t buffer[AGC_GFX1013_DEPTH_SURFACE_DWORDS] = {0};
+    SceAgcCb cb;
+    AgcGfx1013DepthSurfaceState surface = {
+        .depth_read_address = 0x0000123456789000ull,
+        .depth_write_address = 0x0000123456790000ull,
+        .stencil_read_address = 0x0000123456800000ull,
+        .stencil_write_address = 0x0000123456810000ull,
+        .htile_address = 0x0000123456820000ull,
+        .width = 1920u,
+        .height = 1080u,
+        .format = AGC_GFX1013_DEPTH_FORMAT_D32_FLOAT_S8_UINT,
+        .depth_swizzle_mode = 13u,
+        .stencil_swizzle_mode = 14u,
+        .mip_level = 3u,
+        .mip_level_count = 8u,
+        .first_layer = 0x801u,
+        .last_layer = 0x1002u,
+        .sample_count = 4u,
+        .depth_read_only = 1u,
+        .htile_enable = 1u,
+        .allow_expclear = 1u,
+    };
+    const uint32_t expected[AGC_GFX1013_DEPTH_SURFACE_DWORDS] = {
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
+        AGC_REG_DB_DEPTH_VIEW, 0x8d004801u,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
+        AGC_REG_DB_HTILE_DATA_BASE, 0x34568200u,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
+        AGC_REG_DB_DEPTH_SIZE_XY, 0x0437077fu,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 8u),
+        AGC_REG_DB_Z_INFO, 0x280700dbu, 0x080000e1u,
+        0x34567890u, 0x34568000u, 0x34567900u, 0x34568100u,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 7u),
+        AGC_REG_DB_Z_READ_BASE_HI,
+        0x12u, 0x12u, 0x12u, 0x12u, 0x12u,
+    };
+
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetDepthSurface(&cb, &surface), AGC_OK,
+        "gfx1013 typed depth surface emits");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), AGC_GFX1013_DEPTH_SURFACE_DWORDS,
+        "gfx1013 depth surface exact dword count");
+    TEST_ASSERT(memcmp(buffer, expected, sizeof(expected)) == 0,
+        "gfx1013 depth surface exact packet stream");
+
+    agcCbReset(&cb, buffer,
+        (AGC_GFX1013_DEPTH_SURFACE_DWORDS - 1u) * sizeof(uint32_t));
+    TEST_ASSERT_EQ(agcGfx1013SetDepthSurface(&cb, &surface),
+        AGC_ERROR_BUFFER_TOO_SMALL, "short depth surface rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "short depth surface is atomic");
+
+    surface.depth_read_address++;
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetDepthSurface(&cb, &surface),
+        AGC_ERROR_INVALID_ALIGNMENT, "unaligned depth address rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "unaligned depth surface is atomic");
+    surface.depth_read_address--;
+    surface.sample_count = 3u;
+    TEST_ASSERT_EQ(agcGfx1013SetDepthSurface(&cb, &surface),
+        AGC_ERROR_INVALID_ARGUMENT, "invalid depth sample count rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "invalid sample count is atomic");
+    surface.sample_count = 4u;
+    surface.format = AGC_GFX1013_DEPTH_FORMAT_D32_FLOAT;
+    TEST_ASSERT_EQ(agcGfx1013SetDepthSurface(&cb, &surface),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "depth-only format rejects stencil addresses");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "mismatched depth aspects are atomic");
+    surface.format = (AgcGfx1013DepthSurfaceFormat)
+        AGC_GFX1013_DEPTH_FORMAT_COUNT;
+    TEST_ASSERT_EQ(agcGfx1013SetDepthSurface(&cb, &surface),
+        AGC_ERROR_NOT_SUPPORTED, "unknown depth format rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "unsupported depth format is atomic");
+}
+
 static void test_gfx1013_graphics_defaults_v8(void)
 {
     uint32_t buffer[2184] = {0};
@@ -1618,6 +1699,7 @@ void test_suite_graphics(void)
     TEST_RUN(test_gfx1013_resource_transitions);
     TEST_RUN(test_gfx1013_fixed_function_packets);
     TEST_RUN(test_gfx1013_blend_depth_stencil_packets);
+    TEST_RUN(test_gfx1013_depth_surface_packets);
     TEST_RUN(test_gfx1013_frame_state);
     TEST_RUN(test_gfx1013_graphics_defaults_v8);
     TEST_RUN(test_gfx1013_fixed_function_rejects_atomically);
