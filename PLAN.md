@@ -16,6 +16,15 @@ AMD PM4 packet ancestry overlap in useful ways.
 
 ## Current Execution Order
 
+### FW 5.50 application-neutral initialization gate
+
+- Prospero initialization now owns the GPU ucred preparation required before
+  `/dev/gc` access. The public ABI and generic backend remain firmware-neutral;
+  the FW 5.50 thread-ucred offsets live only in `driver_prospero.c`.
+- Higher-level consumers such as Vulkan-PS5 no longer need a sample-only
+  credential header. The next gate is repeated FW 5.50 compute and graphics
+  execution through foreground websrv.
+
 ### Hardware-validated gate: gfx1013 D32 depth surface
 
 - `agcGfx1013GetDepthSurfaceLayout` calculates separate depth and stencil

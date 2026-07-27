@@ -23,6 +23,10 @@ builds with ps5-payload-sdk; hardware validation is the remaining step.
 ## Features
 
 - **AGC driver API surface** — `sceAgcDriver*` submission, SDMA, setup
+- **Prospero process preparation** — `sce_agc_initialize` privately prepares
+  the payload's GPU authorization before opening `/dev/gc`; on FW 5.50 it also
+  repairs a detached `td_ucred` using the hardware-proven kernel layout, so
+  higher-level APIs and ordinary applications need no launcher/sample header
 - **ACB command building** — `sceAgcAcb*` async compute buffer packets
   (event write, atomic mem/GDS, cond exec, wait-reg-mem, write/copy/dma data,
   mem semaphore, acquire mem, queue reset, rewind, set flip, workload
@@ -68,7 +72,7 @@ builds with ps5-payload-sdk; hardware validation is the remaining step.
 - **Two backend targets:**
   - `generic` — pure software implementation for host testing
   - `prospero` — native PS5 `/dev/gc` backend with ioctl submission and internal
-    memory allocation
+    memory allocation, including fail-closed process authorization setup
 - **Binary-compatible struct layouts** — `_Static_assert` verified sizes
 - **Hardware validation samples** — `samples/hw_test/` builds ELF + fake-SELF
   packages for VideoOut and AGC init smoke tests

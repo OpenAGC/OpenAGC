@@ -55,6 +55,7 @@
 #include <stdio.h>
 #include <errno.h>
 #include <machine/cpufunc.h>
+#include <ps5/kernel.h>
 
 #ifdef OPENAGC_PROSPERO
 
@@ -154,6 +155,7 @@ typedef struct {
     bool             async_setup_done;/* agcProsperoSetupAsyncGraphics succeeded */
     void            *mmio_base;      /* GPU register MMIO mapping (0xfe0200000) */
     uint32_t         ctx_capability; /* context query result from ioctl 0x2e */
+    uint32_t         firmware_version; /* raw system-software version */
     AgcProsperoRuntimeProfile profile; /* firmware and hardware ABI profile */
     AgcProsperoQueue    queues[AGC_PROSPERO_MAX_QUEUES];
     /* Internal memory regions — sizes from SPRX disassembly (FW 5.50) */
@@ -211,6 +213,7 @@ int32_t agcProsperoConfigureRuntimeProfile(uint32_t raw_version)
     if (!agcProsperoBuildRuntimeProfile(raw_version, is_trinity,
             &g_prospero.profile))
         return AGC_ERROR_NOT_SUPPORTED;
+    g_prospero.firmware_version = raw_version;
     printf("[openagc] profile fw=0x%08X family=%s model=%s "
            "submit=0x%08X queue_auth=%u tf_ring=%u eop=0x%X "
            "gpu_info=0x%X cwsr_work=0x%X cwsr_size=0x%X\n",
@@ -223,6 +226,69 @@ int32_t agcProsperoConfigureRuntimeProfile(uint32_t raw_version)
            g_prospero.profile.gpu_info_span,
            g_prospero.profile.cwsr_work_offset,
            g_prospero.profile.cwsr_size);
+    return AGC_OK;
+}
+
+#define AGC_GPU_AUTHID_REQUIRED 0x4801000000000000ull
+#define AGC_GPU_AUTHID_MASK 0xff0f000000000000ull
+#define AGC_FW550_PROC_THREADS_OFFSET 0x10u
+#define AGC_FW550_PROC_UCRED_OFFSET 0x40u
+#define AGC_FW550_THREAD_NEXT_OFFSET 0x10u
+#define AGC_FW550_THREAD_UCRED_OFFSET 0x140u
+#define AGC_FW550_UCRED_AUTHID_OFFSET 0x58u
+
+/* Prepare the payload process for /dev/gc before any file descriptor is
+ * opened. The SDK helper updates p_ucred. FW 5.50's ioctl path reads
+ * curthread->td_ucred, so also repair a detached thread credential using the
+ * offsets proven by the hardware qualification samples. Keeping this inside
+ * the Prospero backend lets ordinary OpenAGC and Vulkan clients stay unaware
+ * of kernel credential layout. */
+static int32_t agcProsperoPrepareGpuCredentials(void)
+{
+    pid_t pid = getpid();
+    uint64_t authid;
+
+    if (kernel_set_ucred_authid(pid, AGC_GPU_AUTHID_REQUIRED) != 0)
+        return AGC_ERROR_NOT_INITIALIZED;
+    authid = kernel_get_ucred_authid(pid);
+    if ((authid & AGC_GPU_AUTHID_MASK) != AGC_GPU_AUTHID_REQUIRED)
+        return AGC_ERROR_NOT_INITIALIZED;
+
+    if ((g_prospero.firmware_version & 0xffff0000u) == 0x05500000u) {
+        intptr_t proc = kernel_get_proc(pid);
+        uint64_t process_ucred = 0u;
+        uint64_t thread;
+        uint32_t thread_count = 0u;
+
+        if (proc == 0 || kernel_copyout(
+                proc + AGC_FW550_PROC_UCRED_OFFSET, &process_ucred,
+                sizeof(process_ucred)) != 0 || process_ucred == 0u)
+            return AGC_ERROR_NOT_INITIALIZED;
+        thread = kernel_getlong(proc + AGC_FW550_PROC_THREADS_OFFSET);
+        while (thread != 0u && thread_count < 64u) {
+            uint64_t thread_ucred = 0u;
+
+            if (kernel_copyout(
+                    (intptr_t)thread + AGC_FW550_THREAD_UCRED_OFFSET,
+                    &thread_ucred, sizeof(thread_ucred)) != 0 ||
+                thread_ucred == 0u)
+                return AGC_ERROR_NOT_INITIALIZED;
+            if (thread_ucred != process_ucred) {
+                if (kernel_copyin(&authid,
+                        (intptr_t)thread_ucred +
+                            AGC_FW550_UCRED_AUTHID_OFFSET,
+                        sizeof(authid)) != 0)
+                    return AGC_ERROR_NOT_INITIALIZED;
+            }
+            thread = kernel_getlong(
+                (intptr_t)thread + AGC_FW550_THREAD_NEXT_OFFSET);
+            ++thread_count;
+        }
+        if (thread_count == 0u || thread != 0u)
+            return AGC_ERROR_NOT_INITIALIZED;
+    }
+
+    printf("[openagc] GPU process authorization prepared\n");
     return AGC_OK;
 }
 
@@ -412,6 +478,9 @@ int32_t PS5_SYSV_ABI agcProsperoInitialize(void)
 {
     if (g_prospero.initialized)
         return AGC_OK;
+
+    if (agcProsperoPrepareGpuCredentials() != AGC_OK)
+        return AGC_ERROR_NOT_INITIALIZED;
 
     /* Step 1: Open /dev/gc */
     g_prospero.gc_fd = open(AGC_GC_DEVICE_PATH, O_RDWR);

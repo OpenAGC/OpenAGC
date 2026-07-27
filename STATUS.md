@@ -1,5 +1,17 @@
 # openagc Status
 
+## Application-neutral GPU authorization (2026-07-28)
+
+The Prospero `sce_agc_initialize` path now prepares the payload process for
+`/dev/gc` before opening the device. It uses the payload SDK's ucred helper and,
+for the primary FW 5.50 profile, repairs any detached thread ucred through the
+same offsets proven by the hardware samples. Failures return
+`AGC_ERROR_NOT_INITIALIZED`; firmware-specific kernel layout remains private to
+`driver_prospero.c`. This removes the prior hidden requirement that every
+OpenAGC/Vulkan consumer include `samples/hw_test/gpu_credentials.h`. The generic
+suite remains unchanged and passing, and the Prospero archive cross-builds with
+strict warnings enabled. Real-console requalification remains pending.
+
 ## Compute descriptor resource tables (2026-07-27)
 
 `AgcGfx1013ComputeState` now carries application-neutral resource-table
