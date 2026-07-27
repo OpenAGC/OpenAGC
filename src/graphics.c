@@ -2509,14 +2509,20 @@ int32_t PS5_SYSV_ABI agcGfx1013BuildFramePrologue(
 int32_t PS5_SYSV_ABI agcGfx1013ApplyFramePostBind(
     SceAgcCb *cb, const AgcGfx1013FrameState *state)
 {
+    AgcGfx1013ColorTargetFormatInfo format_info;
+
     if (!cb)
         return AGC_ERROR_INVALID_ARGUMENT;
     int32_t error = agcGfx1013ValidateFrameState(state);
     if (error != AGC_OK)
         return error;
+    if (!agcGfx1013FindColorTargetFormat(&state->color_target, &format_info))
+        return AGC_ERROR_NOT_SUPPORTED;
     if (agcCbRemainingDwords(cb) < AGC_GFX1013_FRAME_POST_BIND_DWORDS)
         return AGC_ERROR_BUFFER_TOO_SMALL;
     if (agcGfx1013SetDepthDisabled(cb) != AGC_OK ||
+        !agcGfx1013EmitCx(cb, AGC_REG_SPI_SHADER_COL_FORMAT,
+            format_info.spi_shader_export_format) ||
         !agcGfx1013EmitCx(
             cb, AGC_REG_PA_CL_CLIP_CNTL, state->clip_control) ||
         !agcGfx1013EmitCx(

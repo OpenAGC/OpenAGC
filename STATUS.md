@@ -1,5 +1,21 @@
 # openagc Status
 
+## FW 5.50 R8 UNORM render-target qualification (2026-07-27)
+
+The typed gfx1013 `R8_UNORM` linear render-target path is hardware-qualified
+on standard PS5 FW `0x05500008`. The reusable frame post-bind builder now
+derives `SPI_SHADER_COL_FORMAT` from the active color-target tuple; R8 uses CB
+format `0x01`, UNORM number type `0`, standard component swap, and FP16_ABGR
+shader export. Exact host fixtures cover this state and the updated 24-dword
+post-bind stream.
+
+Two identical curl/websrv runs each changed 255,043 of 2,359,296 native R8
+pixels, found eight distinct stored values, and produced deterministic FNV64
+`0x6fe253259c7b0455`. Both draws passed the Wave32 audit, post-draw marker, and
+1 ms completion fence; each preview completed 1,800/1,800 flips. Both live
+ps5debug-NG kernel logs were free of panic, bad-packet, page-fault, GPU-reset,
+process-stop, privilege-register, watchdog, and fatal signatures.
+
 ## FW 5.50 D16/HTILE expclear qualification (2026-07-27)
 
 The typed gfx1013 `D16_UNORM` HTILE expclear path is hardware-qualified on

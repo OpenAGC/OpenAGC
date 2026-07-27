@@ -363,6 +363,21 @@ agc_graphics_r16_float.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h sha
 agc_graphics_rg16_float.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_VALIDATE_RG16_FLOAT=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
 
+agc_graphics_r8_unorm.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_VALIDATE_R8_UNORM=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_graphics_rg8_unorm.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_VALIDATE_RG8_UNORM=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_graphics_r32_float.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_VALIDATE_R32_FLOAT=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_graphics_rg32_float.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_VALIDATE_RG32_FLOAT=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_graphics_rgba32_float.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_VALIDATE_RGBA32_FLOAT=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
+
 agc_depth.elf: shaders_depth agc_graphics.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_DEPTH_VALIDATION=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
 
