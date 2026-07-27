@@ -79,7 +79,9 @@ samples reveal integration requirements, not missing PM4 builders.
 Status: command construction and FW 5.50 hardware validation are complete.
 `agc_compute.c` now uses public APIs for defaults, binding, dispatch,
 diagnostic writes, cache visibility, NOP, and submission. Bounded completion
-still replaces the temporary 200 ms wait before the full goal is closed.
+is also complete: an ordered GPU-written marker is polled from CPU-visible
+memory with a 200 ms timeout. The FW 5.50 run reached it after 1 ms and retained
+2,073,600/2,073,600 matching pixels.
 
 1. Add a typed `CONTEXT_CONTROL` builder with an exact FW 5.50 fixture.
 2. Add `AgcGfx1013ComputeState` validation and binding for Wave32 program

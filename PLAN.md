@@ -224,9 +224,12 @@ compute validation/binding/dispatch state, and FW 5.50 compute-default emission.
 and submission calls exclusively; the curl/websrv FW 5.50 run produced
 2,073,600/2,073,600 matching pixels and completed the display flip.
 
-The next implementation step is bounded GPU completion followed by gfx1013
-descriptor serialization/table binding, which is shared by compute and
-graphics. Each closed goal must update the
+The compute sample now places a public `ACQUIRE_MEM` before an ordered
+GPU-written completion marker and polls that CPU-visible fence with a bounded
+timeout. FW 5.50 reached the fence after 1 ms and retained full pixel coverage.
+
+The next implementation step is gfx1013 descriptor serialization and table
+binding, which is shared by compute and graphics. Each closed goal must update the
 documentation, pass clean generic and Prospero builds, pass host fixtures, and
 be committed before hardware promotion.
 

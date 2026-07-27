@@ -1051,7 +1051,9 @@ emitted headers. Exact host fixtures cover the packet stream and atomic failure.
 The compute sample now constructs no raw PM4 or register packets: it uses the
 typed compute path and public diagnostic/barrier builders. FW 5.50 websrv
 validation passed with 2,073,600/2,073,600 pixels matching `0xFF00FF00`, both
-post-submit markers visible, and a completed VideoOut flip.
+post-submit markers visible, and a completed VideoOut flip. The fixed 200 ms
+delay has been replaced by an ordered public `ACQUIRE_MEM` plus `WRITE_DATA`
+completion fence with a bounded 200 ms timeout; hardware reached it after 1 ms.
 
 The hardware-sample PM4 audit is complete. Existing gfx1013 VS/PS,
 tessellation, render-target, viewport, scissor, and baseline draw helpers are

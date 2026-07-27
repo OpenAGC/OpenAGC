@@ -473,6 +473,8 @@ static bool dispatch_compute(ComputeTest *test, void *shader_addr,
     uint64_t garlic_target = (uint64_t)(uintptr_t)compute_out +
         (size_t)total_pixels * sizeof(uint32_t) - sizeof(uint32_t);
     uint64_t post_dispatch = (uint64_t)(uintptr_t)cb_buffer + 0x1008u;
+    volatile uint32_t *completion_fence =
+        (volatile uint32_t *)(uintptr_t)post_dispatch;
     uint32_t flex_marker = 0x12345678u;
     uint32_t garlic_marker = 0xcafebabeu;
     uint32_t post_marker = 0xabcdef01u;
@@ -480,6 +482,7 @@ static bool dispatch_compute(ComputeTest *test, void *shader_addr,
     int32_t result;
 
     agcCbInit(&cb, cb_buffer, cb_buffer_dwords * sizeof(uint32_t));
+    *completion_fence = 0u;
     if (!apply_sh_defaults(&cb))
         return false;
 
@@ -501,10 +504,10 @@ static bool dispatch_compute(ComputeTest *test, void *shader_addr,
         return false;
     }
 
-    if (!sceAgcDcbWriteData(
-            &cb, 2u, 0u, post_dispatch, &post_marker, 1u, 0u, 0u) ||
-        !sceAgcDcbAcquireMem(
+    if (!sceAgcDcbAcquireMem(
             &cb, 0u, 0x2ec47fc0u, 0xffffffffu, 0u) ||
+        !sceAgcDcbWriteData(
+            &cb, 2u, 0u, post_dispatch, &post_marker, 1u, 0u, 0u) ||
         !sceAgcCbNop(&cb, 2u)) {
         printf("[Dispatch] completion packet emission failed\n");
         return false;
@@ -519,8 +522,18 @@ static bool dispatch_compute(ComputeTest *test, void *shader_addr,
         return false;
     }
 
-    printf("[Dispatch] Waiting 200ms for GPU to finish...\n");
-    sceKernelUsleep(200000);
+    uint32_t waited_us = 0u;
+    while (*completion_fence != post_marker && waited_us < 200000u) {
+        sceKernelUsleep(1000u);
+        waited_us += 1000u;
+    }
+    if (*completion_fence != post_marker) {
+        printf("[Dispatch] GPU completion fence timed out after %u us\n",
+               waited_us);
+        return false;
+    }
+    printf("[Dispatch] GPU completion fence reached after %u us\n",
+           waited_us);
     return true;
 }
 
