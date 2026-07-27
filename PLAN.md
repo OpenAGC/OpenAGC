@@ -213,11 +213,19 @@ Work in this order:
    requirement. FW `0x0320` remains the lowest active compatibility target;
    FW `0x0100` and 2.x remain archival.
 
-The next implementation goal is item 1: produce a table of raw/sample-only
-operations versus reusable public APIs, then close the gaps required for a
-public-API-only triangle and compute application. Each closed goal must update
-the documentation, pass clean generic and Prospero builds, pass host fixtures,
-and be committed before hardware promotion.
+The sample-only PM4 audit is complete in
+`analysis/sample_pm4_public_api_audit.md`. It classifies the exact reusable,
+partial, missing, platform-only, and diagnostic operations in the FW 5.50
+hardware samples.
+
+The next implementation goal is the reusable compute vertical slice: add typed
+`CONTEXT_CONTROL`, a gfx1013 compute validator/binder and dispatch state, replace
+duplicate raw `WRITE_DATA`/`ACQUIRE_MEM`, and provide bounded completion. Then
+convert `agc_compute.c` to the public API and repeat the FW 5.50 curl/websrv
+hardware test. Descriptor serialization/table binding follows immediately
+because it is shared by compute and graphics. Each closed goal must update the
+documentation, pass clean generic and Prospero builds, pass host fixtures, and
+be committed before hardware promotion.
 
 #### Retail ABI evidence retained by the project
 

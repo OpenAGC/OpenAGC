@@ -1042,6 +1042,14 @@ six-byte `0x8A6C1000` stubs and leave caller state untouched.
 Eight resource/GDS exports match the bundled FW 5.50 driver's six-byte
 `0x8A6C9018` stubs with recovered SysV signatures, and the three capture
 controls return the exact `0x8A6C1000` status. All preserve caller outputs.
+The hardware-sample PM4 audit is complete. Existing gfx1013 VS/PS,
+tessellation, render-target, viewport, scissor, and baseline draw helpers are
+reusable. Blocking homebrew API gaps are a typed compute binder, gfx1013
+buffer/image descriptor serialization and table binding, context-control
+construction, and bounded GPU completion. See
+`analysis/sample_pm4_public_api_audit.md` for the operation matrix and ordered
+vertical-slice exit criteria.
+
 Subnautica (`PPSA02453`) content `01.022.394` passes the strict analyzer with
 63/63 AGC imports covered. The exact executable hash, SDK `0x0400` metadata,
 five versioned wrappers, and the distinction between static API coverage and
