@@ -1089,96 +1089,47 @@ static bool dispatch_graphics(GraphicsTest *test,
     SceAgcCb cb;
     agcCbInit(&cb, dispatch_cb, DCB_CAPACITY_BYTES);
 
-    /* 0. Notify CP to load context state. */
-    if (agcGfx1013SetContextControl(
-            &cb, 0x80000000u, 0x80000000u) != AGC_OK)
-        return false;
-    printf("[Dispatch] CONTEXT_CONTROL: load enable\n");
-
-    /* Activate the hardware graphics defaults. FW 5.50's exported builder
-     * emits IT_CLEAR_STATE (0x12); the earlier backend experiment used the
-     * unrelated 0x14 opcode and therefore did not test CLEAR_STATE. */
-    if (!sceAgcDcbClearState(&cb, 0)) {
-        printf("[Dispatch] CLEAR_STATE allocation failed\n");
-        return false;
-    }
-    printf("[Dispatch] CLEAR_STATE: opcode 0x12, state 0\n");
-
-    /* 1. Apply FW 5.50 register defaults. */
+    const AgcGfx1013FrameState frame_state = {
+        .color_target = {
+            (uint64_t)(uintptr_t)rt_addr,
+            target->width,
+            target->height,
+            target->color_format,
+            target->number_type,
+            target->component_swap,
+        },
+        .viewport = {target->width, target->height},
+        .scissor = {0u, 0u, target->width, target->height},
+        .target_mask = AGC_GFX1013_TARGET_MASK_RGBA0,
+        .context_load_control = AGC_GFX1013_CONTEXT_CONTROL_ENABLE,
+        .context_shadow_control = AGC_GFX1013_CONTEXT_CONTROL_ENABLE,
+        .clear_state_flags = 0u,
+        .min_vertex_index = 0u,
+        .vertex_index_offset = 0u,
+        .max_vertex_index = 0xffffffffu,
+        .ngg_mode_control = AGC_GFX1013_NGG_MODE_CONTROL,
+        .vertex_reuse_block_control = AGC_GFX1013_VERTEX_REUSE_BLOCK,
+        .instance_step_rate = 1u,
+        .clip_control = 0u,
+        .raster_mode_control = 0u,
+    };
     AgcGfx1013GraphicsDefaultStats default_stats;
-    int32_t state_error = agcGfx1013ApplyGraphicsDefaultsV8(
-        &cb, &default_stats);
+    int32_t state_error = agcGfx1013BuildFramePrologue(
+        &cb, &frame_state, &default_stats);
     if (state_error != AGC_OK) {
-        printf("[Dispatch] graphics defaults failed: %s\n",
+        printf("[Dispatch] reusable frame prologue failed: %s\n",
                errstr(state_error));
         return false;
     }
+    printf("[Dispatch] CONTEXT_CONTROL: load enable\n");
+    printf("[Dispatch] CLEAR_STATE: opcode 0x12, state 0\n");
     printf("[Dispatch] Applied %u SH, %u CX, %u UC register defaults\n",
            default_stats.sh_register_count,
            default_stats.cx_register_count,
            default_stats.uc_register_count);
 
-    /* 2. Set up render target */
-    const AgcGfx1013ColorTargetState color_target = {
-        (uint64_t)(uintptr_t)rt_addr,
-        target->width,
-        target->height,
-        target->color_format,
-        target->number_type,
-        target->component_swap,
-    };
-    state_error = agcGfx1013SetColorTarget(&cb, &color_target);
-    if (state_error != AGC_OK) {
-        printf("[RT] reusable color-target state failed: %s\n",
-               errstr(state_error));
-        return false;
-    }
     printf("[RT] reusable gfx1013 color target: %ux%u format=0x%x\n",
            target->width, target->height, target->color_format);
-
-    /* 2b. Disable depth-buffer state after applying the shader CX block. */
-    /* (moved to after PS CX registers below) */
-
-    /* 3. Set up viewport, scissor, target mask */
-    const AgcGfx1013ViewportState viewport = {
-        target->width, target->height
-    };
-    const AgcGfx1013ScissorState scissor = {
-        0u, 0u, target->width, target->height
-    };
-    state_error = agcGfx1013SetViewport(&cb, &viewport);
-    if (state_error == AGC_OK)
-        state_error = agcGfx1013SetScissor(&cb, &scissor);
-    if (state_error == AGC_OK)
-        state_error = agcGfx1013SetTargetMask(
-            &cb, AGC_GFX1013_TARGET_MASK_RGBA0);
-    if (state_error != AGC_OK) {
-        printf("[Raster] reusable viewport/scissor/mask failed: %s\n",
-               errstr(state_error));
-        return false;
-    }
-    const AgcRegisterValue vertex_bounds[] = {
-        {AGC_REG_GE_MIN_VTX_INDX, 0x00000000u},
-        {AGC_REG_GE_INDX_OFFSET, 0x00000000u},
-        {AGC_REG_GE_MAX_VTX_INDX, 0xffffffffu},
-    };
-    for (uint32_t i = 0;
-         i < (uint32_t)(sizeof(vertex_bounds) / sizeof(vertex_bounds[0]));
-         i++) {
-        sceAgcCbSetUcRegistersDirect(&cb, &vertex_bounds[i], 1);
-    }
-    const AgcRegisterValue gfx10_launch_context[] = {
-        {AGC_REG_PA_SC_NGG_MODE_CNTL, 0x00000200u},
-        {AGC_REG_VGT_VERTEX_REUSE_BLOCK_CNTL, 14u},
-    };
-    for (uint32_t i = 0;
-         i < (uint32_t)(sizeof(gfx10_launch_context) /
-                        sizeof(gfx10_launch_context[0]));
-         i++) {
-        sceAgcCbSetCxRegistersDirect(&cb, &gfx10_launch_context[i], 1);
-    }
-    AgcRegisterValue instance_step = {0x2a8, 1u};
-    sceAgcCbSetCxRegistersDirect(&cb, &instance_step, 1);
 
     /* 4. Derive primitive and interpolant state from fused records. */
 #if AGC_TESSELLATION
@@ -1247,29 +1198,17 @@ static bool dispatch_graphics(GraphicsTest *test,
      * Shader formats,
      * stage selection, primitive type, and interpolants came from compiler
      * records and the OpenAGC state builders above. */
-    const AgcRegisterValue post_bind_cx[] = {
-        {AGC_REG_DB_DEPTH_INFO, 0u},
-        {AGC_REG_DB_Z_INFO, 0u},
-        {AGC_REG_DB_STENCIL_INFO, 0u},
-        {AGC_REG_DB_SHADER_CONTROL, 0x10u},
-        {AGC_REG_DB_DEPTH_CONTROL, 0u},
-        {AGC_REG_PA_CL_CLIP_CNTL, 0u},
-        {AGC_REG_PA_SU_SC_MODE_CNTL, 0u},
-    };
-
     /* 7. Establish the NGG stage ABI with canonical auto-generated vertex
      * IDs. Indexed offset semantics are a separate PM4 validation case. */
 #if AGC_TESSELLATION
     const AgcGfx1013TessDrawState tess_draw = {
         .shaders = tess_shaders,
+        .frame = &frame_state,
         .tessellation = &tess_state,
         .hull_resource_tables = &primitive_resource_table,
         .num_hull_resource_tables = 1u,
         .pixel_resource_tables = &pixel_resource_table,
         .num_pixel_resource_tables = 1u,
-        .post_bind_cx_registers = post_bind_cx,
-        .num_post_bind_cx_registers =
-            (uint32_t)(sizeof(post_bind_cx) / sizeof(post_bind_cx[0])),
         .instance_count = 1u,
         .vertex_count = NGG_DRAW_VERTEX_COUNT,
         .draw_modifier = 0x40000000u,
@@ -1286,13 +1225,11 @@ static bool dispatch_graphics(GraphicsTest *test,
 #else
     const AgcGfx1013BaselineDrawState baseline_draw = {
         .shaders = baseline_shaders,
+        .frame = &frame_state,
         .primitive_resource_tables = &primitive_resource_table,
         .num_primitive_resource_tables = 1u,
         .pixel_resource_tables = &pixel_resource_table,
         .num_pixel_resource_tables = 1u,
-        .post_bind_cx_registers = post_bind_cx,
-        .num_post_bind_cx_registers =
-            (uint32_t)(sizeof(post_bind_cx) / sizeof(post_bind_cx[0])),
         .index_type = kAgcIndexSize16,
         .index_swap = 0u,
         .instance_count = 1u,

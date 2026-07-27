@@ -1689,6 +1689,13 @@ event/GCR/cache-policy sequence, while `agcGfx1013DrawTessIndexAuto` owns the
 validated HS/TES/GS/PS bind, resource, post-bind context, override, instance,
 and draw ordering. Hardware samples no longer open-code either sequence.
 
+The remaining frame/launch sequence is also promoted. A single
+`AgcGfx1013FrameState` now drives the atomic context-control, clear-state, V8
+defaults, color-target, viewport, scissor, target-mask, vertex-bound, and NGG
+launch prologue. Both baseline and tessellation draw composers apply its
+depth-disabled and clip/raster state after shader binding, preserving the
+hardware-proven overwrite order.
+
 The next hardware action is one complete invocation of
 `make -C samples/hw_test conformance_fw550` on a fresh FW `0x0550` console
 session. The runner preserves logs and fails closed on a transport timeout,

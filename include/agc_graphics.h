@@ -36,6 +36,12 @@ extern "C" {
 #define AGC_GFX1013_EOP_GCR_CONTROL            0x603u
 #define AGC_GFX1013_EOP_CACHE_POLICY_LRU          3u
 
+#define AGC_GFX1013_FRAME_PROLOGUE_DWORDS       2275u
+#define AGC_GFX1013_FRAME_POST_BIND_DWORDS        21u
+#define AGC_GFX1013_CONTEXT_CONTROL_ENABLE 0x80000000u
+#define AGC_GFX1013_NGG_MODE_CONTROL        0x00000200u
+#define AGC_GFX1013_VERTEX_REUSE_BLOCK              14u
+
 typedef struct AgcGfx1013ShaderBinding {
     const AgcShaderRecord *record;
     const AgcRegisterValue *sh_registers;
@@ -83,6 +89,24 @@ typedef struct AgcGfx1013ScissorState {
     uint32_t right;
     uint32_t bottom;
 } AgcGfx1013ScissorState;
+
+typedef struct AgcGfx1013FrameState {
+    AgcGfx1013ColorTargetState color_target;
+    AgcGfx1013ViewportState viewport;
+    AgcGfx1013ScissorState scissor;
+    uint32_t target_mask;
+    uint32_t context_load_control;
+    uint32_t context_shadow_control;
+    uint32_t clear_state_flags;
+    uint32_t min_vertex_index;
+    uint32_t vertex_index_offset;
+    uint32_t max_vertex_index;
+    uint32_t ngg_mode_control;
+    uint32_t vertex_reuse_block_control;
+    uint32_t instance_step_rate;
+    uint32_t clip_control;
+    uint32_t raster_mode_control;
+} AgcGfx1013FrameState;
 
 typedef struct AgcGfx1013GraphicsDefaultStats {
     uint32_t sh_register_count;
@@ -145,6 +169,7 @@ _Static_assert(sizeof(AgcGfx1013TessellationRingTable) == 128,
 
 typedef struct AgcGfx1013BaselineDrawState {
     AgcGfx1013Wave32VsPsState shaders;
+    const AgcGfx1013FrameState *frame;
     const AgcGfx1013ResourceTableBinding *primitive_resource_tables;
     uint32_t num_primitive_resource_tables;
     const AgcGfx1013ResourceTableBinding *pixel_resource_tables;
@@ -164,6 +189,7 @@ typedef struct AgcGfx1013BaselineDrawState {
 
 typedef struct AgcGfx1013TessDrawState {
     AgcGfx1013Wave32TessVsPsState shaders;
+    const AgcGfx1013FrameState *frame;
     const AgcGfx1013TessellationState *tessellation;
     const AgcGfx1013ResourceTableBinding *hull_resource_tables;
     uint32_t num_hull_resource_tables;
@@ -209,6 +235,11 @@ int32_t PS5_SYSV_ABI agcGfx1013SetScissor(
 int32_t PS5_SYSV_ABI agcGfx1013SetTargetMask(
     SceAgcCb *cb, uint32_t mask);
 int32_t PS5_SYSV_ABI agcGfx1013SetDepthDisabled(SceAgcCb *cb);
+int32_t PS5_SYSV_ABI agcGfx1013BuildFramePrologue(
+    SceAgcCb *cb, const AgcGfx1013FrameState *state,
+    AgcGfx1013GraphicsDefaultStats *stats);
+int32_t PS5_SYSV_ABI agcGfx1013ApplyFramePostBind(
+    SceAgcCb *cb, const AgcGfx1013FrameState *state);
 int32_t PS5_SYSV_ABI agcGfx1013SetContextControl(
     SceAgcCb *cb, uint32_t load_control, uint32_t shadow_control);
 int32_t PS5_SYSV_ABI agcGfx1013ValidateCompute(

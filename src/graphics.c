@@ -16,6 +16,8 @@
 
 static int32_t agcGfx1013ValidateTessellationState(
     const AgcGfx1013TessellationState *state);
+static int32_t agcGfx1013ValidateFrameState(
+    const AgcGfx1013FrameState *state);
 
 static bool agcGfx1013AddressIsProgramCompatible(uint64_t address)
 {
@@ -351,6 +353,11 @@ int32_t PS5_SYSV_ABI agcGfx1013DrawBaselineIndexAuto(
     error = agcGfx1013ValidateVsPs(&state->shaders);
     if (error != AGC_OK)
         return error;
+    if (state->frame) {
+        error = agcGfx1013ValidateFrameState(state->frame);
+        if (error != AGC_OK)
+            return error;
+    }
     if (state->num_primitive_resource_tables != 0u) {
         error = agcGfx1013ValidateResourceTables(
             &state->shaders.primitive, state->primitive_resource_tables,
@@ -377,6 +384,8 @@ int32_t PS5_SYSV_ABI agcGfx1013DrawBaselineIndexAuto(
          state->num_post_bind_sh_registers +
          state->num_post_bind_cx_registers +
          state->num_post_bind_uc_registers) * 3u;
+    if (state->frame)
+        required_dwords += AGC_GFX1013_FRAME_POST_BIND_DWORDS;
     if (agcCbRemainingDwords(cb) < required_dwords)
         return AGC_ERROR_BUFFER_TOO_SMALL;
 
@@ -398,6 +407,9 @@ int32_t PS5_SYSV_ABI agcGfx1013DrawBaselineIndexAuto(
         if (error != AGC_OK)
             return error;
     }
+    if (state->frame &&
+        agcGfx1013ApplyFramePostBind(cb, state->frame) != AGC_OK)
+        return AGC_ERROR_INTERNAL;
     for (i = 0; i < state->num_post_bind_sh_registers; ++i) {
         if (!sceAgcCbSetShRegistersDirect(
                 cb, &state->post_bind_sh_registers[i], 1u)) {
@@ -621,6 +633,11 @@ int32_t PS5_SYSV_ABI agcGfx1013DrawTessIndexAuto(
     error = agcGfx1013ValidateWave32TessVsPs(&state->shaders);
     if (error != AGC_OK)
         return error;
+    if (state->frame) {
+        error = agcGfx1013ValidateFrameState(state->frame);
+        if (error != AGC_OK)
+            return error;
+    }
     error = agcGfx1013ValidateTessellationState(state->tessellation);
     if (error != AGC_OK)
         return error;
@@ -659,6 +676,8 @@ int32_t PS5_SYSV_ABI agcGfx1013DrawTessIndexAuto(
          pixel_resource_count + state->num_post_bind_sh_registers +
          state->num_post_bind_cx_registers +
          state->num_post_bind_uc_registers) * 3u;
+    if (state->frame)
+        required_dwords += AGC_GFX1013_FRAME_POST_BIND_DWORDS;
     if (agcCbRemainingDwords(cb) < required_dwords)
         return AGC_ERROR_BUFFER_TOO_SMALL;
 
@@ -683,6 +702,9 @@ int32_t PS5_SYSV_ABI agcGfx1013DrawTessIndexAuto(
         return AGC_ERROR_INTERNAL;
     if (agcGfx1013SetTessellationContext(
             cb, state->tessellation) != AGC_OK)
+        return AGC_ERROR_INTERNAL;
+    if (state->frame &&
+        agcGfx1013ApplyFramePostBind(cb, state->frame) != AGC_OK)
         return AGC_ERROR_INTERNAL;
     for (i = 0u; i < state->num_post_bind_sh_registers; ++i) {
         if (!sceAgcCbSetShRegistersDirect(
@@ -907,6 +929,108 @@ int32_t PS5_SYSV_ABI agcGfx1013SetDepthDisabled(SceAgcCb *cb)
         if (!agcGfx1013EmitCx(cb, regs[i].offset, regs[i].value))
             return AGC_ERROR_INTERNAL;
     }
+    return AGC_OK;
+}
+
+static int32_t agcGfx1013ValidateFrameState(
+    const AgcGfx1013FrameState *state)
+{
+    uint32_t scratch[28] = {0};
+    SceAgcCb probe;
+    int32_t error;
+
+    if (!state || state->min_vertex_index > state->max_vertex_index ||
+        state->instance_step_rate == 0u ||
+        state->scissor.right > state->color_target.width ||
+        state->scissor.bottom > state->color_target.height)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    agcCbInit(&probe, scratch, sizeof(scratch));
+    error = agcGfx1013SetColorTarget(&probe, &state->color_target);
+    if (error != AGC_OK)
+        return error;
+    agcCbReset(&probe, scratch, sizeof(scratch));
+    error = agcGfx1013SetViewport(&probe, &state->viewport);
+    if (error != AGC_OK)
+        return error;
+    agcCbReset(&probe, scratch, sizeof(scratch));
+    error = agcGfx1013SetScissor(&probe, &state->scissor);
+    if (error != AGC_OK)
+        return error;
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013BuildFramePrologue(
+    SceAgcCb *cb, const AgcGfx1013FrameState *state,
+    AgcGfx1013GraphicsDefaultStats *stats)
+{
+    AgcGfx1013GraphicsDefaultStats counts = {0};
+    const AgcRegisterValue vertex_bounds[3] = {
+        {AGC_REG_GE_MIN_VTX_INDX, state ? state->min_vertex_index : 0u},
+        {AGC_REG_GE_INDX_OFFSET, state ? state->vertex_index_offset : 0u},
+        {AGC_REG_GE_MAX_VTX_INDX, state ? state->max_vertex_index : 0u},
+    };
+    const AgcRegisterValue launch_context[3] = {
+        {AGC_REG_PA_SC_NGG_MODE_CNTL,
+         state ? state->ngg_mode_control : 0u},
+        {AGC_REG_VGT_VERTEX_REUSE_BLOCK_CNTL,
+         state ? state->vertex_reuse_block_control : 0u},
+        {AGC_REG_VGT_INSTANCE_STEP_RATE_0,
+         state ? state->instance_step_rate : 0u},
+    };
+    uint32_t i;
+    int32_t error;
+
+    if (!cb)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    error = agcGfx1013ValidateFrameState(state);
+    if (error != AGC_OK)
+        return error;
+    if (agcCbRemainingDwords(cb) < AGC_GFX1013_FRAME_PROLOGUE_DWORDS)
+        return AGC_ERROR_BUFFER_TOO_SMALL;
+
+    if (agcGfx1013SetContextControl(
+            cb, state->context_load_control,
+            state->context_shadow_control) != AGC_OK ||
+        !sceAgcDcbClearState(cb, state->clear_state_flags))
+        return AGC_ERROR_INTERNAL;
+    error = agcGfx1013ApplyGraphicsDefaultsV8(cb, &counts);
+    if (error != AGC_OK)
+        return AGC_ERROR_INTERNAL;
+    if (agcGfx1013SetColorTarget(cb, &state->color_target) != AGC_OK ||
+        agcGfx1013SetViewport(cb, &state->viewport) != AGC_OK ||
+        agcGfx1013SetScissor(cb, &state->scissor) != AGC_OK ||
+        agcGfx1013SetTargetMask(cb, state->target_mask) != AGC_OK)
+        return AGC_ERROR_INTERNAL;
+    for (i = 0u; i < 3u; ++i) {
+        if (!sceAgcCbSetUcRegistersDirect(cb, &vertex_bounds[i], 1u))
+            return AGC_ERROR_INTERNAL;
+    }
+    for (i = 0u; i < 3u; ++i) {
+        if (!sceAgcCbSetCxRegistersDirect(cb, &launch_context[i], 1u))
+            return AGC_ERROR_INTERNAL;
+    }
+    if (stats)
+        *stats = counts;
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013ApplyFramePostBind(
+    SceAgcCb *cb, const AgcGfx1013FrameState *state)
+{
+    if (!cb)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    int32_t error = agcGfx1013ValidateFrameState(state);
+    if (error != AGC_OK)
+        return error;
+    if (agcCbRemainingDwords(cb) < AGC_GFX1013_FRAME_POST_BIND_DWORDS)
+        return AGC_ERROR_BUFFER_TOO_SMALL;
+    if (agcGfx1013SetDepthDisabled(cb) != AGC_OK ||
+        !agcGfx1013EmitCx(
+            cb, AGC_REG_PA_CL_CLIP_CNTL, state->clip_control) ||
+        !agcGfx1013EmitCx(
+            cb, AGC_REG_PA_SU_SC_MODE_CNTL, state->raster_mode_control))
+        return AGC_ERROR_INTERNAL;
     return AGC_OK;
 }
 

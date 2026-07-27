@@ -402,6 +402,7 @@
 #define AGC_REG_PA_SC_CONSERVATIVE_RASTERIZATION_CNTL 0x313u
 #define AGC_REG_PA_SC_NGG_MODE_CNTL                 0x314u
 #define AGC_REG_VGT_VERTEX_REUSE_BLOCK_CNTL         0x316u
+#define AGC_REG_VGT_INSTANCE_STEP_RATE_0             0x2A8u
 #define AGC_REG_PA_SC_FOV_WINDOW_LR                 0x0EBu
 #define AGC_REG_PA_SC_FOV_WINDOW_TB                 0x0ECu
 #define AGC_REG_PA_SC_FSR_ENABLE                    0x0F0u  /* AGC-custom */

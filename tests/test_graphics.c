@@ -136,6 +136,28 @@ static void make_wave32_state(
     state->primitive_type = 4u;
 }
 
+static AgcGfx1013FrameState make_frame_state(void)
+{
+    const AgcGfx1013FrameState state = {
+        .color_target = {
+            0x0000000201600000ull, 1920u, 1080u,
+            AGC_GFX1013_COLOR_FORMAT_8_8_8_8,
+            AGC_GFX1013_SURFACE_NUMBER_UNORM,
+            AGC_GFX1013_SURFACE_SWAP_ALT,
+        },
+        .viewport = {1920u, 1080u},
+        .scissor = {0u, 0u, 1920u, 1080u},
+        .target_mask = AGC_GFX1013_TARGET_MASK_RGBA0,
+        .context_load_control = AGC_GFX1013_CONTEXT_CONTROL_ENABLE,
+        .context_shadow_control = AGC_GFX1013_CONTEXT_CONTROL_ENABLE,
+        .max_vertex_index = 0xffffffffu,
+        .ngg_mode_control = AGC_GFX1013_NGG_MODE_CONTROL,
+        .vertex_reuse_block_control = AGC_GFX1013_VERTEX_REUSE_BLOCK,
+        .instance_step_rate = 1u,
+    };
+    return state;
+}
+
 static void test_gfx1013_wave32_vs_ps_binding(void)
 {
     uint32_t buffer[128] = {0};
@@ -217,6 +239,7 @@ static void test_gfx1013_baseline_draw_wrapper(void)
     const AgcRegisterValue post_bind_cx[] = {
         {AGC_REG_DB_DEPTH_CONTROL, 0u},
     };
+    const AgcGfx1013FrameState frame = make_frame_state();
 
     memset(&draw, 0, sizeof(draw));
     make_wave32_state(&draw.shaders, &primitive_record, &pixel_record,
@@ -268,7 +291,19 @@ static void test_gfx1013_baseline_draw_wrapper(void)
 
     draw.post_bind_cx_registers = NULL;
     draw.num_post_bind_cx_registers = 0u;
-    agcCbInit(&cb, buffer, 43u * sizeof(uint32_t));
+    draw.frame = &frame;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndexAuto(&cb, &draw), AGC_OK,
+        "gfx1013 baseline wrapper applies frame post-bind state");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 65u,
+        "gfx1013 baseline frame post-bind exact dword count");
+    TEST_ASSERT_EQ(buffer[36],
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
+        "gfx1013 baseline frame depth starts after shader bind");
+    TEST_ASSERT_EQ(buffer[37], AGC_REG_DB_DEPTH_INFO,
+        "gfx1013 baseline frame depth register order");
+
+    agcCbInit(&cb, buffer, 64u * sizeof(uint32_t));
     TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndexAuto(&cb, &draw),
         AGC_ERROR_BUFFER_TOO_SMALL,
         "gfx1013 baseline wrapper rejects short buffer");
@@ -506,8 +541,10 @@ static void test_gfx1013_wave32_tessellation_binding(void)
         0x0000000202702000ull,
     };
     const AgcRegisterValue post_cx = {AGC_REG_DB_DEPTH_CONTROL, 0u};
+    const AgcGfx1013FrameState frame = make_frame_state();
     AgcGfx1013TessDrawState draw = {
         .shaders = state,
+        .frame = &frame,
         .tessellation = &tessellation,
         .hull_resource_tables = &hull_table,
         .num_hull_resource_tables = 1u,
@@ -523,7 +560,7 @@ static void test_gfx1013_wave32_tessellation_binding(void)
     agcCbReset(&cb, buffer, sizeof(buffer));
     TEST_ASSERT_EQ(agcGfx1013DrawTessIndexAuto(&cb, &draw), AGC_OK,
         "gfx1013 tessellation draw composes");
-    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 107u,
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 128u,
         "gfx1013 tessellation draw exact dword count");
     TEST_ASSERT(find_last_register(buffer, agcCbUsedDwords(&cb),
         AGC_PM4_OP_SET_SH_REG, 0x220u, &value),
@@ -539,14 +576,19 @@ static void test_gfx1013_wave32_tessellation_binding(void)
         AGC_PM4_OP_SET_CONTEXT_REG, AGC_REG_VGT_TF_PARAM, &value),
         "post-bind tessellation context emitted");
     TEST_ASSERT_EQ(value, 0x61u, "tessellation parameter preserved");
-    TEST_ASSERT_EQ(agcPm4Opcode(buffer[102]), AGC_PM4_OP_NUM_INSTANCES,
+    TEST_ASSERT_EQ(buffer[99],
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
+        "tessellation frame depth follows tessellation context");
+    TEST_ASSERT_EQ(buffer[100], AGC_REG_DB_DEPTH_INFO,
+        "tessellation frame depth register order");
+    TEST_ASSERT_EQ(agcPm4Opcode(buffer[123]), AGC_PM4_OP_NUM_INSTANCES,
         "tessellation draw instance packet order");
-    TEST_ASSERT_EQ(buffer[103], 1u, "tessellation draw instance count");
-    TEST_ASSERT_EQ(agcPm4Opcode(buffer[104]), AGC_PM4_OP_DRAW_INDEX_AUTO,
+    TEST_ASSERT_EQ(buffer[124], 1u, "tessellation draw instance count");
+    TEST_ASSERT_EQ(agcPm4Opcode(buffer[125]), AGC_PM4_OP_DRAW_INDEX_AUTO,
         "tessellation draw packet order");
-    TEST_ASSERT_EQ(buffer[105], 3u, "tessellation draw vertex count");
+    TEST_ASSERT_EQ(buffer[126], 3u, "tessellation draw vertex count");
 
-    agcCbReset(&cb, buffer, 106u * sizeof(uint32_t));
+    agcCbReset(&cb, buffer, 127u * sizeof(uint32_t));
     TEST_ASSERT_EQ(agcGfx1013DrawTessIndexAuto(&cb, &draw),
         AGC_ERROR_BUFFER_TOO_SMALL, "short tessellation draw rejects");
     TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
@@ -557,6 +599,75 @@ static void test_gfx1013_wave32_tessellation_binding(void)
         AGC_ERROR_INVALID_ARGUMENT, "invalid tessellation override rejects");
     TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
         "invalid tessellation override is atomic");
+}
+
+static void test_gfx1013_frame_state(void)
+{
+    uint32_t buffer[AGC_GFX1013_FRAME_PROLOGUE_DWORDS] = {0};
+    SceAgcCb cb;
+    AgcGfx1013FrameState frame = make_frame_state();
+    AgcGfx1013GraphicsDefaultStats stats = {0};
+
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013BuildFramePrologue(
+        &cb, &frame, &stats), AGC_OK,
+        "gfx1013 frame prologue composes");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb),
+        AGC_GFX1013_FRAME_PROLOGUE_DWORDS,
+        "gfx1013 frame prologue exact dword count");
+    TEST_ASSERT_EQ(stats.sh_register_count, 174u,
+        "gfx1013 frame SH defaults count");
+    TEST_ASSERT_EQ(stats.cx_register_count, 493u,
+        "gfx1013 frame CX defaults count");
+    TEST_ASSERT_EQ(stats.uc_register_count, 61u,
+        "gfx1013 frame UC defaults count");
+    TEST_ASSERT_EQ(agcPm4Opcode(buffer[0]), AGC_PM4_OP_CONTEXT_CONTROL,
+        "gfx1013 frame context-control first");
+    TEST_ASSERT_EQ(agcPm4Opcode(buffer[3]), AGC_PM4_OP_CLEAR_STATE_AGC,
+        "gfx1013 frame clear-state second");
+    TEST_ASSERT_EQ(buffer[2190], AGC_REG_CB_COLOR0_BASE,
+        "gfx1013 frame color target follows defaults");
+    TEST_ASSERT_EQ(buffer[2218], AGC_REG_PA_CL_VPORT_XSCALE,
+        "gfx1013 frame viewport follows target");
+    TEST_ASSERT_EQ(buffer[2233], AGC_REG_PA_SC_SCREEN_SCISSOR_TL,
+        "gfx1013 frame scissor follows viewport");
+    TEST_ASSERT_EQ(buffer[2255], AGC_REG_CB_TARGET_MASK,
+        "gfx1013 frame target mask order");
+    TEST_ASSERT_EQ(buffer[2258], AGC_REG_GE_MIN_VTX_INDX,
+        "gfx1013 frame vertex bounds order");
+    TEST_ASSERT_EQ(buffer[2267], AGC_REG_PA_SC_NGG_MODE_CNTL,
+        "gfx1013 frame NGG launch state order");
+    TEST_ASSERT_EQ(buffer[2273], AGC_REG_VGT_INSTANCE_STEP_RATE_0,
+        "gfx1013 frame instance-step register");
+
+    agcCbReset(&cb, buffer, AGC_GFX1013_FRAME_POST_BIND_DWORDS *
+        sizeof(uint32_t));
+    TEST_ASSERT_EQ(agcGfx1013ApplyFramePostBind(&cb, &frame), AGC_OK,
+        "gfx1013 frame post-bind state composes");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb),
+        AGC_GFX1013_FRAME_POST_BIND_DWORDS,
+        "gfx1013 frame post-bind exact dword count");
+    TEST_ASSERT_EQ(buffer[1], AGC_REG_DB_DEPTH_INFO,
+        "gfx1013 frame post-bind depth first");
+    TEST_ASSERT_EQ(buffer[16], AGC_REG_PA_CL_CLIP_CNTL,
+        "gfx1013 frame post-bind clip after depth");
+    TEST_ASSERT_EQ(buffer[19], AGC_REG_PA_SU_SC_MODE_CNTL,
+        "gfx1013 frame post-bind raster last");
+
+    agcCbReset(&cb, buffer,
+        (AGC_GFX1013_FRAME_PROLOGUE_DWORDS - 1u) * sizeof(uint32_t));
+    TEST_ASSERT_EQ(agcGfx1013BuildFramePrologue(
+        &cb, &frame, NULL), AGC_ERROR_BUFFER_TOO_SMALL,
+        "short gfx1013 frame prologue rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "short gfx1013 frame prologue is atomic");
+    frame.scissor.right++;
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013BuildFramePrologue(
+        &cb, &frame, NULL), AGC_ERROR_INVALID_ARGUMENT,
+        "out-of-target frame scissor rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "invalid gfx1013 frame prologue is atomic");
 }
 
 static void test_gfx1013_eop_completion_fence(void)
@@ -1181,6 +1292,7 @@ void test_suite_graphics(void)
     TEST_RUN(test_gfx1013_wave32_tessellation_binding);
     TEST_RUN(test_gfx1013_eop_completion_fence);
     TEST_RUN(test_gfx1013_fixed_function_packets);
+    TEST_RUN(test_gfx1013_frame_state);
     TEST_RUN(test_gfx1013_graphics_defaults_v8);
     TEST_RUN(test_gfx1013_fixed_function_rejects_atomically);
     TEST_RUN(test_gfx1013_compute_packets);

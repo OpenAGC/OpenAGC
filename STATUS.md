@@ -433,6 +433,10 @@ Cursor-based builders:
 
 Typed gfx1013 state builders:
 
+- `agcGfx1013BuildFramePrologue` / `agcGfx1013ApplyFramePostBind` — own the
+  exact hardware-proven 2,275-dword context/default/target/viewport/scissor/
+  launch prologue and 21-dword post-shader depth/raster phase; baseline and
+  tessellation composers consume the same `AgcGfx1013FrameState`
 - `agcGfx1013SignalEopFence` — atomically emits the hardware-proven 10-dword
   gfx1013 `RELEASE_MEM` cache-flush/writeback fence and trailer used by both
   compute and graphics samples
