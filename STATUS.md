@@ -1068,6 +1068,11 @@ produces the proven 16-byte structured VBO descriptor, while the image encoder
 produces the proven eight-dword linear 2D layout. The combined descriptor fixes
 the sampler at dword 8 in a 64-byte table entry. Static layout assertions,
 exact-word fixtures, validation, and atomic output failure cover all three.
+Public resource-table binding also replaces application scans of shader SH
+register arrays. Callers provide placeholder/address pairs; OpenAGC resolves
+all VBO and descriptor-set placeholders, rejects missing/duplicate/unaligned
+tables before cursor mutation, and emits the correct graphics or compute packet
+type from the shader record.
 
 Subnautica (`PPSA02453`) content `01.022.394` passes the strict analyzer with
 63/63 AGC imports covered. The exact executable hash, SDK `0x0400` metadata,

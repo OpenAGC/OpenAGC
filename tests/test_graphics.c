@@ -785,6 +785,106 @@ static void test_gfx1013_compute_defaults_v8(void)
         "compute defaults emitted packet count");
 }
 
+static void test_gfx1013_resource_table_binding(void)
+{
+    uint32_t buffer[16] = {0};
+    AgcRegisterValue registers[2] = {
+        {0x220u, OPENAGC_VERTEX_BUFFER_TABLE_PLACEHOLDER},
+        {0x221u, OPENAGC_DESCRIPTOR_SET_PLACEHOLDER(0u)},
+    };
+    AgcShaderRecord record;
+    AgcGfx1013ShaderBinding shader;
+    const AgcGfx1013ResourceTableBinding tables[2] = {
+        {OPENAGC_VERTEX_BUFFER_TABLE_PLACEHOLDER,
+            0x0000000202601000ull},
+        {OPENAGC_DESCRIPTOR_SET_PLACEHOLDER(0u),
+            0x0000000202702000ull},
+    };
+    SceAgcCb cb;
+
+    memset(&record, 0, sizeof(record));
+    record.magic = AGC_SHADER_RECORD_MAGIC;
+    record.version = AGC_SHADER_RECORD_VERSION_GEN5;
+    record.shader_type = kAgcShaderTypePs;
+    record.num_sh_registers = 2u;
+    memset(&shader, 0, sizeof(shader));
+    shader.record = &record;
+    shader.sh_registers = registers;
+    shader.num_sh_registers = 2u;
+
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013BindResourceTables(
+        &cb, &shader, tables, 2u), AGC_OK,
+        "gfx1013 resource tables bind");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 6u,
+        "two resource tables emit two register packets");
+    TEST_ASSERT_EQ(buffer[0],
+        agcPm4Header3(AGC_PM4_OP_SET_SH_REG, 3u),
+        "graphics resource table uses graphics SET_SH_REG");
+    TEST_ASSERT_EQ(buffer[1], 0x220u,
+        "vertex table target register");
+    TEST_ASSERT_EQ(buffer[2], 0x02601000u,
+        "vertex table address32 value");
+    TEST_ASSERT_EQ(buffer[4], 0x221u,
+        "descriptor set target register");
+    TEST_ASSERT_EQ(buffer[5], 0x02702000u,
+        "descriptor set address32 value");
+
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013BindResourceTables(
+        &cb, &shader, tables, 1u), AGC_ERROR_RESOURCE_NOT_BOUND,
+        "missing descriptor set rejects atomically");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "missing table emits no packets");
+
+    record.shader_type = kAgcShaderTypeCs;
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013BindResourceTables(
+        &cb, &shader, tables, 2u), AGC_OK,
+        "compute resource tables bind");
+    TEST_ASSERT_EQ(buffer[0] & 1u, 1u,
+        "compute resource table selects compute shader");
+}
+
+static void test_gfx1013_resource_table_binding_rejects(void)
+{
+    uint32_t buffer[8] = {0};
+    AgcRegisterValue reg = {
+        0x220u, OPENAGC_DESCRIPTOR_SET_PLACEHOLDER(0u),
+    };
+    AgcShaderRecord record;
+    AgcGfx1013ShaderBinding shader;
+    AgcGfx1013ResourceTableBinding table = {
+        OPENAGC_DESCRIPTOR_SET_PLACEHOLDER(0u),
+        0x0000000302702000ull,
+    };
+    SceAgcCb cb;
+
+    memset(&record, 0, sizeof(record));
+    record.magic = AGC_SHADER_RECORD_MAGIC;
+    record.version = AGC_SHADER_RECORD_VERSION_GEN5;
+    record.shader_type = kAgcShaderTypePs;
+    record.num_sh_registers = 1u;
+    memset(&shader, 0, sizeof(shader));
+    shader.record = &record;
+    shader.sh_registers = &reg;
+    shader.num_sh_registers = 1u;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+
+    TEST_ASSERT_EQ(agcGfx1013BindResourceTables(
+        &cb, &shader, &table, 1u), AGC_ERROR_INVALID_ALIGNMENT,
+        "non-address32 table rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "invalid table address emits no packets");
+    table.address = 0x0000000202702000ull;
+    agcCbReset(&cb, buffer, 2u * sizeof(uint32_t));
+    TEST_ASSERT_EQ(agcGfx1013BindResourceTables(
+        &cb, &shader, &table, 1u), AGC_ERROR_BUFFER_TOO_SMALL,
+        "short resource binding rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "short resource binding is atomic");
+}
+
 void test_suite_graphics(void)
 {
     TEST_SUITE("GFX1013 Graphics State");
@@ -798,4 +898,6 @@ void test_suite_graphics(void)
     TEST_RUN(test_gfx1013_fixed_function_rejects_atomically);
     TEST_RUN(test_gfx1013_compute_packets);
     TEST_RUN(test_gfx1013_compute_defaults_v8);
+    TEST_RUN(test_gfx1013_resource_table_binding);
+    TEST_RUN(test_gfx1013_resource_table_binding_rejects);
 }

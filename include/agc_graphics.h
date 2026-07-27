@@ -95,6 +95,13 @@ typedef struct AgcGfx1013ComputeState {
     uint32_t modifier;
 } AgcGfx1013ComputeState;
 
+#define AGC_GFX1013_ADDRESS32_HIGH 0x00000002u
+
+typedef struct AgcGfx1013ResourceTableBinding {
+    uint32_t placeholder;
+    uint64_t address;
+} AgcGfx1013ResourceTableBinding;
+
 typedef struct AgcGfx1013BaselineDrawState {
     AgcGfx1013Wave32VsPsState shaders;
     const AgcRegisterValue *post_bind_sh_registers;
@@ -141,6 +148,9 @@ int32_t PS5_SYSV_ABI agcGfx1013ApplyComputeDefaultsV8(
     SceAgcCb *cb, AgcGfx1013ComputeDefaultStats *stats);
 int32_t PS5_SYSV_ABI agcGfx1013DispatchCompute(
     SceAgcCb *cb, const AgcGfx1013ComputeState *state);
+int32_t PS5_SYSV_ABI agcGfx1013BindResourceTables(
+    SceAgcCb *cb, const AgcGfx1013ShaderBinding *shader,
+    const AgcGfx1013ResourceTableBinding *tables, uint32_t table_count);
 int32_t PS5_SYSV_ABI agcGfx1013ApplyGraphicsDefaultsV8(
     SceAgcCb *cb, AgcGfx1013GraphicsDefaultStats *stats);
 

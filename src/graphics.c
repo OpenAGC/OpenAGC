@@ -1048,3 +1048,91 @@ int32_t PS5_SYSV_ABI agcGfx1013DispatchCompute(
     dispatch[4] = (state->modifier & 0xa038u) | 0x41u;
     return AGC_OK;
 }
+
+static bool agcGfx1013IsResourcePlaceholder(uint32_t value)
+{
+    return value == OPENAGC_VERTEX_BUFFER_TABLE_PLACEHOLDER ||
+        (value & 0xffffff00u) == OPENAGC_DESCRIPTOR_SET_PLACEHOLDER(0u);
+}
+
+static int32_t agcGfx1013FindResourceTable(
+    const AgcGfx1013ResourceTableBinding *tables, uint32_t table_count,
+    uint32_t placeholder, uint64_t *address)
+{
+    uint32_t i;
+    bool found = false;
+
+    for (i = 0; i < table_count; ++i) {
+        if (tables[i].placeholder != placeholder)
+            continue;
+        if (found)
+            return AGC_ERROR_INVALID_ARGUMENT;
+        found = true;
+        *address = tables[i].address;
+    }
+    return found ? AGC_OK : AGC_ERROR_RESOURCE_NOT_BOUND;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013BindResourceTables(
+    SceAgcCb *cb, const AgcGfx1013ShaderBinding *shader,
+    const AgcGfx1013ResourceTableBinding *tables, uint32_t table_count)
+{
+    uint32_t resource_count = 0u;
+    uint32_t i;
+    bool compute;
+
+    if (!cb || !shader || !shader->record || !shader->sh_registers ||
+        !tables || table_count == 0u || table_count > 256u ||
+        shader->num_sh_registers == 0u ||
+        shader->num_sh_registers != shader->record->num_sh_registers)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (shader->record->magic != AGC_SHADER_RECORD_MAGIC ||
+        shader->record->version != AGC_SHADER_RECORD_VERSION_GEN5)
+        return AGC_ERROR_SHADER_INVALID;
+    compute = shader->record->shader_type == kAgcShaderTypeCs;
+
+    for (i = 0; i < shader->num_sh_registers; ++i) {
+        uint64_t address;
+        int32_t result;
+        if (!agcGfx1013IsResourcePlaceholder(
+                shader->sh_registers[i].value))
+            continue;
+        result = agcGfx1013FindResourceTable(tables, table_count,
+            shader->sh_registers[i].value, &address);
+        if (result != AGC_OK)
+            return result;
+        if (address == 0u || (address & 0xfu) != 0u ||
+            (uint32_t)(address >> 32u) != AGC_GFX1013_ADDRESS32_HIGH)
+            return AGC_ERROR_INVALID_ALIGNMENT;
+        resource_count++;
+    }
+    if (resource_count == 0u)
+        return AGC_ERROR_NOT_FOUND;
+    if (agcCbRemainingDwords(cb) < resource_count * 3u)
+        return AGC_ERROR_BUFFER_TOO_SMALL;
+
+    for (i = 0; i < shader->num_sh_registers; ++i) {
+        uint64_t address;
+        uint32_t value;
+        if (!agcGfx1013IsResourcePlaceholder(
+                shader->sh_registers[i].value))
+            continue;
+        if (agcGfx1013FindResourceTable(tables, table_count,
+                shader->sh_registers[i].value, &address) != AGC_OK)
+            return AGC_ERROR_INTERNAL;
+        value = (uint32_t)address;
+        if (compute) {
+            if (!agcGfx1013EmitComputeRegisters(cb,
+                    shader->sh_registers[i].offset, &value, 1u))
+                return AGC_ERROR_INTERNAL;
+        } else {
+            AgcRegisterValue reg = {
+                shader->sh_registers[i].offset,
+                value,
+            };
+            if (!sceAgcCbSetShRegistersDirect(cb, &reg, 1u))
+                return AGC_ERROR_INTERNAL;
+        }
+    }
+    return AGC_OK;
+}

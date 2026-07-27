@@ -230,8 +230,10 @@ timeout. FW 5.50 reached the fence after 1 ms and retained full pixel coverage.
 
 The public resource API now has byte-exact gfx1013 structured-buffer, 2D-image,
 and 64-byte combined image/sampler descriptor encoders matching the proven
-sample layouts. The next implementation step is descriptor-table binding and
-shader-placeholder resolution, followed by conversion of the graphics sample.
+sample layouts. Resource-table binding now resolves compiler placeholders
+inside shader records, validates every required table atomically, enforces the
+PS5 address32 range, and selects graphics/compute packet type internally. The
+next implementation step is conversion of the graphics sample.
 Each closed goal must update the
 documentation, pass clean generic and Prospero builds, pass host fixtures, and
 be committed before hardware promotion.
