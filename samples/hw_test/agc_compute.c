@@ -423,237 +423,102 @@ static void *upload_shader_code(const uint8_t *code, size_t code_size,
  *   base=5   → workgroup_id_x (system)
  *   base=7   → local_invocation_id (system)
  */
-#include "agc_context.h"
+#include "agc_graphics.h"
 
-static void apply_sh_defaults(SceAgcCb *cb) {
-    uint32_t count = 0;
-    const AgcRegisterDefaultsGroup *pgroups = agcRegisterDefaultsV8GetPrimaryGroups(&count);
-    uint32_t applied = 0;
-    for (uint32_t i = 0; i < count; i++) {
-        if (pgroups[i].space == kAgcRegisterDefaultSpaceSh && pgroups[i].register_count > 0) {
-            uint32_t *cmd = sceAgcCbSetShRegistersDirect(cb, (const AgcRegisterValue *)pgroups[i].registers, pgroups[i].register_count);
-            if (cmd) {
-                *cmd |= 1u; /* compute shader type */
-                applied++;
-            }
-        }
+static bool apply_sh_defaults(SceAgcCb *cb)
+{
+    AgcGfx1013ComputeDefaultStats stats = {0};
+    int32_t result = agcGfx1013ApplyComputeDefaultsV8(cb, &stats);
+
+    if (result != AGC_OK) {
+        printf("[Dispatch] compute defaults failed: 0x%08x\n",
+               (uint32_t)result);
+        return false;
     }
-    const AgcRegisterDefaultsGroup *igroups = agcRegisterDefaultsV8GetInternalGroups(&count);
-    for (uint32_t i = 0; i < count; i++) {
-        if (igroups[i].space == kAgcRegisterDefaultSpaceSh && igroups[i].register_count > 0) {
-            uint32_t *cmd = sceAgcCbSetShRegistersDirect(cb, (const AgcRegisterValue *)igroups[i].registers, igroups[i].register_count);
-            if (cmd) {
-                *cmd |= 1u; /* compute shader type */
-                applied++;
-            }
-        }
-    }
-    printf("[Dispatch] Applied %u SH register default groups\n", applied);
+    printf("[Dispatch] Applied %u SH defaults in %u packets\n",
+           stats.sh_register_count, stats.packet_count);
+    return true;
 }
 
-
-
 static bool dispatch_compute(ComputeTest *test, void *shader_addr,
-                             const ParsedShader *shader, uint32_t color) {
+                             const ParsedShader *shader, uint32_t color)
+{
     SceAgcCb cb;
-    agcCbInit(&cb, cb_buffer, cb_buffer_dwords * 4);
-
-    /* CONTEXT_CONTROL — notify CP of context state transition.
-     * RE'd from freegnm CLEAR_STATE_SEQUENCE:
-     *   0xc0012800, 0x80000000, 0x80000000
-     * This enables loading context from default state. */
-    uint32_t *cc = agcCbAllocDwords(&cb, 3);
-    if (cc) {
-        cc[0] = agcPm4Header3(0x28, 3);  /* CONTEXT_CONTROL */
-        cc[1] = 0x80000000u;  /* LOAD_ENABLE_CONTEXT */
-        cc[2] = 0x80000000u;
-        printf("[Dispatch] CONTEXT_CONTROL: load enable\n");
-    }
-
-    /* --- Set compute shader registers ---
-     * SET_SH_REG writes CONTIGUOUS registers starting from the base offset.
-     * The .offset field of only the FIRST register matters; subsequent
-     * registers must be at base+1, base+2, etc.
-     * Register groups are non-contiguous, so we need separate calls:
-     *   PGM_LO/HI:      0x20C-0x20D (2 contiguous)
-     *   RSRC1/2:        0x212-0x213 (2 contiguous)
-     *   RSRC3:          0x228       (standalone)
-     *   NUM_THREAD_X/Y/Z: 0x207-0x209 (3 contiguous)
-     *   USER_DATA_0..5: 0x240-0x245 (6 contiguous)
-     */
-    /* PGM_LO/HI encode a 48-bit GPU address:
-     *   PGM_LO = bits [39:8] of address (value << 8 reconstructs)
-     *   PGM_HI = bits [47:40] of address (only lower 8 bits used)
-     * The address must be 256-byte aligned (bits [7:0] = 0).
-     * RE'd from KytyPS5 pm4Handlers.cpp HwShSetCsRegister. */
-    uint32_t shader_addr_lo = (uint32_t)((uintptr_t)shader_addr >> 8);
-    uint32_t shader_addr_hi = (uint32_t)((uintptr_t)shader_addr >> 40) & 0xFF;
-
-    /* Extract RSRC values from shader record */
-    uint32_t rsrc1 = 0, rsrc2 = 0, rsrc3 = 0;
-    for (uint32_t i = 0; i < shader->num_sh_regs; i++) {
-        uint32_t off = shader->sh_regs[i].offset;
-        if (off == AGC_REG_COMPUTE_PGM_RSRC1) rsrc1 = shader->sh_regs[i].value;
-        if (off == AGC_REG_COMPUTE_PGM_RSRC2) rsrc2 = shader->sh_regs[i].value;
-        if (off == AGC_REG_COMPUTE_PGM_RSRC3) rsrc3 = shader->sh_regs[i].value;
-    }
-
-    uint32_t *cmd = NULL;
-
-    /* Apply all FW 5.50 primary and internal SH register defaults */
-    apply_sh_defaults(&cb);
-
-
-
-
-    /* Group 0a: RESOURCE_LIMITS (0x215) + STATIC_THREAD_MGMT_SE0/SE1 (0x216..0x217) (3 contiguous) */
-    AgcRegisterValue res_limit_reg0[3] = {
-        { 0x215, 0x3FFFFFFFu },  /* COMPUTE_RESOURCE_LIMITS */
-        { 0x216, 0xFFFFFFFFu },  /* COMPUTE_STATIC_THREAD_MGMT_SE0 */
-        { 0x217, 0xFFFFFFFFu },  /* COMPUTE_STATIC_THREAD_MGMT_SE1 */
-    };
-    cmd = sceAgcCbSetShRegistersDirect(&cb, res_limit_reg0, 3);
-
-    *cmd |= 1u;  /* compute shader type for SET_SH_REG */
-
-    /* Group 0b: STATIC_THREAD_MGMT_SE2/SE3 (0x219..0x21A) (2 contiguous, skips 0x218 TMPRING_SIZE) */
-    AgcRegisterValue res_limit_reg1[2] = {
-        { 0x219, 0xFFFFFFFFu },  /* COMPUTE_STATIC_THREAD_MGMT_SE2 */
-        { 0x21A, 0xFFFFFFFFu },  /* COMPUTE_STATIC_THREAD_MGMT_SE3 */
-    };
-    cmd = sceAgcCbSetShRegistersDirect(&cb, res_limit_reg1, 2);
-    *cmd |= 1u;  /* compute shader type for SET_SH_REG */
-
-
-    /* Group 1: START_X/Y/Z (0x204) + NUM_THREAD_X/Y/Z (0x207) (6 contiguous) */
-    AgcRegisterValue thread_regs[6] = {
-        { AGC_REG_COMPUTE_START_X, 0 },
-        { AGC_REG_COMPUTE_START_Y, 0 },
-        { AGC_REG_COMPUTE_START_Z, 0 },
-        { AGC_REG_COMPUTE_NUM_THREAD_X, 64 },
-        { AGC_REG_COMPUTE_NUM_THREAD_Y, 1 },
-        { AGC_REG_COMPUTE_NUM_THREAD_Z, 1 },
-    };
-    cmd = sceAgcCbSetShRegistersDirect(&cb, thread_regs, 6);
-    *cmd |= 1u;  /* compute shader type for SET_SH_REG */
-
-    /* Group 2: PGM_LO/HI at 0x20C (2 contiguous) */
-    AgcRegisterValue pgm_regs[2] = {
-        { AGC_REG_COMPUTE_PGM_LO, shader_addr_lo },
-        { AGC_REG_COMPUTE_PGM_HI, shader_addr_hi },
-    };
-    printf("[Dispatch] SET_SH_REG PGM_LO/HI (0x20C): 0x%08x, 0x%08x\n",
-           shader_addr_lo, shader_addr_hi);
-    cmd = sceAgcCbSetShRegistersDirect(&cb, pgm_regs, 2);
-    if (!cmd) { printf("[Dispatch] ERROR: failed to set PGM_LO/HI\n"); return false; }
-    *cmd |= 1u;  /* compute shader type */
-
-    /* Group 3: RSRC1/2 at 0x212 (2 contiguous) */
-    AgcRegisterValue rsrc12_regs[2] = {
-        { AGC_REG_COMPUTE_PGM_RSRC1, rsrc1 },
-        { AGC_REG_COMPUTE_PGM_RSRC2, rsrc2 },
-    };
-    printf("[Dispatch] SET_SH_REG RSRC1/2 (0x212): 0x%08x, 0x%08x\n", rsrc1, rsrc2);
-    cmd = sceAgcCbSetShRegistersDirect(&cb, rsrc12_regs, 2);
-    if (!cmd) { printf("[Dispatch] ERROR: failed to set RSRC1/2\n"); return false; }
-    *cmd |= 1u;  /* compute shader type */
-
-    /* Group 4: RSRC3 at 0x228 (standalone) */
-    AgcRegisterValue rsrc3_reg[1] = {
-        { AGC_REG_COMPUTE_PGM_RSRC3, rsrc3 },
-    };
-    cmd = sceAgcCbSetShRegistersDirect(&cb, rsrc3_reg, 1);
-    *cmd |= 1u;
-
-    /* --- Set user data registers ---
-     * User data layout (proven by RDNA2 instruction disassembly):
-     *   s0: unused (0)
-     *   s1: unused (0)
-     *   s2: buffer ptr low 32 bits (v_cndmask_b32 s2)
-     *   s3: buffer ptr high 32 bits (v_add_co_ci_u32 s3)
-     *   s4: total_pixels (v_cmpx_gt_u32 s4)
-     *   s5: fill color (v_mov_b32 s5)
-     */
     void *compute_out = (uint8_t *)test->compute_buffer + 0x10000;
-    uint32_t buf_addr_lo = (uint32_t)(uintptr_t)compute_out;
-    uint32_t buf_addr_hi = (uint32_t)((uintptr_t)compute_out >> 32);
     uint32_t total_pixels = test->width * test->height;
-
-    AgcRegisterValue user_data[6];
-    user_data[0] = (AgcRegisterValue){ AGC_REG_COMPUTE_USER_DATA_0 + 0, 0 };           /* s0: unused */
-    user_data[1] = (AgcRegisterValue){ AGC_REG_COMPUTE_USER_DATA_0 + 1, 0 };           /* s1: unused */
-    user_data[2] = (AgcRegisterValue){ AGC_REG_COMPUTE_USER_DATA_0 + 2, buf_addr_lo }; /* s2: buf ptr low */
-    user_data[3] = (AgcRegisterValue){ AGC_REG_COMPUTE_USER_DATA_0 + 3, buf_addr_hi }; /* s3: buf ptr high */
-    user_data[4] = (AgcRegisterValue){ AGC_REG_COMPUTE_USER_DATA_0 + 4, total_pixels };/* s4: total pixels */
-    user_data[5] = (AgcRegisterValue){ AGC_REG_COMPUTE_USER_DATA_0 + 5, color };       /* s5: fill color */
-
-    printf("[Dispatch] SET_SH_REG USER_DATA (0x240): s2..s5 buf=0x%x_%08x pixels=%u color=0x%08x\n",
-           buf_addr_hi, buf_addr_lo, total_pixels, color);
-
-    cmd = sceAgcCbSetShRegistersDirect(&cb, user_data, 6);
-    *cmd |= 1u;  /* compute shader type */
-
-    /* WRITE_DATA #1: flexible memory marker (CB+0x1000) */
-    uint64_t flex_target = (uint64_t)(uintptr_t)cb_buffer + 0x1000;
-    uint32_t *wd1 = agcCbAllocDwords(&cb, 5);
-    if (wd1) {
-        wd1[0] = agcPm4Header3(AGC_PM4_OP_WRITE_DATA, 5);
-        wd1[1] = (2u << 0) | (0u << 2) | (1u << 8);
-        wd1[2] = (uint32_t)flex_target;
-        wd1[3] = (uint32_t)(flex_target >> 32);
-        wd1[4] = 0x12345678u;
-    }
-
-    /* WRITE_DATA #2: marker (compute_out last pixel) */
+    uint32_t user_data[6] = {
+        0u,
+        0u,
+        (uint32_t)(uintptr_t)compute_out,
+        (uint32_t)((uintptr_t)compute_out >> 32),
+        total_pixels,
+        color,
+    };
+    AgcGfx1013ComputeState state = {
+        .record = shader->record,
+        .sh_registers = shader->sh_regs,
+        .num_sh_registers = shader->num_sh_regs,
+        .code_address = (uint64_t)(uintptr_t)shader_addr,
+        .user_data = user_data,
+        .num_user_data = 6u,
+        .local_size_x = 64u,
+        .local_size_y = 1u,
+        .local_size_z = 1u,
+        .group_count_x = (total_pixels + 63u) / 64u,
+        .group_count_y = 1u,
+        .group_count_z = 1u,
+        .modifier = 0u,
+    };
+    uint64_t flex_target = (uint64_t)(uintptr_t)cb_buffer + 0x1000u;
     uint64_t garlic_target = (uint64_t)(uintptr_t)compute_out +
-                             (size_t)test->width * test->height * 4 - 4;
-    uint32_t *wd2 = agcCbAllocDwords(&cb, 5);
-    if (wd2) {
-        wd2[0] = agcPm4Header3(AGC_PM4_OP_WRITE_DATA, 5);
-        wd2[1] = (2u << 0) | (0u << 2) | (1u << 8);
-        wd2[2] = (uint32_t)garlic_target;
-        wd2[3] = (uint32_t)(garlic_target >> 32);
-        wd2[4] = 0xCAFEBABE;
-    }
-
-    /* WRITE_DATA #3 disabled — compute_out[0] will ONLY be written if the compute shader executes */
-
-
-    /* Dispatch compute */
-    uint32_t num_groups_x = (total_pixels + 63) / 64;
-    sceAgcCbDispatch(&cb, num_groups_x, 1, 1, 0);
-
-
-    /* WRITE_DATA #4: marker after dispatch */
-    uint64_t post_dispatch = (uint64_t)(uintptr_t)cb_buffer + 0x1008;
-    uint32_t *wd4 = agcCbAllocDwords(&cb, 5);
-    if (wd4) {
-        wd4[0] = agcPm4Header3(AGC_PM4_OP_WRITE_DATA, 5);
-        wd4[1] = (2u << 0) | (0u << 2) | (1u << 8);
-        wd4[2] = (uint32_t)post_dispatch;
-        wd4[3] = (uint32_t)(post_dispatch >> 32);
-        wd4[4] = 0xABCDEF01u;
-    }
-
-    /* ACQUIRE_MEM: flush GPU caches after dispatch */
-    uint32_t *am = agcCbAllocDwords(&cb, 6);
-    if (am) {
-        am[0] = agcPm4Header3(AGC_PM4_OP_ACQUIRE_MEM, 6);
-        am[1] = 0x2ec47fc0u;
-        am[2] = 0xFFFFFFFFu;
-        am[3] = 0;
-        am[4] = 0;
-        am[5] = 0;
-    }
-
-    sceAgcCbNop(&cb, 2);
+        (size_t)total_pixels * sizeof(uint32_t) - sizeof(uint32_t);
+    uint64_t post_dispatch = (uint64_t)(uintptr_t)cb_buffer + 0x1008u;
+    uint32_t flex_marker = 0x12345678u;
+    uint32_t garlic_marker = 0xcafebabeu;
+    uint32_t post_marker = 0xabcdef01u;
     AgcCommandBufferSubmit submit;
+    int32_t result;
+
+    agcCbInit(&cb, cb_buffer, cb_buffer_dwords * sizeof(uint32_t));
+    if (!apply_sh_defaults(&cb))
+        return false;
+
+    printf("[Dispatch] compute_out=%p pixels=%u color=0x%08x groups=%u\n",
+           compute_out, total_pixels, color, state.group_count_x);
+
+    if (!sceAgcDcbWriteData(
+            &cb, 2u, 0u, flex_target, &flex_marker, 1u, 0u, 0u) ||
+        !sceAgcDcbWriteData(
+            &cb, 2u, 0u, garlic_target, &garlic_marker, 1u, 0u, 0u)) {
+        printf("[Dispatch] diagnostic WRITE_DATA emission failed\n");
+        return false;
+    }
+
+    result = agcGfx1013DispatchCompute(&cb, &state);
+    if (result != AGC_OK) {
+        printf("[Dispatch] compute binding failed: 0x%08x\n",
+               (uint32_t)result);
+        return false;
+    }
+
+    if (!sceAgcDcbWriteData(
+            &cb, 2u, 0u, post_dispatch, &post_marker, 1u, 0u, 0u) ||
+        !sceAgcDcbAcquireMem(
+            &cb, 0u, 0x2ec47fc0u, 0xffffffffu, 0u) ||
+        !sceAgcCbNop(&cb, 2u)) {
+        printf("[Dispatch] completion packet emission failed\n");
+        return false;
+    }
+
     submit.command_address = (uintptr_t)cb_buffer;
     submit.dword_count = agcCbUsedDwords(&cb);
-    submit.reserved = 0;
+    submit.reserved = 0u;
+    result = sceAgcDriverSubmitDcb(&submit);
+    if (result != AGC_OK) {
+        printf("[Dispatch] submission failed: 0x%08x\n", (uint32_t)result);
+        return false;
+    }
 
-    int32_t err = sceAgcDriverSubmitDcb(&submit);
-    if (err != AGC_OK) return false;
     printf("[Dispatch] Waiting 200ms for GPU to finish...\n");
     sceKernelUsleep(200000);
     return true;

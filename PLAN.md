@@ -220,11 +220,13 @@ hardware samples.
 
 The reusable compute vertical slice now has typed `CONTEXT_CONTROL`, gfx1013
 compute validation/binding/dispatch state, and FW 5.50 compute-default emission.
-The next implementation step is to convert `agc_compute.c` to these APIs,
-replace duplicate raw `WRITE_DATA`/`ACQUIRE_MEM`, and provide bounded completion
-before repeating the FW 5.50 curl/websrv hardware test. Descriptor
-serialization/table binding follows immediately because it is shared by
-compute and graphics. Each closed goal must update the
+`agc_compute.c` uses those APIs plus public `WRITE_DATA`, `ACQUIRE_MEM`, NOP,
+and submission calls exclusively; the curl/websrv FW 5.50 run produced
+2,073,600/2,073,600 matching pixels and completed the display flip.
+
+The next implementation step is bounded GPU completion followed by gfx1013
+descriptor serialization/table binding, which is shared by compute and
+graphics. Each closed goal must update the
 documentation, pass clean generic and Prospero builds, pass host fixtures, and
 be committed before hardware promotion.
 
