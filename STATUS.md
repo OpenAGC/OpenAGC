@@ -1328,13 +1328,15 @@ accounting. Address-pipe count remains explicit pending a FW `0x0550`
 metadata but leaves HTILE disabled. Stencil, MSAA, and HTILE are documented as
 separate ordered hardware gates and none is claimed hardware-validated.
 
-The first follow-up gate is now hardware-ready but not hardware-validated.
+The first follow-up gate is hardware-validated on FW `0x05500008`.
 `agc_depth_stencil.elf` uses separate typed D32/S8 `64KB_Z_X` allocations,
 1x sampling, and no HTILE. It exercises front-face compare masks, write masks,
 and `REPLACE 0x5a`, then requires deterministic color/depth output and raw S8
 containing only zero and the replacement value. Exact layout and packet
-fixtures are host-covered. The sample remains outside the passing FW `0x0550`
-matrix until a real-console curl/websrv run succeeds.
+fixtures are host-covered. The real-console curl/websrv run produced 256,608
+`0x5a` bytes, 2,364,832 zero bytes, no other stencil values, all depth/color
+checks, and 1,800/1,800 completed flips. The screen showed the expected green
+and red triangles without a hang or kernel panic.
 
 Host implementation is complete for typed gfx1013 depth-surface memory state.
 `agcGfx1013SetDepthSurface` emits a deterministic 24-dword packet stream for

@@ -12,10 +12,12 @@ The provisional eight-address-pipe input must be checked against the PS5's
 
 ## Ordered follow-up gates
 
-1. **Stencil gate:** `agc_depth_stencil.elf` is cross-build ready. It keeps 1x
+1. **Stencil gate (passed):** `agc_depth_stencil.elf` keeps 1x
    sampling and HTILE disabled, binds separate D32 and S8 `64KB_Z_X` planes,
    uses `ALWAYS` comparison with `0xff` compare/write masks and `REPLACE 0x5a`,
    and requires deterministic color, raw depth, and raw stencil readback.
+   FW `0x05500008` produced 256,608 `0x5a` bytes, 2,364,832 zero bytes,
+   no other stencil values, and 1,800/1,800 completed flips.
 2. **MSAA gate:** keep HTILE disabled, use a 4x D32 surface and matching color
    sample state, resolve to a 1x target, and require edge/sample and raw-depth
    checks. Do not combine this first MSAA run with stencil.
@@ -115,6 +117,10 @@ Expected additional terminal result:
 [Stencil Readback] zero=<nonzero> replace-5a=<more than 1000> other=0
 [Depth+Stencil Result] markers=PASS color=PASS raw-depth=PASS stencil=PASS
 ```
+
+The FW `0x05500008` curl/websrv run passed this contract on 2026-07-27. The
+screen showed the expected green and red triangles, and the console remained
+responsive without a hang or kernel panic.
 
 ## 4x MSAA gate contract
 
