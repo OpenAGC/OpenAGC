@@ -125,7 +125,8 @@ extern int32_t  sceAgcDriverSubmitDcb(void *submit);
 extern int32_t  sceAgcDriverSubmitAcb(uint32_t owner, void *submit);
 extern int32_t  sceAgcDriverSubmitMultiDcbs(uintptr_t *addr_array, uint32_t *size_array, uint32_t count);
 extern int32_t  sceAgcDriverSetTFRing(uintptr_t ring, uint32_t size);
-extern int32_t  sceAgcDriverSetHsOffchipParam(uintptr_t buffer, uint32_t param);
+extern int32_t  sceAgcDriverSetHsOffchipParam(
+    uint32_t pipe_id, uint64_t list_addr, uint32_t num_entries);
 extern int32_t  sceAgcGetDataPacketPayloadAddress(uintptr_t *out, uintptr_t cmd_addr, int32_t type);
 extern int32_t  sceAgcSuspendPoint(void);
 extern int32_t  sceAgcDriverGetDefaultOwner(uint32_t *out_owner);
@@ -464,7 +465,8 @@ int main(void) {
     CHECK_OK("sceAgcDriverSetTFRing", err);
 
     /* SetHsOffchipParam: returns OK */
-    err = sceAgcDriverSetHsOffchipParam((uintptr_t)cb_buffer, 0x1000);
+    err = sceAgcDriverSetHsOffchipParam(
+        0u, (uint64_t)(uintptr_t)cb_buffer, 0x400u);
     CHECK_OK("sceAgcDriverSetHsOffchipParam", err);
 
     /* GetDefaultOwner: writes owner to output */

@@ -20,9 +20,11 @@ remain external reference material.
 | Unknown | PPSA03157 | Unknown | Unknown | 58 | 58 | 0 |
 | Subnautica 01.022.394 | PPSA02453 | Unity IL2CPP | 4.00 | 63 | 63 | 0 |
 
-The four-title corpus contains **73 unique AGC functions, all implemented**.
-The release target remains at least ten representative FW 5.50-compatible
-titles across multiple engines and SDK vintages.
+The four-title corpus contains **73 unique AGC functions with declarations and
+definitions**. This corpus is bounded ABI/NID evidence, not a retail-game
+compatibility target or release gate. Add another retail binary only when it
+provides missing calling-convention, structure, firmware-variant, or commonly
+used packet-builder evidence relevant to homebrew.
 
 ## Candidate scope
 

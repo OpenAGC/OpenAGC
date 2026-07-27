@@ -201,6 +201,9 @@ static void test_misc_driver_ioctls(void) {
     ret = sceAgcDriverSetHsOffchipParamDirect(0u, 0u);
     TEST_ASSERT_EQ(ret, (int32_t)AGC_OK, "SetHsOffchipParamDirect");
 
+    ret = sceAgcDriverSetHsOffchipParam(0u, 0x1000u, 0x20u);
+    TEST_ASSERT_EQ(ret, (int32_t)AGC_OK, "SetHsOffchipParam public wrapper");
+
     ret = sceAgcDriverNotifyDefaultStates(0u);
     TEST_ASSERT_EQ(ret, (int32_t)AGC_OK, "NotifyDefaultStates");
 }

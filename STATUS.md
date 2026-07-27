@@ -1,5 +1,21 @@
 # openagc Status
 
+## Product scope and Subnautica evidence cleanup (2026-07-27)
+
+OpenAGC is a source-level GPU API for PS5 homebrew. Retail-game compatibility
+is not a product goal or release gate. Retail binaries are retained only as
+bounded ABI/NID evidence, packet-builder usage examples, and cross-checks for
+structures, calling conventions, and firmware variants.
+
+The pinned Subnautica `PPSA02453` executable is 27,750,350 bytes with SHA-256
+`8d5cd4b6417363a0568ea8d3c28ebdbad01e9725edaf39c614d303b352dcaf07`.
+Its 63 imports resolve to 58 direct definitions and five versioned forwarding
+wrappers. The strict analyzer now rejects header-only coverage. The manifest
+correctly classifies `sceAgcDriverSetHsOffchipParam` and
+`sceAgcDriverSetTFRing` as direct implementations, not forwarding wrappers.
+This is static ABI evidence and makes no claim that Subnautica runs through
+OpenAGC or on FW `0x0550`.
+
 ## FW 5.50 RGBA32 FLOAT render-target qualification (2026-07-27)
 
 The typed gfx1013 `RGBA32_FLOAT` linear render-target path is

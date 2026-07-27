@@ -1929,24 +1929,24 @@ documented expected screen/result, repeated websrv validation, and a negative
 test that rejects unsafe configuration. A single successful frame is evidence,
 not completion.
 
-### Phase 6: Build compatibility from real application requirements
+### Phase 6: Stabilize the homebrew-facing API from real requirements
 
-1. Maintain a coverage manifest mapping each examined homebrew/game import to
-   its public wrapper, implementation status, firmware evidence, and test.
-2. Correct the Subnautica coverage first, then use DRAGON QUEST VII Reimagined
-   as the next available real-application ABI reference.
-3. Exclude Astro's Playroom from the compatibility target and documentation.
-4. Implement wrappers in dependency order: lifecycle and memory, shaders and
-   resources, command recording, submission and synchronization, presentation,
-   then optional statistics/debug helpers.
-5. Do not add empty success stubs. Unsupported calls must report a stable,
-   documented error until their observable behavior is implemented.
-6. Use game binaries only to identify legitimate API/ABI requirements; do not
-   copy proprietary code or data into the repository.
+1. Stabilize homebrew initialization, memory, shader, resource, draw, compute,
+   synchronization, and presentation APIs as coherent vertical slices.
+2. Move generally useful gfx1013 state and PM4 construction into reusable
+   builders; do not add title-specific runtime paths.
+3. Give every feature an exact host fixture and a focused FW 5.50 hardware
+   sample before calling it supported.
+4. Maintain buildable examples and public documentation for homebrew authors.
+5. Retain Sony-compatible names when they improve source portability, while
+   keeping unsupported behavior explicit rather than adding success stubs.
+6. Treat Subnautica, DRAGON QUEST VII Reimagined, and other retail binaries as
+   bounded ABI/NID evidence only. Audit one only when it resolves a missing
+   structure, calling convention, firmware variant, or common API shape.
 
-Exit criteria: selected applications have no unresolved required AGC imports,
-their exercised paths map to tested public behavior, and compatibility claims
-state the exact firmware and feature limits.
+Exit criteria: representative homebrew samples build against documented public
+APIs and pass deterministic host plus focused PS5 hardware gates. Retail import
+counts are never a release criterion.
 
 ### Phase 7: Establish a release-grade validation matrix
 
@@ -2172,9 +2172,10 @@ Next execution order:
    components for 255,744 pixels, eight distinct values, no invalid floats,
    and FNV64 `0x1e8771ed63381dce`; all checks and 1,800/1,800 flips passed with
    clean logs. The R8/RG8/R32/RG32/RGBA32 format-expansion goal is complete.
-18. Continue game-import coverage after the reusable draw/format APIs land;
-   correct Subnautica wrapper coverage and inventory DRAGON QUEST VII
-   Reimagined against the new application-facing surface.
+18. Complete the bounded Subnautica evidence cleanup, then return to stable
+   homebrew-facing vertical slices and examples. Do not expand Subnautica or
+   DRAGON QUEST VII into retail-runtime compatibility goals; consult those
+   binaries only when a missing ABI contract blocks reusable homebrew work.
 
 ## Gfx1013 4x MSAA depth gate (hardware validated)
 

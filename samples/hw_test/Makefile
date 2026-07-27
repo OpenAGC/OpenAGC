@@ -567,7 +567,7 @@ install_agc_videoout: agc_videoout.bin
 # These use a custom _start (crt_emu.c) that skips the ps5-payload-sdk CRT
 # bootstrap, which expects payload_args_t* with sys_dynlib_dlsym.
 # Emulators pass different args to _start, so we bypass the CRT entirely.
-EMU_CFLAGS  := $(CFLAGS) -nostartfiles
+EMU_CFLAGS  := $(CFLAGS) -Wno-unused-command-line-argument
 EMU_LDFLAGS := -nostartfiles -lc -lkernel
 
 emu_videoout: videoout_linear.c ps5_video_out.h crt_emu.c

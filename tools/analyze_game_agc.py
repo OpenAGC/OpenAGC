@@ -27,6 +27,8 @@ ELF64_SYM_SIZE = 24
 NID_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-"
 VERSIONED_NAME = re.compile(r"_[0-9]{4}$")
 PUBLIC_DECL = re.compile(r"\b(sceAgc(?:Driver)?[A-Za-z0-9_]+)\s*\(")
+PUBLIC_DEF = re.compile(
+    r"\bPS5_SYSV_ABI\s+(sceAgc(?:Driver)?[A-Za-z0-9_]+)\s*\(")
 
 
 class ElfError(ValueError):
@@ -78,18 +80,28 @@ def load_public_declarations(include_dir: Path) -> set[str]:
     return declarations
 
 
-def classify(name: str, declarations: set[str]) -> str:
+def load_public_definitions(source_dir: Path) -> set[str]:
+    definitions: set[str] = set()
+    for source in source_dir.glob("*.c"):
+        definitions.update(PUBLIC_DEF.findall(source.read_text(encoding="utf-8")))
+    return definitions
+
+
+def classify(name: str, declarations: set[str], definitions: set[str]) -> str:
     if "Unknown_" in name:
         return "unresolved"
     if name not in declarations:
         return "unresolved"
+    if name not in definitions:
+        return "declared-only"
     if VERSIONED_NAME.search(name):
         return "forwarding-wrapper"
     return "implemented"
 
 
 def parse_imports(data: bytes, known: dict[str, tuple[str, str]],
-                  declarations: set[str]) -> list[tuple[str, str, str, str, str]]:
+                  declarations: set[str],
+                  definitions: set[str]) -> list[tuple[str, str, str, str, str]]:
     if len(data) < 64 or data[:4] != b"\x7fELF":
         raise ElfError("not an ELF file")
     if data[4] != 2 or data[5] != 1:
@@ -160,7 +172,8 @@ def parse_imports(data: bytes, known: dict[str, tuple[str, str]],
             continue
         mapped_library, name = known.get(
             nid, (library, f"{library.removeprefix('libSce')}Unknown_{nid}"))
-        imports.add((mapped_library, name, nid, classify(name, declarations), raw_name))
+        imports.add((mapped_library, name, nid,
+                     classify(name, declarations, definitions), raw_name))
     return sorted(imports)
 
 
@@ -175,6 +188,8 @@ def main() -> int:
                         "analysis/agc_nids_version_variants.tsv")
     parser.add_argument("--include-dir", type=Path,
                         default=Path(__file__).resolve().parents[1] / "include")
+    parser.add_argument("--source-dir", type=Path,
+                        default=Path(__file__).resolve().parents[1] / "src")
     parser.add_argument("--require-covered", action="store_true")
     args = parser.parse_args()
 
@@ -182,17 +197,19 @@ def main() -> int:
     known = load_known_nids(args.known)
     for nid, mapped in load_variant_nids(args.variants).items():
         known.setdefault(nid, mapped)
-    imports = parse_imports(data, known,
-                            load_public_declarations(args.include_dir))
+    imports = parse_imports(
+        data, known, load_public_declarations(args.include_dir),
+        load_public_definitions(args.source_dir))
     writer = csv.writer(sys.stdout, delimiter="\t", lineterminator="\n")
     writer.writerow(("library", "function", "nid", "classification", "raw_symbol"))
     writer.writerows(imports)
 
     unresolved = sum(row[3] == "unresolved" for row in imports)
+    declared_only = sum(row[3] == "declared-only" for row in imports)
     digest = hashlib.sha256(data).hexdigest()
     print(f"{args.binary}: {len(imports)} AGC imports, {unresolved} unresolved, "
-          f"sha256={digest}", file=sys.stderr)
-    return 2 if args.require_covered and unresolved else 0
+          f"{declared_only} declared-only, sha256={digest}", file=sys.stderr)
+    return 2 if args.require_covered and (unresolved or declared_only) else 0
 
 
 if __name__ == "__main__":
