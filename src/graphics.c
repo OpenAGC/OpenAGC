@@ -312,6 +312,8 @@ int32_t PS5_SYSV_ABI agcGfx1013DrawBaselineIndexAuto(
 {
     uint32_t input_count;
     uint32_t required_dwords;
+    uint32_t primitive_resource_count = 0u;
+    uint32_t pixel_resource_count = 0u;
     uint32_t i;
     int32_t error;
 
@@ -337,6 +339,20 @@ int32_t PS5_SYSV_ABI agcGfx1013DrawBaselineIndexAuto(
     error = agcGfx1013ValidateVsPs(&state->shaders);
     if (error != AGC_OK)
         return error;
+    if (state->num_primitive_resource_tables != 0u) {
+        error = agcGfx1013ValidateResourceTables(
+            &state->shaders.primitive, state->primitive_resource_tables,
+            state->num_primitive_resource_tables, &primitive_resource_count);
+        if (error != AGC_OK)
+            return error;
+    }
+    if (state->num_pixel_resource_tables != 0u) {
+        error = agcGfx1013ValidateResourceTables(
+            &state->shaders.pixel, state->pixel_resource_tables,
+            state->num_pixel_resource_tables, &pixel_resource_count);
+        if (error != AGC_OK)
+            return error;
+    }
 
     input_count = agcShaderRecordGetNumInputSemantics(
         state->shaders.pixel.record);
@@ -345,6 +361,7 @@ int32_t PS5_SYSV_ABI agcGfx1013DrawBaselineIndexAuto(
          state->shaders.primitive.num_cx_registers +
          state->shaders.pixel.num_sh_registers +
          state->shaders.pixel.num_cx_registers +
+         primitive_resource_count + pixel_resource_count +
          state->num_post_bind_sh_registers +
          state->num_post_bind_cx_registers +
          state->num_post_bind_uc_registers) * 3u;
@@ -354,6 +371,21 @@ int32_t PS5_SYSV_ABI agcGfx1013DrawBaselineIndexAuto(
     error = agcGfx1013BindVsPs(cb, &state->shaders);
     if (error != AGC_OK)
         return error;
+    if (state->num_primitive_resource_tables != 0u) {
+        error = agcGfx1013BindResourceTables(
+            cb, &state->shaders.primitive,
+            state->primitive_resource_tables,
+            state->num_primitive_resource_tables);
+        if (error != AGC_OK)
+            return error;
+    }
+    if (state->num_pixel_resource_tables != 0u) {
+        error = agcGfx1013BindResourceTables(
+            cb, &state->shaders.pixel, state->pixel_resource_tables,
+            state->num_pixel_resource_tables);
+        if (error != AGC_OK)
+            return error;
+    }
     for (i = 0; i < state->num_post_bind_sh_registers; ++i) {
         if (!sceAgcCbSetShRegistersDirect(
                 cb, &state->post_bind_sh_registers[i], 1u)) {
@@ -1073,15 +1105,15 @@ static int32_t agcGfx1013FindResourceTable(
     return found ? AGC_OK : AGC_ERROR_RESOURCE_NOT_BOUND;
 }
 
-int32_t PS5_SYSV_ABI agcGfx1013BindResourceTables(
-    SceAgcCb *cb, const AgcGfx1013ShaderBinding *shader,
-    const AgcGfx1013ResourceTableBinding *tables, uint32_t table_count)
+int32_t PS5_SYSV_ABI agcGfx1013ValidateResourceTables(
+    const AgcGfx1013ShaderBinding *shader,
+    const AgcGfx1013ResourceTableBinding *tables, uint32_t table_count,
+    uint32_t *binding_count)
 {
     uint32_t resource_count = 0u;
     uint32_t i;
-    bool compute;
 
-    if (!cb || !shader || !shader->record || !shader->sh_registers ||
+    if (!shader || !shader->record || !shader->sh_registers ||
         !tables || table_count == 0u || table_count > 256u ||
         shader->num_sh_registers == 0u ||
         shader->num_sh_registers != shader->record->num_sh_registers)
@@ -1089,7 +1121,20 @@ int32_t PS5_SYSV_ABI agcGfx1013BindResourceTables(
     if (shader->record->magic != AGC_SHADER_RECORD_MAGIC ||
         shader->record->version != AGC_SHADER_RECORD_VERSION_GEN5)
         return AGC_ERROR_SHADER_INVALID;
-    compute = shader->record->shader_type == kAgcShaderTypeCs;
+
+    for (i = 0; i < table_count; ++i) {
+        uint32_t j;
+        if (!agcGfx1013IsResourcePlaceholder(tables[i].placeholder))
+            return AGC_ERROR_INVALID_ARGUMENT;
+        if (tables[i].address == 0u || (tables[i].address & 0xfu) != 0u ||
+            (uint32_t)(tables[i].address >> 32u) !=
+                AGC_GFX1013_ADDRESS32_HIGH)
+            return AGC_ERROR_INVALID_ALIGNMENT;
+        for (j = i + 1u; j < table_count; ++j) {
+            if (tables[i].placeholder == tables[j].placeholder)
+                return AGC_ERROR_INVALID_ARGUMENT;
+        }
+    }
 
     for (i = 0; i < shader->num_sh_registers; ++i) {
         uint64_t address;
@@ -1101,15 +1146,33 @@ int32_t PS5_SYSV_ABI agcGfx1013BindResourceTables(
             shader->sh_registers[i].value, &address);
         if (result != AGC_OK)
             return result;
-        if (address == 0u || (address & 0xfu) != 0u ||
-            (uint32_t)(address >> 32u) != AGC_GFX1013_ADDRESS32_HIGH)
-            return AGC_ERROR_INVALID_ALIGNMENT;
         resource_count++;
     }
+    if (binding_count)
+        *binding_count = resource_count;
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013BindResourceTables(
+    SceAgcCb *cb, const AgcGfx1013ShaderBinding *shader,
+    const AgcGfx1013ResourceTableBinding *tables, uint32_t table_count)
+{
+    uint32_t resource_count;
+    uint32_t i;
+    bool compute;
+    int32_t result;
+
+    if (!cb)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    result = agcGfx1013ValidateResourceTables(
+        shader, tables, table_count, &resource_count);
+    if (result != AGC_OK)
+        return result;
     if (resource_count == 0u)
-        return AGC_ERROR_NOT_FOUND;
+        return AGC_OK;
     if (agcCbRemainingDwords(cb) < resource_count * 3u)
         return AGC_ERROR_BUFFER_TOO_SMALL;
+    compute = shader->record->shader_type == kAgcShaderTypeCs;
 
     for (i = 0; i < shader->num_sh_registers; ++i) {
         uint64_t address;

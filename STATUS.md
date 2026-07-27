@@ -1073,6 +1073,9 @@ register arrays. Callers provide placeholder/address pairs; OpenAGC resolves
 all VBO and descriptor-set placeholders, rejects missing/duplicate/unaligned
 tables before cursor mutation, and emits the correct graphics or compute packet
 type from the shader record.
+The reusable baseline draw now includes primitive and pixel resource-table
+bindings in its atomic preflight and emission order. Shader placeholders can no
+longer overwrite a table address written earlier by an application.
 
 Subnautica (`PPSA02453`) content `01.022.394` passes the strict analyzer with
 63/63 AGC imports covered. The exact executable hash, SDK `0x0400` metadata,

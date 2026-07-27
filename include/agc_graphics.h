@@ -104,6 +104,10 @@ typedef struct AgcGfx1013ResourceTableBinding {
 
 typedef struct AgcGfx1013BaselineDrawState {
     AgcGfx1013Wave32VsPsState shaders;
+    const AgcGfx1013ResourceTableBinding *primitive_resource_tables;
+    uint32_t num_primitive_resource_tables;
+    const AgcGfx1013ResourceTableBinding *pixel_resource_tables;
+    uint32_t num_pixel_resource_tables;
     const AgcRegisterValue *post_bind_sh_registers;
     uint32_t num_post_bind_sh_registers;
     const AgcRegisterValue *post_bind_cx_registers;
@@ -151,6 +155,10 @@ int32_t PS5_SYSV_ABI agcGfx1013DispatchCompute(
 int32_t PS5_SYSV_ABI agcGfx1013BindResourceTables(
     SceAgcCb *cb, const AgcGfx1013ShaderBinding *shader,
     const AgcGfx1013ResourceTableBinding *tables, uint32_t table_count);
+int32_t PS5_SYSV_ABI agcGfx1013ValidateResourceTables(
+    const AgcGfx1013ShaderBinding *shader,
+    const AgcGfx1013ResourceTableBinding *tables, uint32_t table_count,
+    uint32_t *binding_count);
 int32_t PS5_SYSV_ABI agcGfx1013ApplyGraphicsDefaultsV8(
     SceAgcCb *cb, AgcGfx1013GraphicsDefaultStats *stats);
 

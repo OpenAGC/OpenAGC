@@ -885,6 +885,67 @@ static void test_gfx1013_resource_table_binding_rejects(void)
         "short resource binding is atomic");
 }
 
+static void test_gfx1013_baseline_draw_binds_resources(void)
+{
+    uint32_t buffer[96] = {0};
+    AgcGfx1013Wave32VsPsState shaders;
+    AgcShaderRecord primitive_record;
+    AgcShaderRecord pixel_record;
+    AgcShaderSpecials specials;
+    AgcRegisterValue primitive_sh[3];
+    AgcRegisterValue pixel_sh[3];
+    AgcRegisterValue pixel_cx[1];
+    const AgcGfx1013ResourceTableBinding primitive_table = {
+        OPENAGC_VERTEX_BUFFER_TABLE_PLACEHOLDER,
+        0x0000000202601000ull,
+    };
+    const AgcGfx1013ResourceTableBinding pixel_table = {
+        OPENAGC_DESCRIPTOR_SET_PLACEHOLDER(0u),
+        0x0000000202702000ull,
+    };
+    AgcGfx1013BaselineDrawState draw;
+    SceAgcCb cb;
+    uint32_t value;
+
+    make_wave32_state(&shaders, &primitive_record, &pixel_record, &specials,
+        primitive_sh, pixel_sh, pixel_cx);
+    primitive_sh[2] = (AgcRegisterValue){
+        0x220u, OPENAGC_VERTEX_BUFFER_TABLE_PLACEHOLDER,
+    };
+    pixel_sh[2] = (AgcRegisterValue){
+        0x221u, OPENAGC_DESCRIPTOR_SET_PLACEHOLDER(0u),
+    };
+    primitive_record.num_sh_registers = 3u;
+    pixel_record.num_sh_registers = 3u;
+    shaders.primitive.num_sh_registers = 3u;
+    shaders.pixel.num_sh_registers = 3u;
+    memset(&draw, 0, sizeof(draw));
+    draw.shaders = shaders;
+    draw.primitive_resource_tables = &primitive_table;
+    draw.num_primitive_resource_tables = 1u;
+    draw.pixel_resource_tables = &pixel_table;
+    draw.num_pixel_resource_tables = 1u;
+    draw.index_type = kAgcIndexSize16;
+    draw.instance_count = 1u;
+    draw.vertex_count = 3u;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+
+    TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndexAuto(&cb, &draw), AGC_OK,
+        "baseline draw binds resource tables");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 56u,
+        "baseline resource draw exact dword count");
+    TEST_ASSERT(find_last_register(buffer, agcCbUsedDwords(&cb),
+        AGC_PM4_OP_SET_SH_REG, 0x220u, &value),
+        "baseline vertex table register emitted");
+    TEST_ASSERT_EQ(value, 0x02601000u,
+        "baseline vertex placeholder resolved after shader bind");
+    TEST_ASSERT(find_last_register(buffer, agcCbUsedDwords(&cb),
+        AGC_PM4_OP_SET_SH_REG, 0x221u, &value),
+        "baseline descriptor-set register emitted");
+    TEST_ASSERT_EQ(value, 0x02702000u,
+        "baseline descriptor placeholder resolved after shader bind");
+}
+
 void test_suite_graphics(void)
 {
     TEST_SUITE("GFX1013 Graphics State");
@@ -900,4 +961,5 @@ void test_suite_graphics(void)
     TEST_RUN(test_gfx1013_compute_defaults_v8);
     TEST_RUN(test_gfx1013_resource_table_binding);
     TEST_RUN(test_gfx1013_resource_table_binding_rejects);
+    TEST_RUN(test_gfx1013_baseline_draw_binds_resources);
 }
