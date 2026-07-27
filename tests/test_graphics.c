@@ -1000,6 +1000,136 @@ static void test_gfx1013_fixed_function_packets(void)
         "gfx1013 depth-disabled exact packet stream");
 }
 
+static void test_gfx1013_blend_depth_stencil_packets(void)
+{
+    uint32_t buffer[32] = {0};
+    SceAgcCb cb;
+    AgcGfx1013ColorBlendState blend = {0};
+    AgcGfx1013DepthStencilState depth = {0};
+    const uint32_t expected_blend[AGC_GFX1013_BLEND_STATE_DWORDS] = {
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 10u),
+        AGC_REG_CB_BLEND0_CONTROL,
+        0x65010504u, 0x41010101u, 0u, 0u, 0u, 0u, 0u, 0u,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
+        AGC_REG_CB_TARGET_MASK, 0x0000007fu,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 6u),
+        AGC_REG_CB_BLEND_RED,
+        0x3e800000u, 0x3f000000u, 0x3f400000u, 0x3f800000u,
+    };
+    const uint32_t expected_depth[AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS] = {
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
+        AGC_REG_DB_DEPTH_CONTROL, 0x001007bfu,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
+        AGC_REG_DB_STENCIL_CONTROL, 0x00971530u,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 4u),
+        AGC_REG_DB_STENCILREFMASK, 0x12cdab12u, 0x34785634u,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 4u),
+        AGC_REG_DB_DEPTH_BOUNDS_MIN, 0x3e800000u, 0x3f400000u,
+    };
+
+    TEST_ASSERT_EQ(AGC_GFX1013_BLEND_CONSTANT_ALPHA, 19u,
+        "gfx1013 constant-alpha blend encoding");
+    TEST_ASSERT_EQ(AGC_GFX1013_BLEND_ONE_MINUS_CONSTANT_ALPHA, 20u,
+        "gfx1013 inverse constant-alpha encoding");
+    TEST_ASSERT_EQ(AGC_GFX1013_BLEND_OP_REVERSE_SUBTRACT, 4u,
+        "gfx1013 reverse-subtract encoding");
+    TEST_ASSERT_EQ(AGC_GFX1013_COMPARE_ALWAYS, 7u,
+        "gfx1013 compare encoding");
+    TEST_ASSERT_EQ(AGC_GFX1013_STENCIL_REPLACE, 3u,
+        "gfx1013 stencil replace-test encoding");
+    TEST_ASSERT_EQ(AGC_GFX1013_STENCIL_DECREMENT_WRAP, 9u,
+        "gfx1013 stencil decrement-wrap encoding");
+
+    blend.target_count = 2u;
+    blend.targets[0].enable = 1u;
+    blend.targets[0].color_source = AGC_GFX1013_BLEND_SRC_ALPHA;
+    blend.targets[0].color_destination =
+        AGC_GFX1013_BLEND_ONE_MINUS_SRC_ALPHA;
+    blend.targets[0].separate_alpha = 1u;
+    blend.targets[0].alpha_source = AGC_GFX1013_BLEND_ONE;
+    blend.targets[0].alpha_destination =
+        AGC_GFX1013_BLEND_ONE_MINUS_SRC_ALPHA;
+    blend.targets[0].write_mask = 0xfu;
+    blend.targets[1].enable = 1u;
+    blend.targets[1].color_source = AGC_GFX1013_BLEND_ONE;
+    blend.targets[1].color_destination = AGC_GFX1013_BLEND_ONE;
+    blend.targets[1].alpha_source = AGC_GFX1013_BLEND_ONE;
+    blend.targets[1].alpha_destination = AGC_GFX1013_BLEND_ONE;
+    blend.targets[1].write_mask = 0x7u;
+    blend.constants[0] = 0.25f;
+    blend.constants[1] = 0.5f;
+    blend.constants[2] = 0.75f;
+    blend.constants[3] = 1.0f;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetColorBlendState(&cb, &blend), AGC_OK,
+        "gfx1013 typed blend state emits");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), AGC_GFX1013_BLEND_STATE_DWORDS,
+        "gfx1013 blend exact dword count");
+    TEST_ASSERT(memcmp(buffer, expected_blend, sizeof(expected_blend)) == 0,
+        "gfx1013 blend exact packet stream");
+
+    depth.depth_test_enable = 1u;
+    depth.depth_write_enable = 1u;
+    depth.depth_compare_operation = AGC_GFX1013_COMPARE_LESS_EQUAL;
+    depth.depth_bounds_enable = 1u;
+    depth.min_depth_bounds = 0.25f;
+    depth.max_depth_bounds = 0.75f;
+    depth.stencil_test_enable = 1u;
+    depth.back_face_enable = 1u;
+    depth.front.compare_operation = AGC_GFX1013_COMPARE_ALWAYS;
+    depth.front.fail_operation = AGC_GFX1013_STENCIL_KEEP;
+    depth.front.depth_fail_operation = AGC_GFX1013_STENCIL_INCREMENT_CLAMP;
+    depth.front.pass_operation = AGC_GFX1013_STENCIL_REPLACE;
+    depth.front.reference = 0x12u;
+    depth.front.compare_mask = 0xabu;
+    depth.front.write_mask = 0xcdu;
+    depth.back.compare_operation = AGC_GFX1013_COMPARE_LESS;
+    depth.back.fail_operation = AGC_GFX1013_STENCIL_ZERO;
+    depth.back.depth_fail_operation = AGC_GFX1013_STENCIL_DECREMENT_WRAP;
+    depth.back.pass_operation = AGC_GFX1013_STENCIL_INVERT;
+    depth.back.reference = 0x34u;
+    depth.back.compare_mask = 0x56u;
+    depth.back.write_mask = 0x78u;
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetDepthStencilState(&cb, &depth), AGC_OK,
+        "gfx1013 typed depth/stencil state emits");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb),
+        AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS,
+        "gfx1013 depth/stencil exact dword count");
+    TEST_ASSERT(memcmp(buffer, expected_depth, sizeof(expected_depth)) == 0,
+        "gfx1013 depth/stencil exact packet stream");
+
+    agcCbReset(&cb, buffer,
+        (AGC_GFX1013_BLEND_STATE_DWORDS - 1u) * sizeof(uint32_t));
+    TEST_ASSERT_EQ(agcGfx1013SetColorBlendState(&cb, &blend),
+        AGC_ERROR_BUFFER_TOO_SMALL, "short blend state rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u, "short blend state is atomic");
+    blend.targets[0].write_mask = 0x10u;
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetColorBlendState(&cb, &blend),
+        AGC_ERROR_INVALID_ARGUMENT, "invalid blend mask rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u, "invalid blend is atomic");
+
+    agcCbReset(&cb, buffer,
+        (AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS - 1u) * sizeof(uint32_t));
+    TEST_ASSERT_EQ(agcGfx1013SetDepthStencilState(&cb, &depth),
+        AGC_ERROR_BUFFER_TOO_SMALL, "short depth/stencil state rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "short depth/stencil state is atomic");
+    depth.depth_test_enable = 0u;
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetDepthStencilState(&cb, &depth),
+        AGC_ERROR_INVALID_ARGUMENT, "depth write without test rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "invalid depth/stencil is atomic");
+    depth.depth_test_enable = 1u;
+    depth.front.pass_operation = (AgcGfx1013StencilOp)4;
+    TEST_ASSERT_EQ(agcGfx1013SetDepthStencilState(&cb, &depth),
+        AGC_ERROR_INVALID_ARGUMENT, "nonstandard stencil op rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "invalid stencil op is atomic");
+}
+
 static void test_gfx1013_graphics_defaults_v8(void)
 {
     uint32_t buffer[2184] = {0};
@@ -1487,6 +1617,7 @@ void test_suite_graphics(void)
     TEST_RUN(test_gfx1013_eop_completion_fence);
     TEST_RUN(test_gfx1013_resource_transitions);
     TEST_RUN(test_gfx1013_fixed_function_packets);
+    TEST_RUN(test_gfx1013_blend_depth_stencil_packets);
     TEST_RUN(test_gfx1013_frame_state);
     TEST_RUN(test_gfx1013_graphics_defaults_v8);
     TEST_RUN(test_gfx1013_fixed_function_rejects_atomically);

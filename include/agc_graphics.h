@@ -60,6 +60,9 @@ extern "C" {
 
 #define AGC_GFX1013_FRAME_PROLOGUE_DWORDS       2275u
 #define AGC_GFX1013_FRAME_POST_BIND_DWORDS        21u
+#define AGC_GFX1013_BLEND_STATE_DWORDS            19u
+#define AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS    14u
+#define AGC_GFX1013_MAX_COLOR_TARGETS              8u
 #define AGC_GFX1013_CONTEXT_CONTROL_ENABLE 0x80000000u
 #define AGC_GFX1013_NGG_MODE_CONTROL        0x00000200u
 #define AGC_GFX1013_VERTEX_REUSE_BLOCK              14u
@@ -113,6 +116,104 @@ typedef struct AgcGfx1013ColorTargetFormatInfo {
     uint32_t bytes_per_pixel;
     uint32_t spi_shader_export_format;
 } AgcGfx1013ColorTargetFormatInfo;
+
+typedef enum AgcGfx1013BlendFactor {
+    AGC_GFX1013_BLEND_ZERO = 0,
+    AGC_GFX1013_BLEND_ONE = 1,
+    AGC_GFX1013_BLEND_SRC_COLOR = 2,
+    AGC_GFX1013_BLEND_ONE_MINUS_SRC_COLOR = 3,
+    AGC_GFX1013_BLEND_SRC_ALPHA = 4,
+    AGC_GFX1013_BLEND_ONE_MINUS_SRC_ALPHA = 5,
+    AGC_GFX1013_BLEND_DST_ALPHA = 6,
+    AGC_GFX1013_BLEND_ONE_MINUS_DST_ALPHA = 7,
+    AGC_GFX1013_BLEND_DST_COLOR = 8,
+    AGC_GFX1013_BLEND_ONE_MINUS_DST_COLOR = 9,
+    AGC_GFX1013_BLEND_SRC_ALPHA_SATURATE = 10,
+    AGC_GFX1013_BLEND_BOTH_SRC_ALPHA = 11,
+    AGC_GFX1013_BLEND_BOTH_INV_SRC_ALPHA = 12,
+    AGC_GFX1013_BLEND_CONSTANT_COLOR = 13,
+    AGC_GFX1013_BLEND_ONE_MINUS_CONSTANT_COLOR = 14,
+    AGC_GFX1013_BLEND_SRC1_COLOR = 15,
+    AGC_GFX1013_BLEND_ONE_MINUS_SRC1_COLOR = 16,
+    AGC_GFX1013_BLEND_SRC1_ALPHA = 17,
+    AGC_GFX1013_BLEND_ONE_MINUS_SRC1_ALPHA = 18,
+    AGC_GFX1013_BLEND_CONSTANT_ALPHA = 19,
+    AGC_GFX1013_BLEND_ONE_MINUS_CONSTANT_ALPHA = 20,
+    AGC_GFX1013_BLEND_FACTOR_COUNT = 21
+} AgcGfx1013BlendFactor;
+
+typedef enum AgcGfx1013BlendOp {
+    AGC_GFX1013_BLEND_OP_ADD = 0,
+    AGC_GFX1013_BLEND_OP_SUBTRACT = 1,
+    AGC_GFX1013_BLEND_OP_MIN = 2,
+    AGC_GFX1013_BLEND_OP_MAX = 3,
+    AGC_GFX1013_BLEND_OP_REVERSE_SUBTRACT = 4,
+    AGC_GFX1013_BLEND_OP_COUNT = 5
+} AgcGfx1013BlendOp;
+
+typedef struct AgcGfx1013ColorBlendTargetState {
+    uint32_t enable;
+    AgcGfx1013BlendFactor color_source;
+    AgcGfx1013BlendFactor color_destination;
+    AgcGfx1013BlendOp color_operation;
+    uint32_t separate_alpha;
+    AgcGfx1013BlendFactor alpha_source;
+    AgcGfx1013BlendFactor alpha_destination;
+    AgcGfx1013BlendOp alpha_operation;
+    uint32_t write_mask;
+} AgcGfx1013ColorBlendTargetState;
+
+typedef struct AgcGfx1013ColorBlendState {
+    uint32_t target_count;
+    AgcGfx1013ColorBlendTargetState targets[AGC_GFX1013_MAX_COLOR_TARGETS];
+    float constants[4];
+} AgcGfx1013ColorBlendState;
+
+typedef enum AgcGfx1013CompareOp {
+    AGC_GFX1013_COMPARE_NEVER = 0,
+    AGC_GFX1013_COMPARE_LESS = 1,
+    AGC_GFX1013_COMPARE_EQUAL = 2,
+    AGC_GFX1013_COMPARE_LESS_EQUAL = 3,
+    AGC_GFX1013_COMPARE_GREATER = 4,
+    AGC_GFX1013_COMPARE_NOT_EQUAL = 5,
+    AGC_GFX1013_COMPARE_GREATER_EQUAL = 6,
+    AGC_GFX1013_COMPARE_ALWAYS = 7,
+    AGC_GFX1013_COMPARE_COUNT = 8
+} AgcGfx1013CompareOp;
+
+typedef enum AgcGfx1013StencilOp {
+    AGC_GFX1013_STENCIL_KEEP = 0,
+    AGC_GFX1013_STENCIL_ZERO = 1,
+    AGC_GFX1013_STENCIL_REPLACE = 3,
+    AGC_GFX1013_STENCIL_INCREMENT_CLAMP = 5,
+    AGC_GFX1013_STENCIL_DECREMENT_CLAMP = 6,
+    AGC_GFX1013_STENCIL_INVERT = 7,
+    AGC_GFX1013_STENCIL_INCREMENT_WRAP = 8,
+    AGC_GFX1013_STENCIL_DECREMENT_WRAP = 9
+} AgcGfx1013StencilOp;
+
+typedef struct AgcGfx1013StencilFaceState {
+    AgcGfx1013CompareOp compare_operation;
+    AgcGfx1013StencilOp fail_operation;
+    AgcGfx1013StencilOp depth_fail_operation;
+    AgcGfx1013StencilOp pass_operation;
+    uint32_t reference;
+    uint32_t compare_mask;
+    uint32_t write_mask;
+} AgcGfx1013StencilFaceState;
+
+typedef struct AgcGfx1013DepthStencilState {
+    uint32_t depth_test_enable;
+    uint32_t depth_write_enable;
+    AgcGfx1013CompareOp depth_compare_operation;
+    uint32_t depth_bounds_enable;
+    float min_depth_bounds;
+    float max_depth_bounds;
+    uint32_t stencil_test_enable;
+    uint32_t back_face_enable;
+    AgcGfx1013StencilFaceState front;
+    AgcGfx1013StencilFaceState back;
+} AgcGfx1013DepthStencilState;
 
 typedef struct AgcGfx1013ColorTargetState {
     uint64_t address;
@@ -308,6 +409,10 @@ int32_t PS5_SYSV_ABI agcGfx1013SetScissor(
     SceAgcCb *cb, const AgcGfx1013ScissorState *state);
 int32_t PS5_SYSV_ABI agcGfx1013SetTargetMask(
     SceAgcCb *cb, uint32_t mask);
+int32_t PS5_SYSV_ABI agcGfx1013SetColorBlendState(
+    SceAgcCb *cb, const AgcGfx1013ColorBlendState *state);
+int32_t PS5_SYSV_ABI agcGfx1013SetDepthStencilState(
+    SceAgcCb *cb, const AgcGfx1013DepthStencilState *state);
 int32_t PS5_SYSV_ABI agcGfx1013SetDepthDisabled(SceAgcCb *cb);
 int32_t PS5_SYSV_ABI agcGfx1013BuildFramePrologue(
     SceAgcCb *cb, const AgcGfx1013FrameState *state,

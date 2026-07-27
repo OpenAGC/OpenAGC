@@ -1116,6 +1116,170 @@ int32_t PS5_SYSV_ABI agcGfx1013SetTargetMask(
         ? AGC_OK : AGC_ERROR_INTERNAL;
 }
 
+static bool agcGfx1013StencilOpValid(AgcGfx1013StencilOp operation)
+{
+    return operation == AGC_GFX1013_STENCIL_KEEP ||
+        operation == AGC_GFX1013_STENCIL_ZERO ||
+        operation == AGC_GFX1013_STENCIL_REPLACE ||
+        operation == AGC_GFX1013_STENCIL_INCREMENT_CLAMP ||
+        operation == AGC_GFX1013_STENCIL_DECREMENT_CLAMP ||
+        operation == AGC_GFX1013_STENCIL_INVERT ||
+        operation == AGC_GFX1013_STENCIL_INCREMENT_WRAP ||
+        operation == AGC_GFX1013_STENCIL_DECREMENT_WRAP;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013SetColorBlendState(
+    SceAgcCb *cb, const AgcGfx1013ColorBlendState *state)
+{
+    uint32_t controls[AGC_GFX1013_MAX_COLOR_TARGETS] = {0};
+    uint32_t target_mask = 0u;
+    uint32_t *cmd;
+    uint32_t i;
+
+    if (!cb || !state || state->target_count == 0u ||
+        state->target_count > AGC_GFX1013_MAX_COLOR_TARGETS)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    for (i = 0u; i < state->target_count; ++i) {
+        const AgcGfx1013ColorBlendTargetState *target = &state->targets[i];
+        if (target->enable > 1u || target->separate_alpha > 1u ||
+            target->color_source >= AGC_GFX1013_BLEND_FACTOR_COUNT ||
+            target->color_destination >= AGC_GFX1013_BLEND_FACTOR_COUNT ||
+            target->alpha_source >= AGC_GFX1013_BLEND_FACTOR_COUNT ||
+            target->alpha_destination >= AGC_GFX1013_BLEND_FACTOR_COUNT ||
+            target->color_operation >= AGC_GFX1013_BLEND_OP_COUNT ||
+            target->alpha_operation >= AGC_GFX1013_BLEND_OP_COUNT ||
+            target->write_mask > 0x0fu)
+            return AGC_ERROR_INVALID_ARGUMENT;
+        controls[i] =
+            ((uint32_t)target->color_source <<
+                AGC_REG_CB_BLEND0_CONTROL_COLOR_SRCBLEND_SHIFT) |
+            ((uint32_t)target->color_operation <<
+                AGC_REG_CB_BLEND0_CONTROL_COLOR_COMB_FCN_SHIFT) |
+            ((uint32_t)target->color_destination <<
+                AGC_REG_CB_BLEND0_CONTROL_COLOR_DESTBLEND_SHIFT) |
+            ((uint32_t)target->alpha_source <<
+                AGC_REG_CB_BLEND0_CONTROL_ALPHA_SRCBLEND_SHIFT) |
+            ((uint32_t)target->alpha_operation <<
+                AGC_REG_CB_BLEND0_CONTROL_ALPHA_COMB_FCN_SHIFT) |
+            ((uint32_t)target->alpha_destination <<
+                AGC_REG_CB_BLEND0_CONTROL_ALPHA_DESTBLEND_SHIFT) |
+            (target->separate_alpha <<
+                AGC_REG_CB_BLEND0_CONTROL_SEPARATE_ALPHA_BLEND_SHIFT) |
+            (target->enable << AGC_REG_CB_BLEND0_CONTROL_ENABLE_SHIFT);
+        target_mask |= target->write_mask << (i * 4u);
+    }
+    if (agcCbRemainingDwords(cb) < AGC_GFX1013_BLEND_STATE_DWORDS)
+        return AGC_ERROR_BUFFER_TOO_SMALL;
+
+    cmd = agcCbAllocDwords(cb, 10u);
+    if (!cmd)
+        return AGC_ERROR_INTERNAL;
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 10u);
+    cmd[1] = AGC_REG_CB_BLEND0_CONTROL;
+    memcpy(&cmd[2], controls, sizeof(controls));
+    if (!agcGfx1013EmitCx(cb, AGC_REG_CB_TARGET_MASK, target_mask))
+        return AGC_ERROR_INTERNAL;
+    cmd = agcCbAllocDwords(cb, 6u);
+    if (!cmd)
+        return AGC_ERROR_INTERNAL;
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 6u);
+    cmd[1] = AGC_REG_CB_BLEND_RED;
+    for (i = 0u; i < 4u; ++i)
+        cmd[i + 2u] = agcGfx1013FloatBits(state->constants[i]);
+    return AGC_OK;
+}
+
+static bool agcGfx1013StencilFaceValid(
+    const AgcGfx1013StencilFaceState *face)
+{
+    return face->compare_operation < AGC_GFX1013_COMPARE_COUNT &&
+        agcGfx1013StencilOpValid(face->fail_operation) &&
+        agcGfx1013StencilOpValid(face->depth_fail_operation) &&
+        agcGfx1013StencilOpValid(face->pass_operation) &&
+        face->reference <= 0xffu && face->compare_mask <= 0xffu &&
+        face->write_mask <= 0xffu;
+}
+
+static uint32_t agcGfx1013StencilRefMask(
+    const AgcGfx1013StencilFaceState *face)
+{
+    return face->reference |
+        (face->compare_mask << AGC_REG_DB_STENCILREFMASK_COMPARE_SHIFT) |
+        (face->write_mask << AGC_REG_DB_STENCILREFMASK_WRITE_SHIFT) |
+        (face->reference << AGC_REG_DB_STENCILREFMASK_OPVAL_SHIFT);
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013SetDepthStencilState(
+    SceAgcCb *cb, const AgcGfx1013DepthStencilState *state)
+{
+    const AgcGfx1013StencilFaceState *back;
+    uint32_t depth_control;
+    uint32_t stencil_control;
+    uint32_t *cmd;
+
+    if (!cb || !state || state->depth_test_enable > 1u ||
+        state->depth_write_enable > 1u || state->depth_bounds_enable > 1u ||
+        state->stencil_test_enable > 1u || state->back_face_enable > 1u ||
+        state->depth_compare_operation >= AGC_GFX1013_COMPARE_COUNT ||
+        (state->depth_write_enable && !state->depth_test_enable) ||
+        (state->depth_bounds_enable && !state->depth_test_enable) ||
+        (state->back_face_enable && !state->stencil_test_enable) ||
+        !(state->min_depth_bounds >= 0.0f &&
+          state->max_depth_bounds <= 1.0f &&
+          state->min_depth_bounds <= state->max_depth_bounds) ||
+        !agcGfx1013StencilFaceValid(&state->front) ||
+        !agcGfx1013StencilFaceValid(&state->back))
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (agcCbRemainingDwords(cb) < AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS)
+        return AGC_ERROR_BUFFER_TOO_SMALL;
+
+    back = state->back_face_enable ? &state->back : &state->front;
+    depth_control = state->stencil_test_enable |
+        (state->depth_test_enable << AGC_REG_DB_DEPTH_CONTROL_Z_ENABLE_SHIFT) |
+        (state->depth_write_enable <<
+            AGC_REG_DB_DEPTH_CONTROL_Z_WRITE_ENABLE_SHIFT) |
+        (state->depth_bounds_enable <<
+            AGC_REG_DB_DEPTH_CONTROL_DEPTH_BOUNDS_ENABLE_SHIFT) |
+        ((uint32_t)state->depth_compare_operation <<
+            AGC_REG_DB_DEPTH_CONTROL_ZFUNC_SHIFT) |
+        (state->back_face_enable <<
+            AGC_REG_DB_DEPTH_CONTROL_BACKFACE_ENABLE_SHIFT) |
+        ((uint32_t)state->front.compare_operation <<
+            AGC_REG_DB_DEPTH_CONTROL_STENCILFUNC_SHIFT) |
+        ((uint32_t)back->compare_operation <<
+            AGC_REG_DB_DEPTH_CONTROL_STENCILFUNC_BF_SHIFT);
+    stencil_control = (uint32_t)state->front.fail_operation |
+        ((uint32_t)state->front.pass_operation <<
+            AGC_REG_DB_STENCIL_CONTROL_ZPASS_SHIFT) |
+        ((uint32_t)state->front.depth_fail_operation <<
+            AGC_REG_DB_STENCIL_CONTROL_ZFAIL_SHIFT) |
+        ((uint32_t)back->fail_operation <<
+            AGC_REG_DB_STENCIL_CONTROL_FAIL_BF_SHIFT) |
+        ((uint32_t)back->pass_operation <<
+            AGC_REG_DB_STENCIL_CONTROL_ZPASS_BF_SHIFT) |
+        ((uint32_t)back->depth_fail_operation <<
+            AGC_REG_DB_STENCIL_CONTROL_ZFAIL_BF_SHIFT);
+
+    if (!agcGfx1013EmitCx(cb, AGC_REG_DB_DEPTH_CONTROL, depth_control) ||
+        !agcGfx1013EmitCx(cb, AGC_REG_DB_STENCIL_CONTROL, stencil_control))
+        return AGC_ERROR_INTERNAL;
+    cmd = agcCbAllocDwords(cb, 4u);
+    if (!cmd)
+        return AGC_ERROR_INTERNAL;
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 4u);
+    cmd[1] = AGC_REG_DB_STENCILREFMASK;
+    cmd[2] = agcGfx1013StencilRefMask(&state->front);
+    cmd[3] = agcGfx1013StencilRefMask(back);
+    cmd = agcCbAllocDwords(cb, 4u);
+    if (!cmd)
+        return AGC_ERROR_INTERNAL;
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 4u);
+    cmd[1] = AGC_REG_DB_DEPTH_BOUNDS_MIN;
+    cmd[2] = agcGfx1013FloatBits(state->min_depth_bounds);
+    cmd[3] = agcGfx1013FloatBits(state->max_depth_bounds);
+    return AGC_OK;
+}
+
 int32_t PS5_SYSV_ABI agcGfx1013SetDepthDisabled(SceAgcCb *cb)
 {
     static const AgcRegisterValue regs[5] = {

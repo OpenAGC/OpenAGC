@@ -1722,6 +1722,14 @@ failure fixtures are required gates. The acquire-bearing transitions remain
 hardware-unqualified until the FW `0x0550` websrv matrix can exercise
 render-to-shader, compute-to-copy, copy-to-shader, and present-to-render cases.
 
+Typed blend and depth/stencil control is implemented as deterministic gfx1013
+packet groups. Blend covers eight MRT equations, write masks, and constants;
+depth/stencil covers depth test/write/bounds plus independent front/back
+compare, operations, reference, compare mask, and write mask. Host fixtures
+lock the full streams and atomic failures. This completes control-state
+encoding only: depth-surface allocation/binding and FW `0x0550` execution must
+be qualified before depth or stencil support is advertised as hardware-ready.
+
 This is the authoritative execution order for OpenAGC. The product goal is a
 clean, redistributable GPU API that lets homebrew applications and game ports
 compile shaders, allocate GPU resources, build command buffers, submit work,
