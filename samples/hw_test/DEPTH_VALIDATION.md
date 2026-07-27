@@ -243,3 +243,31 @@ Repeat through websrv only:
 make agc_depth_htile_ops.elf
 make deploy_agc_depth_htile_ops PS5_HOST=<address>
 ```
+
+## Depth-only expclear gate contract
+
+- `agc_depth_expclear.elf` uses 1x D32 with pipe-aligned HTILE; stencil, MSAA,
+  and combined-aspect compression remain disabled.
+- HTILE starts at the canonical gfx10.3 depth-one fast-clear value
+  `0xfffffff0`; the raw D32 allocation starts as NaNs.
+- `DB_Z_INFO.ALLOW_EXPCLEAR` is enabled and
+  `agcGfx1013SetDepthExpclear` programs `DB_DEPTH_CLEAR=1.0f`.
+- The full-surface depth initialization draw is intentionally omitted. The
+  near-pass, overlap-fail, and independent far-pass draws must consume the
+  metadata-backed logical clear value.
+- Typed decompression must materialize exact 1.0, near, and far D32 words.
+  Resummarization must then replace the initial fast-clear metadata.
+
+FW `0x05500008` passed on 2026-07-27. The 2,695-dword DCB reached its fence in
+1 ms. Raw D32 contained 918,432 clear, 128,304 near, and 128,304 far words;
+color readback contained 128,304 green and 128,304 red pixels; all 49,152
+HTILE words changed from `0xfffffff0`; and VideoOut completed 1,800/1,800
+flips without a hang, reset, or kernel panic. The physical display showed the
+expected green and red triangles on dark gray.
+
+Repeat through websrv only:
+
+```sh
+make agc_depth_expclear.elf
+make deploy_agc_depth_expclear PS5_HOST=<address>
+```

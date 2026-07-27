@@ -1751,6 +1751,24 @@ int32_t PS5_SYSV_ABI agcGfx1013SetHtileOperation(
     return AGC_OK;
 }
 
+int32_t PS5_SYSV_ABI agcGfx1013SetDepthExpclear(
+    SceAgcCb *cb, const AgcGfx1013DepthExpclearState *state)
+{
+    uint32_t clear_bits;
+
+    if (!cb || !state)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (state->clear_depth != 0.0f && state->clear_depth != 1.0f)
+        return AGC_ERROR_NOT_SUPPORTED;
+    if (agcCbRemainingDwords(cb) < AGC_GFX1013_DEPTH_EXPCLEAR_DWORDS)
+        return AGC_ERROR_BUFFER_TOO_SMALL;
+
+    memcpy(&clear_bits, &state->clear_depth, sizeof(clear_bits));
+    if (!agcGfx1013EmitCx(cb, AGC_REG_DB_DEPTH_CLEAR, clear_bits))
+        return AGC_ERROR_INTERNAL;
+    return AGC_OK;
+}
+
 int32_t PS5_SYSV_ABI agcGfx1013SetViewport(
     SceAgcCb *cb, const AgcGfx1013ViewportState *state)
 {

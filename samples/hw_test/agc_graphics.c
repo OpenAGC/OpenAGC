@@ -75,6 +75,10 @@
 #define AGC_HTILE_OPERATION_VALIDATION 0
 #endif
 
+#ifndef AGC_EXPCLEAR_VALIDATION
+#define AGC_EXPCLEAR_VALIDATION 0
+#endif
+
 #if AGC_STENCIL_VALIDATION && !AGC_DEPTH_VALIDATION
 #error "stencil validation requires depth validation"
 #endif
@@ -97,6 +101,10 @@
 
 #if AGC_HTILE_OPERATION_VALIDATION && !AGC_HTILE_VALIDATION
 #error "HTILE operation validation requires the isolated HTILE gate"
+#endif
+
+#if AGC_EXPCLEAR_VALIDATION && !AGC_HTILE_OPERATION_VALIDATION
+#error "expclear validation requires HTILE decompression/resummarization"
 #endif
 
 #if AGC_DEPTH_VALIDATION && AGC_TESSELLATION
@@ -585,7 +593,9 @@ static bool allocate_display_buffers(GraphicsTest *test) {
         uint32_t *htile = (uint32_t *)test->htile_surface;
         for (size_t i = 0u;
              i < test->htile_surface_size / sizeof(uint32_t); ++i)
-            htile[i] = AGC_GFX1013_HTILE_UNCOMPRESSED_DEPTH;
+            htile[i] = AGC_EXPCLEAR_VALIDATION ?
+                AGC_GFX1013_HTILE_CLEAR_DEPTH_ONE :
+                AGC_GFX1013_HTILE_UNCOMPRESSED_DEPTH;
     } else {
         memset(test->htile_surface, 0, test->htile_surface_size);
     }
@@ -1507,6 +1517,7 @@ static bool dispatch_graphics(GraphicsTest *test,
         .htile_address = AGC_HTILE_VALIDATION ?
             (uint64_t)(uintptr_t)test->htile_surface : 0u,
         .htile_enable = AGC_HTILE_VALIDATION,
+        .allow_expclear = AGC_EXPCLEAR_VALIDATION,
     };
     AgcGfx1013DepthStencilState depth_control = {
         .depth_test_enable = 1u,
@@ -1519,12 +1530,16 @@ static bool dispatch_graphics(GraphicsTest *test,
 #if AGC_MSAA_VALIDATION
     blend.targets[0].write_mask = 0xfu;
 #endif
+    const AgcGfx1013DepthExpclearState expclear = {1.0f};
     if (agcGfx1013SetDepthSurface(&cb, &depth_surface) != AGC_OK ||
+        (AGC_EXPCLEAR_VALIDATION &&
+         agcGfx1013SetDepthExpclear(&cb, &expclear) != AGC_OK) ||
         agcGfx1013SetDepthStencilState(&cb, &depth_control) != AGC_OK ||
         agcGfx1013SetColorBlendState(&cb, &blend) != AGC_OK ||
         !sceAgcDcbSetIndexSize(&cb, kAgcIndexSize16, 0u) ||
         !sceAgcDcbSetNumInstances(&cb, 1u) ||
-        !sceAgcDcbDrawIndexAuto(&cb, 3u, 0x40000000u) ||
+        (!AGC_EXPCLEAR_VALIDATION &&
+         !sceAgcDcbDrawIndexAuto(&cb, 3u, 0x40000000u)) ||
         !sceAgcDcbWriteData(&cb, 2u, 0u,
             (uint64_t)(uintptr_t)&depth_markers[0],
             &depth_marker_values[0], 1u, 0u, 0u))
@@ -1594,8 +1609,10 @@ static bool dispatch_graphics(GraphicsTest *test,
         return false;
     printf("[HTILE] full-surface depth decompress + resummarize emitted\n");
 #endif
-    printf("[Depth%s] emitted init, near-pass, overlap-fail, and far-pass draws\n",
-           AGC_STENCIL_VALIDATION ? "+Stencil" : "");
+    printf("[Depth%s%s] emitted %s, near-pass, overlap-fail, and far-pass\n",
+           AGC_STENCIL_VALIDATION ? "+Stencil" : "",
+           AGC_EXPCLEAR_VALIDATION ? "+Expclear" : "",
+           AGC_EXPCLEAR_VALIDATION ? "metadata clear" : "init draw");
 #if AGC_MSAA_VALIDATION
     AgcGfx1013ImageDescriptor *msaa_descriptor =
         (AgcGfx1013ImageDescriptor *)texture_desc;
@@ -1861,15 +1878,18 @@ static bool dispatch_graphics(GraphicsTest *test,
     uint32_t htile_other = 0u;
     for (size_t i = 0u;
          i < test->htile_surface_size / sizeof(uint32_t); ++i) {
-        htile_changed +=
-            htile[i] != AGC_GFX1013_HTILE_UNCOMPRESSED_DEPTH;
-        htile_other += htile[i] != AGC_GFX1013_HTILE_UNCOMPRESSED_DEPTH &&
+        const uint32_t htile_initial = AGC_EXPCLEAR_VALIDATION ?
+            AGC_GFX1013_HTILE_CLEAR_DEPTH_ONE :
+            AGC_GFX1013_HTILE_UNCOMPRESSED_DEPTH;
+        htile_changed += htile[i] != htile_initial;
+        htile_other += htile[i] != htile_initial &&
             htile[i] != 0xfffffff0u && htile[i] != 0x00000000u;
     }
     const bool htile_pass = htile_changed > 0u;
     printf("[HTILE Readback] changed=%u other=%u initial=%08x\n",
            htile_changed, htile_other,
-           AGC_GFX1013_HTILE_UNCOMPRESSED_DEPTH);
+           AGC_EXPCLEAR_VALIDATION ? AGC_GFX1013_HTILE_CLEAR_DEPTH_ONE :
+               AGC_GFX1013_HTILE_UNCOMPRESSED_DEPTH);
 #else
     const bool htile_pass = true;
 #endif

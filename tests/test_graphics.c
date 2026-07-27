@@ -1341,6 +1341,48 @@ static void test_gfx1013_htile_operation_packets(void)
         "invalid HTILE operation is atomic");
 }
 
+static void test_gfx1013_depth_expclear_packets(void)
+{
+    uint32_t buffer[AGC_GFX1013_DEPTH_EXPCLEAR_DWORDS] = {0};
+    SceAgcCb cb;
+    AgcGfx1013DepthExpclearState state = {1.0f};
+
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetDepthExpclear(&cb, &state), AGC_OK,
+        "gfx1013 typed depth expclear emits");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb),
+        AGC_GFX1013_DEPTH_EXPCLEAR_DWORDS,
+        "gfx1013 depth expclear exact dword count");
+    TEST_ASSERT_EQ(buffer[0], agcPm4Header3(
+        AGC_PM4_OP_SET_CONTEXT_REG, AGC_GFX1013_DEPTH_EXPCLEAR_DWORDS),
+        "depth expclear context header");
+    TEST_ASSERT_EQ(buffer[1], AGC_REG_DB_DEPTH_CLEAR,
+        "depth expclear register");
+    TEST_ASSERT_EQ(buffer[2], 0x3f800000u,
+        "depth-one expclear bits");
+
+    state.clear_depth = 0.0f;
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetDepthExpclear(&cb, &state), AGC_OK,
+        "gfx1013 depth-zero expclear emits");
+    TEST_ASSERT_EQ(buffer[2], 0u, "depth-zero expclear bits");
+
+    state.clear_depth = 0.5f;
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetDepthExpclear(&cb, &state),
+        AGC_ERROR_NOT_SUPPORTED, "noncanonical expclear rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "unsupported expclear is atomic");
+
+    state.clear_depth = 1.0f;
+    agcCbReset(&cb, buffer,
+        (AGC_GFX1013_DEPTH_EXPCLEAR_DWORDS - 1u) * sizeof(uint32_t));
+    TEST_ASSERT_EQ(agcGfx1013SetDepthExpclear(&cb, &state),
+        AGC_ERROR_BUFFER_TOO_SMALL, "short depth expclear rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "short depth expclear is atomic");
+}
+
 static void test_gfx1013_depth_surface_layout(void)
 {
     AgcGfx1013DepthSurfaceLayoutInput input = {
@@ -2236,6 +2278,7 @@ void test_suite_graphics(void)
     TEST_RUN(test_gfx1013_blend_depth_stencil_packets);
     TEST_RUN(test_gfx1013_depth_surface_packets);
     TEST_RUN(test_gfx1013_htile_operation_packets);
+    TEST_RUN(test_gfx1013_depth_expclear_packets);
     TEST_RUN(test_gfx1013_depth_surface_layout);
     TEST_RUN(test_gfx1013_htile_layout);
     TEST_RUN(test_gfx1013_stencil_gate_fixture);

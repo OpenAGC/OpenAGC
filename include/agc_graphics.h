@@ -67,7 +67,10 @@ extern "C" {
 #define AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS    14u
 #define AGC_GFX1013_DEPTH_SURFACE_DWORDS           27u
 #define AGC_GFX1013_HTILE_OPERATION_DWORDS          3u
+#define AGC_GFX1013_DEPTH_EXPCLEAR_DWORDS            3u
 #define AGC_GFX1013_HTILE_UNCOMPRESSED_DEPTH       0xfffc000fu
+#define AGC_GFX1013_HTILE_CLEAR_DEPTH_ZERO          0x00000000u
+#define AGC_GFX1013_HTILE_CLEAR_DEPTH_ONE           0xfffffff0u
 #define AGC_GFX1013_SWIZZLE_64KB_Z_X               24u
 #define AGC_GFX1013_SWIZZLE_64KB_R_X               27u
 #define AGC_GFX1013_64KB_SURFACE_ALIGNMENT    0x10000u
@@ -279,6 +282,10 @@ typedef enum AgcGfx1013HtileOperation {
     AGC_GFX1013_HTILE_OPERATION_RESUMMARIZE_DEPTH,
     AGC_GFX1013_HTILE_OPERATION_COUNT
 } AgcGfx1013HtileOperation;
+
+typedef struct AgcGfx1013DepthExpclearState {
+    float clear_depth;
+} AgcGfx1013DepthExpclearState;
 
 typedef struct AgcGfx1013DepthSurfaceState {
     uint64_t depth_read_address;
@@ -561,6 +568,8 @@ int32_t PS5_SYSV_ABI agcGfx1013SetDepthSurface(
     SceAgcCb *cb, const AgcGfx1013DepthSurfaceState *state);
 int32_t PS5_SYSV_ABI agcGfx1013SetHtileOperation(
     SceAgcCb *cb, AgcGfx1013HtileOperation operation);
+int32_t PS5_SYSV_ABI agcGfx1013SetDepthExpclear(
+    SceAgcCb *cb, const AgcGfx1013DepthExpclearState *state);
 int32_t PS5_SYSV_ABI agcGfx1013GetDepthSurfaceLayout(
     const AgcGfx1013DepthSurfaceLayoutInput *input,
     AgcGfx1013DepthSurfaceLayout *layout);

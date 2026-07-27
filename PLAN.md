@@ -2036,14 +2036,27 @@ recovered exact D32 counts of 909,792 clear, 128,304 near, and 128,304 far
 words, produced 4,226 non-initial HTILE words after resummarization, and
 completed 1,800/1,800 flips.
 
-1. Run the complete 15-sample deterministic FW `0x0550` websrv matrix on the
+Depth-only expclear is also hardware-validated. The typed
+`agcGfx1013SetDepthExpclear` builder accepts only the gfx10.3 canonical 0.0 or
+1.0 clear values and emits `DB_DEPTH_CLEAR` atomically. The isolated gate
+initializes HTILE to the depth-one clear encoding `0xfffffff0`, enables
+`DB_Z_INFO.ALLOW_EXPCLEAR`, and deliberately omits the old full-surface depth
+initialization draw. Near-pass, overlap-fail, and independent far-pass draws
+therefore consume only metadata-backed clear depth. The proven decompression
+pass recovered 918,432 exact 1.0 D32 words, 128,304 near words, and 128,304 far
+words; all 49,152 HTILE words changed after resummarization; and the FW
+`0x05500008` run completed 1,800/1,800 flips. The physical display showed the
+expected green and red triangles on dark gray.
+
+1. Run the complete 16-sample deterministic FW `0x0550` websrv matrix on the
    next available real PS5 and retain its raw logs as qualification evidence.
 2. If instant-close behavior recurs after a fresh launcher session, isolate it
    as a loader lifecycle failure before changing GPU PM4 or shader state.
-3. Add an isolated depth-only expclear gate using the now-proven HTILE
-   operation and synchronization path; do not combine stencil in this gate.
-4. Add combined stencil/HTILE only after expclear has an independent passing
-   fixture, preserving exact aspect-specific validation and recovery checks.
+3. Add combined stencil/HTILE now that depth-only expclear has an independent
+   passing fixture, preserving exact aspect-specific metadata initialization,
+   raw S8 validation, depth decompression, and recovery checks.
+4. Keep combined stencil/HTILE expclear disabled until ordinary combined
+   compression is independently hardware-proven.
 5. Move remaining hardware-proven sample PM4 into public typed builders and
    fixtures, continuing with synchronization and additional format state.
 6. Correct and document Subnautica wrapper coverage, then inventory the provided
