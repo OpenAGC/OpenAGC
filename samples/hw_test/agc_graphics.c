@@ -235,7 +235,9 @@ int sceKernelWaitEqueue(SceKernelEqueue equeue, SceKernelEvent *events,
 #define DIRECT_MEMORY_ALIGNMENT  0x200000  /* 2MB */
 #define PS5_DIRECT_MEM_SEARCH_END  0x1000000000ULL
 
-#define DCB_CAPACITY_BYTES 0x4000u
+#define STANDARD_DCB_CAPACITY_BYTES 0x4000u
+#define DCB_MARKER_OFFSET  0x7000u
+#define DEPTH_DCB_CAPACITY_BYTES DCB_MARKER_OFFSET
 #define DCB_MAPPING_BYTES  0x10000u
 #define DCB_SECOND_OFFSET  0x8000u
 #define VERTEX_DATA_OFFSET 0x8000u
@@ -1314,7 +1316,9 @@ static bool dispatch_graphics(GraphicsTest *test,
 
     /* Build DCB */
     SceAgcCb cb;
-    agcCbInit(&cb, dispatch_cb, DCB_CAPACITY_BYTES);
+    agcCbInit(&cb, dispatch_cb,
+              AGC_DEPTH_VALIDATION ? DEPTH_DCB_CAPACITY_BYTES :
+                                     STANDARD_DCB_CAPACITY_BYTES);
 
     const AgcGfx1013FrameState frame_state = {
         .color_target = {
@@ -1435,7 +1439,7 @@ static bool dispatch_graphics(GraphicsTest *test,
      * IDs. Indexed offset semantics are a separate PM4 validation case. */
 #if AGC_DEPTH_VALIDATION
     volatile uint32_t *depth_markers = (volatile uint32_t *)
-        ((uint8_t *)dispatch_cb + 0x7000u);
+        ((uint8_t *)dispatch_cb + DCB_MARKER_OFFSET);
     static const uint32_t depth_marker_values[4] = {
         0xD3200001u, 0xD3200002u, 0xD3200003u, 0xD3200004u,
     };
@@ -1534,8 +1538,10 @@ static bool dispatch_graphics(GraphicsTest *test,
         .height = target->height,
         .format = AGC_GFX1013_IMAGE_FORMAT_RGBA8_UNORM,
         .image_type = AGC_GFX1013_IMAGE_TYPE_2D_MSAA,
-        .dst_sel_x = 4u, .dst_sel_y = 5u,
-        .dst_sel_z = 6u, .dst_sel_w = 7u,
+        /* ALT render-target storage exchanges the logical red/blue lanes;
+         * undo that exchange when sampling the multisample image. */
+        .dst_sel_x = 6u, .dst_sel_y = 5u,
+        .dst_sel_z = 4u, .dst_sel_w = 7u,
         .sample_count = 4u,
         .swizzle_mode = AGC_GFX1013_SWIZZLE_64KB_R_X,
     };
@@ -1587,8 +1593,12 @@ static bool dispatch_graphics(GraphicsTest *test,
     const AgcGfx1013ColorResolveState resolve = {
         &frame_state.color_target, &resolve_draw,
     };
-    if (agcGfx1013ResolveColor4x(&cb, &resolve) != AGC_OK)
+    int32_t resolve_error = agcGfx1013ResolveColor4x(&cb, &resolve);
+    if (resolve_error != AGC_OK) {
+        printf("[MSAA] resolve failed: 0x%08x (%s)\n",
+               (unsigned)resolve_error, errstr(resolve_error));
         return false;
+    }
     printf("[MSAA] shader-resolved 4x RGBA8 to 1x VideoOut target\n");
 #endif
 #elif AGC_TESSELLATION
@@ -1638,11 +1648,12 @@ static bool dispatch_graphics(GraphicsTest *test,
      * the end of this 32 KiB allocation, outside the active command stream. */
 #if AGC_DEPTH_VALIDATION
     uint64_t marker_target =
-        (uint64_t)(uintptr_t)dispatch_cb + 0x7020u;
+                (uint64_t)(uintptr_t)dispatch_cb +
+                DCB_MARKER_OFFSET + 0x20u;
     uint32_t marker_value = 0xD32FFFFFu;
 #else
     uint64_t marker_target =
-        (uint64_t)(uintptr_t)dispatch_cb + 0x7000u;
+            (uint64_t)(uintptr_t)dispatch_cb + DCB_MARKER_OFFSET;
     uint32_t marker_value = 0xDEADCAFEu;
 #endif
     volatile uint32_t *marker =
@@ -1744,9 +1755,10 @@ static bool dispatch_graphics(GraphicsTest *test,
     uint32_t depth_one = 0u;
     uint32_t depth_near = 0u;
     uint32_t depth_far = 0u;
+    const uint32_t expected_red = 0xFFFF0000u;
     for (uint32_t i = 0u; i < target_pixels; ++i) {
         green_pixels += color[i] == 0xFF00FF00u;
-        red_pixels += color[i] == 0xFFFF0000u;
+        red_pixels += color[i] == expected_red;
     }
     for (size_t i = 0u; i < test->depth_surface_size / sizeof(uint32_t); ++i) {
         depth_one += depth[i] == 0x3f800000u;
@@ -1757,7 +1769,7 @@ static bool dispatch_graphics(GraphicsTest *test,
     const uint32_t left_sample = color[639u * target->width + 717u];
     const uint32_t right_sample = color[639u * target->width + 1203u];
     const bool color_pass = green_pixels > 1000u && red_pixels > 1000u &&
-        left_sample == 0xFF00FF00u && right_sample == 0xFFFF0000u;
+        left_sample == 0xFF00FF00u && right_sample == expected_red;
     const bool depth_pass = depth_one != 0u && depth_near != 0u &&
         depth_far != 0u;
 #if AGC_STENCIL_VALIDATION

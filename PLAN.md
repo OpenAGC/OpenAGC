@@ -57,6 +57,22 @@ AMD PM4 packet ancestry overlap in useful ways.
   2,364,832 zero bytes, no unexpected values, all depth/color checks, and
   1,800/1,800 completed flips without a hang or kernel panic.
 
+### Hardware-validated: isolated 4x MSAA gate
+
+- `agc_depth_msaa.elf` binds typed 4x RGBA8 `64KB_R_X` color and D32
+  `64KB_Z_X` surfaces while leaving stencil, HTILE, expclear, CMASK, FMASK,
+  and DCC disabled.
+- The shader resolve transitions the multisample target to shader-read,
+  restores 1x raster state, samples all four fragments, and draws into the
+  registered VideoOut target. The sample compensates the source `ALT`
+  red/blue storage and composites coverage over dark gray.
+- Repeated FW `0x05500008` runs accepted the 5,131-dword DCB. All stage and
+  completion markers, exact green/red interiors, raw 4x D32 classes, and
+  1,800/1,800 flips passed without a hang or kernel panic.
+- The captured framebuffer showed green and red triangles with resolved edges
+  on dark gray. Black side pillars in the wider capture are outside the
+  registered 1920x1080 framebuffer.
+
 This section is the authoritative completion plan. The later phase sections
 retain detailed history and evidence; they do not override this order.
 
@@ -2011,7 +2027,7 @@ uses separate color and depth-to-host transitions before CPU readback.
 5. Correct and document Subnautica wrapper coverage, then inventory the provided
    DRAGON QUEST VII Reimagined executable for required AGC API coverage.
 
-## Gfx1013 4x MSAA depth gate (host complete, hardware pending)
+## Gfx1013 4x MSAA depth gate (hardware validated)
 
 The reusable FW `0x0550` preparation for the isolated 4x gate is complete:
 
@@ -2030,8 +2046,9 @@ The reusable FW `0x0550` preparation for the isolated 4x gate is complete:
   color/depth images and averages four samples into the 1x VideoOut buffer.
   Stencil and HTILE are explicitly disabled.
 
-Next action when the PS5 is ready: deploy only `agc_depth_msaa.elf` through
-curl/websrv, require the expected antialiased green/red depth image, exact
-markers and interior colors, nonzero raw 4x D32 values, and a responsive
-console. A failure or kernel panic stops the gate. Until that run succeeds,
-the milestone is prepared rather than hardware-supported.
+FW `0x05500008` passed this gate repeatedly through curl/websrv on 2026-07-27.
+The 5,131-dword DCB produced 127,818 exact green and 127,818 exact red pixels,
+all four draw-stage markers, the completion fence, and nonzero initialization,
+near, and far raw D32 classes. VideoOut completed 1,800/1,800 flips. The
+captured physical result showed the expected green/red triangles and resolved
+edges on the dark-gray framebuffer without a hang or kernel panic.

@@ -18,9 +18,10 @@ The provisional eight-address-pipe input must be checked against the PS5's
    and requires deterministic color, raw depth, and raw stencil readback.
    FW `0x05500008` produced 256,608 `0x5a` bytes, 2,364,832 zero bytes,
    no other stencil values, and 1,800/1,800 completed flips.
-2. **MSAA gate:** keep HTILE disabled, use a 4x D32 surface and matching color
-   sample state, resolve to a 1x target, and require edge/sample and raw-depth
-   checks. Do not combine this first MSAA run with stencil.
+2. **MSAA gate (passed):** `agc_depth_msaa.elf` keeps HTILE and stencil
+   disabled, uses 4x D32 and matching RGBA8 state, shader-resolves to a 1x
+   target, and requires edge/sample and raw-depth checks. FW `0x05500008`
+   passed all marker, color/depth, visual, and responsiveness requirements.
 3. **HTILE gate:** return to 1x D32, confirm the address-pipe count from
    `GB_ADDR_CONFIG`, initialize the typed metadata allocation, and enable HTILE
    first without expclear. Require the EOP fence, unchanged PS5 responsiveness,
@@ -124,9 +125,8 @@ responsive without a hang or kernel panic.
 
 ## 4x MSAA gate contract
 
-`agc_depth_msaa.elf` is the isolated gfx1013 4x gate. It is host-tested and
-Prospero-cross-built; real FW `0x0550` execution remains pending while the PS5
-is unavailable.
+`agc_depth_msaa.elf` is the isolated gfx1013 4x gate. It is host-tested,
+Prospero-cross-built, and hardware-validated on FW `0x05500008`.
 
 - The color image is a separately allocated, 64 KiB-aligned `64KB_R_X`
   RGBA8 surface. At 1920x1080 its typed layout is 1920x1088 pixels and
@@ -141,8 +141,10 @@ is unavailable.
 - `CB_COLOR0_ATTRIB.NUM_SAMPLES=2` and `NUM_FRAGMENTS=2` encode log2(4), and
   `CB_COLOR0_ATTRIB3.COLOR_SW_MODE=27` selects `64KB_R_X`.
 - A `sampler2DMS` fragment shader fetches samples 0 through 3, averages them,
-  and draws a fullscreen triangle into the registered 1x VideoOut buffer.
-  Gfx10.3 has no supported legacy fixed-function `CB_RESOLVE` path.
+  composites fixture coverage over dark gray, and draws a fullscreen triangle
+  into the registered 1x VideoOut buffer. Its descriptor selects `Z,Y,X,W` to
+  undo the source `ALT` red/blue storage. Gfx10.3 has no supported legacy
+  fixed-function `CB_RESOLVE` path.
 - Stencil addresses remain zero, stencil testing stays disabled, and
   `htile_enable`, expclear, compression, CMASK, FMASK, and DCC remain clear.
 - A render-target-to-shader-read transition precedes the resolve. The resolve
@@ -162,7 +164,14 @@ Expected terminal result:
 [Depth+4xMSAA Result] markers=PASS color=PASS raw-depth=PASS stencil=PASS
 ```
 
-Build and deploy only when the PS5 is ready:
+Repeated FW `0x05500008` websrv runs passed this contract on 2026-07-27. The
+5,131-dword DCB reached its fence in 1-4 ms, all four stage markers matched,
+readback found 127,818 exact green and 127,818 exact red pixels plus all three
+raw D32 classes, and VideoOut completed 1,800/1,800 flips. The capture showed
+green and red triangles with resolved edges on the dark-gray framebuffer;
+black side pillars were outside the registered 1920x1080 framebuffer.
+
+Build and deploy for a repeat qualification run:
 
 ```sh
 export PS5_PAYLOAD_SDK=~/ps5-payload-sdk
@@ -173,6 +182,5 @@ make deploy_agc_depth_msaa PS5_HOST=<address>
 ```
 
 The deployment target uses only curl with websrv FTP/HTTP. Do not use
-`prospero-deploy`, and do not add this gate to the passing FW `0x0550`
-conformance matrix until the visual, marker, raw-depth, and responsiveness
-checks pass on hardware.
+`prospero-deploy`. This gate may now be included in the passing FW `0x0550`
+conformance matrix; HTILE remains excluded until separately qualified.

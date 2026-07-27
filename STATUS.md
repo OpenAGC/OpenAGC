@@ -1325,8 +1325,8 @@ The companion typed HTILE layout is host-complete for non-RB+ gfx1013
 alignment, per-layer slice size, full allocation size, and packed mip-tail
 accounting. Address-pipe count remains explicit pending a FW `0x0550`
 `GB_ADDR_CONFIG` capture. The depth sample reserves and zeroes the calculated
-metadata but leaves HTILE disabled. Stencil, MSAA, and HTILE are documented as
-separate ordered hardware gates and none is claimed hardware-validated.
+metadata but leaves HTILE disabled. Stencil and 4x MSAA have passed their
+separate hardware gates; HTILE remains isolated and pending.
 
 The first follow-up gate is hardware-validated on FW `0x05500008`.
 `agc_depth_stencil.elf` uses separate typed D32/S8 `64KB_Z_X` allocations,
@@ -1337,6 +1337,17 @@ fixtures are host-covered. The real-console curl/websrv run produced 256,608
 `0x5a` bytes, 2,364,832 zero bytes, no other stencil values, all depth/color
 checks, and 1,800/1,800 completed flips. The screen showed the expected green
 and red triangles without a hang or kernel panic.
+
+The second follow-up gate is hardware-validated on FW `0x05500008`.
+`agc_depth_msaa.elf` uses typed 4x RGBA8 `64KB_R_X` and D32 `64KB_Z_X`
+surfaces with stencil and HTILE disabled, then shader-resolves all four
+fragments into the 1x VideoOut buffer. The image descriptor undoes the source
+`ALT` red/blue storage, and the fixture shader composites resolved coverage
+over dark gray. Repeated websrv runs accepted the 5,131-dword DCB, reached all
+stage and completion markers, found 127,818 exact green and 127,818 exact red
+pixels, retained all three raw D32 classes, and completed 1,800/1,800 flips.
+The captured framebuffer showed the expected resolved green/red triangles on
+dark gray without a hang or kernel panic.
 
 Host implementation is complete for typed gfx1013 depth-surface memory state.
 `agcGfx1013SetDepthSurface` emits a deterministic 24-dword packet stream for
@@ -1352,9 +1363,9 @@ HTILE state; unsupported formats; and short command buffers without advancing
 the cursor. The stale gfx103 `DB_Z_INFO[8:4]` tile-mode-index name was corrected
 to the hardware-defined `SW_MODE` field.
 
-The first PS5 hardware gate is complete on FW `0x05500008`. The uncompressed
-depth-only sample and GPU readback passed; stencil, MSAA, and HTILE remain
-separate ordered gates.
+The baseline D32, isolated stencil, and isolated 4x MSAA PS5 hardware gates
+are complete on FW `0x05500008`. HTILE remains the next ordered gate and must
+not be enabled until the address-pipe count is captured.
 
 `samples/hw_test/agc_depth.elf` hardware-validates a dedicated baseline-NGG
 mode with an uncompressed D32-only
@@ -1406,10 +1417,10 @@ Validation completed on 2026-07-27:
 - CPack generates `openagc-0.1.0-generic.tar.gz` and
   `openagc-0.1.0-prospero.tar.gz`.
 
-## Gfx1013 4x MSAA preparation
+## Gfx1013 4x MSAA hardware validation
 
-Host implementation and Prospero compilation are complete; PS5 validation is
-pending because hardware is unavailable.
+Host implementation, Prospero compilation, and FW `0x05500008` hardware
+validation are complete.
 
 The host gate now enforces the 64 KiB base alignment returned by the R_X/Z_X
 layout queries, programs tiled color pitch from the padded layout rather than
@@ -1429,9 +1440,11 @@ resolve wrapper therefore transitions the 4x image to shader-read, binds a 1x
 destination frame, restores 1x raster state after register defaults, and runs
 a caller-supplied fullscreen draw. `agc_depth_msaa.elf` supplies a psbc-built
 `sampler2DMS` fragment shader that averages samples 0-3 into the VideoOut
-buffer. Stencil, HTILE, expclear, CMASK, FMASK, and DCC stay disabled.
+buffer. Its descriptor compensates `ALT` red/blue storage and the fixture
+shader composites resolved coverage over dark gray. Stencil, HTILE, expclear,
+CMASK, FMASK, and DCC stay disabled.
 
-Host result: 3878 passed, 0 failed. Both the Prospero library and
-`samples/hw_test/agc_depth_msaa.elf` cross-build without warnings. These
-results prove packet/layout encoding and build integration, not real-PS5
-execution.
+The preparation host result was 3878 passed, 0 failed. Both the Prospero
+library and `samples/hw_test/agc_depth_msaa.elf` cross-built without warnings.
+On 2026-07-27, repeated FW `0x05500008` websrv runs passed all marker, exact
+color, raw-depth, visual, and responsiveness checks with 1,800/1,800 flips.
