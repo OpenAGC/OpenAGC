@@ -321,8 +321,8 @@ int32_t PS5_SYSV_ABI agcGfx1013BindWave32VsPs(
     return agcGfx1013BindVsPsImpl(cb, state, true);
 }
 
-int32_t PS5_SYSV_ABI agcGfx1013DrawBaselineIndexAuto(
-    SceAgcCb *cb, const AgcGfx1013BaselineDrawState *state)
+static int32_t agcGfx1013ValidateBaselineDrawState(
+    const AgcGfx1013BaselineDrawState *state, uint32_t *required_dwords_out)
 {
     uint32_t input_count;
     uint32_t required_dwords;
@@ -331,7 +331,7 @@ int32_t PS5_SYSV_ABI agcGfx1013DrawBaselineIndexAuto(
     uint32_t i;
     int32_t error;
 
-    if (!cb || !state)
+    if (!state || !required_dwords_out)
         return AGC_ERROR_INVALID_ARGUMENT;
     if (state->index_type > (uint32_t)kAgcIndexSize32 ||
         state->index_swap > 1u || state->instance_count == 0u ||
@@ -386,6 +386,22 @@ int32_t PS5_SYSV_ABI agcGfx1013DrawBaselineIndexAuto(
          state->num_post_bind_uc_registers) * 3u;
     if (state->frame)
         required_dwords += AGC_GFX1013_FRAME_POST_BIND_DWORDS;
+    *required_dwords_out = required_dwords;
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013DrawBaselineIndexAuto(
+    SceAgcCb *cb, const AgcGfx1013BaselineDrawState *state)
+{
+    uint32_t required_dwords;
+    uint32_t i;
+    int32_t error;
+
+    if (!cb)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    error = agcGfx1013ValidateBaselineDrawState(state, &required_dwords);
+    if (error != AGC_OK)
+        return error;
     if (agcCbRemainingDwords(cb) < required_dwords)
         return AGC_ERROR_BUFFER_TOO_SMALL;
 
@@ -1221,7 +1237,11 @@ int32_t PS5_SYSV_ABI agcGfx1013ResolveColor4x(
     };
     AgcGfx1013SampleState samples = {1u, 1u, 1u};
     AgcGfx1013GraphicsDefaultStats stats;
-    SceAgcCb probe;
+    uint32_t source_scratch[28] = {0};
+    SceAgcCb source_probe;
+    uint32_t transition_dwords;
+    uint32_t draw_dwords;
+    uint64_t required_dwords;
     int32_t error;
 
     if (!cb || !state || !state->source || !state->draw ||
@@ -1229,19 +1249,40 @@ int32_t PS5_SYSV_ABI agcGfx1013ResolveColor4x(
         state->source->fragment_count != 4u ||
         state->source->swizzle_mode != AGC_GFX1013_SWIZZLE_64KB_R_X ||
         (state->draw->frame->color_target.sample_count != 0u &&
-         state->draw->frame->color_target.sample_count != 1u))
+         state->draw->frame->color_target.sample_count != 1u) ||
+        state->source->address ==
+            state->draw->frame->color_target.address ||
+        state->source->width !=
+            state->draw->frame->color_target.width ||
+        state->source->height !=
+            state->draw->frame->color_target.height ||
+        state->source->color_format !=
+            state->draw->frame->color_target.color_format ||
+        state->source->number_type !=
+            state->draw->frame->color_target.number_type ||
+        state->source->component_swap !=
+            state->draw->frame->color_target.component_swap)
         return AGC_ERROR_INVALID_ARGUMENT;
-    probe = *cb;
-    error = agcGfx1013TransitionResource(&probe, &transition);
-    if (error == AGC_OK)
-        error = agcGfx1013BuildFramePrologue(
-            &probe, state->draw->frame, &stats);
-    if (error == AGC_OK)
-        error = agcGfx1013SetSampleState(&probe, &samples);
-    if (error == AGC_OK)
-        error = agcGfx1013DrawBaselineIndexAuto(&probe, state->draw);
+
+    agcCbInit(&source_probe, source_scratch, sizeof(source_scratch));
+    error = agcGfx1013SetColorTarget(&source_probe, state->source);
     if (error != AGC_OK)
         return error;
+    error = agcGfx1013GetResourceTransitionDwords(
+        &transition, &transition_dwords);
+    if (error != AGC_OK)
+        return error;
+    error = agcGfx1013ValidateBaselineDrawState(
+        state->draw, &draw_dwords);
+    if (error != AGC_OK)
+        return error;
+
+    required_dwords = (uint64_t)transition_dwords +
+        AGC_GFX1013_FRAME_PROLOGUE_DWORDS +
+        AGC_GFX1013_SAMPLE_STATE_DWORDS + draw_dwords;
+    if (required_dwords > agcCbRemainingDwords(cb))
+        return AGC_ERROR_BUFFER_TOO_SMALL;
+
     error = agcGfx1013TransitionResource(cb, &transition);
     if (error == AGC_OK)
         error = agcGfx1013BuildFramePrologue(

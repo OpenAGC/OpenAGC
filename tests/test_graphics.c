@@ -2073,6 +2073,66 @@ static void test_gfx1013_msaa_state_and_layout(void)
         "gfx1013 color 64KB_R_X attrib3");
 }
 
+static void test_gfx1013_color_resolve_rejects_atomically(void)
+{
+    uint32_t buffer[AGC_GFX1013_TRANSITION_MAX_DWORDS] = {0};
+    SceAgcCb cb;
+    AgcGfx1013BaselineDrawState draw;
+    AgcGfx1013ColorResolveState resolve;
+    AgcGfx1013FrameState frame = make_frame_state();
+    AgcGfx1013ColorTargetState source = frame.color_target;
+    AgcShaderRecord primitive_record;
+    AgcShaderRecord pixel_record;
+    AgcShaderSpecials specials;
+    AgcRegisterValue primitive_sh[2];
+    AgcRegisterValue pixel_sh[2];
+    AgcRegisterValue pixel_cx[1];
+    uint32_t i;
+
+    memset(&draw, 0, sizeof(draw));
+    make_wave32_state(&draw.shaders, &primitive_record, &pixel_record,
+        &specials, primitive_sh, pixel_sh, pixel_cx);
+    draw.frame = &frame;
+    draw.index_type = kAgcIndexSize16;
+    draw.instance_count = 1u;
+    draw.vertex_count = 3u;
+    source.address += AGC_GFX1013_64KB_SURFACE_ALIGNMENT;
+    source.sample_count = 4u;
+    source.fragment_count = 4u;
+    source.swizzle_mode = AGC_GFX1013_SWIZZLE_64KB_R_X;
+    resolve.source = &source;
+    resolve.draw = &draw;
+
+    source.width--;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013ResolveColor4x(&cb, &resolve),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "gfx1013 resolve rejects mismatched source extent");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "gfx1013 mismatched resolve emits nothing");
+    source.width++;
+
+    source.color_format++;
+    TEST_ASSERT_EQ(agcGfx1013ResolveColor4x(&cb, &resolve),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "gfx1013 resolve rejects mismatched source format");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "gfx1013 mismatched format emits nothing");
+    source.color_format--;
+
+    for (i = 0u; i < AGC_GFX1013_TRANSITION_MAX_DWORDS; ++i)
+        buffer[i] = 0xA5A5A5A5u;
+    TEST_ASSERT_EQ(agcGfx1013ResolveColor4x(&cb, &resolve),
+        AGC_ERROR_BUFFER_TOO_SMALL,
+        "gfx1013 resolve rejects insufficient aggregate capacity");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "gfx1013 short resolve preserves cursor");
+    for (i = 0u; i < AGC_GFX1013_TRANSITION_MAX_DWORDS; ++i) {
+        TEST_ASSERT_EQ(buffer[i], 0xA5A5A5A5u,
+            "gfx1013 short resolve preserves command memory");
+    }
+}
+
 void test_suite_graphics(void)
 {
     TEST_SUITE("GFX1013 Graphics State");
@@ -2100,4 +2160,5 @@ void test_suite_graphics(void)
     TEST_RUN(test_gfx1013_tessellation_state_builders);
     TEST_RUN(test_gfx1013_tessellation_state_rejects_atomically);
     TEST_RUN(test_gfx1013_msaa_state_and_layout);
+    TEST_RUN(test_gfx1013_color_resolve_rejects_atomically);
 }
