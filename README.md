@@ -48,6 +48,9 @@ builds with ps5-payload-sdk; hardware validation is the remaining step.
   in-flight query placeholder
 - **Known NID index** — local Gen5 AGC NID constants for mapped exports
 - **Texture/buffer descriptors** — RDNA2 SQ_IMG_RSRC / SQ_BUF_RSRC
+- **Application-neutral capabilities** — `agcGfx1013GetCapabilities` reports
+  qualified gfx1013 dimensions, Wave32/compute limits, render/depth formats,
+  sample counts, and flexible/direct memory profiles without Vulkan coupling
 - **Shader binary format** — RDNA2 ISA shader header parsing
 - **Two backend targets:**
   - `generic` — pure software implementation for host testing

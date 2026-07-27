@@ -1,5 +1,13 @@
 # openagc Status
 
+## Reusable gfx1013 capability query (2026-07-27)
+
+The public `agc_capabilities.h` API now provides a versioned, application-neutral
+gfx1013 capability snapshot. It centralizes qualified image dimensions, MRT and
+Wave32/compute limits, color/depth format masks, sample counts, and the flexible
+and direct-memory profiles used by higher-level APIs such as Vulkan-PS5. The
+generic host suite covers invalid arguments and every exposed capability class.
+
 ## Product scope and Subnautica evidence cleanup (2026-07-27)
 
 OpenAGC is a source-level GPU API for PS5 homebrew. Retail-game compatibility

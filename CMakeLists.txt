@@ -24,6 +24,7 @@ endif()
 
 # Core AGC sources
 set(OPENAGC_SOURCES
+    src/capabilities.c
     src/cb.c
     src/cb_builders.c
     src/context_state.c
@@ -90,6 +91,7 @@ if(OPENAGC_BUILD_TESTS)
 
     add_executable(openagc_tests
         tests/test_main.c
+        tests/test_capabilities.c
         tests/test_types.c
         tests/test_acb.c
         tests/test_cb.c
