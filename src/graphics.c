@@ -1100,6 +1100,42 @@ int32_t PS5_SYSV_ABI agcGfx1013WriteOcclusionSnapshot(
     return AGC_OK;
 }
 
+int32_t PS5_SYSV_ABI agcGfx1013BeginOcclusionQuery(
+    SceAgcCb *cb, uint64_t address, uint32_t precise)
+{
+    uint32_t count_control = 0x11000102u;
+
+    if (!cb || address == 0u || (address >> 48u) != 0u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if ((address & 7u) != 0u)
+        return AGC_ERROR_INVALID_ALIGNMENT;
+    if (agcCbRemainingDwords(cb) < AGC_GFX1013_OCCLUSION_QUERY_OP_DWORDS)
+        return AGC_ERROR_BUFFER_TOO_SMALL;
+    if (precise)
+        count_control |= 1u << 2u;
+    if (!sceAgcDcbSetCxRegisterDirect(cb,
+            ((uint64_t)count_control << 32u) | AGC_REG_DB_COUNT_CONTROL) ||
+        agcGfx1013WriteOcclusionSnapshot(cb, address) != AGC_OK)
+        return AGC_ERROR_INTERNAL;
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013EndOcclusionQuery(
+    SceAgcCb *cb, uint64_t address)
+{
+    if (!cb || address == 0u || (address >> 48u) != 0u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if ((address & 7u) != 0u)
+        return AGC_ERROR_INVALID_ALIGNMENT;
+    if (agcCbRemainingDwords(cb) < AGC_GFX1013_OCCLUSION_QUERY_OP_DWORDS)
+        return AGC_ERROR_BUFFER_TOO_SMALL;
+    if (agcGfx1013WriteOcclusionSnapshot(cb, address) != AGC_OK ||
+        !sceAgcDcbSetCxRegisterDirect(cb,
+            ((uint64_t)1u << 32u) | AGC_REG_DB_COUNT_CONTROL))
+        return AGC_ERROR_INTERNAL;
+    return AGC_OK;
+}
+
 static uint32_t agcGfx1013FloatBits(float value)
 {
     uint32_t bits;

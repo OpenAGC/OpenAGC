@@ -982,6 +982,35 @@ static void test_gfx1013_occlusion_snapshot(void)
         AGC_ERROR_INVALID_ALIGNMENT, "unaligned occlusion snapshot rejects");
     TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
         "unaligned occlusion snapshot emits nothing");
+
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013BeginOcclusionQuery(&cb, address, 0u), AGC_OK,
+        "gfx1013 occlusion begin emits");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb),
+        AGC_GFX1013_OCCLUSION_QUERY_OP_DWORDS,
+        "gfx1013 occlusion begin exact dword count");
+    TEST_ASSERT_EQ(buffer[1], AGC_REG_DB_COUNT_CONTROL,
+        "gfx1013 occlusion begin selects count control");
+    TEST_ASSERT_EQ(buffer[2], 0x11000102u,
+        "gfx1013 occlusion begin enables perfect ZPASS counting");
+    TEST_ASSERT_EQ(buffer[4], 0x115u,
+        "gfx1013 occlusion begin snapshots after enabling counters");
+
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013EndOcclusionQuery(&cb, address + 8u), AGC_OK,
+        "gfx1013 occlusion end emits");
+    TEST_ASSERT_EQ(buffer[1], 0x115u,
+        "gfx1013 occlusion end snapshots before disabling counters");
+    TEST_ASSERT_EQ(buffer[5], AGC_REG_DB_COUNT_CONTROL,
+        "gfx1013 occlusion end selects count control");
+    TEST_ASSERT_EQ(buffer[6], 1u,
+        "gfx1013 occlusion end disables ZPASS increments");
+
+    agcCbReset(&cb, buffer, 6u * sizeof(uint32_t));
+    TEST_ASSERT_EQ(agcGfx1013BeginOcclusionQuery(&cb, address, 0u),
+        AGC_ERROR_BUFFER_TOO_SMALL, "short occlusion begin rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "short occlusion begin is atomic");
 }
 
 static void test_gfx1013_resource_transitions(void)

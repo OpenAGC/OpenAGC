@@ -2,10 +2,10 @@
 
 ## GFX1013 occlusion-query snapshots (2026-07-28)
 
-OpenAGC now owns an application-neutral address-bearing `ZPASS_DONE` snapshot
-helper for gfx1013 occlusion queries. It validates the GPU address and command
-capacity atomically and emits the four-dword `EVENT_WRITE` packet used for
-both query begin and end counters. Public constants describe the conservative
+OpenAGC now owns application-neutral gfx1013 occlusion begin/end helpers. They
+enable perfect ZPASS counting before the address-bearing begin snapshot,
+snapshot the end counter before disabling increments, and validate GPU address
+and aggregate command capacity atomically. Public constants describe the conservative
 16-render-backend, 256-byte per-query storage layout; exact packet and rejection
 tests keep PM4 details out of Vulkan clients. Hardware qualification is pending.
 
