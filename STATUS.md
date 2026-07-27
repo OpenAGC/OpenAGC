@@ -1,5 +1,22 @@
 # openagc Status
 
+## FW 5.50 D16/HTILE expclear qualification (2026-07-27)
+
+The typed gfx1013 `D16_UNORM` HTILE expclear path is hardware-qualified on
+standard PS5 FW `0x05500008`. The reusable depth-surface builder emits
+`DB_Z_INFO.ALLOW_EXPCLEAR=1`, `DECOMPRESS_ON_N_ZPLANES=15`, and D16
+`ZRANGE_PRECISION=1`; the isolated sample initializes all metadata to the
+canonical depth-one word `0xfffffff0`, writes `DB_DEPTH_CLEAR=1.0`, and omits
+the ordinary full-surface depth initialization draw.
+
+Two identical curl/websrv runs each changed all 49,152 HTILE words after typed
+decompression and resummarization, recovered exactly 918,432 clear-one,
+128,304 near, and 128,304 far native D16 values, and produced exactly 128,304
+green plus 128,304 red pixels. All stage markers passed, both completion
+fences arrived in 1 ms, each preview completed 1,800/1,800 flips, and both
+live kernel logs were free of GPU-fault, reset, process-stop, and panic
+signatures.
+
 ## FW 5.50 compressed D16/HTILE qualification (2026-07-27)
 
 The typed gfx1013 `D16_UNORM` plus pipe-aligned HTILE path is
@@ -15,7 +32,7 @@ clear-one, 128,304 near, and 128,304 far native D16 values, and produced
 128,304 green plus 128,304 red pixels. All four stage markers and the 1 ms
 completion fence passed, each run completed 1,800/1,800 flips, and both live
 kernel logs were free of GPU-fault, reset, process-stop, and panic signatures.
-D16 HTILE expclear remains a separate follow-up gate.
+D16 HTILE expclear was subsequently qualified as the separate follow-up gate.
 
 ## FW 5.50 D16+S8 qualification (2026-07-27)
 

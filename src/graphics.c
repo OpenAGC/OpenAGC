@@ -1950,6 +1950,12 @@ int32_t PS5_SYSV_ABI agcGfx1013SetDepthSurface(
             (state->format == AGC_GFX1013_DEPTH_FORMAT_D16_UNORM ||
              state->format ==
                  AGC_GFX1013_DEPTH_FORMAT_D16_UNORM_S8_UINT)) |
+        AGC_REG_SET(DB_Z_INFO, DECOMPRESS_ON_N_ZPLANES,
+            (expclear_aspects &
+             AGC_GFX1013_DEPTH_STENCIL_ASPECT_DEPTH) != 0u &&
+            (state->format == AGC_GFX1013_DEPTH_FORMAT_D16_UNORM ||
+             state->format ==
+                 AGC_GFX1013_DEPTH_FORMAT_D16_UNORM_S8_UINT) ? 15u : 0u) |
         AGC_REG_SET(DB_Z_INFO, ALLOW_EXPCLEAR,
             (expclear_aspects &
              AGC_GFX1013_DEPTH_STENCIL_ASPECT_DEPTH) != 0u) |

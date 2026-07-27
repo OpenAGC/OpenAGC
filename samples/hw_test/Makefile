@@ -378,6 +378,9 @@ agc_depth_stencil_d16_s8.elf: shaders_depth agc_graphics.c ps5_video_out.h gpu_c
 agc_depth_d16_htile.elf: shaders_depth agc_graphics.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_DEPTH_VALIDATION=1 -DAGC_D16_VALIDATION=1 -DAGC_D16_HTILE_VALIDATION=1 -DAGC_HTILE_VALIDATION=1 -DAGC_HTILE_OPERATION_VALIDATION=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
 
+agc_depth_d16_expclear.elf: shaders_depth agc_graphics.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_DEPTH_VALIDATION=1 -DAGC_D16_VALIDATION=1 -DAGC_D16_HTILE_VALIDATION=1 -DAGC_D16_HTILE_EXPCLEAR_VALIDATION=1 -DAGC_HTILE_VALIDATION=1 -DAGC_HTILE_OPERATION_VALIDATION=1 -DAGC_EXPCLEAR_VALIDATION=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
+
 agc_depth_stencil.elf: shaders_depth agc_graphics.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_DEPTH_VALIDATION=1 -DAGC_STENCIL_VALIDATION=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
 
@@ -622,6 +625,14 @@ deploy_agc_depth_expclear: agc_depth_expclear.elf
 	curl -T agc_depth_expclear.elf "ftp://$(PS5_HOST):2121/data/homebrew/agc_depth_expclear/eboot.elf"
 	curl -T sce_sys/icon0.png "ftp://$(PS5_HOST):2121/data/homebrew/agc_depth_expclear/sce_sys/icon0.png"
 	curl -s "http://$(PS5_HOST):8080/hbldr?pipe=1&daemon=0&path=/data/homebrew/agc_depth_expclear/eboot.elf"
+
+.PHONY: deploy_agc_depth_d16_expclear
+deploy_agc_depth_d16_expclear: agc_depth_d16_expclear.elf
+	-curl -s "ftp://$(PS5_HOST):2121/" --quote "MKD /data/homebrew/agc_depth_d16_expclear"
+	-curl -s "ftp://$(PS5_HOST):2121/" --quote "MKD /data/homebrew/agc_depth_d16_expclear/sce_sys"
+	curl -T agc_depth_d16_expclear.elf "ftp://$(PS5_HOST):2121/data/homebrew/agc_depth_d16_expclear/eboot.elf"
+	curl -T sce_sys/icon0.png "ftp://$(PS5_HOST):2121/data/homebrew/agc_depth_d16_expclear/sce_sys/icon0.png"
+	curl -s "http://$(PS5_HOST):8080/hbldr?pipe=1&daemon=0&path=/data/homebrew/agc_depth_d16_expclear/eboot.elf"
 
 .PHONY: deploy_agc_depth_stencil_htile
 deploy_agc_depth_stencil_htile: agc_depth_stencil_htile.elf

@@ -88,6 +88,10 @@
 #define AGC_D16_HTILE_VALIDATION 0
 #endif
 
+#ifndef AGC_D16_HTILE_EXPCLEAR_VALIDATION
+#define AGC_D16_HTILE_EXPCLEAR_VALIDATION 0
+#endif
+
 #ifndef AGC_STENCIL_VALIDATION
 #define AGC_STENCIL_VALIDATION 0
 #endif
@@ -157,8 +161,14 @@
 #if AGC_D16_HTILE_VALIDATION && \
     (!AGC_D16_VALIDATION || !AGC_HTILE_VALIDATION || \
      !AGC_HTILE_OPERATION_VALIDATION || AGC_STENCIL_VALIDATION || \
-     AGC_MSAA_VALIDATION || AGC_EXPCLEAR_VALIDATION)
-#error "D16 HTILE requires depth-only decompress/resummarize without expclear"
+     AGC_MSAA_VALIDATION || \
+     (AGC_EXPCLEAR_VALIDATION && !AGC_D16_HTILE_EXPCLEAR_VALIDATION))
+#error "D16 HTILE requires its isolated depth-only validation mode"
+#endif
+
+#if AGC_D16_HTILE_EXPCLEAR_VALIDATION && \
+    (!AGC_D16_HTILE_VALIDATION || !AGC_EXPCLEAR_VALIDATION)
+#error "D16 HTILE expclear requires the proven D16 HTILE operation gate"
 #endif
 
 #if AGC_D16_S8_VALIDATION && \
@@ -2014,7 +2024,7 @@ static bool dispatch_graphics(GraphicsTest *test,
             return false;
     }
 #if AGC_HTILE_OPERATION_VALIDATION
-    /* Expand compressed depth into the D32 plane, then rebuild HTILE ranges.
+    /* Expand compressed depth into the typed depth plane, then rebuild HTILE.
      * Both operations are full-surface DB raster passes. Color writes and
      * ordinary depth testing stay disabled; explicit DB release/acquire
      * transitions separate the producer and the two metadata modes. */
@@ -2343,13 +2353,22 @@ static bool dispatch_graphics(GraphicsTest *test,
 #endif
     const uint32_t left_sample = color[639u * target->width + 717u];
     const uint32_t right_sample = color[639u * target->width + 1203u];
-    const bool color_pass = green_pixels > 1000u && red_pixels > 1000u &&
+    const bool color_pass =
+        (AGC_D16_VALIDATION ?
+            (green_pixels == 128304u && red_pixels == 128304u) :
+            (green_pixels > 1000u && red_pixels > 1000u)) &&
         (AGC_HTILE_MIP_VALIDATION ||
          (left_sample == 0xFF00FF00u && right_sample == expected_red));
 #if !AGC_S8_ONLY_VALIDATION
+#if AGC_D16_VALIDATION
+    const bool depth_pass =
+        depth_one == (AGC_EXPCLEAR_VALIDATION ? 918432u : 909792u) &&
+        depth_near == 128304u && depth_far == 128304u;
+#else
     const bool depth_pass =
         (AGC_HTILE_VALIDATION && !AGC_HTILE_OPERATION_VALIDATION) ||
         (depth_one != 0u && depth_near != 0u && depth_far != 0u);
+#endif
 #endif
 #if AGC_STENCIL_VALIDATION
     const uint8_t *stencil = (const uint8_t *)test->stencil_surface;

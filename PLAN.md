@@ -271,8 +271,8 @@ Work in this order:
    hardware-qualified, alongside the earlier alternate-swap BGRA8 and RGBA16F
    paths. RGBA8/BGRA8 sRGB encode behavior is also hardware-qualified. Next
    qualify additional 16-bit color tuples. After the color matrix is stable,
-   qualify D16, S8-only, D16+S8, and compressed D16/HTILE before enabling
-   D16 HTILE expclear. Continue with blending, resource transitions,
+   D16, S8-only, D16+S8, compressed D16/HTILE, and D16 HTILE expclear are now
+   hardware-qualified. Continue with blending, resource transitions,
    multi-buffer frame scheduling, timestamps/queries, and stable NGG
    geometry/tessellation APIs according to homebrew needs.
 8. **Firmware and retail ABI evidence.** Preserve numeric firmware profiles and
@@ -2142,11 +2142,14 @@ Next execution order:
    metadata words, recovered exact 909,792/128,304/128,304 native D16 counts,
    produced exact 128,304 green/red color counts, passed all markers and 1 ms
    fences, completed 1,800/1,800 flips, and left clean live kernel logs.
-13. Qualify D16 HTILE expclear separately. Add an exact host fixture for
-   `ALLOW_EXPCLEAR`, `DECOMPRESS_ON_N_ZPLANES=15`, and the depth-one metadata
-   encoding before the first hardware run; require two clean native-D16,
-   metadata, color, marker, fence, flip, and live-kernel-log passes before
-   enabling or documenting the capability.
+13. **Hardware complete:** D16 HTILE expclear uses the exact host-locked
+   `DB_Z_INFO` word `0xaf800181` (`ALLOW_EXPCLEAR=1`,
+   `DECOMPRESS_ON_N_ZPLANES=15`, and `ZRANGE_PRECISION=1`) and canonical
+   depth-one metadata `0xfffffff0`. Two identical FW `0x05500008` runs each
+   changed all 49,152 metadata words, recovered exact
+   918,432/128,304/128,304 native D16 counts, produced exact 128,304 green/red
+   color counts, passed every marker and 1 ms fence, completed 1,800/1,800
+   flips, and left clean live kernel logs.
 14. Continue game-import coverage after the reusable draw/format APIs land;
    correct Subnautica wrapper coverage and inventory DRAGON QUEST VII
    Reimagined against the new application-facing surface.

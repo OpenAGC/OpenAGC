@@ -1523,6 +1523,8 @@ static void test_gfx1013_d16_htile_qualification_fixture(void)
         agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 7u),
         AGC_REG_DB_Z_READ_BASE_HI, 0u, 0u, 0u, 0u, 0u,
     };
+    uint32_t expected_expclear[AGC_GFX1013_DEPTH_SURFACE_DWORDS];
+    AgcGfx1013DepthSurfaceState expclear_surface = surface;
 
     TEST_ASSERT_EQ(AGC_GFX1013_HTILE_UNCOMPRESSED_D16, 0xfffc000fu,
         "gfx1013 D16 exact uncompressed HTILE word");
@@ -1554,6 +1556,21 @@ static void test_gfx1013_d16_htile_qualification_fixture(void)
         "gfx1013 D16 HTILE surface emits");
     TEST_ASSERT(memcmp(buffer, expected, sizeof(expected)) == 0,
         "gfx1013 D16 HTILE exact 27-dword bind stream");
+
+    memcpy(expected_expclear, expected, sizeof(expected_expclear));
+    expected_expclear[14] = 0xaf800181u;
+    expclear_surface.allow_expclear = 1u;
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetDepthSurface(
+        &cb, &expclear_surface), AGC_OK,
+        "gfx1013 D16 HTILE expclear surface emits");
+    TEST_ASSERT_EQ(buffer[14], expected_expclear[14],
+        "gfx1013 D16 HTILE expclear exact DB_Z_INFO");
+    TEST_ASSERT(memcmp(buffer, expected_expclear,
+        sizeof(expected_expclear)) == 0,
+        "gfx1013 D16 HTILE expclear exact 27-dword bind stream");
+    TEST_ASSERT_EQ(AGC_GFX1013_HTILE_CLEAR_DEPTH_ONE, 0xfffffff0u,
+        "gfx1013 D16 exact depth-one HTILE clear word");
 
     agcCbReset(&cb, buffer, sizeof(buffer));
     TEST_ASSERT_EQ(agcGfx1013SetHtileOperation(
