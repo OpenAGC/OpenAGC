@@ -2651,7 +2651,7 @@ static void test_gfx1013_resource_table_binding_rejects(void)
 
 static void test_gfx1013_baseline_draw_binds_resources(void)
 {
-    uint32_t buffer[112] = {0};
+    uint32_t buffer[144] = {0};
     AgcGfx1013Wave32VsPsState shaders;
     AgcShaderRecord primitive_record;
     AgcShaderRecord pixel_record;
@@ -2675,8 +2675,19 @@ static void test_gfx1013_baseline_draw_binds_resources(void)
         .min_depth_bounds = 0.0f,
         .max_depth_bounds = 1.0f,
     };
+    const AgcGfx1013DepthSurfaceState depth_surface = {
+        .depth_read_address = 0x0000000202800000ull,
+        .depth_write_address = 0x0000000202800000ull,
+        .width = 64u,
+        .height = 64u,
+        .format = AGC_GFX1013_DEPTH_FORMAT_D32_FLOAT,
+        .depth_swizzle_mode = AGC_GFX1013_SWIZZLE_64KB_Z_X,
+        .mip_level_count = 1u,
+        .sample_count = 1u,
+    };
     SceAgcCb cb;
     uint32_t value;
+    bool found_depth_address = false;
 
     make_wave32_state(&shaders, &primitive_record, &pixel_record, &specials,
         primitive_sh, pixel_sh, pixel_cx);
@@ -2696,6 +2707,7 @@ static void test_gfx1013_baseline_draw_binds_resources(void)
     draw.num_primitive_resource_tables = 1u;
     draw.pixel_resource_tables = &pixel_table;
     draw.num_pixel_resource_tables = 1u;
+    draw.depth_surface_state = &depth_surface;
     draw.depth_stencil_state = &depth;
     draw.index_type = kAgcIndexSize16;
     draw.instance_count = 1u;
@@ -2704,7 +2716,7 @@ static void test_gfx1013_baseline_draw_binds_resources(void)
 
     TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndexAuto(&cb, &draw), AGC_OK,
         "baseline draw binds resource tables");
-    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 70u,
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 97u,
         "baseline resource draw exact dword count");
     TEST_ASSERT(find_last_register(buffer, agcCbUsedDwords(&cb),
         AGC_PM4_OP_SET_SH_REG, 0x220u, &value),
@@ -2721,6 +2733,13 @@ static void test_gfx1013_baseline_draw_binds_resources(void)
         "baseline depth control emitted after shader bind");
     TEST_ASSERT_EQ(value, 0x00000016u,
         "baseline depth state restores less-test and writes");
+    TEST_ASSERT(find_last_register(buffer, agcCbUsedDwords(&cb),
+        AGC_PM4_OP_SET_CONTEXT_REG, AGC_REG_DB_DEPTH_SIZE_XY, &value),
+        "baseline depth surface emitted after shader bind");
+    for (uint32_t i = 0u; i < agcCbUsedDwords(&cb); ++i)
+        found_depth_address |= buffer[i] == 0x02028000u;
+    TEST_ASSERT(found_depth_address,
+        "baseline depth surface restores the typed DB address");
 }
 
 static void test_gfx1013_tessellation_state_builders(void)

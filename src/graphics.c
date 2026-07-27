@@ -360,6 +360,15 @@ static int32_t agcGfx1013ValidateBaselineDrawState(
         if (error != AGC_OK)
             return error;
     }
+    if (state->depth_surface_state) {
+        uint32_t storage[AGC_GFX1013_DEPTH_SURFACE_DWORDS];
+        SceAgcCb validation_cb;
+        agcCbInit(&validation_cb, storage, sizeof(storage));
+        error = agcGfx1013SetDepthSurface(
+            &validation_cb, state->depth_surface_state);
+        if (error != AGC_OK)
+            return error;
+    }
     if (state->depth_stencil_state) {
         const AgcGfx1013DepthStencilState *depth =
             state->depth_stencil_state;
@@ -407,6 +416,8 @@ static int32_t agcGfx1013ValidateBaselineDrawState(
          state->num_post_bind_uc_registers) * 3u;
     if (state->frame)
         required_dwords += AGC_GFX1013_FRAME_POST_BIND_DWORDS;
+    if (state->depth_surface_state)
+        required_dwords += AGC_GFX1013_DEPTH_SURFACE_DWORDS;
     if (state->depth_stencil_state)
         required_dwords += AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS;
     *required_dwords_out = required_dwords;
@@ -439,6 +450,10 @@ static int32_t agcGfx1013EmitBaselineDrawPrefix(
     }
     if (state->frame &&
         agcGfx1013ApplyFramePostBind(cb, state->frame) != AGC_OK)
+        return AGC_ERROR_INTERNAL;
+    if (state->depth_surface_state &&
+        agcGfx1013SetDepthSurface(
+            cb, state->depth_surface_state) != AGC_OK)
         return AGC_ERROR_INTERNAL;
     if (state->depth_stencil_state &&
         agcGfx1013SetDepthStencilState(

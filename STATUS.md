@@ -495,10 +495,11 @@ index size/swap, instance count, and `DRAW_INDEX_AUTO`. The base stream is
 post-bind override; short buffers and invalid state leave the cursor
 unchanged.
 
-Baseline draws may also carry an optional typed depth/stencil state. It is
-validated as part of the atomic draw contract and emitted after the frame
-post-bind sequence, which otherwise disables depth. Vulkan and other clients
-therefore do not need to duplicate ordering-sensitive DB register emission.
+Baseline draws may also carry optional typed depth-surface and depth/stencil
+state. Both are validated as part of the atomic draw contract and emitted
+after the frame post-bind sequence, which otherwise disables depth and clears
+the DB surface registers. Vulkan and other clients therefore do not need to
+duplicate ordering-sensitive DB register emission.
 
 FW 5.50 hardware validation uses the wrapper as the real draw path. Both the
 RGBA16F and direct RGBA8 samples submitted a 2473-dword DCB, completed the
