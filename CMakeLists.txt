@@ -98,6 +98,7 @@ if(OPENAGC_BUILD_TESTS)
         tests/test_texture.c
         tests/test_shader.c
         tests/test_graphics.c
+        samples/triangle/triangle.c
         tests/test_ioctl.c
         tests/test_register_defaults.c
         tests/test_registers.c
@@ -200,3 +201,14 @@ set(CPACK_PACKAGE_FILE_NAME
 set(CPACK_GENERATOR TGZ)
 set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
 include(CPack)
+
+# Public-API examples are deliberately separate from the large PS5 hardware
+# qualification programs under samples/hw_test.
+option(OPENAGC_BUILD_EXAMPLES "Build OpenAGC public API examples" OFF)
+if(OPENAGC_BUILD_EXAMPLES)
+    add_library(openagc_triangle_example STATIC
+        samples/triangle/triangle.c)
+    target_include_directories(openagc_triangle_example PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle)
+    target_link_libraries(openagc_triangle_example PUBLIC openagc)
+endif()

@@ -16,6 +16,21 @@ correctly classifies `sceAgcDriverSetHsOffchipParam` and
 This is static ABI evidence and makes no claim that Subnautica runs through
 OpenAGC or on FW `0x0550`.
 
+## Minimal public graphics example (2026-07-27)
+
+`samples/triangle` is the small homebrew-facing counterpart to the FW 5.50
+qualification harness. Its `openagcTriangleRecord` helper atomically composes
+the public gfx1013 frame prologue, Wave32 baseline draw, and render-to-present
+transition. The example documents typed RGBA8 UNORM/sRGB selection and keeps
+platform allocation, shader upload, submission, bounded waits, and VideoOut in
+the application layer. It contains no raw or sample-private PM4 construction.
+
+The command-recording layer is host-buildable through
+`OPENAGC_BUILD_EXAMPLES=ON`. Standalone Prospero application integration and a
+curl/websrv run remain required before the representative-homebrew gate is
+complete. A clean generic build with examples enabled passed the complete host
+suite at 4,127 passed and 0 failed.
+
 ## FW 5.50 RGBA32 FLOAT render-target qualification (2026-07-27)
 
 The typed gfx1013 `RGBA32_FLOAT` linear render-target path is

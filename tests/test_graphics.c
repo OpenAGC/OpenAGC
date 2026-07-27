@@ -5,6 +5,7 @@
 #include "agc_cb.h"
 #include "agc_error.h"
 #include "agc_graphics.h"
+#include "../samples/triangle/triangle.h"
 #include "agc_pm4.h"
 #include "agc_registers.h"
 
@@ -156,6 +157,72 @@ static AgcGfx1013FrameState make_frame_state(void)
         .instance_step_rate = 1u,
     };
     return state;
+}
+
+static void test_public_triangle_example(void)
+{
+    uint32_t buffer[2400] = {0};
+    uint32_t expected[2400] = {0};
+    SceAgcCb cb;
+    SceAgcCb expected_cb;
+    OpenAgcTrianglePass pass;
+    AgcGfx1013BaselineDrawState expected_draw;
+    AgcGfx1013GraphicsDefaultStats stats;
+    AgcGfx1013ResourceTransition present;
+    AgcShaderRecord primitive_record;
+    AgcShaderRecord pixel_record;
+    AgcShaderSpecials specials;
+    AgcRegisterValue primitive_sh[2];
+    AgcRegisterValue pixel_sh[2];
+    AgcRegisterValue pixel_cx[1];
+    uint32_t expected_dwords;
+
+    memset(&pass, 0, sizeof(pass));
+    pass.frame = make_frame_state();
+    make_wave32_state(&pass.draw.shaders, &primitive_record, &pixel_record,
+        &specials, primitive_sh, pixel_sh, pixel_cx);
+    pass.draw.index_type = kAgcIndexSize16;
+    pass.draw.instance_count = 1u;
+    pass.draw.vertex_count = 3u;
+    pass.draw.draw_modifier = 0x40000000u;
+    pass.completion_address = 0x00000002014bb000ull;
+    pass.completion_value = 0x1234abcdu;
+
+    expected_draw = pass.draw;
+    expected_draw.frame = &pass.frame;
+    present.before = AGC_GFX1013_RESOURCE_USAGE_RENDER_TARGET;
+    present.after = AGC_GFX1013_RESOURCE_USAGE_PRESENT;
+    present.completion_address = pass.completion_address;
+    present.completion_value = pass.completion_value;
+
+    agcCbInit(&expected_cb, expected, sizeof(expected));
+    TEST_ASSERT_EQ(agcGfx1013BuildFramePrologue(
+        &expected_cb, &pass.frame, &stats), AGC_OK,
+        "triangle example expected frame prologue succeeds");
+    TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndexAuto(
+        &expected_cb, &expected_draw), AGC_OK,
+        "triangle example expected draw succeeds");
+    TEST_ASSERT_EQ(agcGfx1013TransitionResource(
+        &expected_cb, &present), AGC_OK,
+        "triangle example expected present transition succeeds");
+    expected_dwords = agcCbUsedDwords(&expected_cb);
+
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(openagcTriangleRecord(&cb, &pass), AGC_OK,
+        "public triangle example records");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), expected_dwords,
+        "public triangle example exact cursor advance");
+    TEST_ASSERT(memcmp(buffer, expected,
+        expected_dwords * sizeof(uint32_t)) == 0,
+        "public triangle example exact packet composition");
+
+    agcCbInit(&cb, buffer,
+        (expected_dwords - 1u) * sizeof(uint32_t));
+    TEST_ASSERT_EQ(openagcTriangleRecord(&cb, &pass),
+        AGC_ERROR_BUFFER_TOO_SMALL,
+        "public triangle example rejects short buffer");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "public triangle example restores cursor on failure");
 }
 
 static void test_gfx1013_wave32_vs_ps_binding(void)
@@ -2840,6 +2907,7 @@ static void test_gfx1013_color_resolve_rejects_atomically(void)
 void test_suite_graphics(void)
 {
     TEST_SUITE("GFX1013 Graphics State");
+    TEST_RUN(test_public_triangle_example);
     TEST_RUN(test_gfx1013_wave32_vs_ps_binding);
     TEST_RUN(test_gfx1013_baseline_draw_wrapper);
     TEST_RUN(test_gfx1013_indexed_indirect_draw_wrappers);
