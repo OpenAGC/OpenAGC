@@ -235,7 +235,9 @@ inside shader records, validates every required table atomically, enforces the
 PS5 address32 range, and selects graphics/compute packet type internally. The
 baseline draw state owns primitive and pixel resource tables so their resolved
 values are emitted after shader placeholders and before draw packets. The next
-implementation step is conversion of the graphics sample.
+implementation step is conversion of the graphics sample. The VS/PS state also
+owns the primitive back-program address and resolves the compiler continuation
+placeholder internally, removing the sample's last shader-register scan.
 Each closed goal must update the
 documentation, pass clean generic and Prospero builds, pass host fixtures, and
 be committed before hardware promotion.

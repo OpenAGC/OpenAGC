@@ -144,19 +144,26 @@ static void test_gfx1013_wave32_vs_ps_binding(void)
     AgcShaderRecord primitive_record;
     AgcShaderRecord pixel_record;
     AgcShaderSpecials specials;
-    AgcRegisterValue primitive_sh[2];
+    AgcRegisterValue primitive_sh[3];
     AgcRegisterValue pixel_sh[2];
     AgcRegisterValue pixel_cx[1];
     uint32_t value = 0;
 
     make_wave32_state(&state, &primitive_record, &pixel_record, &specials,
         primitive_sh, pixel_sh, pixel_cx);
+    primitive_sh[2] = (AgcRegisterValue){
+        AGC_REG_SPI_SHADER_USER_DATA_GS_0 + 1u,
+        OPENAGC_NEXT_STAGE_PC_PLACEHOLDER,
+    };
+    primitive_record.num_sh_registers = 3u;
+    state.primitive.num_sh_registers = 3u;
+    state.primitive_back_code_address = 0x0000003234567800ull;
     agcCbInit(&cb, buffer, sizeof(buffer));
     TEST_ASSERT_EQ(agcGfx1013ValidateWave32VsPs(&state), AGC_OK,
         "gfx1013 Wave32 VS+PS validation succeeds");
     TEST_ASSERT_EQ(agcGfx1013BindWave32VsPs(&cb, &state), AGC_OK,
         "gfx1013 Wave32 VS+PS binding succeeds");
-    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 36u,
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 39u,
         "gfx1013 Wave32 VS+PS exact dword count");
     TEST_ASSERT(find_register(
         buffer, agcCbUsedDwords(&cb), AGC_PM4_OP_SET_SH_REG,
@@ -176,6 +183,12 @@ static void test_gfx1013_wave32_vs_ps_binding(void)
         "gfx1013 pixel Wave32 control emitted");
     TEST_ASSERT_EQ(value, AGC_GFX1013_SPI_PS_IN_CONTROL_PS_W32_EN,
         "gfx1013 pixel Wave32 control value");
+    TEST_ASSERT(find_last_register(
+        buffer, agcCbUsedDwords(&cb), AGC_PM4_OP_SET_SH_REG,
+        AGC_REG_SPI_SHADER_USER_DATA_GS_0 + 1u, &value),
+        "gfx1013 primitive continuation SGPR emitted");
+    TEST_ASSERT_EQ(value, 0x34567800u,
+        "gfx1013 primitive continuation placeholder patched");
     TEST_ASSERT(find_register(
         buffer, agcCbUsedDwords(&cb), AGC_PM4_OP_SET_CONTEXT_REG,
         AGC_REG_VGT_DRAW_PAYLOAD_CNTL, &value),

@@ -33,6 +33,7 @@ typedef struct AgcGfx1013ShaderBinding {
 typedef struct AgcGfx1013Wave32VsPsState {
     AgcGfx1013ShaderBinding primitive;
     AgcGfx1013ShaderBinding pixel;
+    uint64_t primitive_back_code_address;
     uint32_t primitive_type;
 } AgcGfx1013Wave32VsPsState;
 

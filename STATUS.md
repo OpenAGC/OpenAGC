@@ -1076,6 +1076,9 @@ type from the shader record.
 The reusable baseline draw now includes primitive and pixel resource-table
 bindings in its atomic preflight and emission order. Shader placeholders can no
 longer overwrite a table address written earlier by an application.
+The Wave32 VS/PS binder now patches the fused primitive front program's
+`OPENAGC_NEXT_STAGE_PC_PLACEHOLDER` from a typed back-program address, with
+alignment validation and an exact host fixture.
 
 Subnautica (`PPSA02453`) content `01.022.394` passes the strict analyzer with
 63/63 AGC imports covered. The exact executable hash, SDK `0x0400` metadata,

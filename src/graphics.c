@@ -206,6 +206,11 @@ static int32_t agcGfx1013ValidateVsPsImpl(
     if (!agcGfx1013FindProgramPair(&state->primitive, &primitive_lo) ||
         !agcGfx1013FindProgramPair(&state->pixel, &pixel_lo))
         return AGC_ERROR_SHADER_INVALID;
+    if (agcGfx1013BindingHasValue(
+            &state->primitive, OPENAGC_NEXT_STAGE_PC_PLACEHOLDER) &&
+        !agcGfx1013AddressIsProgramCompatible(
+            state->primitive_back_code_address))
+        return AGC_ERROR_INVALID_ALIGNMENT;
 
     specials = agcShaderRecordGetSpecialsTyped(state->primitive.record);
     if (!specials ||
@@ -289,7 +294,11 @@ static int32_t agcGfx1013BindVsPsImpl(
 
     agcGfx1013FindProgramPair(&state->primitive, &primitive_lo);
     agcGfx1013FindProgramPair(&state->pixel, &pixel_lo);
-    if (!agcGfx1013EmitShader(cb, &state->primitive, primitive_lo) ||
+    const AgcGfx1013RuntimePatches primitive_patches = {
+        .next_stage_address = state->primitive_back_code_address,
+    };
+    if (!agcGfx1013EmitShaderPatched(
+            cb, &state->primitive, primitive_lo, &primitive_patches) ||
         !agcGfx1013EmitShader(cb, &state->pixel, pixel_lo))
         return AGC_ERROR_INTERNAL;
     return AGC_OK;
