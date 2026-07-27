@@ -31,6 +31,14 @@ curl/websrv run remain required before the representative-homebrew gate is
 complete. A clean generic build with examples enabled passed the complete host
 suite at 4,127 passed and 0 failed.
 
+The same public example cross-builds cleanly with the Prospero Clang 18
+toolchain as `build-prospero/libopenagc_triangle_example.a`. The focused
+FW 5.50 qualification payload was rebuilt from the same revision as
+`samples/hw_test/agc_graphics.elf`: 508,200 bytes, SHA-256
+`a5f31a3b761476d9438ae34bc31be98c2f158474e70196047381bf2fcc381c3c`.
+Its curl/websrv execution remains pending console readiness; this build result
+is not recorded as hardware validation.
+
 ## FW 5.50 RGBA32 FLOAT render-target qualification (2026-07-27)
 
 The typed gfx1013 `RGBA32_FLOAT` linear render-target path is

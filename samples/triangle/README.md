@@ -68,3 +68,18 @@ cmake --build build
 For PS5, build OpenAGC with the Prospero toolchain and compile `triangle.c`
 into the homebrew application. Deploy the complete application through
 curl/websrv; do not use `prospero-deploy`.
+
+The FW 5.50 qualification counterpart is `samples/hw_test/agc_graphics.elf`.
+Build and launch it with the repository runner:
+
+```sh
+export PS5_PAYLOAD_SDK=~/ps5-payload-sdk
+export LLVM_CONFIG=/opt/homebrew/opt/llvm@18/bin/llvm-config
+make -C samples/hw_test -B agc_graphics.elf
+PS5_HOST=10.0.1.41 \
+    samples/hw_test/run_fw550_conformance.sh --sample agc_graphics
+```
+
+The runner uses curl with FTP port 2121 and the websrv HTTP launcher on port
+8080. Run it only after confirming the console is ready; a disconnected or
+timed-out foreground request is a hard stop.
