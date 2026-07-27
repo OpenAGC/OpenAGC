@@ -51,6 +51,10 @@ builds with ps5-payload-sdk; hardware validation is the remaining step.
 - **Application-neutral capabilities** — `agcGfx1013GetCapabilities` reports
   qualified gfx1013 dimensions, Wave32/compute limits, render/depth formats,
   sample counts, and flexible/direct memory profiles without Vulkan coupling
+- **GPU-visible flexible memory** — `agcGpuMemoryAllocateFlexible` provides a
+  unified CPU/GPU address on Prospero and an aligned host analogue for tests;
+  matching flush, invalidate, and deterministic free operations keep kernel
+  mapping details outside applications and higher-level drivers
 - **Shader binary format** — RDNA2 ISA shader header parsing
 - **Two backend targets:**
   - `generic` — pure software implementation for host testing
