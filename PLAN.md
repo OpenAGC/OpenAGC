@@ -2118,10 +2118,15 @@ Next execution order:
    no GPU fault or reset signatures. One earlier R16 launch coincided with an
    unlogged console shutdown, so its cause remains unproven; event setup and
    VideoOut teardown are now checked explicitly.
-9. Expand depth/stencil formats after color qualification: D16, S8-only, and
-   D16+S8, with independent compressed/uncompressed gates and no reuse of D32
-   HTILE encodings without hardware evidence.
-10. Continue game-import coverage after the reusable draw/format APIs land;
+9. **Hardware complete:** uncompressed D16 depth-only uses the typed
+   `D16_UNORM` `64KB_Z_X` layout and surface binder with HTILE, stencil, MSAA,
+   and expclear disabled. Two identical FW `0x05500008` runs produced exact
+   128,304-pixel near/far color outcomes and exact 909,792/128,304/128,304
+   native clear/near/far D16 counts, passed all markers and fences, completed
+   1,800/1,800 flips, and left clean live kernel logs.
+10. Qualify uncompressed S8-only, then D16+S8. Keep each gate independent and
+   do not reuse D32 HTILE encodings without hardware evidence.
+11. Continue game-import coverage after the reusable draw/format APIs land;
    correct Subnautica wrapper coverage and inventory DRAGON QUEST VII
    Reimagined against the new application-facing surface.
 

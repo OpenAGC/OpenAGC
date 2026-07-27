@@ -1,5 +1,21 @@
 # openagc Status
 
+## FW 5.50 D16 depth qualification (2026-07-27)
+
+The typed gfx1013 uncompressed `D16_UNORM` depth path is hardware-qualified
+on standard PS5 FW `0x05500008`. `agc_depth_d16.elf` uses the public
+`64KB_Z_X` layout query and depth-surface binder with HTILE, stencil, MSAA,
+and expclear disabled. It reuses the proven Wave32 four-draw oracle: a
+full-surface clear-depth draw, a near green pass, an overlapping farther draw
+that must fail, and an independent far red pass.
+
+Both identical websrv runs reached the GPU fence in 1 ms, passed all four
+stage markers and the post-draw marker, produced exactly 128,304 green and
+128,304 red pixels, and recovered 909,792 clear-one, 128,304 near, and 128,304
+far values from the native 16-bit depth plane. Each run completed 1,800/1,800
+flips. Live ps5debug-NG logs contained no panic, bad-packet, page-fault,
+GPU-reset, or process-stop signature.
+
 ## FW 5.50 narrow FP16 render-target qualification (2026-07-27)
 
 The typed gfx1013 `R16_FLOAT` and `RG16_FLOAT` presets are now
