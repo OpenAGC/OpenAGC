@@ -20,6 +20,8 @@
 #include <stdint.h>
 #include <stddef.h>  /* offsetof, for _Static_assert offset checks */
 
+#include "agc_types.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -476,6 +478,58 @@ void agcSamplerDescriptorSetCompareFunc(AgcSamplerDescriptor *desc,
     uint32_t compare_func);
 void agcSamplerDescriptorSetAnisotropy(AgcSamplerDescriptor *desc,
     uint32_t max_anisotropy);
+
+/* Hardware-ready gfx1013 resource descriptors. These types are byte-exact
+ * SQ descriptor layouts, unlike the portable abstract descriptors above. */
+#define AGC_GFX1013_BUFFER_WORD3_STRUCTURED 0x11014FACu
+#define AGC_GFX1013_IMAGE_FORMAT_RGBA8_UNORM 56u
+#define AGC_GFX1013_IMAGE_TYPE_2D 9u
+
+typedef struct AgcGfx1013BufferDescriptor {
+    uint32_t words[4];
+} AgcGfx1013BufferDescriptor;
+
+typedef struct AgcGfx1013ImageDescriptor {
+    uint32_t words[8];
+} AgcGfx1013ImageDescriptor;
+
+typedef struct AgcGfx1013Image2DState {
+    uint64_t address;
+    uint32_t width;
+    uint32_t height;
+    uint32_t format;
+    uint32_t image_type;
+    uint32_t dst_sel_x;
+    uint32_t dst_sel_y;
+    uint32_t dst_sel_z;
+    uint32_t dst_sel_w;
+} AgcGfx1013Image2DState;
+
+typedef struct AgcGfx1013CombinedImageSamplerDescriptor {
+    AgcGfx1013ImageDescriptor image;
+    AgcSamplerDescriptor sampler;
+    uint32_t reserved[4];
+} AgcGfx1013CombinedImageSamplerDescriptor;
+
+_Static_assert(sizeof(AgcGfx1013BufferDescriptor) == 16,
+    "gfx1013 buffer descriptor must be 16 bytes");
+_Static_assert(sizeof(AgcGfx1013ImageDescriptor) == 32,
+    "gfx1013 image descriptor must be 32 bytes");
+_Static_assert(sizeof(AgcGfx1013CombinedImageSamplerDescriptor) == 64,
+    "gfx1013 combined image/sampler descriptor must be 64 bytes");
+_Static_assert(offsetof(AgcGfx1013CombinedImageSamplerDescriptor, sampler) == 32,
+    "gfx1013 combined descriptor sampler must start at dword 8");
+
+int32_t PS5_SYSV_ABI agcGfx1013BufferDescriptorEncode(
+    AgcGfx1013BufferDescriptor *descriptor, uint64_t address,
+    uint32_t stride, uint32_t element_count);
+int32_t PS5_SYSV_ABI agcGfx1013Image2DDescriptorEncode(
+    AgcGfx1013ImageDescriptor *descriptor,
+    const AgcGfx1013Image2DState *state);
+int32_t PS5_SYSV_ABI agcGfx1013CombinedImageSamplerDescriptorEncode(
+    AgcGfx1013CombinedImageSamplerDescriptor *descriptor,
+    const AgcGfx1013Image2DState *image,
+    const AgcSamplerDescriptor *sampler);
 
 /* Typed convenience setters using the expanded sampler enums. */
 void agcSamplerDescriptorSetClampMode(AgcSamplerDescriptor *desc,

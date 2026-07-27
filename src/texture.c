@@ -367,6 +367,75 @@ void agcSamplerDescriptorSetMaxAnisotropy(AgcSamplerDescriptor *desc,
     agcSamplerDescriptorSetAnisotropy(desc, max_aniso);
 }
 
+int32_t PS5_SYSV_ABI agcGfx1013BufferDescriptorEncode(
+    AgcGfx1013BufferDescriptor *descriptor, uint64_t address,
+    uint32_t stride, uint32_t element_count)
+{
+    AgcGfx1013BufferDescriptor encoded = {{0}};
+
+    if (!descriptor || address == 0u || element_count == 0u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if ((address >> 48u) != 0u || stride > 0x3fffu)
+        return AGC_ERROR_VALIDATION_FAILED;
+    encoded.words[0] = (uint32_t)address;
+    encoded.words[1] = (uint32_t)(address >> 32u) | (stride << 16u);
+    encoded.words[2] = element_count;
+    encoded.words[3] = AGC_GFX1013_BUFFER_WORD3_STRUCTURED;
+    *descriptor = encoded;
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013Image2DDescriptorEncode(
+    AgcGfx1013ImageDescriptor *descriptor,
+    const AgcGfx1013Image2DState *state)
+{
+    AgcGfx1013ImageDescriptor encoded = {{0}};
+    uint32_t width_minus_one;
+
+    if (!descriptor || !state || state->address == 0u ||
+        state->width == 0u || state->height == 0u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if ((state->address & 0xffu) != 0u)
+        return AGC_ERROR_INVALID_ALIGNMENT;
+    if ((state->address >> 48u) != 0u || state->width > 16384u ||
+        state->height > 16384u || state->format > 0x3fu ||
+        state->image_type > 0xfu || state->dst_sel_x > 7u ||
+        state->dst_sel_y > 7u || state->dst_sel_z > 7u ||
+        state->dst_sel_w > 7u)
+        return AGC_ERROR_VALIDATION_FAILED;
+
+    width_minus_one = state->width - 1u;
+    encoded.words[0] = (uint32_t)(state->address >> 8u);
+    encoded.words[1] = ((uint32_t)(state->address >> 40u) & 0xffu) |
+        (state->format << 20u) | ((width_minus_one & 0x3u) << 30u);
+    encoded.words[2] = ((width_minus_one >> 2u) & 0xfffu) |
+        ((state->height - 1u) << 14u) | (1u << 31u);
+    encoded.words[3] = state->dst_sel_x | (state->dst_sel_y << 3u) |
+        (state->dst_sel_z << 6u) | (state->dst_sel_w << 9u) |
+        (state->image_type << 28u);
+    *descriptor = encoded;
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013CombinedImageSamplerDescriptorEncode(
+    AgcGfx1013CombinedImageSamplerDescriptor *descriptor,
+    const AgcGfx1013Image2DState *image,
+    const AgcSamplerDescriptor *sampler)
+{
+    AgcGfx1013CombinedImageSamplerDescriptor encoded;
+    int32_t result;
+
+    if (!descriptor || !image || !sampler)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    memset(&encoded, 0, sizeof(encoded));
+    result = agcGfx1013Image2DDescriptorEncode(&encoded.image, image);
+    if (result != AGC_OK)
+        return result;
+    encoded.sampler = *sampler;
+    *descriptor = encoded;
+    return AGC_OK;
+}
+
 /* ==================== Render Target helpers ==================== */
 
 void agcRenderTargetInit(AgcRenderTarget *rt) {

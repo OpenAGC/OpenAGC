@@ -1,4 +1,5 @@
 #include "test.h"
+#include "agc_error.h"
 #include "agc_texture.h"
 
 #include <stddef.h>  /* offsetof */
@@ -806,6 +807,94 @@ static void test_texture_format_roundtrip_all_number_types(void) {
     }
 }
 
+static void test_gfx1013_hardware_descriptors(void)
+{
+    AgcGfx1013BufferDescriptor buffer = {{0}};
+    AgcGfx1013ImageDescriptor image = {{0}};
+    AgcGfx1013CombinedImageSamplerDescriptor combined;
+    AgcSamplerDescriptor sampler;
+    const AgcGfx1013Image2DState image_state = {
+        .address = 0x0000000202700000ull,
+        .width = 2u,
+        .height = 2u,
+        .format = AGC_GFX1013_IMAGE_FORMAT_RGBA8_UNORM,
+        .image_type = AGC_GFX1013_IMAGE_TYPE_2D,
+        .dst_sel_x = 4u,
+        .dst_sel_y = 5u,
+        .dst_sel_z = 6u,
+        .dst_sel_w = 7u,
+    };
+
+    TEST_ASSERT_EQ(agcGfx1013BufferDescriptorEncode(
+        &buffer, 0x0000000202600000ull, 32u, 8u), AGC_OK,
+        "gfx1013 structured buffer descriptor encodes");
+    TEST_ASSERT_EQ(buffer.words[0], 0x02600000u,
+        "gfx1013 buffer address low");
+    TEST_ASSERT_EQ(buffer.words[1], 0x00200002u,
+        "gfx1013 buffer address high and stride");
+    TEST_ASSERT_EQ(buffer.words[2], 8u,
+        "gfx1013 buffer element count");
+    TEST_ASSERT_EQ(buffer.words[3], 0x11014facu,
+        "gfx1013 buffer hardware controls");
+
+    TEST_ASSERT_EQ(agcGfx1013Image2DDescriptorEncode(
+        &image, &image_state), AGC_OK,
+        "gfx1013 2D image descriptor encodes");
+    TEST_ASSERT_EQ(image.words[0], 0x02027000u,
+        "gfx1013 image address low");
+    TEST_ASSERT_EQ(image.words[1], 0x43800000u,
+        "gfx1013 image format and width low");
+    TEST_ASSERT_EQ(image.words[2], 0x80004000u,
+        "gfx1013 image dimensions and resource level");
+    TEST_ASSERT_EQ(image.words[3], 0x90000facu,
+        "gfx1013 image type and destination selection");
+    TEST_ASSERT_EQ(image.words[4], 0u,
+        "gfx1013 unused image words are zero");
+
+    agcSamplerDescriptorInit(&sampler);
+    agcSamplerDescriptorSetClampMode(
+        &sampler, kAgcClampClamp, kAgcClampClamp, kAgcClampClamp);
+    agcSamplerDescriptorSetFilterMode(
+        &sampler, kAgcFilterBilinear, kAgcFilterBilinear,
+        kAgcMipFilterNone);
+    TEST_ASSERT_EQ(agcGfx1013CombinedImageSamplerDescriptorEncode(
+        &combined, &image_state, &sampler), AGC_OK,
+        "gfx1013 combined image/sampler descriptor encodes");
+    TEST_ASSERT_EQ(combined.image.words[3], image.words[3],
+        "combined descriptor preserves image encoding");
+    TEST_ASSERT_EQ(combined.sampler.words[0], sampler.words[0],
+        "combined descriptor places sampler at dword 8");
+    TEST_ASSERT_EQ(combined.reserved[3], 0u,
+        "combined descriptor clears trailing stride padding");
+}
+
+static void test_gfx1013_hardware_descriptor_validation(void)
+{
+    AgcGfx1013BufferDescriptor buffer = {{1u, 2u, 3u, 4u}};
+    AgcGfx1013ImageDescriptor image = {{1u}};
+    AgcGfx1013Image2DState state = {
+        .address = 0x0000000202700001ull,
+        .width = 2u,
+        .height = 2u,
+        .format = AGC_GFX1013_IMAGE_FORMAT_RGBA8_UNORM,
+        .image_type = AGC_GFX1013_IMAGE_TYPE_2D,
+        .dst_sel_x = 4u,
+        .dst_sel_y = 5u,
+        .dst_sel_z = 6u,
+        .dst_sel_w = 7u,
+    };
+
+    TEST_ASSERT_EQ(agcGfx1013BufferDescriptorEncode(
+        &buffer, 0x0001000000000000ull, 32u, 8u),
+        AGC_ERROR_VALIDATION_FAILED, "48-bit buffer address enforced");
+    TEST_ASSERT_EQ(buffer.words[0], 1u,
+        "invalid buffer encoding preserves destination");
+    TEST_ASSERT_EQ(agcGfx1013Image2DDescriptorEncode(&image, &state),
+        AGC_ERROR_INVALID_ALIGNMENT, "image alignment enforced");
+    TEST_ASSERT_EQ(image.words[0], 1u,
+        "invalid image encoding preserves destination");
+}
+
 void test_suite_texture(void) {
     TEST_SUITE("Texture Descriptors");
     TEST_RUN(test_texture_descriptor_size);
@@ -881,4 +970,6 @@ void test_suite_texture(void) {
     TEST_RUN(test_texture_format_roundtrip);
     TEST_RUN(test_texture_format_roundtrip_all_data_formats);
     TEST_RUN(test_texture_format_roundtrip_all_number_types);
+    TEST_RUN(test_gfx1013_hardware_descriptors);
+    TEST_RUN(test_gfx1013_hardware_descriptor_validation);
 }

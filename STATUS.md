@@ -1063,6 +1063,12 @@ construction, and bounded GPU completion. See
 `analysis/sample_pm4_public_api_audit.md` for the operation matrix and ordered
 vertical-slice exit criteria.
 
+Hardware-ready resource encoding is now public. The gfx1013 buffer encoder
+produces the proven 16-byte structured VBO descriptor, while the image encoder
+produces the proven eight-dword linear 2D layout. The combined descriptor fixes
+the sampler at dword 8 in a 64-byte table entry. Static layout assertions,
+exact-word fixtures, validation, and atomic output failure cover all three.
+
 Subnautica (`PPSA02453`) content `01.022.394` passes the strict analyzer with
 63/63 AGC imports covered. The exact executable hash, SDK `0x0400` metadata,
 five versioned wrappers, and the distinction between static API coverage and
