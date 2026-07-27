@@ -1746,7 +1746,7 @@ static bool dispatch_graphics(GraphicsTest *test,
     uint32_t depth_far = 0u;
     for (uint32_t i = 0u; i < target_pixels; ++i) {
         green_pixels += color[i] == 0xFF00FF00u;
-        red_pixels += color[i] == 0xFF0000FFu;
+        red_pixels += color[i] == 0xFFFF0000u;
     }
     for (size_t i = 0u; i < test->depth_surface_size / sizeof(uint32_t); ++i) {
         depth_one += depth[i] == 0x3f800000u;
@@ -1757,7 +1757,7 @@ static bool dispatch_graphics(GraphicsTest *test,
     const uint32_t left_sample = color[639u * target->width + 717u];
     const uint32_t right_sample = color[639u * target->width + 1203u];
     const bool color_pass = green_pixels > 1000u && red_pixels > 1000u &&
-        left_sample == 0xFF00FF00u && right_sample == 0xFF0000FFu;
+        left_sample == 0xFF00FF00u && right_sample == 0xFFFF0000u;
     const bool depth_pass = depth_one != 0u && depth_near != 0u &&
         depth_far != 0u;
 #if AGC_STENCIL_VALIDATION

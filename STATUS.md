@@ -1312,13 +1312,13 @@ verified from SPRX/kernel disassembly.
 
 ## Typed gfx1013 depth-surface binding
 
-The companion gfx1013 `64KB_Z_X` layout query is host-complete. It reports
+The companion gfx1013 `64KB_Z_X` layout query is hardware-validated for the
+single-level D32 FW `0x0550` gate and host-complete for its wider matrix. It reports
 separate depth/stencil plane pitch, padded height, block geometry, mip-tail
 entry, 64 KiB alignment, slice size, and allocation size for D16, D32, S8,
 array layers, mip chains, and 1x-8x samples. Checked 64-bit sizing covers the
 largest bindable layout without truncation. The depth hardware sample now uses
-the query instead of a fixed 16 MiB reservation. Hardware validation remains
-pending because the PS5 is unavailable.
+the query instead of a fixed 16 MiB reservation.
 
 The companion typed HTILE layout is host-complete for non-RB+ gfx1013
 `64KB_Z_X`. It reports metadata pitch, padded height, block geometry,
@@ -1350,18 +1350,20 @@ HTILE state; unsupported formats; and short command buffers without advancing
 the cursor. The stale gfx103 `DB_Z_INFO[8:4]` tile-mode-index name was corrected
 to the hardware-defined `SW_MODE` field.
 
-No PS5 hardware claim is made yet. FW `0x0550` qualification must begin with an
-uncompressed depth-only sample and GPU readback, then add stencil, MSAA, and
-HTILE as separate gates when a real PS5 is available.
+The first PS5 hardware gate is complete on FW `0x05500008`. The uncompressed
+depth-only sample and GPU readback passed; stencil, MSAA, and HTILE remain
+separate ordered gates.
 
-That first hardware gate is now prepared. `samples/hw_test/agc_depth.elf`
-cross-builds a dedicated baseline-NGG mode with an uncompressed D32-only
+`samples/hw_test/agc_depth.elf` hardware-validates a dedicated baseline-NGG
+mode with an uncompressed D32-only
 64KB-Z-X surface, HTILE disabled, deterministic depth initialization and
 pass/fail geometry, four post-draw markers, an EOP completion marker, and both
 color and raw-depth readback checks. Its expected screen and curl/websrv launch
-procedure are documented in `samples/hw_test/DEPTH_VALIDATION.md`. Status is
-hardware-ready, not hardware-validated, and it is intentionally excluded from
-the passing FW `0x0550` conformance matrix.
+procedure are documented in `samples/hw_test/DEPTH_VALIDATION.md`. The FW
+`0x05500008` run produced all four stage markers, 128,304 green and 128,304 red
+pixels, the expected raw D32 values, and 1,800/1,800 completed flips without a
+hang or kernel panic. The intentionally separated triangles are tall and
+narrow; their shorter bases are expected fixture geometry.
 
 Explicit depth/stencil resource usages are host-complete. A transition away
 from `DEPTH_STENCIL_WRITE` emits gfx1013 `FLUSH_AND_INV_DB_META` (`0x2c`), then

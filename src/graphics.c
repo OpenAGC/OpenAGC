@@ -328,7 +328,6 @@ static int32_t agcGfx1013ValidateBaselineDrawState(
     uint32_t required_dwords;
     uint32_t primitive_resource_count = 0u;
     uint32_t pixel_resource_count = 0u;
-    uint32_t i;
     int32_t error;
 
     if (!state || !required_dwords_out)

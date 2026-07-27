@@ -2,8 +2,8 @@
 
 The sample obtains its D32 `64KB_Z_X` pitch, padded height, 64 KiB alignment,
 slice size, and allocation size from `agcGfx1013GetDepthSurfaceLayout`. It no
-longer reserves a sample-local fixed 16 MiB image. This changes allocation
-only; PS5 execution remains pending while hardware is unavailable.
+longer reserves a sample-local fixed 16 MiB image. FW `0x05500008` hardware
+execution passed through curl/websrv on 2026-07-27.
 
 The sample also reserves and zeroes a separately aligned HTILE allocation from
 `agcGfx1013GetHtileLayout`, but it deliberately leaves `htile_enable` clear.
@@ -28,9 +28,9 @@ The provisional eight-address-pipe input must be checked against the PS5's
 Each gate is promoted independently. A failure or kernel panic stops the
 sequence and does not invalidate the earlier gate.
 
-`agc_depth.elf` is the first hardware qualification sample for OpenAGC's typed
-gfx1013 depth-surface and depth/stencil-control builders. It is prepared for FW
-`0x0550`, but has not yet been run on a real PS5.
+`agc_depth.elf` is the first hardware-qualified sample for OpenAGC's typed
+gfx1013 depth-surface and depth/stencil-control builders. It passed on a real
+standard PS5 running FW `0x05500008`.
 
 ## Test contract
 
@@ -54,12 +54,14 @@ gfx1013 depth-surface and depth/stencil-control builders. It is prepared for FW
 
 Expected display: a dark-gray background with a green triangle on the left and
 a red triangle on the right. No red should replace the green overlap triangle.
+The two fixtures are deliberately tall and narrow to separate the overlap and
+independent-pass regions, so their bases are visibly shorter than their sides.
 
 Expected terminal result:
 
 ```text
 [Depth Marker] stage[0..3] ... expected ...
-[Depth Readback] green=<nonzero> red=<nonzero> left=ff00ff00 right=ff0000ff
+[Depth Readback] green=<nonzero> red=<nonzero> left=ff00ff00 right=ffff0000
 [Depth Readback] raw D32: one=<nonzero> near=<nonzero> far=<nonzero>
 [Depth Result] markers=PASS color=PASS raw-depth=PASS
 ```
@@ -91,8 +93,9 @@ The equivalent Make target is `make deploy_agc_depth PS5_HOST=<address>`.
 The stencil equivalent is
 `make deploy_agc_depth_stencil PS5_HOST=<address>` and uses the same curl/websrv
 foreground-launch path.
-Do not add this sample to the passing FW `0x0550` conformance matrix until a
-real-console run records the expected display, marker values, and readback.
+The real-console run recorded all four stage markers, the completion fence,
+128,304 green pixels, 128,304 red pixels, raw initialization/near/far D32
+values, and 1,800/1,800 completed flips without a hang or kernel panic.
 
 ## Stencil gate contract
 

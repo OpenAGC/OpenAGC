@@ -16,7 +16,7 @@ AMD PM4 packet ancestry overlap in useful ways.
 
 ## Current Execution Order
 
-### Host-complete: gfx1013 depth-surface layout
+### Hardware-validated gate: gfx1013 D32 depth surface
 
 - `agcGfx1013GetDepthSurfaceLayout` calculates separate depth and stencil
   plane layouts for gfx1013 `64KB_Z_X`, including pitch, padded height,
@@ -27,7 +27,9 @@ AMD PM4 packet ancestry overlap in useful ways.
   unsupported swizzles, and invalid multisampled mip chains.
 - `agc_depth.elf` now consumes the query instead of reserving a hardcoded
   16 MiB depth image.
-- Hardware promotion remains deferred until the FW `0x0550` PS5 is available.
+- FW `0x05500008` hardware passed the isolated D32 gate through curl/websrv:
+  all markers, color coverage, raw depth values, and 1,800/1,800 flips passed
+  without a hang or kernel panic.
 
 ### Host-complete: gfx1013 HTILE layout and ordered qualification
 
@@ -1977,18 +1979,17 @@ aspects; and optional HTILE/expclear state. Exact host fixtures lock the
 fixtures prove that malformed formats, aspect/address combinations, sample
 counts, alignment, and undersized command buffers fail atomically.
 
-This is host qualification only. Before advertising depth or stencil as
-hardware-ready, add a minimal FW `0x0550` depth sample, verify depth writes and
-comparisons by GPU readback, exercise read-only transitions, then qualify
-stencil and HTILE separately. Keep HTILE disabled for the first hardware run.
+The isolated FW `0x0550` D32 qualification is complete. Depth writes and
+comparisons passed GPU/CPU readback with HTILE disabled. Read-only transitions,
+stencil, MSAA, and HTILE retain separate qualification gates.
 
-The first hardware sample is now prepared as `samples/hw_test/agc_depth.elf`.
+The first hardware sample is `samples/hw_test/agc_depth.elf`.
 It uses an uncompressed D32-only 64KB-Z-X surface with HTILE disabled, performs
 GPU initialization plus deterministic near-pass, overlap-fail, and independent
 far-pass draws, and checks four stage markers, an EOP completion marker, RGBA8
-samples, coverage, and raw D32 values. The Prospero artifact is build-qualified
-only; it remains outside the passing conformance matrix until FW `0x0550`
-hardware produces the documented screen and readback evidence.
+samples, coverage, and raw D32 values. FW `0x05500008` produced all four stage
+markers, 128,304 green and 128,304 red pixels, expected raw depth values, and
+1,800/1,800 completed flips without a hang or kernel panic.
 
 Depth/stencil synchronization is also typed. `DEPTH_STENCIL_WRITE` releases
 gfx1013 DB metadata with event `0x2c`, releases DB data with timestamp event
