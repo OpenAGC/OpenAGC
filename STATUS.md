@@ -1,5 +1,22 @@
 # openagc Status
 
+## FW 5.50 S8-only stencil qualification (2026-07-27)
+
+The typed gfx1013 uncompressed `S8_UINT` path is hardware-qualified on
+standard PS5 FW `0x05500008` without a depth plane. `agc_stencil_s8.elf`
+allocates only the public `64KB_Z_X` stencil layout, binds zero depth
+addresses and a zero depth swizzle, and keeps HTILE, MSAA, depth testing, and
+depth writes disabled.
+
+The isolated four-draw oracle clears stencil to zero with color masked, writes
+`0x5a` under a green left triangle, rejects the overlapping red triangle with
+`EQUAL 0`, and independently passes and replaces under the red right triangle.
+Both identical websrv runs produced exactly 128,304 green and 128,304 red
+pixels. Native S8 readback contained 2,364,832 zero bytes, exactly 256,608
+`0x5a` bytes, and no other values. Every marker and 1 ms fence passed, each run
+completed 1,800/1,800 flips, and live ps5debug-NG logs contained no panic,
+bad-packet, page-fault, GPU-reset, or process-stop signature.
+
 ## FW 5.50 D16 depth qualification (2026-07-27)
 
 The typed gfx1013 uncompressed `D16_UNORM` depth path is hardware-qualified

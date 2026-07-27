@@ -76,6 +76,10 @@
 #define AGC_D16_VALIDATION 0
 #endif
 
+#ifndef AGC_S8_ONLY_VALIDATION
+#define AGC_S8_ONLY_VALIDATION 0
+#endif
+
 #ifndef AGC_STENCIL_VALIDATION
 #define AGC_STENCIL_VALIDATION 0
 #endif
@@ -124,6 +128,16 @@
 
 #if AGC_D16_VALIDATION && !AGC_DEPTH_VALIDATION
 #error "D16 validation requires depth validation"
+#endif
+
+#if AGC_S8_ONLY_VALIDATION && \
+    (!AGC_DEPTH_VALIDATION || !AGC_STENCIL_VALIDATION)
+#error "S8-only validation requires the depth/stencil sample path"
+#endif
+
+#if AGC_S8_ONLY_VALIDATION && (AGC_D16_VALIDATION || AGC_MSAA_VALIDATION || \
+                               AGC_HTILE_VALIDATION)
+#error "the isolated S8 gate keeps depth formats, MSAA, and HTILE disabled"
 #endif
 
 #if AGC_D16_VALIDATION && (AGC_STENCIL_VALIDATION || AGC_MSAA_VALIDATION || \
@@ -608,26 +622,33 @@ static bool allocate_display_buffers(GraphicsTest *test) {
         .layer_count = DEPTH_FIXTURE_LAYER_COUNT,
         .mip_level_count = DEPTH_FIXTURE_MIP_COUNT,
         .sample_count = AGC_MSAA_VALIDATION ? 4u : 1u,
-        .format = AGC_D16_VALIDATION ?
+        .format = AGC_S8_ONLY_VALIDATION ?
+            AGC_GFX1013_DEPTH_FORMAT_S8_UINT :
+            AGC_D16_VALIDATION ?
             AGC_GFX1013_DEPTH_FORMAT_D16_UNORM :
             AGC_STENCIL_VALIDATION ?
             AGC_GFX1013_DEPTH_FORMAT_D32_FLOAT_S8_UINT :
             AGC_GFX1013_DEPTH_FORMAT_D32_FLOAT,
-        .depth_swizzle_mode = DEPTH_SWIZZLE_64KB_Z_X,
+        .depth_swizzle_mode = AGC_S8_ONLY_VALIDATION ? 0u :
+            DEPTH_SWIZZLE_64KB_Z_X,
         .stencil_swizzle_mode = AGC_STENCIL_VALIDATION ?
             DEPTH_SWIZZLE_64KB_Z_X : 0u,
     };
     AgcGfx1013DepthSurfaceLayout depth_layout;
     int32_t layout_ret = agcGfx1013GetDepthSurfaceLayout(
         &depth_input, &depth_layout);
-    if (layout_ret != AGC_OK || depth_layout.depth.allocation_size > SIZE_MAX) {
+    if (layout_ret != AGC_OK ||
+        depth_layout.depth.allocation_size > SIZE_MAX ||
+        depth_layout.stencil.allocation_size > SIZE_MAX) {
         printf("%s layout query failed: 0x%08x\n",
-               AGC_D16_VALIDATION ? "D16" : "D32",
+               AGC_S8_ONLY_VALIDATION ? "S8" :
+                   (AGC_D16_VALIDATION ? "D16" : "D32"),
                (unsigned)layout_ret);
         return false;
     }
     size_t rt_size = (size_t)depth_layout.depth.allocation_size;
-    size_t rt_alignment = depth_layout.depth.alignment;
+    size_t rt_alignment = AGC_S8_ONLY_VALIDATION ? 1u :
+        depth_layout.depth.alignment;
     test->depth_surface_size = rt_size;
 #if AGC_MSAA_VALIDATION
     const AgcGfx1013ColorSurfaceLayoutInput color_input = {
@@ -658,7 +679,9 @@ static bool allocate_display_buffers(GraphicsTest *test) {
         .width = test->width, .height = test->height,
         .layer_count = DEPTH_FIXTURE_LAYER_COUNT,
         .mip_level_count = DEPTH_FIXTURE_MIP_COUNT,
-        .first_mip_in_tail = depth_layout.depth.first_mip_in_tail,
+        .first_mip_in_tail = AGC_S8_ONLY_VALIDATION ?
+            depth_layout.stencil.first_mip_in_tail :
+            depth_layout.depth.first_mip_in_tail,
         .pipe_count = DEPTH_HTILE_PROVISIONAL_PIPE_COUNT,
         .swizzle_mode = DEPTH_SWIZZLE_64KB_Z_X,
     };
@@ -743,11 +766,13 @@ static bool allocate_display_buffers(GraphicsTest *test) {
     printf("Compute pool: %zu bytes at %p (flexible)\n", pool_size, pool_addr);
     printf("Render target: at %p (flexible)\n", test->render_target);
 #if AGC_DEPTH_VALIDATION
+#if !AGC_S8_ONLY_VALIDATION
     printf("Depth surface: %zu bytes at %p (%s, swizzle=%u, HTILE %s)\n",
            test->depth_surface_size, test->depth_surface,
            AGC_D16_VALIDATION ? "D16" : "D32",
            DEPTH_SWIZZLE_64KB_Z_X,
            AGC_HTILE_VALIDATION ? "on" : "off");
+#endif
 #if AGC_MSAA_VALIDATION
     printf("MSAA color: %zu bytes at %p (RGBA8, 4x, 64KB_R_X)\n",
            test->msaa_color_surface_size, test->msaa_color_surface);
@@ -1555,7 +1580,9 @@ static bool dispatch_graphics(GraphicsTest *test,
             return false;
         }
     }
-#if AGC_D16_VALIDATION
+#if AGC_S8_ONLY_VALIDATION
+    /* The dedicated stencil plane was zeroed during allocation. */
+#elif AGC_D16_VALIDATION
     uint16_t *depth_words = (uint16_t *)test->depth_surface;
     for (size_t i = 0u; i < test->depth_surface_size / sizeof(uint16_t); ++i)
         depth_words[i] = 0x5555u;
@@ -1808,10 +1835,14 @@ static bool dispatch_graphics(GraphicsTest *test,
     volatile uint32_t *depth_markers = (volatile uint32_t *)
         ((uint8_t *)dispatch_cb + DCB_MARKER_OFFSET);
     static const uint32_t depth_marker_values[4] = {
-        AGC_D16_VALIDATION ? 0xD1600001u : 0xD3200001u,
-        AGC_D16_VALIDATION ? 0xD1600002u : 0xD3200002u,
-        AGC_D16_VALIDATION ? 0xD1600003u : 0xD3200003u,
-        AGC_D16_VALIDATION ? 0xD1600004u : 0xD3200004u,
+        AGC_S8_ONLY_VALIDATION ? 0x58000001u :
+            (AGC_D16_VALIDATION ? 0xD1600001u : 0xD3200001u),
+        AGC_S8_ONLY_VALIDATION ? 0x58000002u :
+            (AGC_D16_VALIDATION ? 0xD1600002u : 0xD3200002u),
+        AGC_S8_ONLY_VALIDATION ? 0x58000003u :
+            (AGC_D16_VALIDATION ? 0xD1600003u : 0xD3200003u),
+        AGC_S8_ONLY_VALIDATION ? 0x58000004u :
+            (AGC_D16_VALIDATION ? 0xD1600004u : 0xD3200004u),
     };
     memset((void *)depth_markers, 0, 4u * sizeof(uint32_t));
 
@@ -1829,20 +1860,25 @@ static bool dispatch_graphics(GraphicsTest *test,
 #endif
 
     const AgcGfx1013DepthSurfaceState depth_surface = {
-        .depth_read_address = (uint64_t)(uintptr_t)test->depth_surface,
-        .depth_write_address = (uint64_t)(uintptr_t)test->depth_surface,
+        .depth_read_address = AGC_S8_ONLY_VALIDATION ? 0u :
+            (uint64_t)(uintptr_t)test->depth_surface,
+        .depth_write_address = AGC_S8_ONLY_VALIDATION ? 0u :
+            (uint64_t)(uintptr_t)test->depth_surface,
         .stencil_read_address = AGC_STENCIL_VALIDATION ?
             (uint64_t)(uintptr_t)test->stencil_surface : 0u,
         .stencil_write_address = AGC_STENCIL_VALIDATION ?
             (uint64_t)(uintptr_t)test->stencil_surface : 0u,
         .width = target->width,
         .height = target->height,
-        .format = AGC_D16_VALIDATION ?
+        .format = AGC_S8_ONLY_VALIDATION ?
+            AGC_GFX1013_DEPTH_FORMAT_S8_UINT :
+            AGC_D16_VALIDATION ?
             AGC_GFX1013_DEPTH_FORMAT_D16_UNORM :
             AGC_STENCIL_VALIDATION ?
             AGC_GFX1013_DEPTH_FORMAT_D32_FLOAT_S8_UINT :
             AGC_GFX1013_DEPTH_FORMAT_D32_FLOAT,
-        .depth_swizzle_mode = DEPTH_SWIZZLE_64KB_Z_X,
+        .depth_swizzle_mode = AGC_S8_ONLY_VALIDATION ? 0u :
+            DEPTH_SWIZZLE_64KB_Z_X,
         .stencil_swizzle_mode = AGC_STENCIL_VALIDATION ?
             DEPTH_SWIZZLE_64KB_Z_X : 0u,
         .mip_level = DEPTH_FIXTURE_MIP_LEVEL,
@@ -1858,10 +1894,20 @@ static bool dispatch_graphics(GraphicsTest *test,
             AGC_EXPCLEAR_ASPECTS : 0u,
     };
     AgcGfx1013DepthStencilState depth_control = {
-        .depth_test_enable = 1u,
-        .depth_write_enable = 1u,
+        .depth_test_enable = AGC_S8_ONLY_VALIDATION ? 0u : 1u,
+        .depth_write_enable = AGC_S8_ONLY_VALIDATION ? 0u : 1u,
         .depth_compare_operation = AGC_GFX1013_COMPARE_ALWAYS,
     };
+#if AGC_S8_ONLY_VALIDATION
+    depth_control.stencil_test_enable = 1u;
+    depth_control.front.compare_operation = AGC_GFX1013_COMPARE_ALWAYS;
+    depth_control.front.fail_operation = AGC_GFX1013_STENCIL_KEEP;
+    depth_control.front.depth_fail_operation = AGC_GFX1013_STENCIL_KEEP;
+    depth_control.front.pass_operation = AGC_GFX1013_STENCIL_REPLACE;
+    depth_control.front.reference = 0u;
+    depth_control.front.compare_mask = 0xffu;
+    depth_control.front.write_mask = 0xffu;
+#endif
     AgcGfx1013ColorBlendState blend = {
         .target_count = 1u,
     };
@@ -1896,6 +1942,7 @@ static bool dispatch_graphics(GraphicsTest *test,
         return false;
 
     blend.targets[0].write_mask = 0xfu;
+#if !AGC_S8_ONLY_VALIDATION
     depth_control.depth_compare_operation = AGC_GFX1013_COMPARE_LESS;
 #if AGC_STENCIL_VALIDATION
     depth_control.stencil_test_enable = 1u;
@@ -1910,7 +1957,21 @@ static bool dispatch_graphics(GraphicsTest *test,
     if (agcGfx1013SetColorBlendState(&cb, &blend) != AGC_OK ||
         agcGfx1013SetDepthStencilState(&cb, &depth_control) != AGC_OK)
         return false;
+#else
+    if (agcGfx1013SetColorBlendState(&cb, &blend) != AGC_OK)
+        return false;
+#endif
     for (uint32_t draw = 1u; draw < 4u; ++draw) {
+#if AGC_S8_ONLY_VALIDATION
+        depth_control.front.compare_operation = draw == 2u ?
+            AGC_GFX1013_COMPARE_EQUAL : AGC_GFX1013_COMPARE_ALWAYS;
+        depth_control.front.pass_operation = draw == 2u ?
+            AGC_GFX1013_STENCIL_KEEP : AGC_GFX1013_STENCIL_REPLACE;
+        depth_control.front.reference = draw == 2u ? 0u : 0x5au;
+        depth_control.front.write_mask = draw == 2u ? 0u : 0xffu;
+        if (agcGfx1013SetDepthStencilState(&cb, &depth_control) != AGC_OK)
+            return false;
+#endif
         const AgcGfx1013ResourceTableBinding draw_table = {
             OPENAGC_VERTEX_BUFFER_TABLE_PLACEHOLDER,
             (uint64_t)(uintptr_t)&vertex_desc[draw * 4u],
@@ -2121,7 +2182,8 @@ static bool dispatch_graphics(GraphicsTest *test,
     uint64_t marker_target =
                 (uint64_t)(uintptr_t)dispatch_cb +
                 DCB_MARKER_OFFSET + 0x20u;
-    uint32_t marker_value = AGC_D16_VALIDATION ? 0xD16FFFFFu : 0xD32FFFFFu;
+    uint32_t marker_value = AGC_S8_ONLY_VALIDATION ? 0x58FFFFFFu :
+        (AGC_D16_VALIDATION ? 0xD16FFFFFu : 0xD32FFFFFu);
 #else
     uint64_t marker_target =
             (uint64_t)(uintptr_t)dispatch_cb + DCB_MARKER_OFFSET;
@@ -2222,15 +2284,19 @@ static bool dispatch_graphics(GraphicsTest *test,
         test->buffers[0] : rt_addr);
     uint32_t green_pixels = 0u;
     uint32_t red_pixels = 0u;
+#if !AGC_S8_ONLY_VALIDATION
     uint32_t depth_one = 0u;
     uint32_t depth_near = 0u;
     uint32_t depth_far = 0u;
+#endif
     const uint32_t expected_red = 0xFFFF0000u;
     for (uint32_t i = 0u; i < target_pixels; ++i) {
         green_pixels += color[i] == 0xFF00FF00u;
         red_pixels += color[i] == expected_red;
     }
-#if AGC_D16_VALIDATION
+#if AGC_S8_ONLY_VALIDATION
+    const bool depth_pass = true;
+#elif AGC_D16_VALIDATION
     const uint16_t *depth = (const uint16_t *)test->depth_surface;
     for (size_t i = 0u; i < test->depth_surface_size / sizeof(uint16_t); ++i) {
         depth_one += depth[i] == 0xffffu;
@@ -2251,9 +2317,11 @@ static bool dispatch_graphics(GraphicsTest *test,
     const bool color_pass = green_pixels > 1000u && red_pixels > 1000u &&
         (AGC_HTILE_MIP_VALIDATION ||
          (left_sample == 0xFF00FF00u && right_sample == expected_red));
+#if !AGC_S8_ONLY_VALIDATION
     const bool depth_pass =
         (AGC_HTILE_VALIDATION && !AGC_HTILE_OPERATION_VALIDATION) ||
         (depth_one != 0u && depth_near != 0u && depth_far != 0u);
+#endif
 #if AGC_STENCIL_VALIDATION
     const uint8_t *stencil = (const uint8_t *)test->stencil_surface;
     uint32_t stencil_zero = 0u;
@@ -2265,7 +2333,9 @@ static bool dispatch_graphics(GraphicsTest *test,
         stencil_other += stencil[i] != 0u && stencil[i] != 0x5au;
     }
     const bool stencil_pass = stencil_zero != 0u &&
-        stencil_replace > 1000u && stencil_other == 0u;
+        (AGC_S8_ONLY_VALIDATION ? stencil_replace == 256608u :
+                                  stencil_replace > 1000u) &&
+        stencil_other == 0u;
 #else
     const bool stencil_pass = true;
 #endif
@@ -2307,9 +2377,11 @@ static bool dispatch_graphics(GraphicsTest *test,
 #endif
     printf("[Depth Readback] green=%u red=%u left=%08x right=%08x\n",
            green_pixels, red_pixels, left_sample, right_sample);
+#if !AGC_S8_ONLY_VALIDATION
     printf("[Depth Readback] raw %s: one=%u near=%u far=%u\n",
            AGC_D16_VALIDATION ? "D16" : "D32",
            depth_one, depth_near, depth_far);
+#endif
 #if AGC_HTILE_VALIDATION && !AGC_HTILE_OPERATION_VALIDATION
     printf("[Depth Readback] raw D32 is compressed; logical depth is "
            "validated by color outcomes and HTILE metadata\n");
@@ -2872,13 +2944,17 @@ int main(void) {
             "4x depth validation RGBA8" : "depth validation RGBA8"
     };
     printf("\n--- Step 4: %s%s%s depth pass/fail draw ---\n",
-           AGC_D16_VALIDATION ? "D16" : "D32",
-           AGC_STENCIL_VALIDATION ? "+S8 stencil" : "",
+           AGC_S8_ONLY_VALIDATION ? "S8-only" :
+               (AGC_D16_VALIDATION ? "D16" : "D32"),
+           AGC_S8_ONLY_VALIDATION ? "" :
+               (AGC_STENCIL_VALIDATION ? "+S8 stencil" : ""),
            AGC_MSAA_VALIDATION ? "+4x MSAA" : "");
     if (!dispatch_graphics(&test, &front, &back, &ps, &depth_target)) {
         printf("FATAL: %s%s validation failed\n",
-               AGC_D16_VALIDATION ? "D16" : "D32",
-               AGC_STENCIL_VALIDATION ? "+S8 stencil" : " depth");
+               AGC_S8_ONLY_VALIDATION ? "S8-only" :
+                   (AGC_D16_VALIDATION ? "D16" : "D32"),
+               AGC_S8_ONLY_VALIDATION ? "" :
+                   (AGC_STENCIL_VALIDATION ? "+S8 stencil" : " depth"));
         return 1;
     }
     memcpy(test.buffers[1], test.buffers[0],

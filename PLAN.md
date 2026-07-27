@@ -2124,9 +2124,15 @@ Next execution order:
    128,304-pixel near/far color outcomes and exact 909,792/128,304/128,304
    native clear/near/far D16 counts, passed all markers and fences, completed
    1,800/1,800 flips, and left clean live kernel logs.
-10. Qualify uncompressed S8-only, then D16+S8. Keep each gate independent and
-   do not reuse D32 HTILE encodings without hardware evidence.
-11. Continue game-import coverage after the reusable draw/format APIs land;
+10. **Hardware complete:** uncompressed S8-only uses the typed `S8_UINT`
+   `64KB_Z_X` layout and binder with no depth plane, zero depth addresses, and
+   depth testing/writes disabled. Two identical FW `0x05500008` runs proved
+   stencil replace and compare rejection with exact 128,304 green/red color
+   counts, 2,364,832 zero plus 256,608 `0x5a` S8 bytes, all markers/fences,
+   1,800/1,800 flips, and clean live kernel logs.
+11. Qualify uncompressed D16+S8 as an independent combined gate. Do not reuse
+   D32 HTILE encodings without hardware evidence.
+12. Continue game-import coverage after the reusable draw/format APIs land;
    correct Subnautica wrapper coverage and inventory DRAGON QUEST VII
    Reimagined against the new application-facing surface.
 
