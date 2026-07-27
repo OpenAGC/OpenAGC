@@ -56,6 +56,10 @@ builds with ps5-payload-sdk; hardware validation is the remaining step.
   matching flush, invalidate, and deterministic free operations keep kernel
   mapping details outside applications and higher-level drivers; bounded
   32-bit label waits support EOP completion without platform polling code
+- **Write-combined direct memory** —
+  `agcGpuMemoryAllocateDirectWriteCombined` owns the 2 MiB-aligned kernel
+  physical allocation, CPU/GPU mapping, and paired unmap/release lifecycle used
+  for garlic resources and scanout-compatible storage
 - **Shader binary format** — RDNA2 ISA shader header parsing
 - **Two backend targets:**
   - `generic` — pure software implementation for host testing

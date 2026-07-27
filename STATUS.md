@@ -729,6 +729,8 @@ The host-generic implementation now has a tested model for:
   cache flush/invalidate operations, 16 KiB mapping granularity, deterministic
   unmapping, requested alignment validation, and bounded 32-bit EOP-label
   waits (`agcGpuMemory*`)
+- Write-combined direct GPU memory allocation with 2 MiB granularity, unified
+  CPU/GPU mapping, physical-allocation tracking, and paired unmap/release
 - FW 5.50 AGC shader Specials block struct (`AgcShaderSpecials`: 0x30-byte sparse register/value layout with fields at 0x00, 0x08, 0x20, and 0x28)
 - AGC shader User Data Table struct (`AgcShaderUserData`: 5× 64-bit entries)
 - Typed accessors for shader sub-blocks (`agcShaderRecordGetSpecialsTyped`, `agcShaderRecordGetUserDataTyped`, `agcShaderRecordGetShRegisterValues`, `agcShaderRecordGetCxRegisterValues`)

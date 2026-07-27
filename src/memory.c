@@ -7,6 +7,8 @@
 #include <time.h>
 
 #define AGC_FLEXIBLE_PAGE_SIZE 0x4000u
+#define AGC_DIRECT_ALIGNMENT 0x200000u
+#define AGC_DIRECT_SEARCH_END 0x300000000ll
 #define AGC_CACHE_LINE_SIZE 64u
 
 #if defined(OPENAGC_PROSPERO)
@@ -14,6 +16,14 @@ extern int32_t sceKernelMapNamedSystemFlexibleMemory(
     void **addr, size_t size, int type, int flags, const char *name);
 extern int32_t sceKernelMunmap(void *addr, size_t len);
 extern int32_t sceKernelUsleep(uint32_t microseconds);
+extern int32_t sceKernelAllocateDirectMemory(
+    int64_t search_start, int64_t search_end, size_t length,
+    uint64_t alignment, int memory_type, int64_t *physical_address);
+extern int32_t sceKernelMapDirectMemory(
+    void **virtual_address, size_t length, int protection, int flags,
+    int64_t physical_address, uint64_t alignment);
+extern int32_t sceKernelReleaseDirectMemory(
+    int64_t physical_address, size_t length);
 #endif
 
 static int32_t agcGpuMemoryValidateRange(
@@ -63,6 +73,7 @@ int32_t PS5_SYSV_ABI agcGpuMemoryAllocateFlexible(
     memory->gpu_address = (uint64_t)(uintptr_t)address;
     memory->size = size;
     memory->mapped_size = mapped_size;
+    memory->type = AGC_GPU_MEMORY_TYPE_FLEXIBLE;
     return AGC_OK;
 }
 
@@ -72,6 +83,61 @@ void PS5_SYSV_ABI agcGpuMemoryFreeFlexible(AgcGpuMemory *memory)
     if (memory->cpu_address && memory->mapped_size) {
 #if defined(OPENAGC_PROSPERO)
         sceKernelMunmap(memory->cpu_address, memory->mapped_size);
+#else
+        free(memory->cpu_address);
+#endif
+    }
+    memset(memory, 0, sizeof(*memory));
+}
+
+int32_t PS5_SYSV_ABI agcGpuMemoryAllocateDirectWriteCombined(
+    AgcGpuMemory *memory, size_t size, size_t alignment)
+{
+    size_t mapped_size;
+    void *address = NULL;
+    int64_t physical = 0;
+
+    if (!memory || size == 0u || alignment == 0u ||
+        (alignment & (alignment - 1u)) != 0u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (alignment < AGC_DIRECT_ALIGNMENT) alignment = AGC_DIRECT_ALIGNMENT;
+    memset(memory, 0, sizeof(*memory));
+    if (size > SIZE_MAX - (alignment - 1u))
+        return AGC_ERROR_OUT_OF_MEMORY;
+    mapped_size = (size + alignment - 1u) & ~(alignment - 1u);
+
+#if defined(OPENAGC_PROSPERO)
+    if (sceKernelAllocateDirectMemory(
+            0, AGC_DIRECT_SEARCH_END, mapped_size, alignment, 3,
+            &physical) != 0)
+        return AGC_ERROR_OUT_OF_MEMORY;
+    if (sceKernelMapDirectMemory(
+            &address, mapped_size, 0x33, 0, physical, alignment) != 0 ||
+        !address) {
+        sceKernelReleaseDirectMemory(physical, mapped_size);
+        return AGC_ERROR_OUT_OF_MEMORY;
+    }
+#else
+    if (posix_memalign(&address, alignment, mapped_size) != 0)
+        return AGC_ERROR_OUT_OF_MEMORY;
+#endif
+    memory->cpu_address = address;
+    memory->gpu_address = (uint64_t)(uintptr_t)address;
+    memory->size = size;
+    memory->mapped_size = mapped_size;
+    memory->physical_offset = physical;
+    memory->type = AGC_GPU_MEMORY_TYPE_DIRECT_WRITE_COMBINED;
+    return AGC_OK;
+}
+
+void PS5_SYSV_ABI agcGpuMemoryFreeDirect(AgcGpuMemory *memory)
+{
+    if (!memory) return;
+    if (memory->cpu_address && memory->mapped_size) {
+#if defined(OPENAGC_PROSPERO)
+        sceKernelMunmap(memory->cpu_address, memory->mapped_size);
+        sceKernelReleaseDirectMemory(
+            memory->physical_offset, memory->mapped_size);
 #else
         free(memory->cpu_address);
 #endif

@@ -46,9 +46,28 @@ static void test_flexible_memory_invalid_arguments(void)
         AGC_ERROR_INVALID_ARGUMENT, "non-power-of-two alignment rejected");
 }
 
+static void test_direct_memory_lifecycle(void)
+{
+    AgcGpuMemory memory = {0};
+    TEST_ASSERT_EQ(agcGpuMemoryAllocateDirectWriteCombined(
+        &memory, 0x1000u, 0x1000u), AGC_OK,
+        "write-combined direct allocation succeeds");
+    TEST_ASSERT_EQ(memory.type,
+        AGC_GPU_MEMORY_TYPE_DIRECT_WRITE_COMBINED,
+        "direct memory type recorded");
+    TEST_ASSERT_EQ(memory.mapped_size, 0x200000u,
+        "direct allocation uses 2 MiB granularity");
+    TEST_ASSERT_EQ((uintptr_t)memory.cpu_address & 0x1fffffu, 0u,
+        "direct mapping is 2 MiB aligned");
+    agcGpuMemoryFreeDirect(&memory);
+    TEST_ASSERT(memory.cpu_address == NULL && memory.type == 0u,
+        "direct free clears allocation record");
+}
+
 void test_suite_memory(void)
 {
     TEST_SUITE("GPU Memory");
     TEST_RUN(test_flexible_memory_lifecycle);
     TEST_RUN(test_flexible_memory_invalid_arguments);
+    TEST_RUN(test_direct_memory_lifecycle);
 }
