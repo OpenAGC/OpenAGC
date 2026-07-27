@@ -1080,6 +1080,14 @@ The Wave32 VS/PS binder now patches the fused primitive front program's
 `OPENAGC_NEXT_STAGE_PC_PLACEHOLDER` from a typed back-program address, with
 alignment validation and an exact host fixture.
 
+`agc_graphics.c` no longer constructs raw PM4, packs resource descriptors, or
+scans shader registers. The baseline FW 5.50 websrv run reached its completion
+fence after 4 ms and passed FP16 coverage, bounds, color, opacity, and VideoOut
+checks. Tessellation reached its fence after 9 ms, changed 24 offchip words and
+four factor-ring words, and passed the same FP16 checks. Direct register
+builders remain only as the public escape hatch for fixed-function and
+tessellation state awaiting typed promotion.
+
 Subnautica (`PPSA02453`) content `01.022.394` passes the strict analyzer with
 63/63 AGC imports covered. The exact executable hash, SDK `0x0400` metadata,
 five versioned wrappers, and the distinction between static API coverage and

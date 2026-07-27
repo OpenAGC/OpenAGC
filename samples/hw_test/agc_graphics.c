@@ -680,6 +680,7 @@ static void setup_shader_stages(
             ps->cx_regs, ps->num_cx_regs,
             (uint64_t)(uintptr_t)ps_code,
         },
+        .primitive_back_code_address = (uint64_t)(uintptr_t)ngg_code,
         .primitive_type = NGG_INPUT_PRIMITIVE_TYPE,
     };
 }
@@ -692,7 +693,8 @@ static bool setup_tess_shader_stages(
     const ParsedGraphicsShader *primitive,
     void *primitive_back_code,
     const ParsedGraphicsShader *ps, void *ps_code,
-    uint64_t ring_descriptor_address)
+    uint64_t ring_descriptor_address, uint64_t vertex_table_address,
+    uint64_t texture_table_address)
 {
     AgcGfx1013Wave32TessVsPsState state = {
         .hull = {
@@ -720,6 +722,21 @@ static bool setup_tess_shader_stages(
     int32_t err = agcGfx1013BindWave32TessVsPs(cb, &state);
     printf("[Tess] reusable gfx1013 HS+TES+PS bind: 0x%08x\n",
            (unsigned)err);
+    if (err != AGC_OK)
+        return false;
+    const AgcGfx1013ResourceTableBinding vertex_table = {
+        OPENAGC_VERTEX_BUFFER_TABLE_PLACEHOLDER, vertex_table_address,
+    };
+    const AgcGfx1013ResourceTableBinding texture_table = {
+        OPENAGC_DESCRIPTOR_SET_PLACEHOLDER(0u), texture_table_address,
+    };
+    err = agcGfx1013BindResourceTables(
+        cb, &state.hull, &vertex_table, 1u);
+    if (err == AGC_OK) {
+        err = agcGfx1013BindResourceTables(
+            cb, &state.pixel, &texture_table, 1u);
+    }
+    printf("[Tess] resource tables bind: 0x%08x\n", (unsigned)err);
     return err == AGC_OK;
 }
 #endif
@@ -1025,28 +1042,26 @@ static bool dispatch_graphics(GraphicsTest *test,
         0xFFFF0000u, 0xFFFFFFFFu,
     };
     memcpy(gpu_texture, texture_pixels, sizeof(texture_pixels));
-    const uintptr_t vertex_addr = (uintptr_t)gpu_vertices;
-    vertex_desc[0] = (uint32_t)vertex_addr;
-    vertex_desc[1] = (uint32_t)(vertex_addr >> 32) |
-                     ((uint32_t)sizeof(GraphicsVertex) << 16);
-    vertex_desc[2] = 8u;
-    vertex_desc[3] = GFX10_VBO_DESC_WORD3;
-
-    /* RADV combined-image-sampler layout for set 0, binding 0:
-     * image resource at dwords 0..7, sampler at dwords 8..11, 64-byte stride.
-     * These are GFX10.3 SQ_IMG_RSRC fields; RESOURCE_LEVEL must be one. */
-    memset(texture_desc, 0, 64u);
-    const uintptr_t texture_addr = (uintptr_t)gpu_texture;
-    const uint32_t tex_width_m1 = TEXTURE_WIDTH - 1u;
-    texture_desc[0] = (uint32_t)(texture_addr >> 8);
-    texture_desc[1] = ((uint32_t)(texture_addr >> 40) & 0xffu) |
-                      (GFX10_FORMAT_RGBA8_UNORM << 20) |
-                      ((tex_width_m1 & 0x3u) << 30);
-    texture_desc[2] = ((tex_width_m1 >> 2) & 0xfffu) |
-                      ((TEXTURE_HEIGHT - 1u) << 14) |
-                      (1u << 31);
-    texture_desc[3] = (4u << 0) | (5u << 3) | (6u << 6) | (7u << 9) |
-                      (GFX10_SQ_RSRC_IMG_2D << 28);
+    int32_t resource_error = agcGfx1013BufferDescriptorEncode(
+        (AgcGfx1013BufferDescriptor *)vertex_desc,
+        (uint64_t)(uintptr_t)gpu_vertices,
+        (uint32_t)sizeof(GraphicsVertex), 8u);
+    if (resource_error != AGC_OK) {
+        printf("[Vertex] descriptor encode failed: 0x%08x\n",
+               (unsigned)resource_error);
+        return false;
+    }
+    const AgcGfx1013Image2DState image_state = {
+        .address = (uint64_t)(uintptr_t)gpu_texture,
+        .width = TEXTURE_WIDTH,
+        .height = TEXTURE_HEIGHT,
+        .format = AGC_GFX1013_IMAGE_FORMAT_RGBA8_UNORM,
+        .image_type = AGC_GFX1013_IMAGE_TYPE_2D,
+        .dst_sel_x = 4u,
+        .dst_sel_y = 5u,
+        .dst_sel_z = 6u,
+        .dst_sel_w = 7u,
+    };
     AgcSamplerDescriptor sampler;
     agcSamplerDescriptorInit(&sampler);
     agcSamplerDescriptorSetClampMode(
@@ -1054,70 +1069,28 @@ static bool dispatch_graphics(GraphicsTest *test,
     agcSamplerDescriptorSetFilterMode(
         &sampler, kAgcFilterBilinear, kAgcFilterBilinear,
         kAgcMipFilterNone);
-    memcpy(&texture_desc[8], sampler.words, sizeof(sampler.words));
-
-    uint32_t vertex_table_reg = 0;
-    uint32_t next_stage_pc_reg = 0;
-    bool found_vertex_table_reg = false;
-    bool found_next_stage_pc_reg = false;
-    for (uint32_t i = 0; i < ngg.num_sh_regs; i++) {
-        if (ngg.sh_regs[i].value ==
-                OPENAGC_VERTEX_BUFFER_TABLE_PLACEHOLDER) {
-            vertex_table_reg = ngg.sh_regs[i].offset;
-            found_vertex_table_reg = true;
-        } else if (ngg.sh_regs[i].value ==
-                   OPENAGC_NEXT_STAGE_PC_PLACEHOLDER) {
-            next_stage_pc_reg = ngg.sh_regs[i].offset;
-            found_next_stage_pc_reg = true;
-        }
-    }
-#if AGC_TESSELLATION
-    for (uint32_t i = 0; i < hull.num_sh_regs; i++) {
-        if (hull.sh_regs[i].value ==
-                OPENAGC_VERTEX_BUFFER_TABLE_PLACEHOLDER) {
-            vertex_table_reg = hull.sh_regs[i].offset;
-            found_vertex_table_reg = true;
-        }
-    }
-#endif
-#if !AGC_TESSELLATION
-    if (!found_next_stage_pc_reg) {
-        printf("[NGG] shader record has no GS-back continuation-PC SGPR\n");
+    resource_error = agcGfx1013CombinedImageSamplerDescriptorEncode(
+        (AgcGfx1013CombinedImageSamplerDescriptor *)texture_desc,
+        &image_state, &sampler);
+    if (resource_error != AGC_OK) {
+        printf("[Texture] descriptor encode failed: 0x%08x\n",
+               (unsigned)resource_error);
         return false;
     }
-#endif
-    if (found_vertex_table_reg) {
-        printf("[Vertex] data=%p stride=%zu records=8 table=%p sh_reg=0x%03x\n",
-               gpu_vertices, sizeof(GraphicsVertex), vertex_desc,
-               vertex_table_reg);
-        printf("[Vertex] descriptor=%08x %08x %08x %08x\n",
-               vertex_desc[0], vertex_desc[1], vertex_desc[2], vertex_desc[3]);
-    } else {
-        printf("[Vertex] procedural gl_VertexIndex path (no VBO SGPR)\n");
-    }
+
+    printf("[Vertex] data=%p stride=%zu records=8 table=%p\n",
+           gpu_vertices, sizeof(GraphicsVertex), vertex_desc);
+    printf("[Vertex] descriptor=%08x %08x %08x %08x\n",
+           vertex_desc[0], vertex_desc[1], vertex_desc[2], vertex_desc[3]);
     printf("[Index] data=%p type=u16 count=3 values={%u,%u,%u}\n",
            gpu_indices, indices[0], indices[1], indices[2]);
-    uint32_t texture_table_reg = 0;
-    bool found_texture_table_reg = false;
-    for (uint32_t i = 0; i < ps->num_sh_regs; i++) {
-        if (ps->sh_regs[i].value ==
-                OPENAGC_DESCRIPTOR_SET_PLACEHOLDER(0)) {
-            texture_table_reg = ps->sh_regs[i].offset;
-            found_texture_table_reg = true;
-            break;
-        }
-    }
-    if (!found_texture_table_reg) {
-        printf("[Texture] PS record has no descriptor-set-0 SGPR\n");
-        return false;
-    }
-    printf("[Texture] data=%p 2x2 RGBA8 table=%p sh_reg=0x%03x\n",
-           gpu_texture, texture_desc, texture_table_reg);
+    printf("[Texture] data=%p 2x2 RGBA8 table=%p\n",
+           gpu_texture, texture_desc);
     printf("[Texture] image=%08x %08x %08x %08x sampler=%08x %08x %08x %08x\n",
            texture_desc[0], texture_desc[1], texture_desc[2], texture_desc[3],
            texture_desc[8], texture_desc[9], texture_desc[10], texture_desc[11]);
 
-    /* Use a distinct command-buffer address for each hardware submission.
+        /* Use a distinct command-buffer address for each hardware submission.
      * Reusing the first IB address immediately can leave the second direct
      * submit indistinguishable from the prior work in the native queue. */
     uint32_t *dispatch_cb = (uint32_t *)((uint8_t *)cb_buffer +
@@ -1127,14 +1100,10 @@ static bool dispatch_graphics(GraphicsTest *test,
     SceAgcCb cb;
     agcCbInit(&cb, dispatch_cb, DCB_CAPACITY_BYTES);
 
-    /* 0. CONTEXT_CONTROL — notify CP to load context state.
-     * Same as compute sample: opcode 0x28, 3 dwords. */
-    uint32_t *cc = agcCbAllocDwords(&cb, 3);
-    if (cc) {
-        cc[0] = agcPm4Header3(0x28, 3);  /* CONTEXT_CONTROL */
-        cc[1] = 0x80000000u;  /* LOAD_ENABLE_CONTEXT */
-        cc[2] = 0x80000000u;
-    }
+    /* 0. Notify CP to load context state. */
+    if (agcGfx1013SetContextControl(
+            &cb, 0x80000000u, 0x80000000u) != AGC_OK)
+        return false;
     printf("[Dispatch] CONTEXT_CONTROL: load enable\n");
 
     /* Activate the hardware graphics defaults. FW 5.50's exported builder
@@ -1270,7 +1239,9 @@ static bool dispatch_graphics(GraphicsTest *test,
     if (!setup_tess_shader_stages(
             &cb, &hull, hs_back_code,
             &ngg, back_code, ps, ps_code,
-            (uint64_t)(uintptr_t)ring_table)) {
+            (uint64_t)(uintptr_t)ring_table,
+            (uint64_t)(uintptr_t)vertex_desc,
+            (uint64_t)(uintptr_t)texture_desc)) {
         return false;
     }
     /* The compiled TES record carries generic CX defaults, including an
@@ -1287,23 +1258,16 @@ static bool dispatch_graphics(GraphicsTest *test,
     /* 5. Bind the fused state. The ES-front starts the merged wave and uses
      * the address32 AC_UD_NEXT_STAGE_PC value to continue at the GS-back
      * program; ACO supplies the fixed high address dword in the ISA. */
-    AgcRegisterValue post_bind_sh[3];
-    uint32_t post_bind_sh_count = 0u;
-    if (found_vertex_table_reg) {
-        post_bind_sh[post_bind_sh_count++] = (AgcRegisterValue){
-            vertex_table_reg, (uint32_t)(uintptr_t)vertex_desc
-        };
-    }
-    if (found_next_stage_pc_reg) {
-        post_bind_sh[post_bind_sh_count++] = (AgcRegisterValue){
-            next_stage_pc_reg, (uint32_t)(uintptr_t)back_code
-        };
-    }
-
-    /* 6. Write PS shader SH + CX registers */
-    post_bind_sh[post_bind_sh_count++] = (AgcRegisterValue){
-        texture_table_reg, (uint32_t)(uintptr_t)texture_desc
+#if !AGC_TESSELLATION
+    const AgcGfx1013ResourceTableBinding primitive_resource_table = {
+        OPENAGC_VERTEX_BUFFER_TABLE_PLACEHOLDER,
+        (uint64_t)(uintptr_t)vertex_desc,
     };
+    const AgcGfx1013ResourceTableBinding pixel_resource_table = {
+        OPENAGC_DESCRIPTOR_SET_PLACEHOLDER(0u),
+        (uint64_t)(uintptr_t)texture_desc,
+    };
+#endif
 
     /* 6b. Post-bind depth and rasterizer overrides remain application state.
      * Shader formats,
@@ -1320,8 +1284,6 @@ static bool dispatch_graphics(GraphicsTest *test,
     };
 
 #if AGC_TESSELLATION
-    for (uint32_t i = 0u; i < post_bind_sh_count; ++i)
-        sceAgcCbSetShRegistersDirect(&cb, &post_bind_sh[i], 1u);
     for (uint32_t i = 0u;
          i < (uint32_t)(sizeof(post_bind_cx) / sizeof(post_bind_cx[0]));
          ++i) {
@@ -1343,8 +1305,10 @@ static bool dispatch_graphics(GraphicsTest *test,
 #else
     const AgcGfx1013BaselineDrawState baseline_draw = {
         .shaders = baseline_shaders,
-        .post_bind_sh_registers = post_bind_sh,
-        .num_post_bind_sh_registers = post_bind_sh_count,
+        .primitive_resource_tables = &primitive_resource_table,
+        .num_primitive_resource_tables = 1u,
+        .pixel_resource_tables = &pixel_resource_table,
+        .num_pixel_resource_tables = 1u,
         .post_bind_cx_registers = post_bind_cx,
         .num_post_bind_cx_registers =
             (uint32_t)(sizeof(post_bind_cx) / sizeof(post_bind_cx[0])),
@@ -1365,29 +1329,22 @@ static bool dispatch_graphics(GraphicsTest *test,
      * the end of this 32 KiB allocation, outside the active command stream. */
     uint64_t marker_target =
         (uint64_t)(uintptr_t)dispatch_cb + 0x7000u;
-    uint32_t *wd = agcCbAllocDwords(&cb, 5);
-    if (wd) {
-        wd[0] = agcPm4Header3(AGC_PM4_OP_WRITE_DATA, 5);
-        wd[1] = (2u << 0) | (0u << 2) | (1u << 8);  /* dst=memory, verify=1 */
-        wd[2] = (uint32_t)marker_target;
-        wd[3] = (uint32_t)(marker_target >> 32);
-        wd[4] = 0xDEADCAFEu;
-    }
+    volatile uint32_t *marker =
+        (volatile uint32_t *)(uintptr_t)marker_target;
+    uint32_t marker_value = 0xDEADCAFEu;
+    *marker = 0u;
     printf("[Draw] WRITE_DATA marker at 0x%llx\n", (unsigned long long)marker_target);
 
     /* 9. ACQUIRE_MEM — flush GPU caches */
-    uint32_t *am = agcCbAllocDwords(&cb, 6);
-    if (am) {
-        am[0] = agcPm4Header3(AGC_PM4_OP_ACQUIRE_MEM, 6);
-        am[1] = 0x2ec47fc0u;  /* coher_cntl */
-        am[2] = 0xFFFFFFFFu;
-        am[3] = 0;
-        am[4] = 0;
-        am[5] = 0;
-    }
+    if (!sceAgcDcbAcquireMem(
+            &cb, 0u, 0x2ec47fc0u, 0xffffffffu, 0u) ||
+        !sceAgcDcbWriteData(
+            &cb, 2u, 0u, marker_target, &marker_value, 1u, 0u, 0u))
+        return false;
 
     /* Trailing NOP */
-    sceAgcCbNop(&cb, 2);
+    if (!sceAgcCbNop(&cb, 2u))
+        return false;
 
     /* Submit DCB */
     AgcCommandBufferSubmit submit;
@@ -1403,12 +1360,18 @@ static bool dispatch_graphics(GraphicsTest *test,
     printf("[Draw] SubmitDcb: 0x%08x (%s)\n", (unsigned)err, errstr(err));
     if (err != AGC_OK) return false;
 
-    /* Wait for GPU to finish */
-    printf("[Draw] Waiting 200ms for GPU...\n");
-    sceKernelUsleep(200000);
+    uint32_t waited_us = 0u;
+    while (*marker != marker_value && waited_us < 200000u) {
+        sceKernelUsleep(1000u);
+        waited_us += 1000u;
+    }
+    if (*marker != marker_value) {
+        printf("[Draw] GPU completion fence timed out after %u us\n",
+               waited_us);
+        return false;
+    }
+    printf("[Draw] GPU completion fence reached after %u us\n", waited_us);
 
-    /* Check WRITE_DATA marker — if present, GPU is alive after draw */
-    uint32_t *marker = (uint32_t *)(uintptr_t)marker_target;
     printf("[Marker] WRITE_DATA marker = 0x%08x (expected 0xDEADCAFE)\n", *marker);
 #if AGC_TESSELLATION
     uint32_t offchip_changed = 0;

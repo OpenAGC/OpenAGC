@@ -234,10 +234,18 @@ sample layouts. Resource-table binding now resolves compiler placeholders
 inside shader records, validates every required table atomically, enforces the
 PS5 address32 range, and selects graphics/compute packet type internally. The
 baseline draw state owns primitive and pixel resource tables so their resolved
-values are emitted after shader placeholders and before draw packets. The next
-implementation step is conversion of the graphics sample. The VS/PS state also
-owns the primitive back-program address and resolves the compiler continuation
-placeholder internally, removing the sample's last shader-register scan.
+values are emitted after shader placeholders and before draw packets. The VS/PS
+state also owns the primitive back-program address and resolves the compiler
+continuation placeholder internally.
+
+The graphics sample conversion is complete for command construction. Baseline
+and tessellation builds use typed resource encoders, state-owned placeholder
+resolution, public context/default/fixed-function/draw calls, public cache and
+marker packets, and bounded completion. FW 5.50 validated the baseline fence at
+4 ms and tessellation at 9 ms; both passed FP16 validation, and tessellation
+produced the expected ring writes. The next API-hardening step is promoting the
+remaining tessellation ring/context register arrays from the public
+direct-register escape hatch into typed gfx1013 state.
 Each closed goal must update the
 documentation, pass clean generic and Prospero builds, pass host fixtures, and
 be committed before hardware promotion.

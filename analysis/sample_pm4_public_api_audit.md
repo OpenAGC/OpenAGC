@@ -115,6 +115,12 @@ resources without constructing SQ descriptor words.
 
 ### Goal 3: Reusable graphics vertical slice
 
+Status: the hardware sample now uses public APIs exclusively for command
+construction, resource encoding/binding, drawing, barriers, completion, and
+submission. FW 5.50 baseline and tessellation runs passed. Remaining direct
+register calls use the public escape hatch; tessellation ring/context arrays are
+the next typed-state promotion rather than a raw-PM4 blocker.
+
 1. Add typed indexed and indirect draw state above existing packet builders.
 2. Add raster, depth/stencil, blend, and primitive state needed by normal render
    passes.
