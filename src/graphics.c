@@ -2599,6 +2599,7 @@ int32_t PS5_SYSV_ABI agcGfx1013SetColorBlendState(
     uint32_t blend_optimizations[AGC_GFX1013_MAX_COLOR_TARGETS] = {0};
     uint32_t target_mask = 0u;
     uint32_t color_control;
+    bool dual_source_blend = false;
     uint32_t *cmd;
     uint32_t i;
     static const uint8_t optimization_operations[AGC_GFX1013_BLEND_OP_COUNT] = {
@@ -2623,6 +2624,18 @@ int32_t PS5_SYSV_ABI agcGfx1013SetColorBlendState(
             target->alpha_operation >= AGC_GFX1013_BLEND_OP_COUNT ||
             target->write_mask > 0x0fu)
             return AGC_ERROR_INVALID_ARGUMENT;
+        const bool target_uses_dual_source = target->enable &&
+            ((target->color_source >= AGC_GFX1013_BLEND_SRC1_COLOR &&
+              target->color_source <= AGC_GFX1013_BLEND_ONE_MINUS_SRC1_ALPHA) ||
+             (target->color_destination >= AGC_GFX1013_BLEND_SRC1_COLOR &&
+              target->color_destination <= AGC_GFX1013_BLEND_ONE_MINUS_SRC1_ALPHA) ||
+             (target->alpha_source >= AGC_GFX1013_BLEND_SRC1_COLOR &&
+              target->alpha_source <= AGC_GFX1013_BLEND_ONE_MINUS_SRC1_ALPHA) ||
+             (target->alpha_destination >= AGC_GFX1013_BLEND_SRC1_COLOR &&
+              target->alpha_destination <= AGC_GFX1013_BLEND_ONE_MINUS_SRC1_ALPHA));
+        if (target_uses_dual_source && i != 0u)
+            return AGC_ERROR_INVALID_ARGUMENT;
+        dual_source_blend |= target_uses_dual_source;
         controls[i] =
             ((uint32_t)target->color_source <<
                 AGC_REG_CB_BLEND0_CONTROL_COLOR_SRCBLEND_SHIFT) |
@@ -2656,6 +2669,8 @@ int32_t PS5_SYSV_ABI agcGfx1013SetColorBlendState(
                 AGC_REG_SX_MRT0_BLEND_OPT_ALPHA_COMB_FCN_SHIFT);
         target_mask |= target->write_mask << (i * 4u);
     }
+    if (dual_source_blend)
+        memset(blend_optimizations, 0, sizeof(blend_optimizations));
     if (agcCbRemainingDwords(cb) < AGC_GFX1013_BLEND_STATE_DWORDS)
         return AGC_ERROR_BUFFER_TOO_SMALL;
 
@@ -2684,6 +2699,9 @@ int32_t PS5_SYSV_ABI agcGfx1013SetColorBlendState(
         ((uint32_t)(state->logic_enable ? rop3[state->logic_operation] :
             rop3[AGC_GFX1013_LOGIC_COPY]) <<
             AGC_REG_CB_COLOR_CONTROL_ROP3_SHIFT);
+    if (dual_source_blend)
+        color_control |=
+            1u << AGC_REG_CB_COLOR_CONTROL_DISABLE_DUAL_QUAD_SHIFT;
     if (!agcGfx1013EmitCx(cb, AGC_REG_CB_COLOR_CONTROL, color_control))
         return AGC_ERROR_INTERNAL;
     return AGC_OK;

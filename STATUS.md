@@ -1,5 +1,14 @@
 # openagc Status
 
+## GFX1013 dual-source blend state (2026-07-28)
+
+The typed color-blend helper now detects SRC1 factors on MRT0, disables RB+
+dual-quad mode, clears every SX blend-optimization register, and rejects SRC1
+use on later targets. Exact packet and rejection tests pass. Two consecutive
+bounded FW 5.50 Vulkan probes produced the exact 18,432-pixel green SRC1 oracle
+and exited cleanly; the only klog item was the established `amount=0x4000`
+baseline VM warning.
+
 ## Typed gfx1013 primitive topology and size state (2026-07-28)
 
 OpenAGC now maps point, line, triangle, strip, and patch topologies through an

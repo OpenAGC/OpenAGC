@@ -1696,6 +1696,36 @@ static void test_gfx1013_blend_depth_stencil_packets(void)
     blend.logic_enable = 0u;
     blend.logic_operation = AGC_GFX1013_LOGIC_CLEAR;
 
+    blend.target_count = 1u;
+    blend.targets[0].color_source = AGC_GFX1013_BLEND_SRC1_COLOR;
+    blend.targets[0].color_destination = AGC_GFX1013_BLEND_ZERO;
+    blend.targets[0].alpha_source = AGC_GFX1013_BLEND_SRC1_ALPHA;
+    blend.targets[0].alpha_destination = AGC_GFX1013_BLEND_ZERO;
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetColorBlendState(&cb, &blend), AGC_OK,
+        "gfx1013 dual-source blend state emits");
+    for (uint32_t target = 0u; target < AGC_GFX1013_MAX_COLOR_TARGETS;
+         ++target) {
+        TEST_ASSERT_EQ(buffer[12u + target], 0u,
+            "gfx1013 dual-source blend disables RB+ optimization");
+    }
+    TEST_ASSERT_EQ(buffer[AGC_GFX1013_BLEND_STATE_DWORDS - 1u],
+        0x00cc0011u,
+        "gfx1013 dual-source blend disables dual-quad mode");
+
+    blend.target_count = 2u;
+    blend.targets[0].color_source = AGC_GFX1013_BLEND_ONE;
+    blend.targets[0].alpha_source = AGC_GFX1013_BLEND_ONE;
+    blend.targets[1].color_source = AGC_GFX1013_BLEND_SRC1_COLOR;
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetColorBlendState(&cb, &blend),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "gfx1013 dual-source blend rejects nonzero targets");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "invalid dual-source blend state is atomic");
+    blend.target_count = 1u;
+    blend.targets[1].color_source = AGC_GFX1013_BLEND_ONE;
+
     TEST_ASSERT_EQ(AGC_GFX1013_DEPTH_BIAS_RASTER_MODE, 0x00001800u,
         "gfx1013 depth-bias front/back enable mask");
     TEST_ASSERT_EQ(AGC_GFX1013_VULKAN_CLIP_CONTROL, 0x00080000u,

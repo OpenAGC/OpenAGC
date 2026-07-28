@@ -16,6 +16,17 @@ AMD PM4 packet ancestry overlap in useful ways.
 
 ## Current Execution Order
 
+### Gfx1013 dual-source blend state
+
+- Detect SRC1 factors in the application-neutral blend builder and reject
+  their use outside MRT0.
+- Disable RB+ dual-quad mode and clear all SX blend optimizations while dual
+  source blending is active.
+- Exact host tests pass, and two bounded FW 5.50 Vulkan probes passed the
+  18,432-pixel green SRC1 readback oracle with clean process exit.
+- This OpenAGC portion is complete; higher-level Vulkan feature exposure is
+  tracked in Vulkan-PS5.
+
 ### Gfx1013 tessellation offchip concurrency gate
 
 - Replaced the tessellation sample's single global HS offchip buffer with an

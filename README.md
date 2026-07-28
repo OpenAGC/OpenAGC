@@ -64,7 +64,8 @@ builds with ps5-payload-sdk; hardware validation is the remaining step.
   encodings for higher-level APIs without exposing register values
 - **Application-neutral color blending** — typed blend factors and operations
   program both CB blend controls and conservative per-target SX optimization
-  state, including the gfx1013 SRC1 factors required by dual-source blending
+  state, including the gfx1013 SRC1 factors required by dual-source blending;
+  SRC1 use disables RB+ dual-quad mode and all SX blend optimizations
 - **GPU-visible flexible memory** — `agcGpuMemoryAllocateFlexible` provides a
   unified CPU/GPU address on Prospero and an aligned host analogue for tests;
   matching flush, invalidate, and deterministic free operations keep kernel
