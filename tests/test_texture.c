@@ -837,6 +837,18 @@ static void test_gfx1013_hardware_descriptors(void)
     TEST_ASSERT_EQ(buffer.words[3], 0x11014facu,
         "gfx1013 buffer hardware controls");
 
+    TEST_ASSERT_EQ(agcGfx1013RawBufferDescriptorEncode(
+        &buffer, 0x0000000202600000ull, 31u), AGC_OK,
+        "gfx1013 raw buffer descriptor encodes");
+    TEST_ASSERT_EQ(buffer.words[0], 0x02600000u,
+        "gfx1013 raw buffer address low");
+    TEST_ASSERT_EQ(buffer.words[1], 0x00000002u,
+        "gfx1013 raw buffer address high and zero stride");
+    TEST_ASSERT_EQ(buffer.words[2], 31u,
+        "gfx1013 raw buffer byte bound");
+    TEST_ASSERT_EQ(buffer.words[3], 0x31014facu,
+        "gfx1013 raw buffer OOB controls");
+
     TEST_ASSERT_EQ(agcGfx1013Image2DDescriptorEncode(
         &image, &image_state), AGC_OK,
         "gfx1013 2D image descriptor encodes");
@@ -889,6 +901,11 @@ static void test_gfx1013_hardware_descriptor_validation(void)
         AGC_ERROR_VALIDATION_FAILED, "48-bit buffer address enforced");
     TEST_ASSERT_EQ(buffer.words[0], 1u,
         "invalid buffer encoding preserves destination");
+    TEST_ASSERT_EQ(agcGfx1013RawBufferDescriptorEncode(
+        &buffer, 0x0000000202600000ull, 0u),
+        AGC_ERROR_INVALID_ARGUMENT, "zero raw buffer size rejected");
+    TEST_ASSERT_EQ(buffer.words[0], 1u,
+        "invalid raw buffer encoding preserves destination");
     TEST_ASSERT_EQ(agcGfx1013Image2DDescriptorEncode(&image, &state),
         AGC_ERROR_INVALID_ALIGNMENT, "image alignment enforced");
     TEST_ASSERT_EQ(image.words[0], 1u,

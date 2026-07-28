@@ -385,6 +385,24 @@ int32_t PS5_SYSV_ABI agcGfx1013BufferDescriptorEncode(
     return AGC_OK;
 }
 
+int32_t PS5_SYSV_ABI agcGfx1013RawBufferDescriptorEncode(
+    AgcGfx1013BufferDescriptor *descriptor, uint64_t address,
+    uint32_t byte_size)
+{
+    AgcGfx1013BufferDescriptor encoded = {{0}};
+
+    if (!descriptor || address == 0u || byte_size == 0u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if ((address >> 48u) != 0u)
+        return AGC_ERROR_VALIDATION_FAILED;
+    encoded.words[0] = (uint32_t)address;
+    encoded.words[1] = (uint32_t)(address >> 32u);
+    encoded.words[2] = byte_size;
+    encoded.words[3] = AGC_GFX1013_BUFFER_WORD3_RAW;
+    *descriptor = encoded;
+    return AGC_OK;
+}
+
 int32_t PS5_SYSV_ABI agcGfx1013Image2DDescriptorEncode(
     AgcGfx1013ImageDescriptor *descriptor,
     const AgcGfx1013Image2DState *state)

@@ -482,6 +482,7 @@ void agcSamplerDescriptorSetAnisotropy(AgcSamplerDescriptor *desc,
 /* Hardware-ready gfx1013 resource descriptors. These types are byte-exact
  * SQ descriptor layouts, unlike the portable abstract descriptors above. */
 #define AGC_GFX1013_BUFFER_WORD3_STRUCTURED 0x11014FACu
+#define AGC_GFX1013_BUFFER_WORD3_RAW 0x31014FACu
 #define AGC_GFX1013_IMAGE_FORMAT_RGBA8_UNORM 56u
 #define AGC_GFX1013_IMAGE_TYPE_2D 9u
 #define AGC_GFX1013_IMAGE_TYPE_2D_MSAA 14u
@@ -528,6 +529,9 @@ _Static_assert(offsetof(AgcGfx1013CombinedImageSamplerDescriptor, sampler) == 32
 int32_t PS5_SYSV_ABI agcGfx1013BufferDescriptorEncode(
     AgcGfx1013BufferDescriptor *descriptor, uint64_t address,
     uint32_t stride, uint32_t element_count);
+int32_t PS5_SYSV_ABI agcGfx1013RawBufferDescriptorEncode(
+    AgcGfx1013BufferDescriptor *descriptor, uint64_t address,
+    uint32_t byte_size);
 int32_t PS5_SYSV_ABI agcGfx1013Image2DDescriptorEncode(
     AgcGfx1013ImageDescriptor *descriptor,
     const AgcGfx1013Image2DState *state);
