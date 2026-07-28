@@ -1,5 +1,15 @@
 # openagc Status
 
+## Typed gfx1013 primitive topology and size state (2026-07-28)
+
+OpenAGC now maps point, line, triangle, strip, and patch topologies through an
+application-neutral enum and emits point-size, point-clamp, and line-width
+state through one atomic typed helper. The helper owns the gfx1013 primitive
+codes and fixed-point register encoding. Exact host tests cover every topology,
+the contiguous register packet, insufficient capacity, invalid ranges, and
+null inputs. Real-console large-point and wide-line qualification remains a
+higher-level client gate.
+
 ## GFX1013 blendable color-target policy (2026-07-28)
 
 Color-target setup now derives `CB_COLOR_INFO` blend clamp, bypass, simple

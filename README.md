@@ -59,6 +59,9 @@ builds with ps5-payload-sdk; hardware validation is the remaining step.
   gfx1013 `DMA_DATA` copies, validates four-byte alignment and 48-bit address
   ranges, splits transfers larger than one packet, and rejects insufficient
   command-buffer space atomically
+- **Application-neutral raster primitives** — typed topology translation and
+  primitive-size state own gfx1013 point-size, point-clamp, and line-width
+  encodings for higher-level APIs without exposing register values
 - **GPU-visible flexible memory** — `agcGpuMemoryAllocateFlexible` provides a
   unified CPU/GPU address on Prospero and an aligned host analogue for tests;
   matching flush, invalidate, and deterministic free operations keep kernel

@@ -91,6 +91,7 @@ extern "C" {
 #define AGC_GFX1013_BLEND_STATE_DWORDS            22u
 #define AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS    14u
 #define AGC_GFX1013_DEPTH_BIAS_STATE_DWORDS       10u
+#define AGC_GFX1013_PRIMITIVE_SIZE_STATE_DWORDS    5u
 #define AGC_GFX1013_DEPTH_BIAS_RASTER_MODE         0x00001800u
 #define AGC_GFX1013_VULKAN_CLIP_CONTROL             0x00080000u
 #define AGC_GFX1013_DEPTH_CLAMP_CLIP_CONTROL        0x0c080000u
@@ -509,6 +510,23 @@ typedef enum AgcGfx1013PolygonMode {
     AGC_GFX1013_POLYGON_MODE_COUNT
 } AgcGfx1013PolygonMode;
 
+typedef enum AgcGfx1013PrimitiveTopology {
+    AGC_GFX1013_TOPOLOGY_POINT_LIST = 0,
+    AGC_GFX1013_TOPOLOGY_LINE_LIST,
+    AGC_GFX1013_TOPOLOGY_LINE_STRIP,
+    AGC_GFX1013_TOPOLOGY_TRIANGLE_LIST,
+    AGC_GFX1013_TOPOLOGY_TRIANGLE_STRIP,
+    AGC_GFX1013_TOPOLOGY_PATCH_LIST,
+    AGC_GFX1013_TOPOLOGY_COUNT
+} AgcGfx1013PrimitiveTopology;
+
+typedef struct AgcGfx1013PrimitiveSizeState {
+    float point_size;
+    float point_size_min;
+    float point_size_max;
+    float line_width;
+} AgcGfx1013PrimitiveSizeState;
+
 typedef struct AgcGfx1013FrameState {
     AgcGfx1013ColorTargetState color_target;
     AgcGfx1013ColorTargetState additional_color_targets[
@@ -796,6 +814,10 @@ int32_t PS5_SYSV_ABI agcGfx1013SetScissor(
     SceAgcCb *cb, const AgcGfx1013ScissorState *state);
 int32_t PS5_SYSV_ABI agcGfx1013ApplyPolygonMode(
     AgcGfx1013FrameState *state, AgcGfx1013PolygonMode mode);
+int32_t PS5_SYSV_ABI agcGfx1013GetPrimitiveType(
+    AgcGfx1013PrimitiveTopology topology, uint32_t *primitive_type);
+int32_t PS5_SYSV_ABI agcGfx1013SetPrimitiveSizeState(
+    SceAgcCb *cb, const AgcGfx1013PrimitiveSizeState *state);
 int32_t PS5_SYSV_ABI agcGfx1013SetTargetMask(
     SceAgcCb *cb, uint32_t mask);
 int32_t PS5_SYSV_ABI agcGfx1013SetColorBlendState(

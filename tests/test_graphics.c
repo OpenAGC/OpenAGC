@@ -923,6 +923,65 @@ static void test_gfx1013_polygon_modes(void)
         AGC_ERROR_INVALID_ARGUMENT, "null polygon state rejects");
 }
 
+static void test_gfx1013_raster_primitives(void)
+{
+    static const uint32_t expected_types[] = {1u, 2u, 3u, 4u, 5u, 9u};
+    const uint32_t expected_state[] = {
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG,
+            AGC_GFX1013_PRIMITIVE_SIZE_STATE_DWORDS),
+        AGC_REG_PA_SU_POINT_SIZE,
+        0x00080008u,
+        0x02000008u,
+        0x00000040u,
+    };
+    uint32_t buffer[AGC_GFX1013_PRIMITIVE_SIZE_STATE_DWORDS] = {0};
+    SceAgcCb cb;
+    AgcGfx1013PrimitiveSizeState state = {1.0f, 1.0f, 64.0f, 8.0f};
+
+    for (uint32_t topology = 0u;
+         topology < AGC_GFX1013_TOPOLOGY_COUNT; ++topology) {
+        uint32_t primitive_type = 0u;
+        TEST_ASSERT_EQ(agcGfx1013GetPrimitiveType(
+            (AgcGfx1013PrimitiveTopology)topology, &primitive_type), AGC_OK,
+            "gfx1013 primitive topology maps");
+        TEST_ASSERT_EQ(primitive_type, expected_types[topology],
+            "gfx1013 primitive topology exact type");
+    }
+    TEST_ASSERT_EQ(agcGfx1013GetPrimitiveType(
+        AGC_GFX1013_TOPOLOGY_COUNT, &buffer[0]),
+        AGC_ERROR_INVALID_ARGUMENT, "invalid primitive topology rejects");
+    TEST_ASSERT_EQ(agcGfx1013GetPrimitiveType(
+        (AgcGfx1013PrimitiveTopology)-1, &buffer[0]),
+        AGC_ERROR_INVALID_ARGUMENT, "negative primitive topology rejects");
+    TEST_ASSERT_EQ(agcGfx1013GetPrimitiveType(
+        AGC_GFX1013_TOPOLOGY_POINT_LIST, NULL),
+        AGC_ERROR_INVALID_ARGUMENT, "null primitive type output rejects");
+
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetPrimitiveSizeState(&cb, &state), AGC_OK,
+        "gfx1013 primitive size state emits");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb),
+        AGC_GFX1013_PRIMITIVE_SIZE_STATE_DWORDS,
+        "gfx1013 primitive size exact dword count");
+    TEST_ASSERT(memcmp(buffer, expected_state, sizeof(expected_state)) == 0,
+        "gfx1013 primitive size exact packet stream");
+
+    agcCbReset(&cb, buffer, (AGC_GFX1013_PRIMITIVE_SIZE_STATE_DWORDS - 1u) *
+        sizeof(uint32_t));
+    TEST_ASSERT_EQ(agcGfx1013SetPrimitiveSizeState(&cb, &state),
+        AGC_ERROR_BUFFER_TOO_SMALL, "short primitive size state rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "short primitive size state is atomic");
+    state.point_size_max = 0.5f;
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetPrimitiveSizeState(&cb, &state),
+        AGC_ERROR_INVALID_ARGUMENT, "invalid primitive size range rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "invalid primitive size state is atomic");
+    TEST_ASSERT_EQ(agcGfx1013SetPrimitiveSizeState(NULL, &state),
+        AGC_ERROR_INVALID_ARGUMENT, "null primitive size command rejects");
+}
+
 static void test_gfx1013_frame_state(void)
 {
     static const struct {
@@ -3380,6 +3439,7 @@ void test_suite_graphics(void)
     TEST_RUN(test_gfx1013_htile_layout);
     TEST_RUN(test_gfx1013_stencil_gate_fixture);
     TEST_RUN(test_gfx1013_polygon_modes);
+    TEST_RUN(test_gfx1013_raster_primitives);
     TEST_RUN(test_gfx1013_frame_state);
     TEST_RUN(test_gfx1013_graphics_defaults_v8);
     TEST_RUN(test_gfx1013_fixed_function_rejects_atomically);

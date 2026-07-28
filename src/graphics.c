@@ -2425,6 +2425,58 @@ int32_t PS5_SYSV_ABI agcGfx1013ApplyPolygonMode(
     return AGC_OK;
 }
 
+int32_t PS5_SYSV_ABI agcGfx1013GetPrimitiveType(
+    AgcGfx1013PrimitiveTopology topology, uint32_t *primitive_type)
+{
+    static const uint8_t types[AGC_GFX1013_TOPOLOGY_COUNT] = {
+        1u, 2u, 3u, 4u, 5u, 9u,
+    };
+
+    if (!primitive_type || (uint32_t)topology >= AGC_GFX1013_TOPOLOGY_COUNT)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    *primitive_type = types[topology];
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013SetPrimitiveSizeState(
+    SceAgcCb *cb, const AgcGfx1013PrimitiveSizeState *state)
+{
+    uint32_t point_size;
+    uint32_t point_min;
+    uint32_t point_max;
+    uint32_t line_width;
+    uint32_t *cmd;
+
+    if (!cb || !state || !(state->point_size >= 0.125f) ||
+        !(state->point_size <= 8191.875f) ||
+        !(state->point_size_min >= 0.0f) ||
+        !(state->point_size_min <= state->point_size_max) ||
+        !(state->point_size_max <= 8191.875f) ||
+        !(state->line_width >= 0.125f) ||
+        !(state->line_width <= 8191.875f))
+        return AGC_ERROR_INVALID_ARGUMENT;
+    point_size = (uint32_t)(state->point_size * 8.0f + 0.5f);
+    point_min = (uint32_t)(state->point_size_min * 8.0f + 0.5f);
+    point_max = (uint32_t)(state->point_size_max * 8.0f + 0.5f);
+    line_width = (uint32_t)(state->line_width * 8.0f + 0.5f);
+    if (point_size > 0xffffu || point_min > 0xffffu ||
+        point_max > 0xffffu || line_width > 0xffffu)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (agcCbRemainingDwords(cb) < AGC_GFX1013_PRIMITIVE_SIZE_STATE_DWORDS)
+        return AGC_ERROR_BUFFER_TOO_SMALL;
+
+    cmd = agcCbAllocDwords(cb, AGC_GFX1013_PRIMITIVE_SIZE_STATE_DWORDS);
+    if (!cmd)
+        return AGC_ERROR_INTERNAL;
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG,
+        AGC_GFX1013_PRIMITIVE_SIZE_STATE_DWORDS);
+    cmd[1] = AGC_REG_PA_SU_POINT_SIZE;
+    cmd[2] = point_size | (point_size << 16u);
+    cmd[3] = point_min | (point_max << 16u);
+    cmd[4] = line_width;
+    return AGC_OK;
+}
+
 int32_t PS5_SYSV_ABI agcGfx1013SetViewport(
     SceAgcCb *cb, const AgcGfx1013ViewportState *state)
 {
