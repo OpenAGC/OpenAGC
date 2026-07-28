@@ -59,6 +59,13 @@ OpenAGC/Vulkan consumer include `samples/hw_test/gpu_credentials.h`. The generic
 suite remains unchanged and passing, and the Prospero archive cross-builds with
 strict warnings enabled. Real-console requalification remains pending.
 
+## Zero-record structured buffer bounds (2026-07-28)
+
+`agcGfx1013BufferDescriptorEncode` accepts a zero element count while retaining
+the validated nonzero address, stride, and structured OOB mode. Vulkan-PS5 can
+therefore represent a robust vertex attribute with no complete in-range record
+without substituting an unbounded descriptor or failing draw preparation.
+
 ## Compute descriptor resource tables (2026-07-27)
 
 `AgcGfx1013ComputeState` now carries application-neutral resource-table

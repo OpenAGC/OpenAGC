@@ -354,7 +354,7 @@ GPU-written completion marker and polls that CPU-visible fence with a bounded
 timeout. FW 5.50 reached the fence after 1 ms and retained full pixel coverage.
 
 The public resource API now has byte-exact gfx1013 structured-buffer,
-byte-bounded raw-buffer, 2D-image, and 64-byte combined image/sampler
+zero-record structured-buffer, byte-bounded raw-buffer, 2D-image, and 64-byte combined image/sampler
 descriptor encoders matching the proven
 sample layouts. Resource-table binding now resolves compiler placeholders
 inside shader records, validates every required table atomically, enforces the

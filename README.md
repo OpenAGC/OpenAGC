@@ -51,8 +51,8 @@ builds with ps5-payload-sdk; hardware validation is the remaining step.
 - **Suspend points** — RE'd `SUSPEND_16`/`SUSPEND_39` ioctl argument layout and
   in-flight query placeholder
 - **Known NID index** — local Gen5 AGC NID constants for mapped exports
-- **Texture/buffer descriptors** — RDNA2 SQ_IMG_RSRC plus structured and
-  byte-bounded raw SQ_BUF_RSRC encoders
+- **Texture/buffer descriptors** — RDNA2 SQ_IMG_RSRC plus structured (including
+  zero-record robust bounds) and byte-bounded raw SQ_BUF_RSRC encoders
 - **Application-neutral capabilities** — `agcGfx1013GetCapabilities` reports
   qualified gfx1013 dimensions, Wave32/compute limits, render/depth formats,
   sample counts, and flexible/direct memory profiles without Vulkan coupling

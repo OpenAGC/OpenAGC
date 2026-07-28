@@ -836,6 +836,13 @@ static void test_gfx1013_hardware_descriptors(void)
         "gfx1013 buffer element count");
     TEST_ASSERT_EQ(buffer.words[3], 0x11014facu,
         "gfx1013 buffer hardware controls");
+    TEST_ASSERT_EQ(agcGfx1013BufferDescriptorEncode(
+        &buffer, 0x0000000202600000ull, 32u, 0u), AGC_OK,
+        "gfx1013 zero-record structured buffer descriptor encodes");
+    TEST_ASSERT_EQ(buffer.words[2], 0u,
+        "gfx1013 zero-record structured buffer bound");
+    TEST_ASSERT_EQ(buffer.words[3], 0x11014facu,
+        "gfx1013 zero-record structured buffer hardware controls");
 
     TEST_ASSERT_EQ(agcGfx1013RawBufferDescriptorEncode(
         &buffer, 0x0000000202600000ull, 31u), AGC_OK,

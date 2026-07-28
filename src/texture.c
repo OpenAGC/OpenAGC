@@ -373,7 +373,7 @@ int32_t PS5_SYSV_ABI agcGfx1013BufferDescriptorEncode(
 {
     AgcGfx1013BufferDescriptor encoded = {{0}};
 
-    if (!descriptor || address == 0u || element_count == 0u)
+    if (!descriptor || address == 0u)
         return AGC_ERROR_INVALID_ARGUMENT;
     if ((address >> 48u) != 0u || stride > 0x3fffu)
         return AGC_ERROR_VALIDATION_FAILED;
