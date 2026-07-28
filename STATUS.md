@@ -1422,7 +1422,13 @@ lifecycle difference is the VideoOut text patch: the module starts
 execute-only, while OpenAGC restored it as read/execute after each temporary
 RWX interval. The backend now restores the exact execute-only protection so
 the kernel can coalesce the temporary text mapping. A fresh bounded hardware
-run is required to verify the warning is gone.
+run at `20260728T063634Z-swapchain-run1-target.klog` reproduced the warning,
+falsifying that hypothesis too. The identical single-page warning appears in
+all 27 retained OpenAGC graphics teardown klogs. The remaining unpaired
+lifecycle object is the registered flip event, so teardown now explicitly
+unregisters it before closing VideoOut and deleting its still-live equeue. A
+fresh bounded hardware run is required to distinguish that resource from a FW
+5.50/raw-ELF baseline warning.
 
 The compiler now assigns standalone vertex-stage user varyings to RADV
 parameter-export slots before NGG lowering. The validated shader exports

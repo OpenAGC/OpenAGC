@@ -1397,7 +1397,12 @@ After interpolants pass, proceed in this order:
    source of its final `0x4000` VM warning. The VideoOut patch had restored its
    originally execute-only text range as read/execute; the Prospero backend now
    restores the exact execute-only protection so the kernel can coalesce the
-   temporary text mapping. Fresh bounded hardware evidence remains required.
+   temporary text mapping. A follow-up reproduced the warning, falsifying that
+   hypothesis too. All 27 retained OpenAGC graphics klogs contain the same
+   single-page warning; the remaining unmatched lifecycle object is the flip
+   event. Teardown now explicitly unregisters it before closing VideoOut and
+   deleting its still-live equeue. Fresh bounded hardware evidence remains
+   required.
 8. ✅ Validate isolated Wave32 tessellation. Fused HS and TES records execute
    through the reusable gfx1013 binder and the recovered non-Direct TF-ring
    ABI. The factor ring contains four `4.0` factors, readback contains 255,744
