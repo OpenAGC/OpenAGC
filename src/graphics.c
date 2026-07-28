@@ -1456,6 +1456,9 @@ int32_t PS5_SYSV_ABI agcGfx1013SetColorTargetSlot(
     uint32_t fragment_log2;
     uint32_t surface_pitch;
     uint32_t padded_height;
+    uint32_t blend_clamp;
+    uint32_t blend_bypass;
+    uint32_t round_mode;
 
     if (!cb || slot >= AGC_GFX1013_MAX_COLOR_TARGETS || !state ||
         state->address == 0u || state->width == 0u ||
@@ -1526,7 +1529,19 @@ int32_t PS5_SYSV_ABI agcGfx1013SetColorTargetSlot(
     regs[4] =
         (state->color_format << AGC_REG_CB_COLOR0_INFO_FORMAT_SHIFT) |
         (state->number_type << AGC_REG_CB_COLOR0_INFO_NUMBER_TYPE_SHIFT) |
-        (state->component_swap << 11) | (1u << 16);
+        (state->component_swap << AGC_REG_CB_COLOR0_INFO_COMP_SWAP_SHIFT);
+    blend_clamp = state->number_type == AGC_GFX1013_SURFACE_NUMBER_UNORM ||
+        state->number_type == AGC_GFX1013_SURFACE_NUMBER_SNORM ||
+        state->number_type == AGC_GFX1013_SURFACE_NUMBER_SRGB;
+    blend_bypass =
+        state->number_type == AGC_GFX1013_SURFACE_NUMBER_UINT ||
+        state->number_type == AGC_GFX1013_SURFACE_NUMBER_SINT;
+    round_mode = !blend_clamp;
+    regs[4] |=
+        (blend_clamp << AGC_REG_CB_COLOR0_INFO_BLEND_CLAMP_SHIFT) |
+        (blend_bypass << AGC_REG_CB_COLOR0_INFO_BLEND_BYPASS_SHIFT) |
+        (1u << AGC_REG_CB_COLOR0_INFO_SIMPLE_FLOAT_SHIFT) |
+        (round_mode << AGC_REG_CB_COLOR0_INFO_ROUND_MODE_SHIFT);
     regs[5] =
         (sample_log2 << AGC_REG_CB_COLOR0_ATTRIB_NUM_SAMPLES_SHIFT) |
         (fragment_log2 << AGC_REG_CB_COLOR0_ATTRIB_NUM_FRAGMENTS_SHIFT);

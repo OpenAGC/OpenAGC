@@ -1,5 +1,15 @@
 # openagc Status
 
+## GFX1013 blendable color-target policy (2026-07-28)
+
+Color-target setup now derives `CB_COLOR_INFO` blend clamp, bypass, simple
+float, and round-mode bits from the target number type. Normalized and sRGB
+targets take the blend path with clamping, float targets take the blend path
+with round mode, and integer targets retain the required blend bypass. This
+replaces the former unconditional bypass that made valid `CB_BLENDn_CONTROL`
+state ineffective. Exact packet tests cover every currently exposed render
+target format; real-console MRT blend qualification remains pending.
+
 ## Typed gfx1013 polygon raster modes (2026-07-28)
 
 OpenAGC now applies fill, line, and point polygon modes through the typed
