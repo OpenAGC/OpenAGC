@@ -950,6 +950,57 @@ static void test_gfx1013_msaa_image_descriptor(void)
         "misaligned gfx1013 MSAA image preserves destination");
 }
 
+static void test_gfx1013_array_image_descriptors(void)
+{
+    AgcGfx1013ImageDescriptor image = {{0}};
+    AgcGfx1013Image2DState state = {
+        .address = 0x0000000202700000ull,
+        .width = 2u,
+        .height = 2u,
+        .format = AGC_GFX1013_IMAGE_FORMAT_RGBA8_UNORM,
+        .image_type = AGC_GFX1013_IMAGE_TYPE_CUBE,
+        .dst_sel_x = 4u,
+        .dst_sel_y = 5u,
+        .dst_sel_z = 6u,
+        .dst_sel_w = 7u,
+        .base_array_layer = 0u,
+        .last_array_layer = 11u,
+    };
+
+    TEST_ASSERT_EQ(agcGfx1013Image2DDescriptorEncode(&image, &state),
+        AGC_OK, "gfx1013 two-cube array descriptor encodes");
+    TEST_ASSERT_EQ(image.words[3], 0xB0000FACu,
+        "gfx1013 cube resource type encodes");
+    TEST_ASSERT_EQ(image.words[4], 0x0000000Bu,
+        "gfx1013 cube array exposes twelve face layers");
+
+    state.base_array_layer = 6u;
+    TEST_ASSERT_EQ(agcGfx1013Image2DDescriptorEncode(&image, &state),
+        AGC_OK, "gfx1013 cube subrange descriptor encodes");
+    TEST_ASSERT_EQ(image.words[4], 0x0006000Bu,
+        "gfx1013 cube subrange preserves base and last layers");
+
+    state.image_type = AGC_GFX1013_IMAGE_TYPE_2D_ARRAY;
+    state.base_array_layer = 3u;
+    state.last_array_layer = 4u;
+    TEST_ASSERT_EQ(agcGfx1013Image2DDescriptorEncode(&image, &state),
+        AGC_OK, "gfx1013 2D array descriptor encodes");
+    TEST_ASSERT_EQ(image.words[3], 0xD0000FACu,
+        "gfx1013 2D array resource type encodes");
+    TEST_ASSERT_EQ(image.words[4], 0x00030004u,
+        "gfx1013 2D array range encodes");
+
+    state.image_type = AGC_GFX1013_IMAGE_TYPE_CUBE;
+    state.base_array_layer = 0u;
+    state.last_array_layer = 6u;
+    image.words[0] = 0x11223344u;
+    TEST_ASSERT_EQ(agcGfx1013Image2DDescriptorEncode(&image, &state),
+        AGC_ERROR_NOT_SUPPORTED,
+        "gfx1013 cube descriptor rejects incomplete face groups");
+    TEST_ASSERT_EQ(image.words[0], 0x11223344u,
+        "invalid gfx1013 cube range preserves destination");
+}
+
 void test_suite_texture(void) {
     TEST_SUITE("Texture Descriptors");
     TEST_RUN(test_texture_descriptor_size);
@@ -1028,4 +1079,5 @@ void test_suite_texture(void) {
     TEST_RUN(test_gfx1013_hardware_descriptors);
     TEST_RUN(test_gfx1013_hardware_descriptor_validation);
     TEST_RUN(test_gfx1013_msaa_image_descriptor);
+    TEST_RUN(test_gfx1013_array_image_descriptors);
 }

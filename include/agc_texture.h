@@ -485,6 +485,8 @@ void agcSamplerDescriptorSetAnisotropy(AgcSamplerDescriptor *desc,
 #define AGC_GFX1013_BUFFER_WORD3_RAW 0x31014FACu
 #define AGC_GFX1013_IMAGE_FORMAT_RGBA8_UNORM 56u
 #define AGC_GFX1013_IMAGE_TYPE_2D 9u
+#define AGC_GFX1013_IMAGE_TYPE_CUBE 11u
+#define AGC_GFX1013_IMAGE_TYPE_2D_ARRAY 13u
 #define AGC_GFX1013_IMAGE_TYPE_2D_MSAA 14u
 #define AGC_GFX1013_IMAGE_SWIZZLE_64KB_R_X 27u
 #define AGC_GFX1013_IMAGE_64KB_ALIGNMENT 0x10000u
@@ -509,6 +511,8 @@ typedef struct AgcGfx1013Image2DState {
     uint32_t dst_sel_w;
     uint32_t sample_count;
     uint32_t swizzle_mode;
+    uint32_t base_array_layer;
+    uint32_t last_array_layer;
 } AgcGfx1013Image2DState;
 
 typedef struct AgcGfx1013CombinedImageSamplerDescriptor {

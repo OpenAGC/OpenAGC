@@ -1,5 +1,15 @@
 # openagc Status
 
+## GFX1013 array and cube image descriptors (2026-07-29)
+
+The typed gfx1013 image descriptor state now supports 2D arrays and cube
+arrays with explicit base and last accessible layers. OpenAGC owns the
+`SQ_RSRC_IMG_CUBE`, `SQ_RSRC_IMG_2D_ARRAY`, `BASE_ARRAY`, and `DEPTH`
+encodings; clients no longer need to patch descriptor words. Exact host tests
+cover two-cube arrays, cube subranges, 2D-array subranges, and incomplete cube
+face-group rejection. Real-console sampling qualification is tracked by the
+Vulkan-PS5 `imageCubeArray` gate.
+
 ## GFX1013 dual-source blend state (2026-07-28)
 
 The typed color-blend helper now detects SRC1 factors on MRT0, disables RB+

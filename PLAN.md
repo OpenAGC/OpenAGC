@@ -16,6 +16,15 @@ AMD PM4 packet ancestry overlap in useful ways.
 
 ## Current Execution Order
 
+### Gfx1013 array and cube image descriptors
+
+- Add application-neutral 2D-array and cube-array resource types plus base and
+  last accessible layers to the typed SQ image descriptor helper.
+- Exact host tests cover full and subrange cube arrays, ordinary 2D arrays,
+  and malformed cube face counts.
+- Host implementation is complete; FW 5.50 sampling qualification proceeds
+  through the Vulkan-PS5 `imageCubeArray` gate.
+
 ### Gfx1013 dual-source blend state
 
 - Detect SRC1 factors in the application-neutral blend builder and reject

@@ -421,19 +421,34 @@ int32_t PS5_SYSV_ABI agcGfx1013Image2DDescriptorEncode(
         state->height > 16384u || state->format > 0x3fu ||
         state->image_type > 0xfu || state->dst_sel_x > 7u ||
         state->dst_sel_y > 7u || state->dst_sel_z > 7u ||
-        state->dst_sel_w > 7u)
+        state->dst_sel_w > 7u || state->base_array_layer > 0x1fffu ||
+        state->last_array_layer > 0x1fffu ||
+        state->last_array_layer < state->base_array_layer)
         return AGC_ERROR_VALIDATION_FAILED;
 
     sample_count = state->sample_count == 0u ? 1u : state->sample_count;
     if (sample_count == 1u) {
         sample_log2 = 0u;
-        if (state->image_type != AGC_GFX1013_IMAGE_TYPE_2D ||
-            state->swizzle_mode != 0u)
+        if (state->swizzle_mode != 0u)
             return AGC_ERROR_NOT_SUPPORTED;
+        if (state->image_type == AGC_GFX1013_IMAGE_TYPE_2D) {
+            if (state->base_array_layer != 0u ||
+                state->last_array_layer != 0u)
+                return AGC_ERROR_NOT_SUPPORTED;
+        } else if (state->image_type == AGC_GFX1013_IMAGE_TYPE_CUBE) {
+            uint32_t layer_count = state->last_array_layer -
+                state->base_array_layer + 1u;
+            if (layer_count % 6u != 0u)
+                return AGC_ERROR_NOT_SUPPORTED;
+        } else if (state->image_type != AGC_GFX1013_IMAGE_TYPE_2D_ARRAY) {
+            return AGC_ERROR_NOT_SUPPORTED;
+        }
     } else if (sample_count == 4u) {
         sample_log2 = 2u;
         if (state->image_type != AGC_GFX1013_IMAGE_TYPE_2D_MSAA ||
-            state->swizzle_mode != AGC_GFX1013_IMAGE_SWIZZLE_64KB_R_X)
+            state->swizzle_mode != AGC_GFX1013_IMAGE_SWIZZLE_64KB_R_X ||
+            state->base_array_layer != 0u ||
+            state->last_array_layer != 0u)
             return AGC_ERROR_NOT_SUPPORTED;
         if ((state->address &
              (AGC_GFX1013_IMAGE_64KB_ALIGNMENT - 1u)) != 0u)
@@ -452,6 +467,8 @@ int32_t PS5_SYSV_ABI agcGfx1013Image2DDescriptorEncode(
         (state->dst_sel_z << 6u) | (state->dst_sel_w << 9u) |
         (sample_log2 << 16u) | (state->swizzle_mode << 20u) |
         (state->image_type << 28u);
+    encoded.words[4] = state->last_array_layer |
+        (state->base_array_layer << 16u);
     encoded.words[5] = sample_log2 << 4u;
     *descriptor = encoded;
     return AGC_OK;
