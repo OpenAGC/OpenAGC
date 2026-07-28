@@ -71,7 +71,8 @@ builds with ps5-payload-sdk; hardware validation is the remaining step.
 - **Reusable VideoOut lifecycle** — `agc_videoout.h` registers caller-owned
   linear scanout buffers, presents FIFO/VSYNC frames with bounded waits, and
   tears down its flip event queue. The Prospero backend contains the FW 5.50
-  linear-registration patch, verifies its original instruction bytes, and
+  linear-registration patch, temporarily makes the execute-only page RWX
+  before verifying its original instruction bytes, and
   restores them immediately after registration; the generic backend provides
   deterministic host lifecycle coverage.
 - **Shader binary format** — RDNA2 ISA shader header parsing

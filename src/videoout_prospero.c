@@ -86,12 +86,13 @@ static int32_t set_linear_registration_patch(bool enable)
     uint8_t *address = (uint8_t *)(base + 0x7e61);
     const uint8_t *expected = enable ? original : patched;
     const uint8_t *replacement = enable ? patched : original;
-    if (memcmp(address, expected, sizeof(original)) != 0)
-        return AGC_ERROR_NOT_SUPPORTED;
-
     intptr_t page = (intptr_t)address & ~(intptr_t)0xfff;
     if (kernel_mprotect(-1, page, 0x2000, 0x7) != 0)
         return AGC_ERROR_INTERNAL;
+    if (memcmp(address, expected, sizeof(original)) != 0) {
+        return kernel_mprotect(-1, page, 0x2000, 0x5) == 0 ?
+            AGC_ERROR_NOT_SUPPORTED : AGC_ERROR_INTERNAL;
+    }
     memcpy(address, replacement, sizeof(original));
     __builtin___clear_cache((char *)address, (char *)address + sizeof(original));
     if (kernel_mprotect(-1, page, 0x2000, 0x5) != 0)
