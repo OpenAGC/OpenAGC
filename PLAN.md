@@ -1401,8 +1401,11 @@ After interpolants pass, proceed in this order:
    hypothesis too. All 27 retained OpenAGC graphics klogs contain the same
    single-page warning; the remaining unmatched lifecycle object is the flip
    event. Teardown now explicitly unregisters it before closing VideoOut and
-   deleting its still-live equeue. Fresh bounded hardware evidence remains
-   required.
+   deleting its still-live equeue. The Vulkan-PS5 SystemService-only baseline at
+   `20260728T064628Z-system-exit-probe-target.klog` then reproduced exactly one
+   `set:1, res:0, amount:0x4000` warning without loading OpenAGC or using GPU,
+   VideoOut, equeues, or custom memory. This proves the warning belongs to FW
+   5.50/raw-ELF container teardown rather than OpenAGC's VideoOut lifecycle.
 8. ✅ Validate isolated Wave32 tessellation. Fused HS and TES records execute
    through the reusable gfx1013 binder and the recovered non-Direct TF-ring
    ABI. The factor ring contains four `4.0` factors, readback contains 255,744

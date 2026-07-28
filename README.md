@@ -79,6 +79,10 @@ builds with ps5-payload-sdk; hardware validation is the remaining step.
   Teardown unregisters the flip event, closes the display handle, and only then
   deletes the equeue, keeping the event's queue alive through both VideoOut
   lifecycle operations.
+  A SystemService-only Vulkan-PS5 probe with no OpenAGC, GPU, VideoOut, equeue,
+  or custom-memory work reproduces the single `0x4000` warning at
+  `EndAppMount`; it is therefore classified as FW 5.50/raw-ELF container
+  bookkeeping rather than an OpenAGC VideoOut leak.
 - **Shader binary format** — RDNA2 ISA shader header parsing
 - **Two backend targets:**
   - `generic` — pure software implementation for host testing

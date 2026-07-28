@@ -1426,9 +1426,12 @@ run at `20260728T063634Z-swapchain-run1-target.klog` reproduced the warning,
 falsifying that hypothesis too. The identical single-page warning appears in
 all 27 retained OpenAGC graphics teardown klogs. The remaining unpaired
 lifecycle object is the registered flip event, so teardown now explicitly
-unregisters it before closing VideoOut and deleting its still-live equeue. A
-fresh bounded hardware run is required to distinguish that resource from a FW
-5.50/raw-ELF baseline warning.
+unregisters it before closing VideoOut and deleting its still-live equeue. The
+Vulkan-PS5 SystemService-only probe at
+`20260728T064628Z-system-exit-probe-target.klog` subsequently reproduced the
+exact warning without loading OpenAGC or using GPU, VideoOut, equeues, or
+custom memory. The single `set:1, res:0, amount:0x4000` line is therefore a
+proven FW 5.50/raw-ELF container baseline, not an OpenAGC VideoOut leak.
 
 The compiler now assigns standalone vertex-stage user varyings to RADV
 parameter-export slots before NGG lowering. The validated shader exports
