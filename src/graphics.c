@@ -587,6 +587,29 @@ int32_t PS5_SYSV_ABI agcGfx1013DrawBaselineIndexed(
     return AGC_OK;
 }
 
+static uint32_t *agcGfx1013DcbDrawIndirectMulti(
+    SceAgcCb *cb, uint32_t opcode, uint32_t data_offset,
+    uint32_t base_vertex_location, uint32_t start_instance_location,
+    uint32_t draw_index_location, uint32_t draw_index_enable,
+    uint32_t draw_count, uint32_t stride, uint32_t draw_initiator)
+{
+    uint32_t *cmd = agcCbAllocDwords(cb, 10u);
+    if (!cmd)
+        return NULL;
+    cmd[0] = agcPm4Header3(opcode, 10u);
+    cmd[1] = data_offset;
+    cmd[2] = base_vertex_location & 0xffffu;
+    cmd[3] = start_instance_location & 0xffffu;
+    cmd[4] = (draw_index_location & 0xffffu) |
+        (draw_index_enable ? (1u << 31u) : 0u);
+    cmd[5] = draw_count;
+    cmd[6] = 0u;
+    cmd[7] = 0u;
+    cmd[8] = stride;
+    cmd[9] = draw_initiator;
+    return cmd;
+}
+
 int32_t PS5_SYSV_ABI agcGfx1013DrawBaselineIndirect(
     SceAgcCb *cb, const AgcGfx1013IndirectDrawState *state)
 {
@@ -599,8 +622,11 @@ int32_t PS5_SYSV_ABI agcGfx1013DrawBaselineIndirect(
 
     if (!cb || !state || state->argument_buffer_address == 0u ||
         state->draw_count == 0u || state->indexed > 1u ||
+        state->draw_index_enable > 1u ||
         state->base_vertex_location > 0xffffu ||
         state->start_instance_location > 0xffffu ||
+        state->draw_index_location > 0xffffu ||
+        (state->draw_count == 1u && state->draw_index_enable) ||
         (state->argument_buffer_address & 7u) != 0u ||
         (state->argument_buffer_address >> 48) != 0u ||
         (state->argument_offset & 3u) != 0u)
@@ -628,7 +654,7 @@ int32_t PS5_SYSV_ABI agcGfx1013DrawBaselineIndirect(
         &validation, &required_dwords);
     if (error != AGC_OK)
         return error;
-    tail_dwords = 4u + (state->draw_count == 1u ? 5u : 7u);
+    tail_dwords = 4u + (state->draw_count == 1u ? 5u : 10u);
     if (state->indexed)
         tail_dwords += 8u;
     required_dwords = required_dwords - 8u + tail_dwords;
@@ -660,18 +686,15 @@ int32_t PS5_SYSV_ABI agcGfx1013DrawBaselineIndirect(
                        state->start_instance_location,
                        state->draw_initiator))
             return AGC_ERROR_INTERNAL;
-    } else if (state->indexed) {
-        if (!sceAgcDcbDrawIndexIndirectMulti(
-                cb, state->argument_offset,
-                state->base_vertex_location,
-                state->start_instance_location,
-                state->draw_count, state->stride,
-                state->draw_initiator))
-            return AGC_ERROR_INTERNAL;
-    } else if (!sceAgcDcbDrawIndirectMulti(
-                   cb, state->argument_offset,
+    } else if (!agcGfx1013DcbDrawIndirectMulti(
+                   cb, state->indexed ?
+                       AGC_PM4_OP_DRAW_INDEX_INDIRECT_MULTI :
+                       AGC_PM4_OP_DRAW_INDIRECT_MULTI,
+                   state->argument_offset,
                    state->base_vertex_location,
                    state->start_instance_location,
+                   state->draw_index_location,
+                   state->draw_index_enable,
                    state->draw_count, state->stride,
                    state->draw_initiator))
         return AGC_ERROR_INTERNAL;

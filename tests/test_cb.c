@@ -881,9 +881,9 @@ static void test_sce_agc_dcb_draw_index_indirect(void) {
         "DcbDrawIndexIndirect rejects overflow");
 }
 
-/* sceAgcDcbDrawIndirectMulti — IT_DRAW_INDIRECT_MULTI (0x2C), 7 dwords.
+/* sceAgcDcbDrawIndirectMulti — IT_DRAW_INDIRECT_MULTI (0x2C), 10 dwords.
  * data_offset=0x100 base_vtx=0x200 start_inst=0x300 count=4 stride=0x40 init=0x42
- * → [1]=0x100 [2]=0x200 [3]=0x300 [4]=4 [5]=0x40 [6]=0x42 */
+ * → fixed count with disabled draw-index/count-address controls. */
 static void test_sce_agc_dcb_draw_indirect_multi(void) {
     uint32_t buffer[16];
     SceAgcCb cb;
@@ -892,26 +892,29 @@ static void test_sce_agc_dcb_draw_indirect_multi(void) {
     uint32_t* cmd = sceAgcDcbDrawIndirectMulti(&cb, 0x100, 0x200, 0x300, 4, 0x40, 0x42);
     TEST_ASSERT(cmd == buffer, "DcbDrawIndirectMulti returns allocated packet");
     TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_DRAW_INDIRECT_MULTI, "DcbDrawIndirectMulti opcode");
-    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 7, "DcbDrawIndirectMulti length");
-    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 7, "DcbDrawIndirectMulti advances cursor");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 10, "DcbDrawIndirectMulti length");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 10, "DcbDrawIndirectMulti advances cursor");
     TEST_ASSERT_EQ(cmd[1], 0x100u, "DcbDrawIndirectMulti data_offset");
     TEST_ASSERT_EQ(cmd[2], 0x200u, "DcbDrawIndirectMulti base_vtx_loc");
     TEST_ASSERT_EQ(cmd[3], 0x300u, "DcbDrawIndirectMulti start_inst_loc");
-    TEST_ASSERT_EQ(cmd[4], 4u, "DcbDrawIndirectMulti count");
-    TEST_ASSERT_EQ(cmd[5], 0x40u, "DcbDrawIndirectMulti stride");
-    TEST_ASSERT_EQ(cmd[6], 0x42u, "DcbDrawIndirectMulti draw_initiator");
+    TEST_ASSERT_EQ(cmd[4], 0u, "DcbDrawIndirectMulti draw-index control");
+    TEST_ASSERT_EQ(cmd[5], 4u, "DcbDrawIndirectMulti count");
+    TEST_ASSERT_EQ(cmd[6], 0u, "DcbDrawIndirectMulti count address low");
+    TEST_ASSERT_EQ(cmd[7], 0u, "DcbDrawIndirectMulti count address high");
+    TEST_ASSERT_EQ(cmd[8], 0x40u, "DcbDrawIndirectMulti stride");
+    TEST_ASSERT_EQ(cmd[9], 0x42u, "DcbDrawIndirectMulti draw_initiator");
 
     TEST_ASSERT(sceAgcDcbDrawIndirectMulti(NULL, 0, 0, 0, 0, 0, 0) == 0,
         "DcbDrawIndirectMulti rejects NULL cb");
 
     SceAgcCb small;
-    uint32_t small_buf[6];
+    uint32_t small_buf[9];
     agcCbInit(&small, small_buf, sizeof(small_buf));
     TEST_ASSERT(sceAgcDcbDrawIndirectMulti(&small, 0, 0, 0, 0, 0, 0) == 0,
         "DcbDrawIndirectMulti rejects overflow");
 }
 
-/* sceAgcDcbDrawIndexIndirectMulti — IT_DRAW_INDEX_INDIRECT_MULTI (0x38), 7 dwords.
+/* sceAgcDcbDrawIndexIndirectMulti — IT_DRAW_INDEX_INDIRECT_MULTI (0x38), 10 dwords.
  * Same layout as DrawIndirectMulti but with INDEX variant opcode. */
 static void test_sce_agc_dcb_draw_index_indirect_multi(void) {
     uint32_t buffer[16];
@@ -921,20 +924,23 @@ static void test_sce_agc_dcb_draw_index_indirect_multi(void) {
     uint32_t* cmd = sceAgcDcbDrawIndexIndirectMulti(&cb, 0x100, 0x200, 0x300, 4, 0x40, 0x42);
     TEST_ASSERT(cmd == buffer, "DcbDrawIndexIndirectMulti returns allocated packet");
     TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_DRAW_INDEX_INDIRECT_MULTI, "DcbDrawIndexIndirectMulti opcode");
-    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 7, "DcbDrawIndexIndirectMulti length");
-    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 7, "DcbDrawIndexIndirectMulti advances cursor");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 10, "DcbDrawIndexIndirectMulti length");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 10, "DcbDrawIndexIndirectMulti advances cursor");
     TEST_ASSERT_EQ(cmd[1], 0x100u, "DcbDrawIndexIndirectMulti data_offset");
     TEST_ASSERT_EQ(cmd[2], 0x200u, "DcbDrawIndexIndirectMulti base_vtx_loc");
     TEST_ASSERT_EQ(cmd[3], 0x300u, "DcbDrawIndexIndirectMulti start_inst_loc");
-    TEST_ASSERT_EQ(cmd[4], 4u, "DcbDrawIndexIndirectMulti count");
-    TEST_ASSERT_EQ(cmd[5], 0x40u, "DcbDrawIndexIndirectMulti stride");
-    TEST_ASSERT_EQ(cmd[6], 0x42u, "DcbDrawIndexIndirectMulti draw_initiator");
+    TEST_ASSERT_EQ(cmd[4], 0u, "DcbDrawIndexIndirectMulti draw-index control");
+    TEST_ASSERT_EQ(cmd[5], 4u, "DcbDrawIndexIndirectMulti count");
+    TEST_ASSERT_EQ(cmd[6], 0u, "DcbDrawIndexIndirectMulti count address low");
+    TEST_ASSERT_EQ(cmd[7], 0u, "DcbDrawIndexIndirectMulti count address high");
+    TEST_ASSERT_EQ(cmd[8], 0x40u, "DcbDrawIndexIndirectMulti stride");
+    TEST_ASSERT_EQ(cmd[9], 0x42u, "DcbDrawIndexIndirectMulti draw_initiator");
 
     TEST_ASSERT(sceAgcDcbDrawIndexIndirectMulti(NULL, 0, 0, 0, 0, 0, 0) == 0,
         "DcbDrawIndexIndirectMulti rejects NULL cb");
 
     SceAgcCb small;
-    uint32_t small_buf[6];
+    uint32_t small_buf[9];
     agcCbInit(&small, small_buf, sizeof(small_buf));
     TEST_ASSERT(sceAgcDcbDrawIndexIndirectMulti(&small, 0, 0, 0, 0, 0, 0) == 0,
         "DcbDrawIndexIndirectMulti rejects overflow");

@@ -949,61 +949,76 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndexIndirect(
     return cmd;
 }
 
-/* sceAgcDcbDrawIndirectMulti (NID kUlvghKs-mA) — IT_DRAW_INDIRECT_MULTI (0x2C), 7 dwords.
- * SPRX evidence: 0x28000000000, 2*helper+10 pattern.
- * Layout (shadPS4 PM4CmdDrawIndirectMulti):
+/* sceAgcDcbDrawIndirectMulti (NID kUlvghKs-mA) — IT_DRAW_INDIRECT_MULTI
+ * (0x2C), 10 dwords. The native GetSize path uses 2*helper+10; Mesa's gfx10+
+ * packet layout supplies the previously omitted draw-index control, optional
+ * count address, and trailing stride/initiator words.
  *   [0] header
  *   [1] data_offset
  *   [2] base_vtx_loc[15:0]
  *   [3] start_inst_loc[15:0]
- *   [4] count
- *   [5] stride
- *   [6] draw_initiator */
+ *   [4] draw_index_loc[15:0] | draw_index_enable[31] (disabled here)
+ *   [5] count
+ *   [6] count_addr_lo (zero for fixed count)
+ *   [7] count_addr_hi (zero for fixed count)
+ *   [8] stride
+ *   [9] draw_initiator */
 uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndirectMulti(
     SceAgcCb *cb, uint32_t data_offset, uint32_t base_vtx_loc,
     uint32_t start_inst_loc, uint32_t count, uint32_t stride,
     uint32_t draw_initiator)
 {
-    uint32_t *cmd = agcCbAllocDwords(cb, 7);
+    uint32_t *cmd = agcCbAllocDwords(cb, 10);
     if (!cmd)
         return 0;
 
-    cmd[0] = agcPm4Header3(AGC_PM4_OP_DRAW_INDIRECT_MULTI, 7);
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_DRAW_INDIRECT_MULTI, 10);
     cmd[1] = data_offset;
     cmd[2] = base_vtx_loc & 0xFFFFu;
     cmd[3] = start_inst_loc & 0xFFFFu;
-    cmd[4] = count;
-    cmd[5] = stride;
-    cmd[6] = draw_initiator;
+    cmd[4] = 0u;
+    cmd[5] = count;
+    cmd[6] = 0u;
+    cmd[7] = 0u;
+    cmd[8] = stride;
+    cmd[9] = draw_initiator;
     return cmd;
 }
 
-/* sceAgcDcbDrawIndexIndirectMulti (NID ypVBz4uPKcQ) — IT_DRAW_INDEX_INDIRECT_MULTI (0x38), 7 dwords.
- * SPRX evidence: 0x28000000000, 2*helper+10 pattern.
- * Layout (shadPS4 PM4CmdDrawIndexIndirectMulti):
+/* sceAgcDcbDrawIndexIndirectMulti (NID ypVBz4uPKcQ) —
+ * IT_DRAW_INDEX_INDIRECT_MULTI (0x38), 10 dwords. The fixed-count layout
+ * matches DRAW_INDIRECT_MULTI above; the indexed packet keeps the high half
+ * of word 2 zero because this recovered ABI does not expose start-index SGPR
+ * programming.
  *   [0] header
  *   [1] data_offset
  *   [2] base_vtx_loc[15:0]
  *   [3] start_inst_loc[15:0]
- *   [4] count
- *   [5] stride
- *   [6] draw_initiator */
+ *   [4] draw_index_loc/control (disabled here)
+ *   [5] count
+ *   [6] count_addr_lo (zero)
+ *   [7] count_addr_hi (zero)
+ *   [8] stride
+ *   [9] draw_initiator */
 uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndexIndirectMulti(
     SceAgcCb *cb, uint32_t data_offset, uint32_t base_vtx_loc,
     uint32_t start_inst_loc, uint32_t count, uint32_t stride,
     uint32_t draw_initiator)
 {
-    uint32_t *cmd = agcCbAllocDwords(cb, 7);
+    uint32_t *cmd = agcCbAllocDwords(cb, 10);
     if (!cmd)
         return 0;
 
-    cmd[0] = agcPm4Header3(AGC_PM4_OP_DRAW_INDEX_INDIRECT_MULTI, 7);
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_DRAW_INDEX_INDIRECT_MULTI, 10);
     cmd[1] = data_offset;
     cmd[2] = base_vtx_loc & 0xFFFFu;
     cmd[3] = start_inst_loc & 0xFFFFu;
-    cmd[4] = count;
-    cmd[5] = stride;
-    cmd[6] = draw_initiator;
+    cmd[4] = 0u;
+    cmd[5] = count;
+    cmd[6] = 0u;
+    cmd[7] = 0u;
+    cmd[8] = stride;
+    cmd[9] = draw_initiator;
     return cmd;
 }
 

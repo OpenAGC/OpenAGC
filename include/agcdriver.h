@@ -300,13 +300,15 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndexIndirect(
     SceAgcCb *cb, uint32_t data_offset, uint32_t base_vtx_loc,
     uint32_t start_inst_loc, uint32_t draw_initiator);
 
-/* IT_DRAW_INDIRECT_MULTI (opcode 0x2C) — 7-dword multi indirect draw. NID: kUlvghKs-mA */
+/* IT_DRAW_INDIRECT_MULTI (opcode 0x2C) — 10-dword fixed-count multi draw.
+ * NID: kUlvghKs-mA */
 uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndirectMulti(
     SceAgcCb *cb, uint32_t data_offset, uint32_t base_vtx_loc,
     uint32_t start_inst_loc, uint32_t count, uint32_t stride,
     uint32_t draw_initiator);
 
-/* IT_DRAW_INDEX_INDIRECT_MULTI (opcode 0x38) — 7-dword multi indirect indexed draw. NID: ypVBz4uPKcQ */
+/* IT_DRAW_INDEX_INDIRECT_MULTI (opcode 0x38) — 10-dword fixed-count indexed
+ * multi draw. NID: ypVBz4uPKcQ */
 uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndexIndirectMulti(
     SceAgcCb *cb, uint32_t data_offset, uint32_t base_vtx_loc,
     uint32_t start_inst_loc, uint32_t count, uint32_t stride,

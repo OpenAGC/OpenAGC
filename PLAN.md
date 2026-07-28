@@ -2160,7 +2160,11 @@ Next execution order:
    covers indexed and non-indexed arguments, argument-base and offset
    alignment, stride validation, register locations, and exact golden streams.
    Count-buffer-driven draws remain a later extension because the recovered
-   FW 5.50 packet builders currently expose fixed draw counts only.
+   FW 5.50 packet builders currently expose fixed draw counts only. The multi
+   builders now use the complete gfx10+ 10-dword layout rather than the earlier
+   7-dword legacy form: fixed count, zero count address, trailing stride and
+   initiator, plus typed optional DrawIndex location/enable. Host and Prospero
+   builds pass; corrected multi execution remains hardware-pending.
 6. **Hardware complete:** direct u16 indexed, non-indexed indirect, and u16
    indexed-indirect each passed separately on FW `0x0550` through curl/websrv
    with exact FP16 coverage, completion fence, Wave32 audit, and 1,800 flips.

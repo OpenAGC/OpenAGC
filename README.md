@@ -124,7 +124,9 @@ Completed and tested:
 - HLE-reference-confirmed `sceAgcCb*` and `sceAgcDcb*` packet builders for NOP,
   dispatch, SH registers, release memory, indirect register sets, write-data,
   wait-reg-mem, DMA, indirect dispatch/base args, index buffer setup, indexed
-  draw packets, markers, wait-safe, flip, and LOD stats helpers
+  draw packets, gfx10+ 10-dword fixed-count multi-indirect packets with
+  optional DrawIndex user-SGPR updates, markers, wait-safe, flip, and LOD
+  stats helpers
 - ACB packet builders for event write, atomic mem/GDS, cond exec, wait-reg-mem,
   write/copy/dma data, mem semaphore, acquire mem, queue reset, rewind, set
   flip, workload markers, and prime UTC L2
