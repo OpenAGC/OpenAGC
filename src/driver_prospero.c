@@ -447,6 +447,9 @@ static int32_t agcProsperoCarveSubRegion(
 #define AGC_DDID_INTERNAL_SIZE    0xC000    /* 48 KB for internal defaults */
 #define AGC_DDID_PRIMARY_OFFSET   0x00000   /* start of DDID */
 #define AGC_DDID_INTERNAL_OFFSET  AGC_DDID_PRIMARY_OFFSET + AGC_DDID_PRIMARY_SIZE
+#define AGC_DDID_MULTI_TRAILER_OFFSET \
+    (AGC_DDID_INTERNAL_OFFSET + AGC_DDID_INTERNAL_SIZE)
+#define AGC_DDID_MULTI_TRAILER_SIZE 64
 #define AGC_DDID_DCB_OFFSET       0xFC000 - 16  /* last 16 bytes for DCB scratch */
 
 /* ===================================================================== */
@@ -573,7 +576,6 @@ int32_t PS5_SYSV_ABI agcProsperoInitializeInternalMemory(void)
           AGC_FLEX_TYPE_GPU, "SceGnmCwsr" },
         { &g_prospero.misc,       0x4000,    AGC_FLEX_TYPE_GPU,  "SceGnmMisc"      },
         { &g_prospero.acqrb,      0x1E0000,  AGC_FLEX_TYPE_GPU,  "SceGnmACQRB"     },
-        { &g_prospero.multi_trailer, 0x4000, AGC_FLEX_TYPE_GPU,  "OpenAgcMultiTrailer" },
     };
 
     for (int i = 0; i < (int)(sizeof(regions) / sizeof(regions[0])); i++) {
@@ -592,6 +594,18 @@ int32_t PS5_SYSV_ABI agcProsperoInitializeInternalMemory(void)
         }
         printf("OK (addr=%p)\n", regions[i].region->cpu_addr);
     }
+
+    int32_t trailer_ret = agcProsperoCarveSubRegion(
+        &g_prospero.ddid, AGC_DDID_MULTI_TRAILER_OFFSET,
+        AGC_DDID_MULTI_TRAILER_SIZE, &g_prospero.multi_trailer);
+    if (trailer_ret != AGC_OK) {
+        for (int i = 0; i < (int)(sizeof(regions) / sizeof(regions[0])); i++)
+            agcProsperoFreeRegion(regions[i].region);
+        return trailer_ret;
+    }
+    printf("    [mem] OpenAgcMultiTrailer: size=0x%x subregion=%p\n",
+           AGC_DDID_MULTI_TRAILER_SIZE,
+           g_prospero.multi_trailer.cpu_addr);
 
     uint32_t *trailer = (uint32_t *)g_prospero.multi_trailer.cpu_addr;
     trailer[0] = agcPm4Header3(AGC_PM4_OP_NOP, 16);

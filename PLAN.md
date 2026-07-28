@@ -1385,8 +1385,9 @@ After interpolants pass, proceed in this order:
    descriptor-array submit after the SPRX-confirmed nr=1 frame-state ioctl.
    Unique-marker runs proved the FW 5.50 exploited-payload graphics ring defers
    the final descriptor until the next submit. The Prospero backend now appends
-   a dedicated GPU-visible NOP IB trailer, making the deferred descriptor
-   harmless. Standalone `sceAgcDriverSubmitDcb` also emits the frame-state
+   a 64-byte GPU-visible NOP IB trailer carved from unused `SceGnmDdid` space,
+   making the deferred descriptor harmless without a standalone 16 KiB VM
+   resource. Standalone `sceAgcDriverSubmitDcb` also emits the frame-state
    operation and trailer so its caller DCB executes in the current submit. Two
    immediate deployments each passed three repeated two-DCB
    iterations with unique ordered markers and zero polling delay. Vulkan-PS5

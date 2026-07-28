@@ -1185,8 +1185,9 @@ Submit model:
   - /dev/gc opened (fd=7), CONTEXT_QUERY OK, mmap at 0xfe0200000
   - FRAME_OPEN correctly returns EINVAL (confirms ps5-openagc audit)
 - **[2] sce_agc_initialize_internal_memory()** — PASS
-  - All 9 firmware regions plus the OpenAGC multi-submit NOP trailer allocated
-    with sceKernelMapNamedSystemFlexibleMemory (type=0x33)
+  - All 9 firmware regions are allocated with
+    sceKernelMapNamedSystemFlexibleMemory (type=0x33); the 64-byte OpenAGC
+    multi-submit NOP trailer is carved from unused SceGnmDdid space
   - GPU VAs: 0x200024000–0x20145C000
   - Region sizes match SPRX disassembly exactly
 - **[3] sceAgcDriverNotifyDefaultStates()** — PASS
@@ -1410,6 +1411,14 @@ freeze.
 Automatic per-submit `SUBMITDONE` synchronization is intentionally not used;
 it froze the console during workload completion. See
 `analysis/multi_dcb_submission_550.md`.
+
+The Vulkan-PS5 VideoOut gate at
+`20260728T062155Z-swapchain-run1.klog` completed 1,800 frames and clean Vulkan
+object teardown, then isolated the remaining app-teardown warning to exactly
+`0x4000`, matching the standalone `OpenAgcMultiTrailer` allocation. The trailer
+now occupies a 64-byte SceGnmDdid subregion immediately after the internal
+defaults blob, removing that extra VM resource. A fresh bounded hardware run
+is required to verify the warning is gone.
 
 The compiler now assigns standalone vertex-stage user varyings to RADV
 parameter-export slots before NGG lowering. The validated shader exports
