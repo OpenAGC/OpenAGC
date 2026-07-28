@@ -120,6 +120,7 @@ typedef struct AgcGfx1013Wave32TessVsPsState {
     uint64_t ring_descriptor_address;
     uint32_t tcs_offchip_layout;
     uint32_t tes_offchip_layout;
+    uint32_t hull_lds_size;
     uint32_t primitive_type;
 } AgcGfx1013Wave32TessVsPsState;
 

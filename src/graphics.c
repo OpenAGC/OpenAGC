@@ -127,7 +127,13 @@ typedef struct AgcGfx1013RuntimePatches {
     uint64_t ring_descriptor_address;
     uint64_t next_stage_address;
     uint32_t tcs_offchip_layout;
+    uint32_t hull_lds_size;
 } AgcGfx1013RuntimePatches;
+
+#define AGC_GFX1013_HS_LDS_SIZE_SHIFT 18u
+#define AGC_GFX1013_HS_LDS_SIZE_MASK  (0x1ffu << 18u)
+#define AGC_GFX1013_HS_LDS_GRANULARITY 512u
+#define AGC_GFX1013_HS_LDS_MAX_SIZE 65536u
 
 static bool agcGfx1013BindingHasValue(
     const AgcGfx1013ShaderBinding *binding, uint32_t value)
@@ -136,6 +142,18 @@ static bool agcGfx1013BindingHasValue(
 
     for (i = 0; i < binding->num_sh_registers; ++i) {
         if (binding->sh_registers[i].value == value)
+            return true;
+    }
+    return false;
+}
+
+static bool agcGfx1013BindingHasOffset(
+    const AgcGfx1013ShaderBinding *binding, uint32_t offset)
+{
+    uint32_t i;
+
+    for (i = 0; i < binding->num_sh_registers; ++i) {
+        if (binding->sh_registers[i].offset == offset)
             return true;
     }
     return false;
@@ -163,6 +181,15 @@ static bool agcGfx1013EmitShaderPatched(
             reg.value = patches->tcs_offchip_layout;
         else if (reg.value == OPENAGC_NEXT_STAGE_PC_PLACEHOLDER)
             reg.value = (uint32_t)patches->next_stage_address;
+        else if (patches->hull_lds_size != 0u &&
+                 reg.offset == AGC_REG_SPI_SHADER_PGM_RSRC2_HS) {
+            const uint32_t encoded =
+                (patches->hull_lds_size +
+                 AGC_GFX1013_HS_LDS_GRANULARITY - 1u) /
+                AGC_GFX1013_HS_LDS_GRANULARITY;
+            reg.value = (reg.value & ~AGC_GFX1013_HS_LDS_SIZE_MASK) |
+                (encoded << AGC_GFX1013_HS_LDS_SIZE_SHIFT);
+        }
         if (!sceAgcCbSetShRegistersDirect(cb, &reg, 1u))
             return false;
     }
@@ -690,6 +717,11 @@ int32_t PS5_SYSV_ABI agcGfx1013ValidateWave32TessVsPs(
         (state->tcs_offchip_layout & ~(0x1fu << 7u)) !=
             (state->tes_offchip_layout & ~(0x1fu << 7u)))
         return AGC_ERROR_VALIDATION_FAILED;
+    if (state->hull_lds_size > AGC_GFX1013_HS_LDS_MAX_SIZE ||
+        (state->hull_lds_size != 0u &&
+         !agcGfx1013BindingHasOffset(
+             &state->hull, AGC_REG_SPI_SHADER_PGM_RSRC2_HS)))
+        return AGC_ERROR_VALIDATION_FAILED;
     if ((state->hull.code_address >> 32) !=
             (state->hull_back_code_address >> 32) ||
         (state->primitive.code_address >> 32) !=
@@ -799,14 +831,15 @@ int32_t PS5_SYSV_ABI agcGfx1013BindWave32TessVsPs(
     agcGfx1013FindProgramPair(&state->primitive, &gs_program_lo);
     agcGfx1013FindProgramPair(&state->pixel, &ps_program_lo);
     hs_patches = (AgcGfx1013RuntimePatches){
-        state->ring_descriptor_address,
-        state->hull_back_code_address,
-        state->tcs_offchip_layout,
+        .ring_descriptor_address = state->ring_descriptor_address,
+        .next_stage_address = state->hull_back_code_address,
+        .tcs_offchip_layout = state->tcs_offchip_layout,
+        .hull_lds_size = state->hull_lds_size,
     };
     gs_patches = (AgcGfx1013RuntimePatches){
-        state->ring_descriptor_address,
-        state->primitive_back_code_address,
-        state->tes_offchip_layout,
+        .ring_descriptor_address = state->ring_descriptor_address,
+        .next_stage_address = state->primitive_back_code_address,
+        .tcs_offchip_layout = state->tes_offchip_layout,
     };
     if (!agcGfx1013EmitShaderPatched(
             cb, &state->hull, hs_program_lo, &hs_patches) ||

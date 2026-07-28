@@ -579,6 +579,7 @@ static void test_gfx1013_wave32_tessellation_binding(void)
          OPENAGC_NEXT_STAGE_PC_PLACEHOLDER},
         {AGC_REG_SPI_SHADER_PGM_LO_HS, 0u},
         {AGC_REG_SPI_SHADER_PGM_HI_HS, 0u},
+        {AGC_REG_SPI_SHADER_PGM_RSRC2_HS, 0x1cu},
         {0x220u, OPENAGC_VERTEX_BUFFER_TABLE_PLACEHOLDER},
     };
     AgcRegisterValue gs_sh[] = {
@@ -652,6 +653,7 @@ static void test_gfx1013_wave32_tessellation_binding(void)
     state.ring_descriptor_address = 0x0000001234800000ull;
     state.tcs_offchip_layout = 0x21022108u;
     state.tes_offchip_layout = 0x21022188u;
+    state.hull_lds_size = 1536u;
     state.primitive_type = 9u;
 
     agcCbInit(&cb, buffer, sizeof(buffer));
@@ -685,6 +687,12 @@ static void test_gfx1013_wave32_tessellation_binding(void)
         "TES offchip layout emitted");
     TEST_ASSERT_EQ(value, state.tes_offchip_layout,
         "TES offchip layout patched");
+    TEST_ASSERT(find_register(
+        buffer, agcCbUsedDwords(&cb), AGC_PM4_OP_SET_SH_REG,
+        AGC_REG_SPI_SHADER_PGM_RSRC2_HS, &value),
+        "HS resource register emitted");
+    TEST_ASSERT_EQ(value, 0x000c001cu,
+        "HS LDS allocation encoded in 512-byte units");
     TEST_ASSERT(find_indexed_register(
         buffer, agcCbUsedDwords(&cb), AGC_PM4_OP_SET_CONTEXT_REG,
         AGC_REG_VGT_LS_HS_CONFIG, 2u, &value),
@@ -756,7 +764,7 @@ static void test_gfx1013_wave32_tessellation_binding(void)
     TEST_ASSERT_EQ(agcGfx1013DrawTessIndexAuto(&cb, &draw), AGC_OK,
         "gfx1013 tessellation draw composes");
     TEST_ASSERT_EQ(agcCbUsedDwords(&cb),
-        131u + AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS,
+        134u + AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS,
         "gfx1013 tessellation draw exact dword count");
     TEST_ASSERT(find_last_register(buffer, agcCbUsedDwords(&cb),
         AGC_PM4_OP_SET_SH_REG, 0x220u, &value),
@@ -772,10 +780,10 @@ static void test_gfx1013_wave32_tessellation_binding(void)
         AGC_PM4_OP_SET_CONTEXT_REG, AGC_REG_VGT_TF_PARAM, &value),
         "post-bind tessellation context emitted");
     TEST_ASSERT_EQ(value, 0x61u, "tessellation parameter preserved");
-    TEST_ASSERT_EQ(buffer[99],
+    TEST_ASSERT_EQ(buffer[102],
         agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
         "tessellation frame depth follows tessellation context");
-    TEST_ASSERT_EQ(buffer[100], AGC_REG_DB_DEPTH_INFO,
+    TEST_ASSERT_EQ(buffer[103], AGC_REG_DB_DEPTH_INFO,
         "tessellation frame depth register order");
     TEST_ASSERT(find_last_register(buffer, agcCbUsedDwords(&cb),
         AGC_PM4_OP_SET_CONTEXT_REG, AGC_REG_DB_DEPTH_CONTROL, &value),
@@ -783,20 +791,20 @@ static void test_gfx1013_wave32_tessellation_binding(void)
     TEST_ASSERT_EQ(value, 0u,
         "caller post-bind depth override follows typed depth state");
     TEST_ASSERT_EQ(agcPm4Opcode(
-        buffer[126u + AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS]),
+        buffer[129u + AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS]),
         AGC_PM4_OP_NUM_INSTANCES,
         "tessellation draw instance packet order");
-    TEST_ASSERT_EQ(buffer[127u + AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS], 1u,
+    TEST_ASSERT_EQ(buffer[130u + AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS], 1u,
         "tessellation draw instance count");
     TEST_ASSERT_EQ(agcPm4Opcode(
-        buffer[128u + AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS]),
+        buffer[131u + AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS]),
         AGC_PM4_OP_DRAW_INDEX_AUTO,
         "tessellation draw packet order");
-    TEST_ASSERT_EQ(buffer[129u + AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS], 3u,
+    TEST_ASSERT_EQ(buffer[132u + AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS], 3u,
         "tessellation draw vertex count");
 
     agcCbReset(&cb, buffer,
-        (130u + AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS) * sizeof(uint32_t));
+        (133u + AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS) * sizeof(uint32_t));
     TEST_ASSERT_EQ(agcGfx1013DrawTessIndexAuto(&cb, &draw),
         AGC_ERROR_BUFFER_TOO_SMALL, "short tessellation draw rejects");
     TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,

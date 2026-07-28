@@ -625,7 +625,10 @@ hardware-validated on FW 5.500.008.**
 The reusable gfx1013 binder consumes fused HsFront/HsBack and TES
 GsFront/GsBack records, patches the runtime ring descriptors and distinct HS/TES
 `VGT_TCS_OFFCHIP_LAYOUT` words, and programs the factor/offchip ring state
-required by gfx1013. The public layout builder packs pipeline-specific patch
+required by gfx1013. It also accepts the pipeline's hull LDS requirement in
+bytes and patches `SPI_SHADER_PGM_RSRC2_HS.LDS_SIZE` in gfx1013's 512-byte
+encoding, which is required when the TCS reads VS outputs through the
+separate-stage LS/HS memory ABI. The public layout builder packs pipeline-specific patch
 counts, input/output control-point counts, linked VS/TCS output counts,
 primitive mode, and tess-factor reads without exposing register fields to API
 clients. Its typed draw state now accepts the same optional depth-surface
