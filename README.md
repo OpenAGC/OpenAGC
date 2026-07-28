@@ -73,7 +73,8 @@ builds with ps5-payload-sdk; hardware validation is the remaining step.
   tears down its flip event queue. The Prospero backend contains the FW 5.50
   linear-registration patch, temporarily makes the execute-only page RWX
   before verifying its original instruction bytes, and
-  restores them immediately after registration; the generic backend provides
+  restores both the bytes and the original execute-only protection immediately
+  after registration; the generic backend provides
   deterministic host lifecycle coverage.
   Teardown follows the hardware-proven VideoOut sample order: close the
   display handle (which removes its flip event) before deleting the equeue.

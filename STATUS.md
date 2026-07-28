@@ -1414,11 +1414,15 @@ it froze the console during workload completion. See
 
 The Vulkan-PS5 VideoOut gate at
 `20260728T062155Z-swapchain-run1.klog` completed 1,800 frames and clean Vulkan
-object teardown, then isolated the remaining app-teardown warning to exactly
-`0x4000`, matching the standalone `OpenAgcMultiTrailer` allocation. The trailer
-now occupies a 64-byte SceGnmDdid subregion immediately after the internal
-defaults blob, removing that extra VM resource. A fresh bounded hardware run
-is required to verify the warning is gone.
+object teardown, then reported one `0x4000` app-teardown warning. Moving the
+64-byte `OpenAgcMultiTrailer` into unused SceGnmDdid space removed its separate
+allocation, but `20260728T063200Z-swapchain-run1-target.klog` reproduced the
+warning and falsified that allocation hypothesis. The remaining page-sized
+lifecycle difference is the VideoOut text patch: the module starts
+execute-only, while OpenAGC restored it as read/execute after each temporary
+RWX interval. The backend now restores the exact execute-only protection so
+the kernel can coalesce the temporary text mapping. A fresh bounded hardware
+run is required to verify the warning is gone.
 
 The compiler now assigns standalone vertex-stage user varyings to RADV
 parameter-export slots before NGG lowering. The validated shader exports

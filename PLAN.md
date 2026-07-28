@@ -1393,6 +1393,11 @@ After interpolants pass, proceed in this order:
    iterations with unique ordered markers and zero polling delay. Vulkan-PS5
    additionally passed two standalone compute and two standalone triangle
    EOP/readback runs through this path on FW `0x05500008`.
+   A later VideoOut teardown gate proved the standalone allocation was not the
+   source of its final `0x4000` VM warning. The VideoOut patch had restored its
+   originally execute-only text range as read/execute; the Prospero backend now
+   restores the exact execute-only protection so the kernel can coalesce the
+   temporary text mapping. Fresh bounded hardware evidence remains required.
 8. ✅ Validate isolated Wave32 tessellation. Fused HS and TES records execute
    through the reusable gfx1013 binder and the recovered non-Direct TF-ring
    ABI. The factor ring contains four `4.0` factors, readback contains 255,744

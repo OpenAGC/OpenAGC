@@ -73,6 +73,7 @@ static int32_t set_linear_registration_patch(bool enable)
 {
     static const uint8_t original[6] = {0x0f, 0x84, 0x15, 0x02, 0x00, 0x00};
     static const uint8_t patched[6] = {0x90, 0x90, 0x90, 0x90, 0x90, 0x90};
+    static const int text_protection = 0x4; /* execute-only, as originally mapped */
     uint32_t module = 0;
     if (kernel_dynlib_handle(-1, "libSceVideoOut.sprx", &module) != 0 ||
         module == 0)
@@ -88,12 +89,12 @@ static int32_t set_linear_registration_patch(bool enable)
     if (kernel_mprotect(-1, page, 0x2000, 0x7) != 0)
         return AGC_ERROR_INTERNAL;
     if (memcmp(address, expected, sizeof(original)) != 0) {
-        return kernel_mprotect(-1, page, 0x2000, 0x5) == 0 ?
+        return kernel_mprotect(-1, page, 0x2000, text_protection) == 0 ?
             AGC_ERROR_NOT_SUPPORTED : AGC_ERROR_INTERNAL;
     }
     memcpy(address, replacement, sizeof(original));
     __builtin___clear_cache((char *)address, (char *)address + sizeof(original));
-    if (kernel_mprotect(-1, page, 0x2000, 0x5) != 0)
+    if (kernel_mprotect(-1, page, 0x2000, text_protection) != 0)
         return AGC_ERROR_INTERNAL;
     return AGC_OK;
 }
