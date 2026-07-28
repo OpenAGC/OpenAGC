@@ -75,6 +75,8 @@ builds with ps5-payload-sdk; hardware validation is the remaining step.
   before verifying its original instruction bytes, and
   restores them immediately after registration; the generic backend provides
   deterministic host lifecycle coverage.
+  Teardown follows the hardware-proven VideoOut sample order: close the
+  display handle (which removes its flip event) before deleting the equeue.
 - **Shader binary format** — RDNA2 ISA shader header parsing
 - **Two backend targets:**
   - `generic` — pure software implementation for host testing

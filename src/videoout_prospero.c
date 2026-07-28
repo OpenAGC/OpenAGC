@@ -43,7 +43,6 @@ int32_t sceVideoOutRegisterBuffers(int32_t, int32_t, void *const *, int32_t,
 int32_t sceVideoOutSetFlipRate(int32_t, int32_t);
 int32_t sceVideoOutSubmitFlip(int32_t, int32_t, int32_t, int64_t);
 int32_t sceVideoOutAddFlipEvent(void *, int32_t, void *);
-int32_t sceVideoOutDeleteFlipEvent(void *, int32_t);
 int sceKernelCreateEqueue(SceKernelEqueue *, const char *);
 int sceKernelDeleteEqueue(SceKernelEqueue);
 int sceKernelWaitEqueue(SceKernelEqueue, SceKernelEvent *, int, int *, void *);
@@ -52,7 +51,6 @@ struct AgcVideoOut {
     int32_t handle;
     SceKernelEqueue flip_queue;
     uint32_t buffer_count;
-    bool event_added;
 };
 
 static int32_t validate_create_info(const AgcVideoOutCreateInfo *info)
@@ -168,7 +166,6 @@ int32_t agcVideoOutOpen(const AgcVideoOutCreateInfo *info,
         err = AGC_ERROR_INTERNAL;
         goto fail;
     }
-    result->event_added = true;
     if (sceVideoOutSetFlipRate(result->handle, 0) != 0) {
         err = AGC_ERROR_NOT_SUPPORTED;
         goto fail;
@@ -210,12 +207,9 @@ void agcVideoOutClose(AgcVideoOut *video_out)
 {
     if (!video_out)
         return;
-    if (video_out->event_added)
-        sceVideoOutDeleteFlipEvent((void *)(uintptr_t)video_out->flip_queue,
-                                   video_out->handle);
-    if (video_out->flip_queue)
-        sceKernelDeleteEqueue(video_out->flip_queue);
     if (video_out->handle >= 0)
         sceVideoOutClose(video_out->handle);
+    if (video_out->flip_queue)
+        sceKernelDeleteEqueue(video_out->flip_queue);
     free(video_out);
 }
