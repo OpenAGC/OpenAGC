@@ -1414,6 +1414,10 @@ reference/compare/write masks, depth writes, and depth bounds in one atomic
 invalid enums, masks, state dependencies, and short buffers emit nothing.
 Depth-surface binding and real FW 5.50 blend/depth-bias/depth/stencil execution remain
 separate hardware-validation milestones.
+The public frame constants also encode Vulkan's zero-to-one clip convention
+(`DX_CLIP_SPACE_DEF`) and the depth-clamp variant with both near and far Z clip
+planes disabled. Exact register tests lock both masks; real FW 5.50 depth-clamp
+execution remains a separate qualification gate.
 
 Multiple DCB submission in one process is hardware-validated on FW 5.50.
 Separate `sceAgcDriverSubmitDcb` ioctls accepted both buffers but advanced
