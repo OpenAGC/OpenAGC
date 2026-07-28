@@ -890,6 +890,39 @@ static void test_gfx1013_wave32_tessellation_binding(void)
         "invalid tessellation override is atomic");
 }
 
+static void test_gfx1013_polygon_modes(void)
+{
+    AgcGfx1013FrameState frame = {0};
+    const uint32_t preserved = 0xa5a51807u;
+
+    frame.raster_mode_control = preserved | 0x7f8u;
+    TEST_ASSERT_EQ(agcGfx1013ApplyPolygonMode(
+        &frame, AGC_GFX1013_POLYGON_MODE_FILL), AGC_OK,
+        "gfx1013 fill polygon mode applies");
+    TEST_ASSERT_EQ(frame.raster_mode_control, preserved | 0x240u,
+        "gfx1013 fill polygon mode exact bits");
+    TEST_ASSERT_EQ(agcGfx1013ApplyPolygonMode(
+        &frame, AGC_GFX1013_POLYGON_MODE_LINE), AGC_OK,
+        "gfx1013 line polygon mode applies");
+    TEST_ASSERT_EQ(frame.raster_mode_control, preserved | 0x128u,
+        "gfx1013 line polygon mode exact bits");
+    TEST_ASSERT_EQ(agcGfx1013ApplyPolygonMode(
+        &frame, AGC_GFX1013_POLYGON_MODE_POINT), AGC_OK,
+        "gfx1013 point polygon mode applies");
+    TEST_ASSERT_EQ(frame.raster_mode_control, preserved | 0x008u,
+        "gfx1013 point polygon mode exact bits");
+
+    const uint32_t before_invalid = frame.raster_mode_control;
+    TEST_ASSERT_EQ(agcGfx1013ApplyPolygonMode(
+        &frame, AGC_GFX1013_POLYGON_MODE_COUNT),
+        AGC_ERROR_INVALID_ARGUMENT, "invalid polygon mode rejects");
+    TEST_ASSERT_EQ(frame.raster_mode_control, before_invalid,
+        "invalid polygon mode preserves state");
+    TEST_ASSERT_EQ(agcGfx1013ApplyPolygonMode(
+        NULL, AGC_GFX1013_POLYGON_MODE_FILL),
+        AGC_ERROR_INVALID_ARGUMENT, "null polygon state rejects");
+}
+
 static void test_gfx1013_frame_state(void)
 {
     static const struct {
@@ -3346,6 +3379,7 @@ void test_suite_graphics(void)
     TEST_RUN(test_gfx1013_depth_surface_layout);
     TEST_RUN(test_gfx1013_htile_layout);
     TEST_RUN(test_gfx1013_stencil_gate_fixture);
+    TEST_RUN(test_gfx1013_polygon_modes);
     TEST_RUN(test_gfx1013_frame_state);
     TEST_RUN(test_gfx1013_graphics_defaults_v8);
     TEST_RUN(test_gfx1013_fixed_function_rejects_atomically);

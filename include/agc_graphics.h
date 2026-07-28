@@ -502,6 +502,13 @@ typedef struct AgcGfx1013ScissorState {
     uint32_t bottom;
 } AgcGfx1013ScissorState;
 
+typedef enum AgcGfx1013PolygonMode {
+    AGC_GFX1013_POLYGON_MODE_FILL = 0,
+    AGC_GFX1013_POLYGON_MODE_LINE = 1,
+    AGC_GFX1013_POLYGON_MODE_POINT = 2,
+    AGC_GFX1013_POLYGON_MODE_COUNT
+} AgcGfx1013PolygonMode;
+
 typedef struct AgcGfx1013FrameState {
     AgcGfx1013ColorTargetState color_target;
     AgcGfx1013ColorTargetState additional_color_targets[
@@ -787,6 +794,8 @@ int32_t PS5_SYSV_ABI agcGfx1013SetViewport(
     SceAgcCb *cb, const AgcGfx1013ViewportState *state);
 int32_t PS5_SYSV_ABI agcGfx1013SetScissor(
     SceAgcCb *cb, const AgcGfx1013ScissorState *state);
+int32_t PS5_SYSV_ABI agcGfx1013ApplyPolygonMode(
+    AgcGfx1013FrameState *state, AgcGfx1013PolygonMode mode);
 int32_t PS5_SYSV_ABI agcGfx1013SetTargetMask(
     SceAgcCb *cb, uint32_t mask);
 int32_t PS5_SYSV_ABI agcGfx1013SetColorBlendState(

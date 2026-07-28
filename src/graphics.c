@@ -2382,6 +2382,34 @@ int32_t PS5_SYSV_ABI agcGfx1013BuildHtileExpclearPlan(
     return AGC_OK;
 }
 
+int32_t PS5_SYSV_ABI agcGfx1013ApplyPolygonMode(
+    AgcGfx1013FrameState *state, AgcGfx1013PolygonMode mode)
+{
+    const uint32_t polygon_mask =
+        (AGC_REG_PA_SU_SC_MODE_CNTL_POLY_MODE_MASK <<
+            AGC_REG_PA_SU_SC_MODE_CNTL_POLY_MODE_SHIFT) |
+        (AGC_REG_PA_SU_SC_MODE_CNTL_POLYMODE_FRONT_PTYPE_MASK <<
+            AGC_REG_PA_SU_SC_MODE_CNTL_POLYMODE_FRONT_PTYPE_SHIFT) |
+        (AGC_REG_PA_SU_SC_MODE_CNTL_POLYMODE_BACK_PTYPE_MASK <<
+            AGC_REG_PA_SU_SC_MODE_CNTL_POLYMODE_BACK_PTYPE_SHIFT);
+    uint32_t primitive_type;
+    uint32_t polygon_mode;
+
+    if (!state || mode >= AGC_GFX1013_POLYGON_MODE_COUNT)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    polygon_mode = mode == AGC_GFX1013_POLYGON_MODE_FILL ? 0u : 1u;
+    primitive_type = mode == AGC_GFX1013_POLYGON_MODE_FILL ? 2u :
+        mode == AGC_GFX1013_POLYGON_MODE_LINE ? 1u : 0u;
+    state->raster_mode_control =
+        (state->raster_mode_control & ~polygon_mask) |
+        AGC_REG_SET(PA_SU_SC_MODE_CNTL, POLY_MODE, polygon_mode) |
+        AGC_REG_SET(PA_SU_SC_MODE_CNTL, POLYMODE_FRONT_PTYPE,
+            primitive_type) |
+        AGC_REG_SET(PA_SU_SC_MODE_CNTL, POLYMODE_BACK_PTYPE,
+            primitive_type);
+    return AGC_OK;
+}
+
 int32_t PS5_SYSV_ABI agcGfx1013SetViewport(
     SceAgcCb *cb, const AgcGfx1013ViewportState *state)
 {

@@ -1,5 +1,14 @@
 # openagc Status
 
+## Typed gfx1013 polygon raster modes (2026-07-28)
+
+OpenAGC now applies fill, line, and point polygon modes through the typed
+`AgcGfx1013PolygonMode` API. The helper owns the gfx1013 dual-polygon-mode and
+front/back primitive-type encodings while preserving culling, depth-bias, and
+other raster bits. Exact host tests cover every mode plus invalid and null
+inputs. Higher-level APIs no longer need to embed `PA_SU_SC_MODE_CNTL` polygon
+encodings; real-console qualification remains pending.
+
 ## GFX1013 occlusion-query snapshots (2026-07-28)
 
 OpenAGC now owns application-neutral gfx1013 occlusion begin/end helpers. They
