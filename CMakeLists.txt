@@ -54,10 +54,12 @@ set(OPENAGC_SOURCES
 if(OPENAGC_PROSPERO_PLATFORM)
     list(APPEND OPENAGC_SOURCES
         src/driver_prospero.c
+        src/videoout_prospero.c
     )
 else()
     list(APPEND OPENAGC_SOURCES
         src/driver_generic.c
+        src/videoout_generic.c
     )
 endif()
 
@@ -108,6 +110,7 @@ if(OPENAGC_BUILD_TESTS)
         tests/test_registers.c
         tests/test_sony_exports.c
         tests/test_driver_registry.c
+        tests/test_videoout.c
     )
     target_link_libraries(openagc_tests PRIVATE openagc)
     target_include_directories(openagc_tests PRIVATE

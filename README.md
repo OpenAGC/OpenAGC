@@ -68,6 +68,12 @@ builds with ps5-payload-sdk; hardware validation is the remaining step.
   `agcGpuMemoryAllocateDirectWriteCombined` owns the 2 MiB-aligned kernel
   physical allocation, CPU/GPU mapping, and paired unmap/release lifecycle used
   for garlic resources and scanout-compatible storage
+- **Reusable VideoOut lifecycle** — `agc_videoout.h` registers caller-owned
+  linear scanout buffers, presents FIFO/VSYNC frames with bounded waits, and
+  tears down its flip event queue. The Prospero backend contains the FW 5.50
+  linear-registration patch, verifies its original instruction bytes, and
+  restores them immediately after registration; the generic backend provides
+  deterministic host lifecycle coverage.
 - **Shader binary format** — RDNA2 ISA shader header parsing
 - **Two backend targets:**
   - `generic` — pure software implementation for host testing
@@ -132,7 +138,7 @@ Completed and tested:
   default-state `CLEAR_STATE` submission, and suspend-point submit/query
 - Hardware validation samples (`samples/hw_test/`) built as ELF and fake-SELF
 - Build system (CMake + Makefile)
-- Test suite with 4225 passing assertions on the host generic backend
+- Test suite with 4236 passing assertions on the host generic backend
 
 Tessellation clients use the Oberon-wide ring profile in `agc_graphics.h`:
 four shader engines, two shader arrays per engine, five physical CUs per
