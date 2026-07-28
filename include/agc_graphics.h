@@ -90,6 +90,10 @@ extern "C" {
 #define AGC_GFX1013_FRAME_POST_BIND_DWORDS        24u
 #define AGC_GFX1013_BLEND_STATE_DWORDS            19u
 #define AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS    14u
+#define AGC_GFX1013_DEPTH_BIAS_STATE_DWORDS       10u
+#define AGC_GFX1013_DEPTH_BIAS_RASTER_MODE \
+    ((1u << AGC_REG_PA_SU_SC_MODE_CNTL_POLY_OFFSET_FRONT_ENABLE_SHIFT) | \
+     (1u << AGC_REG_PA_SU_SC_MODE_CNTL_POLY_OFFSET_BACK_ENABLE_SHIFT))
 #define AGC_GFX1013_DEPTH_SURFACE_DWORDS           27u
 #define AGC_GFX1013_HTILE_OPERATION_DWORDS          3u
 #define AGC_GFX1013_DEPTH_EXPCLEAR_DWORDS            3u
@@ -312,6 +316,13 @@ typedef enum AgcGfx1013DepthSurfaceFormat {
     AGC_GFX1013_DEPTH_FORMAT_D32_FLOAT_S8_UINT,
     AGC_GFX1013_DEPTH_FORMAT_COUNT
 } AgcGfx1013DepthSurfaceFormat;
+
+typedef struct AgcGfx1013DepthBiasState {
+    AgcGfx1013DepthSurfaceFormat format;
+    float constant_factor;
+    float clamp;
+    float slope_factor;
+} AgcGfx1013DepthBiasState;
 
 typedef enum AgcGfx1013HtileOperation {
     AGC_GFX1013_HTILE_OPERATION_NONE = 0,
@@ -754,6 +765,8 @@ int32_t PS5_SYSV_ABI agcGfx1013SetTargetMask(
     SceAgcCb *cb, uint32_t mask);
 int32_t PS5_SYSV_ABI agcGfx1013SetColorBlendState(
     SceAgcCb *cb, const AgcGfx1013ColorBlendState *state);
+int32_t PS5_SYSV_ABI agcGfx1013SetDepthBiasState(
+    SceAgcCb *cb, const AgcGfx1013DepthBiasState *state);
 int32_t PS5_SYSV_ABI agcGfx1013SetDepthStencilState(
     SceAgcCb *cb, const AgcGfx1013DepthStencilState *state);
 int32_t PS5_SYSV_ABI agcGfx1013SetDepthDisabled(SceAgcCb *cb);

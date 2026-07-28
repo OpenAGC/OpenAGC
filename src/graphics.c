@@ -2546,6 +2546,48 @@ int32_t PS5_SYSV_ABI agcGfx1013SetColorBlendState(
     return AGC_OK;
 }
 
+int32_t PS5_SYSV_ABI agcGfx1013SetDepthBiasState(
+    SceAgcCb *cb, const AgcGfx1013DepthBiasState *state)
+{
+    uint32_t format_control;
+    uint32_t *cmd;
+
+    if (!cb || !state)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    switch (state->format) {
+    case AGC_GFX1013_DEPTH_FORMAT_D16_UNORM:
+    case AGC_GFX1013_DEPTH_FORMAT_D16_UNORM_S8_UINT:
+        format_control = (uint8_t)-16;
+        break;
+    case AGC_GFX1013_DEPTH_FORMAT_D32_FLOAT:
+    case AGC_GFX1013_DEPTH_FORMAT_D32_FLOAT_S8_UINT:
+        format_control = (uint8_t)-23 | (1u << 8u);
+        break;
+    default:
+        return AGC_ERROR_INVALID_ARGUMENT;
+    }
+    if (agcCbRemainingDwords(cb) < AGC_GFX1013_DEPTH_BIAS_STATE_DWORDS)
+        return AGC_ERROR_BUFFER_TOO_SMALL;
+
+    cmd = agcCbAllocDwords(cb, 3u);
+    if (!cmd)
+        return AGC_ERROR_INTERNAL;
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u);
+    cmd[1] = AGC_REG_PA_SU_POLY_OFFSET_DB_FMT_CNTL;
+    cmd[2] = format_control;
+    cmd = agcCbAllocDwords(cb, 7u);
+    if (!cmd)
+        return AGC_ERROR_INTERNAL;
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 7u);
+    cmd[1] = AGC_REG_PA_SU_POLY_OFFSET_CLAMP;
+    cmd[2] = agcGfx1013FloatBits(state->clamp);
+    cmd[3] = agcGfx1013FloatBits(state->slope_factor * 16.0f);
+    cmd[4] = agcGfx1013FloatBits(state->constant_factor);
+    cmd[5] = cmd[3];
+    cmd[6] = cmd[4];
+    return AGC_OK;
+}
+
 static bool agcGfx1013StencilFaceValid(
     const AgcGfx1013StencilFaceState *face)
 {

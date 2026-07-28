@@ -1401,15 +1401,18 @@ paths. The compute and graphics samples use typed host-read transitions without
 changing their hardware-proven completion packet bytes. Acquire-bearing paths
 remain host-encoded and Prospero-compiled but await real PS5 qualification.
 
-Typed gfx1013 blend and depth/stencil state is host-complete. The blend builder
+Typed gfx1013 blend, depth bias, and depth/stencil state is host-complete. The blend builder
 programs all eight MRT controls deterministically, packs per-target RGBA write
 masks, and emits four blend constants in one atomic 19-dword group. The
+depth-bias builder selects D16 or D32 hardware scaling, writes the clamp plus
+front/back slope and constant factors in one atomic 10-dword group, and exposes
+the typed front/back raster-enable mask. The
 depth/stencil builder maps the eight compare operations and eight standard
 stencil operations to gfx103 values, supports independent front/back state,
 reference/compare/write masks, depth writes, and depth bounds in one atomic
 14-dword group. Full-stream fixtures lock register order and bit encodings;
 invalid enums, masks, state dependencies, and short buffers emit nothing.
-Depth-surface binding and real FW 5.50 blend/depth/stencil execution remain
+Depth-surface binding and real FW 5.50 blend/depth-bias/depth/stencil execution remain
 separate hardware-validation milestones.
 
 Multiple DCB submission in one process is hardware-validated on FW 5.50.

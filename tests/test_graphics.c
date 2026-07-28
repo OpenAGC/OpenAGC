@@ -1482,6 +1482,12 @@ static void test_gfx1013_blend_depth_stencil_packets(void)
     uint32_t buffer[32] = {0};
     SceAgcCb cb;
     AgcGfx1013ColorBlendState blend = {0};
+    AgcGfx1013DepthBiasState bias = {
+        .format = AGC_GFX1013_DEPTH_FORMAT_D32_FLOAT,
+        .constant_factor = 2.0f,
+        .clamp = 0.25f,
+        .slope_factor = -1.5f,
+    };
     AgcGfx1013DepthStencilState depth = {0};
     const uint32_t expected_blend[AGC_GFX1013_BLEND_STATE_DWORDS] = {
         agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 10u),
@@ -1502,6 +1508,13 @@ static void test_gfx1013_blend_depth_stencil_packets(void)
         AGC_REG_DB_STENCILREFMASK, 0x12cdab12u, 0x34785634u,
         agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 4u),
         AGC_REG_DB_DEPTH_BOUNDS_MIN, 0x3e800000u, 0x3f400000u,
+    };
+    const uint32_t expected_bias[AGC_GFX1013_DEPTH_BIAS_STATE_DWORDS] = {
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
+        AGC_REG_PA_SU_POLY_OFFSET_DB_FMT_CNTL, 0x000001e9u,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 7u),
+        AGC_REG_PA_SU_POLY_OFFSET_CLAMP, 0x3e800000u, 0xc1c00000u,
+        0x40000000u, 0xc1c00000u, 0x40000000u,
     };
 
     TEST_ASSERT_EQ(AGC_GFX1013_BLEND_CONSTANT_ALPHA, 19u,
@@ -1544,6 +1557,30 @@ static void test_gfx1013_blend_depth_stencil_packets(void)
         "gfx1013 blend exact dword count");
     TEST_ASSERT(memcmp(buffer, expected_blend, sizeof(expected_blend)) == 0,
         "gfx1013 blend exact packet stream");
+
+    TEST_ASSERT_EQ(AGC_GFX1013_DEPTH_BIAS_RASTER_MODE, 0x00001800u,
+        "gfx1013 depth-bias front/back enable mask");
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetDepthBiasState(&cb, &bias), AGC_OK,
+        "gfx1013 typed depth-bias state emits");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb),
+        AGC_GFX1013_DEPTH_BIAS_STATE_DWORDS,
+        "gfx1013 depth-bias exact dword count");
+    TEST_ASSERT(memcmp(buffer, expected_bias, sizeof(expected_bias)) == 0,
+        "gfx1013 depth-bias exact packet stream");
+
+    agcCbReset(&cb, buffer,
+        (AGC_GFX1013_DEPTH_BIAS_STATE_DWORDS - 1u) * sizeof(uint32_t));
+    TEST_ASSERT_EQ(agcGfx1013SetDepthBiasState(&cb, &bias),
+        AGC_ERROR_BUFFER_TOO_SMALL, "short depth-bias state rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "short depth-bias state is atomic");
+    bias.format = AGC_GFX1013_DEPTH_FORMAT_S8_UINT;
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetDepthBiasState(&cb, &bias),
+        AGC_ERROR_INVALID_ARGUMENT, "stencil-only depth bias rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "invalid depth-bias state is atomic");
 
     depth.depth_test_enable = 1u;
     depth.depth_write_enable = 1u;
