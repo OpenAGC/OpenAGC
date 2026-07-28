@@ -143,6 +143,10 @@ per-shader-engine interpretation does not apply to Oberon. The public constants
 and regression test retain the explicit 40-per-engine/160-global distinction.
 Ring-state validation rejects an allocation smaller than the buffering and
 granularity encoded in `VGT_HS_OFFCHIP_PARAM`.
+The profile's first bounded Vulkan FW 5.500.008 qualification run passed exact
+hull, TES offchip-read, and 7200-pixel image oracles and left the console
+responsive (`20260728T043915Z-tessellation-run1.log`). A second independent
+run is still required before marking the correction hardware-stable.
 
 Hardware-validated on real PS5 gfx1013 hardware running FW 5.50:
 - Native `/dev/gc` initialization, queue setup, default states, and submission

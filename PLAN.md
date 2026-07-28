@@ -28,7 +28,10 @@ AMD PM4 packet ancestry overlap in useful ways.
   encoded `VGT_HS_OFFCHIP_PARAM`, and the hardware sample derives
   non-overlapping pool offsets from the public ring sizes.
 - This is the next qualification candidate for Vulkan's nondeterministic
-  HS-store/TES-load path. Host tests pass; hardware qualification is pending.
+  HS-store/TES-load path. Host tests pass. Its first bounded Vulkan FW
+  5.500.008 run passed the hull, TES offchip-read, and 7200-pixel image oracles
+  (`20260728T043915Z-tessellation-run1.log`) and left the console responsive;
+  a second independent run remains pending.
 
 ### FW 5.50 application-neutral initialization gate
 
