@@ -188,6 +188,9 @@ Hardware-validated on real PS5 gfx1013 hardware running FW 5.50:
 - Native `/dev/gc` initialization, queue setup, default states, and submission
 - Compute dispatch and no-GS NGG indexed graphics with GPU readback
 - Wave32 NGG and pixel execution, including compiler-record and final-PM4 checks
+- Typed 4x sample state with one, two, or four pixel-shader iterations;
+  baseline and tessellation draws apply it after shader binding so
+  `DB_EQAA` and `PA_SC_MODE_CNTL_1` reach launch unchanged
 - Pipeline-specific HS/TES tessellation offchip-layout packing and independent
   runtime patching for unequal input/output patch sizes
 - Linear standard/alternate-swap RGBA8 UNORM/SRGB, RGB10A2,

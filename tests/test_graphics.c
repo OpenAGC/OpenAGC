@@ -307,6 +307,7 @@ static void test_gfx1013_baseline_draw_wrapper(void)
         {AGC_REG_DB_DEPTH_CONTROL, 0u},
     };
     const AgcGfx1013FrameState frame = make_frame_state();
+    const AgcGfx1013SampleState samples = {4u, 4u, 0xFu};
 
     memset(&draw, 0, sizeof(draw));
     make_wave32_state(&draw.shaders, &primitive_record, &pixel_record,
@@ -369,6 +370,22 @@ static void test_gfx1013_baseline_draw_wrapper(void)
         "gfx1013 baseline frame depth starts after shader bind");
     TEST_ASSERT_EQ(buffer[37], AGC_REG_DB_DEPTH_INFO,
         "gfx1013 baseline frame depth register order");
+
+    draw.sample_state = &samples;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndexAuto(&cb, &draw), AGC_OK,
+        "gfx1013 baseline wrapper applies sample state post-bind");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb),
+        68u + AGC_GFX1013_SAMPLE_STATE_DWORDS,
+        "gfx1013 baseline sample state exact dword count");
+    uint32_t value = 0u;
+    TEST_ASSERT(find_last_register(
+        buffer, agcCbUsedDwords(&cb), AGC_PM4_OP_SET_CONTEXT_REG,
+        AGC_REG_DB_EQAA, &value),
+        "gfx1013 baseline sample state follows shader bind");
+    TEST_ASSERT_EQ(value, 0x2222u,
+        "gfx1013 baseline retains four pixel iterations");
+    draw.sample_state = NULL;
 
     agcCbInit(&cb, buffer, 67u * sizeof(uint32_t));
     TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndexAuto(&cb, &draw),
@@ -3323,12 +3340,38 @@ static void test_gfx1013_msaa_state_and_layout(void)
         "gfx1013 DB_EQAA register");
     TEST_ASSERT_EQ(buffer[5], 0x00002202u,
         "gfx1013 exact 4x DB_EQAA");
-    TEST_ASSERT_EQ(buffer[15], 0xE62A62AEu,
+    TEST_ASSERT_EQ(buffer[7], AGC_REG_PA_SC_MODE_CNTL_0,
+        "gfx1013 PA_SC_MODE_CNTL_0 register");
+    TEST_ASSERT_EQ(buffer[10], AGC_REG_PA_SC_MODE_CNTL_1,
+        "gfx1013 PA_SC_MODE_CNTL_1 register");
+    TEST_ASSERT_EQ(buffer[11], 0u,
+        "gfx1013 per-pixel shading leaves PS_ITER_SAMPLE clear");
+    TEST_ASSERT_EQ(buffer[18], 0xE62A62AEu,
         "gfx1013 standard DX 4x sample locations");
-    TEST_ASSERT_EQ(buffer[27], 0x000F000Fu,
+    TEST_ASSERT_EQ(buffer[30], 0x000F000Fu,
         "gfx1013 full 4x coverage mask 0");
-    TEST_ASSERT_EQ(buffer[28], 0x000F000Fu,
+    TEST_ASSERT_EQ(buffer[31], 0x000F000Fu,
         "gfx1013 full 4x coverage mask 1");
+
+    samples.pixel_shader_sample_count = 4u;
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetSampleState(&cb, &samples), AGC_OK,
+        "gfx1013 4x per-sample shading emits");
+    TEST_ASSERT_EQ(buffer[5], 0x00002222u,
+        "gfx1013 4x per-sample DB_EQAA");
+    TEST_ASSERT_EQ(buffer[11], 1u <<
+        AGC_REG_PA_SC_MODE_CNTL_1_PS_ITER_SAMPLE_SHIFT,
+        "gfx1013 4x per-sample mode enables sample iteration");
+
+    samples.pixel_shader_sample_count = 2u;
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetSampleState(&cb, &samples), AGC_OK,
+        "gfx1013 4x partial sample shading emits");
+    TEST_ASSERT_EQ(buffer[5], 0x00002212u,
+        "gfx1013 4x partial sample DB_EQAA");
+    TEST_ASSERT_EQ(buffer[11], 1u <<
+        AGC_REG_PA_SC_MODE_CNTL_1_PS_ITER_SAMPLE_SHIFT,
+        "gfx1013 partial sample mode enables sample iteration");
 
     TEST_ASSERT_EQ(agcGfx1013GetColorSurfaceLayout(&input, &layout),
         AGC_OK, "gfx1013 4x RGBA8 color layout computes");

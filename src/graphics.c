@@ -422,6 +422,15 @@ static int32_t agcGfx1013ValidateBaselineDrawState(
             !agcGfx1013StencilFaceValid(&depth->back))
             return AGC_ERROR_INVALID_ARGUMENT;
     }
+    if (state->sample_state) {
+        uint32_t storage[AGC_GFX1013_SAMPLE_STATE_DWORDS];
+        SceAgcCb validation_cb;
+        agcCbInit(&validation_cb, storage, sizeof(storage));
+        error = agcGfx1013SetSampleState(
+            &validation_cb, state->sample_state);
+        if (error != AGC_OK)
+            return error;
+    }
     if (state->num_primitive_resource_tables != 0u) {
         error = agcGfx1013ValidateResourceTables(
             &state->shaders.primitive, state->primitive_resource_tables,
@@ -454,6 +463,8 @@ static int32_t agcGfx1013ValidateBaselineDrawState(
         required_dwords += AGC_GFX1013_DEPTH_SURFACE_DWORDS;
     if (state->depth_stencil_state)
         required_dwords += AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS;
+    if (state->sample_state)
+        required_dwords += AGC_GFX1013_SAMPLE_STATE_DWORDS;
     *required_dwords_out = required_dwords;
     return AGC_OK;
 }
@@ -492,6 +503,9 @@ static int32_t agcGfx1013EmitBaselineDrawPrefix(
     if (state->depth_stencil_state &&
         agcGfx1013SetDepthStencilState(
             cb, state->depth_stencil_state) != AGC_OK)
+        return AGC_ERROR_INTERNAL;
+    if (state->sample_state &&
+        agcGfx1013SetSampleState(cb, state->sample_state) != AGC_OK)
         return AGC_ERROR_INTERNAL;
     for (i = 0; i < state->num_post_bind_sh_registers; ++i) {
         if (!sceAgcCbSetShRegistersDirect(
@@ -957,6 +971,15 @@ int32_t PS5_SYSV_ABI agcGfx1013DrawTessIndexAuto(
             !agcGfx1013StencilFaceValid(&depth->back))
             return AGC_ERROR_INVALID_ARGUMENT;
     }
+    if (state->sample_state) {
+        uint32_t storage[AGC_GFX1013_SAMPLE_STATE_DWORDS];
+        SceAgcCb validation_cb;
+        agcCbInit(&validation_cb, storage, sizeof(storage));
+        error = agcGfx1013SetSampleState(
+            &validation_cb, state->sample_state);
+        if (error != AGC_OK)
+            return error;
+    }
     error = agcGfx1013ValidateTessellationState(state->tessellation);
     if (error != AGC_OK)
         return error;
@@ -1001,6 +1024,8 @@ int32_t PS5_SYSV_ABI agcGfx1013DrawTessIndexAuto(
         required_dwords += AGC_GFX1013_DEPTH_SURFACE_DWORDS;
     if (state->depth_stencil_state)
         required_dwords += AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS;
+    if (state->sample_state)
+        required_dwords += AGC_GFX1013_SAMPLE_STATE_DWORDS;
     if (agcCbRemainingDwords(cb) < required_dwords)
         return AGC_ERROR_BUFFER_TOO_SMALL;
 
@@ -1036,6 +1061,9 @@ int32_t PS5_SYSV_ABI agcGfx1013DrawTessIndexAuto(
     if (state->depth_stencil_state &&
         agcGfx1013SetDepthStencilState(
             cb, state->depth_stencil_state) != AGC_OK)
+        return AGC_ERROR_INTERNAL;
+    if (state->sample_state &&
+        agcGfx1013SetSampleState(cb, state->sample_state) != AGC_OK)
         return AGC_ERROR_INTERNAL;
     for (i = 0u; i < state->num_post_bind_sh_registers; ++i) {
         if (!sceAgcCbSetShRegistersDirect(
@@ -1589,14 +1617,17 @@ int32_t PS5_SYSV_ABI agcGfx1013SetSampleState(
     if (!cb || !state || (state->sample_count != 1u &&
         state->sample_count != 4u) ||
         (state->pixel_shader_sample_count != 1u &&
+         state->pixel_shader_sample_count != 2u &&
          state->pixel_shader_sample_count != state->sample_count) ||
+        (state->pixel_shader_sample_count > state->sample_count) ||
         (state->sample_mask & ~((1u << state->sample_count) - 1u)) != 0u)
         return AGC_ERROR_INVALID_ARGUMENT;
     if (agcCbRemainingDwords(cb) < AGC_GFX1013_SAMPLE_STATE_DWORDS)
         return AGC_ERROR_BUFFER_TOO_SMALL;
 
     sample_log2 = state->sample_count == 4u ? 2u : 0u;
-    ps_iter_log2 = state->pixel_shader_sample_count == 4u ? 2u : 0u;
+    ps_iter_log2 = state->pixel_shader_sample_count == 4u ? 2u :
+        (state->pixel_shader_sample_count == 2u ? 1u : 0u);
     max_distance = state->sample_count == 4u ? 6u : 0u;
     /* Standard DX 4x positions: (-2,-6), (2,6), (-6,2), (6,-2). */
     sample_locations = state->sample_count == 4u ? 0xE62A62AEu : 0u;
@@ -1618,7 +1649,10 @@ int32_t PS5_SYSV_ABI agcGfx1013SetSampleState(
             (sample_log2 << AGC_REG_DB_EQAA_ALPHA_TO_MASK_NUM_SAMPLES_SHIFT)) ||
         !agcGfx1013EmitCx(cb, AGC_REG_PA_SC_MODE_CNTL_0,
             (state->sample_count == 4u ? 1u : 0u) |
-            (1u << AGC_REG_PA_SC_MODE_CNTL_0_VPORT_SCISSOR_ENABLE_SHIFT)))
+            (1u << AGC_REG_PA_SC_MODE_CNTL_0_VPORT_SCISSOR_ENABLE_SHIFT)) ||
+        !agcGfx1013EmitCx(cb, AGC_REG_PA_SC_MODE_CNTL_1,
+            (state->pixel_shader_sample_count > 1u ? 1u : 0u) <<
+                AGC_REG_PA_SC_MODE_CNTL_1_PS_ITER_SAMPLE_SHIFT))
         return AGC_ERROR_INTERNAL;
     {
         uint32_t *cmd = agcCbAllocDwords(cb, 4u);

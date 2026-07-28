@@ -2111,7 +2111,7 @@ layout queries, programs tiled color pitch from the padded layout rather than
 the logical width, and keeps the default non-depth hardware sample build
 independent of the optional MSAA allocation.
 
-The typed 29-dword sample-state builder programs gfx1013 4x AA with
+The typed 32-dword sample-state builder programs gfx1013 4x AA with
 `PA_SC_AA_CONFIG=0x2020c002`, `DB_EQAA=0x00002202`, standard DX sample
 locations `0xe62a62ae`, centroid priority `0x3210321032103210`, and full
 coverage masks. The color binder programs log2 sample/fragment fields and
@@ -2132,3 +2132,21 @@ The preparation host result was 3878 passed, 0 failed. Both the Prospero
 library and `samples/hw_test/agc_depth_msaa.elf` cross-built without warnings.
 On 2026-07-27, repeated FW `0x05500008` websrv runs passed all marker, exact
 color, raw-depth, visual, and responsiveness checks with 1,800/1,800 flips.
+
+## Gfx1013 sample-rate shading hardware validation
+
+OpenAGC now carries typed sample state on baseline and tessellation draw
+states, validates it before recording, and emits it after shader binding so
+the shader record cannot restore stale AA context. The state builder supports
+one, two, or four pixel-shader iterations for a 4x target and programs both
+`DB_EQAA.PS_ITER_SAMPLES` and `PA_SC_MODE_CNTL_1.PS_ITER_SAMPLE`. Exact host
+fixtures lock the 1x, partial 2x, and full 4x encodings and atomic capacity
+accounting.
+
+On 2026-07-28, repeated FW `0x05500008` Vulkan gates produced exactly 73,728
+fragment invocations for full sample shading and 36,960 for
+`minSampleShading=0.5`. The full-rate shader observed all four `gl_SampleID`
+values with stable counts `18,336/18,528/18,432/18,432`; the partial-rate
+shader left all four guard words untouched. Every run self-exited, the console
+remained responsive, and target klogs contained only the known single
+`amount=0x4000` baseline VM warning.

@@ -191,6 +191,9 @@
 #define AGC_REG_PA_SC_MODE_CNTL_0_MSAA_ENABLE_MASK  0x1u
 #define AGC_REG_PA_SC_MODE_CNTL_0_VPORT_SCISSOR_ENABLE_SHIFT 1u
 #define AGC_REG_PA_SC_MODE_CNTL_0_VPORT_SCISSOR_ENABLE_MASK  0x1u
+#define AGC_REG_PA_SC_MODE_CNTL_1                   0x293u
+#define AGC_REG_PA_SC_MODE_CNTL_1_PS_ITER_SAMPLE_SHIFT 16u
+#define AGC_REG_PA_SC_MODE_CNTL_1_PS_ITER_SAMPLE_MASK  0x1u
 #define AGC_REG_PA_SC_CENTROID_PRIORITY_0           0x2F5u
 #define AGC_REG_PA_SC_CENTROID_PRIORITY_1           0x2F6u
 #define AGC_REG_PA_SC_AA_CONFIG                     0x2F8u
@@ -516,7 +519,6 @@
 
 /* Scissor / AA */
 #define AGC_REG_PA_SC_MODE_CNTL_0                   0x292u
-#define AGC_REG_PA_SC_MODE_CNTL_1                   0x293u
 #define AGC_REG_PA_SC_AA_CONFIG                     0x2F8u
 #define AGC_REG_PA_SC_AA_SAMPLE_LOCS_PIXEL_X0Y0_0   0x2FEu
 #define AGC_REG_PA_SC_AA_MASK_X0Y0_X1Y0             0x30Eu

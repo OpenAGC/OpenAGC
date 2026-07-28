@@ -2267,8 +2267,10 @@ Next execution order:
 The reusable FW `0x0550` preparation for the isolated 4x gate is complete:
 
 - Typed `agcGfx1013SetSampleState` emits `PA_SC_AA_CONFIG`, `DB_EQAA`,
-  `PA_SC_MODE_CNTL_0`, four sample-location registers, centroid priority, and
-  both coverage masks for exact 1x/4x state.
+  `PA_SC_MODE_CNTL_0`, `PA_SC_MODE_CNTL_1`, four sample-location registers,
+  centroid priority, and both coverage masks for exact 1x/4x state. Baseline
+  and tessellation draw states apply it after shader binding; 1/2/4 pixel
+  iterations are host-locked and the 2x/4x modes are FW 5.50-qualified.
 - Typed `agcGfx1013GetColorSurfaceLayout` covers 4x `64KB_R_X` color
   allocations, while the existing D32 layout covers 4x `64KB_Z_X`.
 - Color-target binding now types the sample/fragment counts and swizzle mode;

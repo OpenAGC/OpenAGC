@@ -111,7 +111,7 @@ extern "C" {
 #define AGC_GFX1013_SWIZZLE_64KB_Z_X               24u
 #define AGC_GFX1013_SWIZZLE_64KB_R_X               27u
 #define AGC_GFX1013_64KB_SURFACE_ALIGNMENT    0x10000u
-#define AGC_GFX1013_SAMPLE_STATE_DWORDS             29u
+#define AGC_GFX1013_SAMPLE_STATE_DWORDS             32u
 #define AGC_GFX1013_MAX_COLOR_TARGETS              8u
 #define AGC_GFX1013_CONTEXT_CONTROL_ENABLE 0x80000000u
 #define AGC_GFX1013_NGG_MODE_CONTROL        0x00000200u
@@ -678,6 +678,7 @@ typedef struct AgcGfx1013BaselineDrawState {
     uint32_t instance_count;
     uint32_t vertex_count;
     uint64_t draw_modifier;
+    const AgcGfx1013SampleState *sample_state;
 } AgcGfx1013BaselineDrawState;
 
 typedef struct AgcGfx1013IndexedDrawState {
@@ -735,6 +736,7 @@ typedef struct AgcGfx1013TessDrawState {
     uint32_t instance_count;
     uint32_t vertex_count;
     uint64_t draw_modifier;
+    const AgcGfx1013SampleState *sample_state;
 } AgcGfx1013TessDrawState;
 
 int32_t PS5_SYSV_ABI agcGfx1013ValidateWave32VsPs(
