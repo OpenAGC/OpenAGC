@@ -691,8 +691,8 @@ static void test_gfx1013_wave32_tessellation_binding(void)
         buffer, agcCbUsedDwords(&cb), AGC_PM4_OP_SET_SH_REG,
         AGC_REG_SPI_SHADER_PGM_RSRC2_HS, &value),
         "HS resource register emitted");
-    TEST_ASSERT_EQ(value, 0x000c001cu,
-        "HS LDS allocation encoded in 512-byte units");
+    TEST_ASSERT_EQ(value, 0x0010001cu,
+        "HS LDS allocation rounds to a gfx1013 1 KiB block");
     TEST_ASSERT(find_indexed_register(
         buffer, agcCbUsedDwords(&cb), AGC_PM4_OP_SET_CONTEXT_REG,
         AGC_REG_VGT_LS_HS_CONFIG, 2u, &value),
@@ -705,6 +705,19 @@ static void test_gfx1013_wave32_tessellation_binding(void)
         "combined tessellation stages emitted");
     TEST_ASSERT_EQ(value, 0x00e0210du,
         "LS+HS+DS+NGG Wave32 stage enables combined");
+
+    state.hull_lds_size = 1u;
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(
+        agcGfx1013BindWave32TessVsPs(&cb, &state), AGC_OK,
+        "gfx1013 minimum hull LDS allocation binds");
+    TEST_ASSERT(find_register(
+        buffer, agcCbUsedDwords(&cb), AGC_PM4_OP_SET_SH_REG,
+        AGC_REG_SPI_SHADER_PGM_RSRC2_HS, &value),
+        "minimum HS LDS resource register emitted");
+    TEST_ASSERT_EQ(value, 0x0008001cu,
+        "minimum HS LDS allocation encodes one 1 KiB block as two units");
+    state.hull_lds_size = 1536u;
 
     /* TES-as-NGG can be a complete front program with an inert back half.
      * ACO then allocates no continuation SGPR; ring pointers remain required. */

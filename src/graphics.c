@@ -132,7 +132,8 @@ typedef struct AgcGfx1013RuntimePatches {
 
 #define AGC_GFX1013_HS_LDS_SIZE_SHIFT 18u
 #define AGC_GFX1013_HS_LDS_SIZE_MASK  (0x1ffu << 18u)
-#define AGC_GFX1013_HS_LDS_GRANULARITY 512u
+#define AGC_GFX1013_HS_LDS_ALLOCATION_GRANULARITY 1024u
+#define AGC_GFX1013_HS_LDS_ENCODING_GRANULARITY 512u
 #define AGC_GFX1013_HS_LDS_MAX_SIZE 65536u
 
 static bool agcGfx1013BindingHasValue(
@@ -183,10 +184,16 @@ static bool agcGfx1013EmitShaderPatched(
             reg.value = (uint32_t)patches->next_stage_address;
         else if (patches->hull_lds_size != 0u &&
                  reg.offset == AGC_REG_SPI_SHADER_PGM_RSRC2_HS) {
-            const uint32_t encoded =
+            /* GFX10.3 allocates LDS in 1 KiB blocks, while the HS register
+             * field remains encoded in 512-byte units.  Consequently every
+             * legal gfx1013 field value is even. */
+            const uint32_t allocated =
                 (patches->hull_lds_size +
-                 AGC_GFX1013_HS_LDS_GRANULARITY - 1u) /
-                AGC_GFX1013_HS_LDS_GRANULARITY;
+                 AGC_GFX1013_HS_LDS_ALLOCATION_GRANULARITY - 1u) /
+                AGC_GFX1013_HS_LDS_ALLOCATION_GRANULARITY *
+                AGC_GFX1013_HS_LDS_ALLOCATION_GRANULARITY;
+            const uint32_t encoded = allocated /
+                AGC_GFX1013_HS_LDS_ENCODING_GRANULARITY;
             reg.value = (reg.value & ~AGC_GFX1013_HS_LDS_SIZE_MASK) |
                 (encoded << AGC_GFX1013_HS_LDS_SIZE_SHIFT);
         }

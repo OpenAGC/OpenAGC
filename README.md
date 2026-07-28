@@ -140,7 +140,8 @@ Hardware-validated on real PS5 gfx1013 hardware running FW 5.50:
 - Wave32 NGG and pixel execution, including compiler-record and final-PM4 checks
 - Pipeline-specific HS/TES tessellation offchip-layout packing and independent
   runtime patching for unequal input/output patch sizes, plus byte-sized hull
-  LDS allocation patched into the gfx1013 resource register by the binder
+  LDS allocation rounded to gfx10.3's 1024-byte allocation granularity and
+  patched into the resource register's 512-byte encoding by the binder
 - Linear standard/alternate-swap RGBA8 UNORM/SRGB, RGB10A2,
   `R11G11B10_FLOAT`, and `R16G16B16A16_FLOAT` render targets
 
