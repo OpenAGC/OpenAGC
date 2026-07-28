@@ -431,6 +431,15 @@ static int32_t agcGfx1013ValidateBaselineDrawState(
         if (error != AGC_OK)
             return error;
     }
+    if (state->viewport_array_state) {
+        uint32_t storage[AGC_GFX1013_VIEWPORT_ARRAY_MAX_DWORDS];
+        SceAgcCb validation_cb;
+        agcCbInit(&validation_cb, storage, sizeof(storage));
+        error = agcGfx1013SetViewportArray(
+            &validation_cb, state->viewport_array_state);
+        if (error != AGC_OK)
+            return error;
+    }
     if (state->num_primitive_resource_tables != 0u) {
         error = agcGfx1013ValidateResourceTables(
             &state->shaders.primitive, state->primitive_resource_tables,
@@ -465,6 +474,9 @@ static int32_t agcGfx1013ValidateBaselineDrawState(
         required_dwords += AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS;
     if (state->sample_state)
         required_dwords += AGC_GFX1013_SAMPLE_STATE_DWORDS;
+    if (state->viewport_array_state)
+        required_dwords += AGC_GFX1013_VIEWPORT_ARRAY_DWORDS(
+            state->viewport_array_state->count);
     *required_dwords_out = required_dwords;
     return AGC_OK;
 }
@@ -506,6 +518,10 @@ static int32_t agcGfx1013EmitBaselineDrawPrefix(
         return AGC_ERROR_INTERNAL;
     if (state->sample_state &&
         agcGfx1013SetSampleState(cb, state->sample_state) != AGC_OK)
+        return AGC_ERROR_INTERNAL;
+    if (state->viewport_array_state &&
+        agcGfx1013SetViewportArray(
+            cb, state->viewport_array_state) != AGC_OK)
         return AGC_ERROR_INTERNAL;
     for (i = 0; i < state->num_post_bind_sh_registers; ++i) {
         if (!sceAgcCbSetShRegistersDirect(
@@ -980,6 +996,15 @@ int32_t PS5_SYSV_ABI agcGfx1013DrawTessIndexAuto(
         if (error != AGC_OK)
             return error;
     }
+    if (state->viewport_array_state) {
+        uint32_t storage[AGC_GFX1013_VIEWPORT_ARRAY_MAX_DWORDS];
+        SceAgcCb validation_cb;
+        agcCbInit(&validation_cb, storage, sizeof(storage));
+        error = agcGfx1013SetViewportArray(
+            &validation_cb, state->viewport_array_state);
+        if (error != AGC_OK)
+            return error;
+    }
     error = agcGfx1013ValidateTessellationState(state->tessellation);
     if (error != AGC_OK)
         return error;
@@ -1026,6 +1051,9 @@ int32_t PS5_SYSV_ABI agcGfx1013DrawTessIndexAuto(
         required_dwords += AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS;
     if (state->sample_state)
         required_dwords += AGC_GFX1013_SAMPLE_STATE_DWORDS;
+    if (state->viewport_array_state)
+        required_dwords += AGC_GFX1013_VIEWPORT_ARRAY_DWORDS(
+            state->viewport_array_state->count);
     if (agcCbRemainingDwords(cb) < required_dwords)
         return AGC_ERROR_BUFFER_TOO_SMALL;
 
@@ -1064,6 +1092,10 @@ int32_t PS5_SYSV_ABI agcGfx1013DrawTessIndexAuto(
         return AGC_ERROR_INTERNAL;
     if (state->sample_state &&
         agcGfx1013SetSampleState(cb, state->sample_state) != AGC_OK)
+        return AGC_ERROR_INTERNAL;
+    if (state->viewport_array_state &&
+        agcGfx1013SetViewportArray(
+            cb, state->viewport_array_state) != AGC_OK)
         return AGC_ERROR_INTERNAL;
     for (i = 0u; i < state->num_post_bind_sh_registers; ++i) {
         if (!sceAgcCbSetShRegistersDirect(
@@ -2593,6 +2625,120 @@ int32_t PS5_SYSV_ABI agcGfx1013SetScissor(
         uint32_t value = (i & 1u) == 0u ? tl : br;
         if (!agcGfx1013EmitCx(cb, offsets[i], value))
             return AGC_ERROR_INTERNAL;
+    }
+    return AGC_OK;
+}
+
+static bool agcGfx1013FiniteFloat(float value)
+{
+    return (agcGfx1013FloatBits(value) & 0x7f800000u) != 0x7f800000u;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013SetViewportArray(
+    SceAgcCb *cb, const AgcGfx1013ViewportArrayState *state)
+{
+    uint32_t *cmd;
+    uint32_t union_left = 0x7fffu;
+    uint32_t union_top = 0x7fffu;
+    uint32_t union_right = 0u;
+    uint32_t union_bottom = 0u;
+    uint32_t i;
+
+    if (!cb || !state || state->count == 0u ||
+        state->count > AGC_GFX1013_MAX_VIEWPORTS)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    for (i = 0u; i < state->count; ++i) {
+        const AgcGfx1013Viewport *viewport = &state->viewports[i];
+        const AgcGfx1013ScissorState *scissor = &state->scissors[i];
+        if (!agcGfx1013FiniteFloat(viewport->x) ||
+            !agcGfx1013FiniteFloat(viewport->y) ||
+            !agcGfx1013FiniteFloat(viewport->width) ||
+            !agcGfx1013FiniteFloat(viewport->height) ||
+            !agcGfx1013FiniteFloat(viewport->min_depth) ||
+            !agcGfx1013FiniteFloat(viewport->max_depth) ||
+            !(viewport->width > 0.0f) || !(viewport->height > 0.0f) ||
+            !(viewport->min_depth >= 0.0f) ||
+            !(viewport->max_depth <= 1.0f) ||
+            viewport->min_depth > viewport->max_depth ||
+            scissor->left >= scissor->right ||
+            scissor->top >= scissor->bottom ||
+            scissor->right > 0x7fffu || scissor->bottom > 0x7fffu)
+            return AGC_ERROR_INVALID_ARGUMENT;
+        if (scissor->left < union_left)
+            union_left = scissor->left;
+        if (scissor->top < union_top)
+            union_top = scissor->top;
+        if (scissor->right > union_right)
+            union_right = scissor->right;
+        if (scissor->bottom > union_bottom)
+            union_bottom = scissor->bottom;
+    }
+    if (agcCbRemainingDwords(cb) <
+        AGC_GFX1013_VIEWPORT_ARRAY_DWORDS(state->count))
+        return AGC_ERROR_BUFFER_TOO_SMALL;
+
+    cmd = agcCbAllocDwords(cb, 2u + state->count * 6u);
+    if (!cmd)
+        return AGC_ERROR_INTERNAL;
+    cmd[0] = agcPm4Header3(
+        AGC_PM4_OP_SET_CONTEXT_REG, 2u + state->count * 6u);
+    cmd[1] = AGC_REG_PA_CL_VPORT_XSCALE;
+    for (i = 0u; i < state->count; ++i) {
+        const AgcGfx1013Viewport *viewport = &state->viewports[i];
+        cmd[2u + i * 6u] = agcGfx1013FloatBits(viewport->width * 0.5f);
+        cmd[3u + i * 6u] = agcGfx1013FloatBits(
+            viewport->x + viewport->width * 0.5f);
+        cmd[4u + i * 6u] = agcGfx1013FloatBits(viewport->height * 0.5f);
+        cmd[5u + i * 6u] = agcGfx1013FloatBits(
+            viewport->y + viewport->height * 0.5f);
+        cmd[6u + i * 6u] = agcGfx1013FloatBits(
+            viewport->max_depth - viewport->min_depth);
+        cmd[7u + i * 6u] = agcGfx1013FloatBits(viewport->min_depth);
+    }
+
+    cmd = agcCbAllocDwords(cb, 2u + state->count * 2u);
+    if (!cmd)
+        return AGC_ERROR_INTERNAL;
+    cmd[0] = agcPm4Header3(
+        AGC_PM4_OP_SET_CONTEXT_REG, 2u + state->count * 2u);
+    cmd[1] = AGC_REG_PA_SC_VPORT_ZMIN_0;
+    for (i = 0u; i < state->count; ++i) {
+        cmd[2u + i * 2u] = agcGfx1013FloatBits(
+            state->viewports[i].min_depth);
+        cmd[3u + i * 2u] = agcGfx1013FloatBits(
+            state->viewports[i].max_depth);
+    }
+    if (!agcGfx1013EmitCx(cb, AGC_REG_PA_CL_VTE_CNTL, 0x0000043fu))
+        return AGC_ERROR_INTERNAL;
+
+#define AGC_EMIT_SCISSOR_PAIR(offset, left, top, right, bottom) do { \
+    cmd = agcCbAllocDwords(cb, 4u); \
+    if (!cmd) \
+        return AGC_ERROR_INTERNAL; \
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 4u); \
+    cmd[1] = (offset); \
+    cmd[2] = (left) | ((top) << 16u); \
+    cmd[3] = (right) | ((bottom) << 16u); \
+} while (0)
+    AGC_EMIT_SCISSOR_PAIR(AGC_REG_PA_SC_SCREEN_SCISSOR_TL,
+        union_left, union_top, union_right, union_bottom);
+    AGC_EMIT_SCISSOR_PAIR(AGC_REG_PA_SC_WINDOW_SCISSOR_TL,
+        union_left, union_top, union_right, union_bottom);
+    AGC_EMIT_SCISSOR_PAIR(AGC_REG_PA_SC_GENERIC_SCISSOR_TL,
+        union_left, union_top, union_right, union_bottom);
+#undef AGC_EMIT_SCISSOR_PAIR
+
+    cmd = agcCbAllocDwords(cb, 2u + state->count * 2u);
+    if (!cmd)
+        return AGC_ERROR_INTERNAL;
+    cmd[0] = agcPm4Header3(
+        AGC_PM4_OP_SET_CONTEXT_REG, 2u + state->count * 2u);
+    cmd[1] = AGC_REG_PA_SC_VPORT_SCISSOR_0_TL;
+    for (i = 0u; i < state->count; ++i) {
+        cmd[2u + i * 2u] = state->scissors[i].left |
+            (state->scissors[i].top << 16u);
+        cmd[3u + i * 2u] = state->scissors[i].right |
+            (state->scissors[i].bottom << 16u);
     }
     return AGC_OK;
 }

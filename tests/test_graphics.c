@@ -308,6 +308,11 @@ static void test_gfx1013_baseline_draw_wrapper(void)
     };
     const AgcGfx1013FrameState frame = make_frame_state();
     const AgcGfx1013SampleState samples = {4u, 4u, 0xFu};
+    const AgcGfx1013ViewportArrayState viewport_array = {
+        .count = 1u,
+        .viewports = {{0.0f, 0.0f, 640.0f, 480.0f, 0.0f, 1.0f}},
+        .scissors = {{0u, 0u, 640u, 480u}},
+    };
 
     memset(&draw, 0, sizeof(draw));
     make_wave32_state(&draw.shaders, &primitive_record, &pixel_record,
@@ -386,6 +391,21 @@ static void test_gfx1013_baseline_draw_wrapper(void)
     TEST_ASSERT_EQ(value, 0x2222u,
         "gfx1013 baseline retains four pixel iterations");
     draw.sample_state = NULL;
+
+    draw.viewport_array_state = &viewport_array;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndexAuto(&cb, &draw), AGC_OK,
+        "gfx1013 baseline wrapper reapplies viewport array post-bind");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb),
+        68u + AGC_GFX1013_VIEWPORT_ARRAY_DWORDS(1u),
+        "gfx1013 baseline viewport array exact dword count");
+    TEST_ASSERT(find_last_register(
+        buffer, agcCbUsedDwords(&cb), AGC_PM4_OP_SET_CONTEXT_REG,
+        AGC_REG_PA_CL_VPORT_XSCALE, &value),
+        "gfx1013 baseline viewport array follows shader bind");
+    TEST_ASSERT_EQ(value, 0x43a00000u,
+        "gfx1013 baseline retains Vulkan viewport transform");
+    draw.viewport_array_state = NULL;
 
     agcCbInit(&cb, buffer, 67u * sizeof(uint32_t));
     TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndexAuto(&cb, &draw),
@@ -1604,6 +1624,81 @@ static void test_gfx1013_fixed_function_packets(void)
         "gfx1013 depth-disabled state emits");
     TEST_ASSERT(memcmp(buffer, expected_depth, sizeof(expected_depth)) == 0,
         "gfx1013 depth-disabled exact packet stream");
+}
+
+static void test_gfx1013_viewport_array_packets(void)
+{
+    uint32_t buffer[AGC_GFX1013_VIEWPORT_ARRAY_MAX_DWORDS] = {0};
+    uint32_t short_buffer[AGC_GFX1013_VIEWPORT_ARRAY_DWORDS(2u) - 1u];
+    SceAgcCb cb;
+    AgcGfx1013ViewportArrayState state = {
+        .count = 2u,
+        .viewports = {
+            {0.0f, 0.0f, 640.0f, 480.0f, 0.0f, 1.0f},
+            {640.0f, 0.0f, 640.0f, 480.0f, 0.25f, 0.75f},
+        },
+        .scissors = {
+            {0u, 0u, 640u, 480u},
+            {640u, 0u, 1280u, 480u},
+        },
+    };
+    const uint32_t expected[AGC_GFX1013_VIEWPORT_ARRAY_DWORDS(2u)] = {
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 14u),
+        AGC_REG_PA_CL_VPORT_XSCALE,
+        0x43a00000u, 0x43a00000u, 0x43700000u, 0x43700000u,
+        0x3f800000u, 0u,
+        0x43a00000u, 0x44700000u, 0x43700000u, 0x43700000u,
+        0x3f000000u, 0x3e800000u,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 6u),
+        AGC_REG_PA_SC_VPORT_ZMIN_0,
+        0u, 0x3f800000u, 0x3e800000u, 0x3f400000u,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
+        AGC_REG_PA_CL_VTE_CNTL, 0x0000043fu,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 4u),
+        AGC_REG_PA_SC_SCREEN_SCISSOR_TL, 0u, 0x01e00500u,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 4u),
+        AGC_REG_PA_SC_WINDOW_SCISSOR_TL, 0u, 0x01e00500u,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 4u),
+        AGC_REG_PA_SC_GENERIC_SCISSOR_TL, 0u, 0x01e00500u,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 6u),
+        AGC_REG_PA_SC_VPORT_SCISSOR_0_TL,
+        0u, 0x01e00280u, 0x00000280u, 0x01e00500u,
+    };
+    uint32_t i;
+
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetViewportArray(&cb, &state), AGC_OK,
+        "gfx1013 two-slot viewport array emits");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb),
+        AGC_GFX1013_VIEWPORT_ARRAY_DWORDS(2u),
+        "gfx1013 viewport array exact dword count");
+    TEST_ASSERT(memcmp(buffer, expected, sizeof(expected)) == 0,
+        "gfx1013 viewport array exact packet stream");
+
+    memset(short_buffer, 0xa5, sizeof(short_buffer));
+    agcCbInit(&cb, short_buffer, sizeof(short_buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetViewportArray(&cb, &state),
+        AGC_ERROR_BUFFER_TOO_SMALL,
+        "gfx1013 viewport array rejects short command buffers");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "gfx1013 short viewport array is atomic");
+    for (i = 0u; i < sizeof(short_buffer) / sizeof(short_buffer[0]); ++i) {
+        TEST_ASSERT_EQ(short_buffer[i], 0xa5a5a5a5u,
+            "gfx1013 short viewport array preserves command memory");
+    }
+
+    state.viewports[1].width = 0.0f;
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetViewportArray(&cb, &state),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "gfx1013 viewport array rejects empty viewport extents");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "gfx1013 invalid viewport array is atomic");
+    state.viewports[1].width = 640.0f;
+    state.count = AGC_GFX1013_MAX_VIEWPORTS + 1u;
+    TEST_ASSERT_EQ(agcGfx1013SetViewportArray(&cb, &state),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "gfx1013 viewport array rejects more than sixteen slots");
 }
 
 static void test_gfx1013_blend_depth_stencil_packets(void)
@@ -3509,6 +3604,7 @@ void test_suite_graphics(void)
     TEST_RUN(test_gfx1013_occlusion_snapshot);
     TEST_RUN(test_gfx1013_resource_transitions);
     TEST_RUN(test_gfx1013_fixed_function_packets);
+    TEST_RUN(test_gfx1013_viewport_array_packets);
     TEST_RUN(test_gfx1013_blend_depth_stencil_packets);
     TEST_RUN(test_gfx1013_depth_surface_packets);
     TEST_RUN(test_gfx1013_htile_operation_packets);

@@ -1,5 +1,16 @@
 # openagc Status
 
+## GFX1013 multi-viewport state (2026-07-29)
+
+OpenAGC now owns an application-neutral 16-slot viewport/scissor array. The
+typed builder lowers Vulkan-style x/y/width/height/depth transforms, programs
+each slot's z range and scissor, and derives conservative global scissor
+bounds without exposing PM4 registers to clients. Baseline and tessellation
+draw wrappers validate the aggregate atomically and reapply it after shader
+binding. Exact two-slot packets, invalid ranges, insufficient capacity, and
+post-bind ordering pass the complete host CTest suite. Real gfx1013 routing is
+qualified by Vulkan-PS5's bounded `multiViewport` gate.
+
 ## GFX1013 array and cube image descriptors (2026-07-29)
 
 The typed gfx1013 image descriptor state now supports 2D arrays and cube

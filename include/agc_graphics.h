@@ -113,6 +113,10 @@ extern "C" {
 #define AGC_GFX1013_64KB_SURFACE_ALIGNMENT    0x10000u
 #define AGC_GFX1013_SAMPLE_STATE_DWORDS             32u
 #define AGC_GFX1013_MAX_COLOR_TARGETS              8u
+#define AGC_GFX1013_MAX_VIEWPORTS                  16u
+#define AGC_GFX1013_VIEWPORT_ARRAY_DWORDS(count) (21u + 10u * (count))
+#define AGC_GFX1013_VIEWPORT_ARRAY_MAX_DWORDS \
+    AGC_GFX1013_VIEWPORT_ARRAY_DWORDS(AGC_GFX1013_MAX_VIEWPORTS)
 #define AGC_GFX1013_CONTEXT_CONTROL_ENABLE 0x80000000u
 #define AGC_GFX1013_NGG_MODE_CONTROL        0x00000200u
 #define AGC_GFX1013_VERTEX_REUSE_BLOCK              14u
@@ -503,6 +507,21 @@ typedef struct AgcGfx1013ScissorState {
     uint32_t bottom;
 } AgcGfx1013ScissorState;
 
+typedef struct AgcGfx1013Viewport {
+    float x;
+    float y;
+    float width;
+    float height;
+    float min_depth;
+    float max_depth;
+} AgcGfx1013Viewport;
+
+typedef struct AgcGfx1013ViewportArrayState {
+    uint32_t count;
+    AgcGfx1013Viewport viewports[AGC_GFX1013_MAX_VIEWPORTS];
+    AgcGfx1013ScissorState scissors[AGC_GFX1013_MAX_VIEWPORTS];
+} AgcGfx1013ViewportArrayState;
+
 typedef enum AgcGfx1013PolygonMode {
     AGC_GFX1013_POLYGON_MODE_FILL = 0,
     AGC_GFX1013_POLYGON_MODE_LINE = 1,
@@ -679,6 +698,7 @@ typedef struct AgcGfx1013BaselineDrawState {
     uint32_t vertex_count;
     uint64_t draw_modifier;
     const AgcGfx1013SampleState *sample_state;
+    const AgcGfx1013ViewportArrayState *viewport_array_state;
 } AgcGfx1013BaselineDrawState;
 
 typedef struct AgcGfx1013IndexedDrawState {
@@ -737,6 +757,7 @@ typedef struct AgcGfx1013TessDrawState {
     uint32_t vertex_count;
     uint64_t draw_modifier;
     const AgcGfx1013SampleState *sample_state;
+    const AgcGfx1013ViewportArrayState *viewport_array_state;
 } AgcGfx1013TessDrawState;
 
 int32_t PS5_SYSV_ABI agcGfx1013ValidateWave32VsPs(
@@ -818,6 +839,8 @@ int32_t PS5_SYSV_ABI agcGfx1013SetViewport(
     SceAgcCb *cb, const AgcGfx1013ViewportState *state);
 int32_t PS5_SYSV_ABI agcGfx1013SetScissor(
     SceAgcCb *cb, const AgcGfx1013ScissorState *state);
+int32_t PS5_SYSV_ABI agcGfx1013SetViewportArray(
+    SceAgcCb *cb, const AgcGfx1013ViewportArrayState *state);
 int32_t PS5_SYSV_ABI agcGfx1013ApplyPolygonMode(
     AgcGfx1013FrameState *state, AgcGfx1013PolygonMode mode);
 int32_t PS5_SYSV_ABI agcGfx1013GetPrimitiveType(

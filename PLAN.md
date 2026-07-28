@@ -16,6 +16,15 @@ AMD PM4 packet ancestry overlap in useful ways.
 
 ## Current Execution Order
 
+### Gfx1013 multi-viewport state
+
+- Provide one application-neutral typed array for up to 16 Vulkan-style
+  viewport transforms and matching per-slot scissors.
+- Reapply this state after baseline and tessellation shader binding so shader
+  records cannot restore stale viewport registers.
+- Exact packet, range, capacity, and draw-order host coverage is complete;
+  FW 5.50 shader routing qualification proceeds through Vulkan-PS5.
+
 ### Gfx1013 array and cube image descriptors
 
 - Add application-neutral 2D-array and cube-array resource types plus base and

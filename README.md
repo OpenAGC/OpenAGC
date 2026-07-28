@@ -64,6 +64,10 @@ builds with ps5-payload-sdk; hardware validation is the remaining step.
 - **Application-neutral raster primitives** — typed topology translation and
   primitive-size state own gfx1013 point-size, point-clamp, and line-width
   encodings for higher-level APIs without exposing register values
+- **Application-neutral viewport arrays** — typed Vulkan-style float viewport
+  transforms and per-slot scissors program all 16 gfx1013 viewport slots,
+  validate atomically, and can be reapplied after shader binding by baseline
+  and tessellation draw wrappers
 - **Application-neutral color blending** — typed blend factors and operations
   program both CB blend controls and conservative per-target SX optimization
   state, including the gfx1013 SRC1 factors required by dual-source blending;
