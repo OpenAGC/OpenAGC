@@ -71,6 +71,11 @@ builds with ps5-payload-sdk; hardware validation is the remaining step.
   descriptor-set placeholder bindings; dispatch validation rejects unbound or
   malformed tables and patches the exact compute user-SGPR registers after
   shader state emission and before `DISPATCH_DIRECT`
+- **Explicit compute wave mode** —
+  `AGC_GFX1013_COMPUTE_DISPATCH_WAVE32` and
+  `AGC_GFX1013_COMPUTE_DISPATCH_WAVE64` name the gfx1013 dispatch-initiator
+  contract so callers execute compiler-selected compute code at the matching
+  wave size instead of relying on an implicit packet default
 - **Write-combined direct memory** —
   `agcGpuMemoryAllocateDirectWriteCombined` owns the 2 MiB-aligned kernel
   physical allocation, CPU/GPU mapping, and paired unmap/release lifecycle used

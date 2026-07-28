@@ -2684,6 +2684,7 @@ static void test_gfx1013_compute_packets(void)
     state.group_count_x = 32400u;
     state.group_count_y = 1u;
     state.group_count_z = 1u;
+    state.modifier = AGC_GFX1013_COMPUTE_DISPATCH_WAVE32;
 
     agcCbInit(&cb, buffer, sizeof(buffer));
     TEST_ASSERT_EQ(agcGfx1013ValidateCompute(&state), AGC_OK,
@@ -2727,7 +2728,8 @@ static void test_gfx1013_compute_packets(void)
     TEST_ASSERT_EQ(agcPm4Opcode(buffer[39]), AGC_PM4_OP_DISPATCH_DIRECT,
         "gfx1013 dispatch opcode");
     TEST_ASSERT_EQ(buffer[40], 32400u, "gfx1013 dispatch group X");
-    TEST_ASSERT_EQ(buffer[43], 0x41u, "gfx1013 dispatch initiator");
+    TEST_ASSERT_EQ(buffer[43], 0x8041u,
+        "gfx1013 Wave32 dispatch initiator");
 
     agcCbReset(&cb, buffer, 43u * sizeof(uint32_t));
     TEST_ASSERT_EQ(agcGfx1013DispatchCompute(&cb, &state),

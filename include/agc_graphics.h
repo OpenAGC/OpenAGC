@@ -564,6 +564,10 @@ typedef struct AgcGfx1013ResourceTableBinding {
     uint64_t address;
 } AgcGfx1013ResourceTableBinding;
 
+/* COMPUTE_DISPATCH_INITIATOR modifiers accepted by gfx1013 dispatch packets. */
+#define AGC_GFX1013_COMPUTE_DISPATCH_WAVE64 0x0000u
+#define AGC_GFX1013_COMPUTE_DISPATCH_WAVE32 0x8000u
+
 typedef struct AgcGfx1013ComputeState {
     const AgcShaderRecord *record;
     const AgcRegisterValue *sh_registers;
@@ -577,7 +581,7 @@ typedef struct AgcGfx1013ComputeState {
     uint32_t group_count_x;
     uint32_t group_count_y;
     uint32_t group_count_z;
-    uint32_t modifier;
+    uint32_t modifier; /* AGC_GFX1013_COMPUTE_DISPATCH_* */
     const AgcGfx1013ResourceTableBinding *resource_tables;
     uint32_t num_resource_tables;
 } AgcGfx1013ComputeState;

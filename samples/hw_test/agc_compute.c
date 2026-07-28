@@ -467,7 +467,7 @@ static bool dispatch_compute(ComputeTest *test, void *shader_addr,
         .group_count_x = (total_pixels + 63u) / 64u,
         .group_count_y = 1u,
         .group_count_z = 1u,
-        .modifier = 0u,
+        .modifier = AGC_GFX1013_COMPUTE_DISPATCH_WAVE32,
     };
     uint64_t flex_target = (uint64_t)(uintptr_t)cb_buffer + 0x1000u;
     uint64_t garlic_target = (uint64_t)(uintptr_t)compute_out +

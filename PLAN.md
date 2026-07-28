@@ -1621,6 +1621,12 @@ records carry `VGT_SHADER_STAGES_EN.GS_W32_EN` and
 `SPI_PS_IN_CONTROL.PS_W32_EN`; the hardware sample rejects missing bits both
 before fusion and in the final PM4 stream.
 
+Compute dispatch now exposes named Wave32 and Wave64 initiator modifiers.
+Wave32 ACO compute records must be dispatched with
+`AGC_GFX1013_COMPUTE_DISPATCH_WAVE32`; leaving the modifier at its zero
+Wave64 default causes divergent Wave32 state to execute with the wrong lane
+model. Exact host packet coverage locks the Wave32 initiator to `0x8041`.
+
 Three FW 5.50 runs programmed NGG stage state `0x02412010` and PS control
 `0x00008001`, submitted successfully, executed the post-draw marker, and
 passed FP16 readback with 255,744 changed pixels, eight sampled colors, and

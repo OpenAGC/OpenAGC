@@ -2044,6 +2044,16 @@ buffer rejection. `agc_depth.elf` now uses the typed DB transition in addition
 to a separate color-target transition before CPU readback. Hardware execution
 is covered by the passing FW 5.50 depth, HTILE, and expclear gates.
 
+## Explicit gfx1013 compute wave mode
+
+`AgcGfx1013ComputeState.modifier` now has public Wave32 and Wave64 constants.
+The exact host packet fixture proves that Wave32 produces dispatch initiator
+`0x8041`, and the hardware compute sample uses the named Wave32 value. This
+closes a cross-layer mismatch found by Vulkan-PS5: ACO emitted Wave32 compute
+code while a zero modifier dispatched it as Wave64. After setting
+`AGC_GFX1013_COMPUTE_DISPATCH_WAVE32`, repeated FW 5.50 variable-pointer
+probes passed all 64 StorageBuffer and Workgroup pointer-selection checks.
+
 ## Non-Goals For Current Milestone
 
 - No firmware blobs or proprietary microcode are embedded.
