@@ -2596,16 +2596,22 @@ int32_t PS5_SYSV_ABI agcGfx1013SetColorBlendState(
         0x33u, 0xbbu, 0x77u, 0xffu,
     };
     uint32_t controls[AGC_GFX1013_MAX_COLOR_TARGETS] = {0};
+    uint32_t blend_optimizations[AGC_GFX1013_MAX_COLOR_TARGETS] = {0};
     uint32_t target_mask = 0u;
     uint32_t color_control;
     uint32_t *cmd;
     uint32_t i;
+    static const uint8_t optimization_operations[AGC_GFX1013_BLEND_OP_COUNT] = {
+        1u, 2u, 3u, 4u, 5u,
+    };
 
     if (!cb || !state || state->target_count == 0u ||
         state->target_count > AGC_GFX1013_MAX_COLOR_TARGETS ||
         state->logic_enable > 1u ||
         state->logic_operation >= AGC_GFX1013_LOGIC_OP_COUNT)
         return AGC_ERROR_INVALID_ARGUMENT;
+    for (i = 0u; i < AGC_GFX1013_MAX_COLOR_TARGETS; ++i)
+        blend_optimizations[i] = 0x06770677u;
     for (i = 0u; i < state->target_count; ++i) {
         const AgcGfx1013ColorBlendTargetState *target = &state->targets[i];
         if (target->enable > 1u || target->separate_alpha > 1u ||
@@ -2633,6 +2639,21 @@ int32_t PS5_SYSV_ABI agcGfx1013SetColorBlendState(
             (target->separate_alpha <<
                 AGC_REG_CB_BLEND0_CONTROL_SEPARATE_ALPHA_BLEND_SHIFT) |
             (target->enable << AGC_REG_CB_BLEND0_CONTROL_ENABLE_SHIFT);
+        const uint32_t color_operation =
+            target->enable && !state->logic_enable ?
+            optimization_operations[target->color_operation] : 6u;
+        const uint32_t alpha_operation =
+            target->enable && !state->logic_enable ?
+            optimization_operations[target->alpha_operation] : 6u;
+        blend_optimizations[i] =
+            (7u << AGC_REG_SX_MRT0_BLEND_OPT_COLOR_SRC_OPT_SHIFT) |
+            (7u << AGC_REG_SX_MRT0_BLEND_OPT_COLOR_DST_OPT_SHIFT) |
+            (color_operation <<
+                AGC_REG_SX_MRT0_BLEND_OPT_COLOR_COMB_FCN_SHIFT) |
+            (7u << AGC_REG_SX_MRT0_BLEND_OPT_ALPHA_SRC_OPT_SHIFT) |
+            (7u << AGC_REG_SX_MRT0_BLEND_OPT_ALPHA_DST_OPT_SHIFT) |
+            (alpha_operation <<
+                AGC_REG_SX_MRT0_BLEND_OPT_ALPHA_COMB_FCN_SHIFT);
         target_mask |= target->write_mask << (i * 4u);
     }
     if (agcCbRemainingDwords(cb) < AGC_GFX1013_BLEND_STATE_DWORDS)
@@ -2644,6 +2665,12 @@ int32_t PS5_SYSV_ABI agcGfx1013SetColorBlendState(
     cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 10u);
     cmd[1] = AGC_REG_CB_BLEND0_CONTROL;
     memcpy(&cmd[2], controls, sizeof(controls));
+    cmd = agcCbAllocDwords(cb, 10u);
+    if (!cmd)
+        return AGC_ERROR_INTERNAL;
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 10u);
+    cmd[1] = AGC_REG_SX_MRT0_BLEND_OPT;
+    memcpy(&cmd[2], blend_optimizations, sizeof(blend_optimizations));
     if (!agcGfx1013EmitCx(cb, AGC_REG_CB_TARGET_MASK, target_mask))
         return AGC_ERROR_INTERNAL;
     cmd = agcCbAllocDwords(cb, 6u);
