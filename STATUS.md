@@ -1417,7 +1417,10 @@ separate hardware-validation milestones.
 The public frame constants also encode Vulkan's zero-to-one clip convention
 (`DX_CLIP_SPACE_DEF`) and the depth-clamp variant with both near and far Z clip
 planes disabled. Exact register tests lock both masks; real FW 5.50 depth-clamp
-execution remains a separate qualification gate.
+execution remains a separate qualification gate. Viewport state independently
+selects negative-one-to-one or zero-to-one clip depth. The latter programs
+`ZSCALE=1` and `ZOFFSET=0`, preventing the legacy 0.5/0.5 transform from
+remapping Vulkan depth a second time; exact packet tests lock both conventions.
 
 Multiple DCB submission in one process is hardware-validated on FW 5.50.
 Separate `sceAgcDriverSubmitDcb` ioctls accepted both buffers but advanced

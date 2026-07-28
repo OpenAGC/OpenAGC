@@ -467,7 +467,11 @@ _Static_assert(sizeof(AgcGfx1013ColorSurfaceLayout) == 40,
 typedef struct AgcGfx1013ViewportState {
     uint32_t width;
     uint32_t height;
+    uint32_t depth_clip_space;
 } AgcGfx1013ViewportState;
+
+#define AGC_GFX1013_CLIP_SPACE_NEGATIVE_ONE_TO_ONE 0u
+#define AGC_GFX1013_CLIP_SPACE_ZERO_TO_ONE         1u
 
 typedef struct AgcGfx1013ScissorState {
     uint32_t left;

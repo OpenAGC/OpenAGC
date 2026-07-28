@@ -1342,6 +1342,9 @@ static void test_gfx1013_fixed_function_packets(void)
         AGC_GFX1013_SURFACE_SWAP_ALT,
     };
     const AgcGfx1013ViewportState viewport = {1920u, 1080u};
+    const AgcGfx1013ViewportState vulkan_viewport = {
+        1920u, 1080u, AGC_GFX1013_CLIP_SPACE_ZERO_TO_ONE,
+    };
     const AgcGfx1013ScissorState scissor = {0u, 0u, 1920u, 1080u};
     const uint32_t expected_color[28] = {
         agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 16u),
@@ -1362,6 +1365,16 @@ static void test_gfx1013_fixed_function_packets(void)
         AGC_REG_PA_CL_VPORT_XSCALE,
         0x44070000u, 0x44700000u, 0xc4070000u,
         0x44070000u, 0x3f000000u, 0x3f000000u,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 4u),
+        AGC_REG_PA_SC_VPORT_ZMIN_0, 0u, 0x3f800000u,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
+        AGC_REG_PA_CL_VTE_CNTL, 0x0000043fu,
+    };
+    const uint32_t expected_vulkan_viewport[15] = {
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 8u),
+        AGC_REG_PA_CL_VPORT_XSCALE,
+        0x44070000u, 0x44700000u, 0xc4070000u,
+        0x44070000u, 0x3f800000u, 0u,
         agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 4u),
         AGC_REG_PA_SC_VPORT_ZMIN_0, 0u, 0x3f800000u,
         agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
@@ -1451,6 +1464,13 @@ static void test_gfx1013_fixed_function_packets(void)
     TEST_ASSERT(memcmp(buffer, expected_viewport,
         sizeof(expected_viewport)) == 0,
         "gfx1013 viewport exact packet stream");
+
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetViewport(&cb, &vulkan_viewport), AGC_OK,
+        "gfx1013 Vulkan viewport emits");
+    TEST_ASSERT(memcmp(buffer, expected_vulkan_viewport,
+        sizeof(expected_vulkan_viewport)) == 0,
+        "gfx1013 Vulkan viewport exact packet stream");
 
     agcCbReset(&cb, buffer, sizeof(buffer));
     TEST_ASSERT_EQ(agcGfx1013SetScissor(&cb, &scissor), AGC_OK,
@@ -2455,6 +2475,7 @@ static void test_gfx1013_fixed_function_rejects_atomically(void)
         AGC_GFX1013_SURFACE_SWAP_ALT,
     };
     const AgcGfx1013ViewportState viewport = {1920u, 1080u};
+    const AgcGfx1013ViewportState invalid_viewport = {1920u, 1080u, 2u};
     const AgcGfx1013ScissorState scissor = {0u, 0u, 1920u, 1080u};
     AgcGfx1013ColorTargetFormatInfo format_info;
 
@@ -2467,6 +2488,11 @@ static void test_gfx1013_fixed_function_rejects_atomically(void)
     TEST_ASSERT_EQ(agcGfx1013SetViewport(&cb, &viewport),
         AGC_ERROR_BUFFER_TOO_SMALL, "short viewport rejects");
     TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u, "short viewport is atomic");
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetViewport(&cb, &invalid_viewport),
+        AGC_ERROR_INVALID_ARGUMENT, "unknown viewport clip space rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "invalid viewport clip space emits no packets");
     agcCbReset(&cb, buffer, 21u * sizeof(uint32_t));
     TEST_ASSERT_EQ(agcGfx1013SetScissor(&cb, &scissor),
         AGC_ERROR_BUFFER_TOO_SMALL, "short scissor rejects");

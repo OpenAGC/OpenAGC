@@ -2390,6 +2390,7 @@ int32_t PS5_SYSV_ABI agcGfx1013SetViewport(
     uint32_t regs[6];
 
     if (!cb || !state || state->width == 0u || state->height == 0u ||
+        state->depth_clip_space > AGC_GFX1013_CLIP_SPACE_ZERO_TO_ONE ||
         state->width > 0x7fffu || state->height > 0x7fffu)
         return AGC_ERROR_INVALID_ARGUMENT;
     if (agcCbRemainingDwords(cb) < 15u)
@@ -2400,8 +2401,13 @@ int32_t PS5_SYSV_ABI agcGfx1013SetViewport(
     regs[1] = agcGfx1013FloatBits((float)state->width * 0.5f);
     regs[2] = agcGfx1013FloatBits(-(float)extent * 0.5f);
     regs[3] = agcGfx1013FloatBits((float)state->height * 0.5f);
-    regs[4] = agcGfx1013FloatBits(0.5f);
-    regs[5] = agcGfx1013FloatBits(0.5f);
+    if (state->depth_clip_space == AGC_GFX1013_CLIP_SPACE_ZERO_TO_ONE) {
+        regs[4] = agcGfx1013FloatBits(1.0f);
+        regs[5] = agcGfx1013FloatBits(0.0f);
+    } else {
+        regs[4] = agcGfx1013FloatBits(0.5f);
+        regs[5] = agcGfx1013FloatBits(0.5f);
+    }
 
     cmd = agcCbAllocDwords(cb, 8u);
     if (!cmd)
