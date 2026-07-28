@@ -132,12 +132,15 @@ Completed and tested:
   default-state `CLEAR_STATE` submission, and suspend-point submit/query
 - Hardware validation samples (`samples/hw_test/`) built as ELF and fake-SELF
 - Build system (CMake + Makefile)
-- Test suite with 4222 passing assertions on the host generic backend
+- Test suite with 4225 passing assertions on the host generic backend
 
 Tessellation clients use the Oberon-wide ring profile in `agc_graphics.h`:
 four shader engines, two shader arrays per engine, five physical CUs per
 array, and four live HS offchip workgroups per CU. This provisions 160
 32-KiB offchip buffers instead of the former single-buffer sample profile.
+On gfx10.3 the buffering field encodes that global count (`159`); gfx11's
+per-shader-engine interpretation does not apply to Oberon. The public constants
+and regression test retain the explicit 40-per-engine/160-global distinction.
 Ring-state validation rejects an allocation smaller than the buffering and
 granularity encoded in `VGT_HS_OFFCHIP_PARAM`.
 

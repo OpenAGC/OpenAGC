@@ -2900,6 +2900,12 @@ static void test_gfx1013_tessellation_state_builders(void)
     uint32_t tes_layout = 0u;
     SceAgcCb cb;
 
+    TEST_ASSERT_EQ(AGC_GFX1013_TESS_OFFCHIP_BUFFERS_PER_SE, 40u,
+        "gfx1013 tessellation buffers are derived per shader engine");
+    TEST_ASSERT_EQ(AGC_GFX1013_TESS_OFFCHIP_BUFFER_COUNT, 160u,
+        "gfx1013 tessellation buffering field uses the global count");
+    TEST_ASSERT_EQ(AGC_GFX1013_TESS_OFFCHIP_RING_SIZE, 0x500000u,
+        "gfx1013 tessellation ring covers every global buffer");
     TEST_ASSERT_EQ(agcGfx1013BuildTessellationOffchipLayouts(
         &layout_state, &tcs_layout, &tes_layout), AGC_OK,
         "gfx1013 tessellation offchip layouts build");

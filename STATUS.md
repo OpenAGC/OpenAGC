@@ -923,7 +923,9 @@ Typed gfx1013 state builders:
 - `agcGfx1013BuildTessellationRingTable` — validates and builds the exact
   128-byte factor/offchip descriptor table atomically; the reusable gfx1013
   profile provisions 160 8K-dword offchip buffers across all four shader
-  engines, and validation rejects ring storage smaller than the encoded
+  engines. The gfx10.3 buffering field uses the global encoded count (`159`),
+  while an explicit 40-buffer per-engine constant documents the distinction
+  from gfx11. Validation rejects ring storage smaller than the encoded
   buffering/granularity requirement
 - `agcGfx1013SetTessellationRings` — emits the four hardware-proven UC ring
   registers with complete buffer preflight

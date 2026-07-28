@@ -21,6 +21,9 @@ AMD PM4 packet ancestry overlap in useful ways.
 - Replaced the tessellation sample's single global HS offchip buffer with an
   Oberon-wide 160-buffer profile: four shader engines, two shader arrays per
   engine, five physical CUs per array, and four workgroups per CU.
+- Mesa's gfx10.3 path confirms that `VGT_HS_OFFCHIP_PARAM` encodes the global
+  count (`159`), unlike gfx11's per-shader-engine interpretation. Public
+  constants and tests preserve the 40-per-engine/160-global distinction.
 - The ring-table builder rejects state whose allocation cannot cover its
   encoded `VGT_HS_OFFCHIP_PARAM`, and the hardware sample derives
   non-overlapping pool offsets from the public ring sizes.
