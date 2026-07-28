@@ -139,11 +139,13 @@ Hardware-validated on real PS5 gfx1013 hardware running FW 5.50:
 - Compute dispatch and no-GS NGG indexed graphics with GPU readback
 - Wave32 NGG and pixel execution, including compiler-record and final-PM4 checks
 - Pipeline-specific HS/TES tessellation offchip-layout packing and independent
-  runtime patching for unequal input/output patch sizes, plus byte-sized hull
-  LDS allocation rounded to gfx10.3's 1024-byte allocation granularity and
-  patched into the resource register's 512-byte encoding by the binder
+  runtime patching for unequal input/output patch sizes
 - Linear standard/alternate-swap RGBA8 UNORM/SRGB, RGB10A2,
   `R11G11B10_FLOAT`, and `R16G16B16A16_FLOAT` render targets
+
+Host-verified and awaiting application-level hardware qualification:
+- Byte-sized hull LDS allocation rounded to gfx10.3's 1024-byte allocation
+  granularity and patched into the resource register's 512-byte encoding
 
 Firmware policy: FW 3.20 is the lowest active compatibility target. FW 1.00
 and 2.x aliases are retained only as archival RE data and are not advertised

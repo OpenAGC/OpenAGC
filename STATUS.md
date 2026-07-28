@@ -630,7 +630,9 @@ bytes and patches `SPI_SHADER_PGM_RSRC2_HS.LDS_SIZE`. Gfx10.3 first rounds the
 allocation to 1024 bytes and then encodes that allocation in 512-byte field
 units, so the reusable binder now emits only legal even field values. This is
 required when the TCS reads VS outputs through the
-separate-stage LS/HS memory ABI. The public layout builder packs pipeline-specific patch
+separate-stage LS/HS memory ABI. That nonzero-LDS rounding is host-verified and
+still awaits application-level hardware qualification. The public layout
+builder packs pipeline-specific patch
 counts, input/output control-point counts, linked VS/TCS output counts,
 primitive mode, and tess-factor reads without exposing register fields to API
 clients. Its typed draw state now accepts the same optional depth-surface
