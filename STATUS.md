@@ -927,10 +927,12 @@ Typed gfx1013 state builders:
   while an explicit 40-buffer per-engine constant documents the distinction
   from gfx11. Validation rejects ring storage smaller than the encoded
   buffering/granularity requirement
-  The first bounded Vulkan FW 5.500.008 run using this profile passed exact
-  hull markers and LDS positions, TES marker and offchip positions, and 7200
-  green pixels (`20260728T043915Z-tessellation-run1.log`). The console remained
-  responsive; one independent qualification run remains pending.
+  Two independent bounded Vulkan FW 5.500.008 runs using this profile passed
+  exact hull markers and LDS positions, TES marker and offchip positions, and
+  7200 green pixels (`20260728T043915Z-tessellation-run1.log` and
+  `20260728T044035Z-tessellation-run1.log`). Both consoles remained responsive,
+  completing hardware qualification of the ring-concurrency profile at this
+  scope.
 - `agcGfx1013SetTessellationRings` — emits the four hardware-proven UC ring
   registers with complete buffer preflight
 - `agcGfx1013SetTessellationContext` — emits the five post-shader CX
