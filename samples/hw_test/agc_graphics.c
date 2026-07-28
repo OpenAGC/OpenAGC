@@ -1182,6 +1182,7 @@ static void setup_tess_shader_stages(
             (uint64_t)(uintptr_t)primitive_back_code,
         .ring_descriptor_address = ring_descriptor_address,
         .tcs_offchip_layout = AGC_GFX1013_TESS_OFFCHIP_LAYOUT,
+        .tes_offchip_layout = AGC_GFX1013_TESS_OFFCHIP_LAYOUT,
         .primitive_type = 9u,
     };
     (void)vertex_table_address;

@@ -623,9 +623,12 @@ retained compiler suite passes, as does the clean OpenAGC generic suite with
 Status: **isolated Wave32 tessellation and TES-to-NGG geometry composition are
 hardware-validated on FW 5.500.008.**
 The reusable gfx1013 binder consumes fused HsFront/HsBack and TES
-GsFront/GsBack records, patches the runtime ring descriptors and
-`VGT_TCS_OFFCHIP_LAYOUT`, and programs the factor/offchip ring state required
-by gfx1013. Its typed draw state now accepts the same optional depth-surface
+GsFront/GsBack records, patches the runtime ring descriptors and distinct HS/TES
+`VGT_TCS_OFFCHIP_LAYOUT` words, and programs the factor/offchip ring state
+required by gfx1013. The public layout builder packs pipeline-specific patch
+counts, input/output control-point counts, linked VS/TCS output counts,
+primitive mode, and tess-factor reads without exposing register fields to API
+clients. Its typed draw state now accepts the same optional depth-surface
 and depth/stencil state as baseline graphics draws, restoring DB state after
 shader binding without exposing register packets to API consumers. FW 5.50
 `sceAgcDriverSetTFRing` takes a 256-byte-aligned ring

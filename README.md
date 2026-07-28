@@ -138,6 +138,8 @@ Hardware-validated on real PS5 gfx1013 hardware running FW 5.50:
 - Native `/dev/gc` initialization, queue setup, default states, and submission
 - Compute dispatch and no-GS NGG indexed graphics with GPU readback
 - Wave32 NGG and pixel execution, including compiler-record and final-PM4 checks
+- Pipeline-specific HS/TES tessellation offchip-layout packing and independent
+  runtime patching for unequal input/output patch sizes
 - Linear standard/alternate-swap RGBA8 UNORM/SRGB, RGB10A2,
   `R11G11B10_FLOAT`, and `R16G16B16A16_FLOAT` render targets
 

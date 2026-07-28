@@ -119,6 +119,7 @@ typedef struct AgcGfx1013Wave32TessVsPsState {
     uint64_t primitive_back_code_address;
     uint64_t ring_descriptor_address;
     uint32_t tcs_offchip_layout;
+    uint32_t tes_offchip_layout;
     uint32_t primitive_type;
 } AgcGfx1013Wave32TessVsPsState;
 
@@ -560,6 +561,16 @@ typedef struct AgcGfx1013TessellationState {
     uint32_t tf_param;
 } AgcGfx1013TessellationState;
 
+typedef struct AgcGfx1013TessellationLayoutState {
+    uint32_t patch_count;
+    uint32_t input_control_points;
+    uint32_t output_control_points;
+    uint32_t vertex_output_count;
+    uint32_t control_output_count;
+    uint32_t primitive_mode;
+    uint32_t tes_reads_tess_factors;
+} AgcGfx1013TessellationLayoutState;
+
 _Static_assert(sizeof(AgcGfx1013TessellationRingTable) == 128,
     "gfx1013 tessellation ring table must be 128 bytes");
 
@@ -745,6 +756,9 @@ int32_t PS5_SYSV_ABI agcGfx1013ValidateResourceTables(
 int32_t PS5_SYSV_ABI agcGfx1013BuildTessellationRingTable(
     AgcGfx1013TessellationRingTable *table,
     const AgcGfx1013TessellationState *state);
+int32_t PS5_SYSV_ABI agcGfx1013BuildTessellationOffchipLayouts(
+    const AgcGfx1013TessellationLayoutState *state,
+    uint32_t *tcs_offchip_layout, uint32_t *tes_offchip_layout);
 int32_t PS5_SYSV_ABI agcGfx1013SetTessellationRings(
     SceAgcCb *cb, const AgcGfx1013TessellationState *state);
 int32_t PS5_SYSV_ABI agcGfx1013SetTessellationContext(

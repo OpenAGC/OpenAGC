@@ -685,6 +685,11 @@ int32_t PS5_SYSV_ABI agcGfx1013ValidateWave32TessVsPs(
             state->primitive_back_code_address) ||
         (state->ring_descriptor_address & 0xfu) != 0u)
         return AGC_ERROR_INVALID_ALIGNMENT;
+    if ((state->tcs_offchip_layout & 0x7fu) == 0u ||
+        (state->tes_offchip_layout & 0x7fu) == 0u ||
+        (state->tcs_offchip_layout & ~(0x1fu << 7u)) !=
+            (state->tes_offchip_layout & ~(0x1fu << 7u)))
+        return AGC_ERROR_VALIDATION_FAILED;
     if ((state->hull.code_address >> 32) !=
             (state->hull_back_code_address >> 32) ||
         (state->primitive.code_address >> 32) !=
@@ -801,7 +806,7 @@ int32_t PS5_SYSV_ABI agcGfx1013BindWave32TessVsPs(
     gs_patches = (AgcGfx1013RuntimePatches){
         state->ring_descriptor_address,
         state->primitive_back_code_address,
-        state->tcs_offchip_layout,
+        state->tes_offchip_layout,
     };
     if (!agcGfx1013EmitShaderPatched(
             cb, &state->hull, hs_program_lo, &hs_patches) ||
@@ -3330,6 +3335,42 @@ static void agcGfx1013BuildRawRingDescriptor(
     words[1] = (uint32_t)(address >> 32u);
     words[2] = size;
     words[3] = AGC_GFX1013_RAW_R32_DESCRIPTOR_WORD3;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013BuildTessellationOffchipLayouts(
+    const AgcGfx1013TessellationLayoutState *state,
+    uint32_t *tcs_offchip_layout, uint32_t *tes_offchip_layout)
+{
+    uint32_t attribute_stride;
+    uint32_t common;
+
+    if (!state || !tcs_offchip_layout || !tes_offchip_layout ||
+        state->patch_count == 0u || state->patch_count > 0x7fu ||
+        state->input_control_points == 0u ||
+        state->input_control_points > 32u ||
+        state->output_control_points == 0u ||
+        state->output_control_points > 32u ||
+        state->vertex_output_count > 0x3fu ||
+        state->control_output_count > 0x3fu ||
+        state->primitive_mode == 0u || state->primitive_mode > 3u ||
+        state->tes_reads_tess_factors > 1u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    attribute_stride =
+        (state->patch_count * state->output_control_points * 16u + 255u) /
+        256u;
+    if (attribute_stride == 0u || attribute_stride > 0x1fu)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    common = state->patch_count |
+        (attribute_stride << 12u) |
+        (state->vertex_output_count << 17u) |
+        (state->control_output_count << 23u) |
+        (state->primitive_mode << 29u) |
+        (state->tes_reads_tess_factors << 31u);
+    *tcs_offchip_layout = common |
+        ((state->input_control_points - 1u) << 7u);
+    *tes_offchip_layout = common |
+        ((state->output_control_points - 1u) << 7u);
+    return AGC_OK;
 }
 
 int32_t PS5_SYSV_ABI agcGfx1013BuildTessellationRingTable(

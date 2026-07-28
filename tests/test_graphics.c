@@ -650,7 +650,8 @@ static void test_gfx1013_wave32_tessellation_binding(void)
     state.hull_back_code_address = 0x0000001234501000ull;
     state.primitive_back_code_address = 0x0000001234601000ull;
     state.ring_descriptor_address = 0x0000001234800000ull;
-    state.tcs_offchip_layout = 0x21042108u;
+    state.tcs_offchip_layout = 0x21022108u;
+    state.tes_offchip_layout = 0x21022188u;
     state.primitive_type = 9u;
 
     agcCbInit(&cb, buffer, sizeof(buffer));
@@ -682,7 +683,7 @@ static void test_gfx1013_wave32_tessellation_binding(void)
         buffer, agcCbUsedDwords(&cb), AGC_PM4_OP_SET_SH_REG,
         AGC_REG_SPI_SHADER_USER_DATA_GS_0 + 11u, &value),
         "TES offchip layout emitted");
-    TEST_ASSERT_EQ(value, state.tcs_offchip_layout,
+    TEST_ASSERT_EQ(value, state.tes_offchip_layout,
         "TES offchip layout patched");
     TEST_ASSERT(find_indexed_register(
         buffer, agcCbUsedDwords(&cb), AGC_PM4_OP_SET_CONTEXT_REG,
@@ -2865,7 +2866,26 @@ static void test_gfx1013_tessellation_state_builders(void)
     };
     const uint32_t factor_slot = AGC_GFX1013_TESS_FACTOR_RING_SLOT * 4u;
     const uint32_t offchip_slot = AGC_GFX1013_TESS_OFFCHIP_RING_SLOT * 4u;
+    const AgcGfx1013TessellationLayoutState layout_state = {
+        .patch_count = 8u,
+        .input_control_points = 3u,
+        .output_control_points = 4u,
+        .vertex_output_count = 1u,
+        .control_output_count = 2u,
+        .primitive_mode = 1u,
+        .tes_reads_tess_factors = 0u,
+    };
+    uint32_t tcs_layout = 0u;
+    uint32_t tes_layout = 0u;
     SceAgcCb cb;
+
+    TEST_ASSERT_EQ(agcGfx1013BuildTessellationOffchipLayouts(
+        &layout_state, &tcs_layout, &tes_layout), AGC_OK,
+        "gfx1013 tessellation offchip layouts build");
+    TEST_ASSERT_EQ(tcs_layout, 0x21022108u,
+        "TCS layout uses input patch size and compiler output counts");
+    TEST_ASSERT_EQ(tes_layout, 0x21022188u,
+        "TES layout uses output patch size independently");
 
     TEST_ASSERT_EQ(agcGfx1013BuildTessellationRingTable(&table, &state),
         AGC_OK, "gfx1013 tessellation ring table builds");
@@ -2923,7 +2943,19 @@ static void test_gfx1013_tessellation_state_rejects_atomically(void)
         .offchip_ring_size = AGC_GFX1013_TESS_OFFCHIP_RING_SIZE,
         .factor_ring_size = AGC_GFX1013_TESS_FACTOR_RING_SIZE,
     };
+    AgcGfx1013TessellationLayoutState layout_state = {0};
+    uint32_t tcs_layout = 0x11111111u;
+    uint32_t tes_layout = 0x22222222u;
     SceAgcCb cb;
+
+    TEST_ASSERT_EQ(agcGfx1013BuildTessellationOffchipLayouts(
+        &layout_state, &tcs_layout, &tes_layout),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "empty tessellation offchip layout rejects");
+    TEST_ASSERT_EQ(tcs_layout, 0x11111111u,
+        "invalid TCS layout preserves output");
+    TEST_ASSERT_EQ(tes_layout, 0x22222222u,
+        "invalid TES layout preserves output");
 
     TEST_ASSERT_EQ(agcGfx1013BuildTessellationRingTable(&table, &state),
         AGC_ERROR_INVALID_ALIGNMENT, "unaligned tessellation ring rejects");
