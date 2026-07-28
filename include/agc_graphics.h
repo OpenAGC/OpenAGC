@@ -620,6 +620,8 @@ typedef struct AgcGfx1013TessDrawState {
     AgcGfx1013Wave32TessVsPsState shaders;
     const AgcGfx1013FrameState *frame;
     const AgcGfx1013TessellationState *tessellation;
+    const AgcGfx1013DepthSurfaceState *depth_surface_state;
+    const AgcGfx1013DepthStencilState *depth_stencil_state;
     const AgcGfx1013ResourceTableBinding *hull_resource_tables;
     uint32_t num_hull_resource_tables;
     const AgcGfx1013ResourceTableBinding *primitive_resource_tables;

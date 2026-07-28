@@ -845,6 +845,34 @@ int32_t PS5_SYSV_ABI agcGfx1013DrawTessIndexAuto(
         if (error != AGC_OK)
             return error;
     }
+    if (state->depth_surface_state) {
+        uint32_t storage[AGC_GFX1013_DEPTH_SURFACE_DWORDS];
+        SceAgcCb validation_cb;
+        agcCbInit(&validation_cb, storage, sizeof(storage));
+        error = agcGfx1013SetDepthSurface(
+            &validation_cb, state->depth_surface_state);
+        if (error != AGC_OK)
+            return error;
+    }
+    if (state->depth_stencil_state) {
+        const AgcGfx1013DepthStencilState *depth =
+            state->depth_stencil_state;
+        if (depth->depth_test_enable > 1u ||
+            depth->depth_write_enable > 1u ||
+            depth->depth_bounds_enable > 1u ||
+            depth->stencil_test_enable > 1u ||
+            depth->back_face_enable > 1u ||
+            depth->depth_compare_operation >= AGC_GFX1013_COMPARE_COUNT ||
+            (depth->depth_write_enable && !depth->depth_test_enable) ||
+            (depth->depth_bounds_enable && !depth->depth_test_enable) ||
+            (depth->back_face_enable && !depth->stencil_test_enable) ||
+            !(depth->min_depth_bounds >= 0.0f &&
+              depth->max_depth_bounds <= 1.0f &&
+              depth->min_depth_bounds <= depth->max_depth_bounds) ||
+            !agcGfx1013StencilFaceValid(&depth->front) ||
+            !agcGfx1013StencilFaceValid(&depth->back))
+            return AGC_ERROR_INVALID_ARGUMENT;
+    }
     error = agcGfx1013ValidateTessellationState(state->tessellation);
     if (error != AGC_OK)
         return error;
@@ -885,6 +913,10 @@ int32_t PS5_SYSV_ABI agcGfx1013DrawTessIndexAuto(
          state->num_post_bind_uc_registers) * 3u;
     if (state->frame)
         required_dwords += AGC_GFX1013_FRAME_POST_BIND_DWORDS;
+    if (state->depth_surface_state)
+        required_dwords += AGC_GFX1013_DEPTH_SURFACE_DWORDS;
+    if (state->depth_stencil_state)
+        required_dwords += AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS;
     if (agcCbRemainingDwords(cb) < required_dwords)
         return AGC_ERROR_BUFFER_TOO_SMALL;
 
@@ -912,6 +944,14 @@ int32_t PS5_SYSV_ABI agcGfx1013DrawTessIndexAuto(
         return AGC_ERROR_INTERNAL;
     if (state->frame &&
         agcGfx1013ApplyFramePostBind(cb, state->frame) != AGC_OK)
+        return AGC_ERROR_INTERNAL;
+    if (state->depth_surface_state &&
+        agcGfx1013SetDepthSurface(
+            cb, state->depth_surface_state) != AGC_OK)
+        return AGC_ERROR_INTERNAL;
+    if (state->depth_stencil_state &&
+        agcGfx1013SetDepthStencilState(
+            cb, state->depth_stencil_state) != AGC_OK)
         return AGC_ERROR_INTERNAL;
     for (i = 0u; i < state->num_post_bind_sh_registers; ++i) {
         if (!sceAgcCbSetShRegistersDirect(

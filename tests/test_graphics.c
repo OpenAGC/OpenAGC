@@ -727,11 +727,19 @@ static void test_gfx1013_wave32_tessellation_binding(void)
         0x0000000202702000ull,
     };
     const AgcRegisterValue post_cx = {AGC_REG_DB_DEPTH_CONTROL, 0u};
+    const AgcGfx1013DepthStencilState depth_stencil = {
+        .depth_test_enable = 1u,
+        .depth_write_enable = 1u,
+        .depth_compare_operation = AGC_GFX1013_COMPARE_LESS,
+        .min_depth_bounds = 0.0f,
+        .max_depth_bounds = 1.0f,
+    };
     const AgcGfx1013FrameState frame = make_frame_state();
     AgcGfx1013TessDrawState draw = {
         .shaders = state,
         .frame = &frame,
         .tessellation = &tessellation,
+        .depth_stencil_state = &depth_stencil,
         .hull_resource_tables = &hull_table,
         .num_hull_resource_tables = 1u,
         .pixel_resource_tables = &pixel_table,
@@ -746,7 +754,8 @@ static void test_gfx1013_wave32_tessellation_binding(void)
     agcCbReset(&cb, buffer, sizeof(buffer));
     TEST_ASSERT_EQ(agcGfx1013DrawTessIndexAuto(&cb, &draw), AGC_OK,
         "gfx1013 tessellation draw composes");
-    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 131u,
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb),
+        131u + AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS,
         "gfx1013 tessellation draw exact dword count");
     TEST_ASSERT(find_last_register(buffer, agcCbUsedDwords(&cb),
         AGC_PM4_OP_SET_SH_REG, 0x220u, &value),
@@ -767,14 +776,26 @@ static void test_gfx1013_wave32_tessellation_binding(void)
         "tessellation frame depth follows tessellation context");
     TEST_ASSERT_EQ(buffer[100], AGC_REG_DB_DEPTH_INFO,
         "tessellation frame depth register order");
-    TEST_ASSERT_EQ(agcPm4Opcode(buffer[126]), AGC_PM4_OP_NUM_INSTANCES,
+    TEST_ASSERT(find_last_register(buffer, agcCbUsedDwords(&cb),
+        AGC_PM4_OP_SET_CONTEXT_REG, AGC_REG_DB_DEPTH_CONTROL, &value),
+        "tessellation depth control emitted");
+    TEST_ASSERT_EQ(value, 0u,
+        "caller post-bind depth override follows typed depth state");
+    TEST_ASSERT_EQ(agcPm4Opcode(
+        buffer[126u + AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS]),
+        AGC_PM4_OP_NUM_INSTANCES,
         "tessellation draw instance packet order");
-    TEST_ASSERT_EQ(buffer[127], 1u, "tessellation draw instance count");
-    TEST_ASSERT_EQ(agcPm4Opcode(buffer[128]), AGC_PM4_OP_DRAW_INDEX_AUTO,
+    TEST_ASSERT_EQ(buffer[127u + AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS], 1u,
+        "tessellation draw instance count");
+    TEST_ASSERT_EQ(agcPm4Opcode(
+        buffer[128u + AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS]),
+        AGC_PM4_OP_DRAW_INDEX_AUTO,
         "tessellation draw packet order");
-    TEST_ASSERT_EQ(buffer[129], 3u, "tessellation draw vertex count");
+    TEST_ASSERT_EQ(buffer[129u + AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS], 3u,
+        "tessellation draw vertex count");
 
-    agcCbReset(&cb, buffer, 130u * sizeof(uint32_t));
+    agcCbReset(&cb, buffer,
+        (130u + AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS) * sizeof(uint32_t));
     TEST_ASSERT_EQ(agcGfx1013DrawTessIndexAuto(&cb, &draw),
         AGC_ERROR_BUFFER_TOO_SMALL, "short tessellation draw rejects");
     TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,

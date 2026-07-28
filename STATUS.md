@@ -625,7 +625,10 @@ hardware-validated on FW 5.500.008.**
 The reusable gfx1013 binder consumes fused HsFront/HsBack and TES
 GsFront/GsBack records, patches the runtime ring descriptors and
 `VGT_TCS_OFFCHIP_LAYOUT`, and programs the factor/offchip ring state required
-by gfx1013. FW 5.50 `sceAgcDriverSetTFRing` takes a 256-byte-aligned ring
+by gfx1013. Its typed draw state now accepts the same optional depth-surface
+and depth/stencil state as baseline graphics draws, restoring DB state after
+shader binding without exposing register packets to API consumers. FW 5.50
+`sceAgcDriverSetTFRing` takes a 256-byte-aligned ring
 address and a dword-aligned size, clamps the size to `0x4000`, and submits the
 16-byte `{uint64_t ring_addr, uint32_t size, uint32_t reserved}` payload with
 ioctl `0x80108128`. The similarly named Direct export is a permission stub and
