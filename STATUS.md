@@ -1403,7 +1403,11 @@ remain host-encoded and Prospero-compiled but await real PS5 qualification.
 
 Typed gfx1013 blend, depth bias, and depth/stencil state is host-complete. The blend builder
 programs all eight MRT controls deterministically, packs per-target RGBA write
-masks, and emits four blend constants in one atomic 19-dword group. The
+masks, emits four blend constants, and now programs `CB_COLOR_CONTROL` in one
+atomic 22-dword group. Its typed logic-operation selector maps all 16 standard
+Boolean operations to exact gfx1013 ROP3 truth tables; disabled logic state
+restores COPY deterministically. Exact tests cover every mapping plus invalid
+and short-buffer rejection. The
 depth-bias builder selects D16 or D32 hardware scaling, writes the clamp plus
 front/back slope and constant factors in one atomic 10-dword group, and exposes
 the typed front/back raster-enable mask. The

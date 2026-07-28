@@ -88,7 +88,7 @@ extern "C" {
 #define AGC_GFX1013_FRAME_PROLOGUE_BASE_DWORDS  2275u
 #define AGC_GFX1013_FRAME_PROLOGUE_DWORDS       2471u
 #define AGC_GFX1013_FRAME_POST_BIND_DWORDS        24u
-#define AGC_GFX1013_BLEND_STATE_DWORDS            19u
+#define AGC_GFX1013_BLEND_STATE_DWORDS            22u
 #define AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS    14u
 #define AGC_GFX1013_DEPTH_BIAS_STATE_DWORDS       10u
 #define AGC_GFX1013_DEPTH_BIAS_RASTER_MODE         0x00001800u
@@ -205,6 +205,26 @@ typedef enum AgcGfx1013BlendOp {
     AGC_GFX1013_BLEND_OP_COUNT = 5
 } AgcGfx1013BlendOp;
 
+typedef enum AgcGfx1013LogicOp {
+    AGC_GFX1013_LOGIC_CLEAR = 0,
+    AGC_GFX1013_LOGIC_AND = 1,
+    AGC_GFX1013_LOGIC_AND_REVERSE = 2,
+    AGC_GFX1013_LOGIC_COPY = 3,
+    AGC_GFX1013_LOGIC_AND_INVERTED = 4,
+    AGC_GFX1013_LOGIC_NO_OP = 5,
+    AGC_GFX1013_LOGIC_XOR = 6,
+    AGC_GFX1013_LOGIC_OR = 7,
+    AGC_GFX1013_LOGIC_NOR = 8,
+    AGC_GFX1013_LOGIC_EQUIVALENT = 9,
+    AGC_GFX1013_LOGIC_INVERT = 10,
+    AGC_GFX1013_LOGIC_OR_REVERSE = 11,
+    AGC_GFX1013_LOGIC_COPY_INVERTED = 12,
+    AGC_GFX1013_LOGIC_OR_INVERTED = 13,
+    AGC_GFX1013_LOGIC_NAND = 14,
+    AGC_GFX1013_LOGIC_SET = 15,
+    AGC_GFX1013_LOGIC_OP_COUNT = 16
+} AgcGfx1013LogicOp;
+
 typedef struct AgcGfx1013ColorBlendTargetState {
     uint32_t enable;
     AgcGfx1013BlendFactor color_source;
@@ -220,6 +240,8 @@ typedef struct AgcGfx1013ColorBlendTargetState {
 typedef struct AgcGfx1013ColorBlendState {
     uint32_t target_count;
     AgcGfx1013ColorBlendTargetState targets[AGC_GFX1013_MAX_COLOR_TARGETS];
+    uint32_t logic_enable;
+    AgcGfx1013LogicOp logic_operation;
     float constants[4];
 } AgcGfx1013ColorBlendState;
 

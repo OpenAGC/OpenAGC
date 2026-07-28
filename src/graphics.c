@@ -2494,13 +2494,22 @@ static bool agcGfx1013StencilOpValid(AgcGfx1013StencilOp operation)
 int32_t PS5_SYSV_ABI agcGfx1013SetColorBlendState(
     SceAgcCb *cb, const AgcGfx1013ColorBlendState *state)
 {
+    static const uint8_t rop3[AGC_GFX1013_LOGIC_OP_COUNT] = {
+        0x00u, 0x88u, 0x44u, 0xccu,
+        0x22u, 0xaau, 0x66u, 0xeeu,
+        0x11u, 0x99u, 0x55u, 0xddu,
+        0x33u, 0xbbu, 0x77u, 0xffu,
+    };
     uint32_t controls[AGC_GFX1013_MAX_COLOR_TARGETS] = {0};
     uint32_t target_mask = 0u;
+    uint32_t color_control;
     uint32_t *cmd;
     uint32_t i;
 
     if (!cb || !state || state->target_count == 0u ||
-        state->target_count > AGC_GFX1013_MAX_COLOR_TARGETS)
+        state->target_count > AGC_GFX1013_MAX_COLOR_TARGETS ||
+        state->logic_enable > 1u ||
+        state->logic_operation >= AGC_GFX1013_LOGIC_OP_COUNT)
         return AGC_ERROR_INVALID_ARGUMENT;
     for (i = 0u; i < state->target_count; ++i) {
         const AgcGfx1013ColorBlendTargetState *target = &state->targets[i];
@@ -2549,6 +2558,12 @@ int32_t PS5_SYSV_ABI agcGfx1013SetColorBlendState(
     cmd[1] = AGC_REG_CB_BLEND_RED;
     for (i = 0u; i < 4u; ++i)
         cmd[i + 2u] = agcGfx1013FloatBits(state->constants[i]);
+    color_control = (1u << AGC_REG_CB_COLOR_CONTROL_MODE_SHIFT) |
+        ((uint32_t)(state->logic_enable ? rop3[state->logic_operation] :
+            rop3[AGC_GFX1013_LOGIC_COPY]) <<
+            AGC_REG_CB_COLOR_CONTROL_ROP3_SHIFT);
+    if (!agcGfx1013EmitCx(cb, AGC_REG_CB_COLOR_CONTROL, color_control))
+        return AGC_ERROR_INTERNAL;
     return AGC_OK;
 }
 

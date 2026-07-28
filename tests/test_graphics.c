@@ -1518,6 +1518,14 @@ static void test_gfx1013_blend_depth_stencil_packets(void)
         agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 6u),
         AGC_REG_CB_BLEND_RED,
         0x3e800000u, 0x3f000000u, 0x3f400000u, 0x3f800000u,
+        agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
+        AGC_REG_CB_COLOR_CONTROL, 0x00cc0010u,
+    };
+    const uint8_t expected_rop3[AGC_GFX1013_LOGIC_OP_COUNT] = {
+        0x00u, 0x88u, 0x44u, 0xccu,
+        0x22u, 0xaau, 0x66u, 0xeeu,
+        0x11u, 0x99u, 0x55u, 0xddu,
+        0x33u, 0xbbu, 0x77u, 0xffu,
     };
     const uint32_t expected_depth[AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS] = {
         agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
@@ -1577,6 +1585,19 @@ static void test_gfx1013_blend_depth_stencil_packets(void)
         "gfx1013 blend exact dword count");
     TEST_ASSERT(memcmp(buffer, expected_blend, sizeof(expected_blend)) == 0,
         "gfx1013 blend exact packet stream");
+    blend.logic_enable = 1u;
+    for (uint32_t operation = 0u;
+         operation < AGC_GFX1013_LOGIC_OP_COUNT; ++operation) {
+        blend.logic_operation = (AgcGfx1013LogicOp)operation;
+        agcCbReset(&cb, buffer, sizeof(buffer));
+        TEST_ASSERT_EQ(agcGfx1013SetColorBlendState(&cb, &blend), AGC_OK,
+            "gfx1013 logic operation emits");
+        TEST_ASSERT_EQ(buffer[AGC_GFX1013_BLEND_STATE_DWORDS - 1u],
+            ((uint32_t)expected_rop3[operation] << 16u) | 0x10u,
+            "gfx1013 logic operation exact ROP3");
+    }
+    blend.logic_enable = 0u;
+    blend.logic_operation = AGC_GFX1013_LOGIC_CLEAR;
 
     TEST_ASSERT_EQ(AGC_GFX1013_DEPTH_BIAS_RASTER_MODE, 0x00001800u,
         "gfx1013 depth-bias front/back enable mask");
@@ -1647,6 +1668,13 @@ static void test_gfx1013_blend_depth_stencil_packets(void)
     TEST_ASSERT_EQ(agcGfx1013SetColorBlendState(&cb, &blend),
         AGC_ERROR_INVALID_ARGUMENT, "invalid blend mask rejects");
     TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u, "invalid blend is atomic");
+    blend.targets[0].write_mask = 0xfu;
+    blend.logic_operation = AGC_GFX1013_LOGIC_OP_COUNT;
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetColorBlendState(&cb, &blend),
+        AGC_ERROR_INVALID_ARGUMENT, "invalid logic operation rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "invalid logic operation is atomic");
 
     agcCbReset(&cb, buffer,
         (AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS - 1u) * sizeof(uint32_t));
