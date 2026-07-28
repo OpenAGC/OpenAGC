@@ -473,12 +473,10 @@ static void test_gfx1013_indexed_indirect_draw_wrappers(void)
     indirect.index_buffer_count = 64u;
     indirect.draw_count = 3u;
     indirect.stride = 20u;
-    indirect.draw_index_location = 7u;
-    indirect.draw_index_enable = 1u;
     agcCbInit(&cb, buffer, sizeof(buffer));
     TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndirect(&cb, &indirect), AGC_OK,
         "gfx1013 indexed multi-indirect wrapper succeeds");
-    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 58u,
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 55u,
         "gfx1013 indexed multi-indirect exact dword count");
     TEST_ASSERT_EQ(agcPm4Opcode(buffer[36]), AGC_PM4_OP_SET_INDEX_SIZE,
         "gfx1013 indexed indirect index type precedes buffer");
@@ -489,18 +487,12 @@ static void test_gfx1013_indexed_indirect_draw_wrappers(void)
     TEST_ASSERT_EQ(agcPm4Opcode(buffer[48]),
         AGC_PM4_OP_DRAW_INDEX_INDIRECT_MULTI,
         "gfx1013 indexed multi-indirect draw opcode");
-    TEST_ASSERT_EQ(buffer[52], 0x80000007u,
-        "gfx1013 indexed multi-indirect draw-index control");
-    TEST_ASSERT_EQ(buffer[53], 3u,
+    TEST_ASSERT_EQ(buffer[52], 3u,
         "gfx1013 indexed multi-indirect draw count");
-    TEST_ASSERT_EQ(buffer[54], 0u,
-        "gfx1013 indexed multi-indirect count address low disabled");
-    TEST_ASSERT_EQ(buffer[55], 0u,
-        "gfx1013 indexed multi-indirect count address high disabled");
-    TEST_ASSERT_EQ(buffer[56], 20u,
+    TEST_ASSERT_EQ(buffer[53], 20u,
         "gfx1013 indexed multi-indirect stride");
 
-    agcCbInit(&cb, buffer, 57u * sizeof(uint32_t));
+    agcCbInit(&cb, buffer, 54u * sizeof(uint32_t));
     TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndirect(&cb, &indirect),
         AGC_ERROR_BUFFER_TOO_SMALL,
         "gfx1013 indexed multi-indirect short buffer rejects");
@@ -511,12 +503,13 @@ static void test_gfx1013_indexed_indirect_draw_wrappers(void)
     TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndirect(&cb, &indirect),
         AGC_ERROR_INVALID_ARGUMENT,
         "gfx1013 indexed multi-indirect short stride rejects");
-    indirect.draw_count = 1u;
     indirect.stride = 20u;
+    indirect.draw_index_location = 7u;
+    indirect.draw_index_enable = 1u;
     agcCbInit(&cb, buffer, sizeof(buffer));
     TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndirect(&cb, &indirect),
         AGC_ERROR_INVALID_ARGUMENT,
-        "gfx1013 single indirect rejects draw-index packet control");
+        "gfx1013 indirect rejects unqualified draw-index packet control");
 }
 
 static void test_gfx1013_wave32_rejects_but_generic_accepts_wave64(void)

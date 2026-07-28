@@ -366,19 +366,17 @@ using canonical control value zero passed, and an exact host assertion now
 locks that header. Full evidence is in
 `analysis/fw550_indexed_indirect_qualification_20260727.md`.
 
-The later Vulkan multi-draw audit found that the recovered low-level
-`DRAW_{INDEX_,}INDIRECT_MULTI` builders still used a 7-dword legacy layout.
-That contradicted both the native `2*helper+10` GetSize model and Mesa's gfx10+
-packet definition: word 4 is DrawIndex location/control, words 6-7 are the
-optional count address, and stride/initiator are words 8-9. OpenAGC now emits
-the complete 10-dword fixed-count form with a disabled count address. The typed
-gfx1013 wrapper additionally validates and encodes optional DrawIndex location
-and enable state; single-draw packets reject that multi-only control. Exact
-low-level and typed fixtures lock all ten words, the updated 58-dword indexed
-multi stream, buffer atomicity, and invalid control. The complete CMake host
-suite and Prospero library build pass. Existing single-indirect hardware
-qualification remains valid; the corrected multi packet still requires its
-own bounded FW 5.50 gate.
+The later Vulkan multi-draw audit compared the recovered 7-dword PS5 packet
+against Mesa's 10-dword gfx10+ definition. A bounded FW 5.50 run on 2026-07-28
+tested the 10-dword form and failed at submission: PID 156 received a fatal GPU
+signal, the graphics queue remained active, and the kernel reset the GPU. The
+console recovered, but this disproved that cross-platform packet assumption.
+OpenAGC therefore retains the earlier 7-dword PS5 form, which had already
+passed multi-indirect readback on FW 5.50. The typed DrawIndex fields remain
+reserved and are rejected when nonzero; Vulkan consumers can implement
+DrawIndex by issuing single indirect packets with explicit user-SGPR values.
+Exact low-level and typed fixtures again lock the 7-dword/55-dword streams and
+reject unqualified DrawIndex controls.
 
 ## FW 5.50 combined stencil/HTILE expclear qualification (2026-07-27)
 

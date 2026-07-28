@@ -633,6 +633,7 @@ typedef struct AgcGfx1013IndirectDrawState {
     uint32_t stride;
     uint32_t base_vertex_location;
     uint32_t start_instance_location;
+    /* Reserved until a PS5 DrawIndex packet encoding is hardware-qualified. */
     uint32_t draw_index_location;
     uint32_t draw_index_enable;
     uint32_t draw_initiator;
