@@ -685,6 +685,11 @@ int32_t PS5_SYSV_ABI agcGfx1013DrawBaselineIndexed(
     SceAgcCb *cb, const AgcGfx1013IndexedDrawState *state);
 int32_t PS5_SYSV_ABI agcGfx1013DrawBaselineIndirect(
     SceAgcCb *cb, const AgcGfx1013IndirectDrawState *state);
+/* Records one or more raw Ariel DMA_DATA packets for a GPU buffer copy.
+ * Vulkan-compatible source, destination, and size alignment is four bytes. */
+int32_t PS5_SYSV_ABI agcGfx1013CopyBuffer(
+    SceAgcCb *cb, uint64_t source_address, uint64_t destination_address,
+    uint64_t byte_count);
 int32_t PS5_SYSV_ABI agcGfx1013DrawTessIndexAuto(
     SceAgcCb *cb, const AgcGfx1013TessDrawState *state);
 int32_t PS5_SYSV_ABI agcGfx1013SignalEopFence(

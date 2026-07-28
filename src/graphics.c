@@ -680,6 +680,43 @@ int32_t PS5_SYSV_ABI agcGfx1013DrawBaselineIndirect(
     return AGC_OK;
 }
 
+int32_t PS5_SYSV_ABI agcGfx1013CopyBuffer(
+    SceAgcCb *cb, uint64_t source_address, uint64_t destination_address,
+    uint64_t byte_count)
+{
+    const uint64_t address_limit = UINT64_C(1) << 48u;
+    const uint64_t maximum_packet_bytes = UINT64_C(0xfffffffc);
+
+    if (!cb || source_address == 0u || destination_address == 0u ||
+        byte_count == 0u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (((source_address | destination_address | byte_count) & 3u) != 0u)
+        return AGC_ERROR_INVALID_ALIGNMENT;
+    if (source_address >= address_limit || destination_address >= address_limit ||
+        byte_count > address_limit - source_address ||
+        byte_count > address_limit - destination_address)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    uint64_t packet_count = byte_count / maximum_packet_bytes +
+        (byte_count % maximum_packet_bytes != 0u);
+    if (packet_count > UINT32_MAX / 8u ||
+        agcCbRemainingDwords(cb) < (uint32_t)packet_count * 8u)
+        return AGC_ERROR_BUFFER_TOO_SMALL;
+
+    while (byte_count != 0u) {
+        uint32_t packet_bytes = byte_count > maximum_packet_bytes ?
+            (uint32_t)maximum_packet_bytes : (uint32_t)byte_count;
+        uint32_t *packet = agcCbAllocDwords(cb, 8u);
+        if (!packet || sceAgcAcbDmaData(packet, 8u, source_address,
+                destination_address, packet_bytes, 0u, 0u) != 8)
+            return AGC_ERROR_INTERNAL;
+        source_address += packet_bytes;
+        destination_address += packet_bytes;
+        byte_count -= packet_bytes;
+    }
+    return AGC_OK;
+}
+
 int32_t PS5_SYSV_ABI agcGfx1013ValidateWave32TessVsPs(
     const AgcGfx1013Wave32TessVsPsState *state)
 {

@@ -542,6 +542,59 @@ static void test_gfx1013_wave32_rejects_but_generic_accepts_wave64(void)
         "gfx1013 generic binding accepts Wave64 primitive");
 }
 
+static void test_gfx1013_buffer_copy_packets(void)
+{
+    uint32_t buffer[16] = {0};
+    SceAgcCb cb;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+
+    TEST_ASSERT_EQ(agcGfx1013CopyBuffer(&cb,
+        UINT64_C(0x200010000), UINT64_C(0x200020000), 0x100u), AGC_OK,
+        "gfx1013 buffer copy succeeds");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 8u,
+        "gfx1013 buffer copy exact dword count");
+    TEST_ASSERT_EQ(agcPm4Opcode(buffer[0]), AGC_PM4_OP_DMA_DATA,
+        "gfx1013 buffer copy uses raw DMA_DATA");
+    TEST_ASSERT_EQ(buffer[1], 0u,
+        "gfx1013 buffer copy disables byte swapping");
+    TEST_ASSERT_EQ(buffer[2], 0x100u,
+        "gfx1013 buffer copy byte count");
+    TEST_ASSERT_EQ(buffer[3], 0x00020000u,
+        "gfx1013 buffer copy destination low");
+    TEST_ASSERT_EQ(buffer[4], 2u,
+        "gfx1013 buffer copy destination high");
+    TEST_ASSERT_EQ(buffer[5], 0x00010000u,
+        "gfx1013 buffer copy source low");
+    TEST_ASSERT_EQ(buffer[6], 2u,
+        "gfx1013 buffer copy source high");
+    TEST_ASSERT_EQ(buffer[7], 0u,
+        "gfx1013 buffer copy reserved word");
+
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013CopyBuffer(&cb,
+        UINT64_C(0x200010000), UINT64_C(0x200020000),
+        UINT64_C(0x100000000)), AGC_OK,
+        "gfx1013 large buffer copy splits into packets");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 16u,
+        "gfx1013 split buffer copy exact dword count");
+    TEST_ASSERT_EQ(buffer[2], 0xfffffffcu,
+        "gfx1013 split buffer copy first packet maximum");
+    TEST_ASSERT_EQ(buffer[10], 4u,
+        "gfx1013 split buffer copy remainder");
+
+    agcCbInit(&cb, buffer, 7u * sizeof(uint32_t));
+    TEST_ASSERT_EQ(agcGfx1013CopyBuffer(&cb,
+        UINT64_C(0x200010000), UINT64_C(0x200020000), 4u),
+        AGC_ERROR_BUFFER_TOO_SMALL,
+        "gfx1013 buffer copy rejects short command buffer");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "gfx1013 short buffer rejection is atomic");
+    TEST_ASSERT_EQ(agcGfx1013CopyBuffer(&cb,
+        UINT64_C(0x200010002), UINT64_C(0x200020000), 4u),
+        AGC_ERROR_INVALID_ALIGNMENT,
+        "gfx1013 buffer copy rejects unaligned source");
+}
+
 static void test_gfx1013_wave32_rejects_small_buffer_atomically(void)
 {
     uint32_t buffer[16] = {0};
@@ -3181,6 +3234,7 @@ void test_suite_graphics(void)
     TEST_RUN(test_gfx1013_wave32_vs_ps_binding);
     TEST_RUN(test_gfx1013_baseline_draw_wrapper);
     TEST_RUN(test_gfx1013_indexed_indirect_draw_wrappers);
+    TEST_RUN(test_gfx1013_buffer_copy_packets);
     TEST_RUN(test_gfx1013_wave32_rejects_but_generic_accepts_wave64);
     TEST_RUN(test_gfx1013_wave32_rejects_small_buffer_atomically);
     TEST_RUN(test_gfx1013_wave32_tessellation_binding);

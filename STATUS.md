@@ -378,6 +378,18 @@ DrawIndex by issuing single indirect packets with explicit user-SGPR values.
 Exact low-level and typed fixtures again lock the 7-dword/55-dword streams and
 reject unqualified DrawIndex controls.
 
+## Application-facing buffer-copy composition (2026-07-28)
+
+`agcGfx1013CopyBuffer` now hides the raw Ariel `DMA_DATA` encoding behind an
+application-neutral gfx1013 API for higher-level drivers. It accepts aligned
+48-bit source/destination ranges, splits transfers at the packet byte-count
+limit, and preflights all required DCB space so a short buffer is rejected
+without partial emission. Exact host fixtures cover the single-packet stream,
+a transfer just over 4 GiB split into two packets, alignment rejection, and
+atomic short-buffer failure. The complete host suite and the Prospero static
+library build pass; Vulkan-level copy semantics and hardware readback remain
+the consumer's next qualification step.
+
 ## FW 5.50 combined stencil/HTILE expclear qualification (2026-07-27)
 
 Combined D32+S8 HTILE expclear is enabled after independent qualification on a
