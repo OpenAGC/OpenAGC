@@ -2914,13 +2914,13 @@ static void test_gfx1013_tessellation_state_builders(void)
         "tess factor descriptor address low");
     TEST_ASSERT_EQ(table.words[factor_slot + 1u], 2u,
         "tess factor descriptor address high");
-    TEST_ASSERT_EQ(table.words[factor_slot + 2u], 0x10000u,
+    TEST_ASSERT_EQ(table.words[factor_slot + 2u], 0x1e000u,
         "tess factor descriptor size");
     TEST_ASSERT_EQ(table.words[factor_slot + 3u], 0x31016facu,
         "tess factor descriptor controls");
     TEST_ASSERT_EQ(table.words[offchip_slot], 0x02610000u,
         "tess offchip descriptor address low");
-    TEST_ASSERT_EQ(table.words[offchip_slot + 2u], 0x8000u,
+    TEST_ASSERT_EQ(table.words[offchip_slot + 2u], 0x500000u,
         "tess offchip descriptor size");
     TEST_ASSERT_EQ(table.words[0], 0u,
         "unused tessellation table slots clear");
@@ -2932,8 +2932,12 @@ static void test_gfx1013_tessellation_state_builders(void)
         "tessellation ring state exact dword count");
     TEST_ASSERT_EQ(buffer[1], AGC_REG_VGT_TF_RING_SIZE,
         "tessellation factor ring size register");
-    TEST_ASSERT_EQ(buffer[2], 0x4000u,
+    TEST_ASSERT_EQ(buffer[2], 0x7800u,
         "tessellation factor ring size in dwords");
+    TEST_ASSERT_EQ(buffer[4], AGC_REG_VGT_HS_OFFCHIP_PARAM,
+        "tessellation offchip buffering register");
+    TEST_ASSERT_EQ(buffer[5], 159u,
+        "tessellation provisions four workgroups per physical CU");
     TEST_ASSERT_EQ(buffer[7], AGC_REG_VGT_TF_MEMORY_BASE,
         "tessellation factor base register");
     TEST_ASSERT_EQ(buffer[8], 0x02026180u,
@@ -2963,6 +2967,7 @@ static void test_gfx1013_tessellation_state_rejects_atomically(void)
         .factor_ring_address = 0x0000000202618000ull,
         .offchip_ring_size = AGC_GFX1013_TESS_OFFCHIP_RING_SIZE,
         .factor_ring_size = AGC_GFX1013_TESS_FACTOR_RING_SIZE,
+        .offchip_param = AGC_GFX1013_TESS_OFFCHIP_PARAM,
     };
     AgcGfx1013TessellationLayoutState layout_state = {0};
     uint32_t tcs_layout = 0x11111111u;
@@ -2983,6 +2988,13 @@ static void test_gfx1013_tessellation_state_rejects_atomically(void)
     TEST_ASSERT_EQ(table.words[0], 1u,
         "invalid tessellation table preserves output");
     state.offchip_ring_address--;
+    state.offchip_ring_size = AGC_GFX1013_TESS_OFFCHIP_RING_SIZE - 4u;
+    TEST_ASSERT_EQ(agcGfx1013BuildTessellationRingTable(&table, &state),
+        AGC_ERROR_VALIDATION_FAILED,
+        "undersized offchip ring rejects its buffering profile");
+    TEST_ASSERT_EQ(table.words[0], 1u,
+        "undersized offchip ring preserves output");
+    state.offchip_ring_size = AGC_GFX1013_TESS_OFFCHIP_RING_SIZE;
     agcCbInit(&cb, buffer, 11u * sizeof(uint32_t));
     TEST_ASSERT_EQ(agcGfx1013SetTessellationRings(&cb, &state),
         AGC_ERROR_BUFFER_TOO_SMALL, "short tessellation ring state rejects");

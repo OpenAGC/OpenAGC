@@ -3353,6 +3353,10 @@ int32_t PS5_SYSV_ABI agcGfx1013BindResourceTables(
 static int32_t agcGfx1013ValidateTessellationState(
     const AgcGfx1013TessellationState *state)
 {
+    uint32_t offchip_granularity;
+    uint32_t offchip_buffers;
+    uint64_t required_offchip_size;
+
     if (!state || state->offchip_ring_address == 0u ||
         state->factor_ring_address == 0u ||
         state->offchip_ring_size == 0u || state->factor_ring_size == 0u ||
@@ -3364,6 +3368,15 @@ static int32_t agcGfx1013ValidateTessellationState(
         return AGC_ERROR_INVALID_ALIGNMENT;
     if ((state->offchip_ring_address >> 48u) != 0u ||
         (state->factor_ring_address >> 48u) != 0u)
+        return AGC_ERROR_VALIDATION_FAILED;
+    offchip_granularity =
+        AGC_GFX1013_TESS_OFFCHIP_BUFFER_DWORDS >>
+        ((state->offchip_param >> 10u) & 3u);
+    offchip_buffers = (state->offchip_param & 0x3ffu) + 1u;
+    required_offchip_size =
+        (uint64_t)offchip_granularity * 4u * offchip_buffers;
+    if ((state->offchip_param & ~0xfffu) != 0u ||
+        state->offchip_ring_size < required_offchip_size)
         return AGC_ERROR_VALIDATION_FAILED;
     return AGC_OK;
 }

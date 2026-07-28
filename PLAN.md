@@ -16,6 +16,17 @@ AMD PM4 packet ancestry overlap in useful ways.
 
 ## Current Execution Order
 
+### Gfx1013 tessellation offchip concurrency gate
+
+- Replaced the tessellation sample's single global HS offchip buffer with an
+  Oberon-wide 160-buffer profile: four shader engines, two shader arrays per
+  engine, five physical CUs per array, and four workgroups per CU.
+- The ring-table builder rejects state whose allocation cannot cover its
+  encoded `VGT_HS_OFFCHIP_PARAM`, and the hardware sample derives
+  non-overlapping pool offsets from the public ring sizes.
+- This is the next qualification candidate for Vulkan's nondeterministic
+  HS-store/TES-load path. Host tests pass; hardware qualification is pending.
+
 ### FW 5.50 application-neutral initialization gate
 
 - Prospero initialization now owns the GPU ucred preparation required before

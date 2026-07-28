@@ -132,7 +132,14 @@ Completed and tested:
   default-state `CLEAR_STATE` submission, and suspend-point submit/query
 - Hardware validation samples (`samples/hw_test/`) built as ELF and fake-SELF
 - Build system (CMake + Makefile)
-- Test suite with 4080 passing assertions on the host generic backend
+- Test suite with 4222 passing assertions on the host generic backend
+
+Tessellation clients use the Oberon-wide ring profile in `agc_graphics.h`:
+four shader engines, two shader arrays per engine, five physical CUs per
+array, and four live HS offchip workgroups per CU. This provisions 160
+32-KiB offchip buffers instead of the former single-buffer sample profile.
+Ring-state validation rejects an allocation smaller than the buffering and
+granularity encoded in `VGT_HS_OFFCHIP_PARAM`.
 
 Hardware-validated on real PS5 gfx1013 hardware running FW 5.50:
 - Native `/dev/gc` initialization, queue setup, default states, and submission
