@@ -471,6 +471,14 @@ firmware-selectable cleanup-first runner. HTILE, expclear, compressed
 metadata, and MSAA are deliberately outside this first tier. See
 `analysis/fw1160_uncompressed_depth_gate_audit_20260730.md`.
 
+Exact next-tier ordinary D16/HTILE and D16 HTILE expclear artifacts now build
+for logged FW 11.60 and mirrored headless FW 5.50 profiles. The shared depth
+runner has detached cleanup, optional stale-proof file verdicts, gate-specific
+HTILE initial-word checks, and exact full-rectangle D16/color distributions.
+They have not been hardware-run: the required current FW 5.50 uncompressed
+depth regression is still unavailable. See
+`analysis/fw1160_d16_htile_gate_plan_20260730.md`.
+
 An initial D16 launch stopped before PM4 construction/submission because the
 new headless variant still selected its absent VideoOut color buffer. The
 harness now allocates a dedicated linear RGBA8 color-oracle surface before the

@@ -120,6 +120,13 @@ AMD PM4 packet ancestry overlap in useful ways.
   not advance to HTILE, expclear, compressed metadata, or MSAA until that
   regression passes.
   See `analysis/fw1160_uncompressed_depth_gate_audit_20260730.md`.
+- The next isolated compressed-depth artifacts are prepared but hardware
+  gated: ordinary D16/HTILE first, then D16 HTILE expclear. Exact logged
+  `0x1160` artifacts and exact headless `0x0550` mirrors build without
+  warnings. The runner requires full-rectangle color/D16 distributions,
+  positive metadata mutation, bounded completion, shutdown, and final PASS.
+  Do not launch them until the modern FW 5.50 uncompressed depth regressions
+  pass. See `analysis/fw1160_d16_htile_gate_plan_20260730.md`.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and
