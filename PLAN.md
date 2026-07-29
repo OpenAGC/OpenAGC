@@ -114,9 +114,10 @@ AMD PM4 packet ancestry overlap in useful ways.
   now have exact logged FW 11.60 gates and current-source headless FW 5.50
   mirrors. The shared runner additionally requires the exact intended draw
   path in the verdict, so a generic baseline PASS cannot qualify the wrong
-  compile-time variant. Run each FW 11.60 gate twice in that order, with the
-  cleanup ELF immediately before every launch and a ps5debug-NG residual
-  process check afterward. See
+  compile-time variant. All three passed twice on FW `0x11600005`, with
+  immediate fences, 255,744 complete FP16 pixels, exact hash
+  `0x4a40c2eb4f12bc26`, clean shutdowns, and no residual process. Run the
+  current-source FW 5.50 mirrors when that console returns. See
   `analysis/fw1160_indexed_indirect_gate_plan_20260730.md`.
 - The first uncompressed depth/stencil tier is also built for exact FW 11.60:
   D32, D16, S8-only, then D16+S8. All four passed twice on standard FW

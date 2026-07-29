@@ -484,8 +484,11 @@ non-indexed indirect, and u16 indexed-indirect draws. Exact logged FW 11.60
 artifacts and exact headless FW 5.50 mirrors cross-build without warnings.
 The guarded runner now fails closed unless the verdict names the intended
 draw-composition path with `AGC_OK`, in addition to its ABI, fence, RGBA16F,
-shutdown, and final-verdict checks. Hardware execution remains pending; see
-`analysis/fw1160_indexed_indirect_gate_plan_20260730.md`.
+shutdown, and final-verdict checks. All three variants passed twice on FW
+`0x11600005`: 2,473/2,471/2,479-dword DCBs, immediate fences, 255,744 complete
+FP16 pixels, identical FNV64 `0x4a40c2eb4f12bc26`, clean shutdowns, and no
+residual process. The current-source FW 5.50 mirror regression remains
+pending; see `analysis/fw1160_indexed_indirect_gate_plan_20260730.md`.
 
 Exact next-tier ordinary D16/HTILE and D16 HTILE expclear artifacts now build
 for logged FW 11.60 and mirrored headless FW 5.50 profiles. The shared depth

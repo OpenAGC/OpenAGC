@@ -47,13 +47,33 @@ launch is immediately preceded by the established process-cleanup ELF. After
 each verdict, ps5debug-NG must report no residual `eboot` and ports 744 and
 8080 must remain responsive.
 
-## Execution order
+## FW 11.60 hardware result
 
-Run direct indexed twice, then non-indexed indirect twice, then
-indexed-indirect twice. Stop on the first mismatch, fence timeout, residual
-process, or loss of console responsiveness. The historical noncanonical
-`SET_BASE` low control modifier must not be reintroduced; current exact host
-fixtures require control zero.
+All three variants passed twice on the standard PS5 reporting raw firmware
+`0x11600005`:
+
+| Draw path | DCB dwords | Fence, both runs | Complete FP16 pixels | Native FNV64 |
+| --- | ---: | ---: | ---: | --- |
+| direct u16 indexed | 2,473 | immediate | 255,744 | `0x4a40c2eb4f12bc26` |
+| non-indexed indirect | 2,471 | immediate | 255,744 | `0x4a40c2eb4f12bc26` |
+| u16 indexed-indirect | 2,479 | immediate | 255,744 | `0x4a40c2eb4f12bc26` |
+
+Every run also reproduced the exact 768x665 coverage bounds, eight sampled
+colors, zero incomplete or out-of-range components, the Wave32 PM4 audit,
+`0xdeadcafe` marker, clean driver shutdown, and final graphics PASS.
+ps5debug-NG found no residual `eboot` between or after the runs; ports 744 and
+8080 remained reachable.
+
+This independently hardware-qualifies the three draw-composition variants on
+the tested FW 11.60 console. It does not qualify count-buffer multi-draw or the
+rejected Mesa-style 10-dword packet form.
+
+## Execution policy
+
+The completed run order was direct indexed twice, non-indexed indirect twice,
+then indexed-indirect twice. The historical noncanonical `SET_BASE` low
+control modifier must not be reintroduced; current exact host fixtures require
+control zero.
 
 The matching current-source FW 5.50 mirrors remain a separate regression
 requirement when that console is available. FW 11.60 evidence alone does not
