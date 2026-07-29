@@ -129,7 +129,7 @@ bool agcProsperoFirmwareUsesTrinityPredicate(uint32_t raw_version)
             sizeof(g_trinity_profile_aliases[0]), abi_key);
 }
 
-bool agcProsperoFirmwareSupported(uint32_t raw_version)
+static bool agcProsperoFirmwareIsArchival(uint32_t raw_version)
 {
     uint16_t abi_key = agcFirmwareAbiKey(raw_version);
 
@@ -139,9 +139,14 @@ bool agcProsperoFirmwareSupported(uint32_t raw_version)
            agcFirmwareAliasContains(g_legacy_v2_aliases,
                sizeof(g_legacy_v2_aliases) / sizeof(g_legacy_v2_aliases[0]),
                abi_key) ||
-           agcFirmwareAliasContains(g_legacy_v3_aliases,
-               sizeof(g_legacy_v3_aliases) / sizeof(g_legacy_v3_aliases[0]),
-               abi_key) ||
+           abi_key == 0x0300u;
+}
+
+bool agcProsperoFirmwareSupported(uint32_t raw_version)
+{
+    uint16_t abi_key = agcFirmwareAbiKey(raw_version);
+
+    return abi_key == 0x0320u ||
            agcProsperoStandardDirectAbiSupportsFirmware(raw_version);
 }
 
@@ -169,19 +174,10 @@ bool agcProsperoBuildDirectProfile(uint32_t raw_version, bool is_trinity,
         return false;
     if (is_trinity && !agcProsperoFirmwareUsesTrinityPredicate(raw_version))
         return false;
+    if (agcProsperoFirmwareIsArchival(raw_version))
+        return false;
 
-    if (agcFirmwareAliasContains(g_legacy_v1_aliases,
-            sizeof(g_legacy_v1_aliases) / sizeof(g_legacy_v1_aliases[0]),
-            abi_key)) {
-        profile.family = AGC_PROSPERO_ABI_LEGACY_V1;
-        profile.eop_ring_offset = 0x38000u;
-    } else if (agcFirmwareAliasContains(g_legacy_v2_aliases,
-            sizeof(g_legacy_v2_aliases) / sizeof(g_legacy_v2_aliases[0]),
-            abi_key)) {
-        profile.family = AGC_PROSPERO_ABI_LEGACY_V2;
-        profile.authenticated_special_queue = true;
-        profile.eop_ring_offset = 0x39000u;
-    } else if (agcFirmwareAliasContains(g_legacy_v3_aliases,
+    if (agcFirmwareAliasContains(g_legacy_v3_aliases,
             sizeof(g_legacy_v3_aliases) / sizeof(g_legacy_v3_aliases[0]),
             abi_key)) {
         profile.family = AGC_PROSPERO_ABI_LEGACY_V3;

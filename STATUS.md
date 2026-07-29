@@ -1468,6 +1468,9 @@ async set; its workload, suspend-query, and defaults operations fail closed.
 All other active keys expose the common submit16, exact internal-memory,
 authenticated-queue, primary-suspend, public TF-ring, HS-offchip, and async
 carrier-qualified subset. Matching hardware validation is pending.
+FW 1.00, 2.x, and 3.00 aliases remain preserved as archival RE evidence but
+are rejected by supported-firmware and runtime/direct-profile selection;
+FW 3.20 is the lowest active runtime target.
 `analysis/agc_driver_wrapper_fingerprints.tsv` records normalized groups for
 the exported wrappers across all 39 SPRXs. These groups guide further static
 promotion but do not replace internal-command and payload-layout evidence.

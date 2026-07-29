@@ -55,38 +55,33 @@ static void test_standard_direct_firmware_aliases(void)
         "uninspected nearby firmware rejected");
 }
 
-static void test_legacy_submit16_firmware_profiles(void)
+static void test_archival_and_fw320_firmware_profiles(void)
 {
     AgcProsperoRuntimeProfile profile;
 
-    TEST_ASSERT(agcProsperoFirmwareSupported(0x01000000u),
-        "FW 1.00 submit16 profile supported");
-    TEST_ASSERT(agcProsperoFirmwareSupported(0x02500000u),
-        "FW 2.50 submit16 profile supported");
+    TEST_ASSERT(!agcProsperoFirmwareSupported(0x01000000u),
+        "archival FW 1.00 is not advertised as supported");
+    TEST_ASSERT(!agcProsperoFirmwareSupported(0x02500000u),
+        "archival FW 2.50 is not advertised as supported");
+    TEST_ASSERT(!agcProsperoFirmwareSupported(0x03000000u),
+        "archival FW 3.00 is not advertised as supported");
     TEST_ASSERT(agcProsperoFirmwareSupported(0x03200000u),
-        "FW 3.20 submit16 profile supported");
+        "FW 3.20 is the lowest active profile");
     TEST_ASSERT(!agcProsperoFirmwareSupported(0x03100000u),
         "uninspected legacy firmware fails closed");
+    {
+        AgcProsperoDirectProfile direct;
+        TEST_ASSERT(!agcProsperoBuildDirectProfile(
+            0x03100000u, false, &direct),
+            "uninspected legacy direct profile fails closed");
+    }
 
-    TEST_ASSERT(agcProsperoBuildRuntimeProfile(0x01000000u, false, &profile),
-        "FW 1.00 profile builds");
-    TEST_ASSERT_EQ(profile.family, AGC_PROSPERO_ABI_LEGACY_V1,
-        "FW 1.00 family selected");
-    TEST_ASSERT_EQ(profile.eop_ring_offset, 0x38000u,
-        "FW 1.00 EOP offset retained");
-    TEST_ASSERT(!profile.authenticated_special_queue,
-        "FW 1.00 does not use later queue authentication layout");
-    TEST_ASSERT(!profile.supports_tf_ring,
-        "FW 1.00 has no TF-ring ioctl");
-
-    TEST_ASSERT(agcProsperoBuildRuntimeProfile(0x02500000u, false, &profile),
-        "FW 2.50 profile builds");
-    TEST_ASSERT_EQ(profile.family, AGC_PROSPERO_ABI_LEGACY_V2,
-        "FW 2.50 family selected");
-    TEST_ASSERT(profile.authenticated_special_queue,
-        "FW 2.50 authenticated queue layout selected");
-    TEST_ASSERT(!profile.supports_tf_ring,
-        "FW 2.50 has no TF-ring ioctl");
+    TEST_ASSERT(!agcProsperoBuildRuntimeProfile(0x01000000u, false, &profile),
+        "archival FW 1.00 runtime profile fails closed");
+    TEST_ASSERT(!agcProsperoBuildRuntimeProfile(0x02500000u, false, &profile),
+        "archival FW 2.50 runtime profile fails closed");
+    TEST_ASSERT(!agcProsperoBuildRuntimeProfile(0x03000000u, false, &profile),
+        "archival FW 3.00 runtime profile fails closed");
 
     TEST_ASSERT(agcProsperoBuildRuntimeProfile(0x03200000u, false, &profile),
         "FW 3.20 profile builds");
@@ -229,14 +224,13 @@ static void test_common_operation_carrier_profiles(void)
             AgcProsperoDirectProfile profile;
             uint32_t raw = (uint32_t)archival_keys[i] << 16;
 
-            TEST_ASSERT(agcProsperoBuildDirectProfile(raw, false, &profile),
-                "archival submit-only profile still builds");
-            TEST_ASSERT((profile.capabilities & (AGC_DIRECT_CAP_TF_RING |
-                AGC_DIRECT_CAP_HS_OFFCHIP |
-                AGC_DIRECT_CAP_ASYNC_GRAPHICS |
-                AGC_DIRECT_CAP_MEMORY | AGC_DIRECT_CAP_QUEUE |
-                AGC_DIRECT_CAP_SUSPEND_PRIMARY)) == 0,
-                "archival profile cannot inherit active carrier facts");
+            TEST_ASSERT(!agcProsperoFirmwareSupported(raw),
+                "every archival alias is excluded from supported firmware");
+            TEST_ASSERT(!agcProsperoBuildRuntimeProfile(raw, false,
+                &profile.runtime),
+                "every archival runtime profile fails closed");
+            TEST_ASSERT(!agcProsperoBuildDirectProfile(raw, false, &profile),
+                "archival direct profile fails closed");
         }
     }
 }
@@ -378,7 +372,7 @@ void test_suite_driver_registry(void)
     TEST_SUITE("Runtime Driver Registry");
     TEST_RUN(test_firmware_normalization);
     TEST_RUN(test_standard_direct_firmware_aliases);
-    TEST_RUN(test_legacy_submit16_firmware_profiles);
+    TEST_RUN(test_archival_and_fw320_firmware_profiles);
     TEST_RUN(test_direct_operation_profiles);
     TEST_RUN(test_common_operation_carrier_profiles);
     TEST_RUN(test_trinity_runtime_profile);

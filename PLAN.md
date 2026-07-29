@@ -354,7 +354,9 @@ Work in this order:
    retail binaries when they reveal an API contract needed by homebrew; do not
    chase dead imports, guess prototypes, or make a ten-title corpus a release
    requirement. FW `0x0320` remains the lowest active compatibility target;
-   FW `0x0100` and 2.x remain archival.
+   FW `0x0100`, 2.x, and `0x0300` remain archival evidence only and are
+   rejected by runtime profile selection. FW `0x0320` is the lowest active
+   compatibility target.
 
 The sample-only PM4 audit is complete in
 `analysis/sample_pm4_public_api_audit.md`. It classifies the exact reusable,
