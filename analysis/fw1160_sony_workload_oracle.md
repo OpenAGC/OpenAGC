@@ -80,4 +80,18 @@ state and lets process teardown release resources. A clean console reboot is
 required after every oracle attempt, whether it passes or fails. Never launch
 a direct `/dev/gc` payload later in the same boot session.
 
-Status: build-qualified, hardware pending.
+## Hardware result
+
+The guarded oracle was run once on standard-PS5 FW `0x11600005`. Module load,
+all export resolutions, the 18/12-dword size checks, and installed async setup
+passed. The installed ordinary `WRITE_DATA` preflight returned `AGC_OK`, but
+its marker remained zero after 5,000 ms. The workload safety gate worked: no
+stream was registered and no workload packet was emitted.
+
+This reproduces the installed payload-context submission limitation previously
+seen on FW 5.50. It neither confirms nor disproves the Sony-private workload
+state hypothesis, because the installed backend cannot execute the control
+DCB required to make that comparison. Do not rerun the oracle unchanged. See
+`fw1160_sony_workload_attempt_20260729.md` for the exact artifact and result.
+
+Status: hardware-attempted; installed preflight failed; workload not attempted.

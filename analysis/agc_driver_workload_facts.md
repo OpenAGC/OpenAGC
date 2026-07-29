@@ -113,12 +113,14 @@ in 50 ms. The unchanged inline workload submit returned `AGC_OK` and then
 stalled without reaching either marker. This rules out those surrounding
 prerequisites and must not be rerun unchanged.
 
-The next bounded diagnostic is the opt-in installed-driver oracle documented
-in `fw1160_sony_workload_oracle.md`. It patches credentials before loading the
-matching Sony module and requires an installed-driver preflight marker before
-calling the module's workload builders. A pass would identify missing private
-module state that must be recovered for `/dev/gc`; a failed preflight would
-show that the installed payload-context backend cannot serve as the oracle.
+The opt-in installed-driver oracle documented in
+`fw1160_sony_workload_oracle.md` was run once after a clean reboot. The matching
+module loaded, its exact workload exports and sizes resolved, and async setup
+returned `AGC_OK`. Its ordinary `WRITE_DATA` preflight also returned `AGC_OK`,
+but the marker remained zero after 5,000 ms. The safety gate prevented any
+workload packet from being emitted. The installed payload-context backend
+therefore cannot serve as the oracle and must not be retried unchanged; see
+`fw1160_sony_workload_attempt_20260729.md`.
 
 ## Exact FW 11.60 builder layout
 

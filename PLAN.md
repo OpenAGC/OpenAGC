@@ -636,11 +636,16 @@ This rules out those surrounding prerequisites as the missing state. Do not
 rerun stage 13 unchanged. Keep FW 11.60 workload disabled and recover the
 GPU-side `SET_WORKLOAD` state transition or required queue/register
 programming before constructing another gate.
-An opt-in installed-driver oracle is now build-qualified for that recovery. It
-patches credentials before loading FW 11.60's matching module, forbids direct
-fallback, and requires an installed preflight marker before the module's own
-workload builders can run. Hardware execution remains pending and requires a
-reboot afterward regardless of verdict.
+The opt-in installed-driver oracle was run once after a clean reboot. FW
+11.60's matching module loaded, all exact exports resolved, the 18/12-dword
+sizes matched, and async setup returned `AGC_OK`. Its ordinary `WRITE_DATA`
+preflight returned `AGC_OK` but left the marker zero after 5,000 ms, so the
+safety gate prevented stream registration and workload emission. This matches
+the installed payload-context limitation previously seen on FW 5.50: the Sony
+module cannot serve as an execution oracle under websrv. Do not rerun it
+unchanged. Continue offline recovery of the module's submit-mode routing and
+the GPU-side `SET_WORKLOAD` queue/register state before another direct gate;
+see `analysis/fw1160_sony_workload_attempt_20260729.md`.
 
 The Sony workload contract itself is recovered for all active firmware:
 seven active-wrapper and three complete-wrapper groups converge on the same

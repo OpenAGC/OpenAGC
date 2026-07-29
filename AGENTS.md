@@ -364,6 +364,13 @@ make -C samples/hw_test deploy_agc_fw1160_sony_workload \
 Reboot after every attempt before any direct `/dev/gc` test. See
 `analysis/fw1160_sony_workload_oracle.md`.
 
+**Result:** the one guarded hardware attempt loaded the module and passed all
+export, packet-size, and async-setup checks, but its ordinary installed-driver
+`WRITE_DATA` preflight returned `AGC_OK` without executing its marker. The
+safety gate prevented workload emission. Do not rerun this oracle unchanged;
+the installed backend cannot provide a workload verdict in the websrv payload
+context. See `analysis/fw1160_sony_workload_attempt_20260729.md`.
+
 **3. `agc_videoout.elf` — Combined AGC + VideoOut test**
 
 Tests the full graphics pipeline together:

@@ -1009,12 +1009,15 @@ The host-generic implementation now has a tested model for:
   queue/register programming rather than defaults, async setup, process
   property, registration, address selection, packet bytes, or cursor lifecycle.
   The capability remains disabled.
-  `agc_fw1160_sony_workload.elf` is now a build-qualified, hardware-pending
-  oracle for the remaining private-module-state hypothesis. It patches GPU
-  credentials before `dlopen`, resolves only the matching console module,
-  forbids direct fallback, and will not emit a workload packet unless an
-  installed-driver preflight marker executes. Every attempt requires a reboot
-  before returning to `/dev/gc`.
+  `agc_fw1160_sony_workload.elf` was hardware-attempted once after a clean
+  reboot. It patched credentials before `dlopen`, loaded the matching FW 11.60
+  module, resolved all required exports, matched the 18/12-dword sizes, and
+  completed installed async setup. Its ordinary `WRITE_DATA` preflight returned
+  `AGC_OK`, but the marker remained zero after 5,000 ms. The safety gate
+  prevented stream registration and workload emission. The installed backend
+  therefore cannot serve as the workload oracle in this websrv payload context;
+  do not rerun it unchanged. See
+  `analysis/fw1160_sony_workload_attempt_20260729.md`.
   All 39 active Sony drivers are now verified to share that nine-dword
   multi-argument contract, with 18/12-dword maximum reservations. Other
   profiles remain fail-closed until their GPU-info subregion selection is
