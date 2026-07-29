@@ -129,6 +129,7 @@ void sceVideoOutSetBufferAttribute2(SceVideoOutBufferAttribute2 *attribute,
 int32_t sceVideoOutRegisterBuffers(int32_t handle, int32_t startIndex,
                                    void *const *addresses, int32_t bufferNum,
                                    const SceVideoOutBufferAttribute *attribute);
+int32_t sceVideoOutUnregisterBuffers(int32_t handle, int32_t setIndex);
 
 /* sceVideoOutRegisterBuffers2 — PS5 extended register.
  * NID: rKBUtgRrtbk. Buffers are 0x20-byte entries {void* addr; uint64_t pad;}.

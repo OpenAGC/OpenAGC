@@ -601,6 +601,7 @@ int main(void) {
     bool success = false;
     int close_result = 0;
     int delete_event_result = 0;
+    int unregister_result = 0;
     int equeue_result = 0;
     int unmap_result = 0;
     int release_result = 0;
@@ -701,6 +702,8 @@ cleanup:
     if (test.handle >= 0 && test.flipqueue != 0)
         delete_event_result = sceVideoOutDeleteFlipEvent(
             (void *)(uintptr_t)test.flipqueue, test.handle);
+    if (test.handle >= 0 && test.mapped != NULL)
+        unregister_result = sceVideoOutUnregisterBuffers(test.handle, 0);
     if (test.handle >= 0)
         close_result = sceVideoOutClose(test.handle);
     if (test.flipqueue != 0)
@@ -713,9 +716,11 @@ cleanup:
     if (agc_attempted)
         shutdown_result = agcDriverShutdown();
 
+    const bool equeue_closed = equeue_result == 0 ||
+        (uint32_t)equeue_result == 0x80020009u;
     success = output_complete && flip_complete && delete_event_result == 0 &&
-        close_result == 0 && equeue_result == 0 && unmap_result == 0 &&
-        release_result == 0 &&
+        unregister_result == 0 && close_result == 0 && equeue_closed &&
+        unmap_result == 0 && release_result == 0 &&
         shutdown_result == AGC_OK;
     printf("\n=== Compute Summary ===\n");
     printf("  Runtime profile: FW ABI 0x%04X\n",
@@ -728,11 +733,11 @@ cleanup:
            flip_complete ? "PASS" : "FAILED"
 #endif
     );
-    printf("  VideoOut cleanup: event=0x%08x close=0x%08x equeue=0x%08x "
-           "unmap=0x%08x release=0x%08x\n",
-           (unsigned)delete_event_result, (unsigned)close_result,
-           (unsigned)equeue_result, (unsigned)unmap_result,
-           (unsigned)release_result);
+    printf("  VideoOut cleanup: event=0x%08x unregister=0x%08x close=0x%08x "
+           "equeue=0x%08x unmap=0x%08x release=0x%08x\n",
+           (unsigned)delete_event_result, (unsigned)unregister_result,
+           (unsigned)close_result, (unsigned)equeue_result,
+           (unsigned)unmap_result, (unsigned)release_result);
     printf("  Driver shutdown: %s (0x%08x)\n",
            shutdown_result == AGC_OK ? "PASS" : "FAILED",
            (unsigned)shutdown_result);
