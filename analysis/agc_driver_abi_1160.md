@@ -13,6 +13,10 @@ not treated as evidence.
 - Firmware files are reference inputs only and are not copied into OpenAGC.
 - Request words, immediate sizes, queue tokens, and offsets were recovered
   from x86-64 disassembly and compared as complete per-firmware sets.
+- `tools/verify_agc_driver_fw1160.sh` anchors the facts below to exact export
+  NIDs/sizes and internal instruction addresses in both `libSceAgcDriver` and
+  `libSceAgc`. It verifies field stores for typed payloads rather than accepting
+  an incidental command constant elsewhere in the image.
 
 FW 11.60 exposes 167 driver functions; 140 map to the FW 5.50 NID corpus.
 `libSceAgc.sprx` exposes 247 functions; 216 map. Critical public driver calls,
@@ -42,6 +46,18 @@ The direct submit wrapper uses a 16-byte object with fields at offsets 0, 4,
 and 8. Initialization opens `/dev/gc`, issues the context query, and maps a
 `0x4000` register aperture at `0xfe0200000`.
 
+The typed layouts shared with FW 5.50 and locked by `_Static_assert` in
+`include/agc_ioctl.h` are:
+
+| Payload | Size | Fields |
+|---|---:|---|
+| `AgcGcSubmitArgs` | `0x10` | `u32@0`, `u32@4`, `u64@8` |
+| `AgcGcSuspendArg` | `0x10` | four `u32` values at `0,4,8,0xc` |
+| `AgcGcSetTFRingArg` | `0x10` | `u64@0`, `u32@8`, reserved `u32@0xc` |
+| `AgcGcSetHsOffchipArg` | `0x10` | `u64@0`, `u32@8`, reserved `u32@0xc` |
+| `AgcGcQueueCreateArg` | `0x40` | tokens `@0..0xc`, addresses `@0x10..0x38` |
+| `AgcGcQueueDestroyArg` | `0x0c` | three `u32` tokens at `0,4,8` |
+
 ## Direct-operation status
 
 FW 11.60 is statically qualified (hardware pending) for submit16, standard and
@@ -49,8 +65,16 @@ Trinity internal-memory sizing, authenticated queue create/destroy, primary
 and final suspend submission, public TF-ring setup, HS-offchip setup, and async
 graphics setup. Its workload wrappers build a larger, different packet
 contract than OpenAGC's FW 5.50 workload helper, so workload calls fail closed.
-The suspend-query bit semantics and register-defaults version mapping remain
-unrecovered and also fail closed.
+Both public/direct suspend-query exports are permission stubs. The internal
+`0x80048127` helper's result semantics are not exposed by those wrappers, so
+suspend query remains disabled. `libSceAgc` exposes a versioned 0..12 defaults
+dispatcher, but its no-argument API reads the selected version from a runtime
+hardware table. Static analysis of the driver wrapper does not establish the
+selected 11.60 value, so default-state construction also remains disabled.
+
+The 11.60 workload-active and workload-complete exports emit nine-dword
+`0xc0071e00` packets. That contract differs from OpenAGC's FW 5.50 three-dword
+convenience packets and is explicitly not enabled for 11.60.
 
 The standard-console internal allocations are unchanged from FW 5.50:
 

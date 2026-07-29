@@ -380,7 +380,8 @@ _Static_assert(sizeof(AgcGcMakesysmapArg48) == 0x30,
 /*
  * Suspend-point argument struct (nr=0x1c, dir=RW, size=16).
  *
- * RE'd from the FW 5.50 kernel handler at 0x6e6ff0. The kernel validates
+ * Payload stores and request word are also confirmed in the FW 11.60 wrapper
+ * at vaddr 0x9430. The FW 5.50 kernel handler at 0x6e6ff0 validates
  * the argument and then writes field3 into a driver-internal suspend ring.
  *   field0 - type/selector: 1 or 2 in the simple path; two known magic
  *            triples are also accepted for anti-tamper verification.
@@ -408,7 +409,8 @@ _Static_assert(offsetof(AgcGcSuspendArg, field3) == 0x0C,
 /*
  * Hull-shader offchip parameter ioctl argument struct (nr=0x2c, dir=RW, size=16).
  *
- * RE'd from the FW 5.50 kernel handler at 0x6ee6d2. The handler passes the
+ * The same payload stores and request are confirmed in the FW 11.60 wrapper
+ * at vaddr 0x9820. The FW 5.50 kernel handler at 0x6ee6d2 passes the
  * argument straight to gc_pm4_clearstate_patch (0xb7dd20), which copies the
  * patch list from userspace and applies it to a CLEAR_STATE packet.
  *   list_addr    - user pointer to an array of 8-byte patch entries.
@@ -428,8 +430,8 @@ _Static_assert(offsetof(AgcGcSetHsOffchipArg, num_entries) == 0x08,
 _Static_assert(offsetof(AgcGcSetHsOffchipArg, reserved) == 0x0C,
     "AgcGcSetHsOffchipArg reserved offset mismatch");
 
-/* Public sceAgcDriverSetTFRing ioctl payload recovered from FW 5.50
- * libSceAgcDriver.sprx at vaddr 0x9180. */
+/* Public sceAgcDriverSetTFRing ioctl payload recovered from FW 5.50 at vaddr
+ * 0x9180 and independently confirmed in FW 11.60 at vaddr 0x8fc0. */
 typedef struct AgcGcSetTFRingArg {
     uint64_t ring_addr;     /* offset 0x00, 256-byte aligned */
     uint32_t size;          /* offset 0x08, multiple of 4, max 0x4000 */
