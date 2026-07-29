@@ -111,13 +111,13 @@ AMD PM4 packet ancestry overlap in useful ways.
   residual process. Matching FW 5.50 mirrors remain pending because that
   console is offline.
 - The first uncompressed depth/stencil tier is also built for exact FW 11.60:
-  D32, D16, S8-only, then D16+S8. D16, S8-only, and D16+S8 passed twice on
-  standard FW `0x11600005`, with exact native distributions, 1-3 ms fences,
+  D32, D16, S8-only, then D16+S8. All four passed twice on standard FW
+  `0x11600005`, with exact native distributions, immediate-to-3 ms fences,
   clean shutdowns, and no residual process. D32 was missing from the original
-  matrix and now has an exact logged `0x1160` artifact plus exact headless
-  `0x0550` mirror with full-rectangle native oracles. Run D32 twice before the
-  compressed tier. Matching modern headless FW 5.50 artifacts are built; run
-  D32, D16, S8-only, and D16+S8 once before promotion. Do
+  matrix; its exact logged `0x1160` artifact reproduced the full-rectangle
+  color and native-depth oracle twice, and its exact headless `0x0550` mirror
+  is built. Matching modern headless FW 5.50 artifacts are built; run D32,
+  D16, S8-only, and D16+S8 once before promotion. Do
   not advance to HTILE, expclear, compressed metadata, or MSAA until that
   regression passes.
   See `analysis/fw1160_uncompressed_depth_gate_audit_20260730.md`.

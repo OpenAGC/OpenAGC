@@ -475,7 +475,9 @@ The parity audit found that uncompressed D32 was absent from the FW 11.60
 matrix despite its independent FW 5.50 qualification. Exact logged `0x1160`
 and mirrored headless `0x0550` artifacts now build without warnings. The
 runner requires 228,096 green/red pixels and native D32 classes
-1,617,408/228,096/228,096. D32 must pass twice before compressed HTILE.
+1,617,408/228,096/228,096. Two FW 11.60 runs passed that exact oracle with
+immediate fences, clean shutdowns, final PASS verdicts, and no residual
+process. The matching modern headless FW 5.50 regression remains pending.
 
 Exact next-tier ordinary D16/HTILE and D16 HTILE expclear artifacts now build
 for logged FW 11.60 and mirrored headless FW 5.50 profiles. The shared depth
