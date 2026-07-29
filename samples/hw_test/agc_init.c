@@ -34,6 +34,22 @@
 #include "agc_pm4.h"
 #include "agc_runtime_diag.h"
 
+#ifndef AGC_EXPECT_FIRMWARE_ABI_KEY
+#define AGC_EXPECT_FIRMWARE_ABI_KEY 0x0550u
+#endif
+
+#ifndef AGC_EXPECT_TRINITY
+#define AGC_EXPECT_TRINITY 0
+#endif
+
+#ifndef AGC_EXPECT_DEFAULT_STATES
+#define AGC_EXPECT_DEFAULT_STATES 1
+#endif
+
+#ifndef AGC_EXPECT_WORKLOAD
+#define AGC_EXPECT_WORKLOAD 1
+#endif
+
 /* Private hardware-test diagnostic; not part of the installed public ABI. */
 extern const char *agcDriverDebugBackendName(void);
 
@@ -211,6 +227,7 @@ static const char *errstr(int32_t err) {
     case AGC_ERROR_INTERNAL:            return "INTERNAL";
     case AGC_ERROR_NOT_FOUND:           return "NOT_FOUND";
     case AGC_ERROR_OUT_OF_MEMORY:       return "OUT_OF_MEMORY";
+    case AGC_ERROR_NOT_SUPPORTED:       return "NOT_SUPPORTED";
     default:                            return "UNKNOWN";
     }
 }
@@ -222,6 +239,11 @@ int main(void) {
     uint32_t version;
     bool profile_ok = false;
     bool wait64_ok = false;
+    bool defaults_ok = false;
+    bool async_ok = false;
+    bool queue_contract_ok = false;
+    bool suspend_ok = false;
+    bool workload_ok = false;
     AgcDriverRuntimeDiagnostics runtime_diag;
     SceAgcCb cb;
 
@@ -301,17 +323,22 @@ int main(void) {
                runtime_diag.profile.gpu_info_span,
                runtime_diag.profile.cwsr_work_offset,
                runtime_diag.profile.cwsr_size);
-        profile_ok = runtime_diag.firmware_version == 0x05500008u &&
+        profile_ok = (runtime_diag.firmware_version >> 16u) ==
+                AGC_EXPECT_FIRMWARE_ABI_KEY &&
             runtime_diag.profile.family == AGC_PROSPERO_ABI_STANDARD &&
-            !runtime_diag.profile.is_trinity &&
+            runtime_diag.profile.is_trinity == (AGC_EXPECT_TRINITY != 0) &&
             runtime_diag.profile.authenticated_special_queue &&
             runtime_diag.profile.supports_tf_ring &&
             runtime_diag.profile.eop_ring_offset == 0x39000u &&
-            runtime_diag.profile.gpu_info_span == 0x100000u &&
-            runtime_diag.profile.cwsr_work_offset == 0xa00000u &&
-            runtime_diag.profile.cwsr_size == 0x1000000u;
+            runtime_diag.profile.gpu_info_span ==
+                (AGC_EXPECT_TRINITY ? 0x180000u : 0x100000u) &&
+            runtime_diag.profile.cwsr_work_offset ==
+                (AGC_EXPECT_TRINITY ? 0x1000000u : 0xa00000u) &&
+            runtime_diag.profile.cwsr_size ==
+                (AGC_EXPECT_TRINITY ? 0x1600000u : 0x1000000u);
     }
-    printf("    Runtime profile FW 5.50: %s\n", profile_ok ? "PASS" : "FAIL");
+    printf("    Runtime profile FW ABI 0x%04X: %s\n",
+           AGC_EXPECT_FIRMWARE_ABI_KEY, profile_ok ? "PASS" : "FAIL");
     if (!profile_ok)
         return 1;
 
@@ -329,10 +356,11 @@ int main(void) {
     printf("[3] sceAgcDriverNotifyDefaultStates()...\n");
     err = sceAgcDriverNotifyDefaultStates(0);
     printf("    result: 0x%08X (%s)\n", (unsigned)err, errstr(err));
-    if (err != AGC_OK)
-        printf("    WARNING: default state notification failed\n");
-    else
-    printf("    Default states notified\n");
+    defaults_ok = AGC_EXPECT_DEFAULT_STATES
+        ? err == AGC_OK
+        : err == AGC_ERROR_NOT_SUPPORTED;
+    printf("    Default states contract: %s\n",
+           defaults_ok ? "PASS" : "FAIL");
 
 
     /* --- Step 4: Verify the official FW 5.50 PA-debug permission stub --- */
@@ -496,6 +524,7 @@ int main(void) {
     printf("[6] sceAgcDriverSetupAsyncGraphics(1)...\n");
     err = sceAgcDriverSetupAsyncGraphics(1);
     printf("    result: 0x%08X (%s)\n", (unsigned)err, errstr(err));
+    async_ok = err == AGC_OK;
     if (err != AGC_OK)
         printf("    WARNING: async graphics setup failed\n");
     else
@@ -526,6 +555,7 @@ int main(void) {
 
     int32_t queue_handle = _sceAgcDriverCreateUserSpecialQueue();
     printf("    result: %d (handle)\n", queue_handle);
+    queue_contract_ok = queue_handle >= 0;
     if (queue_handle < 0)
         printf("    WARNING: queue creation failed (err=0x%08X)\n",
                (unsigned)queue_handle);
@@ -549,6 +579,7 @@ int main(void) {
         err = sceAgcDriverSuspendPointSubmitDirect(
             0xaf1e80b7u, 0x8b4cdd90u, 0x99f68d6cu, 0u);
         printf("    result: 0x%08X (%s)\n", (unsigned)err, errstr(err));
+        suspend_ok = err == AGC_OK;
         if (err != AGC_OK)
             printf("    WARNING: suspend point submit failed\n");
         else
@@ -566,6 +597,7 @@ int main(void) {
         printf("[9] _sceAgcDriverDestroyUserSpecialQueue()...\n");
         err = _sceAgcDriverDestroyUserSpecialQueue();
         printf("    result: 0x%08X (%s)\n", (unsigned)err, errstr(err));
+        queue_contract_ok = queue_contract_ok && err == AGC_OK;
         if (err != AGC_OK)
             printf("    WARNING: queue destruction failed\n");
         else
@@ -583,12 +615,15 @@ int main(void) {
         printf("[10b] sceAgcDriverSetWorkloadComplete(1)...\n");
         err = sceAgcDriverSetWorkloadComplete(1);
         printf("    result: 0x%08X (%s)\n", (unsigned)err, errstr(err));
+        workload_ok = AGC_EXPECT_WORKLOAD && err == AGC_OK;
         if (err == AGC_OK)
             printf("    Workload ended\n");
         else
             printf("    WARNING: EndWorkload failed\n");
     } else {
-        printf("    WARNING: BeginWorkload failed\n");
+        workload_ok = !AGC_EXPECT_WORKLOAD && err == AGC_ERROR_NOT_SUPPORTED;
+        printf("    Workload fail-closed contract: %s\n",
+               workload_ok ? "PASS" : "FAIL");
     }
 
     /* --- Summary --- */
@@ -596,20 +631,22 @@ int main(void) {
     printf("  GPU credentials:   %s\n",
            cred_err == 0 ? "set (cr_sceAuthId)" : "FAILED");
     printf("  AGC init:          OK\n");
-    printf("  Runtime profile:   %s\n", profile_ok ? "FW 5.50 PASS" : "FAILED");
+    printf("  Runtime profile:   FW ABI 0x%04X %s\n",
+           AGC_EXPECT_FIRMWARE_ABI_KEY, profile_ok ? "PASS" : "FAILED");
     printf("  Internal memory:   OK\n");
-    printf("  Default states:    notified\n");
+    printf("  Default states:    %s\n", defaults_ok ? "PASS" : "FAILED");
     printf("  PA debug version:  0x%08X\n", version);
     printf("  Batched DCBs:      %s\n",
            dcb_err == AGC_OK ? "OK" : "check step 5");
     printf("  9-dword wait64:    %s\n", wait64_ok ? "PASS" : "FAILED");
-    printf("  Async graphics:    %s\n",
-           "check step 6");
-    printf("  Queue create/destroy: %s\n",
-           queue_handle >= 0 ? "OK" : "FAILED");
-    printf("  Suspend point:     check step 8\n");
+    printf("  Async graphics:    %s\n", async_ok ? "PASS" : "FAILED");
+    printf("  Queue contract:    %s\n",
+           queue_contract_ok ? "PASS" : "FAILED");
+    printf("  Suspend point:     %s\n", suspend_ok ? "PASS" : "FAILED");
+    printf("  Workload contract: %s\n", workload_ok ? "PASS" : "FAILED");
     printf("=== Done ===\n");
 
-    return (profile_ok && dcb_err == AGC_OK && wait64_ok && queue_handle >= 0)
+    return (profile_ok && defaults_ok && dcb_err == AGC_OK && wait64_ok &&
+            async_ok && queue_contract_ok && suspend_ok && workload_ok)
         ? 0 : 1;
 }

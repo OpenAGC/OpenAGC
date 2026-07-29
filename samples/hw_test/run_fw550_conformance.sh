@@ -111,7 +111,7 @@ validate_log() {
 
     case "$sample" in
         agc_init)
-            require_log 'Runtime profile:[[:space:]]+FW 5\.50 PASS' "$log" 'FW 5.50 runtime profile' || return
+            require_log 'Runtime profile:[[:space:]]+FW ABI 0x0550 PASS' "$log" 'FW 5.50 runtime profile' || return
             require_log '=== Done ===' "$log" 'completed init lifecycle'
             ;;
         agc_videoout)
