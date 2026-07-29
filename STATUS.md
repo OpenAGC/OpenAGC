@@ -1523,6 +1523,10 @@ The corrected implementation then passed the complete FW 5.50 `agc_init`
 hardware probe in two seconds, including exact hinted addresses, defaults,
 multi-DCB markers, wait64, async, queue, suspend, and workload lifecycle
 (`20260729T111638Z-98955`).
+FW 11.60 staged requalification then passed identity-only stage 0 twice and
+corrected init-plus-shutdown stage 1 twice. The console remained responsive and
+powered on. Internal memory and every GPU operation remain blocked pending
+their own isolated two-pass gates.
 
 ## Next RE Tasks
 

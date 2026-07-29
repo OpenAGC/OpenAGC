@@ -46,3 +46,17 @@ immediately by shutdown. Neither stage allocates AGC internal memory or submits
 GPU work. The process-cleanup ELF must be the immediately preceding websrv
 launch. A later stage must not combine memory, submission, queue, suspend, or
 display operations; each needs a separate two-pass gate.
+
+## Staged hardware result
+
+On the same standard FW 11.60 console (`0x11600005`, SoC `0x00840f60`):
+
+- Stage 0 passed twice and classified the hardware as standard PS5.
+- Stage 1 passed twice. Profile configuration, corrected direct initialization,
+  and direct shutdown each returned `AGC_OK`; the UI remained responsive and
+  the console stayed powered on.
+- Websrv retained each foreground HTTP pipe until the 20-second client timeout,
+  but the cleanup check before the next run found no stale `eboot.elf`.
+
+This hardware result validates the corrected pre-memory initialization path.
+It does not yet qualify internal allocation or any GPU operation.
