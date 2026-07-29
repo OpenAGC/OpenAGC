@@ -574,10 +574,12 @@ sampled colors, no invalid components, and packed hash `0x4a40c2eb4f12bc26`.
 The same revision then passed FW 5.50's 1,800-flip graphics conformance sample.
 Only FW 11.60 presentation is skipped, keeping proven graphics execution
 independent from its still-unqualified VideoOut linear-buffer contract.
-FW 11.60 workload parity is staged only for OpenAGC's explicitly separate
-one-ID convenience extension. The public-path probe now requires a submitted
-post-workload `WRITE_DATA` marker, so two accepted calls cannot be mistaken for
-GPU execution if either three-dword packet stalls the ordered submit stream.
+FW 11.60 rejected OpenAGC's explicitly separate one-ID convenience extension:
+both three-dword calls returned `AGC_OK`, but the ordered post-workload
+`WRITE_DATA` marker timed out after five seconds. The capability is disabled
+again. The strengthened marker oracle remains active for FW 5.50, and any FW
+11.60 adapter must reproduce the recovered nine-dword Sony contract plus its
+registered-stream state rather than treating submit acceptance as execution.
 
 The Sony workload contract itself is recovered for all active firmware:
 seven active-wrapper and three complete-wrapper groups converge on the same

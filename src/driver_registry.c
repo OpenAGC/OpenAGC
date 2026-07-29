@@ -239,8 +239,7 @@ bool agcProsperoBuildDirectProfile(uint32_t raw_version, bool is_trinity,
         direct.capabilities |= AGC_DIRECT_CAP_SUSPEND_FINAL |
             AGC_DIRECT_CAP_WORKLOAD | AGC_DIRECT_CAP_EOP_FLIP;
     } else if (abi_key == 0x1160u) {
-        direct.capabilities |= AGC_DIRECT_CAP_SUSPEND_FINAL |
-            AGC_DIRECT_CAP_WORKLOAD;
+        direct.capabilities |= AGC_DIRECT_CAP_SUSPEND_FINAL;
     }
 
     if ((direct.capabilities & AGC_DIRECT_CAP_QUEUE) != 0) {

@@ -145,12 +145,12 @@ static void test_direct_operation_profiles(void)
         "FW 11.60 public TF-ring wrapper enabled");
     TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_HS_OFFCHIP) != 0,
         "FW 11.60 HS-offchip wrapper enabled");
-    TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_WORKLOAD) != 0,
-        "FW 11.60 enables only the OpenAGC workload extension");
+    TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_WORKLOAD) == 0,
+        "FW 11.60 rejects the stalled three-dword workload extension");
     TEST_ASSERT_EQ(agcPm4Header3Sub(
         AGC_PM4_OP_SET_WORKLOAD, AGC_PM4_SUB_WORKLOAD_BEGIN, 3u),
         0xC0011E80u,
-        "OpenAGC workload extension retains its typed three-dword header");
+        "historical OpenAGC workload extension header remains documented");
     TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_SUSPEND_QUERY) == 0,
         "FW 11.60 unknown suspend-query semantics fail closed");
     TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_DEFAULT_STATES) != 0,
