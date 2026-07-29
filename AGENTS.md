@@ -346,6 +346,24 @@ Stages 3-9 isolate submit, async, queue, suspend, TF-ring, and HS-offchip
 carriers. Always use their guarded Make targets; never launch a probe without
 the cleanup ELF immediately beforehand.
 
+**2c. `agc_fw1160_sony_workload.elf` — installed-driver workload oracle**
+
+This opt-in diagnostic tests whether FW 11.60 workload execution depends on
+private state established by the console's matching `libSceAgcDriver.sprx`.
+It patches credentials before `dlopen`, never initializes or falls back to the
+direct backend, and requires an installed-driver preflight marker before it can
+emit workload packets. Build and dependency-check it with
+`make -C samples/hw_test fw1160_sony_workload_check`. Deploy only with the
+guarded target and explicit opt-in:
+
+```sh
+make -C samples/hw_test deploy_agc_fw1160_sony_workload \
+  PS5_HOST=10.0.1.39 ALLOW_SONY_DRIVER_ORACLE=YES
+```
+
+Reboot after every attempt before any direct `/dev/gc` test. See
+`analysis/fw1160_sony_workload_oracle.md`.
+
 **3. `agc_videoout.elf` — Combined AGC + VideoOut test**
 
 Tests the full graphics pipeline together:

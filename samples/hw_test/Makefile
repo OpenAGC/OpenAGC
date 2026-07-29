@@ -35,6 +35,7 @@ FSELF     := $(PKG_TOOLS)/prosperopkg-fself
 PKGBUILD  := $(PKG_TOOLS)/prosperopkg-pkg
 PSBC      ?= $(OPENAGC_ROOT)/../openagc-psbc/psbc
 GLSLANG   ?= glslangValidator
+READELF   ?= /opt/homebrew/opt/llvm@18/bin/llvm-readelf
 
 PS4_SDK_VERSION ?= 0x07590001
 
@@ -50,6 +51,7 @@ VIDEOOUT_LDFLAGS := -lSceVideoOut -lkernel
 # agc_init: links libopenagc.a + VideoOut + kernel
 AGC_LDFLAGS := $(OPENAGC_LIB) -lSceVideoOut -lkernel
 FW_STAGE_LDFLAGS := $(OPENAGC_LIB) -lSceVideoOut -lkernel
+FW_SONY_ORACLE_LDFLAGS := $(OPENAGC_LIB) -lkernel
 PROCESS_CLEANUP_ELF ?= $(OPENAGC_ROOT)/../Vulkan-PS5/build-prospero-m2/vulkan_ps5_process_cleanup.elf
 
 # === Targets ===
@@ -130,6 +132,26 @@ agc_fw1160_stage12.elf: agc_fw1160_stage.c gpu_credentials.h $(OPENAGC_LIB)
 
 agc_fw1160_stage13.elf: agc_fw1160_stage.c gpu_credentials.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_FW1160_STAGE=13 -o $@ $< $(FW_STAGE_LDFLAGS)
+
+# Opt-in oracle for the console's own FW 11.60 libSceAgcDriver. This target
+# intentionally has no SceAgcDriver DT_NEEDED entry: credentials must be
+# patched before the payload calls dlopen(), and no direct backend is started.
+agc_fw1160_sony_workload.elf: agc_fw1160_sony_workload.c \
+		gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -o $@ $< $(FW_SONY_ORACLE_LDFLAGS)
+
+.PHONY: fw1160_sony_workload_check
+fw1160_sony_workload_check: agc_fw1160_sony_workload.elf
+	@test -x "$(READELF)" || { echo "missing LLVM readelf: $(READELF)" >&2; exit 1; }
+	@if $(READELF) -d $< | grep -q 'libSceAgcDriver\.sprx'; then \
+		echo "$< must dlopen after credentials, not preload libSceAgcDriver" >&2; \
+		exit 1; \
+	fi
+	@$(READELF) -p .rodata $< | grep -q 'libSceAgcDriver\.sprx' || { \
+		echo "$< is missing the exact runtime module name" >&2; \
+		exit 1; \
+	}
+	@echo "FW 11.60 Sony workload oracle dependency split: PASS"
 
 # Combined AGC + VideoOut test (links libopenagc.a + VideoOut + kernel)
 agc_videoout.elf: agc_videoout.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
@@ -641,6 +663,13 @@ deploy_agc_fw1160_stage12: agc_fw1160_stage12.elf
 deploy_agc_fw1160_stage13: agc_fw1160_stage13.elf
 	PS5_HOST=$(PS5_HOST) STAGE=13 STAGE_ARTIFACT=$(THIS_DIR)/$< \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) ./run_fw1160_stage.sh
+
+.PHONY: deploy_agc_fw1160_sony_workload
+deploy_agc_fw1160_sony_workload: fw1160_sony_workload_check
+	PS5_HOST=$(PS5_HOST) ORACLE_ARTIFACT=$(THIS_DIR)/agc_fw1160_sony_workload.elf \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) \
+		ALLOW_SONY_DRIVER_ORACLE=$(ALLOW_SONY_DRIVER_ORACLE) \
+		./run_fw1160_sony_workload.sh
 
 deploy_agc_videoout: agc_videoout.elf
 	PS5_HOST=$(PS5_HOST) ./run_fw550_conformance.sh --sample agc_videoout

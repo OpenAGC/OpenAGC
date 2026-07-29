@@ -106,14 +106,19 @@ prove that the packet carries the address of `table_base + stream_id * 8`, not
 the value stored in that slot. OpenAGC already matches those facts; see
 `agc_driver_workload_init_1160.md`.
 
-The next bounded gate is stage 13. Unlike stages 11 and 12, it restores the
-normal sequence already used by the qualified FW 5.50 full-path test:
-register-default notification and async-graphics setup first, followed by a
-non-workload marker oracle, then the otherwise unchanged inline workload DCB.
-Both prerequisites and ordinary marker submission are independently qualified
-on FW 11.60. Stage 13 is build-only pending a clean console reboot; its result
-cannot promote the capability until it passes twice and FW 5.50 regresses
-cleanly.
+Stage 13 restored the normal sequence used by the FW 5.50-qualified path after
+a clean reboot. Register defaults, async setup, process property, stream
+registration, and an ordinary preflight marker all passed; the marker completed
+in 50 ms. The unchanged inline workload submit returned `AGC_OK` and then
+stalled without reaching either marker. This rules out those surrounding
+prerequisites and must not be rerun unchanged.
+
+The next bounded diagnostic is the opt-in installed-driver oracle documented
+in `fw1160_sony_workload_oracle.md`. It patches credentials before loading the
+matching Sony module and requires an installed-driver preflight marker before
+calling the module's workload builders. A pass would identify missing private
+module state that must be recovered for `/dev/gc`; a failed preflight would
+show that the installed payload-context backend cannot serve as the oracle.
 
 ## Exact FW 11.60 builder layout
 

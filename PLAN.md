@@ -636,6 +636,11 @@ This rules out those surrounding prerequisites as the missing state. Do not
 rerun stage 13 unchanged. Keep FW 11.60 workload disabled and recover the
 GPU-side `SET_WORKLOAD` state transition or required queue/register
 programming before constructing another gate.
+An opt-in installed-driver oracle is now build-qualified for that recovery. It
+patches credentials before loading FW 11.60's matching module, forbids direct
+fallback, and requires an installed preflight marker before the module's own
+workload builders can run. Hardware execution remains pending and requires a
+reboot afterward regardless of verdict.
 
 The Sony workload contract itself is recovered for all active firmware:
 seven active-wrapper and three complete-wrapper groups converge on the same
