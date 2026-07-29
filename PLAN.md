@@ -76,6 +76,13 @@ AMD PM4 packet ancestry overlap in useful ways.
 - Workload stages 11-17 are closed failed gates and remain independent of the
   now-qualified graphics and compute paths. Require new offline evidence before
   another workload payload.
+- The next advanced graphics gates are headless `R16_FLOAT`, then
+  `RG16_FLOAT`. Both reuse the qualified baseline draw and differ only in the
+  typed color-target tuple and native readback width. Exact FW 11.60 artifacts
+  and target-specific guarded runner support are built. Reboot after the
+  stage-17 stall, reinject ps5debug-NG, and require two passes per format before
+  the corresponding FW 5.50 regression. See
+  `analysis/fw1160_narrow_fp16_gate_audit_20260730.md`.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and

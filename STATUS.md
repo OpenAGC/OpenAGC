@@ -394,6 +394,14 @@ subsequent qualifying runs were stable; `sceKernelDeleteEqueue` consistently
 returned `0x80020009` after a successful 1,800-flip session and is retained as
 a non-fatal teardown diagnostic.
 
+FW 11.60 narrow-FP16 qualification artifacts are now built but not yet
+hardware-run. They force the exact `0x1160` standard profile, headless bounded
+execution, target-specific native validation, clean shutdown, and forced
+termination. The harness no longer references the VideoOut-only CPU preview in
+headless R16/RG16 builds. R16 and RG16 must each pass twice after a clean reboot
+and then be regressed on FW 5.50 before they are advertised as FW 11.60
+capabilities. See `analysis/fw1160_narrow_fp16_gate_audit_20260730.md`.
+
 ## FW 5.50 sRGB render-target qualification (2026-07-27)
 
 Append-only public presets `RGBA8_SRGB` and `BGRA8_SRGB` are host-tested and

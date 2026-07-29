@@ -6,6 +6,7 @@ set -u
 PS5_HOST=${PS5_HOST:?set PS5_HOST}
 GRAPHICS_ARTIFACT=${GRAPHICS_ARTIFACT:?set GRAPHICS_ARTIFACT}
 PROCESS_CLEANUP_ELF=${PROCESS_CLEANUP_ELF:?set PROCESS_CLEANUP_ELF}
+EXPECTED_TARGET=${EXPECTED_TARGET:-offscreen FP16}
 REMOTE_BASE=/data/homebrew/openagc_fw1160_graphics
 
 if [ ! -s "$GRAPHICS_ARTIFACT" ] || [ ! -s "$PROCESS_CLEANUP_ELF" ]; then
@@ -31,7 +32,7 @@ cat "$output_file"
 
 grep -q "Runtime profile FW ABI 0x1160: PASS" "$output_file" || exit 1
 grep -q "GPU completion fence reached" "$output_file" || exit 1
-grep -q "GFX1013 offscreen FP16 target: PASS" "$output_file" || exit 1
+grep -Fq "GFX1013 $EXPECTED_TARGET target: PASS" "$output_file" || exit 1
 grep -q "Driver shutdown: PASS" "$output_file" || exit 1
 grep -q "Graphics result: PASS" "$output_file" || exit 1
 if grep -Eq "FAIL|FATAL|MISMATCH|timed out" "$output_file"; then

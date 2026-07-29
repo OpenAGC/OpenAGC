@@ -3358,7 +3358,9 @@ int main(void) {
                fp16_narrow_target.name);
         return 1;
     }
+#if !AGC_GRAPHICS_HEADLESS
     visualize_fp16(&test, components);
+#endif
 #elif AGC_VALIDATE_R11G11B10
     RenderTargetConfig r11g11b10_target = {
         test.render_target, FP16_TARGET_WIDTH, FP16_TARGET_HEIGHT,
