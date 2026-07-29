@@ -19,9 +19,9 @@ stencil surface ABIs.
 
 | Artifact | SHA-256 |
 | --- | --- |
-| `agc_depth_d16_fw1160.elf` | `c97e4335b84319cf8d62a324f6b78dfd988fb56f02d6924443817bf87e9ee01f` |
-| `agc_stencil_s8_fw1160.elf` | `039b008c9669c0ab5bec4cbed11105c02550c0422cfb85ac349649fd9bb8819f` |
-| `agc_depth_stencil_d16_s8_fw1160.elf` | `fdddd0da4c3efa599929449dcbd463b2fbf5aa6e6847f51c84d341915e10ccd6` |
+| `agc_depth_d16_fw1160.elf` | `f9c26bd6373ecb5ce87fedb492e95a3646d0506665b464cf06eb44ccb4ae2949` |
+| `agc_stencil_s8_fw1160.elf` | `c2c679296601e93857fb62ce0e7fc1a764dfba31246884bc15d5f265907d2fca` |
+| `agc_depth_stencil_d16_s8_fw1160.elf` | `561f0acc085666eccd9c83c417203d300f85da9a66cf61504585b2cf642d9ced` |
 
 `run_fw1160_depth.sh` uploads and runs the established process-cleanup ELF
 immediately before each payload. It accepts a run only when the exact
@@ -42,14 +42,27 @@ residual `eboot`, and ports 744 and 8080 remained reachable. That run is not a
 hardware attempt and led to the explicit headless color-oracle allocation in
 the hashes above.
 
+The next D16 launch completed its 2,633-dword DCB in 1 ms, passed all five
+markers, and shut the driver down cleanly. It was deliberately rejected by the
+old centered-square counts: the exact full-rectangle result was 228,096 green,
+228,096 red, 1,617,408 clear-one D16, 228,096 near D16, and 228,096 far D16.
+The 16/9 change from the retained counts is exactly the viewport-area change,
+not a firmware-dependent ABI difference. ps5debug-NG reported no residual
+`eboot`. The hashes above must be refreshed after rebuilding the corrected
+oracle, and this rejected run does not count toward qualification.
+
 ## Required native oracles
 
-The gates retain the exact FW 5.50-qualified readback counts:
+The original FW 5.50 display-backed fixtures used the former centered-square
+viewport semantics and produced the retained 128,304-pixel triangle counts.
+The current public viewport API intentionally covers the full 1920x1080
+rectangle. The FW 11.60 headless gates therefore require the exact current
+geometry observed by the first completed D16 submission:
 
-- D16: 909,792 clear-one samples, 128,304 near samples, 128,304 far samples,
-  and exactly 128,304 green plus 128,304 red color pixels.
-- S8-only: 2,364,832 zero bytes, 256,608 bytes equal to `0x5a`, no other
-  stencil values, and exactly 128,304 green plus 128,304 red color pixels.
+- D16: 1,617,408 clear-one samples, 228,096 near samples, 228,096 far samples,
+  and exactly 228,096 green plus 228,096 red color pixels.
+- S8-only: 2,165,248 zero bytes, 456,192 bytes equal to `0x5a`, no other
+  stencil values, and exactly 228,096 green plus 228,096 red color pixels.
 - D16+S8: both exact D16 and S8 distributions above, plus the same exact
   color counts.
 

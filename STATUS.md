@@ -412,11 +412,11 @@ See `analysis/fw1160_color_format_gate_matrix_20260730.md`.
 
 The uncompressed D16, S8-only, and D16+S8 paths now have exact FW 11.60
 headless artifacts and a cleanup-first bounded runner. Their native D16, S8,
-color, marker, fence, shutdown, and final-verdict oracles are unchanged from
-the FW 5.50-qualified fixtures. They are built, not hardware-qualified, and
-must pass twice each in increasing risk order after a clean reboot before the
-matching FW 5.50 regression. HTILE, expclear, compressed metadata, and MSAA
-are deliberately outside this first tier. See
+color, marker, fence, shutdown, and final-verdict oracles exercise the same
+four-draw fixture under the current full-rectangle viewport. They are built,
+not hardware-qualified, and must pass twice each in increasing risk order
+before the matching modern headless FW 5.50 regression. HTILE, expclear,
+compressed metadata, and MSAA are deliberately outside this first tier. See
 `analysis/fw1160_uncompressed_depth_gate_audit_20260730.md`.
 
 An initial D16 launch stopped before PM4 construction/submission because the
@@ -424,6 +424,14 @@ new headless variant still selected its absent VideoOut color buffer. The
 harness now allocates a dedicated linear RGBA8 color-oracle surface before the
 aligned depth/stencil allocations; ps5debug-NG found no residual process after
 the rejected launch. No depth capability is promoted from that pre-GPU run.
+
+The first completed headless D16 submission then reached its fence in 1 ms,
+passed every marker, and shut down cleanly, but correctly remained
+unqualified because its exact full-rectangle counts differed from the stale
+centered-square oracle. Source history and the observed 16/9 area ratio prove
+that the current public viewport semantics require 228,096 pixels per test
+triangle. The headless D16/S8 oracles now lock those current dimensions; the
+matching modern headless path still requires an FW 5.50 regression.
 
 ## FW 5.50 sRGB render-target qualification (2026-07-27)
 

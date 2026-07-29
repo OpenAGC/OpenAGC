@@ -2456,17 +2456,26 @@ static bool dispatch_graphics(GraphicsTest *test,
 #endif
     const uint32_t left_sample = color[639u * target->width + 717u];
     const uint32_t right_sample = color[639u * target->width + 1203u];
+    /* Retained VideoOut fixtures use the former centered-square viewport;
+     * headless qualification exercises the current full rectangle. */
+    const uint32_t expected_triangle_pixels = AGC_GRAPHICS_HEADLESS ?
+        228096u : 128304u;
     const bool color_pass =
         (AGC_D16_VALIDATION ?
-            (green_pixels == 128304u && red_pixels == 128304u) :
+            (green_pixels == expected_triangle_pixels &&
+             red_pixels == expected_triangle_pixels) :
             (green_pixels > 1000u && red_pixels > 1000u)) &&
         (AGC_HTILE_MIP_VALIDATION ||
          (left_sample == 0xFF00FF00u && right_sample == expected_red));
 #if !AGC_S8_ONLY_VALIDATION
 #if AGC_D16_VALIDATION
+    const uint32_t expected_depth_one = AGC_GRAPHICS_HEADLESS ?
+        target_pixels - 2u * expected_triangle_pixels :
+        (AGC_EXPCLEAR_VALIDATION ? 918432u : 909792u);
     const bool depth_pass =
-        depth_one == (AGC_EXPCLEAR_VALIDATION ? 918432u : 909792u) &&
-        depth_near == 128304u && depth_far == 128304u;
+        depth_one == expected_depth_one &&
+        depth_near == expected_triangle_pixels &&
+        depth_far == expected_triangle_pixels;
 #else
     const bool depth_pass =
         (AGC_HTILE_VALIDATION && !AGC_HTILE_OPERATION_VALIDATION) ||
@@ -2483,10 +2492,15 @@ static bool dispatch_graphics(GraphicsTest *test,
         stencil_replace += stencil[i] == 0x5au;
         stencil_other += stencil[i] != 0u && stencil[i] != 0x5au;
     }
-    const bool stencil_pass = stencil_zero != 0u &&
+    const uint32_t expected_stencil_replace =
+        2u * expected_triangle_pixels;
+    const uint32_t expected_stencil_zero =
+        (uint32_t)test->stencil_surface_size - expected_stencil_replace;
+    const bool stencil_pass =
         ((AGC_S8_ONLY_VALIDATION || AGC_D16_S8_VALIDATION) ?
-            stencil_replace == 256608u :
-                                  stencil_replace > 1000u) &&
+            (stencil_replace == expected_stencil_replace &&
+             stencil_zero == expected_stencil_zero) :
+            (stencil_replace > 1000u && stencil_zero != 0u)) &&
         stencil_other == 0u;
 #else
     const bool stencil_pass = true;
