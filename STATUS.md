@@ -1436,6 +1436,19 @@ selection. Installed-module probing also changed submission behavior across
 later payload processes, so it must never be followed by a direct fallback in
 the same boot session; see `analysis/sony_export_forwarding_550.md`.
 
+Direct `/dev/gc` operations are now independently capability-gated. FW 5.50
+retains its qualified set; FW 11.60 enables its statically proven submit,
+standard/Trinity memory, queue, primary/final suspend, TF-ring, HS-offchip, and
+async set; its workload, suspend-query, and defaults operations fail closed.
+All other active keys currently expose only the common submit16 baseline.
+`analysis/agc_driver_wrapper_fingerprints.tsv` records normalized groups for
+the exported wrappers across all 39 SPRXs. These groups guide further static
+promotion but do not replace internal-command and payload-layout evidence.
+FW 5.50 `sceAgcDriverSubmitToHDRScopesACQ` is deliberately unavailable: its
+body at vaddr `0x2eb0` dereferences an input structure through `rdi`, while
+OpenAGC's current compatibility declaration has no argument. Forwarding it
+would invoke the firmware with an indeterminate pointer.
+
 The 2026-07-29 clean-session run qualified the rebased direct-only main branch.
 The deployed ELF had no `libSceAgcDriver.sprx` `DT_NEEDED` entry and selected
 `prospero-gc-submit16` for FW `0x05500008`. `/dev/gc` initialization, internal
