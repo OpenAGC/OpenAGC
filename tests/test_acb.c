@@ -124,16 +124,16 @@ static void test_acb_wait_reg_mem(void) {
         &cb, 1, 5, 2, 0x200000047ULL, 0x1122334455667788ULL,
         0xFFEEDDCCBBAA0099ULL, UINT32_MAX);
     TEST_ASSERT(cmd == buf, "WaitRegMem should return packet start");
-    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_NOP, "WaitRegMem wrapper opcode");
-    TEST_ASSERT_EQ(agcPm4Subcommand(cmd[0]), AGC_PM4_SUB_WAIT_MEM64, "WaitRegMem64 subcommand");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_WAIT_REG_MEM64, "WaitRegMem64 opcode");
+    TEST_ASSERT_EQ(agcPm4Subcommand(cmd[0]), AGC_PM4_SUB_ZERO, "WaitRegMem64 header controls");
     TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 9, "WaitRegMem64 length");
-    TEST_ASSERT_EQ(cmd[1], 0x40u, "WaitRegMem64 aligned address low");
-    TEST_ASSERT_EQ(cmd[2], 0x2u, "WaitRegMem64 address high");
-    TEST_ASSERT_EQ(cmd[3], 0xBBAA0099u, "WaitRegMem64 mask low");
-    TEST_ASSERT_EQ(cmd[4], 0xFFEEDDCCu, "WaitRegMem64 mask high");
-    TEST_ASSERT_EQ(cmd[5], 0x55667788u, "WaitRegMem64 reference low");
-    TEST_ASSERT_EQ(cmd[6], 0x11223344u, "WaitRegMem64 reference high");
-    TEST_ASSERT_EQ(cmd[7], 0x04000015u, "WaitRegMem64 operation-zero control");
+    TEST_ASSERT_EQ(cmd[1], 0x04000015u, "WaitRegMem64 operation-zero control");
+    TEST_ASSERT_EQ(cmd[2], 0x40u, "WaitRegMem64 aligned address low");
+    TEST_ASSERT_EQ(cmd[3], 0x2u, "WaitRegMem64 address high");
+    TEST_ASSERT_EQ(cmd[4], 0x55667788u, "WaitRegMem64 reference low");
+    TEST_ASSERT_EQ(cmd[5], 0x11223344u, "WaitRegMem64 reference high");
+    TEST_ASSERT_EQ(cmd[6], 0xBBAA0099u, "WaitRegMem64 mask low");
+    TEST_ASSERT_EQ(cmd[7], 0xFFEEDDCCu, "WaitRegMem64 mask high");
     TEST_ASSERT_EQ(cmd[8], 0xFFFFu, "WaitRegMem64 poll saturates");
     TEST_ASSERT_EQ(cb.cursor_up, (uintptr_t)(buf + 9), "WaitRegMem64 cursor advance");
 }

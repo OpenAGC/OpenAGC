@@ -191,30 +191,28 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbWaitRegMem(
     uint32_t cache_policy, uint64_t address, uint64_t reference,
     uint64_t mask, uint32_t poll_cycles)
 {
-    /* reference-confirmed encoding for NOP-wrapped WaitRegMem.
+    /* FW 5.50 SPRX-confirmed native WAIT_REG_MEM encoding.
      *
-     * 32-bit (size=0): 7 dwords, IT_NOP + R_WAIT_MEM32
+     * 32-bit (size=0): 7 dwords, IT_WAIT_REG_MEM (0x3c)
      *   [0] header
-     *   [1] address_lo & ~0x3
-     *   [2] (address >> 32) & 0x3FFFF
-     *   [3] mask_lo
+     *   [1] control = 0x10 | (cmp&7) | ((op&3)<<8) | ((op&0xC)<<4) | ((cache&3)<<25)
+     *   [2] address_lo & ~0x3
+     *   [3] (address >> 32) & 0x3FFFF
      *   [4] reference_lo
-     *   [5] control = 0x10 | (cmp&7) | ((op&3)<<8) | ((op&0xC)<<4) | ((cache&3)<<25)
+     *   [5] mask_lo
      *   [6] poll = min(poll_cycles >> 4, 0xFFFF)
      *
-     * 64-bit (size=1): 9 dwords, IT_NOP + R_WAIT_MEM64
+     * 64-bit (size=1): 9 dwords, IT_WAIT_REG_MEM64 (0x93)
      *   [0] header
-     *   [1] address_lo & ~0x7
-     *   [2] (address >> 32) & 0x3FFFF
-     *   [3] mask_lo
-     *   [4] mask_hi
-     *   [5] reference_lo
-     *   [6] reference_hi
-     *   [7] control = 0x10 | (cmp&7) | ((op&1)<<8) | ((op&6)<<5) | ((cache&3)<<25)
+     *   [1] control = 0x10 | (cmp&7) | ((op&1)<<8) | ((op&6)<<5) | ((cache&3)<<25)
+     *   [2] address_lo & ~0x7
+     *   [3] (address >> 32) & 0x3FFFF
+     *   [4] reference_lo
+     *   [5] reference_hi
+     *   [6] mask_lo
+     *   [7] mask_hi
      *   [8] poll = min(poll_cycles >> 4, 0xFFFF)
-     *
-     * SharpEmu and KytyPS5 both keep this NOP-wrapped layout for every
-     * supported operation value. */
+     */
     if (size > 1 || compare_function > 7 || operation > 4 || cache_policy > 3)
         return 0;
 
@@ -228,26 +226,26 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbWaitRegMem(
         poll = 0xFFFFu;
 
     if (size == 0) {
-        cmd[0] = agcPm4Header3Sub(AGC_PM4_OP_NOP, AGC_PM4_SUB_WAIT_MEM32, 7);
-        cmd[1] = (uint32_t)address & ~0x3u;
-        cmd[2] = (uint32_t)(address >> 32) & 0x3FFFFu;
-        cmd[3] = (uint32_t)mask;
-        cmd[4] = (uint32_t)reference;
-        cmd[5] = 0x10u | (compare_function & 0x7u) |
+        cmd[0] = agcPm4Header3(AGC_PM4_OP_WAIT_REG_MEM, 7u);
+        cmd[1] = 0x10u | (compare_function & 0x7u) |
                  ((operation & 0x3u) << 8u) | ((operation & 0xCu) << 4u) |
                  ((cache_policy & 0x3u) << 25u);
+        cmd[2] = (uint32_t)address & ~0x3u;
+        cmd[3] = (uint32_t)(address >> 32) & 0x3FFFFu;
+        cmd[4] = (uint32_t)reference;
+        cmd[5] = (uint32_t)mask;
         cmd[6] = poll;
     } else {
-        cmd[0] = agcPm4Header3Sub(AGC_PM4_OP_NOP, AGC_PM4_SUB_WAIT_MEM64, 9);
-        cmd[1] = (uint32_t)address & ~0x7u;
-        cmd[2] = (uint32_t)(address >> 32) & 0x3FFFFu;
-        cmd[3] = (uint32_t)mask;
-        cmd[4] = (uint32_t)(mask >> 32);
-        cmd[5] = (uint32_t)reference;
-        cmd[6] = (uint32_t)(reference >> 32);
-        cmd[7] = 0x10u | (compare_function & 0x7u) |
+        cmd[0] = agcPm4Header3(AGC_PM4_OP_WAIT_REG_MEM64, 9u);
+        cmd[1] = 0x10u | (compare_function & 0x7u) |
                  ((operation & 0x1u) << 8u) | ((operation & 0x6u) << 5u) |
                  ((cache_policy & 0x3u) << 25u);
+        cmd[2] = (uint32_t)address & ~0x7u;
+        cmd[3] = (uint32_t)(address >> 32) & 0x3FFFFu;
+        cmd[4] = (uint32_t)reference;
+        cmd[5] = (uint32_t)(reference >> 32);
+        cmd[6] = (uint32_t)mask;
+        cmd[7] = (uint32_t)(mask >> 32);
         cmd[8] = poll;
     }
     return cmd;
@@ -649,9 +647,9 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbSetUcRegistersIndirect(
  * (opcode 0x10, sub 0x19), we also accept that format and patch the
  * corresponding fields (dst at cmd[4..5], src at cmd[6..7]).
  *
- * WaitRegMemPatchAddress: patches cmd[2..3] (addr at +8 bytes) for a standard
- *   WAIT_REG_MEM packet (op 0x3C), or cmd[1..2] (addr at +4 bytes) for a
- *   NOP-wrapped wait (sub 0x0A WAIT_MEM32 or 0x16 WAIT_MEM64).
+ * WaitRegMemPatchAddress: patches cmd[2..3] (addr at +8 bytes) for native
+ *   WAIT_REG_MEM/WAIT_REG_MEM64 packets (opcodes 0x3C/0x93), or cmd[1..2]
+ *   (addr at +4 bytes) for a legacy NOP-wrapped wait.
  * QueueEndOfPipeActionPatchAddress: patches cmd[3..4] (dst address at +12 bytes)
  *   in a ReleaseMem packet (NOP + sub 0x18).
  */
@@ -715,7 +713,8 @@ int32_t PS5_SYSV_ABI sceAgcWaitRegMemPatchAddress(
     uint32_t sub = agcPm4Subcommand(cmd[0]);
 
     uint32_t field_index;
-    if (opcode == AGC_PM4_OP_WAIT_REG_MEM) {
+    if (opcode == AGC_PM4_OP_WAIT_REG_MEM ||
+        opcode == AGC_PM4_OP_WAIT_REG_MEM64) {
         field_index = 2;
     } else if (opcode == AGC_PM4_OP_NOP &&
                (sub == AGC_PM4_SUB_WAIT_MEM32 || sub == AGC_PM4_SUB_WAIT_MEM64)) {

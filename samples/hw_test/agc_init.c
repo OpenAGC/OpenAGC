@@ -221,6 +221,7 @@ int main(void) {
     int32_t cred_err = -1; /* result of credential bypass (step 0) */
     uint32_t version;
     bool profile_ok = false;
+    bool wait64_ok = false;
     AgcDriverRuntimeDiagnostics runtime_diag;
     SceAgcCb cb;
 
@@ -426,6 +427,71 @@ int main(void) {
     printf("    Batched DCB execution: %s\n",
            dcb_err == AGC_OK ? "PASS" : "FAIL");
 
+    /* --- Step 5b: Execute the SPRX-exact nine-dword wait packet --- */
+    printf("[5b] 64-bit nine-dword WaitRegMem + marker...\n");
+    volatile uint64_t *wait_value =
+        (volatile uint64_t *)((uint8_t *)submit_memory + 0x3000u);
+    volatile uint32_t *wait_marker =
+        (volatile uint32_t *)((uint8_t *)submit_memory + 0x3010u);
+    const uint64_t expected_wait_value = 0x1122334455667788ULL;
+    const uint32_t expected_wait_marker = 0xD064CAFEu;
+    *wait_value = 0u;
+    *wait_marker = 0u;
+    clflush((u_long)(uintptr_t)wait_value);
+    clflush((u_long)(uintptr_t)wait_marker);
+    mfence();
+
+    agcCbInit(&cb, cb_buffers[0], 0x1000u);
+    const uint32_t wait_value_words[2] = {
+        (uint32_t)expected_wait_value,
+        (uint32_t)(expected_wait_value >> 32u),
+    };
+    uint32_t *wait_publish = sceAgcDcbWriteData(
+        &cb, 2u, 0u, (uint64_t)(uintptr_t)wait_value,
+        wait_value_words, 2u, 0u, 1u);
+    uint32_t *wait_packet = sceAgcDcbWaitRegMem(
+        &cb, 1u, 3u, 0u, 0u, (uint64_t)(uintptr_t)wait_value,
+        expected_wait_value, UINT64_MAX, UINT32_MAX);
+    uint32_t *wait_write = sceAgcDcbWriteData(
+        &cb, 2u, 0u, (uint64_t)(uintptr_t)wait_marker,
+        &expected_wait_marker, 1u, 1u, 1u);
+    uint32_t wait_used_dwords = agcCbUsedDwords(&cb);
+    bool wait_shape_ok = wait_publish == cb_buffers[0] && wait_packet != NULL &&
+        wait_write != NULL &&
+        agcPm4Opcode(wait_packet[0]) == AGC_PM4_OP_WAIT_REG_MEM64 &&
+        agcPm4Length(wait_packet[0]) == 9u &&
+        wait_packet[8] == 0xFFFFu && wait_used_dwords == 20u;
+    printf("    packet: header=0x%08X dwords=%u poll=0x%X shape=%s\n",
+           wait_packet ? wait_packet[0] : 0u, wait_used_dwords,
+           wait_packet ? wait_packet[8] : 0u,
+           wait_shape_ok ? "PASS" : "FAIL");
+    if (wait_shape_ok) {
+        clflush((u_long)(uintptr_t)cb_buffers[0]);
+        mfence();
+        AgcCommandBufferSubmit wait_submit = {
+            .command_address = (uintptr_t)cb_buffers[0],
+            .dword_count = wait_used_dwords,
+        };
+        err = sceAgcDriverSubmitDcb(&wait_submit);
+        uint32_t marker_wait_ms = 0u;
+        while (marker_wait_ms < 5000u) {
+            clflush((u_long)(uintptr_t)wait_marker);
+            mfence();
+            if (*wait_marker == expected_wait_marker)
+                break;
+            usleep(50000);
+            marker_wait_ms += 50u;
+        }
+        clflush((u_long)(uintptr_t)wait_marker);
+        clflush((u_long)(uintptr_t)wait_value);
+        mfence();
+        wait64_ok = err == AGC_OK && *wait_marker == expected_wait_marker;
+        printf("    submit: 0x%08X value=0x%016llX marker after %u ms: 0x%08X (%s)\n",
+               (unsigned)err, (unsigned long long)*wait_value,
+               marker_wait_ms, *wait_marker,
+               wait64_ok ? "PASS" : "FAIL");
+    }
+
     /* --- Step 6: Setup async graphics (needed before queue create) --- */
     printf("[6] sceAgcDriverSetupAsyncGraphics(1)...\n");
     err = sceAgcDriverSetupAsyncGraphics(1);
@@ -536,6 +602,7 @@ int main(void) {
     printf("  PA debug version:  0x%08X\n", version);
     printf("  Batched DCBs:      %s\n",
            dcb_err == AGC_OK ? "OK" : "check step 5");
+    printf("  9-dword wait64:    %s\n", wait64_ok ? "PASS" : "FAILED");
     printf("  Async graphics:    %s\n",
            "check step 6");
     printf("  Queue create/destroy: %s\n",
@@ -543,5 +610,6 @@ int main(void) {
     printf("  Suspend point:     check step 8\n");
     printf("=== Done ===\n");
 
-    return (profile_ok && dcb_err == AGC_OK && queue_handle >= 0) ? 0 : 1;
+    return (profile_ok && dcb_err == AGC_OK && wait64_ok && queue_handle >= 0)
+        ? 0 : 1;
 }
