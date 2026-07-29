@@ -48,7 +48,8 @@ cmake --build build-prospero
 ```
 
 The prospero build compiles `driver_prospero.c` with native `/dev/gc` ioctl calls.
-It links against `kernel` and `SceAgcDriver` stubs from the SDK.
+It links against `kernel` and `SceVideoOut`; the direct backend does not depend
+on or preload `libSceAgcDriver.sprx`.
 
 Expected host test result: `4225 passed, 0 failed`. Any change that drops this
 count is a regression — fix it before declaring the task done.
@@ -258,10 +259,11 @@ $PKG_TOOLS/prosperopkg-gp5 app_dir out.gp5 --flat --type app
 
 ### CMake integration
 
-The prospero CMake build (`-DOPENAGC_PLATFORM=prospero`) already links
-`kernel` and `SceAgcDriver` (see `CMakeLists.txt` lines 58–63). Those
-libraries must be available in the SDK's lib directory after stubs are
-installed. The host build does not need the SDK.
+The prospero CMake build (`-DOPENAGC_PLATFORM=prospero`) links `kernel` and
+`SceVideoOut`. It deliberately does not link `SceAgcDriver`: OpenAGC's primary
+backend owns the direct `/dev/gc` ABI and must not acquire an installed-driver
+dependency through its exported CMake target. The host build does not need the
+SDK.
 
 ### Hardware validation samples
 
