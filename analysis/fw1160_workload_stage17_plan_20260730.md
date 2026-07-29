@@ -65,3 +65,34 @@ Require two clean passes, including identical seed semantics and both ordered
 markers, before promoting FW 11.60 workload support. Then regress the matching
 path on FW 5.50. On a stall, use the cleanup ELF and do not repeat the candidate
 unchanged.
+
+## Hardware result
+
+Stage 17 was run once on standard PS5 FW `0x11600005` after a clean reboot,
+with ps5debug-NG live and the cleanup ELF immediately preceding the gate. All
+previously qualified setup steps returned `AGC_OK`: exact profile selection,
+internal memory, version-12 defaults, async graphics, GPU-info property, and
+Gn2/Gn3/Gn4 shadow publications.
+
+The newly recovered request succeeded and returned:
+
+```text
+slot seed ioctl=PASS values=fff0ffe0/fff0ffe0/ffffffff/ffffffff
+```
+
+The helper installed those four dwords at the beginning of the table and left
+the remaining slots all ones. Stream registration succeeded, and the ordinary
+preflight marker reached `0x1160f017` in 50 ms. The exact 40-dword inline
+active/marker/complete/marker DCB then returned `AGC_OK`, but neither workload
+marker executed before the 20-second transport timeout.
+
+ps5debug-NG enumerated PID 101 as `eboot.elf`. The established cleanup ELF
+removed it; a second process-list query found no `eboot.elf`, and both TCP 744
+and websrv remained responsive.
+
+The slot lifecycle is real ABI behavior but is not sufficient to make
+`SET_WORKLOAD` execute on FW 11.60. Do not repeat stage 17 unchanged. Public FW
+11.60 workload support remains disabled. Any later gate requires new evidence
+for a GPU-side queue/register transition beyond the now-proven defaults,
+async, process properties, shadow state, stream metadata, table seed, packet
+bytes, submission framing, and cache lifecycle.

@@ -40,9 +40,12 @@ AMD PM4 packet ancestry overlap in useful ways.
   11-15 missed: Sony fills the `GpuInfo + 0x3a000` slot table with `0xff`,
   seeds its first 16 bytes from an all-ones `0xc010813b` request, and leaves
   zero there only when that request fails. OpenAGC had zeroed all `0x200`
-  bytes. Stage 17 is built as stage 15 plus only this exact lifecycle. Run it
-  once after a clean reboot; require two clean passes before promotion and do
-  not repeat it unchanged after a stall.
+  bytes. Stage 17 was run once as stage 15 plus only this exact lifecycle. The
+  seed request succeeded with values
+  `fff0ffe0/fff0ffe0/ffffffff/ffffffff`, and its ordinary marker completed in
+  50 ms, but the inline workload still stalled before either following marker.
+  Cleanup removed PID 101. Do not repeat stage 17 unchanged. Recover a new
+  GPU-side queue/register prerequisite before another workload gate.
 - After a successful FW 11.60 candidate passes twice, rerun the corresponding
   direct path on FW 5.50 before enabling any capability. Corpus extraction
   now proves the
@@ -70,8 +73,9 @@ AMD PM4 packet ancestry overlap in useful ways.
   1 ms, exact 2,073,600/2,073,600 shader output, clean shutdown, and no
   residual process. Baseline Wave32 compute is hardware-qualified for standard
   FW 11.60.
-- Run the higher-risk workload stage 17 last. It remains independent of the
-  now-qualified graphics and compute paths.
+- Workload stages 11-17 are closed failed gates and remain independent of the
+  now-qualified graphics and compute paths. Require new offline evidence before
+  another workload payload.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and

@@ -1063,6 +1063,14 @@ The host-generic implementation now has a tested model for:
   stage-15 prerequisites and must pass twice on a clean FW 11.60 boot before
   workload support can be promoted. See
   `analysis/fw1160_workload_stage17_plan_20260730.md`.
+  Stage 17 was then run once. The exact seed ioctl succeeded and returned
+  `fff0ffe0/fff0ffe0/ffffffff/ffffffff`; the ordinary preflight marker passed
+  in 50 ms. The fully flushed 40-dword inline workload DCB returned `AGC_OK`,
+  but neither following marker executed before timeout. ps5debug-NG found PID
+  101; the cleanup ELF removed it and restored an empty `eboot.elf` list while
+  ports 744 and 8080 remained responsive. The recovered slot lifecycle is not
+  sufficient. Do not repeat stage 17 unchanged, and keep FW 11.60 workload
+  fail-closed pending new GPU-side queue/register evidence.
   The independent headless FW 11.60 graphics and compute gates were also
   rebuilt and audited. They contain no workload calls, require the exact
   standard `0x1160` profile, and enforce bounded GPU/readback plus shutdown
