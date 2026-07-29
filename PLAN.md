@@ -557,6 +557,9 @@ with an exact 2,073,600-pixel output oracle, driver shutdown, and forced process
 termination. Presentation is isolated because FW 11.60 rejects the FW 5.50
 `libSceVideoOut` linear-buffer patch offset; its VideoOut contract will be
 qualified independently rather than guessed during compute testing.
+The shared compute sample now removes its flip event before deleting the event
+queue and unmaps direct memory before releasing it, so both firmware runners
+require a genuinely clean lifecycle rather than relying on process teardown.
 
 The Sony workload contract itself is recovered for all active firmware:
 seven active-wrapper and three complete-wrapper groups converge on the same

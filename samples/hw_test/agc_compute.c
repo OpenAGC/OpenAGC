@@ -21,6 +21,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/mman.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -599,7 +600,9 @@ int main(void) {
     bool agc_attempted = true;
     bool success = false;
     int close_result = 0;
+    int delete_event_result = 0;
     int equeue_result = 0;
+    int unmap_result = 0;
     int release_result = 0;
     int32_t shutdown_result = AGC_ERROR_NOT_INITIALIZED;
 
@@ -695,18 +698,24 @@ int main(void) {
 #endif
 
 cleanup:
-    if (test.flipqueue != 0)
-        equeue_result = sceKernelDeleteEqueue(test.flipqueue);
+    if (test.handle >= 0 && test.flipqueue != 0)
+        delete_event_result = sceVideoOutDeleteFlipEvent(
+            (void *)(uintptr_t)test.flipqueue, test.handle);
     if (test.handle >= 0)
         close_result = sceVideoOutClose(test.handle);
+    if (test.flipqueue != 0)
+        equeue_result = sceKernelDeleteEqueue(test.flipqueue);
+    if (test.mapped != NULL && test.mapped_size != 0)
+        unmap_result = munmap(test.mapped, test.mapped_size);
     if (test.direct_memory >= 0 && test.mapped_size != 0)
         release_result = sceKernelReleaseDirectMemory(
             test.direct_memory, test.mapped_size);
     if (agc_attempted)
         shutdown_result = agcDriverShutdown();
 
-    success = output_complete && flip_complete && close_result == 0 &&
-        equeue_result == 0 && release_result == 0 &&
+    success = output_complete && flip_complete && delete_event_result == 0 &&
+        close_result == 0 && equeue_result == 0 && unmap_result == 0 &&
+        release_result == 0 &&
         shutdown_result == AGC_OK;
     printf("\n=== Compute Summary ===\n");
     printf("  Runtime profile: FW ABI 0x%04X\n",
@@ -719,8 +728,10 @@ cleanup:
            flip_complete ? "PASS" : "FAILED"
 #endif
     );
-    printf("  VideoOut cleanup: close=0x%08x equeue=0x%08x release=0x%08x\n",
-           (unsigned)close_result, (unsigned)equeue_result,
+    printf("  VideoOut cleanup: event=0x%08x close=0x%08x equeue=0x%08x "
+           "unmap=0x%08x release=0x%08x\n",
+           (unsigned)delete_event_result, (unsigned)close_result,
+           (unsigned)equeue_result, (unsigned)unmap_result,
            (unsigned)release_result);
     printf("  Driver shutdown: %s (0x%08x)\n",
            shutdown_result == AGC_OK ? "PASS" : "FAILED",

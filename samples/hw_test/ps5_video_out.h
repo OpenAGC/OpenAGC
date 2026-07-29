@@ -150,6 +150,7 @@ int32_t sceVideoOutGetResolutionStatus(int32_t handle,
 
 /* --- Events --- */
 int32_t sceVideoOutAddFlipEvent(void *equeue, int32_t handle, void *data);
+int32_t sceVideoOutDeleteFlipEvent(void *equeue, int32_t handle);
 
 #ifdef __cplusplus
 }
