@@ -42,6 +42,12 @@ extern int32_t PS5_SYSV_ABI agcProsperoCreateUserSpecialQueue(void);
 extern int32_t PS5_SYSV_ABI agcProsperoDestroyUserSpecialQueue(void);
 extern int32_t PS5_SYSV_ABI agcProsperoSuspendPointSubmitDirect(
     uint32_t field0, uint32_t field1, uint32_t field2, uint32_t field3);
+extern int32_t PS5_SYSV_ABI agcProsperoInternalSuspendPointSubmitFinal(
+    uint32_t field0, uint32_t field1, uint32_t field2, uint32_t field3);
+extern int32_t PS5_SYSV_ABI agcProsperoSetTFRing(
+    uintptr_t ring_addr, uint32_t size);
+extern int32_t PS5_SYSV_ABI agcProsperoSetHsOffchipParamDirect(
+    uint64_t list_addr, uint32_t num_entries);
 extern int32_t PS5_SYSV_ABI agcProsperoShutdown(void);
 extern int32_t agcProsperoGetRuntimeProfile(
     AgcProsperoRuntimeProfile *profile_out);
@@ -178,7 +184,7 @@ int main(void)
         return 1;
     }
 #endif
-#if AGC_FW1160_STAGE >= 4
+#if AGC_FW1160_STAGE >= 4 && AGC_FW1160_STAGE <= 7
     result = agcProsperoSetupAsyncGraphics(1u);
     printf("async graphics=0x%08X\n", (unsigned)result);
     if (result != AGC_OK) {
@@ -187,7 +193,7 @@ int main(void)
         return 1;
     }
 #endif
-#if AGC_FW1160_STAGE >= 5
+#if AGC_FW1160_STAGE >= 5 && AGC_FW1160_STAGE <= 7
     int32_t queue_handle = agcProsperoCreateUserSpecialQueue();
     printf("queue create=%d (0x%08X)\n",
         queue_handle, (unsigned)queue_handle);
@@ -207,6 +213,17 @@ int main(void)
         return 1;
     }
 #endif
+#if AGC_FW1160_STAGE >= 7
+    result = agcProsperoInternalSuspendPointSubmitFinal(
+        0xaf1e80b7u, 0x8b4cdd90u, 0x99f68d6cu, 0u);
+    printf("final suspend=0x%08X\n", (unsigned)result);
+    if (result != AGC_OK) {
+        printf("stage 7: final suspend FAIL\n");
+        (void)agcProsperoDestroyUserSpecialQueue();
+        (void)agcProsperoShutdown();
+        return 1;
+    }
+#endif
     result = agcProsperoDestroyUserSpecialQueue();
     printf("queue destroy=0x%08X\n", (unsigned)result);
     if (result != AGC_OK) {
@@ -215,12 +232,54 @@ int main(void)
         return 1;
     }
 #endif
+#if AGC_FW1160_STAGE == 8 || AGC_FW1160_STAGE == 9
+    void *ring_memory = (void *)(uintptr_t)0xf02000000ULL;
+    result = sceKernelMapNamedSystemFlexibleMemory(&ring_memory, 0x4000u,
+        0x33, 0, AGC_FW1160_STAGE == 8
+            ? "OpenAgcFw1160TfRing" : "OpenAgcFw1160HsList");
+    printf("ring/list memory result=%d address=%p\n", result, ring_memory);
+    if (result != 0 || !ring_memory) {
+        printf("stage %d: ring/list memory FAIL\n", AGC_FW1160_STAGE);
+        (void)agcProsperoShutdown();
+        return 1;
+    }
+    memset(ring_memory, 0, 0x4000u);
+    clflush((u_long)(uintptr_t)ring_memory);
+    mfence();
+#if AGC_FW1160_STAGE == 8
+    result = agcProsperoSetTFRing((uintptr_t)ring_memory, 0x4000u);
+    printf("TF ring=0x%08X\n", (unsigned)result);
+    if (result != AGC_OK) {
+        printf("stage 8: TF ring FAIL\n");
+        (void)agcProsperoShutdown();
+        return 1;
+    }
+#else
+    result = agcProsperoSetHsOffchipParamDirect(
+        (uint64_t)(uintptr_t)ring_memory, 0u);
+    printf("HS offchip zero-entry carrier=0x%08X\n", (unsigned)result);
+    if (result != AGC_OK) {
+        printf("stage 9: HS offchip carrier FAIL\n");
+        (void)agcProsperoShutdown();
+        return 1;
+    }
+#endif
+#endif
     result = agcProsperoShutdown();
     printf("direct shutdown=0x%08X\n", (unsigned)result);
     if (result != AGC_OK) {
         printf("stage %d: shutdown FAIL\n", AGC_FW1160_STAGE);
         return 1;
     }
+#if AGC_FW1160_STAGE == 8 || AGC_FW1160_STAGE == 9
+    result = sceKernelReleaseFlexibleMemory(ring_memory, 0x4000u);
+    printf("ring/list memory release=%d\n", result);
+    if (result != 0) {
+        printf("stage %d: ring/list memory release FAIL\n",
+            AGC_FW1160_STAGE);
+        return 1;
+    }
+#endif
 #endif
 
     printf("stage %d: PASS\n", AGC_FW1160_STAGE);

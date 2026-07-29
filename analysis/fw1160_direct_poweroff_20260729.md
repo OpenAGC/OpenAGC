@@ -58,6 +58,9 @@ selection deliberately remains blocked until qualification completes.
 The following gates add exactly one new operation over qualified prerequisites:
 stage 4 adds async setup, stage 5 adds authenticated queue create/destroy, and
 stage 6 adds primary suspend submission while the qualified queue is active.
+Stage 7 adds final suspend, stage 8 binds an aligned 16 KiB TF ring, and stage
+9 exercises the HS-offchip ioctl/payload boundary with a valid aligned pointer
+and zero entries; stage 9 does not claim non-empty patch-list execution.
 Each gate still requires two clean runs with process cleanup immediately before
 the payload.
 
