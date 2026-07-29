@@ -6,6 +6,8 @@ CFLAGS  ?= -O2 -Wall -Wextra -Wpedantic
 CFLAGS  += -I include -I src -DOPENAGC_GENERIC
 
 SRCS = \
+	src/capabilities.c \
+	src/memory.c \
 	src/cb.c \
 	src/cb_builders.c \
 	src/driver_ops.c \
@@ -28,13 +30,16 @@ SRCS = \
 	src/texture.c \
 	src/shader.c \
 	src/graphics.c \
-	src/game_compat.c
+	src/game_compat.c \
+	src/videoout_generic.c
 
 OBJS = $(SRCS:.c=.o)
 
 TEST_SRCS = \
 	tests/test_main.c \
 	tests/test_types.c \
+	tests/test_capabilities.c \
+	tests/test_memory.c \
 	tests/test_acb.c \
 	tests/test_cb.c \
 	tests/test_dcb.c \
@@ -46,7 +51,9 @@ TEST_SRCS = \
 	tests/test_register_defaults.c \
 	tests/test_registers.c \
 	tests/test_sony_exports.c \
-	tests/test_driver_registry.c
+	tests/test_driver_registry.c \
+	tests/test_videoout.c \
+	samples/triangle/triangle.c
 
 TEST_OBJS = $(TEST_SRCS:.c=.o)
 
