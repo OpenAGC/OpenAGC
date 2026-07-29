@@ -649,6 +649,13 @@ through Sony's multi-DCB export and flushes all cache lines occupied by the
 40-dword workload DCB. It is build-qualified for one fresh-boot attempt; do not
 rerun the original artifact. See
 `analysis/fw1160_sony_workload_attempt_20260729.md`.
+The revised artifact was subsequently run after another clean reboot. Sony's
+multi-DCB export returned `AGC_OK`, but neither observable marker executed in
+5,000 ms. The safety gate again prevented workload emission. This rules out
+final-descriptor deferral and incomplete cache flushing, and proves that the
+installed module cannot be the execution oracle under websrv. Do not rerun
+either artifact. Resume direct `/dev/gc` recovery of the GPU-side
+`SET_WORKLOAD` queue/register transition before constructing a new gate.
 
 The Sony workload contract itself is recovered for all active firmware:
 seven active-wrapper and three complete-wrapper groups converge on the same

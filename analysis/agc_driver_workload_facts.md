@@ -125,6 +125,14 @@ Sony's multi-DCB export with two observable DCBs plus a 16-dword NOP trailer and
 flushes the full 40-dword workload buffer. Do not retry the original artifact;
 see `fw1160_sony_workload_attempt_20260729.md`.
 
+The revised oracle was then run after another clean reboot. Sony's multi-DCB
+export returned `AGC_OK`, but neither observable preflight marker executed
+after 5,000 ms. The NOP trailer and complete-range flush rule out the original
+framing defects; the workload gate again prevented any `SET_WORKLOAD` packet.
+The installed module cannot serve as a GPU-execution oracle under websrv. Do
+not repeat either installed-driver artifact. Continue recovery against the
+working direct `/dev/gc` submission path.
+
 ## Exact FW 11.60 builder layout
 
 The private prefix helper emits nine dwords for the active call's eight-byte

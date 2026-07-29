@@ -41,3 +41,30 @@ flushes every cache line occupied by the 40-dword workload DCB. The first
 attempt remains useful evidence that the safety gate worked, but it is not
 evidence that the installed backend is unusable. Do not repeat the original
 single-DCB artifact. The console was rebooted before the revised test boundary.
+
+## Revised multi-DCB attempt
+
+Artifact SHA-256:
+`a3aa5b57dd8861e0c6151ec5acf115d48631fb5078b2fd2a3867201e527f8f09`.
+
+After a fresh reboot, the revised artifact was launched with the cleanup ELF
+immediately beforehand. ps5debug-NG remained reachable on port 744. Module
+load, all export resolutions, size checks, and async setup passed again. Sony's
+`sceAgcDriverSubmitMultiDcbs` accepted two five-dword marker DCBs followed by a
+16-dword NOP trailer, but neither marker executed:
+
+```text
+installed preflight submit=0x00000000 markers=0x00000000/0x00000000 wait=5000 ms
+installed preflight execution: FAIL; workload not attempted
+```
+
+The revised test rules out final-descriptor deferral and incomplete DCB cache
+flushing as explanations for the installed preflight failure. The safety gate
+again prevented stream registration and workload emission. The payload printed
+its verdict and killed itself; ps5debug-NG remained reachable.
+
+The installed module cannot provide a GPU-execution oracle in this websrv
+homebrew-loader context. Do not repeat either installed-driver artifact. The
+workload investigation returns to the working direct `/dev/gc` path and offline
+recovery of the GPU-side `SET_WORKLOAD` state transition. Another reboot is
+required before any direct GPU test.

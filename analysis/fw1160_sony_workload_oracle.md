@@ -97,5 +97,12 @@ flushes the complete workload DCB range. See
 `fw1160_sony_workload_attempt_20260729.md` for the original artifact and
 interpretation.
 
-Status: original single-DCB preflight inconclusive; revised multi-DCB oracle
-build-qualified and hardware pending.
+The revised oracle was then run after another clean reboot. Sony's multi-DCB
+export accepted both marker DCBs plus the NOP trailer, but neither marker
+executed after 5,000 ms. The workload safety gate again prevented stream
+registration and packet emission. This rules out final-descriptor deferral and
+partial cache flushing as the preflight cause. The installed module cannot
+provide a GPU-execution oracle in this websrv homebrew-loader context.
+
+Status: both installed preflights hardware-attempted; corrected multi-DCB
+preflight failed; workload not attempted. Do not rerun either artifact.

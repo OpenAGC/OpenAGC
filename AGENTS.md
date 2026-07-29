@@ -374,6 +374,13 @@ Sony's multi-DCB export with two observable DCBs followed by a 16-dword NOP
 trailer. Do not rerun the original artifact. See
 `analysis/fw1160_sony_workload_attempt_20260729.md`.
 
+The revised artifact was also hardware-attempted after another clean reboot.
+Sony's multi-DCB export returned `AGC_OK`, but neither observable marker
+executed after 5,000 ms; the workload gate again prevented packet emission.
+The installed module cannot serve as a GPU-execution oracle under websrv. Do
+not rerun either installed-driver artifact, and reboot before returning to the
+direct backend.
+
 **3. `agc_videoout.elf` — Combined AGC + VideoOut test**
 
 Tests the full graphics pipeline together:

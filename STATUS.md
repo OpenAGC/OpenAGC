@@ -1021,6 +1021,12 @@ The host-generic implementation now has a tested model for:
   two observable DCBs followed by a 16-dword NOP trailer and flushes the full
   40-dword workload DCB. Do not rerun the original artifact. See
   `analysis/fw1160_sony_workload_attempt_20260729.md`.
+  The revised artifact was then hardware-attempted after another clean reboot.
+  Sony's multi-DCB export returned `AGC_OK`, but neither observable marker
+  executed after 5,000 ms. The safety gate again prevented workload emission.
+  This rules out final-descriptor deferral and partial cache flushing; the
+  installed module cannot serve as the GPU-execution oracle under websrv. Do
+  not rerun either installed-driver artifact.
   All 39 active Sony drivers are now verified to share that nine-dword
   multi-argument contract, with 18/12-dword maximum reservations. Other
   profiles remain fail-closed until their GPU-info subregion selection is
