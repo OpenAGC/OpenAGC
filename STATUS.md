@@ -1482,9 +1482,12 @@ queue create/destroy remain split into 14/six groups and are not generalized.
 operation-level row per active four-digit key, recording the enabled direct
 subset and the exact reason every other operation remains disabled. The
 generated ledger gives all 39 keys the common exact submit16, internal-memory,
-authenticated-queue, primary-suspend, public TF-ring, HS-offchip, and async subset; only
-hardware-qualified `0x0550` and the deeper exact-RE-qualified `0x1160` profile
-enable additional operations.
+authenticated-queue, primary-suspend, public TF-ring, HS-offchip, and async
+subset; only hardware-qualified `0x0550` and the deeper exact-RE-qualified
+`0x1160` profile enable additional operations.
+`analysis/agc_firmware_versions.tsv` is the direct evidence index used by every
+extractor; the direct analysis no longer depends on an installed-driver profile
+ledger.
 `analysis/agc_driver_memory_facts.tsv` independently reproduces all eight
 region sizes and the exact FW 9.00+ Trinity predicate/size split.
 `analysis/agc_driver_queue_facts.tsv` reproduces the complete create/destroy
@@ -1499,10 +1502,16 @@ would invoke the firmware with an indeterminate pointer.
 The 2026-07-29 clean-session run qualified the rebased direct-only main branch.
 The deployed ELF had no `libSceAgcDriver.sprx` `DT_NEEDED` entry and selected
 `prospero-gc-submit16` for FW `0x05500008`. `/dev/gc` initialization, internal
-memory, default states, three two-DCB marker runs, async setup, queue lifecycle,
-suspend point, and workload lifecycle all passed. Conformance result: 1/1 in
-two seconds (`20260729T090200Z-65656`). This supersedes the inconclusive
+memory, default states, three two-DCB marker runs, native nine-dword wait64,
+async setup, queue lifecycle, suspend point, and workload lifecycle all passed.
+The firmware-parameterized conformance result was 1/1 in two seconds
+(`20260729T091752Z-72225`). This supersedes the inconclusive
 2026-07-26 run performed after a contaminating Sony-module probe.
+
+FW 11.60 remains exact-RE-qualified and hardware-pending. Its dedicated
+`agc_init_fw1160.elf` probe expects defaults and workload helpers to return
+`AGC_ERROR_NOT_SUPPORTED` while gating submit, memory, queue, primary suspend,
+async setup, multi-DCB markers, and native wait64 execution.
 
 ## Next RE Tasks
 

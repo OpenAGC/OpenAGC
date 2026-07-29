@@ -1721,7 +1721,7 @@ Acceptance criteria:
 - Keep explicit `AGC_ERROR_NOT_SUPPORTED` behavior and do not advertise these
   profiles as supported.
 
-### Priority 2: Stable backend dispatch and Sony exports
+### Priority 2: Stable direct-backend dispatch
 
 - ✅ `AgcDriverOps` preserves the public ABI across generic and Prospero
   implementations.
@@ -1734,20 +1734,18 @@ Acceptance criteria:
   resulting hardware-test ELF has no `libSceAgcDriver.sprx` dependency.
 - ✅ The direct `/dev/gc` backend passed the clean FW 5.500.008 init,
   multi-DCB marker, async queue, suspend-point, and workload sequence
-  (`20260729T090200Z-65656`).
-- ✅ The Sony-export candidate resolves privately without symbol recursion.
-- Keep the installed-Sony candidate ineligible for automatic GPU submission
-  until a non-destructive probe proves execution. Never follow a mutating Sony
-  probe with direct fallback in the same boot session.
+  (`20260729T091752Z-72225`).
+- ✅ All direct extractors use `analysis/agc_firmware_versions.tsv`; no
+  installed-driver profile is required for runtime selection or RE validation.
 - Maintain per-firmware NID/module aliases without assuming NID stability.
 
 ### Priority 3: Additional firmware families
 
-- Recover FW 11.60 exports, initialization, ioctls, memory sizes, defaults, and
-  permissions from local references without committing firmware binaries.
-- Add a direct backend only after independent structure and behavior proof.
-- Validate in layers on matching hardware: version query, initialization, NOP,
-  queue lifecycle, compute readback, graphics readback, and display.
+- Run `agc_init_fw1160.elf` on the available FW 11.60 console: version query,
+  initialization, multi-DCB markers, native wait64, queue lifecycle, and
+  primary suspend first. Defaults and workloads must fail closed.
+- After the direct probe passes, qualify compute readback, graphics readback,
+  and display in that order before advertising full FW 11.60 support.
 - Keep deterministic PM4 builders, descriptors, shader parsing/fusion,
   primitive state, and interpolant mapping inside OpenAGC.
 

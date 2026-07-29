@@ -51,7 +51,7 @@ The prospero build compiles `driver_prospero.c` with native `/dev/gc` ioctl call
 It links against `kernel` and `SceVideoOut`; the direct backend does not depend
 on or preload `libSceAgcDriver.sprx`.
 
-Expected host test result: `4225 passed, 0 failed`. Any change that drops this
+Expected host test result: `4998 passed, 0 failed`. Any change that drops this
 count is a regression — fix it before declaring the task done.
 
 ## Verification Checklist
@@ -292,6 +292,19 @@ native `/dev/gc` backend via `libopenagc.a`:
 - `sceAgcDriverGetPaDebugInterfaceVersion()` — FW 5.50 permission-stub check
 - `sceAgcDriverSubmitDcb()` — NOP packet submission
 - `_sceAgcDriverCreateUserSpecialQueue()` / `DestroyUserSpecialQueue()`
+
+**2b. `agc_init_fw1160.elf` — FW 11.60 direct-backend probe**
+
+Builds the same direct `/dev/gc` lifecycle with ABI key `0x1160`. It requires
+submit, memory, async queue, primary suspend, and native wait64 execution while
+requiring unproven default-state and workload operations to fail closed:
+
+```sh
+make -C samples/hw_test agc_init_fw1160.elf
+PS5_HOST=<fw1160-console> make -C samples/hw_test deploy_agc_fw1160
+```
+
+Do not use the FW 5.50 runner or artifact on the FW 11.60 console.
 
 **3. `agc_videoout.elf` — Combined AGC + VideoOut test**
 
