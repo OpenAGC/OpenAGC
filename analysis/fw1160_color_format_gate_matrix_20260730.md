@@ -25,6 +25,14 @@ fence, validates native memory, shuts down the driver, and kills itself after
 flushing the verdict. The shared runner requires the exact target-specific
 PASS line and rejects failure, fatal, mismatch, and timeout text.
 
+The first R8 launch completed in 1 ms, passed its native UNORM8 oracle, shut
+down cleanly, and left no residual process, but the wrapper rejected it because
+it looked for the FP16-only generic target line. The runner now first requires
+the exact render-target name and then selects the validator actually emitted by
+that format: UNORM8, FLOAT32, RGB10A2 histogram, R11G11B10 hash, or FP16. This
+does not weaken any GPU oracle. The rejected wrapper run does not count toward
+the required two passes.
+
 The headless audit also fixed preview-only references for R8/RG8, R16/RG16,
 R32/RG32/RGBA32, RGB10A2, and R11G11B10. CPU preview conversion remains part of
 the FW 5.50 display fixtures but is not compiled or called by headless gates.

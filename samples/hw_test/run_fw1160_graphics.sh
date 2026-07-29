@@ -32,7 +32,27 @@ cat "$output_file"
 
 grep -q "Runtime profile FW ABI 0x1160: PASS" "$output_file" || exit 1
 grep -q "GPU completion fence reached" "$output_file" || exit 1
-grep -Fq "GFX1013 $EXPECTED_TARGET target: PASS" "$output_file" || exit 1
+grep -Fq "Render target $EXPECTED_TARGET at" "$output_file" || exit 1
+case "$EXPECTED_TARGET" in
+    R8_UNORM|RG8_UNORM)
+        grep -Eq '^\[UNORM8\].*: PASS$' "$output_file" || exit 1
+        ;;
+    R32_FLOAT|RG32_FLOAT|RGBA32_FLOAT)
+        grep -Eq '^\[FLOAT32\].*: PASS$' "$output_file" || exit 1
+        ;;
+    'offscreen RGB10A2')
+        grep -Eq '^\[RGB10A2\] Packed top2 histogram:.*: PASS$' \
+            "$output_file" || exit 1
+        ;;
+    'offscreen R11G11B10 FLOAT')
+        grep -Eq '^\[R11G11B10\] Packed color FNV64:.*: PASS$' \
+            "$output_file" || exit 1
+        ;;
+    *)
+        grep -Fq "GFX1013 $EXPECTED_TARGET target: PASS" \
+            "$output_file" || exit 1
+        ;;
+esac
 grep -q "Driver shutdown: PASS" "$output_file" || exit 1
 grep -q "Graphics result: PASS" "$output_file" || exit 1
 if grep -Eq "FAIL|FATAL|MISMATCH|timed out" "$output_file"; then
