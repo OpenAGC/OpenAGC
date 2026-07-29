@@ -64,3 +64,8 @@ It returned `AGC_OK` for active and complete on FW 5.50 and completed the
 bounded hardware sample without a hang. That proves its tested 5.50 scope but
 does not establish Sony export ABI compatibility or portability to another
 firmware.
+
+The same limits, controls, header, and maximum sizes are now disassembly-
+verified across all 39 active driver images in
+`agc_driver_workload_facts.tsv`; seven/three wrapper groups are compiler and
+surrounding-state variations around one common packet contract.

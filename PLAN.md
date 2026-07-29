@@ -548,6 +548,12 @@ is the modern/Trinity reference and FW 3.20 remains the lowest active target.
 Final suspend, suspend query, workloads, and register defaults remain disabled
 unless their exact firmware contract is separately proven.
 
+The Sony workload contract itself is recovered for all active firmware:
+seven active-wrapper and three complete-wrapper groups converge on the same
+nine-dword `0xc0071e00` packet and 18/12-dword maximum reservations. It remains
+disabled because OpenAGC's one-ID direct extension and eight-dword DCB/ACB
+builders are different ABIs, not because the cross-firmware packet is unknown.
+
 Cache synchronization semantics follow this audit and become an earlier
 blocker only if the expanded game corpus exercises an unresolved path. VRS and
 ray tracing remain later feature tracks driven by verified FW 5.50 ABI evidence

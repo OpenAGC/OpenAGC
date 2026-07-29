@@ -955,6 +955,9 @@ The host-generic implementation now has a tested model for:
   passed on FW 5.50. It is not Sony-export-compatible: FW 5.50 and 11.60 Sony
   exports consume multiple arguments and emit nine-dword `0xc0071e00`
   packets, so no other firmware inherits the convenience capability.
+  All 39 active Sony drivers are now verified to share that nine-dword
+  multi-argument contract, with 18/12-dword maximum reservations; this does
+  not promote the incompatible OpenAGC APIs.
 - FW 5.50 register-defaults blob builder/parser with embedded primary/internal tables
 - Runtime firmware/backend registry: PS5 system-version ABI validation,
   four-digit major/minor ABI keys with complete raw-version diagnostics,
