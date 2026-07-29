@@ -106,7 +106,9 @@ AMD PM4 packet ancestry overlap in useful ways.
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and
   `analysis/fw1160_graphics_qualification_20260730.md` and
-  `analysis/fw1160_compute_qualification_20260730.md`.
+  `analysis/fw1160_compute_qualification_20260730.md`. Exact modern headless
+  FW 5.50 mirrors for all nine color formats are built and recorded in
+  `analysis/fw550_headless_color_regression_matrix_20260730.md`.
 
 ### Gfx1013 multi-viewport state
 

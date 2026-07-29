@@ -423,6 +423,8 @@ agc_graphics_fw1160.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shader
 
 FW1160_GRAPHICS_FLAGS := -DAGC_EXPECT_FIRMWARE_ABI_KEY=0x1160u \
 	-DAGC_GRAPHICS_HEADLESS=1 -DAGC_SELF_TERMINATE=1
+FW550_HEADLESS_GRAPHICS_FLAGS := -DAGC_EXPECT_FIRMWARE_ABI_KEY=0x0550u \
+	-DAGC_GRAPHICS_HEADLESS=1 -DAGC_SELF_TERMINATE=1
 
 agc_graphics_r16_float_fw1160.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) $(FW1160_GRAPHICS_FLAGS) -DAGC_VALIDATE_R16_FLOAT=1 \
@@ -458,6 +460,42 @@ agc_graphics_rg32_float_fw1160.elf: agc_graphics.c ps5_video_out.h gpu_credentia
 
 agc_graphics_rgba32_float_fw1160.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) $(FW1160_GRAPHICS_FLAGS) -DAGC_VALIDATE_RGBA32_FLOAT=1 \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_graphics_r16_float_fw550_headless.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW550_HEADLESS_GRAPHICS_FLAGS) -DAGC_VALIDATE_R16_FLOAT=1 \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_graphics_rg16_float_fw550_headless.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW550_HEADLESS_GRAPHICS_FLAGS) -DAGC_VALIDATE_RG16_FLOAT=1 \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_graphics_r8_unorm_fw550_headless.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW550_HEADLESS_GRAPHICS_FLAGS) -DAGC_VALIDATE_R8_UNORM=1 \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_graphics_rg8_unorm_fw550_headless.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW550_HEADLESS_GRAPHICS_FLAGS) -DAGC_VALIDATE_RG8_UNORM=1 \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_graphics_rgb10a2_fw550_headless.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW550_HEADLESS_GRAPHICS_FLAGS) -DAGC_VALIDATE_RGB10A2=1 \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_graphics_r11g11b10_fw550_headless.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW550_HEADLESS_GRAPHICS_FLAGS) -DAGC_VALIDATE_R11G11B10=1 \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_graphics_r32_float_fw550_headless.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW550_HEADLESS_GRAPHICS_FLAGS) -DAGC_VALIDATE_R32_FLOAT=1 \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_graphics_rg32_float_fw550_headless.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW550_HEADLESS_GRAPHICS_FLAGS) -DAGC_VALIDATE_RG32_FLOAT=1 \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_graphics_rgba32_float_fw550_headless.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW550_HEADLESS_GRAPHICS_FLAGS) -DAGC_VALIDATE_RGBA32_FLOAT=1 \
 		-o $@ agc_graphics.c $(AGC_LDFLAGS)
 
 agc_graphics_indexed.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)

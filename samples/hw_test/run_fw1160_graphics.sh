@@ -7,7 +7,8 @@ PS5_HOST=${PS5_HOST:?set PS5_HOST}
 GRAPHICS_ARTIFACT=${GRAPHICS_ARTIFACT:?set GRAPHICS_ARTIFACT}
 PROCESS_CLEANUP_ELF=${PROCESS_CLEANUP_ELF:?set PROCESS_CLEANUP_ELF}
 EXPECTED_TARGET=${EXPECTED_TARGET:-offscreen FP16}
-REMOTE_BASE=/data/homebrew/openagc_fw1160_graphics
+EXPECTED_FW_ABI=${EXPECTED_FW_ABI:-0x1160}
+REMOTE_BASE=/data/homebrew/openagc_fw${EXPECTED_FW_ABI#0x}_graphics
 
 if [ ! -s "$GRAPHICS_ARTIFACT" ] || [ ! -s "$PROCESS_CLEANUP_ELF" ]; then
     echo "missing graphics-test or process-cleanup ELF" >&2
@@ -30,7 +31,7 @@ curl -sS --fail --max-time 30 \
 transport_status=$?
 cat "$output_file"
 
-grep -q "Runtime profile FW ABI 0x1160: PASS" "$output_file" || exit 1
+grep -q "Runtime profile FW ABI $EXPECTED_FW_ABI: PASS" "$output_file" || exit 1
 grep -q "GPU completion fence reached" "$output_file" || exit 1
 grep -Fq "Render target $EXPECTED_TARGET at" "$output_file" || exit 1
 case "$EXPECTED_TARGET" in

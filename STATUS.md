@@ -414,6 +414,12 @@ outside the headless matrix because their current fixtures depend on
 VideoOut-owned buffers; those oracles will not be weakened merely to compile.
 See `analysis/fw1160_color_format_gate_matrix_20260730.md`.
 
+Exact `0x0550` modern headless mirrors for R16, RG16, R8, RG8, RGB10A2,
+R11G11B10, R32, RG32, and RGBA32 are cross-built without warnings. The shared
+runner is firmware-selectable and retains each target-specific native oracle.
+They are not hardware-run because the FW 5.50 console was offline; see
+`analysis/fw550_headless_color_regression_matrix_20260730.md`.
+
 The uncompressed D16, S8-only, and D16+S8 paths now have exact FW 11.60
 headless artifacts and a cleanup-first bounded runner. Their native D16, S8,
 color, marker, fence, shutdown, and final-verdict oracles exercise the same
