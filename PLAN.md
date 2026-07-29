@@ -565,6 +565,10 @@ all active images use `u64@0,u32@8` with commands `0x80108128` and
 zero-initialized structures preserve that stricter form across the common
 carrier groups.
 
+Submission grouping is also semantic rather than hash-only: every active DCB,
+ACB, and multi-DCB export group converges on the instruction-identical
+`0xc0108102` carrier with a typed `u32@0,u32@4,u64@8` request.
+
 Cache synchronization semantics follow this audit and become an earlier
 blocker only if the expanded game corpus exercises an unresolved path. VRS and
 ray tracing remain later feature tracks driven by verified FW 5.50 ABI evidence

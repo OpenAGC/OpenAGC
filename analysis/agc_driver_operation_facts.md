@@ -39,6 +39,9 @@ Current boundary:
 - `agc_driver_ring_facts.tsv` semantically verifies the 16-byte TF/HS payloads
   behind each carrier group. FW 12.x adds explicit reserved-dword zeroing;
   OpenAGC's zero-initialized typed arguments satisfy both forms.
+- `agc_driver_submission_facts.tsv` verifies that all DCB, ACB, and multi-DCB
+  groups converge on one `0xc0108102` carrier with the complete
+  `u32@0,u32@4,u64@8` request layout.
 
 FW 3.20 remains the lowest active compatibility target. FW 1.00 and 2.x stay
 archival and are intentionally absent from this active-operation ledger.

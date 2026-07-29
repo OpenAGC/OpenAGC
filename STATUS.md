@@ -882,6 +882,9 @@ numeric ranges.
 - TF-ring and HS-offchip payload stores are now semantically verified for all
   active firmware, not merely grouped by hashes. FW 12.x explicitly zeroes
   offset `0xc`; the typed OpenAGC payloads zero it on every firmware.
+- Direct submission is semantically verified across all active images: one
+  common `0xc0108102` carrier and `u32@0,u32@4,u64@8` payload serve the grouped
+  DCB, ACB, and multi-DCB wrappers.
 - Register-default selection is no longer inferred from firmware generation.
   All 39 active `libSceAgc` images use the same runtime hardware-table selector
   (80-byte records, version field at `0x44`), while their versioned dispatchers
