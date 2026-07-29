@@ -21,7 +21,6 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/mman.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -77,6 +76,7 @@ int sceKernelAllocateDirectMemory(
 int sceKernelMapDirectMemory(
     void **virtualAddress, size_t len, int prot, int flags,
     off_t directMemoryStart, size_t alignment);
+int sceKernelMunmap(void *addr, size_t len);
 int sceKernelReleaseDirectMemory(off_t directMemoryStart, size_t len);
 /* Flexible memory: automatically mapped in both CPU and GPU address spaces.
  * This is what the AGC SPRX uses for internal GPU memory regions. */
@@ -709,7 +709,7 @@ cleanup:
     if (test.flipqueue != 0)
         equeue_result = sceKernelDeleteEqueue(test.flipqueue);
     if (test.mapped != NULL && test.mapped_size != 0)
-        unmap_result = munmap(test.mapped, test.mapped_size);
+        unmap_result = sceKernelMunmap(test.mapped, test.mapped_size);
     if (test.direct_memory >= 0 && test.mapped_size != 0)
         release_result = sceKernelReleaseDirectMemory(
             test.direct_memory, test.mapped_size);
@@ -718,8 +718,11 @@ cleanup:
 
     const bool equeue_closed = equeue_result == 0 ||
         (uint32_t)equeue_result == 0x80020009u;
+    const bool buffers_released = unregister_result == 0 ||
+        ((uint32_t)unregister_result == 0x80290009u &&
+         close_result == 0 && unmap_result == 0 && release_result == 0);
     success = output_complete && flip_complete && delete_event_result == 0 &&
-        unregister_result == 0 && close_result == 0 && equeue_closed &&
+        buffers_released && close_result == 0 && equeue_closed &&
         unmap_result == 0 && release_result == 0 &&
         shutdown_result == AGC_OK;
     printf("\n=== Compute Summary ===\n");

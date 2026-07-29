@@ -560,8 +560,11 @@ qualified independently rather than guessed during compute testing.
 The shared compute sample now removes its flip event, unregisters its VideoOut
 buffer set, and unmaps direct memory before releasing it. An event queue already
 closed by VideoOut may report kernel `EBADF`; that is accepted only as an
-already-destroyed handle. Both firmware runners therefore require a genuinely
-clean resource lifecycle rather than relying on process teardown.
+already-destroyed handle. The currently scanned-out buffer set may report
+VideoOut `RESOURCE_BUSY`; that is accepted only when close, kernel unmap, and
+direct-memory release all succeed afterward. Both firmware runners therefore
+require a genuinely clean resource lifecycle rather than relying on process
+teardown.
 
 The Sony workload contract itself is recovered for all active firmware:
 seven active-wrapper and three complete-wrapper groups converge on the same
