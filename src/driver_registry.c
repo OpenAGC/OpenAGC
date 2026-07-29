@@ -146,8 +146,10 @@ bool agcProsperoFirmwareSupported(uint32_t raw_version)
 {
     uint16_t abi_key = agcFirmwareAbiKey(raw_version);
 
-    return abi_key == 0x0320u ||
-           agcProsperoStandardDirectAbiSupportsFirmware(raw_version);
+    /* Runtime support is narrower than the RE profile catalog.  FW 11.60
+     * powered off a standard PS5 during its first direct qualification run;
+     * keep every non-hardware-qualified profile fail-closed. */
+    return abi_key == 0x0550u;
 }
 
 bool agcProsperoBuildRuntimeProfile(uint32_t raw_version, bool is_trinity,
@@ -407,6 +409,8 @@ int32_t agcDriverSelectRuntime(AgcFirmwareVersion *version_out,
     *ops_out = NULL;
     result = agcQueryProsperoFirmware(NULL, &raw_version);
     if (result != AGC_OK)
+        return AGC_ERROR_NOT_SUPPORTED;
+    if (!agcProsperoFirmwareSupported(raw_version))
         return AGC_ERROR_NOT_SUPPORTED;
     entry = agcDriverRegistryLookup(registry,
         sizeof(registry) / sizeof(registry[0]), agcFirmwareAbiKey(raw_version),

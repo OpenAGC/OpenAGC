@@ -51,6 +51,7 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
+#include <sys/sysctl.h>
 #include <string.h>
 #include <stdio.h>
 #include <errno.h>
@@ -183,21 +184,74 @@ typedef int (PS5_SYSV_ABI *AgcKernelHasTrinityModeFn)(void);
 
 extern int PS5_SYSV_ABI sceKernelDlsym(int handle, const char *name,
     void *symbol_out);
+extern int PS5_SYSV_ABI sceKernelGetModuleList(int *modules,
+    size_t module_capacity, size_t *module_count);
 
 static int32_t agcProsperoQueryTrinityMode(bool *is_trinity)
 {
+    static const char *const symbols[] = {
+        "sceKernelHasTrinityMode",
+        "yu17wG8L5FI"
+    };
+    static const int handles[] = {0x2001, 1};
     AgcKernelHasTrinityModeFn query = NULL;
     void *symbol = NULL;
+    int modules[128];
+    uint32_t main_socid = 0;
+    size_t main_socid_size = sizeof(main_socid);
+    size_t module_count = 0;
+    size_t symbol_index;
+    size_t handle_index;
 
     if (!is_trinity)
         return AGC_ERROR_INVALID_ARGUMENT;
-    if (sceKernelDlsym(0x2001, "sceKernelHasTrinityMode", &symbol) != 0 &&
-        sceKernelDlsym(1, "sceKernelHasTrinityMode", &symbol) != 0)
+    for (symbol_index = 0;
+         symbol_index < sizeof(symbols) / sizeof(symbols[0]);
+         ++symbol_index) {
+        for (handle_index = 0;
+             handle_index < sizeof(handles) / sizeof(handles[0]);
+             ++handle_index) {
+            symbol = NULL;
+            if (sceKernelDlsym(handles[handle_index], symbols[symbol_index],
+                    &symbol) == 0 && symbol)
+                break;
+        }
+        if (symbol)
+            break;
+    }
+    if (!symbol && sceKernelGetModuleList(modules,
+            sizeof(modules) / sizeof(modules[0]), &module_count) == 0) {
+        if (module_count > sizeof(modules) / sizeof(modules[0]))
+            module_count = sizeof(modules) / sizeof(modules[0]);
+        for (handle_index = 0; handle_index < module_count; ++handle_index) {
+            for (symbol_index = 0;
+                 symbol_index < sizeof(symbols) / sizeof(symbols[0]);
+                 ++symbol_index) {
+                symbol = NULL;
+                if (sceKernelDlsym(modules[handle_index],
+                        symbols[symbol_index], &symbol) == 0 && symbol)
+                    break;
+            }
+            if (symbol)
+                break;
+        }
+    }
+    if (symbol) {
+        if (sizeof(query) != sizeof(symbol))
+            return AGC_ERROR_NOT_SUPPORTED;
+        memcpy(&query, &symbol, sizeof(query));
+        *is_trinity = query() != 0;
+        return AGC_OK;
+    }
+
+    /* FW 11.60 libkernel implements sceKernelHasTrinityMode by reading this
+     * four-byte sysctl and comparing the SoC family with low stepping bits
+     * masked off.  The protected export is not visible through sceKernelDlsym
+     * in websrv payloads, so reproduce that exact predicate directly. */
+    if (sysctlbyname("hw.sce_main_socid", &main_socid, &main_socid_size,
+            NULL, 0) != 0 || main_socid_size != sizeof(main_socid))
         return AGC_ERROR_NOT_SUPPORTED;
-    if (!symbol || sizeof(query) != sizeof(symbol))
-        return AGC_ERROR_NOT_SUPPORTED;
-    memcpy(&query, &symbol, sizeof(query));
-    *is_trinity = query() != 0;
+    *is_trinity = (main_socid & ~0x1fu) == 0x00840fc0u;
     return AGC_OK;
 }
 

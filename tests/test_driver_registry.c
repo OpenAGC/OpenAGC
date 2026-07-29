@@ -65,8 +65,12 @@ static void test_archival_and_fw320_firmware_profiles(void)
         "archival FW 2.50 is not advertised as supported");
     TEST_ASSERT(!agcProsperoFirmwareSupported(0x03000000u),
         "archival FW 3.00 is not advertised as supported");
-    TEST_ASSERT(agcProsperoFirmwareSupported(0x03200000u),
-        "FW 3.20 is the lowest active profile");
+    TEST_ASSERT(!agcProsperoFirmwareSupported(0x03200000u),
+        "FW 3.20 RE profile is not runtime-qualified");
+    TEST_ASSERT(agcProsperoFirmwareSupported(0x05500008u),
+        "FW 5.50 hardware-qualified runtime is supported");
+    TEST_ASSERT(!agcProsperoFirmwareSupported(0x11600005u),
+        "FW 11.60 hardware-failed runtime is blocked");
     TEST_ASSERT(!agcProsperoFirmwareSupported(0x03100000u),
         "uninspected legacy firmware fails closed");
     {

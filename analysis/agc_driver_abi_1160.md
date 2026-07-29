@@ -109,8 +109,12 @@ FW 1.00 predates the later authenticated special-queue layout, while FW 1.x
 and 2.x lack the TF-ring request; those optional operations fail explicitly.
 
 FW 9.00 and later inspected drivers import `sceKernelHasTrinityMode` at NID
-`yu17wG8L5FI`. OpenAGC resolves that predicate at runtime and fails closed if
-it is unavailable. Standard PS5 uses a `0x1000000` CWSR allocation, a
+`yu17wG8L5FI`. The FW 11.60 libkernel implementation reads the four-byte
+`hw.sce_main_socid` sysctl and identifies Trinity when
+`(socid & ~0x1f) == 0x00840fc0`. OpenAGC first resolves the predicate at
+runtime, then reproduces this exact sysctl predicate when the protected export
+is not visible to a websrv payload; it fails closed if neither query is
+available. Standard PS5 uses a `0x1000000` CWSR allocation, a
 `0xa00000` CWSR working offset, and a `0x100000` GPU-info span. Trinity/PS5 Pro
 uses `0x1600000`, `0x1000000`, and `0x180000`, respectively.
 

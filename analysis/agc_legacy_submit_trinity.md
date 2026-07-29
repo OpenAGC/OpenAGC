@@ -41,8 +41,11 @@ on a nonzero return value.
 | CWSR allocation | `0x1000000` | `0x1600000` |
 
 The import first appears in the inspected FW 9.00 family. OpenAGC resolves it
-through `sceKernelDlsym` for FW 9+ and fails closed if resolution fails. This
-avoids inferring the console model from firmware version.
+through `sceKernelDlsym` for FW 9+. FW 11.60's protected export implements the
+predicate as a four-byte `hw.sce_main_socid` sysctl read followed by
+`(socid & ~0x1f) == 0x00840fc0`; OpenAGC uses that exact operation when the
+export is not visible to a websrv payload and fails closed if the sysctl cannot
+be read. This avoids inferring the console model from firmware version.
 
 ## Validation status
 

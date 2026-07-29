@@ -79,8 +79,8 @@ videoout_linear.elf: videoout_linear.c ps5_video_out.h
 agc_init.elf: agc_init.c ps5_video_out.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -o $@ agc_init.c $(AGC_LDFLAGS)
 
-# FW 11.60 direct-backend probe: defaults and workload helpers must fail
-# closed, while submit/memory/queue/suspend/async operations must execute.
+# FW 11.60 direct-backend artifact retained for offline inspection only.  Its
+# first hardware qualification powered the console off; deployment is blocked.
 agc_init_fw1160.elf: agc_init.c ps5_video_out.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_EXPECT_FIRMWARE_ABI_KEY=0x1160u \
 		-DAGC_EXPECT_DEFAULT_STATES=0 -DAGC_EXPECT_WORKLOAD=0 \
@@ -521,8 +521,8 @@ deploy_agc: agc_init.elf
 
 .PHONY: deploy_agc_fw1160
 deploy_agc_fw1160: agc_init_fw1160.elf
-	PS5_HOST=$(PS5_HOST) EXPECTED_FW_ABI=1160 \
-		PROBE_ARTIFACT=$(THIS_DIR)/agc_init_fw1160.elf ./run_direct_probe.sh
+	@echo "FW 11.60 direct deployment disabled after hardware power-off"
+	@false
 
 deploy_agc_videoout: agc_videoout.elf
 	PS5_HOST=$(PS5_HOST) ./run_fw550_conformance.sh --sample agc_videoout

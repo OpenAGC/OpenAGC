@@ -1741,11 +1741,16 @@ Acceptance criteria:
 
 ### Priority 3: Additional firmware families
 
-- Run `agc_init_fw1160.elf` on the available FW 11.60 console: version query,
-  initialization, multi-DCB markers, native wait64, queue lifecycle, and
-  primary suspend first. Defaults and workloads must fail closed.
-- After the direct probe passes, qualify compute readback, graphics readback,
-  and display in that order before advertising full FW 11.60 support.
+- ⛔ FW 11.60 direct qualification is hardware-blocked. The 2026-07-29 run on
+  standard hardware froze the UI and ended in an automatic console power-off.
+  Runtime selection and `deploy_agc_fw1160` now fail closed.
+- Before reconsidering FW 11.60, design a reviewed probe that runs exactly one
+  operation per boot, uses unbuffered logging, and launches the process-cleanup
+  ELF before every payload. Start with version/model detection only; do not
+  submit, allocate AGC internal memory, create queues, or map MMIO in that gate.
+- Qualify later gates individually only after the preceding gate passes twice.
+  Compute, graphics, and display remain prohibited until the full direct
+  lifecycle has passed this staged ladder.
 - Keep deterministic PM4 builders, descriptors, shader parsing/fusion,
   primitive state, and interpolant mapping inside OpenAGC.
 

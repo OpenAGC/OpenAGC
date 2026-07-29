@@ -1508,10 +1508,12 @@ The firmware-parameterized conformance result was 1/1 in two seconds
 (`20260729T091752Z-72225`). This supersedes the inconclusive
 2026-07-26 run performed after a contaminating Sony-module probe.
 
-FW 11.60 remains exact-RE-qualified and hardware-pending. Its dedicated
-`agc_init_fw1160.elf` probe expects defaults and workload helpers to return
-`AGC_ERROR_NOT_SUPPORTED` while gating submit, memory, queue, primary suspend,
-async setup, multi-DCB markers, and native wait64 execution.
+FW 11.60 remains exact-RE-qualified but is hardware-blocked. On 2026-07-29 a
+standard PS5 reported raw `0x11600005`; after model detection was corrected to
+the exact `hw.sce_main_socid` predicate, the direct probe froze the UI and the
+console powered itself off before a buffered operation log was recovered.
+Runtime selection now rejects FW 11.60 and every other non-hardware-qualified
+profile. `agc_init_fw1160.elf` is build-only and its deployment target fails.
 
 ## Next RE Tasks
 
