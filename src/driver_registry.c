@@ -56,7 +56,8 @@ typedef struct AgcDirectDefaultsSelection {
  * contains only runtime selections proven for the exact firmware/GPU pair.
  * FW 5.50 selected V8 in the hardware-qualified default-state sample. */
 static const AgcDirectDefaultsSelection g_direct_defaults_selections[] = {
-    {0x0550u, AGC_REGISTER_DEFAULTS_VERSION_8}
+    {0x0550u, AGC_REGISTER_DEFAULTS_VERSION_8},
+    {0x1160u, AGC_REGISTER_DEFAULTS_VERSION_12}
 };
 
 static uint16_t agcBcdByte(uint32_t value)
@@ -229,9 +230,9 @@ bool agcProsperoBuildDirectProfile(uint32_t raw_version, bool is_trinity,
             &direct.defaults_version))
         direct.capabilities |= AGC_DIRECT_CAP_DEFAULT_STATES;
 
-    /* FW 5.50 is hardware-qualified.  FW 11.60 is statically qualified from
-     * its exact public/internal wrappers; operations whose wrapper contract
-     * differs (workloads) or remains unknown (defaults/query) stay disabled. */
+    /* FW 5.50 and standard-PS5 FW 11.60 are hardware-qualified for the
+     * operations enabled here. Workloads, EOP flip, and suspend query retain
+     * their narrower evidence boundaries. */
     if (abi_key == 0x0550u) {
         direct.capabilities |= AGC_DIRECT_CAP_SUSPEND_FINAL |
             AGC_DIRECT_CAP_WORKLOAD | AGC_DIRECT_CAP_EOP_FLIP;

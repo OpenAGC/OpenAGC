@@ -43,6 +43,7 @@ extern "C" {
 #define AGC_REGISTER_DEFAULTS_VERSION_7    7u
 #define AGC_REGISTER_DEFAULTS_VERSION_8    8u
 #define AGC_REGISTER_DEFAULTS_VERSION_10   10u
+#define AGC_REGISTER_DEFAULTS_VERSION_12   12u
 
 /* FW 5.50 register-defaults table lengths (from observation). */
 #define AGC_PRIMARY_CX_LENGTH   78u

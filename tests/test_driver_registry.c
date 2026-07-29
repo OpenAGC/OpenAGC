@@ -148,13 +148,12 @@ static void test_direct_operation_profiles(void)
         "FW 11.60 incompatible workload wrapper fails closed");
     TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_SUSPEND_QUERY) == 0,
         "FW 11.60 unknown suspend-query semantics fail closed");
-    TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_DEFAULT_STATES) == 0,
-        "FW 11.60 unknown defaults version fails closed");
+    TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_DEFAULT_STATES) != 0,
+        "FW 11.60 exact version-12 defaults dispatcher is enabled");
     TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_EOP_FLIP) == 0,
         "FW 11.60 cannot inherit FW 5.50-only EOP flip evidence");
-    TEST_ASSERT_EQ(profile.defaults_version,
-        AGC_DIRECT_DEFAULTS_VERSION_UNKNOWN,
-        "FW 11.60 never inherits FW 5.50 defaults version");
+    TEST_ASSERT_EQ(profile.defaults_version, 12u,
+        "FW 11.60 selects version 12, which maps to recovered V10 tables");
     TEST_ASSERT_EQ(profile.tf_ring_ioctl, AGC_GC_IOCTL_SET_TF_RING,
         "FW 11.60 TF-ring uses 0x80108128, not final suspend");
     TEST_ASSERT_EQ(profile.hs_offchip_ioctl, AGC_GC_IOCTL_SET_HS_OFFCHIP,
@@ -226,14 +225,16 @@ static void test_common_operation_carrier_profiles(void)
             TEST_ASSERT(profile.submit_uses_frame_close_trailer,
                 "standard compatibility group shares one submit policy");
         }
-        if (active_keys[i] == 0x0550u) {
+        if (active_keys[i] == 0x0550u || active_keys[i] == 0x1160u) {
             TEST_ASSERT((profile.capabilities &
                 AGC_DIRECT_CAP_DEFAULT_STATES) != 0,
-                "FW 5.50 exact runtime defaults selection is enabled");
-            TEST_ASSERT_EQ(profile.defaults_version, 8u,
-                "FW 5.50 exact runtime defaults selection remains V8");
-            TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_EOP_FLIP) != 0,
-                "FW 5.50 exact EOP flip path remains enabled");
+                "hardware-qualified exact runtime defaults selection is enabled");
+            TEST_ASSERT_EQ(profile.defaults_version,
+                active_keys[i] == 0x0550u ? 8u : 12u,
+                "exact profile retains its selected defaults version");
+            TEST_ASSERT_EQ((profile.capabilities & AGC_DIRECT_CAP_EOP_FLIP) != 0,
+                active_keys[i] == 0x0550u,
+                "EOP flip remains independently qualified");
         } else {
             TEST_ASSERT((profile.capabilities &
                 AGC_DIRECT_CAP_DEFAULT_STATES) == 0,
