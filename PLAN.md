@@ -27,9 +27,11 @@ AMD PM4 packet ancestry overlap in useful ways.
   aperture, two descriptors, and Gn2/Gn3/Gn4 publications all returned
   `AGC_OK`; do not repeat it. The ordinary preflight marker still completed in
   50 ms, so the recovered constructor state is not sufficient.
-- Recover the GPU-side `SET_WORKLOAD` queue/register transition from the exact
-  FW 11.60 driver and matching cross-firmware carriers before constructing a
-  stage 16. Keep that next gate isolated and fail closed.
+- Full FW 5.50/FW 11.60 builder comparison found no semantic difference in
+  Sony's prefix-plus-nine-dword form. Stage 16 is now built as an isolated
+  counterfactual using the separate three-dword direct form actually proven on
+  FW 5.50, with the qualified defaults/async/preflight sequence unchanged.
+  Run it only after a clean reboot and keep the public capability fail closed.
 - After a successful FW 11.60 candidate passes twice, rerun the corresponding direct path
   on FW 5.50 before enabling any capability. Corpus extraction now proves the
   standard Gn2/Gn3/Gn4 constructor state on every exact active key from 6.00
@@ -37,7 +39,8 @@ AMD PM4 packet ancestry overlap in useful ways.
   is ABI evidence, not workload qualification; keep untested firmware gated.
 - Evidence and artifact hashes are recorded in
   `analysis/fw1160_register_shadow_20260729.md` and
-  `analysis/agc_driver_shadow_facts.md`.
+  `analysis/agc_driver_shadow_facts.md`. The stage-16 boundary and artifact
+  hash are in `analysis/fw1160_workload_stage16_plan_20260729.md`.
 
 ### Gfx1013 multi-viewport state
 

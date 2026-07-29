@@ -10,6 +10,7 @@
 #include <machine/cpufunc.h>
 
 #include "agc_cb.h"
+#include "agc_pm4.h"
 #include "agcdriver.h"
 #include "agc_error.h"
 #include "agc_runtime_diag.h"
@@ -73,6 +74,19 @@ static void flush_range(const void *address, size_t size)
         cursor += 64u;
     }
     mfence();
+}
+
+static int append_direct_workload_packet(
+    SceAgcCb *cb, uint32_t sub, uint32_t workload_id)
+{
+    uint32_t *packet = agcCbAllocDwords(cb, 3u);
+
+    if (!packet)
+        return 0;
+    packet[0] = agcPm4Header3Sub(AGC_PM4_OP_SET_WORKLOAD, sub, 3u);
+    packet[1] = workload_id;
+    packet[2] = 0u;
+    return 1;
 }
 
 int main(void)
@@ -277,6 +291,139 @@ int main(void)
     printf("workload memory release=%d\n", result);
     if (result != 0) {
         printf("stage 11: workload memory release FAIL\n");
+        (void)agcProsperoShutdown();
+        return 1;
+    }
+#endif
+#if AGC_FW1160_STAGE == 16
+    void *workload_memory = (void *)(uintptr_t)0xf02000000ULL;
+    const uint32_t preflight_marker_value = 0x1160F016u;
+    const uint32_t active_marker_value = 0x1160A016u;
+    const uint32_t complete_marker_value = 0x1160C016u;
+    volatile uint32_t *preflight_marker;
+    volatile uint32_t *active_marker;
+    volatile uint32_t *complete_marker;
+    SceAgcCb cb;
+    AgcCommandBufferSubmit submit;
+    uint32_t waited_ms = 0u;
+
+    result = agcProsperoNotifyDefaultStates(0u);
+    printf("default states=0x%08X\n", (unsigned)result);
+    if (result != AGC_OK) {
+        printf("stage 16: default states FAIL\n");
+        (void)agcProsperoShutdown();
+        return 1;
+    }
+    result = agcProsperoSetupAsyncGraphics(1u);
+    printf("async graphics=0x%08X\n", (unsigned)result);
+    if (result != AGC_OK) {
+        printf("stage 16: async graphics FAIL\n");
+        (void)agcProsperoShutdown();
+        return 1;
+    }
+    result = sceKernelMapNamedSystemFlexibleMemory(&workload_memory, 0x4000u,
+        0x33, 0, "OpenAgcFw1160DirectWorkload");
+    printf("workload memory result=%d address=%p\n", result, workload_memory);
+    if (result != 0 || !workload_memory) {
+        printf("stage 16: workload memory FAIL\n");
+        (void)agcProsperoShutdown();
+        return 1;
+    }
+
+    preflight_marker = (volatile uint32_t *)
+        ((uint8_t *)workload_memory + 0x1000u);
+    active_marker = preflight_marker + 1;
+    complete_marker = preflight_marker + 2;
+    *preflight_marker = 0u;
+    *active_marker = 0u;
+    *complete_marker = 0u;
+
+    agcCbInit(&cb, workload_memory, 0x1000u);
+    if (!sceAgcDcbWriteData(&cb, 2u, 0u,
+            (uint64_t)(uintptr_t)preflight_marker, &preflight_marker_value,
+            1u, 1u, 1u)) {
+        printf("stage 16: preflight marker build FAIL\n");
+        (void)agcProsperoShutdown();
+        (void)sceKernelReleaseFlexibleMemory(workload_memory, 0x4000u);
+        return 1;
+    }
+    flush_range(workload_memory, agcCbUsedDwords(&cb) * sizeof(uint32_t));
+    clflush((u_long)(uintptr_t)preflight_marker);
+    mfence();
+    submit.command_address = (uintptr_t)workload_memory;
+    submit.dword_count = agcCbUsedDwords(&cb);
+    submit.reserved = 0u;
+    result = agcProsperoSubmitDcb(&submit);
+    while (result == AGC_OK && waited_ms < 5000u) {
+        clflush((u_long)(uintptr_t)preflight_marker);
+        mfence();
+        if (*preflight_marker == preflight_marker_value)
+            break;
+        usleep(50000u);
+        waited_ms += 50u;
+    }
+    clflush((u_long)(uintptr_t)preflight_marker);
+    mfence();
+    printf("preflight submit=0x%08X marker=0x%08X wait=%u ms\n",
+        (unsigned)result, *preflight_marker, waited_ms);
+    if (result != AGC_OK || *preflight_marker != preflight_marker_value) {
+        printf("stage 16: preflight execution FAIL\n");
+        (void)agcProsperoShutdown();
+        (void)sceKernelReleaseFlexibleMemory(workload_memory, 0x4000u);
+        return 1;
+    }
+
+    agcCbInit(&cb, workload_memory, 0x1000u);
+    if (!append_direct_workload_packet(&cb,
+            AGC_PM4_SUB_WORKLOAD_BEGIN, 1u) ||
+        !sceAgcDcbWriteData(&cb, 2u, 0u,
+            (uint64_t)(uintptr_t)active_marker, &active_marker_value,
+            1u, 1u, 1u) ||
+        !append_direct_workload_packet(&cb,
+            AGC_PM4_SUB_WORKLOAD_END, 1u) ||
+        !sceAgcDcbWriteData(&cb, 2u, 0u,
+            (uint64_t)(uintptr_t)complete_marker, &complete_marker_value,
+            1u, 1u, 1u)) {
+        printf("stage 16: direct workload DCB build FAIL\n");
+        (void)agcProsperoShutdown();
+        (void)sceKernelReleaseFlexibleMemory(workload_memory, 0x4000u);
+        return 1;
+    }
+    printf("direct workload DCB dwords=%u headers=0x%08X/0x%08X\n",
+        agcCbUsedDwords(&cb), ((uint32_t *)workload_memory)[0],
+        ((uint32_t *)workload_memory)[8]);
+    flush_range(workload_memory, agcCbUsedDwords(&cb) * sizeof(uint32_t));
+    clflush((u_long)(uintptr_t)active_marker);
+    mfence();
+    submit.command_address = (uintptr_t)workload_memory;
+    submit.dword_count = agcCbUsedDwords(&cb);
+    submit.reserved = 0u;
+    result = agcProsperoSubmitDcb(&submit);
+    printf("direct workload submit=0x%08X\n", (unsigned)result);
+    waited_ms = 0u;
+    while (result == AGC_OK && waited_ms < 5000u) {
+        clflush((u_long)(uintptr_t)active_marker);
+        mfence();
+        if (*active_marker == active_marker_value &&
+            *complete_marker == complete_marker_value)
+            break;
+        usleep(50000u);
+        waited_ms += 50u;
+    }
+    clflush((u_long)(uintptr_t)active_marker);
+    mfence();
+    printf("direct markers active=0x%08X complete=0x%08X wait=%u ms\n",
+        *active_marker, *complete_marker, waited_ms);
+    if (result != AGC_OK || *active_marker != active_marker_value ||
+        *complete_marker != complete_marker_value) {
+        printf("stage 16: direct workload sequence FAIL\n");
+        (void)agcProsperoShutdown();
+        return 1;
+    }
+    result = sceKernelReleaseFlexibleMemory(workload_memory, 0x4000u);
+    printf("workload memory release=%d\n", result);
+    if (result != 0) {
+        printf("stage 16: workload memory release FAIL\n");
         (void)agcProsperoShutdown();
         return 1;
     }

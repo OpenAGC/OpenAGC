@@ -1041,6 +1041,14 @@ The host-generic implementation now has a tested model for:
   both services remained reachable. This rules out the recovered constructor
   shadow state as a sufficient prerequisite. Do not repeat stage 15; recover
   the GPU-side queue/register transition before another gate.
+  Instruction-level comparison subsequently confirmed that FW 5.50 and FW
+  11.60 Sony active/complete builders are semantically identical. Those failed
+  tests used a packet form never qualified through OpenAGC's direct backend on
+  5.50; the qualified direct extension instead uses three-dword begin/end
+  packets. Stage 16 changes only to that 5.50-proven form while retaining
+  defaults, async setup, ordinary preflight, full flush, and ordered markers.
+  It is built but not hardware-run; public FW 11.60 workload remains disabled.
+  See `analysis/fw1160_workload_stage16_plan_20260729.md`.
   The first `agc_fw1160_sony_workload.elf` was hardware-attempted after a clean
   reboot. It patched credentials before `dlopen`, loaded the matching FW 11.60
   module, resolved all required exports, matched the 18/12-dword sizes, and
