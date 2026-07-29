@@ -52,13 +52,17 @@ AMD PM4 packet ancestry overlap in useful ways.
   workload API. It uses the exact `0x1160` standard profile,
   version-12 defaults, async setup, bounded completion/readback oracles, clean
   shutdown, and forced self-termination.
-- Run compute next through its guarded cleanup runner. Run the higher-risk
-  workload stage 16 last so a workload stall cannot consume the boot session
-  before independent parity evidence is collected.
+- Headless compute subsequently passed twice: completion fences at 2 ms and
+  1 ms, exact 2,073,600/2,073,600 shader output, clean shutdown, and no
+  residual process. Baseline Wave32 compute is hardware-qualified for standard
+  FW 11.60.
+- Run the higher-risk workload stage 16 last. It remains independent of the
+  now-qualified graphics and compute paths.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and
-  `analysis/fw1160_graphics_qualification_20260730.md`.
+  `analysis/fw1160_graphics_qualification_20260730.md` and
+  `analysis/fw1160_compute_qualification_20260730.md`.
 
 ### Gfx1013 multi-viewport state
 

@@ -1062,6 +1062,12 @@ The host-generic implementation now has a tested model for:
   process. This qualifies baseline graphics on FW 11.60; advanced FW 5.50
   variants remain separately gated. See
   `analysis/fw1160_graphics_qualification_20260730.md`.
+  The headless compute baseline then passed twice on the same console. Its
+  Wave32 shader completed in 2 ms and 1 ms and wrote the exact expected value
+  to all 2,073,600 pixels in both runs. Defaults, markers, resource transition,
+  shutdown, final verdict, and absence of a residual process also passed.
+  Baseline compute is now hardware-qualified for standard FW 11.60. See
+  `analysis/fw1160_compute_qualification_20260730.md`.
   The first `agc_fw1160_sony_workload.elf` was hardware-attempted after a clean
   reboot. It patched credentials before `dlopen`, loaded the matching FW 11.60
   module, resolved all required exports, matched the 18/12-dword sizes, and
