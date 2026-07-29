@@ -22,9 +22,9 @@ Current boundary:
 - FW `0x1160` is exact-RE-qualified and hardware-pending for the listed subset.
   Workloads, suspend query, and default states remain disabled.
 - Every active firmware key has exact submit16, internal-memory,
-  authenticated-queue, public TF-ring, HS-offchip, and async carrier evidence.
-  Outside FW 5.50 these operations remain hardware-pending; other fields
-  record why each operation stays disabled.
+  authenticated-queue, primary-suspend, public TF-ring, HS-offchip, and async
+  carrier evidence. Outside FW 5.50 these operations remain hardware-pending;
+  other fields record why each operation stays disabled.
 - The direct-named Sony suspend, TF-ring, and HS-offchip exports are common
   permission stubs across all 39 profiles. Direct `/dev/gc` support therefore
   depends on separately recovered internal ioctl paths, never export presence.

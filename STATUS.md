@@ -1446,8 +1446,8 @@ workload convenience submit; FW 11.60 enables its statically proven submit,
 standard/Trinity memory, queue, primary/final suspend, TF-ring, HS-offchip, and
 async set; its workload, suspend-query, and defaults operations fail closed.
 All other active keys expose the common submit16, exact internal-memory,
-authenticated-queue, public TF-ring, HS-offchip, and async carrier-qualified
-subset. Matching hardware validation is pending.
+authenticated-queue, primary-suspend, public TF-ring, HS-offchip, and async
+carrier-qualified subset. Matching hardware validation is pending.
 `analysis/agc_driver_wrapper_fingerprints.tsv` records normalized groups for
 the exported wrappers across all 39 SPRXs. These groups guide further static
 promotion but do not replace internal-command and payload-layout evidence.
@@ -1459,13 +1459,15 @@ queue create/destroy remain split into 14/six groups and are not generalized.
 operation-level row per active four-digit key, recording the enabled direct
 subset and the exact reason every other operation remains disabled. The
 generated ledger gives all 39 keys the common exact submit16, internal-memory,
-authenticated-queue, public TF-ring, HS-offchip, and async subset; only
+authenticated-queue, primary-suspend, public TF-ring, HS-offchip, and async subset; only
 hardware-qualified `0x0550` and the deeper exact-RE-qualified `0x1160` profile
 enable additional operations.
 `analysis/agc_driver_memory_facts.tsv` independently reproduces all eight
 region sizes and the exact FW 9.00+ Trinity predicate/size split.
 `analysis/agc_driver_queue_facts.tsv` reproduces the complete create/destroy
 tuple, including tokens, EOP/ACQRB offsets, pipe ID, and ring size.
+`analysis/agc_driver_suspend_facts.tsv` records the common four-`u32` primary
+carrier, distinct final variants, and permission-only query boundary.
 FW 5.50 `sceAgcDriverSubmitToHDRScopesACQ` is deliberately unavailable: its
 body at vaddr `0x2eb0` dereferences an input structure through `rdi`, while
 OpenAGC's current compatibility declaration has no argument. Forwarding it

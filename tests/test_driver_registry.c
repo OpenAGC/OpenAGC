@@ -146,6 +146,7 @@ static void test_direct_operation_profiles(void)
         0x12200000u, false, &profile), "FW 12.20 submit profile builds");
     TEST_ASSERT_EQ(profile.capabilities,
         AGC_DIRECT_CAP_SUBMIT | AGC_DIRECT_CAP_MEMORY | AGC_DIRECT_CAP_QUEUE |
+        AGC_DIRECT_CAP_SUSPEND_PRIMARY |
         AGC_DIRECT_CAP_TF_RING |
         AGC_DIRECT_CAP_HS_OFFCHIP | AGC_DIRECT_CAP_ASYNC_GRAPHICS,
         "FW 12.20 exposes only its exact carrier-qualified subset");
@@ -186,6 +187,8 @@ static void test_common_operation_carrier_profiles(void)
             "active profile exposes exact internal-memory carrier");
         TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_QUEUE) != 0,
             "active profile exposes exact authenticated-queue carrier");
+        TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_SUSPEND_PRIMARY) != 0,
+            "active profile exposes exact primary-suspend carrier");
         TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_HS_OFFCHIP) != 0,
             "active profile exposes exact HS-offchip carrier");
         TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_ASYNC_GRAPHICS) != 0,
@@ -211,7 +214,8 @@ static void test_common_operation_carrier_profiles(void)
             TEST_ASSERT((profile.capabilities & (AGC_DIRECT_CAP_TF_RING |
                 AGC_DIRECT_CAP_HS_OFFCHIP |
                 AGC_DIRECT_CAP_ASYNC_GRAPHICS |
-                AGC_DIRECT_CAP_MEMORY | AGC_DIRECT_CAP_QUEUE)) == 0,
+                AGC_DIRECT_CAP_MEMORY | AGC_DIRECT_CAP_QUEUE |
+                AGC_DIRECT_CAP_SUSPEND_PRIMARY)) == 0,
                 "archival profile cannot inherit active carrier facts");
         }
     }

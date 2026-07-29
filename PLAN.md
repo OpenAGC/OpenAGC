@@ -181,7 +181,7 @@ official SDK parity, all-firmware support, VRS, or ray-tracing completeness.
 | 3. Re-run the complete FW 5.50 websrv suite | **Complete** | Revision `c0633c7` passed the dependency-ordered base, compute, baseline/NGG, tessellation, and combined-stage matrix through curl/websrv. Required three-run repeats were deterministic, every applicable case completed 1,800/1,800 flips, and the sequential run had no hang, panic, or UI crash. |
 | 4. Investigate FRAME_OPEN EINVAL and PA-debug EPERM | **Complete** | FW 5.50 `FRAME_OPEN` is absent from the kernel dispatcher. The PA-debug export is a userspace permission stub returning `0x8A6D0001`; neither result is an unresolved graphics blocker. |
 | 5. Publish a homebrew-facing example | **Complete** | `samples/triangle` retains the minimal command-recording example. `examples/cube` is a separate installed-package consumer that owns allocation, shader upload, resource tables, triple-buffered frame resources, bounded fences, continuous vertex/index updates, VideoOut presentation, and cleanup. Its staged Prospero install/consumer build passes without repository include or library paths. Two FW `0x05500008` curl/websrv runs presented 3,600 rotating-cube frames and exited cleanly. Retail import audits remain bounded ABI evidence only. |
-| 6. Add cross-firmware backend profiles | **Operation-level promotion in progress** | FW 3.20 is the lowest active target. All 39 exact keys now have submit16, internal-memory, authenticated-queue, public TF-ring, HS-offchip, and async carrier evidence; suspend-final/query, workload, and default-state promotion remains capability-specific and hardware-pending outside FW 5.50. |
+| 6. Add cross-firmware backend profiles | **Operation-level promotion in progress** | FW 3.20 is the lowest active target. All 39 exact keys now have submit16, internal-memory, authenticated-queue, primary-suspend, public TF-ring, HS-offchip, and async carrier evidence; suspend-final/query, workload, and default-state promotion remains capability-specific and hardware-pending outside FW 5.50. |
 
 ### 1. Promote the hardware-proven graphics state into OpenAGC
 
@@ -1630,8 +1630,8 @@ command, layout, and behavior evidence.
 The generated `analysis/agc_driver_operation_facts.tsv` now provides the
 39-key operation ledger and normalized wrapper-group mapping. It is
 deliberately conservative: all keys receive only the common carrier-proven
-submit16, internal-memory, authenticated-queue, public TF-ring, HS-offchip, and
-async subset. FW 5.50's
+submit16, internal-memory, authenticated-queue, primary-suspend, public TF-ring,
+HS-offchip, and async subset. FW 5.50's
 hardware-qualified set and FW 11.60's deeper exact-RE-qualified subset add
 further operations; remaining capabilities require internal layout recovery.
 The companion `analysis/agc_driver_command_carriers.tsv` now groups the full
