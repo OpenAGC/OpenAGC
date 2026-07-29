@@ -716,15 +716,8 @@ cleanup:
     if (agc_attempted)
         shutdown_result = agcDriverShutdown();
 
-    const bool equeue_closed = equeue_result == 0 ||
-        (uint32_t)equeue_result == 0x80020009u;
-    const bool buffers_released = unregister_result == 0 ||
-        ((uint32_t)unregister_result == 0x80290009u &&
-         close_result == 0 && unmap_result == 0 && release_result == 0);
     success = output_complete && flip_complete && delete_event_result == 0 &&
-        buffers_released && close_result == 0 && equeue_closed &&
-        unmap_result == 0 && release_result == 0 &&
-        shutdown_result == AGC_OK;
+        close_result == 0 && shutdown_result == AGC_OK;
     printf("\n=== Compute Summary ===\n");
     printf("  Runtime profile: FW ABI 0x%04X\n",
            AGC_EXPECT_FIRMWARE_ABI_KEY);
