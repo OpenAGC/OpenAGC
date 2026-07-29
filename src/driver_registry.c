@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "agc_context.h"
 #include "agc_error.h"
 #include "agc_ioctl.h"
 
@@ -44,6 +45,18 @@ static const uint32_t g_trinity_profile_aliases[] = {
     0x1001u, 0x1020u, 0x1040u, 0x1060u,
     0x1100u, 0x1120u, 0x1140u, 0x1160u,
     0x1200u, 0x1202u, 0x1220u, 0x1240u, 0x1260u, 0x1270u
+};
+
+typedef struct AgcDirectDefaultsSelection {
+    uint16_t firmware_abi_key;
+    uint32_t selected_version;
+} AgcDirectDefaultsSelection;
+
+/* A dispatcher upper bound does not select a defaults version.  This table
+ * contains only runtime selections proven for the exact firmware/GPU pair.
+ * FW 5.50 selected V8 in the hardware-qualified default-state sample. */
+static const AgcDirectDefaultsSelection g_direct_defaults_selections[] = {
+    {0x0550u, AGC_REGISTER_DEFAULTS_VERSION_8}
 };
 
 static uint16_t agcBcdByte(uint32_t value)
@@ -88,6 +101,21 @@ static bool agcFirmwareAliasContains(const uint32_t *aliases,
     for (i = 0; i < alias_count; ++i) {
         if (aliases[i] == raw_version)
             return true;
+    }
+    return false;
+}
+
+static bool agcDirectDefaultsVersionForFirmware(uint16_t abi_key,
+    uint32_t *version_out)
+{
+    size_t i;
+
+    for (i = 0; i < sizeof(g_direct_defaults_selections) /
+                    sizeof(g_direct_defaults_selections[0]); ++i) {
+        if (g_direct_defaults_selections[i].firmware_abi_key == abi_key) {
+            *version_out = g_direct_defaults_selections[i].selected_version;
+            return true;
+        }
     }
     return false;
 }
@@ -187,13 +215,16 @@ bool agcProsperoBuildDirectProfile(uint32_t raw_version, bool is_trinity,
             AGC_DIRECT_CAP_HS_OFFCHIP | AGC_DIRECT_CAP_ASYNC_GRAPHICS;
     }
 
+    if (agcDirectDefaultsVersionForFirmware(abi_key,
+            &direct.defaults_version))
+        direct.capabilities |= AGC_DIRECT_CAP_DEFAULT_STATES;
+
     /* FW 5.50 is hardware-qualified.  FW 11.60 is statically qualified from
      * its exact public/internal wrappers; operations whose wrapper contract
      * differs (workloads) or remains unknown (defaults/query) stay disabled. */
     if (abi_key == 0x0550u) {
         direct.capabilities |= AGC_DIRECT_CAP_SUSPEND_FINAL |
-            AGC_DIRECT_CAP_WORKLOAD | AGC_DIRECT_CAP_DEFAULT_STATES;
-        direct.defaults_version = 8u;
+            AGC_DIRECT_CAP_WORKLOAD;
     } else if (abi_key == 0x1160u) {
         direct.capabilities |= AGC_DIRECT_CAP_SUSPEND_FINAL;
     }

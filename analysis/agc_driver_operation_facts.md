@@ -8,6 +8,10 @@ python3 tools/build_agc_driver_operation_ledger.py \
   --output analysis/agc_driver_operation_facts.tsv
 ```
 
+The generator consumes `agc_register_defaults_facts.tsv`; defaults capability
+cannot be inferred from a driver-wrapper fingerprint or dispatcher upper
+bound.
+
 The operation columns state what the direct backend may actually issue. The
 fingerprint columns identify normalized Sony export-wrapper groups from
 `agc_driver_wrapper_fingerprints.tsv`; a shared digest is grouping evidence,
@@ -28,6 +32,10 @@ Current boundary:
 - The direct-named Sony suspend, TF-ring, and HS-offchip exports are common
   permission stubs across all 39 profiles. Direct `/dev/gc` support therefore
   depends on separately recovered internal ioctl paths, never export presence.
+- All no-argument defaults wrappers select through a runtime hardware table.
+  Only FW 5.50 has a hardware-observed selected version (8), so all other
+  direct defaults operations remain disabled even when their versioned
+  dispatcher accepts version 8, 9, or 12.
 
 FW 3.20 remains the lowest active compatibility target. FW 1.00 and 2.x stay
 archival and are intentionally absent from this active-operation ledger.

@@ -876,9 +876,16 @@ numeric ranges.
   proven 22 MiB CWSR allocation, 16 MiB working offset, and 1.5 MiB GPU-info
   span. Standard PS5 retains 16 MiB, 10 MiB, and 1 MiB respectively.
 - Unknown firmware builds fail closed.
+- Register-default selection is no longer inferred from firmware generation.
+  All 39 active `libSceAgc` images use the same runtime hardware-table selector
+  (80-byte records, version field at `0x44`), while their versioned dispatchers
+  accept upper bounds of 7, 8, 9, or 12. Only FW 5.50's selected version 8 is
+  hardware-qualified; every other direct default-state operation fails closed.
 
 See `analysis/agc_driver_abi_families.tsv`,
-`analysis/agc_driver_abi_1160.md`, and `tools/verify_agc_driver_abi.sh`.
+`analysis/agc_driver_abi_1160.md`, `analysis/agc_driver_operation_facts.tsv`,
+`analysis/agc_register_defaults_facts.tsv`, and
+`tools/verify_agc_driver_abi.sh`.
 
 ## Current Milestone
 

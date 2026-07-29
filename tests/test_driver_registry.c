@@ -199,6 +199,20 @@ static void test_common_operation_carrier_profiles(void)
             "active profile retains HS-offchip command");
         TEST_ASSERT_EQ(profile.async_graphics_ioctl, AGC_GC_IOCTL_QUEUE_STATUS,
             "active profile retains async setup command");
+        if (active_keys[i] == 0x0550u) {
+            TEST_ASSERT((profile.capabilities &
+                AGC_DIRECT_CAP_DEFAULT_STATES) != 0,
+                "FW 5.50 exact runtime defaults selection is enabled");
+            TEST_ASSERT_EQ(profile.defaults_version, 8u,
+                "FW 5.50 exact runtime defaults selection remains V8");
+        } else {
+            TEST_ASSERT((profile.capabilities &
+                AGC_DIRECT_CAP_DEFAULT_STATES) == 0,
+                "unobserved runtime defaults selection fails closed");
+            TEST_ASSERT_EQ(profile.defaults_version,
+                AGC_DIRECT_DEFAULTS_VERSION_UNKNOWN,
+                "dispatcher upper bound cannot select a defaults version");
+        }
     }
 
     {

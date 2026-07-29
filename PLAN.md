@@ -539,13 +539,19 @@ Before calling the FW 5.50 core complete:
 
 ### 7. Work deliberately deferred until after the FW 5.50 core
 
-FW 3.20 exact-profile implementation is first after the FW 5.50 release gates
-are satisfied; it remains the lowest active compatibility target. Other
-firmware families require matching hardware before support claims. Cache
-synchronization semantics follow the core audit and become an earlier blocker
-only if the expanded game corpus exercises an unresolved path. VRS and ray
-tracing remain later feature tracks driven by verified FW 5.50 ABI evidence and
-real-title demand.
+Per-operation direct-backend gates are complete for the recovered operations.
+All 39 active SPRX pairs are grouped
+by normalized wrapper and private-carrier fingerprints. Submit16, authenticated
+queue management, primary suspend, public TF ring, HS offchip, async setup,
+and standard/Trinity memory facts are exact-RE-qualified per firmware. FW 11.60
+is the modern/Trinity reference and FW 3.20 remains the lowest active target.
+Final suspend, suspend query, workloads, and register defaults remain disabled
+unless their exact firmware contract is separately proven.
+
+Cache synchronization semantics follow this audit and become an earlier
+blocker only if the expanded game corpus exercises an unresolved path. VRS and
+ray tracing remain later feature tracks driven by verified FW 5.50 ABI evidence
+and real-title demand.
 
 Every completed goal requires updated documentation, host regression coverage,
 the relevant Prospero build, hardware validation through curl/websrv when
@@ -566,8 +572,10 @@ Current backend coverage:
 - FW 5.50: RE-verified and fully hardware-validated on a standard PS5. The
   console reports raw build `0x05500008` (`5.500.008`); profile selection uses
   its four-digit `0x0550` ABI key while diagnostics retain the complete value.
-- Other registered FW 4.00-12.70 builds: RE-verified, awaiting per-firmware
-  hardware validation.
+- Other registered FW 4.00-12.70 builds: exact selection, submit16,
+  authenticated queues, primary suspend, public TF ring,
+  HS offchip, async setup, and standard/Trinity memory layouts are RE-verified.
+  They remain hardware-pending and are not a complete support claim.
 - FW 1.00 and 2.x: archival RE profiles only. Known submit/EOP evidence is
   retained, including FW 1.00's `0x38000` offset, but missing legacy queue or
   optional-request ABIs will not be recovered. Unsupported operations remain
@@ -578,10 +586,11 @@ Current backend coverage:
   proven 22 MiB CWSR allocation and related offsets. Hardware validation is
   still required on a PS5 Pro.
 
-The next compatibility work is completion of the FW 5.50 graphics and driver
-path on the available hardware. FW 3.20 exact-profile work follows after the
-FW 5.50 implementation is mature. Evidence and exact
-aliases are tracked in `analysis/agc_driver_abi_families.tsv` and
+The next compatibility work is the safety correction and per-operation
+qualification ladder below. Evidence and exact aliases are tracked in
+`analysis/agc_driver_abi_families.tsv`,
+`analysis/agc_driver_operation_facts.tsv`,
+`analysis/agc_register_defaults_facts.tsv`, and
 `analysis/agc_driver_abi_1160.md`.
 
 ## Target Priority
