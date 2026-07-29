@@ -1581,6 +1581,11 @@ Acceptance criteria:
 - ✅ `AgcDriverOps` preserves the public ABI across generic and Prospero
   implementations.
 - ✅ Exact firmware detection and capability selection fail closed.
+- ✅ The primary Prospero target links no `SceAgcDriver` stub and the
+  resulting hardware-test ELF has no `libSceAgcDriver.sprx` dependency.
+- ✅ The direct `/dev/gc` backend passed the clean FW 5.500.008 init,
+  multi-DCB marker, async queue, suspend-point, and workload sequence
+  (`20260729T090200Z-65656`).
 - ✅ The Sony-export candidate resolves privately without symbol recursion.
 - Keep the installed-Sony candidate ineligible for automatic GPU submission
   until a non-destructive probe proves execution. Never follow a mutating Sony

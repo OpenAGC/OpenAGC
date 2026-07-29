@@ -1427,12 +1427,13 @@ selection. Installed-module probing also changed submission behavior across
 later payload processes, so it must never be followed by a direct fallback in
 the same boot session; see `analysis/sony_export_forwarding_550.md`.
 
-The 2026-07-26 hardware selector run called the FW 5.50 direct backend, proving
-the installed version query and exact registry match on the console. The direct
-backend then returned `0x8089000B` during initialization in the console session
-already contaminated by the earlier Sony-module probe. Full init/submit remains
-inconclusive for that run and must be repeated only after a reboot; the older
-clean-session FW 5.50 direct results below remain the validation baseline.
+The 2026-07-29 clean-session run qualified the rebased direct-only main branch.
+The deployed ELF had no `libSceAgcDriver.sprx` `DT_NEEDED` entry and selected
+`prospero-gc-submit16` for FW `0x05500008`. `/dev/gc` initialization, internal
+memory, default states, three two-DCB marker runs, async setup, queue lifecycle,
+suspend point, and workload lifecycle all passed. Conformance result: 1/1 in
+two seconds (`20260729T090200Z-65656`). This supersedes the inconclusive
+2026-07-26 run performed after a contaminating Sony-module probe.
 
 ## Next RE Tasks
 
