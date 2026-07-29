@@ -55,6 +55,12 @@ FW 5.50 is its hardware proof point rather than a separate submit ABI. The
 stage invokes the direct backend entry because normal FW 11.60 runtime
 selection deliberately remains blocked until qualification completes.
 
+The following gates add exactly one new operation over qualified prerequisites:
+stage 4 adds async setup, stage 5 adds authenticated queue create/destroy, and
+stage 6 adds primary suspend submission while the qualified queue is active.
+Each gate still requires two clean runs with process cleanup immediately before
+the payload.
+
 ## Staged hardware result
 
 On the same standard FW 11.60 console (`0x11600005`, SoC `0x00840f60`):

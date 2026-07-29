@@ -1530,8 +1530,10 @@ int32_t PS5_SYSV_ABI agcProsperoDestroyUserSpecialQueue(void)
                 .magic3 = AGC_GC_QUEUE_MAGIC3,
             };
 
-            agcProsperoIoctl(
+            int ret = agcProsperoIoctl(
                 g_prospero.direct_profile.queue_destroy_ioctl, &arg);
+            if (ret < 0)
+                return AGC_ERROR_INTERNAL;
             /* No ring_region to free — the ring buffer is carved from
              * the EOP FIFO allocation, not a separate region. */
             g_prospero.queues[i].in_use = false;

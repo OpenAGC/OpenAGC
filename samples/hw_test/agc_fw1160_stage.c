@@ -36,6 +36,11 @@ extern int32_t PS5_SYSV_ABI agcProsperoInitialize(void);
 extern int32_t PS5_SYSV_ABI agcProsperoInitializeInternalMemory(void);
 extern int32_t PS5_SYSV_ABI agcProsperoSubmitDcb(
     const AgcCommandBufferSubmit *packet);
+extern int32_t PS5_SYSV_ABI agcProsperoSetupAsyncGraphics(uint32_t pipe_id);
+extern int32_t PS5_SYSV_ABI agcProsperoCreateUserSpecialQueue(void);
+extern int32_t PS5_SYSV_ABI agcProsperoDestroyUserSpecialQueue(void);
+extern int32_t PS5_SYSV_ABI agcProsperoSuspendPointSubmitDirect(
+    uint32_t field0, uint32_t field1, uint32_t field2, uint32_t field3);
 extern int32_t PS5_SYSV_ABI agcProsperoShutdown(void);
 extern int32_t agcProsperoGetRuntimeProfile(
     AgcProsperoRuntimeProfile *profile_out);
@@ -109,7 +114,7 @@ int main(void)
         return 1;
     }
 #endif
-#if AGC_FW1160_STAGE >= 3
+#if AGC_FW1160_STAGE == 3
     void *submit_memory = (void *)(uintptr_t)0xf02000000ULL;
     const uint32_t expected_marker = 0x1160CAFEu;
     volatile uint32_t *marker;
@@ -168,6 +173,43 @@ int main(void)
     printf("submit memory release=%d\n", result);
     if (result != 0) {
         printf("stage 3: submit memory release FAIL\n");
+        (void)agcProsperoShutdown();
+        return 1;
+    }
+#endif
+#if AGC_FW1160_STAGE >= 4
+    result = agcProsperoSetupAsyncGraphics(1u);
+    printf("async graphics=0x%08X\n", (unsigned)result);
+    if (result != AGC_OK) {
+        printf("stage 4: async graphics FAIL\n");
+        (void)agcProsperoShutdown();
+        return 1;
+    }
+#endif
+#if AGC_FW1160_STAGE >= 5
+    int32_t queue_handle = agcProsperoCreateUserSpecialQueue();
+    printf("queue create=%d (0x%08X)\n",
+        queue_handle, (unsigned)queue_handle);
+    if (queue_handle < 0) {
+        printf("stage 5: queue create FAIL\n");
+        (void)agcProsperoShutdown();
+        return 1;
+    }
+#if AGC_FW1160_STAGE >= 6
+    result = agcProsperoSuspendPointSubmitDirect(
+        0xaf1e80b7u, 0x8b4cdd90u, 0x99f68d6cu, 0u);
+    printf("primary suspend=0x%08X\n", (unsigned)result);
+    if (result != AGC_OK) {
+        printf("stage 6: primary suspend FAIL\n");
+        (void)agcProsperoDestroyUserSpecialQueue();
+        (void)agcProsperoShutdown();
+        return 1;
+    }
+#endif
+    result = agcProsperoDestroyUserSpecialQueue();
+    printf("queue destroy=0x%08X\n", (unsigned)result);
+    if (result != AGC_OK) {
+        printf("stage %d: queue destroy FAIL\n", AGC_FW1160_STAGE);
         (void)agcProsperoShutdown();
         return 1;
     }
