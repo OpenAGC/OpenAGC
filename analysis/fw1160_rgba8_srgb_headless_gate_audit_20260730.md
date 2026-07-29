@@ -95,6 +95,28 @@ the live ps5debug-NG fault log after each verdict. Stop on the first stall,
 mismatch, panic, page fault, bad packet, or GPU reset.
 
 Matching exact FW 5.50 headless artifacts must pass before these formats are
-promoted as cross-firmware parity. At build time the FW 5.50 console remains
-unavailable, so neither firmware has a hardware verdict for this new headless
-allocation path yet.
+promoted as cross-firmware parity. The FW 11.60 verdicts are recorded below;
+the FW 5.50 console remains unavailable, so the mirror regression is pending.
+
+## FW 11.60 hardware result
+
+Standard PS5 firmware `0x11600005` passed every logged headless gate twice
+after the full-rectangle coverage correction:
+
+| Target | Reproduced native oracle | State |
+| --- | --- | --- |
+| `RGBA8_UNORM` | changed `224640`, distinct `8`, FNV64 `0xdc0fe459fbd8c58c` | passed twice |
+| `BGRA8_UNORM` | changed `224640`, distinct `8`, FNV64 `0xbcec6133bc4e8583` | passed twice |
+| `RGBA8_SRGB` | changed `224640`, mismatches `0/0/0`, converted `279859`, hashes `0xdc0fe459fbd8c58c` / `0x5024a48443f3e7a8` | passed twice |
+| `BGRA8_SRGB` | changed `224640`, mismatches `0/0/0`, converted `279859`, hashes `0xbcec6133bc4e8583` / `0xd5c40dfcc7c28283` | passed twice |
+
+Every UNORM run passed vertex fetch, bound u16 indexing, bilinear texture
+sampling, ordered marker, and immediate completion-fence checks. Every sRGB
+run completed both the UNORM control and sRGB submissions with immediate
+fences. All eight qualifying runs selected exact ABI key `0x1160`, shut the
+driver down cleanly, produced final PASS, left no `eboot.elf` according to
+ps5debug-NG, and kept websrv responsive.
+
+The FW 5.50 console at `10.0.1.41` still refused both ports 8080 and 744 after
+these runs. The exact FW 5.50 mirrors remain built but unexecuted, so promotion
+to cross-firmware parity is still pending that regression.

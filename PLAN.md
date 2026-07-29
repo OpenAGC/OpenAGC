@@ -105,7 +105,11 @@ AMD PM4 packet ancestry overlap in useful ways.
   GPU execution, fence, marker, and shutdown passed, but the current headless
   full-rectangle viewport produced 224,640 pixels rather than the obsolete
   126,293 expectation. The validator now uses rectangular area in headless
-  mode and retains the square formula for display fixtures; rebuild and retry.
+  mode and retains the square formula for display fixtures. After that fix,
+  RGBA8_UNORM, BGRA8_UNORM, RGBA8_SRGB, and BGRA8_SRGB each passed twice with
+  reproducible native hashes, zero sRGB mismatches, clean shutdowns, and no
+  residual process. Matching FW 5.50 mirrors remain pending because that
+  console is offline.
 - The first uncompressed depth/stencil tier is also built for exact FW 11.60:
   D16, S8-only, then D16+S8. Each target is headless, retains the exact native
   four-draw readback oracle under the current full-rectangle viewport, and

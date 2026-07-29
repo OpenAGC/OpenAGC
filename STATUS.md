@@ -414,7 +414,8 @@ RGBA8/BGRA8 UNORM and sRGB now use real
 headless flexible-memory targets. The sRGB pair preserves distinct aligned
 UNORM-control and sRGB-result surfaces plus exact transfer, coverage, alpha,
 conversion-count, and native-hash checks. Exact FW 11.60 and FW 5.50 artifacts
-cross-build without warnings; hardware verdicts remain pending. See
+cross-build without warnings. FW 11.60 passed twice per target; the matching
+FW 5.50 hardware verdicts remain pending. See
 `analysis/fw1160_color_format_gate_matrix_20260730.md` and
 `analysis/fw1160_rgba8_srgb_headless_gate_audit_20260730.md`.
 
@@ -440,6 +441,16 @@ so index and texture verdicts failed against the obsolete 126,293 estimate.
 Headless RGBA8 coverage now uses rectangular area, display-backed coverage
 keeps the retained square formula, and UNORM gates additionally report a
 native packed FNV64 hash.
+
+The corrected FW 11.60 RGBA8 tier is hardware-qualified twice per target.
+RGBA8_UNORM and BGRA8_UNORM each changed 224,640 pixels, passed vertex/index/
+texture checks, and reproduced FNV64 `0xdc0fe459fbd8c58c` and
+`0xbcec6133bc4e8583`. RGBA8_SRGB and BGRA8_SRGB each matched all 224,640
+covered pixels, reported zero coverage/alpha/transfer mismatches and 279,859
+converted channels, and reproduced sRGB hashes `0x5024a48443f3e7a8` and
+`0xd5c40dfcc7c28283`. All runs fenced immediately, shut down cleanly, and
+left no process. Cross-firmware promotion awaits the exact FW 5.50 mirrors;
+that console still refuses ports 8080 and 744.
 
 Exact `0x0550` modern headless mirrors for R16, RG16, R8, RG8, RGB10A2,
 R11G11B10, R32, RG32, and RGBA32 are cross-built without warnings. The shared

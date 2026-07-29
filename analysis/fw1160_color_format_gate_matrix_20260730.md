@@ -88,7 +88,8 @@ completed and ps5debug-NG again proved an empty process list, but the following
 RG32 websrv request produced no stdout before its 30-second transport bound and
 also left no process. There is no captured GPU verdict for that request, so it
 does not count. Stop this boot here; reboot and reinject ps5debug-NG before the
-second RG32 pass and both RGBA32 passes.
+second RG32 pass and both RGBA32 passes. Those gates later passed twice through
+the file-backed transport recorded below.
 
 The cleanup helper deliberately ends with `SIGKILL`, so websrv can retain a
 foreground pipe until the client timeout even after the helper has finished.
@@ -133,3 +134,10 @@ All seven formats are hardware-qualified on this FW 11.60 console,
 but project-wide parity promotion still requires matching modern headless FW
 5.50 regressions. The FW 5.50 console was unreachable on ports 8080 and 744
 during this session.
+
+The subsequent headless RGBA8 tier also passed twice per target. RGBA8_UNORM
+and BGRA8_UNORM reproduced 224,640 changed pixels with native hashes
+`0xdc0fe459fbd8c58c` and `0xbcec6133bc4e8583`. RGBA8_SRGB and BGRA8_SRGB
+reproduced the same coverage, zero coverage/alpha/transfer mismatches, 279,859
+converted channels, and sRGB hashes `0x5024a48443f3e7a8` and
+`0xd5c40dfcc7c28283`. See the dedicated headless audit for complete evidence.
