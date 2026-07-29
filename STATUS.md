@@ -1047,13 +1047,17 @@ The host-generic implementation now has a tested model for:
   5.50; the qualified direct extension instead uses three-dword begin/end
   packets. Stage 16 changes only to that 5.50-proven form while retaining
   defaults, async setup, ordinary preflight, full flush, and ordered markers.
-  It is built but not hardware-run; public FW 11.60 workload remains disabled.
-  See `analysis/fw1160_workload_stage16_plan_20260729.md`.
+  Stage 16 was subsequently run once. Its preflight marker passed in 50 ms and
+  its exact 16-dword `0xc0011e80`/`0xc0011e84` workload DCB returned `AGC_OK`,
+  but both ordered markers stayed zero for 5 seconds. ps5debug-NG found PID
+  109; cleanup removed it and restored both services. This disproves
+  portability of the FW 5.50-qualified three-dword extension. Both known
+  workload packet forms now fail on FW 11.60; do not repeat stage 16.
   The independent headless FW 11.60 graphics and compute gates were also
   rebuilt and audited. They contain no workload calls, require the exact
   standard `0x1160` profile, and enforce bounded GPU/readback plus shutdown
-  oracles. On the next clean boot they run before stage 16, in increasing risk
-  order, so workload failure cannot hide independent parity results. See
+  oracles. They were run before stage 16 in increasing risk order so workload
+  failure could not hide independent parity results. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md`.
   The headless graphics baseline subsequently passed twice on standard FW
   `0x11600005`. Both runs passed exact profile selection, version-12 defaults,

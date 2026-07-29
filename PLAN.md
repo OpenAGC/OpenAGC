@@ -31,9 +31,14 @@ AMD PM4 packet ancestry overlap in useful ways.
   Sony's prefix-plus-nine-dword form. Stage 16 is now built as an isolated
   counterfactual using the separate three-dword direct form actually proven on
   FW 5.50, with the qualified defaults/async/preflight sequence unchanged.
-  Run it only after a clean reboot and keep the public capability fail closed.
-- After a successful FW 11.60 candidate passes twice, rerun the corresponding direct path
-  on FW 5.50 before enabling any capability. Corpus extraction now proves the
+  Stage 16 was run once: its ordinary marker completed in 50 ms and the exact
+  `0xc0011e80`/`0xc0011e84` DCB submitted, but both following markers remained
+  zero for 5 seconds. Cleanup removed PID 109. Do not repeat it; both known
+  workload packet forms now fail on FW 11.60. Keep the public capability fail
+  closed and recover an official-driver kernel/context prerequisite offline.
+- After a successful FW 11.60 candidate passes twice, rerun the corresponding
+  direct path on FW 5.50 before enabling any capability. Corpus extraction
+  now proves the
   standard Gn2/Gn3/Gn4 constructor state on every exact active key from 6.00
   through 12.70 and the reduced Gn2-only Trinity branch from 9.00 onward. This
   is ABI evidence, not workload qualification; keep untested firmware gated.

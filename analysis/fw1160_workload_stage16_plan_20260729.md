@@ -21,7 +21,7 @@ That Sony builder form has never been proven through OpenAGC's direct
 
 ```text
 begin:    c0011e80 00000001 00000000
-complete: c0011e00 00000001 00000000
+complete: c0011e84 00000001 00000000
 ```
 
 The extension is not a replacement implementation of Sony's multi-argument
@@ -62,3 +62,27 @@ Require two clean passes before enabling the exact FW 11.60 capability, then
 rerun the public FW 5.50 workload path as a regression. A stall must be removed
 with the cleanup ELF and stage 16 must not be repeated until its result has
 been analyzed.
+
+## Hardware result
+
+Stage 16 was run once on standard FW `0x11600005`, last in a boot session after
+two successful graphics and two successful compute qualifications. The
+guarded cleanup found no stale process. Exact profile selection, internal
+memory, version-12 defaults, and async setup returned `AGC_OK`. The ordinary
+preflight submit completed marker `0x1160f016` in 50 ms.
+
+The candidate then printed the expected 16-dword DCB and exact headers
+`0xc0011e80` / `0xc0011e84`. Submission returned `AGC_OK`, but both ordered
+markers remained zero for the full 5,000 ms wait. The payload reported
+`stage 16: direct workload sequence FAIL`; no PASS or normal foreground exit
+followed before the websrv timeout.
+
+ps5debug-NG found PID 109 named `eboot.elf`. The established cleanup ELF
+removed it, after which the process list was empty and both websrv and TCP 744
+were responsive. Do not repeat stage 16 unchanged.
+
+This disproves portability of the FW 5.50-qualified three-dword workload form
+to FW 11.60. Together with stages 11-15, both known packet forms now fail at
+the first workload operation while ordinary graphics and compute execute
+correctly in the same boot. FW 11.60 workload capability remains disabled;
+recover an official-driver kernel/context prerequisite before another gate.
