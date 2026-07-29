@@ -1580,7 +1580,10 @@ Acceptance criteria:
 
 - ✅ `AgcDriverOps` preserves the public ABI across generic and Prospero
   implementations.
-- ✅ Exact firmware detection and capability selection fail closed.
+- ✅ Exact firmware detection, backend selection, and per-operation direct
+  capability gates fail closed. FW 5.50 retains its qualified operations;
+  FW 11.60 enables only wrapper-proven operations, while workloads,
+  suspend-query, and defaults remain disabled pending exact evidence.
 - ✅ The primary Prospero target links no `SceAgcDriver` stub and the
   resulting hardware-test ELF has no `libSceAgcDriver.sprx` dependency.
 - ✅ The direct `/dev/gc` backend passed the clean FW 5.500.008 init,

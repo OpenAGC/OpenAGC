@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "agc_error.h"
+#include "agc_ioctl.h"
 
 static const uint32_t g_legacy_v1_aliases[] = {
     0x0100u
@@ -103,6 +104,20 @@ bool agcProsperoFirmwareSupported(uint32_t raw_version)
 bool agcProsperoBuildRuntimeProfile(uint32_t raw_version, bool is_trinity,
     AgcProsperoRuntimeProfile *profile_out)
 {
+    AgcProsperoDirectProfile direct_profile;
+
+    if (!profile_out ||
+        !agcProsperoBuildDirectProfile(raw_version, is_trinity,
+            &direct_profile))
+        return false;
+    *profile_out = direct_profile.runtime;
+    return true;
+}
+
+bool agcProsperoBuildDirectProfile(uint32_t raw_version, bool is_trinity,
+    AgcProsperoDirectProfile *profile_out)
+{
+    AgcProsperoDirectProfile direct = {0};
     AgcProsperoRuntimeProfile profile = {0};
     uint16_t abi_key = agcFirmwareAbiKey(raw_version);
 
@@ -125,12 +140,10 @@ bool agcProsperoBuildRuntimeProfile(uint32_t raw_version, bool is_trinity,
             abi_key)) {
         profile.family = AGC_PROSPERO_ABI_LEGACY_V3;
         profile.authenticated_special_queue = true;
-        profile.supports_tf_ring = true;
         profile.eop_ring_offset = 0x39000u;
     } else if (agcProsperoStandardDirectAbiSupportsFirmware(raw_version)) {
         profile.family = AGC_PROSPERO_ABI_STANDARD;
         profile.authenticated_special_queue = true;
-        profile.supports_tf_ring = true;
         profile.eop_ring_offset = 0x39000u;
     } else {
         return false;
@@ -140,7 +153,46 @@ bool agcProsperoBuildRuntimeProfile(uint32_t raw_version, bool is_trinity,
     profile.gpu_info_span = is_trinity ? 0x180000u : 0x100000u;
     profile.cwsr_work_offset = is_trinity ? 0x1000000u : 0xa00000u;
     profile.cwsr_size = is_trinity ? 0x1600000u : 0x1000000u;
-    *profile_out = profile;
+    direct.runtime = profile;
+    direct.capabilities = AGC_DIRECT_CAP_SUBMIT;
+    direct.defaults_version = AGC_DIRECT_DEFAULTS_VERSION_UNKNOWN;
+    direct.submit_ioctl = AGC_GC_IOCTL_SUBMIT_16;
+
+    /* FW 5.50 is hardware-qualified.  FW 11.60 is statically qualified from
+     * its exact public/internal wrappers; operations whose wrapper contract
+     * differs (workloads) or remains unknown (defaults/query) stay disabled. */
+    if (abi_key == 0x0550u) {
+        direct.capabilities |= AGC_DIRECT_CAP_MEMORY | AGC_DIRECT_CAP_QUEUE |
+            AGC_DIRECT_CAP_SUSPEND_PRIMARY | AGC_DIRECT_CAP_SUSPEND_FINAL |
+            AGC_DIRECT_CAP_WORKLOAD | AGC_DIRECT_CAP_TF_RING |
+            AGC_DIRECT_CAP_HS_OFFCHIP | AGC_DIRECT_CAP_DEFAULT_STATES |
+            AGC_DIRECT_CAP_ASYNC_GRAPHICS;
+        direct.defaults_version = 8u;
+    } else if (abi_key == 0x1160u) {
+        direct.capabilities |= AGC_DIRECT_CAP_MEMORY | AGC_DIRECT_CAP_QUEUE |
+            AGC_DIRECT_CAP_SUSPEND_PRIMARY | AGC_DIRECT_CAP_SUSPEND_FINAL |
+            AGC_DIRECT_CAP_TF_RING | AGC_DIRECT_CAP_HS_OFFCHIP |
+            AGC_DIRECT_CAP_ASYNC_GRAPHICS;
+    }
+
+    if ((direct.capabilities & AGC_DIRECT_CAP_QUEUE) != 0) {
+        direct.queue_create_ioctl = AGC_GC_IOCTL_QUEUE_CREATE;
+        direct.queue_destroy_ioctl = AGC_GC_IOCTL_QUEUE_DESTROY;
+    }
+    if ((direct.capabilities & AGC_DIRECT_CAP_SUSPEND_PRIMARY) != 0)
+        direct.suspend_primary_ioctl = AGC_GC_IOCTL_SUSPEND_16;
+    if ((direct.capabilities & AGC_DIRECT_CAP_SUSPEND_FINAL) != 0)
+        direct.suspend_final_ioctl = AGC_GC_IOCTL_SUSPEND_39;
+    if ((direct.capabilities & AGC_DIRECT_CAP_TF_RING) != 0)
+        direct.tf_ring_ioctl = AGC_GC_IOCTL_SET_TF_RING;
+    if ((direct.capabilities & AGC_DIRECT_CAP_HS_OFFCHIP) != 0)
+        direct.hs_offchip_ioctl = AGC_GC_IOCTL_SET_HS_OFFCHIP;
+    if ((direct.capabilities & AGC_DIRECT_CAP_ASYNC_GRAPHICS) != 0)
+        direct.async_graphics_ioctl = AGC_GC_IOCTL_QUEUE_STATUS;
+
+    direct.runtime.supports_tf_ring =
+        (direct.capabilities & AGC_DIRECT_CAP_TF_RING) != 0;
+    *profile_out = direct;
     return true;
 }
 

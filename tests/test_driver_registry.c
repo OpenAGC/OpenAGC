@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "agc_error.h"
+#include "agc_ioctl.h"
 #include "driver_ops.h"
 #include "driver_registry.h"
 
@@ -91,8 +92,64 @@ static void test_legacy_submit16_firmware_profiles(void)
         "FW 3.20 profile builds");
     TEST_ASSERT_EQ(profile.family, AGC_PROSPERO_ABI_LEGACY_V3,
         "FW 3.20 family selected");
-    TEST_ASSERT(profile.supports_tf_ring,
-        "FW 3.20 TF-ring ioctl selected");
+    TEST_ASSERT(!profile.supports_tf_ring,
+        "FW 3.20 TF-ring stays disabled until its wrapper is qualified");
+}
+
+static void test_direct_operation_profiles(void)
+{
+    AgcProsperoDirectProfile profile;
+
+    TEST_ASSERT(agcProsperoBuildDirectProfile(
+        0x05500008u, false, &profile), "FW 5.50 direct profile builds");
+    TEST_ASSERT_EQ(profile.capabilities,
+        AGC_DIRECT_CAP_SUBMIT | AGC_DIRECT_CAP_MEMORY | AGC_DIRECT_CAP_QUEUE |
+        AGC_DIRECT_CAP_SUSPEND_PRIMARY | AGC_DIRECT_CAP_SUSPEND_FINAL |
+        AGC_DIRECT_CAP_WORKLOAD | AGC_DIRECT_CAP_TF_RING |
+        AGC_DIRECT_CAP_HS_OFFCHIP | AGC_DIRECT_CAP_DEFAULT_STATES |
+        AGC_DIRECT_CAP_ASYNC_GRAPHICS,
+        "FW 5.50 exposes only its qualified direct operations");
+    TEST_ASSERT_EQ(profile.defaults_version, 8u,
+        "FW 5.50 selects register-defaults version 8");
+    TEST_ASSERT_EQ(profile.tf_ring_ioctl, AGC_GC_IOCTL_SET_TF_RING,
+        "FW 5.50 TF-ring uses the public 0x28 wrapper ioctl");
+    TEST_ASSERT_EQ(profile.hs_offchip_ioctl, AGC_GC_IOCTL_SET_HS_OFFCHIP,
+        "FW 5.50 HS-offchip uses the 0x2c wrapper ioctl");
+
+    TEST_ASSERT(agcProsperoBuildDirectProfile(
+        0x11600000u, true, &profile), "FW 11.60 direct profile builds");
+    TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_SUBMIT) != 0,
+        "FW 11.60 submit16 enabled");
+    TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_MEMORY) != 0,
+        "FW 11.60 standard/Trinity memory profile enabled");
+    TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_QUEUE) != 0,
+        "FW 11.60 queue wrappers enabled");
+    TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_TF_RING) != 0,
+        "FW 11.60 public TF-ring wrapper enabled");
+    TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_HS_OFFCHIP) != 0,
+        "FW 11.60 HS-offchip wrapper enabled");
+    TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_WORKLOAD) == 0,
+        "FW 11.60 incompatible workload wrapper fails closed");
+    TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_SUSPEND_QUERY) == 0,
+        "FW 11.60 unknown suspend-query semantics fail closed");
+    TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_DEFAULT_STATES) == 0,
+        "FW 11.60 unknown defaults version fails closed");
+    TEST_ASSERT_EQ(profile.defaults_version,
+        AGC_DIRECT_DEFAULTS_VERSION_UNKNOWN,
+        "FW 11.60 never inherits FW 5.50 defaults version");
+    TEST_ASSERT_EQ(profile.tf_ring_ioctl, AGC_GC_IOCTL_SET_TF_RING,
+        "FW 11.60 TF-ring uses 0x80108128, not final suspend");
+    TEST_ASSERT_EQ(profile.hs_offchip_ioctl, AGC_GC_IOCTL_SET_HS_OFFCHIP,
+        "FW 11.60 HS-offchip uses 0xc010812c, not operation 0x2d");
+
+    TEST_ASSERT(agcProsperoBuildDirectProfile(
+        0x12200000u, false, &profile), "FW 12.20 submit profile builds");
+    TEST_ASSERT_EQ(profile.capabilities, AGC_DIRECT_CAP_SUBMIT,
+        "unqualified FW 12.20 operations fail closed except submit16");
+    TEST_ASSERT(!profile.runtime.supports_tf_ring,
+        "unqualified firmware does not inherit family-wide TF support");
+    TEST_ASSERT(!agcProsperoBuildDirectProfile(
+        0x11600000u, false, NULL), "NULL direct profile rejected");
 }
 
 static void test_trinity_runtime_profile(void)
@@ -222,6 +279,7 @@ void test_suite_driver_registry(void)
     TEST_RUN(test_firmware_normalization);
     TEST_RUN(test_standard_direct_firmware_aliases);
     TEST_RUN(test_legacy_submit16_firmware_profiles);
+    TEST_RUN(test_direct_operation_profiles);
     TEST_RUN(test_trinity_runtime_profile);
     TEST_RUN(test_runtime_profile_diagnostic_labels);
     TEST_RUN(test_exact_alias_and_capability_selection);

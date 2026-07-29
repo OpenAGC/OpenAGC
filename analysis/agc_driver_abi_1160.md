@@ -29,12 +29,28 @@ suspend points, and capture control, are present.
 | queue create | `0xc0408121` |
 | queue destroy | `0xc00c810e` |
 | async graphics setup | `0x80048126` |
-| TF ring | `0xc0108139` |
-| HS offchip parameter | `0xc008812d` |
+| public TF ring | `0x80108128` |
+| privileged TF ring | `0xc0108120` |
+| HS offchip parameter | `0xc010812c` |
+| primary suspend | `0xc010811c` |
+| final suspend | `0xc0108139` |
+
+`0xc0108139` is the final-suspend operation, not TF-ring. `0xc008812d` is a
+distinct operation and is not the HS-offchip setter.
 
 The direct submit wrapper uses a 16-byte object with fields at offsets 0, 4,
 and 8. Initialization opens `/dev/gc`, issues the context query, and maps a
 `0x4000` register aperture at `0xfe0200000`.
+
+## Direct-operation status
+
+FW 11.60 is statically qualified (hardware pending) for submit16, standard and
+Trinity internal-memory sizing, authenticated queue create/destroy, primary
+and final suspend submission, public TF-ring setup, HS-offchip setup, and async
+graphics setup. Its workload wrappers build a larger, different packet
+contract than OpenAGC's FW 5.50 workload helper, so workload calls fail closed.
+The suspend-query bit semantics and register-defaults version mapping remain
+unrecovered and also fail closed.
 
 The standard-console internal allocations are unchanged from FW 5.50:
 

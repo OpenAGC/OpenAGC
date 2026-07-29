@@ -48,7 +48,6 @@ require "16-byte submit" 'c0108102'
 require "queue create" 'c0408121'
 require "queue destroy" 'c00c810e'
 require "async graphics setup" '80048126'
-require "HS offchip parameter" 'c008812d'
 require "standard CWSR size" '1000000'
 require "DDID size" 'fc000'
 require "EOP FIFO size" '3c000'
@@ -57,15 +56,19 @@ require "ACQRB size" '1e0000'
 case $family in
     legacy-v1)
         require_absent "later queue token" 'af1e80b7'
-        require_absent "TF ring" 'c0108139'
         require "legacy EOP ring offset" '38000'
         ;;
     legacy-v2)
-        require_absent "TF ring" 'c0108139'
         require "EOP ring offset" '39000'
         ;;
-    legacy-v3|standard)
-        require "TF ring" 'c0108139'
+    legacy-v3)
+        require "EOP ring offset" '39000'
+        ;;
+    standard)
+        require "public TF ring" '80108128'
+        require "privileged TF ring" 'c0108120'
+        require "HS offchip parameter" 'c010812c'
+        require "final suspend" 'c0108139'
         require "EOP ring offset" '39000'
         ;;
 esac

@@ -158,6 +158,7 @@ typedef struct {
     uint32_t         ctx_capability; /* context query result from ioctl 0x2e */
     uint32_t         firmware_version; /* raw system-software version */
     AgcProsperoRuntimeProfile profile; /* firmware and hardware ABI profile */
+    AgcProsperoDirectProfile direct_profile; /* exact per-operation /dev/gc ABI */
     AgcProsperoQueue    queues[AGC_PROSPERO_MAX_QUEUES];
     /* Internal memory regions — sizes from SPRX disassembly (FW 5.50) */
     AgcProsperoRegion   gpu_info;    /* SceGnmGpuInfo:   0x100000 (1 MB) */
@@ -211,9 +212,10 @@ int32_t agcProsperoConfigureRuntimeProfile(uint32_t raw_version)
         if (result != AGC_OK)
             return result;
     }
-    if (!agcProsperoBuildRuntimeProfile(raw_version, is_trinity,
-            &g_prospero.profile))
+    if (!agcProsperoBuildDirectProfile(raw_version, is_trinity,
+            &g_prospero.direct_profile))
         return AGC_ERROR_NOT_SUPPORTED;
+    g_prospero.profile = g_prospero.direct_profile.runtime;
     g_prospero.firmware_version = raw_version;
     printf("[openagc] profile fw=0x%08X family=%s model=%s "
            "submit=0x%08X queue_auth=%u tf_ring=%u eop=0x%X "
@@ -555,6 +557,8 @@ int32_t PS5_SYSV_ABI agcProsperoInitializeInternalMemory(void)
         return AGC_ERROR_NOT_INITIALIZED;
     if (g_prospero.mem_initialized)
         return AGC_OK;
+    if ((g_prospero.direct_profile.capabilities & AGC_DIRECT_CAP_MEMORY) == 0)
+        return AGC_ERROR_NOT_SUPPORTED;
 
     /* Memory type for flexible memory (SPRX uses 0x33 for GPU regions).
      * This is a flexible-memory-specific type flag, not the same as
@@ -568,7 +572,8 @@ int32_t PS5_SYSV_ABI agcProsperoInitializeInternalMemory(void)
         int             mem_type;
         const char     *name;
     } regions[] = {
-        { &g_prospero.gpu_info,   0x100000,  AGC_FLEX_TYPE_INFO, "SceGnmGpuInfo"   },
+        { &g_prospero.gpu_info,   g_prospero.profile.gpu_info_span,
+          AGC_FLEX_TYPE_INFO, "SceGnmGpuInfo" },
         { &g_prospero.trap_code,  0x4000,    AGC_FLEX_TYPE_GPU,  "SceGnmTrapCode"  },
         { &g_prospero.trap_data,  0x4000,    AGC_FLEX_TYPE_GPU,  "SceGnmTrapData"  },
         { &g_prospero.ddid,       0xFC000,   AGC_FLEX_TYPE_GPU,  "SceGnmDdid"      },
@@ -741,7 +746,10 @@ int32_t PS5_SYSV_ABI agcProsperoSubmitMultiCommandBuffersDirect(
     if (frame_ret < 0)
         return AGC_ERROR_SUBMIT_FAILED;
 
-    int ret = agcProsperoIoctl(AGC_GC_IOCTL_SUBMIT_16, &submit_arg);
+    if ((g_prospero.direct_profile.capabilities & AGC_DIRECT_CAP_SUBMIT) == 0)
+        return AGC_ERROR_NOT_SUPPORTED;
+    int ret = agcProsperoIoctl(g_prospero.direct_profile.submit_ioctl,
+        &submit_arg);
     if (ret < 0)
         return AGC_ERROR_SUBMIT_FAILED;
 
@@ -787,7 +795,10 @@ int32_t PS5_SYSV_ABI agcProsperoSubmitDcb(const AgcCommandBufferSubmit *packet)
     if (frame_ret < 0)
         return AGC_ERROR_SUBMIT_FAILED;
 
-    int ret = agcProsperoIoctl(AGC_GC_IOCTL_SUBMIT_16, &submit_arg);
+    if ((g_prospero.direct_profile.capabilities & AGC_DIRECT_CAP_SUBMIT) == 0)
+        return AGC_ERROR_NOT_SUPPORTED;
+    int ret = agcProsperoIoctl(g_prospero.direct_profile.submit_ioctl,
+        &submit_arg);
     if (ret < 0)
         return AGC_ERROR_SUBMIT_FAILED;
 
@@ -836,7 +847,10 @@ int32_t PS5_SYSV_ABI agcProsperoSubmitAcb(
     submit_arg.num_cbs = 1;
     submit_arg.cb_array = (uint64_t)(uintptr_t)&cb_desc;
 
-    int ret = agcProsperoIoctl(AGC_GC_IOCTL_SUBMIT_16, &submit_arg);
+    if ((g_prospero.direct_profile.capabilities & AGC_DIRECT_CAP_SUBMIT) == 0)
+        return AGC_ERROR_NOT_SUPPORTED;
+    int ret = agcProsperoIoctl(g_prospero.direct_profile.submit_ioctl,
+        &submit_arg);
     if (ret < 0)
         return AGC_ERROR_SUBMIT_FAILED;
 
@@ -852,6 +866,9 @@ int32_t PS5_SYSV_ABI agcProsperoSuspendPointSubmitDirect(
 {
     if (!g_prospero.initialized)
         return AGC_ERROR_NOT_INITIALIZED;
+    if ((g_prospero.direct_profile.capabilities &
+            AGC_DIRECT_CAP_SUSPEND_PRIMARY) == 0)
+        return AGC_ERROR_NOT_SUPPORTED;
 
     /*
      * Submit a suspend point via the 16-byte gc_accept_suspend_locked ioctl.
@@ -867,7 +884,8 @@ int32_t PS5_SYSV_ABI agcProsperoSuspendPointSubmitDirect(
     arg.field2 = field2;
     arg.field3 = field3;
 
-    int ret = agcProsperoIoctl(AGC_GC_IOCTL_SUSPEND_16, &arg);
+    int ret = agcProsperoIoctl(
+        g_prospero.direct_profile.suspend_primary_ioctl, &arg);
     if (ret < 0)
         return AGC_ERROR_SUBMIT_FAILED;
 
@@ -878,6 +896,9 @@ bool PS5_SYSV_ABI agcProsperoIsSuspendPointInFlightDirect(uint32_t value)
 {
     (void)value;
     if (!g_prospero.initialized)
+        return false;
+    if ((g_prospero.direct_profile.capabilities &
+            AGC_DIRECT_CAP_SUSPEND_QUERY) == 0)
         return false;
 
     /*
@@ -898,6 +919,9 @@ int32_t PS5_SYSV_ABI agcProsperoInternalSuspendPointSubmitFinal(
 {
     if (!g_prospero.initialized)
         return AGC_ERROR_NOT_INITIALIZED;
+    if ((g_prospero.direct_profile.capabilities &
+            AGC_DIRECT_CAP_SUSPEND_FINAL) == 0)
+        return AGC_ERROR_NOT_SUPPORTED;
 
     /*
      * Internal final suspend point submission variant. On FW 5.50 this is
@@ -910,7 +934,8 @@ int32_t PS5_SYSV_ABI agcProsperoInternalSuspendPointSubmitFinal(
     arg.field2 = field2;
     arg.field3 = field3;
 
-    int ret = agcProsperoIoctl(AGC_GC_IOCTL_SUSPEND_39, &arg);
+    int ret = agcProsperoIoctl(
+        g_prospero.direct_profile.suspend_final_ioctl, &arg);
     if (ret < 0)
         return AGC_ERROR_SUBMIT_FAILED;
     return AGC_OK;
@@ -936,6 +961,9 @@ int32_t PS5_SYSV_ABI agcProsperoSetupAsyncGraphics(uint32_t pipe_id)
 {
     if (!g_prospero.initialized)
         return AGC_ERROR_NOT_INITIALIZED;
+    if ((g_prospero.direct_profile.capabilities &
+            AGC_DIRECT_CAP_ASYNC_GRAPHICS) == 0)
+        return AGC_ERROR_NOT_SUPPORTED;
 
     if (g_prospero.async_setup_done) {
         /* SPRX only calls the ioctl once, then sets a flag. */
@@ -943,7 +971,8 @@ int32_t PS5_SYSV_ABI agcProsperoSetupAsyncGraphics(uint32_t pipe_id)
     }
 
     uint32_t arg = 1;
-    int ret = agcProsperoIoctl(AGC_GC_IOCTL_QUEUE_STATUS, &arg);
+    int ret = agcProsperoIoctl(
+        g_prospero.direct_profile.async_graphics_ioctl, &arg);
     if (ret < 0)
         return AGC_ERROR_INTERNAL;
 
@@ -961,13 +990,13 @@ int32_t PS5_SYSV_ABI agcProsperoSetTFRing(
 {
     if (!g_prospero.initialized)
         return AGC_ERROR_NOT_INITIALIZED;
-    if (!g_prospero.profile.supports_tf_ring)
+    if ((g_prospero.direct_profile.capabilities & AGC_DIRECT_CAP_TF_RING) == 0)
         return AGC_ERROR_NOT_SUPPORTED;
 
     AgcGcSetTFRingArg arg = {0};
     arg.ring_addr = (uint64_t)ring_addr;
     arg.size = size;
-    int ret = agcProsperoIoctl(AGC_GC_IOCTL_SET_TF_RING, &arg);
+    int ret = agcProsperoIoctl(g_prospero.direct_profile.tf_ring_ioctl, &arg);
     return (ret < 0) ? AGC_ERROR_INTERNAL : AGC_OK;
 }
 
@@ -976,7 +1005,7 @@ int32_t PS5_SYSV_ABI agcProsperoSetTFRingDirect(void)
 {
     if (!g_prospero.initialized)
         return AGC_ERROR_NOT_INITIALIZED;
-    if (!g_prospero.profile.supports_tf_ring)
+    if ((g_prospero.direct_profile.capabilities & AGC_DIRECT_CAP_TF_RING) == 0)
         return AGC_ERROR_NOT_SUPPORTED;
     return AGC_ERROR_NOT_SUPPORTED;
 }
@@ -993,12 +1022,16 @@ int32_t PS5_SYSV_ABI agcProsperoSetHsOffchipParamDirect(
 {
     if (!g_prospero.initialized)
         return AGC_ERROR_NOT_INITIALIZED;
+    if ((g_prospero.direct_profile.capabilities &
+            AGC_DIRECT_CAP_HS_OFFCHIP) == 0)
+        return AGC_ERROR_NOT_SUPPORTED;
 
     AgcGcSetHsOffchipArg arg = {0};
     arg.list_addr = list_addr;
     arg.num_entries = num_entries;
 
-    int ret = agcProsperoIoctl(AGC_GC_IOCTL_SET_HS_OFFCHIP, &arg);
+    int ret = agcProsperoIoctl(
+        g_prospero.direct_profile.hs_offchip_ioctl, &arg);
     return (ret < 0) ? AGC_ERROR_INTERNAL : AGC_OK;
 }
 
@@ -1021,6 +1054,11 @@ int32_t PS5_SYSV_ABI agcProsperoNotifyDefaultStates(uint32_t flags)
         return AGC_OK;
     if (!g_prospero.mem_initialized)
         return AGC_ERROR_NOT_INITIALIZED;
+    if ((g_prospero.direct_profile.capabilities &
+            AGC_DIRECT_CAP_DEFAULT_STATES) == 0 ||
+        g_prospero.direct_profile.defaults_version ==
+            AGC_DIRECT_DEFAULTS_VERSION_UNKNOWN)
+        return AGC_ERROR_NOT_SUPPORTED;
 
     (void)flags; /* flags meaning is still pending RE */
 
@@ -1030,17 +1068,17 @@ int32_t PS5_SYSV_ABI agcProsperoNotifyDefaultStates(uint32_t flags)
      * loading. The actual submission path that consumes these blobs is still
      * pending hardware validation.
      *
-     * Version selection: FW 5.50 uses register defaults version 8. The
-     * version-selectable API (agcRegisterDefaultsGetPrimaryGroupsForVersion)
-     * supports versions 0-12 with proper fallback. We use version 8 here
-     * since this driver targets FW 5.50.
+     * Version selection is exact-profile data. FW 5.50 uses version 8;
+     * firmware without a recovered mapping returns NOT_SUPPORTED above.
      */
     uint32_t primary_count = 0;
     uint32_t internal_count = 0;
     const AgcRegisterDefaultsGroup *primary_groups =
-        agcRegisterDefaultsGetPrimaryGroupsForVersion(8, &primary_count);
+        agcRegisterDefaultsGetPrimaryGroupsForVersion(
+            g_prospero.direct_profile.defaults_version, &primary_count);
     const AgcRegisterDefaultsGroup *internal_groups =
-        agcRegisterDefaultsGetInternalGroupsForVersion(8, &internal_count);
+        agcRegisterDefaultsGetInternalGroupsForVersion(
+            g_prospero.direct_profile.defaults_version, &internal_count);
 
     size_t primary_size = agcRegisterDefaultsComputeSize(
         primary_count, AGC_PRIMARY_CX_LENGTH, AGC_PRIMARY_SH_LENGTH, AGC_PRIMARY_UC_LENGTH);
@@ -1272,6 +1310,8 @@ static int32_t agcProsperoSubmitWorkload(uint32_t workload_id, uint32_t sub)
 {
     if (!g_prospero.initialized)
         return AGC_ERROR_NOT_INITIALIZED;
+    if ((g_prospero.direct_profile.capabilities & AGC_DIRECT_CAP_WORKLOAD) == 0)
+        return AGC_ERROR_NOT_SUPPORTED;
     if (workload_id == 0)
         return AGC_ERROR_INVALID_ARGUMENT;
 
@@ -1340,7 +1380,7 @@ int32_t PS5_SYSV_ABI agcProsperoCreateUserSpecialQueue(void)
         return AGC_ERROR_NOT_INITIALIZED;
     if (!g_prospero.mem_initialized)
         return AGC_ERROR_NOT_INITIALIZED;
-    if (!g_prospero.profile.authenticated_special_queue)
+    if ((g_prospero.direct_profile.capabilities & AGC_DIRECT_CAP_QUEUE) == 0)
         return AGC_ERROR_NOT_SUPPORTED;
 
     int index = agcProsperoFindFreeQueue();
@@ -1372,7 +1412,8 @@ int32_t PS5_SYSV_ABI agcProsperoCreateUserSpecialQueue(void)
     arg.ring_addr     = ring_addr;
     arg.ring_size     = AGC_GC_QUEUE_RING_SIZE;
 
-    int ret = agcProsperoIoctl(AGC_GC_IOCTL_QUEUE_CREATE, &arg);
+    int ret = agcProsperoIoctl(
+        g_prospero.direct_profile.queue_create_ioctl, &arg);
     if (ret < 0)
         return AGC_ERROR_INTERNAL;
 
@@ -1401,6 +1442,8 @@ int32_t PS5_SYSV_ABI agcProsperoDestroyUserSpecialQueue(void)
 {
     if (!g_prospero.initialized)
         return AGC_ERROR_NOT_INITIALIZED;
+    if ((g_prospero.direct_profile.capabilities & AGC_DIRECT_CAP_QUEUE) == 0)
+        return AGC_ERROR_NOT_SUPPORTED;
 
     /* Find the first in-use queue and destroy it.
      * The SPRX takes no parameters — the kernel tracks the queue. */
@@ -1412,7 +1455,8 @@ int32_t PS5_SYSV_ABI agcProsperoDestroyUserSpecialQueue(void)
                 .magic3 = AGC_GC_QUEUE_MAGIC3,
             };
 
-            agcProsperoIoctl(AGC_GC_IOCTL_QUEUE_DESTROY, &arg);
+            agcProsperoIoctl(
+                g_prospero.direct_profile.queue_destroy_ioctl, &arg);
             /* No ring_region to free — the ring buffer is carved from
              * the EOP FIFO allocation, not a separate region. */
             g_prospero.queues[i].in_use = false;
