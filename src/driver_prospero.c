@@ -889,6 +889,41 @@ int32_t agcProsperoRegisterGpuInfoProcessProperty(void)
     return AGC_OK;
 }
 
+/* Reproduce the constructor's final workload-slot initialization without
+ * enabling the public workload capability.  Sony fills the 0x200-byte
+ * GpuInfo subregion with 0xff, sends an all-ones 16-byte sentinel through
+ * ioctl 0xc010813b, and copies the returned object into slots 0 and 1.  The
+ * helper itself reports success/failure as a bool, but module startup ignores
+ * that result and leaves zeroes in the first 16 bytes on ioctl failure. */
+int32_t agcProsperoInitializeSonyWorkloadSlots(void)
+{
+    uint32_t query[4] = {
+        UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX
+    };
+    uint32_t seed[4] = {0u, 0u, 0u, 0u};
+    bool query_valid;
+
+    if (!g_prospero.initialized || !g_prospero.mem_initialized ||
+        !g_prospero.workload_stream_table.cpu_addr)
+        return AGC_ERROR_NOT_INITIALIZED;
+    if (!g_prospero.direct_profile.workload_has_sony_stream_table)
+        return AGC_ERROR_NOT_SUPPORTED;
+
+    query_valid = agcProsperoIoctl(AGC_GC_IOCTL_SUBMIT_PID, query) == 0;
+    if (query_valid)
+        memcpy(seed, query, sizeof(seed));
+    if (!agcSonyWorkloadInitializeGpuSlots(
+            g_prospero.workload_stream_table.cpu_addr,
+            g_prospero.workload_stream_table.size, seed, query_valid))
+        return AGC_ERROR_INTERNAL;
+    agcProsperoFlushRange(g_prospero.workload_stream_table.cpu_addr,
+        g_prospero.workload_stream_table.size);
+    printf("    [workload] slot seed ioctl=%s values=%08x/%08x/%08x/%08x\n",
+        query_valid ? "PASS" : "FAILED",
+        seed[0], seed[1], seed[2], seed[3]);
+    return AGC_OK;
+}
+
 /* Reproduce the standard-console Gn2/Gn3/Gn4 constructor publication exactly.
  * The private stage-15 gate currently calls this only on FW 11.60; no public
  * workload capability is inferred from the cross-firmware constructor data. */

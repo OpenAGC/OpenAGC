@@ -39,6 +39,7 @@ extern int32_t PS5_SYSV_ABI agcProsperoInitializeInternalMemory(void);
 extern int32_t PS5_SYSV_ABI agcProsperoNotifyDefaultStates(uint32_t flags);
 extern int32_t agcProsperoRegisterGpuInfoProcessProperty(void);
 extern int32_t agcProsperoRegisterStandardShadowProperties(void);
+extern int32_t agcProsperoInitializeSonyWorkloadSlots(void);
 extern int32_t PS5_SYSV_ABI agcProsperoSubmitDcb(
     const AgcCommandBufferSubmit *packet);
 extern int32_t PS5_SYSV_ABI agcProsperoSetupAsyncGraphics(uint32_t pipe_id);
@@ -76,6 +77,7 @@ static void flush_range(const void *address, size_t size)
     mfence();
 }
 
+#if AGC_FW1160_STAGE == 16
 static int append_direct_workload_packet(
     SceAgcCb *cb, uint32_t sub, uint32_t workload_id)
 {
@@ -88,6 +90,7 @@ static int append_direct_workload_packet(
     packet[2] = 0u;
     return 1;
 }
+#endif
 
 int main(void)
 {
@@ -428,17 +431,21 @@ int main(void)
         return 1;
     }
 #endif
-#if AGC_FW1160_STAGE >= 12 && AGC_FW1160_STAGE <= 15
+#if (AGC_FW1160_STAGE >= 12 && AGC_FW1160_STAGE <= 15) || \
+    AGC_FW1160_STAGE == 17
     void *workload_memory = (void *)(uintptr_t)0xf02000000ULL;
     const uint32_t active_marker_value = AGC_FW1160_STAGE >= 14
-        ? (AGC_FW1160_STAGE == 15 ? 0x1160A015u : 0x1160A014u)
+        ? (AGC_FW1160_STAGE == 17 ? 0x1160A017u :
+            (AGC_FW1160_STAGE == 15 ? 0x1160A015u : 0x1160A014u))
         : 0x1160A012u;
     const uint32_t complete_marker_value = AGC_FW1160_STAGE >= 14
-        ? (AGC_FW1160_STAGE == 15 ? 0x1160C015u : 0x1160C014u)
+        ? (AGC_FW1160_STAGE == 17 ? 0x1160C017u :
+            (AGC_FW1160_STAGE == 15 ? 0x1160C015u : 0x1160C014u))
         : 0x1160C012u;
 #if AGC_FW1160_STAGE >= 13
     const uint32_t preflight_marker_value = AGC_FW1160_STAGE >= 14
-        ? (AGC_FW1160_STAGE == 15 ? 0x1160F015u : 0x1160F014u)
+        ? (AGC_FW1160_STAGE == 17 ? 0x1160F017u :
+            (AGC_FW1160_STAGE == 15 ? 0x1160F015u : 0x1160F014u))
         : 0x1160F013u;
 #endif
     const uint32_t workload_ids[] = {1u};
@@ -481,11 +488,21 @@ int main(void)
         (void)agcProsperoShutdown();
         return 1;
     }
-#if AGC_FW1160_STAGE == 15
+#if AGC_FW1160_STAGE == 15 || AGC_FW1160_STAGE == 17
     result = agcProsperoRegisterStandardShadowProperties();
     printf("workload shadow properties=0x%08X\n", (unsigned)result);
     if (result != AGC_OK) {
-        printf("stage 15: workload shadow properties FAIL\n");
+        printf("stage %d: workload shadow properties FAIL\n",
+            AGC_FW1160_STAGE);
+        (void)agcProsperoShutdown();
+        return 1;
+    }
+#endif
+#if AGC_FW1160_STAGE == 17
+    result = agcProsperoInitializeSonyWorkloadSlots();
+    printf("workload slot seed=0x%08X\n", (unsigned)result);
+    if (result != AGC_OK) {
+        printf("stage 17: workload slot seed FAIL\n");
         (void)agcProsperoShutdown();
         return 1;
     }

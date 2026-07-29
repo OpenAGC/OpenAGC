@@ -1053,6 +1053,16 @@ The host-generic implementation now has a tested model for:
   109; cleanup removed it and restored both services. This disproves
   portability of the FW 5.50-qualified three-dword extension. Both known
   workload packet forms now fail on FW 11.60; do not repeat stage 16.
+  Full-constructor tracing then found a state transition omitted from the
+  earlier workload analysis. Both FW 5.50 and FW 11.60 fill the exact
+  `GpuInfo + 0x3a000` `0x200`-byte table with `0xff`, send an all-ones 16-byte
+  object through `0xc010813b`, and copy the returned 16 bytes into slots 0 and
+  1, with zero as the ioctl-failure fallback. Stages 11-15 instead left all
+  slots zero. A private, host-tested stage-17 helper now reproduces this exact
+  lifecycle without enabling the public capability. Stage 17 retains the
+  stage-15 prerequisites and must pass twice on a clean FW 11.60 boot before
+  workload support can be promoted. See
+  `analysis/fw1160_workload_stage17_plan_20260730.md`.
   The independent headless FW 11.60 graphics and compute gates were also
   rebuilt and audited. They contain no workload calls, require the exact
   standard `0x1160` profile, and enforce bounded GPU/readback plus shutdown

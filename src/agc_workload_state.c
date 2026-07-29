@@ -9,6 +9,25 @@ static uint64_t g_stream_table_gpu_address;
 static uint32_t g_stream_mask;
 static uint8_t g_stream_descriptors[32][32];
 
+bool agcSonyWorkloadInitializeGpuSlots(void *table, size_t table_size,
+    const uint32_t seed[4], bool seed_valid)
+{
+    if (!table || table_size < 0x100u ||
+        ((uintptr_t)table & (uintptr_t)0xfu) != 0u ||
+        (seed_valid && !seed))
+        return false;
+
+    /* The official module fills the complete GPU-visible slot table with
+     * 0xff, then copies a zero-initialized 16-byte query result into slots
+     * 0 and 1.  A successful query replaces those 16 bytes with the kernel
+     * response; a failed query leaves them zero. */
+    memset(table, 0xff, table_size);
+    memset(table, 0, 4u * sizeof(uint32_t));
+    if (seed_valid)
+        memcpy(table, seed, 4u * sizeof(uint32_t));
+    return true;
+}
+
 void agcSonyWorkloadConfigureStreamTable(uint64_t gpu_address)
 {
     g_stream_table_gpu_address = gpu_address;

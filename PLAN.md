@@ -35,7 +35,14 @@ AMD PM4 packet ancestry overlap in useful ways.
   `0xc0011e80`/`0xc0011e84` DCB submitted, but both following markers remained
   zero for 5 seconds. Cleanup removed PID 109. Do not repeat it; both known
   workload packet forms now fail on FW 11.60. Keep the public capability fail
-  closed and recover an official-driver kernel/context prerequisite offline.
+  closed.
+- Full-constructor tracing recovered one concrete state difference that stages
+  11-15 missed: Sony fills the `GpuInfo + 0x3a000` slot table with `0xff`,
+  seeds its first 16 bytes from an all-ones `0xc010813b` request, and leaves
+  zero there only when that request fails. OpenAGC had zeroed all `0x200`
+  bytes. Stage 17 is built as stage 15 plus only this exact lifecycle. Run it
+  once after a clean reboot; require two clean passes before promotion and do
+  not repeat it unchanged after a stall.
 - After a successful FW 11.60 candidate passes twice, rerun the corresponding
   direct path on FW 5.50 before enabling any capability. Corpus extraction
   now proves the
@@ -45,7 +52,9 @@ AMD PM4 packet ancestry overlap in useful ways.
 - Evidence and artifact hashes are recorded in
   `analysis/fw1160_register_shadow_20260729.md` and
   `analysis/agc_driver_shadow_facts.md`. The stage-16 boundary and artifact
-  hash are in `analysis/fw1160_workload_stage16_plan_20260729.md`.
+  hash are in `analysis/fw1160_workload_stage16_plan_20260729.md`; the corrected
+  slot lifecycle and stage-17 artifact are in
+  `analysis/fw1160_workload_stage17_plan_20260730.md`.
 
 ### FW 11.60 graphics and compute parity gates
 
@@ -61,7 +70,7 @@ AMD PM4 packet ancestry overlap in useful ways.
   1 ms, exact 2,073,600/2,073,600 shader output, clean shutdown, and no
   residual process. Baseline Wave32 compute is hardware-qualified for standard
   FW 11.60.
-- Run the higher-risk workload stage 16 last. It remains independent of the
+- Run the higher-risk workload stage 17 last. It remains independent of the
   now-qualified graphics and compute paths.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See

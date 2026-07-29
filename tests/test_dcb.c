@@ -15,6 +15,42 @@ static void prepare_workload_stream(uint32_t stream_id)
         AGC_OK, "register workload stream for DCB test");
 }
 
+static void test_workload_gpu_slot_initialization(void)
+{
+    _Alignas(16) uint32_t table[0x200u / sizeof(uint32_t)];
+    const uint32_t seed[4] = {
+        0x11223344u, 0x55667788u, 0x99aabbccu, 0xddeeff00u
+    };
+
+    memset(table, 0x5a, sizeof(table));
+    TEST_ASSERT(agcSonyWorkloadInitializeGpuSlots(
+        table, sizeof(table), seed, true),
+        "workload slot initialization accepts official layout");
+    TEST_ASSERT_EQ(table[0], seed[0], "workload seed dword 0");
+    TEST_ASSERT_EQ(table[3], seed[3], "workload seed dword 3");
+    TEST_ASSERT_EQ(table[4], UINT32_MAX, "workload slot tail starts as all ones");
+    TEST_ASSERT_EQ(table[(sizeof(table) / sizeof(table[0])) - 1u],
+        UINT32_MAX, "workload slot table ends as all ones");
+
+    memset(table, 0x5a, sizeof(table));
+    TEST_ASSERT(agcSonyWorkloadInitializeGpuSlots(
+        table, sizeof(table), NULL, false),
+        "failed workload query preserves official fallback");
+    TEST_ASSERT_EQ(table[0], 0u, "failed query clears seed dword 0");
+    TEST_ASSERT_EQ(table[3], 0u, "failed query clears seed dword 3");
+    TEST_ASSERT_EQ(table[4], UINT32_MAX, "failed query leaves remaining slots all ones");
+
+    TEST_ASSERT(!agcSonyWorkloadInitializeGpuSlots(NULL, sizeof(table),
+        seed, true), "workload slot initialization rejects null table");
+    TEST_ASSERT(!agcSonyWorkloadInitializeGpuSlots(table, 0xffu,
+        seed, true), "workload slot initialization rejects undersized table");
+    TEST_ASSERT(!agcSonyWorkloadInitializeGpuSlots(
+        (uint8_t *)table + 1u, sizeof(table) - 1u, seed, true),
+        "workload slot initialization rejects unaligned table");
+    TEST_ASSERT(!agcSonyWorkloadInitializeGpuSlots(table, sizeof(table),
+        NULL, true), "workload slot initialization rejects missing valid seed");
+}
+
 static void test_dcb_init_null(void) {
     int32_t r = sceAgcDcbInitializeDefaultHardwareState(NULL, 100);
     TEST_ASSERT(r < 0, "NULL dcb should fail");
@@ -1170,6 +1206,7 @@ static void test_batch3_submit_wrappers(void);
 
 void test_suite_dcb(void) {
     TEST_SUITE("DCB Commands");
+    TEST_RUN(test_workload_gpu_slot_initialization);
     TEST_RUN(test_dcb_init_null);
     TEST_RUN(test_dcb_init_ok);
     TEST_RUN(test_dcb_clear_state);

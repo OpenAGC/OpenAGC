@@ -59,8 +59,12 @@ GPU-info region 2. In both standard-console layouts that region is the
 `0x200`-byte span at `SceGnmGpuInfo + 0x3a000`; the base must be 16-byte
 aligned and the module rejects a span smaller than `0x100`. The 32 entries are
 GPU-visible 64-bit slots, so stream `n` uses `gpu_info_gpu_va + 0x3a000 + n*8`.
-Module startup clears the backing GPU-info allocation and reserves stream 0 as
-the 32-byte `"System"` metadata record. Public registration accepts stream IDs
+Module startup initially clears the backing GPU-info allocation and reserves
+stream 0 as the 32-byte `"System"` metadata record. Near the end of the
+constructor it then fills the exact `0x200`-byte GPU slot table with `0xff`,
+issues an all-ones 16-byte `0xc010813b` request, and copies the returned object
+into slots 0 and 1 (or zeroes those slots when the request fails). Slots 2-31
+remain all ones. Public registration accepts stream IDs
 1 through 31, copies exactly 32 descriptor bytes into a userspace metadata
 table, and sets a registration bit. Unregistration clears that descriptor and
 bit; it does not allocate, map, or release a kernel object. The get-info export
@@ -105,6 +109,13 @@ initializes a userspace mutex. The active and complete builders independently
 prove that the packet carries the address of `table_base + stream_id * 8`, not
 the value stored in that slot. OpenAGC already matches those facts; see
 `agc_driver_workload_init_1160.md`.
+
+A later audit of the complete constructor corrected one remaining lifecycle
+assumption: the initializer is followed by the `0xff` table fill and
+`0xc010813b` seed operation described above. Stages 11-15 zeroed the complete
+table, so they did not match the official GPU-visible slot state. Stage 17
+reproduces this exact difference while retaining all stage-15 prerequisites;
+see `fw1160_workload_stage17_plan_20260730.md`.
 
 Stage 13 restored the normal sequence used by the FW 5.50-qualified path after
 a clean reboot. Register defaults, async setup, process property, stream

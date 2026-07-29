@@ -50,8 +50,25 @@ calculation at `0xf09..0xf20`. Neither builder dereferences the 64-bit slot
 before emitting the packet.
 
 Therefore OpenAGC's address operand is correct: stream 1 uses the GPU virtual
-address `SceGnmGpuInfo + 0x3a008`. The zero-initialized value in that slot is
-GPU output/state, not a pointer that userspace must populate.
+address `SceGnmGpuInfo + 0x3a008`. The slot value is GPU output/state, not a
+pointer that userspace must populate. However, later constructor tracing found
+that the slot is not simply left zero-initialized; see the lifecycle below.
+
+## Final slot-table initialization
+
+The module constructor performs another operation after the userspace
+initializer. At `0x78d8..0x7919` it resolves this same `0x200`-byte region,
+fills all of it with `0xff`, zeroes a 16-byte result object, and calls helper
+`0x86a0`. The helper sends a separate all-ones 16-byte object through ioctl
+`0xc010813b`; only on success does it copy the returned object to the caller.
+The constructor then copies the caller's 16 bytes into the beginning of the
+table. Thus slots 0 and 1 contain the returned seed, or zero if the query
+fails, while slots 2-31 remain all ones.
+
+FW 5.50 performs the identical sequence at `0x7c26..0x7c67` through helper
+`0x8890`. Earlier OpenAGC stages zeroed the complete table and therefore did
+not reproduce this lifecycle. Stage 17 isolates the correction; see
+`fw1160_workload_stage17_plan_20260730.md`.
 
 ## Consequence for requalification
 
@@ -88,3 +105,9 @@ Stage 15 was subsequently run once: every shadow publication returned
 returned `AGC_OK`, but the inline marker still never advanced. The cleanup ELF
 removed the stalled PID afterward. The recovered constructor state is not
 sufficient; do not repeat stage 15 unchanged.
+
+The subsequent full-constructor audit found the final slot-table fill and
+`0xc010813b` seed described above. That is a concrete state difference left by
+stages 11-15, so stage 17 adds only this exact lifecycle to the otherwise
+unchanged stage-15 gate. Public FW 11.60 workload support remains disabled
+until the new gate passes twice.
