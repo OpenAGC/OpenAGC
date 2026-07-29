@@ -262,6 +262,25 @@ static void test_sce_agc_dcb_wait_reg_mem(void) {
     TEST_ASSERT_EQ(cmd64[6], 0u, "WaitRegMem64 reference_hi");
     TEST_ASSERT_EQ(cmd64[7], 0x4000115u, "WaitRegMem64 control (0x10|5|op1|cache2)");
     TEST_ASSERT_EQ(cmd64[8], 50u, "WaitRegMem64 poll (800>>4)");
+
+    /* Operations 2/3 retain the NOP-wrapped packet shape.  Earlier code
+     * incorrectly switched these values to a lossy 7-dword WAIT_REG_MEM. */
+    uint32_t buffer3[32];
+    agcCbInit(&cb, buffer3, sizeof(buffer3));
+    uint32_t *cmd_op2 = sceAgcDcbWaitRegMem(
+        &cb, 1, 6, 2, 3, 0x300000088ULL, 0x1122334455667788ULL,
+        0xFFEEDDCCBBAA0099ULL, UINT32_MAX);
+    TEST_ASSERT(cmd_op2 == buffer3, "WaitRegMem op2 returns allocated packet");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd_op2[0]), AGC_PM4_OP_NOP, "WaitRegMem op2 wrapper opcode");
+    TEST_ASSERT_EQ(agcPm4Subcommand(cmd_op2[0]), AGC_PM4_SUB_WAIT_MEM64, "WaitRegMem op2 subcommand");
+    TEST_ASSERT_EQ(agcPm4Length(cmd_op2[0]), 9, "WaitRegMem op2 preserves 9-dword shape");
+    TEST_ASSERT_EQ(cmd_op2[3], 0xBBAA0099u, "WaitRegMem op2 mask low preserved");
+    TEST_ASSERT_EQ(cmd_op2[4], 0xFFEEDDCCu, "WaitRegMem op2 mask high preserved");
+    TEST_ASSERT_EQ(cmd_op2[5], 0x55667788u, "WaitRegMem op2 reference low preserved");
+    TEST_ASSERT_EQ(cmd_op2[6], 0x11223344u, "WaitRegMem op2 reference high preserved");
+    TEST_ASSERT_EQ(cmd_op2[7], 0x06000056u, "WaitRegMem op2 control");
+    TEST_ASSERT_EQ(cmd_op2[8], 0xFFFFu, "WaitRegMem poll saturates instead of wrapping");
+    TEST_ASSERT_EQ(cb.cursor_up, (uintptr_t)(buffer3 + 9), "WaitRegMem op2 cursor advance");
 }
 
 static void test_sce_agc_dcb_markers_and_flip(void) {
@@ -540,8 +559,12 @@ static void test_sce_agc_dcb_patch_address(void) {
     TEST_ASSERT_EQ(raw_dma[4], 0x0000BEEFu, "Raw DMA_DATA dst lo");
     TEST_ASSERT_EQ(raw_dma[5], 0xDEADu, "Raw DMA_DATA dst hi");
 
-    /* WaitRegMemPatch: standard WAIT_REG_MEM → addr at cmd[2..3] (+8 bytes) */
-    uint32_t* wrm_std = sceAgcDcbWaitRegMem(&cb, 0, 3, 2, 0, 0x100000020ULL, 0x55, 0xFF, 400);
+    /* WaitRegMemPatch also accepts a raw standard WAIT_REG_MEM packet even
+     * though the Sony DCB builder emits the NOP-wrapped representation. */
+    uint32_t wrm_std[7] = {
+        agcPm4Header3(AGC_PM4_OP_WAIT_REG_MEM, 7), 3u,
+        0x20u, 0x1u, 0x55u, 0xFFu, 10u
+    };
     TEST_ASSERT_EQ(sceAgcWaitRegMemPatchAddress(wrm_std, 0x400000080ULL), AGC_OK,
         "WaitRegMemPatch returns OK on standard WAIT_REG_MEM");
     TEST_ASSERT_EQ(wrm_std[2], 0x80u, "WaitRegMemPatch std addr lo");

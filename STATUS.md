@@ -1099,7 +1099,7 @@ Typed gfx1013 state builders:
 - `agcGfx1013SetTessellationContext` — emits the five post-shader CX
   tessellation registers with complete buffer preflight
 
-Old-style ACB stubs (from `src/acb.c`) and DCB raw-buffer variants (from `src/dcb.c`):
+ACB exports (from `src/acb.c`) and DCB raw-buffer variants (from `src/dcb.c`):
 
 - `sceAgcAcbInitializeDefaultHardwareState_pre0090`
 - `sceAgcAcbDispatchIndirect`
@@ -1107,7 +1107,8 @@ Old-style ACB stubs (from `src/acb.c`) and DCB raw-buffer variants (from `src/dc
 - `sceAgcAcbEventWrite` — now emits `IT_EVENT_WRITE_EOP` (opcode 0x47) with 5-dword packet
 - `sceAgcAcbAtomicMem` — now emits `IT_ATOMIC_MEM` (opcode 0x1B) with 5-dword packet
 - `sceAgcAcbCondExec` — now emits `IT_COND_EXEC` (opcode 0x22) with 4-dword packet
-- `sceAgcAcbWaitRegMem` — now emits `IT_WAIT_REG_MEM` (opcode 0x3C) with 6-dword packet
+- `sceAgcAcbWaitRegMem` — Sony-style cursor ABI; emits the reference-agreed
+  NOP-wrapped WAIT_MEM32/WAIT_MEM64 packet (7/9 dwords) with operation zero
 - `sceAgcAcbWriteData` — now emits `IT_WRITE_DATA` (opcode 0x37) with 5-dword packet
 - `sceAgcAcbCopyData` — now emits `IT_COPY_DATA` (opcode 0x40) with 6-dword packet
 - `sceAgcAcbMemSemaphore` — now emits `IT_MEM_SEMAPHORE` (opcode 0x39) with 4-dword packet

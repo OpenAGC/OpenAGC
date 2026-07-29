@@ -393,9 +393,10 @@ int32_t PS5_SYSV_ABI sceAgcAcbResetQueue(
 int32_t PS5_SYSV_ABI sceAgcAcbResetQueueInternal(
     uint32_t *acb, uint32_t size_dw, uint32_t queue_id);
 int32_t PS5_SYSV_ABI sceAgcAcbRewind(uint32_t *acb, uint32_t size_dw);
-int32_t PS5_SYSV_ABI sceAgcAcbWaitRegMem(
-    uint32_t *acb, uint32_t size_dw, uint32_t op, uint32_t ref,
-    uint32_t mask, uint64_t addr, uint32_t func);
+uint32_t *PS5_SYSV_ABI sceAgcAcbWaitRegMem(
+    SceAgcCb *cb, uint32_t size, uint32_t compare_function,
+    uint32_t cache_policy, uint64_t address, uint64_t reference,
+    uint64_t mask, uint32_t poll_cycles);
 int32_t PS5_SYSV_ABI sceAgcAcbWaitUntilSafeForRendering(uint32_t *acb, uint32_t size_dw);
 int32_t PS5_SYSV_ABI sceAgcAcbWriteData(
     uint32_t *acb, uint32_t size_dw, uint32_t op, uint64_t addr, uint32_t data);

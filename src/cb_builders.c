@@ -213,29 +213,19 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbWaitRegMem(
      *   [7] control = 0x10 | (cmp&7) | ((op&1)<<8) | ((op&6)<<5) | ((cache&3)<<25)
      *   [8] poll = min(poll_cycles >> 4, 0xFFFF)
      *
-     * The standard_wait path (operation 2/3) uses IT_WAIT_REG_MEM (0x3C)
-     * and is HLE reference-derived (not in reference). Kept for game compatibility. */
+     * SharpEmu and KytyPS5 both keep this NOP-wrapped layout for every
+     * supported operation value. */
     if (size > 1 || compare_function > 7 || operation > 4 || cache_policy > 3)
         return 0;
 
-    uint32_t standard_wait = operation == 2 || operation == 3;
-    uint32_t packet_dwords = standard_wait ? 7u : (size == 0 ? 7u : 9u);
+    uint32_t packet_dwords = size == 0 ? 7u : 9u;
     uint32_t *cmd = agcCbAllocDwords(cb, packet_dwords);
     if (!cmd)
         return 0;
 
-    if (standard_wait) {
-        cmd[0] = agcPm4Header3(AGC_PM4_OP_WAIT_REG_MEM, packet_dwords);
-        cmd[1] = compare_function | ((operation & 1u) << 8);
-        cmd[2] = (uint32_t)address;
-        cmd[3] = (uint32_t)(address >> 32);
-        cmd[4] = (uint32_t)reference;
-        cmd[5] = (uint32_t)mask;
-        cmd[6] = poll_cycles / 40u;
-        return cmd;
-    }
-
-    uint32_t poll = (poll_cycles >> 4u) & 0xFFFFu;
+    uint32_t poll = poll_cycles >> 4u;
+    if (poll > 0xFFFFu)
+        poll = 0xFFFFu;
 
     if (size == 0) {
         cmd[0] = agcPm4Header3Sub(AGC_PM4_OP_NOP, AGC_PM4_SUB_WAIT_MEM32, 7);

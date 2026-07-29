@@ -80,6 +80,7 @@ Implemented cursor-based builders:
 - `sceAgcCbSetShRegistersDirect`
 - `sceAgcDcbWriteData`
 - `sceAgcDcbWaitRegMem`
+- `sceAgcAcbWaitRegMem`
 - `sceAgcDcbDmaData`
 - `sceAgcDcbSetBaseIndirectArgs`
 - `sceAgcDcbDispatchIndirect`

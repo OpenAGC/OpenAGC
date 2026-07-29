@@ -116,19 +116,26 @@ static void test_acb_cond_exec(void) {
 }
 
 static void test_acb_wait_reg_mem(void) {
-    uint32_t buf[64];
-    /* op = mem_select=1, action=2 (wait), int_ctx=1 -> 0xD */
-    int32_t r = sceAgcAcbWaitRegMem(buf, 64, 0xDu, 0xAABBCCDDu, 0xFFFFu,
-                                    0x1122334455667788u, 0x3u);
-    TEST_ASSERT_EQ(r, 6, "WaitRegMem should write 6 dwords");
-    TEST_ASSERT_EQ(agcPm4Opcode(buf[0]), AGC_PM4_OP_WAIT_REG_MEM, "WaitRegMem opcode");
-    TEST_ASSERT_EQ(agcPm4Length(buf[0]), 6, "WaitRegMem length");
-    /* wait_info: func=3 | mem_select=1<<4 | action=2<<5 | int_ctx=1<<7 | mask=0xFFFF<<16 */
-    TEST_ASSERT_EQ(buf[1], 0xFFFF00D3u, "WaitRegMem wait_info");
-    TEST_ASSERT_EQ(buf[2], 0xAABBCCDDu, "WaitRegMem reference");
-    TEST_ASSERT_EQ(buf[3], 0xFFFFu, "WaitRegMem mask");
-    TEST_ASSERT_EQ(buf[4], 0x55667788u, "WaitRegMem addr_lo");
-    TEST_ASSERT_EQ(buf[5], 0x11223344u, "WaitRegMem addr_hi");
+    uint32_t buf[64] = {0};
+    SceAgcCb cb;
+    agcCbInit(&cb, buf, sizeof(buf));
+
+    uint32_t *cmd = sceAgcAcbWaitRegMem(
+        &cb, 1, 5, 2, 0x200000047ULL, 0x1122334455667788ULL,
+        0xFFEEDDCCBBAA0099ULL, UINT32_MAX);
+    TEST_ASSERT(cmd == buf, "WaitRegMem should return packet start");
+    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_NOP, "WaitRegMem wrapper opcode");
+    TEST_ASSERT_EQ(agcPm4Subcommand(cmd[0]), AGC_PM4_SUB_WAIT_MEM64, "WaitRegMem64 subcommand");
+    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 9, "WaitRegMem64 length");
+    TEST_ASSERT_EQ(cmd[1], 0x40u, "WaitRegMem64 aligned address low");
+    TEST_ASSERT_EQ(cmd[2], 0x2u, "WaitRegMem64 address high");
+    TEST_ASSERT_EQ(cmd[3], 0xBBAA0099u, "WaitRegMem64 mask low");
+    TEST_ASSERT_EQ(cmd[4], 0xFFEEDDCCu, "WaitRegMem64 mask high");
+    TEST_ASSERT_EQ(cmd[5], 0x55667788u, "WaitRegMem64 reference low");
+    TEST_ASSERT_EQ(cmd[6], 0x11223344u, "WaitRegMem64 reference high");
+    TEST_ASSERT_EQ(cmd[7], 0x04000015u, "WaitRegMem64 operation-zero control");
+    TEST_ASSERT_EQ(cmd[8], 0xFFFFu, "WaitRegMem64 poll saturates");
+    TEST_ASSERT_EQ(cb.cursor_up, (uintptr_t)(buf + 9), "WaitRegMem64 cursor advance");
 }
 
 static void test_acb_write_data(void) {

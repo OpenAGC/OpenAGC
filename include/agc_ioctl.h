@@ -39,7 +39,7 @@
  *
  * openagc is a clean rewrite — these constants are recovered ABI facts, not
  * copied code. The operation-specific facts used by the direct backend are
- * reproduced across every active firmware in analysis/*.tsv; unrelated
+ * reproduced across every active firmware in the analysis TSV files; unrelated
  * ioctl-table entries remain FW 5.50 reference data and are not promoted.
  *
  * Nothing here is used by the generic host backend. It exists so the prospero

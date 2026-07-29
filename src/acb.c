@@ -366,43 +366,14 @@ int32_t PS5_SYSV_ABI sceAgcAcbRewind(uint32_t *acb, uint32_t size_dw)
     return 2;
 }
 
-int32_t PS5_SYSV_ABI sceAgcAcbWaitRegMem(
-    uint32_t *acb, uint32_t size_dw, uint32_t op, uint32_t ref,
-    uint32_t mask, uint64_t addr, uint32_t func)
+uint32_t *PS5_SYSV_ABI sceAgcAcbWaitRegMem(
+    SceAgcCb *cb, uint32_t size, uint32_t compare_function,
+    uint32_t cache_policy, uint64_t address, uint64_t reference,
+    uint64_t mask, uint32_t poll_cycles)
 {
-    if (!acb || size_dw < 6)
-        return AGC_ERROR_CB_INVALID_SIZE;
-
-    /*
-     * IT_WAIT_REG_MEM (opcode 0x3C) on AMD/Ariel.
-     * Packet layout (6 dwords):
-     *   [0] header
-     *   [1] wait_info = func[2:0] | mem_select[4] | action[6:5] | int_ctx[7] | mask[31:16]
-     *   [2] reference
-     *   [3] mask
-     *   [4] addr_lo
-     *   [5] addr_hi
-     *
-     * Wait functions: 0=always_pass, 1=less_than, 2=less_than_equal,
-     * 3=equal, 4=not_equal, 5=greater_than_equal, 6=greater_than.
-     */
-    uint32_t mem_select = (op >> 0) & 0x1;
-    uint32_t action     = (op >> 1) & 0x3;
-    uint32_t int_ctx    = (op >> 3) & 0x1;
-
-    uint32_t wait_info = (func & 0x7) |
-                         (mem_select << 4) |
-                         (action << 5) |
-                         (int_ctx << 7) |
-                         ((mask & 0xFFFFu) << 16);
-
-    acb[0] = agcPm4Header3(AGC_PM4_OP_WAIT_REG_MEM, 6);
-    acb[1] = wait_info;
-    acb[2] = ref;
-    acb[3] = mask;
-    acb[4] = (uint32_t)(addr & 0xFFFFFFFFu);
-    acb[5] = (uint32_t)(addr >> 32);
-    return 6;
+    /* The ACB form is the DCB packet with operation fixed to zero. */
+    return sceAgcDcbWaitRegMem(cb, size, compare_function, 0u, cache_policy,
+                               address, reference, mask, poll_cycles);
 }
 
 int32_t PS5_SYSV_ABI sceAgcAcbWaitUntilSafeForRendering(uint32_t *acb, uint32_t size_dw)
