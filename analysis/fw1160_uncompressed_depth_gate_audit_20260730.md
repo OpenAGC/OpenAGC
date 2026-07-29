@@ -105,3 +105,21 @@ This hardware-qualifies the three base uncompressed paths on the tested FW
 11.60 console. Project-wide promotion remains pending the matching modern
 headless regression on FW 5.50. The two earlier rejected harness-development
 runs do not count toward the two-pass result.
+
+## FW 5.50 regression artifacts
+
+The matching modern headless artifacts force exact ABI key `0x0550` and use
+the same current viewport, allocation, packet, native readback, bounded fence,
+shutdown, and self-termination paths as the FW 11.60 gates:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| `agc_depth_d16_fw550_headless.elf` | `e3ac54d0edcd003246a9517f03879ed37f22cdf573b1202ade2c699b6881ebf0` |
+| `agc_stencil_s8_fw550_headless.elf` | `8059abd5a68c44f8ea1d05215f374550063ba552b500f6f9a3050e565553eef3` |
+| `agc_depth_stencil_d16_s8_fw550_headless.elf` | `3866dd4dcf82e1a5425e23c401e7794702dac8b359009f70852cb0583fd6b001` |
+
+`run_fw1160_depth.sh` now accepts an `EXPECTED_FW_ABI` selector and derives a
+firmware-specific remote path. The FW 5.50 deploy targets set it to `0x0550`;
+the default remains exact `0x1160`. Run D16, S8-only, and D16+S8 once each on
+the FW 5.50 console. Any mismatch blocks promotion and requires stopping the
+matrix.

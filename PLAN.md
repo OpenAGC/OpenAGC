@@ -94,9 +94,10 @@ AMD PM4 packet ancestry overlap in useful ways.
   four-draw readback oracle under the current full-rectangle viewport, and
   runs through a cleanup-first bounded harness. All three passed twice on
   standard FW `0x11600005`, with exact native distributions, 1-3 ms fences,
-  clean shutdowns, and no residual process. Build and run matching modern
-  headless FW 5.50 artifacts before promotion. Do not advance to HTILE,
-  expclear, compressed metadata, or MSAA until that regression passes.
+  clean shutdowns, and no residual process. Matching modern headless FW 5.50
+  artifacts are built; run D16, S8-only, and D16+S8 once before promotion. Do
+  not advance to HTILE, expclear, compressed metadata, or MSAA until that
+  regression passes.
   See `analysis/fw1160_uncompressed_depth_gate_audit_20260730.md`.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See

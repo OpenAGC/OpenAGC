@@ -6,7 +6,8 @@ set -u
 PS5_HOST=${PS5_HOST:?set PS5_HOST}
 DEPTH_ARTIFACT=${DEPTH_ARTIFACT:?set DEPTH_ARTIFACT}
 PROCESS_CLEANUP_ELF=${PROCESS_CLEANUP_ELF:?set PROCESS_CLEANUP_ELF}
-REMOTE_BASE=/data/homebrew/openagc_fw1160_depth
+EXPECTED_FW_ABI=${EXPECTED_FW_ABI:-0x1160}
+REMOTE_BASE=/data/homebrew/openagc_fw${EXPECTED_FW_ABI#0x}_depth
 
 if [ ! -s "$DEPTH_ARTIFACT" ] || [ ! -s "$PROCESS_CLEANUP_ELF" ]; then
     echo "missing depth-test or process-cleanup ELF" >&2
@@ -29,7 +30,7 @@ curl -sS --fail --max-time 30 \
 transport_status=$?
 cat "$output_file"
 
-grep -q "Runtime profile FW ABI 0x1160: PASS" "$output_file" || exit 1
+grep -q "Runtime profile FW ABI $EXPECTED_FW_ABI: PASS" "$output_file" || exit 1
 grep -q "GPU completion fence reached" "$output_file" || exit 1
 grep -Eq "\[Depth(\+Stencil)? Result\] markers=PASS color=PASS .*stencil=PASS" \
     "$output_file" || exit 1

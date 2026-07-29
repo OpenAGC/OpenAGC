@@ -417,7 +417,9 @@ four-draw fixture under the current full-rectangle viewport. D16, S8-only,
 and D16+S8 each passed twice on standard FW `0x11600005`; all fences completed
 in 1-3 ms, all exact native distributions matched, shutdown passed, and
 ps5debug-NG found no residual process. Project-wide promotion awaits the
-matching modern headless FW 5.50 regression. HTILE, expclear, compressed
+matching modern headless FW 5.50 regression. Exact `0x0550` headless D16,
+S8-only, and D16+S8 artifacts are built with the same current oracles and a
+firmware-selectable cleanup-first runner. HTILE, expclear, compressed
 metadata, and MSAA are deliberately outside this first tier. See
 `analysis/fw1160_uncompressed_depth_gate_audit_20260730.md`.
 
