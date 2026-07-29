@@ -63,3 +63,25 @@ Record the changed-pixel count, complete-sample count, out-of-range count,
 native FNV64, fence latency, shutdown, residual-process state, and ps5debug-NG
 fault scan for every run. Require two identical successful runs per format,
 then rerun the existing FW 5.50 R16 and RG16 artifacts before promoting parity.
+
+## FW 11.60 hardware result
+
+Both artifacts passed twice on the standard PS5 reporting raw firmware
+`0x11600005`:
+
+| Gate | Fences | Changed/complete | Out of range | Native FNV64 |
+| --- | --- | ---: | ---: | --- |
+| R16_FLOAT | 1 ms, 1 ms | 255,744 | 0 | `0xbf5d5feba001bc26` |
+| RG16_FLOAT | 2 ms, 4 ms | 255,744 | 0 | `0xcf48c2eb4f12bc26` |
+
+Every run reproduced the exact 768x665 coverage bounds, eight sampled native
+colors, Wave32 shader audit, completion marker, driver shutdown PASS, and final
+graphics PASS. ps5debug-NG found no residual `eboot` after every launch, and
+ports 744 and 8080 remained responsive.
+
+The current R16 result differs from the older display-backed FW 5.50 retained
+result (`255680`, FNV64 `0xedd26b35cf6fe81a`), while RG16 matches its older
+hash. This does not weaken the FW 11.60 result: both R16 runs were bit-exact to
+each other under the committed current artifact. It does mean promotion must
+wait for a matching modern headless FW 5.50 regression rather than comparing
+different historical artifacts.

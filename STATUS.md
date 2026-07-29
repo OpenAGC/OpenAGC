@@ -394,13 +394,15 @@ subsequent qualifying runs were stable; `sceKernelDeleteEqueue` consistently
 returned `0x80020009` after a successful 1,800-flip session and is retained as
 a non-fatal teardown diagnostic.
 
-FW 11.60 narrow-FP16 qualification artifacts are now built but not yet
-hardware-run. They force the exact `0x1160` standard profile, headless bounded
-execution, target-specific native validation, clean shutdown, and forced
-termination. The harness no longer references the VideoOut-only CPU preview in
-headless R16/RG16 builds. R16 and RG16 must each pass twice after a clean reboot
-and then be regressed on FW 5.50 before they are advertised as FW 11.60
-capabilities. See `analysis/fw1160_narrow_fp16_gate_audit_20260730.md`.
+FW 11.60 R16_FLOAT and RG16_FLOAT each passed twice on standard raw firmware
+`0x11600005` under the exact `0x1160` profile and headless bounded harness.
+R16 reproduced 255,744 complete samples and FNV64 `0xbf5d5feba001bc26`;
+RG16 reproduced 255,744 complete samples and FNV64
+`0xcf48c2eb4f12bc26`. All out-of-range counts were zero, fences completed in
+1-4 ms, shutdown passed, and ps5debug-NG found no residual process. Promotion
+awaits matching modern headless FW 5.50 regressions, particularly because the
+current R16 artifact differs from the older display-backed retained hash. See
+`analysis/fw1160_narrow_fp16_gate_audit_20260730.md`.
 
 The remaining FW 5.50-qualified offscreen formats now also have exact FW 11.60
 headless artifacts: R8, RG8, RGB10A2, R11G11B10, R32, RG32, and RGBA32. All

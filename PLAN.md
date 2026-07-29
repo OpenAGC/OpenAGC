@@ -79,9 +79,10 @@ AMD PM4 packet ancestry overlap in useful ways.
 - The next advanced graphics gates are headless `R16_FLOAT`, then
   `RG16_FLOAT`. Both reuse the qualified baseline draw and differ only in the
   typed color-target tuple and native readback width. Exact FW 11.60 artifacts
-  and target-specific guarded runner support are built. Reboot after the
-  stage-17 stall, reinject ps5debug-NG, and require two passes per format before
-  the corresponding FW 5.50 regression. See
+  and target-specific guarded runner support are built. Both formats passed
+  twice on standard FW `0x11600005`, with reproducible native hashes, 1-4 ms
+  fences, clean shutdowns, and no residual process. Build and run matching
+  modern headless FW 5.50 artifacts before promotion. See
   `analysis/fw1160_narrow_fp16_gate_audit_20260730.md`.
 - Seven additional offscreen format gates now build under the same exact
   profile and bounded runner: R8, RG8, RGB10A2, R11G11B10, R32, RG32, and
