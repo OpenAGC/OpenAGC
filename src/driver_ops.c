@@ -37,6 +37,11 @@ int32_t agcDriverInstallOpsForTesting(const AgcDriverOps *ops)
     return AGC_OK;
 }
 
+void agcDriverClearOpsForTesting(void)
+{
+    g_driver_ops = NULL;
+}
+
 void agcDriverResetOpsForTesting(void)
 {
     g_driver_ops = &AGC_DEFAULT_DRIVER_OPS;
@@ -114,7 +119,7 @@ int32_t PS5_SYSV_ABI sceAgcDriverSuspendPointSubmitDirect(
 bool PS5_SYSV_ABI sceAgcDriverIsSuspendPointInFlightDirect(uint32_t value)
 {
     const AgcDriverOps *ops = agcDriverGetOps();
-    return ops->is_suspend_point_in_flight_direct
+    return ops && ops->is_suspend_point_in_flight_direct
         ? ops->is_suspend_point_in_flight_direct(value) : false;
 }
 
@@ -231,7 +236,7 @@ int32_t PS5_SYSV_ABI sceAgcDriverSubmitToHDRScopesACQ(void)
 uint32_t PS5_SYSV_ABI sceAgcDriverGetPaDebugInterfaceVersion(void)
 {
     const AgcDriverOps *ops = agcDriverGetOps();
-    return ops->get_pa_debug_interface_version
+    return ops && ops->get_pa_debug_interface_version
         ? ops->get_pa_debug_interface_version()
         : (uint32_t)AGC_ERROR_NOT_SUPPORTED;
 }

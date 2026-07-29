@@ -43,6 +43,9 @@
 static AgcContextState g_default_state;
 static bool g_default_state_initialized;
 
+#define AGC_DEFAULT_STATE_DWORD_COUNT \
+    (sizeof(g_default_state.data) / sizeof(g_default_state.data[0]))
+
 static void init_default_state(void) {
     memset(&g_default_state, 0, sizeof(g_default_state));
 
@@ -55,7 +58,7 @@ static void init_default_state(void) {
         for (uint32_t r = 0; r < group->register_count; r++) {
             uint32_t offset = group->registers[r].offset;
             uint32_t value = group->registers[r].value;
-            if (offset < sizeof(g_default_state.data))
+            if (offset < AGC_DEFAULT_STATE_DWORD_COUNT)
                 g_default_state.data[offset] = value;
         }
     }
@@ -74,6 +77,8 @@ int32_t PS5_SYSV_ABI sceAgcGetDefaultState(AgcContextState* out_state) {
 int32_t PS5_SYSV_ABI sceAgcGetRegisterDefaults(AgcContextState* out_state) {
     if (!out_state)
         return AGC_ERROR_INVALID_ARGUMENT;
+    if (!g_default_state_initialized)
+        init_default_state();
     /* Game default state is the same as default state for now.
      * On real PS5, this may include game-specific optimizations. */
     memcpy(out_state, &g_default_state, sizeof(AgcContextState));
@@ -83,6 +88,8 @@ int32_t PS5_SYSV_ABI sceAgcGetRegisterDefaults(AgcContextState* out_state) {
 int32_t PS5_SYSV_ABI sceAgcGetDefaultCxStateFlat(void* out_state, uint32_t size) {
     if (!out_state)
         return AGC_ERROR_INVALID_ARGUMENT;
+    if (!g_default_state_initialized)
+        init_default_state();
     if (size > sizeof(AgcContextState))
         size = sizeof(AgcContextState);
     memcpy(out_state, &g_default_state, size);

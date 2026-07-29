@@ -57,6 +57,18 @@ static void test_internal_operations_dispatch(void) {
         "reset restores generic operations table");
 }
 
+static void test_unselected_operations_dispatch(void) {
+    agcDriverClearOpsForTesting();
+
+    TEST_ASSERT_EQ(sceAgcDriverIsSuspendPointInFlightDirect(0), false,
+        "unselected backend reports no suspend point in flight");
+    TEST_ASSERT_EQ(sceAgcDriverGetPaDebugInterfaceVersion(),
+        (uint32_t)AGC_ERROR_NOT_SUPPORTED,
+        "unselected backend reports PA-debug interface unsupported");
+
+    agcDriverResetOpsForTesting();
+}
+
 static void test_submit_packet_layout(void) {
     TEST_ASSERT_EQ(offsetof(AgcCommandBufferSubmit, command_address), 0, "submit address offset");
     TEST_ASSERT_EQ(offsetof(AgcCommandBufferSubmit, dword_count), 8, "submit dword count offset");
@@ -360,6 +372,7 @@ static void test_default_state_populated(void) {
 void test_suite_driver(void) {
     TEST_SUITE("Driver Submit RE");
     TEST_RUN(test_internal_operations_dispatch);
+    TEST_RUN(test_unselected_operations_dispatch);
     TEST_RUN(test_submit_packet_layout);
     TEST_RUN(test_pa_debug_permission_stub);
     TEST_RUN(test_submit_dcb_validation);

@@ -59,6 +59,7 @@ const char *agcDriverDebugBackendName(void);
 
 #ifdef OPENAGC_GENERIC
 int32_t agcDriverInstallOpsForTesting(const AgcDriverOps *ops);
+void agcDriverClearOpsForTesting(void);
 void agcDriverResetOpsForTesting(void);
 #endif
 

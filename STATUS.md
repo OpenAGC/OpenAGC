@@ -1,5 +1,14 @@
 # openagc Status
 
+## Regression safety fixes (2026-07-29)
+
+Default context-state construction now bounds register offsets in dwords,
+preventing FW 5.50 entries beyond the 512-dword public state from writing past
+the global buffer. All default-state accessors also initialize the shared state
+before copying it. Suspend-point and PA-debug queries now return safe fallback
+values while no backend is selected, including before Prospero initialization
+and after shutdown.
+
 ## Reusable driver and flexible-memory teardown (2026-07-29)
 
 `agcDriverShutdown` now provides a public, backend-neutral teardown boundary.
