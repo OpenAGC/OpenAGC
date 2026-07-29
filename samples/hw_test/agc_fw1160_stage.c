@@ -34,6 +34,8 @@ extern int PS5_SYSV_ABI sceKernelGetProsperoSystemSwVersion(
 extern int32_t agcProsperoConfigureRuntimeProfile(uint32_t raw_version);
 extern int32_t PS5_SYSV_ABI agcProsperoInitialize(void);
 extern int32_t PS5_SYSV_ABI agcProsperoInitializeInternalMemory(void);
+extern int32_t PS5_SYSV_ABI agcProsperoSubmitDcb(
+    const AgcCommandBufferSubmit *packet);
 extern int32_t PS5_SYSV_ABI agcProsperoShutdown(void);
 extern int32_t agcProsperoGetRuntimeProfile(
     AgcProsperoRuntimeProfile *profile_out);
@@ -140,7 +142,9 @@ int main(void)
 
     submit.command_address = (uintptr_t)submit_memory;
     submit.dword_count = agcCbUsedDwords(&cb);
-    result = sceAgcDriverSubmitDcb(&submit);
+    /* The staged probe configures the direct backend explicitly because the
+     * public runtime selector remains blocked until qualification completes. */
+    result = agcProsperoSubmitDcb(&submit);
     printf("single DCB submit=0x%08X dwords=%u\n",
         (unsigned)result, submit.dword_count);
     while (result == AGC_OK && waited_ms < 5000u) {

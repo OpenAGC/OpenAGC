@@ -47,11 +47,13 @@ GPU work. The process-cleanup ELF must be the immediately preceding websrv
 launch. A later stage must not combine memory, submission, queue, suspend, or
 display operations; each needs a separate two-pass gate.
 
-`agc_fw1160_stage3.elf` is the first GPU gate: one public DCB containing one
+`agc_fw1160_stage3.elf` is the first GPU gate: one direct DCB containing one
 `WRITE_DATA` marker. FW 11.60 uses the same normalized submit16/multi-DCB
 carrier group as FW 5.50. The standard compatibility group therefore shares
 the exploited-payload CLOSE transition plus trailing NOP IB completion policy;
-FW 5.50 is its hardware proof point rather than a separate submit ABI.
+FW 5.50 is its hardware proof point rather than a separate submit ABI. The
+stage invokes the direct backend entry because normal FW 11.60 runtime
+selection deliberately remains blocked until qualification completes.
 
 ## Staged hardware result
 
