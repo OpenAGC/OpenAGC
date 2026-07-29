@@ -10,6 +10,13 @@ python3 tools/fingerprint_agc_driver_wrappers.py /Volumes/Untitled/unp \
   --output analysis/agc_driver_wrapper_fingerprints.tsv
 ```
 
+Regenerate the table into a temporary file, compare it byte-for-byte, require
+all 39 active firmware keys, and reject missing tracked exports with:
+
+```sh
+tools/verify_agc_driver_wrapper_fingerprints.sh /Volumes/Untitled/unp
+```
+
 The normalizer retains opcodes, register operands, structure offsets, and
 immediate constants. It removes function-placement-dependent control-flow
 targets and RIP-relative data addresses before hashing. A matching fingerprint
