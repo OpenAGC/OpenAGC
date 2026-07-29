@@ -146,13 +146,13 @@ bool agcProsperoFirmwareSupported(uint32_t raw_version)
 {
     uint16_t abi_key = agcFirmwareAbiKey(raw_version);
 
-    /* FW 5.50 and standard-PS5 FW 11.60 hardware-qualify both endpoints of
-     * this compatibility group.  The external SPRX corpus independently
-     * verifies the common submit, memory, queue, primary-suspend, TF-ring,
-     * HS-offchip, and async carriers for every listed intermediate key.
-     * Retain exact alias membership so an uninspected key inside the numeric
-     * interval still fails closed. */
-    return abi_key >= 0x0550u && abi_key <= 0x1160u &&
+    /* FW 5.50 and standard-PS5 FW 11.60 hardware-qualify the standard
+     * submit16 path.  The external SPRX corpus independently verifies the
+     * common submit, memory, queue, primary-suspend, TF-ring, HS-offchip, and
+     * async carriers for every active key.  FW 3.20 retains its separately
+     * recovered legacy-v3 completion policy.  Exact alias membership keeps
+     * every uninspected key fail-closed. */
+    return abi_key == 0x0320u ||
         agcProsperoStandardDirectAbiSupportsFirmware(raw_version);
 }
 

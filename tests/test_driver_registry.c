@@ -57,14 +57,6 @@ static void test_standard_direct_firmware_aliases(void)
 
 static void test_archival_and_fw320_firmware_profiles(void)
 {
-    static const uint16_t compatible_keys[] = {
-        0x0550u, 0x0600u, 0x0602u, 0x0650u,
-        0x0701u, 0x0720u, 0x0740u, 0x0760u, 0x0761u,
-        0x0800u, 0x0820u, 0x0840u, 0x0860u,
-        0x0900u, 0x0905u, 0x0920u, 0x0940u, 0x0960u,
-        0x1001u, 0x1020u, 0x1040u, 0x1060u,
-        0x1100u, 0x1120u, 0x1140u, 0x1160u,
-    };
     AgcProsperoRuntimeProfile profile;
 
     TEST_ASSERT(!agcProsperoFirmwareSupported(0x01000000u),
@@ -73,25 +65,18 @@ static void test_archival_and_fw320_firmware_profiles(void)
         "archival FW 2.50 is not advertised as supported");
     TEST_ASSERT(!agcProsperoFirmwareSupported(0x03000000u),
         "archival FW 3.00 is not advertised as supported");
-    TEST_ASSERT(!agcProsperoFirmwareSupported(0x03200000u),
-        "FW 3.20 RE profile is not runtime-qualified");
-    for (size_t i = 0; i < sizeof(compatible_keys) /
-            sizeof(compatible_keys[0]); ++i) {
-        uint32_t raw = (uint32_t)compatible_keys[i] << 16;
-
-        TEST_ASSERT(agcProsperoFirmwareSupported(raw),
-            "every exact FW 5.50-11.60 compatibility key is supported");
-    }
+    TEST_ASSERT(agcProsperoFirmwareSupported(0x03200000u),
+        "FW 3.20 exact legacy-v3 runtime profile is supported");
     TEST_ASSERT(agcProsperoFirmwareSupported(0x05500008u),
         "FW 5.50 raw patch suffix uses the supported ABI key");
     TEST_ASSERT(agcProsperoFirmwareSupported(0x11600005u),
         "FW 11.60 raw patch suffix uses the supported ABI key");
     TEST_ASSERT(!agcProsperoFirmwareSupported(0x05510000u),
         "uninspected key inside the numeric interval fails closed");
-    TEST_ASSERT(!agcProsperoFirmwareSupported(0x05020000u),
-        "inspected key below the qualified compatibility group stays blocked");
-    TEST_ASSERT(!agcProsperoFirmwareSupported(0x12000000u),
-        "inspected key above the qualified compatibility group stays blocked");
+    TEST_ASSERT(agcProsperoFirmwareSupported(0x05020000u),
+        "inspected standard key below FW 5.50 is RE-qualified");
+    TEST_ASSERT(agcProsperoFirmwareSupported(0x12000000u),
+        "inspected standard key above FW 11.60 is RE-qualified");
     TEST_ASSERT(!agcProsperoFirmwareSupported(0x03100000u),
         "uninspected legacy firmware fails closed");
     {
@@ -214,6 +199,8 @@ static void test_common_operation_carrier_profiles(void)
 
         TEST_ASSERT(agcProsperoBuildDirectProfile(raw, false, &profile),
             "active carrier-qualified profile builds");
+        TEST_ASSERT(agcProsperoFirmwareSupported(raw),
+            "every active exact profile is runtime-selectable");
         TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_TF_RING) != 0,
             "active profile exposes exact public TF-ring carrier");
         TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_MEMORY) != 0,
