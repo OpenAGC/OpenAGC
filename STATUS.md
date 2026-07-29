@@ -1449,6 +1449,10 @@ All other active keys currently expose only the common submit16 baseline.
 `analysis/agc_driver_wrapper_fingerprints.tsv` records normalized groups for
 the exported wrappers across all 39 SPRXs. These groups guide further static
 promotion but do not replace internal-command and payload-layout evidence.
+`analysis/agc_driver_command_carriers.tsv` adds complete internal carrier
+fingerprints for submit, queue, suspend, TF, HS, and async ioctl commands.
+Submit16, primary suspend, and privileged TF each form one group across all 39;
+queue create/destroy remain split into 14/six groups and are not generalized.
 `analysis/agc_driver_operation_facts.tsv` expands those groups into one
 operation-level row per active four-digit key, recording the enabled direct
 subset and the exact reason every other operation remains disabled. The

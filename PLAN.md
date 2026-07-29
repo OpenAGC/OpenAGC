@@ -1632,6 +1632,10 @@ The generated `analysis/agc_driver_operation_facts.tsv` now provides the
 deliberately conservative: only FW 5.50's hardware-qualified set and FW
 11.60's exact-RE-qualified subset exceed submit16. Remaining keys are promoted
 from this ledger only after their internal command/layout facts are recovered.
+The companion `analysis/agc_driver_command_carriers.tsv` now groups the full
+private ioctl carrier functions. It proves one common submit16, primary
+suspend, and privileged-TF carrier, while preserving the multiple queue,
+public-TF, HS, final-suspend, and async groups for explicit review.
 
 ### Priority 1: FW 11.60 modern and Trinity reference
 
