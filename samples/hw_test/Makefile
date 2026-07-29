@@ -504,6 +504,18 @@ agc_graphics_bgra8_srgb_fw1160_logged.elf: agc_graphics.c ps5_video_out.h gpu_cr
 	$(CC) $(CFLAGS) $(FW1160_GRAPHICS_LOG_FLAGS) -DAGC_VALIDATE_BGRA8_SRGB=1 \
 		-o $@ agc_graphics.c $(AGC_LDFLAGS)
 
+agc_graphics_indexed_fw1160_logged.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW1160_GRAPHICS_LOG_FLAGS) -DAGC_DRAW_INDEXED=1 \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_graphics_indirect_fw1160_logged.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW1160_GRAPHICS_LOG_FLAGS) -DAGC_DRAW_INDIRECT=1 \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_graphics_indexed_indirect_fw1160_logged.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW1160_GRAPHICS_LOG_FLAGS) \
+		-DAGC_DRAW_INDEXED_INDIRECT=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
+
 agc_graphics_r16_float_fw550_headless.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) $(FW550_HEADLESS_GRAPHICS_FLAGS) -DAGC_VALIDATE_R16_FLOAT=1 \
 		-o $@ agc_graphics.c $(AGC_LDFLAGS)
@@ -555,6 +567,18 @@ agc_graphics_rgba8_srgb_fw550_headless.elf: agc_graphics.c ps5_video_out.h gpu_c
 agc_graphics_bgra8_srgb_fw550_headless.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) $(FW550_HEADLESS_GRAPHICS_FLAGS) -DAGC_VALIDATE_BGRA8_SRGB=1 \
 		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_graphics_indexed_fw550_headless.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW550_HEADLESS_GRAPHICS_FLAGS) -DAGC_DRAW_INDEXED=1 \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_graphics_indirect_fw550_headless.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW550_HEADLESS_GRAPHICS_FLAGS) -DAGC_DRAW_INDIRECT=1 \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_graphics_indexed_indirect_fw550_headless.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW550_HEADLESS_GRAPHICS_FLAGS) \
+		-DAGC_DRAW_INDEXED_INDIRECT=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
 
 agc_graphics_indexed.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_DRAW_INDEXED=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
@@ -936,7 +960,10 @@ deploy_agc_graphics: agc_graphics.elf
 	deploy_agc_graphics_rgba8_unorm_fw1160_logged \
 	deploy_agc_graphics_bgra8_unorm_fw1160_logged \
 	deploy_agc_graphics_rgba8_srgb_fw1160_logged \
-	deploy_agc_graphics_bgra8_srgb_fw1160_logged
+	deploy_agc_graphics_bgra8_srgb_fw1160_logged \
+	deploy_agc_graphics_indexed_fw1160_logged \
+	deploy_agc_graphics_indirect_fw1160_logged \
+	deploy_agc_graphics_indexed_indirect_fw1160_logged
 deploy_agc_graphics_fw1160: agc_graphics_fw1160.elf
 	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
@@ -1042,10 +1069,31 @@ deploy_agc_graphics_bgra8_srgb_fw1160_logged: agc_graphics_bgra8_srgb_fw1160_log
 		RESULT_LOG_PATH=/data/homebrew/openagc_fw1160_graphics/result.log \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
 
+deploy_agc_graphics_indexed_fw1160_logged: agc_graphics_indexed_fw1160_logged.elf
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_DRAW_MODE='reusable baseline direct u16 indexed' \
+		RESULT_LOG_PATH=/data/homebrew/openagc_fw1160_graphics/result.log \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
+
+deploy_agc_graphics_indirect_fw1160_logged: agc_graphics_indirect_fw1160_logged.elf
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_DRAW_MODE='reusable baseline non-indexed indirect' \
+		RESULT_LOG_PATH=/data/homebrew/openagc_fw1160_graphics/result.log \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
+
+deploy_agc_graphics_indexed_indirect_fw1160_logged: agc_graphics_indexed_indirect_fw1160_logged.elf
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_DRAW_MODE='reusable baseline u16 indexed indirect' \
+		RESULT_LOG_PATH=/data/homebrew/openagc_fw1160_graphics/result.log \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
+
 .PHONY: deploy_agc_graphics_rgba8_unorm_fw550_headless \
 	deploy_agc_graphics_bgra8_unorm_fw550_headless \
 	deploy_agc_graphics_rgba8_srgb_fw550_headless \
-	deploy_agc_graphics_bgra8_srgb_fw550_headless
+	deploy_agc_graphics_bgra8_srgb_fw550_headless \
+	deploy_agc_graphics_indexed_fw550_headless \
+	deploy_agc_graphics_indirect_fw550_headless \
+	deploy_agc_graphics_indexed_indirect_fw550_headless
 deploy_agc_graphics_rgba8_unorm_fw550_headless: agc_graphics_rgba8_unorm_fw550_headless.elf
 	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
 		EXPECTED_FW_ABI=0x0550 EXPECTED_TARGET=RGBA8_UNORM \
@@ -1064,6 +1112,24 @@ deploy_agc_graphics_rgba8_srgb_fw550_headless: agc_graphics_rgba8_srgb_fw550_hea
 deploy_agc_graphics_bgra8_srgb_fw550_headless: agc_graphics_bgra8_srgb_fw550_headless.elf
 	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
 		EXPECTED_FW_ABI=0x0550 EXPECTED_TARGET=BGRA8_SRGB \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
+
+deploy_agc_graphics_indexed_fw550_headless: agc_graphics_indexed_fw550_headless.elf
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_FW_ABI=0x0550 \
+		EXPECTED_DRAW_MODE='reusable baseline direct u16 indexed' \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
+
+deploy_agc_graphics_indirect_fw550_headless: agc_graphics_indirect_fw550_headless.elf
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_FW_ABI=0x0550 \
+		EXPECTED_DRAW_MODE='reusable baseline non-indexed indirect' \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
+
+deploy_agc_graphics_indexed_indirect_fw550_headless: agc_graphics_indexed_indirect_fw550_headless.elf
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_FW_ABI=0x0550 \
+		EXPECTED_DRAW_MODE='reusable baseline u16 indexed indirect' \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
 
 .PHONY: deploy_agc_depth_d16_fw1160 deploy_agc_stencil_s8_fw1160 \

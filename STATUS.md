@@ -479,6 +479,14 @@ runner requires 228,096 green/red pixels and native D32 classes
 immediate fences, clean shutdowns, final PASS verdicts, and no residual
 process. The matching modern headless FW 5.50 regression remains pending.
 
+The next non-compressed parity tier is prepared for direct u16 indexed,
+non-indexed indirect, and u16 indexed-indirect draws. Exact logged FW 11.60
+artifacts and exact headless FW 5.50 mirrors cross-build without warnings.
+The guarded runner now fails closed unless the verdict names the intended
+draw-composition path with `AGC_OK`, in addition to its ABI, fence, RGBA16F,
+shutdown, and final-verdict checks. Hardware execution remains pending; see
+`analysis/fw1160_indexed_indirect_gate_plan_20260730.md`.
+
 Exact next-tier ordinary D16/HTILE and D16 HTILE expclear artifacts now build
 for logged FW 11.60 and mirrored headless FW 5.50 profiles. The shared depth
 runner has detached cleanup, optional stale-proof file verdicts, gate-specific
