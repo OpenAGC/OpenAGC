@@ -1532,7 +1532,11 @@ submit16 returned `AGC_OK`, its five-dword `WRITE_DATA` DCB wrote the expected
 `0x1160cafe` marker after 50 ms and 0 ms, flexible memory released, and direct
 shutdown succeeded. The shared standard-firmware CLOSE/trailing-NOP policy also
 passed the complete FW 5.50 regression lifecycle immediately beforehand. Async,
-queue, and suspend remain blocked pending their own isolated two-pass gates.
+setup then returned `AGC_OK` with clean shutdown twice in isolated stage 4. Its
+foreground homebrew process required manual UI termination despite returning
+from `main`; staged probes now flush PASS and self-terminate so this loader
+lifecycle artifact is not mistaken for a GPU black-screen failure. Queue and
+suspend remain blocked pending their own isolated two-pass gates.
 
 ## Next RE Tasks
 

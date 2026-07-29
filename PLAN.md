@@ -1759,8 +1759,11 @@ Acceptance criteria:
   executed a five-dword `WRITE_DATA` marker after 50 ms and 0 ms, then released
   its memory and shut down cleanly. The same revision passed FW 5.50's complete
   init/multi-DCB/wait/async/queue/suspend/workload regression lifecycle first.
-- Next isolate async setup, authenticated queue lifecycle, and suspend-point
-  submission as separate two-pass stages.
+- ✅ FW 11.60 stage 4 passed twice: async setup and direct shutdown returned
+  `AGC_OK`. The foreground app's black screen was a loader lifecycle artifact;
+  probes now flush PASS and self-terminate instead of requiring manual UI kill.
+- Next isolate authenticated queue lifecycle and suspend-point submission as
+  separate two-pass stages.
 - Qualify later gates individually only after the preceding gate passes twice.
   Compute, graphics, and display remain prohibited until the full direct
   lifecycle has passed this staged ladder.

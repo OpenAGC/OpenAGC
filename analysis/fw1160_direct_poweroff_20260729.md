@@ -61,6 +61,12 @@ stage 6 adds primary suspend submission while the qualified queue is active.
 Each gate still requires two clean runs with process cleanup immediately before
 the payload.
 
+The cleanup payload's `refusing stale eboot count/status=1` message means its
+process scan found zero stale `eboot.elf` instances (`matches + 1`), not one
+stale process. Successful stage payloads flush their PASS line and terminate
+themselves with `SIGKILL` so websrv releases the foreground app and restores
+the UI without manual intervention.
+
 ## Staged hardware result
 
 On the same standard FW 11.60 console (`0x11600005`, SoC `0x00840f60`):
@@ -76,11 +82,16 @@ On the same standard FW 11.60 console (`0x11600005`, SoC `0x00840f60`):
   submitted one five-dword `WRITE_DATA` DCB; the GPU wrote `0x1160cafe` after
   50 ms and 0 ms respectively. Flexible-memory release and direct shutdown
   returned success in both runs.
+- Stage 4 async setup returned `AGC_OK` twice and direct shutdown succeeded.
+  The original probe process remained foreground after returning from `main`,
+  leaving the UI black until the app was killed manually; this was a homebrew
+  process-lifecycle issue, not a GPU failure. Later staged probes self-terminate
+  after flushing their result.
 - Websrv retained each foreground HTTP pipe until the 20-second client timeout,
   but the cleanup check before the next run found no stale `eboot.elf`.
 
 This hardware result validates corrected initialization, internal memory, and
 basic graphics-ring submission through clean teardown. It strongly localizes
 the original power-off to the corrected pre-submit mapping defects, though it
-cannot distinguish which individual defect was causal. Async setup, queue, and
-suspend operations remain isolated pending gates.
+cannot distinguish which individual defect was causal. Async setup is now
+qualified; queue and suspend operations remain isolated pending gates.

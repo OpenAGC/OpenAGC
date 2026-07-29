@@ -2,6 +2,7 @@
 /* Narrow FW 11.60 qualification stages. Add only one isolated gate at a time. */
 
 #include <stdint.h>
+#include <signal.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/sysctl.h>
@@ -223,5 +224,8 @@ int main(void)
 #endif
 
     printf("stage %d: PASS\n", AGC_FW1160_STAGE);
-    return 0;
+    fflush(NULL);
+    (void)kill(getpid(), SIGKILL);
+    for (;;)
+        pause();
 }
