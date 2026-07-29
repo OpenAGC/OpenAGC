@@ -19,9 +19,9 @@ stencil surface ABIs.
 
 | Artifact | SHA-256 |
 | --- | --- |
-| `agc_depth_d16_fw1160.elf` | `d98a3db295e869cb868525ba1a7961b95cb98fce051d3d672f64a9d0e8b331e4` |
-| `agc_stencil_s8_fw1160.elf` | `fc3f4cbe1f929b497f1817c006b37cad194b4d927bb0625ae2411c3762ab5966` |
-| `agc_depth_stencil_d16_s8_fw1160.elf` | `3a156bf09a4ad5d87a83c1821d08bfe49341d3deb9006cf8149623fc5de0792e` |
+| `agc_depth_d16_fw1160.elf` | `c97e4335b84319cf8d62a324f6b78dfd988fb56f02d6924443817bf87e9ee01f` |
+| `agc_stencil_s8_fw1160.elf` | `039b008c9669c0ab5bec4cbed11105c02550c0422cfb85ac349649fd9bb8819f` |
+| `agc_depth_stencil_d16_s8_fw1160.elf` | `fdddd0da4c3efa599929449dcbd463b2fbf5aa6e6847f51c84d341915e10ccd6` |
 
 `run_fw1160_depth.sh` uploads and runs the established process-cleanup ELF
 immediately before each payload. It accepts a run only when the exact
@@ -29,10 +29,18 @@ immediately before each payload. It accepts a run only when the exact
 final graphics verdict all pass, and rejects any failure, fatal, mismatch, or
 timeout text.
 
-The headless harness no longer copies the rendered surface into the absent
-VideoOut preview buffer after depth validation. This changes no GPU packet or
-native oracle; it only removes a host-side null dereference from headless
-builds.
+The headless harness allocates a real 1920x1080 linear RGBA8 color-oracle
+surface ahead of the aligned depth/stencil allocations and no longer copies
+that result into an absent VideoOut preview buffer. This changes no GPU packet
+or native oracle; it replaces the two VideoOut-owned addresses that are absent
+from headless builds.
+
+The first D16 launch was rejected before command construction or GPU
+submission: the diagnostic printed a null color-target address and the process
+exited before `DCB: ... submitting`. ps5debug-NG immediately reported no
+residual `eboot`, and ports 744 and 8080 remained reachable. That run is not a
+hardware attempt and led to the explicit headless color-oracle allocation in
+the hashes above.
 
 ## Required native oracles
 

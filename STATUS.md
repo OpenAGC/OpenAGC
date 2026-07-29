@@ -419,6 +419,12 @@ matching FW 5.50 regression. HTILE, expclear, compressed metadata, and MSAA
 are deliberately outside this first tier. See
 `analysis/fw1160_uncompressed_depth_gate_audit_20260730.md`.
 
+An initial D16 launch stopped before PM4 construction/submission because the
+new headless variant still selected its absent VideoOut color buffer. The
+harness now allocates a dedicated linear RGBA8 color-oracle surface before the
+aligned depth/stencil allocations; ps5debug-NG found no residual process after
+the rejected launch. No depth capability is promoted from that pre-GPU run.
+
 ## FW 5.50 sRGB render-target qualification (2026-07-27)
 
 Append-only public presets `RGBA8_SRGB` and `BGRA8_SRGB` are host-tested and

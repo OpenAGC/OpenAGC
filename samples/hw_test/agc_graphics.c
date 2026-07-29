@@ -717,6 +717,8 @@ static bool allocate_display_buffers(GraphicsTest *test) {
 
     /* The offscreen target is independent of the VideoOut dimensions. */
 #if AGC_DEPTH_VALIDATION
+    const size_t headless_color_size = AGC_GRAPHICS_HEADLESS ?
+        (size_t)test->width * test->height * BYTES_PER_PIXEL : 0u;
     const AgcGfx1013DepthSurfaceLayoutInput depth_input = {
         .width = test->width, .height = test->height,
         .layer_count = DEPTH_FIXTURE_LAYER_COUNT,
@@ -806,6 +808,7 @@ static bool allocate_display_buffers(GraphicsTest *test) {
     size_t htile_alignment = htile_layout.alignment;
     test->htile_surface_size = htile_size;
 #else
+    size_t headless_color_size = 0u;
     size_t msaa_color_size = 0u;
     size_t msaa_color_alignment = 1u;
     size_t rt_size = (size_t)FP16_TARGET_WIDTH * FP16_TARGET_HEIGHT *
@@ -818,6 +821,7 @@ static bool allocate_display_buffers(GraphicsTest *test) {
 #endif
     size_t pool_size = align_up(
                                 GRAPHICS_POOL_PREFIX +
+                                headless_color_size +
                                 msaa_color_alignment - 1u + msaa_color_size +
                                 rt_alignment - 1u + rt_size +
                                 stencil_alignment - 1u + stencil_size +
@@ -835,16 +839,18 @@ static bool allocate_display_buffers(GraphicsTest *test) {
     /* Render target follows shader data and any tessellation rings. */
     test->render_target = (uint8_t *)pool_addr + GRAPHICS_POOL_PREFIX;
 #if AGC_DEPTH_VALIDATION
+    void *depth_allocation_start = (uint8_t *)test->render_target +
+        headless_color_size;
 #if AGC_MSAA_VALIDATION
     test->msaa_color_surface = (void *)(uintptr_t)align_up(
-        (size_t)(uintptr_t)test->render_target, msaa_color_alignment);
+        (size_t)(uintptr_t)depth_allocation_start, msaa_color_alignment);
     test->depth_surface = (void *)(uintptr_t)align_up(
         (size_t)(uintptr_t)test->msaa_color_surface +
             test->msaa_color_surface_size,
         rt_alignment);
 #else
     test->depth_surface = (void *)(uintptr_t)align_up(
-        (size_t)(uintptr_t)test->render_target, rt_alignment);
+        (size_t)(uintptr_t)depth_allocation_start, rt_alignment);
 #endif
     test->stencil_surface = (void *)(uintptr_t)align_up(
         (size_t)(uintptr_t)test->depth_surface + test->depth_surface_size,
@@ -869,6 +875,10 @@ static bool allocate_display_buffers(GraphicsTest *test) {
     printf("Compute pool: %zu bytes at %p (flexible)\n", pool_size, pool_addr);
     printf("Render target: at %p (flexible)\n", test->render_target);
 #if AGC_DEPTH_VALIDATION
+#if AGC_GRAPHICS_HEADLESS
+    printf("Headless color oracle: %zu bytes at %p (linear RGBA8)\n",
+           headless_color_size, test->render_target);
+#endif
 #if !AGC_S8_ONLY_VALIDATION
     printf("Depth surface: %zu bytes at %p (%s, swizzle=%u, HTILE %s)\n",
            test->depth_surface_size, test->depth_surface,
@@ -2182,7 +2192,8 @@ static bool dispatch_graphics(GraphicsTest *test,
                         &resolve_ps, resolve_ps_code);
     const AgcGfx1013FrameState resolve_frame = {
         .color_target = {
-            .address = (uint64_t)(uintptr_t)test->buffers[0],
+            .address = (uint64_t)(uintptr_t)(AGC_GRAPHICS_HEADLESS ?
+                test->render_target : test->buffers[0]),
             .width = target->width,
             .height = target->height,
             .color_format = AGC_GFX1013_COLOR_FORMAT_8_8_8_8,
@@ -2411,7 +2422,8 @@ static bool dispatch_graphics(GraphicsTest *test,
 
 #if AGC_DEPTH_VALIDATION
     const uint32_t *color = (const uint32_t *)(AGC_MSAA_VALIDATION ?
-        test->buffers[0] : rt_addr);
+        (AGC_GRAPHICS_HEADLESS ? test->render_target : test->buffers[0]) :
+        rt_addr);
     uint32_t green_pixels = 0u;
     uint32_t red_pixels = 0u;
 #if !AGC_S8_ONLY_VALIDATION
@@ -3246,7 +3258,8 @@ int main(void) {
 
 #if AGC_DEPTH_VALIDATION
     RenderTargetConfig depth_target = {
-        AGC_MSAA_VALIDATION ? test.msaa_color_surface : test.buffers[0],
+        AGC_MSAA_VALIDATION ? test.msaa_color_surface :
+            (AGC_GRAPHICS_HEADLESS ? test.render_target : test.buffers[0]),
         test.width, test.height,
         AGC_GFX1013_COLOR_FORMAT_8_8_8_8,
         AGC_GFX1013_SURFACE_NUMBER_UNORM,
