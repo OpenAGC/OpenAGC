@@ -1445,7 +1445,8 @@ retains its qualified set, including the independently hardware-proven
 workload convenience submit; FW 11.60 enables its statically proven submit,
 standard/Trinity memory, queue, primary/final suspend, TF-ring, HS-offchip, and
 async set; its workload, suspend-query, and defaults operations fail closed.
-All other active keys currently expose only the common submit16 baseline.
+All other active keys expose the common submit16, public TF-ring, HS-offchip,
+and async carrier-qualified subset. Matching hardware validation is pending.
 `analysis/agc_driver_wrapper_fingerprints.tsv` records normalized groups for
 the exported wrappers across all 39 SPRXs. These groups guide further static
 promotion but do not replace internal-command and payload-layout evidence.
@@ -1456,8 +1457,9 @@ queue create/destroy remain split into 14/six groups and are not generalized.
 `analysis/agc_driver_operation_facts.tsv` expands those groups into one
 operation-level row per active four-digit key, recording the enabled direct
 subset and the exact reason every other operation remains disabled. The
-generated ledger currently leaves all keys except hardware-qualified `0x0550`
-and exact-RE-qualified `0x1160` at the common submit16 baseline.
+generated ledger gives all 39 keys the common exact submit16, public TF-ring,
+HS-offchip, and async subset; only hardware-qualified `0x0550` and the deeper
+exact-RE-qualified `0x1160` profile enable additional operations.
 FW 5.50 `sceAgcDriverSubmitToHDRScopesACQ` is deliberately unavailable: its
 body at vaddr `0x2eb0` dereferences an input structure through `rdi`, while
 OpenAGC's current compatibility declaration has no argument. Forwarding it

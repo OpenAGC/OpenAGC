@@ -47,17 +47,17 @@ def load_fingerprints(path: Path) -> dict[tuple[str, str], str]:
 
 def evidence_for(key: str) -> dict[str, str]:
     evidence = {
-        "enabled_direct_ops": "submit16",
+        "enabled_direct_ops": "submit16,tf-ring,hs-offchip,async",
         "queue": "disabled-pending-layout",
         "suspend_submit": "disabled-pending-layout",
         "suspend_query": "disabled-permission-export",
         "workload": "disabled-not-adapted",
-        "tf_ring": "disabled-permission-direct-export",
-        "hs_offchip": "disabled-permission-direct-export",
+        "tf_ring": "RE-exact-public-0x80108128-hardware-pending",
+        "hs_offchip": "RE-exact-0xc010812c-hardware-pending",
         "memory": "disabled-pending-layout",
         "defaults": "disabled-version-unknown",
-        "async_graphics": "disabled-pending-layout",
-        "qualification": "RE-submit16-hardware-pending",
+        "async_graphics": "RE-exact-0x80048126-hardware-pending",
+        "qualification": "RE-operation-carriers-hardware-pending",
     }
     if key == "0x0550":
         evidence.update({

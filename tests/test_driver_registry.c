@@ -92,8 +92,8 @@ static void test_legacy_submit16_firmware_profiles(void)
         "FW 3.20 profile builds");
     TEST_ASSERT_EQ(profile.family, AGC_PROSPERO_ABI_LEGACY_V3,
         "FW 3.20 family selected");
-    TEST_ASSERT(!profile.supports_tf_ring,
-        "FW 3.20 TF-ring stays disabled until its wrapper is qualified");
+    TEST_ASSERT(profile.supports_tf_ring,
+        "FW 3.20 exact public TF-ring carrier is enabled");
 }
 
 static void test_direct_operation_profiles(void)
@@ -144,12 +144,71 @@ static void test_direct_operation_profiles(void)
 
     TEST_ASSERT(agcProsperoBuildDirectProfile(
         0x12200000u, false, &profile), "FW 12.20 submit profile builds");
-    TEST_ASSERT_EQ(profile.capabilities, AGC_DIRECT_CAP_SUBMIT,
-        "unqualified FW 12.20 operations fail closed except submit16");
-    TEST_ASSERT(!profile.runtime.supports_tf_ring,
-        "unqualified firmware does not inherit family-wide TF support");
+    TEST_ASSERT_EQ(profile.capabilities,
+        AGC_DIRECT_CAP_SUBMIT | AGC_DIRECT_CAP_TF_RING |
+        AGC_DIRECT_CAP_HS_OFFCHIP | AGC_DIRECT_CAP_ASYNC_GRAPHICS,
+        "FW 12.20 exposes only its exact carrier-qualified subset");
+    TEST_ASSERT(profile.runtime.supports_tf_ring,
+        "FW 12.20 explicit profile enables its public TF carrier");
+    TEST_ASSERT_EQ(profile.tf_ring_ioctl, AGC_GC_IOCTL_SET_TF_RING,
+        "FW 12.20 uses the public TF ioctl with reserved dword zeroed");
+    TEST_ASSERT_EQ(profile.hs_offchip_ioctl, AGC_GC_IOCTL_SET_HS_OFFCHIP,
+        "FW 12.20 uses the typed HS-offchip ioctl payload");
+    TEST_ASSERT_EQ(profile.async_graphics_ioctl, AGC_GC_IOCTL_QUEUE_STATUS,
+        "FW 12.20 uses the carrier-proven async setup ioctl");
     TEST_ASSERT(!agcProsperoBuildDirectProfile(
         0x11600000u, false, NULL), "NULL direct profile rejected");
+}
+
+static void test_common_operation_carrier_profiles(void)
+{
+    static const uint16_t active_keys[] = {
+        0x0320u, 0x0400u, 0x0403u, 0x0450u, 0x0451u,
+        0x0502u, 0x0510u, 0x0550u, 0x0600u, 0x0602u, 0x0650u,
+        0x0701u, 0x0720u, 0x0740u, 0x0760u, 0x0761u,
+        0x0800u, 0x0820u, 0x0840u, 0x0860u,
+        0x0900u, 0x0905u, 0x0920u, 0x0940u, 0x0960u,
+        0x1001u, 0x1020u, 0x1040u, 0x1060u,
+        0x1100u, 0x1120u, 0x1140u, 0x1160u,
+        0x1200u, 0x1202u, 0x1220u, 0x1240u, 0x1260u, 0x1270u,
+    };
+
+    for (size_t i = 0; i < sizeof(active_keys) / sizeof(active_keys[0]); ++i) {
+        AgcProsperoDirectProfile profile;
+        uint32_t raw = (uint32_t)active_keys[i] << 16;
+
+        TEST_ASSERT(agcProsperoBuildDirectProfile(raw, false, &profile),
+            "active carrier-qualified profile builds");
+        TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_TF_RING) != 0,
+            "active profile exposes exact public TF-ring carrier");
+        TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_HS_OFFCHIP) != 0,
+            "active profile exposes exact HS-offchip carrier");
+        TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_ASYNC_GRAPHICS) != 0,
+            "active profile exposes exact async carrier");
+        TEST_ASSERT_EQ(profile.tf_ring_ioctl, AGC_GC_IOCTL_SET_TF_RING,
+            "active profile retains public TF command");
+        TEST_ASSERT_EQ(profile.hs_offchip_ioctl, AGC_GC_IOCTL_SET_HS_OFFCHIP,
+            "active profile retains HS-offchip command");
+        TEST_ASSERT_EQ(profile.async_graphics_ioctl, AGC_GC_IOCTL_QUEUE_STATUS,
+            "active profile retains async setup command");
+    }
+
+    {
+        static const uint16_t archival_keys[] = {0x0100u, 0x0200u, 0x0250u,
+                                                 0x0300u};
+        for (size_t i = 0; i < sizeof(archival_keys) /
+                sizeof(archival_keys[0]); ++i) {
+            AgcProsperoDirectProfile profile;
+            uint32_t raw = (uint32_t)archival_keys[i] << 16;
+
+            TEST_ASSERT(agcProsperoBuildDirectProfile(raw, false, &profile),
+                "archival submit-only profile still builds");
+            TEST_ASSERT((profile.capabilities & (AGC_DIRECT_CAP_TF_RING |
+                AGC_DIRECT_CAP_HS_OFFCHIP |
+                AGC_DIRECT_CAP_ASYNC_GRAPHICS)) == 0,
+                "archival profile cannot inherit active carrier facts");
+        }
+    }
 }
 
 static void test_trinity_runtime_profile(void)
@@ -280,6 +339,7 @@ void test_suite_driver_registry(void)
     TEST_RUN(test_standard_direct_firmware_aliases);
     TEST_RUN(test_legacy_submit16_firmware_profiles);
     TEST_RUN(test_direct_operation_profiles);
+    TEST_RUN(test_common_operation_carrier_profiles);
     TEST_RUN(test_trinity_runtime_profile);
     TEST_RUN(test_runtime_profile_diagnostic_labels);
     TEST_RUN(test_exact_alias_and_capability_selection);
