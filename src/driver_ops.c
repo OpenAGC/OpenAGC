@@ -112,15 +112,24 @@ int32_t PS5_SYSV_ABI sceAgcDriverSubmitAcb(
 int32_t PS5_SYSV_ABI sceAgcDriverSuspendPointSubmitDirect(
     uint32_t field0, uint32_t field1, uint32_t field2, uint32_t field3)
 {
-    AGC_DISPATCH_OR_UNSUPPORTED(suspend_point_submit_direct,
+    (void)field0;
+    (void)field1;
+    (void)field2;
+    (void)field3;
+    return (int32_t)AGC_DRIVER_ERROR_PERMISSION_INSUFFICIENT;
+}
+
+int32_t PS5_SYSV_ABI sce_agc_internal_suspend_point_submit_primary(
+    uint32_t field0, uint32_t field1, uint32_t field2, uint32_t field3)
+{
+    AGC_DISPATCH_OR_UNSUPPORTED(internal_suspend_point_submit_primary,
         (field0, field1, field2, field3));
 }
 
-bool PS5_SYSV_ABI sceAgcDriverIsSuspendPointInFlightDirect(uint32_t value)
+int32_t PS5_SYSV_ABI sceAgcDriverIsSuspendPointInFlightDirect(uint32_t value)
 {
-    const AgcDriverOps *ops = agcDriverGetOps();
-    return ops && ops->is_suspend_point_in_flight_direct
-        ? ops->is_suspend_point_in_flight_direct(value) : false;
+    (void)value;
+    return (int32_t)AGC_DRIVER_ERROR_PERMISSION_INSUFFICIENT;
 }
 
 int32_t PS5_SYSV_ABI sce_agc_internal_suspend_point_submit_final(

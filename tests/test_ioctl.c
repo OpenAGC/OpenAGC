@@ -115,16 +115,22 @@ static void test_suspend_point_api(void) {
     TEST_ASSERT_EQ(ret, (int32_t)AGC_OK, "initialize for suspend");
 
     ret = sceAgcDriverSuspendPointSubmitDirect(1u, 0u, 0u, 0u);
-    TEST_ASSERT_EQ(ret, (int32_t)AGC_OK, "SuspendPointSubmitDirect");
+    TEST_ASSERT_EQ(ret, (int32_t)AGC_DRIVER_ERROR_PERMISSION_INSUFFICIENT,
+        "SuspendPointSubmitDirect permission stub");
+
+    ret = sce_agc_internal_suspend_point_submit_primary(1u, 0u, 0u, 0u);
+    TEST_ASSERT_EQ(ret, (int32_t)AGC_OK, "internal suspend point primary");
 
     ret = sce_agc_internal_suspend_point_submit_final(1u, 0u, 0u, 0u);
     TEST_ASSERT_EQ(ret, (int32_t)AGC_OK, "internal suspend point final");
 
-    bool in_flight = sceAgcDriverIsSuspendPointInFlightDirect(0u);
-    TEST_ASSERT_EQ(in_flight, false, "IsSuspendPointInFlightDirect");
+    ret = sceAgcDriverIsSuspendPointInFlightDirect(0u);
+    TEST_ASSERT_EQ(ret, (int32_t)AGC_DRIVER_ERROR_PERMISSION_INSUFFICIENT,
+        "IsSuspendPointInFlightDirect permission stub");
 
     ret = sceAgcSuspendPointAndCheckStatus(0u);
-    TEST_ASSERT_EQ(ret, (int32_t)AGC_OK, "SuspendPointAndCheckStatus");
+    TEST_ASSERT_EQ(ret, (int32_t)AGC_ERROR_NOT_SUPPORTED,
+        "SuspendPointAndCheckStatus fail closed");
 }
 
 static void test_set_hs_offchip_struct_layout(void) {

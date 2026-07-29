@@ -51,7 +51,7 @@ The prospero build compiles `driver_prospero.c` with native `/dev/gc` ioctl call
 It links against `kernel` and `SceVideoOut`; the direct backend does not depend
 on or preload `libSceAgcDriver.sprx`.
 
-Expected host test result: `5135 passed, 0 failed`. Any change that drops this
+Expected host test result: `5137 passed, 0 failed`. Any change that drops this
 count is a regression — fix it before declaring the task done.
 
 ## Verification Checklist
@@ -310,7 +310,9 @@ native `/dev/gc` backend via `libopenagc.a`:
 - `sce_agc_initialize()` — `/dev/gc` open + `CONTEXT_QUERY` ioctl (0xc004812e) + mmap GPU registers at 0xfe0200000
 - `sce_agc_initialize_internal_memory()` — allocate 9 named internal regions
 - `sceAgcDriverNotifyDefaultStates()` — build primary/internal register-defaults blobs
-- `sceAgcDriverSuspendPointSubmitDirect()` — submit a suspend point
+- public Direct suspend exports — verify the corpus-qualified permission stubs
+- `sce_agc_internal_suspend_point_submit_primary()` — submit through the
+  separately recovered private `/dev/gc` carrier
 - `sceAgcDriverGetPaDebugInterfaceVersion()` — FW 5.50 permission-stub check
 - `sceAgcDriverSubmitDcb()` — NOP packet submission
 - `_sceAgcDriverCreateUserSpecialQueue()` / `DestroyUserSpecialQueue()`

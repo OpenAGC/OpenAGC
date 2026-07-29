@@ -20,9 +20,8 @@ typedef struct AgcDriverOps {
         uint32_t, void *const[], uint32_t *, void *const[], uint32_t *);
     int32_t (PS5_SYSV_ABI *submit_dcb)(const AgcCommandBufferSubmit *);
     int32_t (PS5_SYSV_ABI *submit_acb)(uint32_t, const AgcCommandBufferSubmit *);
-    int32_t (PS5_SYSV_ABI *suspend_point_submit_direct)(
+    int32_t (PS5_SYSV_ABI *internal_suspend_point_submit_primary)(
         uint32_t, uint32_t, uint32_t, uint32_t);
-    bool (PS5_SYSV_ABI *is_suspend_point_in_flight_direct)(uint32_t);
     int32_t (PS5_SYSV_ABI *internal_suspend_point_submit_final)(
         uint32_t, uint32_t, uint32_t, uint32_t);
     int32_t (PS5_SYSV_ABI *setup_async_graphics)(uint32_t);

@@ -60,8 +60,9 @@ static void test_internal_operations_dispatch(void) {
 static void test_unselected_operations_dispatch(void) {
     agcDriverClearOpsForTesting();
 
-    TEST_ASSERT_EQ(sceAgcDriverIsSuspendPointInFlightDirect(0), false,
-        "unselected backend reports no suspend point in flight");
+    TEST_ASSERT_EQ(sceAgcDriverIsSuspendPointInFlightDirect(0),
+        (int32_t)AGC_DRIVER_ERROR_PERMISSION_INSUFFICIENT,
+        "unselected backend preserves Sony suspend-query stub");
     TEST_ASSERT_EQ(sceAgcDriverGetPaDebugInterfaceVersion(),
         (uint32_t)AGC_ERROR_NOT_SUPPORTED,
         "unselected backend reports PA-debug interface unsupported");
@@ -262,12 +263,10 @@ static void test_notify_default_states(void) {
 }
 
 static void test_suspend_point_and_check_status(void) {
-    /*
-     * On the generic backend IsSuspendPointInFlightDirect always returns false,
-     * so SuspendPointAndCheckStatus returns AGC_OK (not in flight / done).
-     */
+    /* The Sony helper uses the separate CDBG carrier, which is fail-closed. */
     int32_t r = sceAgcSuspendPointAndCheckStatus(0x12345678u);
-    TEST_ASSERT_EQ(r, AGC_OK, "SuspendPointAndCheckStatus returns OK on generic backend");
+    TEST_ASSERT_EQ(r, AGC_ERROR_NOT_SUPPORTED,
+        "SuspendPointAndCheckStatus fails closed");
 }
 
 static void test_submit_eop_flip_generic_stub(void) {

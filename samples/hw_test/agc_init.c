@@ -561,8 +561,8 @@ int main(void) {
     else
         printf("    Compute queue created (handle=%d)\n", queue_handle);
 
-    /* --- Step 8: Submit a suspend point (while queue is active) --- */
-    printf("[8] sceAgcDriverSuspendPointSubmitDirect()...\n");
+    /* --- Step 8: Validate the public stub, then use the private carrier. --- */
+    printf("[8] suspend-point public ABI + private primary carrier...\n");
 
     /* The suspend point ioctl (0xC010811C) handler at 0xd8f66ff0
      * requires a queue to already exist in the computed slot.
@@ -575,9 +575,17 @@ int main(void) {
      * ctx offset 0x158. Non-magic values like (1,0,0) would compute a
      * different slot (0x64) and fail with 0x804C0001 (no queue). */
     if (queue_handle >= 0) {
-        err = sceAgcDriverSuspendPointSubmitDirect(
+        int32_t direct_result = sceAgcDriverSuspendPointSubmitDirect(
             0xaf1e80b7u, 0x8b4cdd90u, 0x99f68d6cu, 0u);
-        printf("    result: 0x%08X (%s)\n", (unsigned)err, errstr(err));
+        printf("    public Direct result: 0x%08X (%s)\n",
+               (unsigned)direct_result,
+               direct_result ==
+                   (int32_t)AGC_DRIVER_ERROR_PERMISSION_INSUFFICIENT
+                   ? "permission stub" : "unexpected");
+        err = sce_agc_internal_suspend_point_submit_primary(
+            0xaf1e80b7u, 0x8b4cdd90u, 0x99f68d6cu, 0u);
+        printf("    private primary result: 0x%08X (%s)\n",
+               (unsigned)err, errstr(err));
         suspend_ok = err == AGC_OK;
         if (err != AGC_OK)
             printf("    WARNING: suspend point submit failed\n");
@@ -585,8 +593,11 @@ int main(void) {
             printf("    Suspend point submitted\n");
 
         printf("[8b] sceAgcDriverIsSuspendPointInFlightDirect()...\n");
-        bool in_flight = sceAgcDriverIsSuspendPointInFlightDirect(0u);
-        printf("    in flight: %s\n", in_flight ? "yes" : "no");
+        int32_t query_result =
+            sceAgcDriverIsSuspendPointInFlightDirect(0u);
+        printf("    result: 0x%08X (%s)\n", (unsigned)query_result,
+               query_result == (int32_t)AGC_DRIVER_ERROR_PERMISSION_INSUFFICIENT
+                   ? "permission stub" : "unexpected");
     } else {
         printf("    skipped — no queue for suspend point\n");
     }

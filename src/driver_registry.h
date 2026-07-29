@@ -37,6 +37,7 @@ enum {
     AGC_DIRECT_CAP_QUEUE           = 1u << 2,
     AGC_DIRECT_CAP_SUSPEND_PRIMARY = 1u << 3,
     AGC_DIRECT_CAP_SUSPEND_FINAL   = 1u << 4,
+    /* Reserved: public query is a permission stub; retain the bit position. */
     AGC_DIRECT_CAP_SUSPEND_QUERY   = 1u << 5,
     AGC_DIRECT_CAP_WORKLOAD        = 1u << 6,
     AGC_DIRECT_CAP_TF_RING         = 1u << 7,

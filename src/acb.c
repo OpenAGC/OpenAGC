@@ -517,16 +517,9 @@ uint32_t *PS5_SYSV_ABI sceAgcAcbSetWorkloadsActive(
 
 int32_t PS5_SYSV_ABI sceAgcSuspendPointAndCheckStatus(uint32_t value)
 {
-    /*
-     * Submit a suspend point and return whether it is still in flight.
-     * Uses the direct driver submit (field0=1, field1=0, field2=0) with the
-     * caller-supplied value as field3.
-     */
-    int32_t ret = sceAgcDriverSuspendPointSubmitDirect(1u, 0u, 0u, value);
-    if (ret != AGC_OK)
-        return ret;
-
-    return sceAgcDriverIsSuspendPointInFlightDirect(value)
-        ? AGC_ERROR_BUSY
-        : AGC_OK;
+    (void)value;
+    /* Sony's wrapper builds runtime CDBG state and calls the distinct
+     * sceAgcDriverSuspendPointSubmitCdbg carrier. The public Direct query is
+     * only a permission stub and must not be substituted here. */
+    return AGC_ERROR_NOT_SUPPORTED;
 }

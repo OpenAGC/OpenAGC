@@ -421,16 +421,16 @@ VSH-only stub.
 
 ## Suspend points
 
-- `sceAgcDriverSuspendPointSubmitDirect` submits a 16-byte suspend argument via
-  `AGC_GC_IOCTL_SUSPEND_16` (nr=0x1c); the internal final variant uses
-  `AGC_GC_IOCTL_SUSPEND_39` (nr=0x39).
-- `sceAgcDriverIsSuspendPointInFlightDirect` now queries the gfx queue status
-  via `AGC_GC_IOCTL_QUEUE_STAT_16` (nr=0x27) and returns whether the status is
-  non-zero. The exact bit layout for the suspend-point in-flight state is still
-  pending RE; the current implementation is a conservative placeholder.
-- `sceAgcSuspendPointAndCheckStatus` combines a direct suspend-point submit with
-  the in-flight query, returning `AGC_ERROR_BUSY` while in flight and `AGC_OK`
-  once it is no longer in flight.
+- Both public Direct exports, `sceAgcDriverSuspendPointSubmitDirect` and
+  `sceAgcDriverIsSuspendPointInFlightDirect`, are corpus-wide userspace
+  permission stubs returning `0x8a6d0001`. They do not issue an ioctl, and the
+  query return type is 32-bit rather than `bool`.
+- OpenAGC's private `sce_agc_internal_suspend_point_submit_primary` carrier
+  submits the recovered 16-byte argument via `AGC_GC_IOCTL_SUSPEND_16`
+  (nr=0x1c); the private final carrier uses `AGC_GC_IOCTL_SUSPEND_39` (nr=0x39).
+- `sceAgcSuspendPointAndCheckStatus` uses the separate private
+  `sceAgcDriverSuspendPointSubmitCdbg` path and fails closed until that carrier
+  is implemented.
 
 ## NID Table Expansion (ps5-openagc cross-reference)
 

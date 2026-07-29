@@ -133,7 +133,7 @@ int32_t PS5_SYSV_ABI agcGenericSubmitAcb(
     return AGC_OK;
 }
 
-int32_t PS5_SYSV_ABI agcGenericSuspendPointSubmitDirect(
+int32_t PS5_SYSV_ABI agcGenericInternalSuspendPointSubmitPrimary(
     uint32_t field0, uint32_t field1, uint32_t field2, uint32_t field3)
 {
     (void)field0;
@@ -141,12 +141,6 @@ int32_t PS5_SYSV_ABI agcGenericSuspendPointSubmitDirect(
     (void)field2;
     (void)field3;
     return AGC_OK;
-}
-
-bool PS5_SYSV_ABI agcGenericIsSuspendPointInFlightDirect(uint32_t value)
-{
-    (void)value;
-    return false;
 }
 
 int32_t PS5_SYSV_ABI agcGenericInternalSuspendPointSubmitFinal(
@@ -378,8 +372,8 @@ const AgcDriverOps agcGenericDriverOps = {
     .submit_multi_command_buffers_direct = agcGenericSubmitMultiCommandBuffersDirect,
     .submit_dcb = agcGenericSubmitDcb,
     .submit_acb = agcGenericSubmitAcb,
-    .suspend_point_submit_direct = agcGenericSuspendPointSubmitDirect,
-    .is_suspend_point_in_flight_direct = agcGenericIsSuspendPointInFlightDirect,
+    .internal_suspend_point_submit_primary =
+        agcGenericInternalSuspendPointSubmitPrimary,
     .internal_suspend_point_submit_final = agcGenericInternalSuspendPointSubmitFinal,
     .setup_async_graphics = agcGenericSetupAsyncGraphics,
     .set_tf_ring = agcGenericSetTFRing,

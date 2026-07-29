@@ -75,9 +75,12 @@ contract than OpenAGC's one-ID workload helper, so workload calls fail closed.
 The one-ID helper remains enabled only on FW 5.50 because its independent
 three-dword submission path passed the real-console qualification sample; it
 must not be inferred from the Sony export's ABI on other firmware.
-Both public/direct suspend-query exports are permission stubs. The internal
-`0x80048127` helper's result semantics are not exposed by those wrappers, so
-suspend query remains disabled. `libSceAgc` exposes a versioned 0..12 defaults
+Both public Direct suspend exports are userspace permission stubs that
+return `0x8a6d0001`; this exact public ABI is now implemented and needs no
+hardware gate. The internal `0x80048127` helper's result semantics are not
+exposed by those wrappers and OpenAGC no longer substitutes it for the public
+query. Private OpenAGC primary/final carriers retain the separately recovered
+`0xc010811c` / `0xc0108139` ioctls. `libSceAgc` exposes a versioned 0..12 defaults
 dispatcher, and its no-argument API reads the selected version from a runtime
 hardware table. FW 11.60 initialization supplies version 12, which maps to the
 recovered V10 tables; the exact 79/29/20 primary and 9/15/3 internal dimensions

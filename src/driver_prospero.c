@@ -1079,7 +1079,7 @@ int32_t PS5_SYSV_ABI agcProsperoSubmitAcb(
 /* Public API — suspend points                                           */
 /* ===================================================================== */
 
-int32_t PS5_SYSV_ABI agcProsperoSuspendPointSubmitDirect(
+int32_t PS5_SYSV_ABI agcProsperoInternalSuspendPointSubmitPrimary(
     uint32_t field0, uint32_t field1, uint32_t field2, uint32_t field3)
 {
     if (!g_prospero.initialized)
@@ -1108,28 +1108,6 @@ int32_t PS5_SYSV_ABI agcProsperoSuspendPointSubmitDirect(
         return AGC_ERROR_SUBMIT_FAILED;
 
     return AGC_OK;
-}
-
-bool PS5_SYSV_ABI agcProsperoIsSuspendPointInFlightDirect(uint32_t value)
-{
-    (void)value;
-    if (!g_prospero.initialized)
-        return false;
-    if ((g_prospero.direct_profile.capabilities &
-            AGC_DIRECT_CAP_SUSPEND_QUERY) == 0)
-        return false;
-
-    /*
-     * Query the gfx queue status via the 4-byte read ioctl (nr=0x27).
-     * The exact suspend-point bit layout is still pending RE; until then
-     * treat any non-zero status as "in flight".
-     */
-    uint32_t status = 0;
-    int ret = agcProsperoIoctl(AGC_GC_IOCTL_QUEUE_STAT_16, &status);
-    if (ret < 0)
-        return false;
-
-    return status != 0;
 }
 
 int32_t PS5_SYSV_ABI agcProsperoInternalSuspendPointSubmitFinal(
@@ -1866,8 +1844,8 @@ const AgcDriverOps agcProsperoDriverOps = {
     .submit_multi_command_buffers_direct = agcProsperoSubmitMultiCommandBuffersDirect,
     .submit_dcb = agcProsperoSubmitDcb,
     .submit_acb = agcProsperoSubmitAcb,
-    .suspend_point_submit_direct = agcProsperoSuspendPointSubmitDirect,
-    .is_suspend_point_in_flight_direct = agcProsperoIsSuspendPointInFlightDirect,
+    .internal_suspend_point_submit_primary =
+        agcProsperoInternalSuspendPointSubmitPrimary,
     .internal_suspend_point_submit_final = agcProsperoInternalSuspendPointSubmitFinal,
     .setup_async_graphics = agcProsperoSetupAsyncGraphics,
     .set_tf_ring = agcProsperoSetTFRing,

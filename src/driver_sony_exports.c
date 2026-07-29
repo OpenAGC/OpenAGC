@@ -133,12 +133,6 @@ int32_t agcSonyDriverResolve(
         sceAgcDriverSubmitDcb, true);
     AGC_SONY_RESOLVE(submit_acb, "sceAgcDriverSubmitAcb",
         sceAgcDriverSubmitAcb, true);
-    AGC_SONY_RESOLVE(suspend_point_submit_direct,
-        "sceAgcDriverSuspendPointSubmitDirect",
-        sceAgcDriverSuspendPointSubmitDirect, true);
-    AGC_SONY_RESOLVE(is_suspend_point_in_flight_direct,
-        "sceAgcDriverIsSuspendPointInFlightDirect",
-        sceAgcDriverIsSuspendPointInFlightDirect, true);
     AGC_SONY_RESOLVE(setup_async_graphics, "sceAgcDriverSetupAsyncGraphics",
         sceAgcDriverSetupAsyncGraphics, true);
     AGC_SONY_RESOLVE(create_user_special_queue,
@@ -151,10 +145,9 @@ int32_t agcSonyDriverResolve(
         "sceAgcDriverGetPaDebugInterfaceVersion",
         sceAgcDriverGetPaDebugInterfaceVersion, true);
 
-    /* The final suspend helper has the same ABI and can use the public direct
-     * Sony export; OpenAGC's private helper is not a firmware export. */
-    out_ops->internal_suspend_point_submit_final =
-        out_ops->suspend_point_submit_direct;
+    /* The public Direct suspend exports are permission stubs. The installed
+     * driver's private primary/final carriers are not exported, so both
+     * OpenAGC internal operations remain NULL and fail closed. */
 
     /* Optional operations remain NULL when absent and dispatch safely as
      * AGC_ERROR_NOT_SUPPORTED. */

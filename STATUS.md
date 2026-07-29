@@ -998,10 +998,17 @@ The host-generic implementation now has a tested model for:
   hidden workload ioctl or GPU write. It validates GPU-info region 2, reserves
   stream 0, initializes descriptors and a mutex, while both builders emit the
   address of `table_base + stream_id * 8`; OpenAGC already matches this.
-  Stage 13 restores the normal FW 5.50-qualified surrounding sequence—default
-  states and async setup—then requires a pre-workload marker before attempting
-  the unchanged inline DCB. It is built as a reboot-only pending gate and has
-  not been launched.
+  Stage 13 restored the normal FW 5.50-qualified surrounding sequence after a
+  clean reboot. Default states, async setup, the process property, stream
+  registration, and a normal preflight submit all passed; its marker reached
+  `0x1160f013` in 50 ms. The unchanged 40-dword inline workload submit returned
+  `AGC_OK`, then no verdict or shutdown appeared before the 20-second transport
+  timeout. The cleanup payload found no stale `eboot.elf`; websrv and
+  ps5debug-NG port 744 were still reachable. Do not rerun stage 13 unchanged.
+  The missing requirement is now narrowed to GPU-side `SET_WORKLOAD` state or
+  queue/register programming rather than defaults, async setup, process
+  property, registration, address selection, packet bytes, or cursor lifecycle.
+  The capability remains disabled.
   All 39 active Sony drivers are now verified to share that nine-dword
   multi-argument contract, with 18/12-dword maximum reservations. Other
   profiles remain fail-closed until their GPU-info subregion selection is
@@ -1033,7 +1040,7 @@ make -B test
 Current expected result:
 
 ```text
-5135 passed, 0 failed
+5137 passed, 0 failed
 ```
 
 PS5 prospero backend (cross-compiled, no tests):
@@ -1178,10 +1185,13 @@ Default state submission:
 
 Suspend points:
 
-- `sceAgcDriverIsSuspendPointInFlightDirect` (prospero) now queries the gfx
-  queue status via ioctl `nr=0x27` and returns whether the status is non-zero.
-- `sceAgcSuspendPointAndCheckStatus` combines a direct suspend-point submit
-  with the in-flight query.
+- Both `sceAgcDriverSuspendPointSubmitDirect` and
+  `sceAgcDriverIsSuspendPointInFlightDirect` now match the Sony ABI on every
+  active firmware: 32-bit `0x8a6d0001` permission stubs with no ioctl. The old
+  public-primary-ioctl exposure, `bool` query declaration, and unrelated
+  `QUEUE_STAT` substitution were removed.
+- `sceAgcSuspendPointAndCheckStatus` now fails closed because Sony routes it
+  through the distinct private `sceAgcDriverSuspendPointSubmitCdbg` carrier.
 
 In-place patchers:
 
@@ -1361,9 +1371,12 @@ Native prospero backend (`src/driver_prospero.c`, `#ifdef OPENAGC_PROSPERO`):
 - `_sceAgcDriverCreateUserSpecialQueue` — `QUEUE_CREATE` ioctl (nr=0x21, 64-byte RW arg). Ring buffer address computed from EOP FIFO base + 0x39000 (SPRX-confirmed). Arg layout: magic tokens, pipe_id, mmio_base, queue_id, ring_addr, ring_size.
 - `_sceAgcDriverDestroyUserSpecialQueue` — `QUEUE_DESTROY` ioctl (nr=0x0e, 12-byte RW arg with magic auth tokens; SPRX-confirmed)
 - `sceAgcDriverNotifyDefaultStates` — takes `uint32_t flags`; builds FW 5.50 primary/internal register-defaults blobs in GPU-visible memory (kernel consumption path still pending RE)
-- `sceAgcDriverSuspendPointSubmitDirect` — `SUSPEND_16` ioctl with RE'd 4-dword argument
-- `sceAgcDriverIsSuspendPointInFlightDirect` — stub query (returns false)
-- `sceAgcSuspendPointAndCheckStatus` — stub query (returns OK)
+- `sceAgcDriverSuspendPointSubmitDirect` and
+  `sceAgcDriverIsSuspendPointInFlightDirect` — exact public permission stubs
+  (return `0x8a6d0001`)
+- `sce_agc_internal_suspend_point_submit_primary` — `SUSPEND_16` ioctl with
+  RE'd 4-dword argument
+- `sceAgcSuspendPointAndCheckStatus` — fail-closed pending CDBG carrier
 - `sce_agc_internal_suspend_point_submit_final` — `SUSPEND_39` ioctl with same 4-dword argument
 - CB descriptor builder using `AgcGcCommandBuffer` with VMID masking
 - Queue tracking (32 slots, gfx/compute/dma types)

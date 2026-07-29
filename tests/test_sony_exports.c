@@ -61,10 +61,6 @@ static void *fakeSonyResolve(void *context, void *module, const char *symbol)
         submit_multi_command_buffers_direct);
     FAKE_SYMBOL("sceAgcDriverSubmitDcb", submit_dcb);
     FAKE_SYMBOL("sceAgcDriverSubmitAcb", submit_acb);
-    FAKE_SYMBOL("sceAgcDriverSuspendPointSubmitDirect",
-        suspend_point_submit_direct);
-    FAKE_SYMBOL("sceAgcDriverIsSuspendPointInFlightDirect",
-        is_suspend_point_in_flight_direct);
     FAKE_SYMBOL("sceAgcDriverSetupAsyncGraphics", setup_async_graphics);
     FAKE_SYMBOL("sceAgcDriverNotifyDefaultStates", notify_default_states);
     FAKE_SYMBOL("sceAgcDriverSetWorkloadsActive", set_workloads_active);
@@ -110,9 +106,10 @@ static void test_sony_export_resolution(void)
         "Sony operations table is named");
     TEST_ASSERT(ops.submit_dcb == agcGenericDriverOps.submit_dcb,
         "Sony submit callback populated from module export");
-    TEST_ASSERT(ops.internal_suspend_point_submit_final ==
-        ops.suspend_point_submit_direct,
-        "private final suspend helper forwards to Sony direct export");
+    TEST_ASSERT(ops.internal_suspend_point_submit_primary == NULL,
+        "installed driver does not expose its private primary carrier");
+    TEST_ASSERT(ops.internal_suspend_point_submit_final == NULL,
+        "installed driver does not expose its private final carrier");
     TEST_ASSERT_EQ(ops.initialize(), AGC_OK,
         "module-backed initialization adapter succeeds");
     TEST_ASSERT_EQ(ops.notify_default_states(0), AGC_OK,

@@ -168,9 +168,9 @@ int main(void) {
         printf("    Compute queue created (handle=%d)\n", queue_handle);
 
     /* --- Step 8: Submit a suspend point --- */
-    printf("[8] sceAgcDriverSuspendPointSubmitDirect()...\n");
+    printf("[8] private primary suspend carrier...\n");
     if (queue_handle >= 0) {
-        err = sceAgcDriverSuspendPointSubmitDirect(
+        err = sce_agc_internal_suspend_point_submit_primary(
             0xaf1e80b7u, 0x8b4cdd90u, 0x99f68d6cu, 0u);
         printf("    result: 0x%08X (%s)\n", (unsigned)err, errstr(err));
         if (err != AGC_OK)

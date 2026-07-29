@@ -117,7 +117,7 @@ Our code uses `sceKernelAllocateDirectMemory` + `sceKernelMapDirectMemory`.
 The SPRX uses `sceKernelMapNamedSystemFlexibleMemory` — a single-call API
 that both allocates and maps. This is a fundamentally different approach.
 
-## Suspend Point (0x95d0) — `sceAgcDriverSuspendPointSubmitDirect`
+## Internal primary suspend carrier (0x95d0)
 
 ```asm
 95d0: push rbp
@@ -160,9 +160,10 @@ The tail-called function at 0xd8e57700 checks
 queue+0x48. If field3 is non-zero and shift_amount is 0, returns EINVAL.
 Passing field3=0 works.
 
-**HW-validated**: sceAgcDriverSuspendPointSubmitDirect(0xaf1e80b7,
-0x8b4cdd90, 0x99f68d6c, 0) succeeds on PS5 FW 5.50 with the GPU
-credential bypass.
+**HW-validated**: OpenAGC's private primary carrier succeeds with
+`(0xaf1e80b7, 0x8b4cdd90, 0x99f68d6c, 0)` on PS5 FW 5.50 with the GPU
+credential bypass. The Sony public `sceAgcDriverSuspendPointSubmitDirect`
+export is a distinct permission stub and does not call this helper.
 
 ## Queue Create (0x8900) — `_sceAgcDriverCreateUserSpecialQueue`
 

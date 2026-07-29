@@ -42,7 +42,7 @@ extern int32_t PS5_SYSV_ABI agcProsperoSubmitDcb(
 extern int32_t PS5_SYSV_ABI agcProsperoSetupAsyncGraphics(uint32_t pipe_id);
 extern int32_t PS5_SYSV_ABI agcProsperoCreateUserSpecialQueue(void);
 extern int32_t PS5_SYSV_ABI agcProsperoDestroyUserSpecialQueue(void);
-extern int32_t PS5_SYSV_ABI agcProsperoSuspendPointSubmitDirect(
+extern int32_t PS5_SYSV_ABI agcProsperoInternalSuspendPointSubmitPrimary(
     uint32_t field0, uint32_t field1, uint32_t field2, uint32_t field3);
 extern int32_t PS5_SYSV_ABI agcProsperoInternalSuspendPointSubmitFinal(
     uint32_t field0, uint32_t field1, uint32_t field2, uint32_t field3);
@@ -464,7 +464,7 @@ int main(void)
         return 1;
     }
 #if AGC_FW1160_STAGE >= 6
-    result = agcProsperoSuspendPointSubmitDirect(
+    result = agcProsperoInternalSuspendPointSubmitPrimary(
         0xaf1e80b7u, 0x8b4cdd90u, 0x99f68d6cu, 0u);
     printf("primary suspend=0x%08X\n", (unsigned)result);
     if (result != AGC_OK) {

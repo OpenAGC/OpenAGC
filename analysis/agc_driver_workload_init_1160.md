@@ -56,9 +56,18 @@ GPU output/state, not a pointer that userspace must populate.
 ## Consequence for requalification
 
 Stage 12 already matched the table address, registration state, packet bytes,
-and caller-owned inline DCB lifecycle, yet stalled. The remaining observable
-difference from the qualified FW 5.50 full-path sequence is surrounding driver
-state. Stage 13 therefore restores two independently FW 11.60-qualified
-prerequisites—register-default notification and async-graphics setup—and proves
-ordinary marker execution before submitting the unchanged inline workload
-DCB. It must not run until the console has rebooted after the stage-12 stall.
+and caller-owned inline DCB lifecycle, yet stalled. Stage 13 ran after a clean
+reboot and restored the two remaining surrounding prerequisites from the
+qualified FW 5.50 path: register-default notification and async-graphics setup.
+It also repeated the exact process-property call and stream registration. A
+normal preflight DCB returned `AGC_OK` and its `0x1160f013` marker completed in
+50 ms, proving that ordinary submission and marker visibility were healthy at
+that point.
+
+The unchanged 40-dword inline active/marker/complete/marker DCB then returned
+`AGC_OK`, but no verdict or shutdown text followed before websrv timed out at
+20 seconds. The cleanup ELF subsequently found no stale `eboot.elf`; websrv and
+ps5debug-NG port 744 remained reachable. Stage 13 must not be rerun unchanged.
+The remaining investigation is the GPU-side `SET_WORKLOAD` state transition or
+required queue/register programming, not defaults, async setup, process
+property, stream registration, slot address, packet bytes, or cursor lifecycle.

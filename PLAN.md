@@ -625,11 +625,17 @@ Offline tracing now proves the workload initializer itself contains no hidden
 ioctl or GPU write: it only selects GPU-info region 2, validates its span and
 alignment, reserves stream 0, initializes descriptors, and creates a mutex.
 The builders also carry the address of the selected 64-bit slot, exactly as
-OpenAGC does. Stage 13 is prepared to test the remaining evidenced difference
-from the FW 5.50 qualified path: it performs FW 11.60-qualified default-state
-notification and async setup, proves a normal marker executes, then submits the
-unchanged inline workload DCB. Keep it hardware-pending until the console is
-rebooted; require two clean passes before promotion.
+OpenAGC does. Stage 13 tested the remaining evidenced difference from the FW
+5.50 qualified path after a clean reboot. FW 11.60 default-state notification,
+async setup, the exact process property, stream registration, and a normal
+preflight marker all succeeded; the preflight marker completed in 50 ms. The
+unchanged inline workload DCB then returned `AGC_OK` but produced no following
+verdict before the 20-second transport timeout. The cleanup payload found no
+stale `eboot.elf`, while websrv and ps5debug-NG port 744 remained reachable.
+This rules out those surrounding prerequisites as the missing state. Do not
+rerun stage 13 unchanged. Keep FW 11.60 workload disabled and recover the
+GPU-side `SET_WORKLOAD` state transition or required queue/register
+programming before constructing another gate.
 
 The Sony workload contract itself is recovered for all active firmware:
 seven active-wrapper and three complete-wrapper groups converge on the same
@@ -843,7 +849,7 @@ Implemented and host-tested:
 Current expected host test result:
 
 ```text
-5135 passed, 0 failed
+5137 passed, 0 failed
 ```
 
 ## Phase 0: RE Groundwork
@@ -1058,8 +1064,9 @@ Work:
    ✅ `AgcProsperoQueue` modeled; `sceAgcDriverSubmitMultiCommandBuffersDirect` uses
    the submit descriptor layout.
 4. Add native backend stubs only after structure sizes are known.
-   ✅ `driver_prospero.c` skeleton implemented; `sceAgcDriverSuspendPointSubmitDirect`
-   now calls the suspend ioctl; in-flight query uses `QUEUE_STAT_16`.
+   ✅ `driver_prospero.c` implements private primary/final suspend carriers.
+   Both public Direct exports preserve Sony's `0x8a6d0001` permission-stub ABI
+   and never substitute the internal `QUEUE_STAT_16` operation.
 
 Acceptance criteria:
 
@@ -1092,8 +1099,9 @@ Work:
    ✅ `sceAgcDriverSubmitDcb` / `sceAgcDriverSubmitMultiCommandBuffersDirect`
    use the recovered descriptor layout.
 5. Submit default state via `CLEAR_STATE`. ✅ Done in `sceAgcDriverNotifyDefaultStates`.
-6. Submit suspend points and query in-flight status. ✅ Done in
-   `sceAgcDriverSuspendPointSubmitDirect` / `sceAgcDriverIsSuspendPointInFlightDirect`.
+6. Submit suspend points and preserve the public Direct ABI. ✅ The private
+   `sce_agc_internal_suspend_point_submit_primary` / `_final` carriers use the
+   recovered ioctls; both Sony Direct exports return the exact permission error.
 7. Add hardware smoke tests. ✅ Four ELF samples in `samples/hw_test/`:
    `videoout_linear.elf`, `agc_init.elf`, `agc_videoout.elf`, `agc_compute.elf`.
    All deployed and validated on PS5 hardware (FW 5.50, exploited).
@@ -1704,7 +1712,7 @@ Acceptance criteria:
 
 - No verifier label names a different ioctl than the command it checks.
 - No direct operation runs on a firmware key without an exact capability fact.
-- Unknown defaults, TF-ring, HS-offchip, workload, or suspend-query ABIs fail
+- Unknown defaults, TF-ring, HS-offchip, workload, or internal suspend-query ABIs fail
   with `AGC_ERROR_NOT_SUPPORTED` rather than reusing FW 5.50 behavior.
 - Generic and Prospero builds pass with no new warnings, and host tests cover
   each disabled/enabled capability boundary.
@@ -1869,8 +1877,13 @@ Acceptance criteria:
   255,744 FP16 pixels, eight sampled colors, no invalid components, and exact
   FNV64 `0x4a40c2eb4f12bc26`. FW 5.50 then passed the same draw and all 1,800
   VideoOut flips.
-- Workloads, suspend query, EOP flip, FW 11.60 VideoOut presentation, and
+- Workloads, EOP flip, FW 11.60 VideoOut presentation, and
   non-empty HS patch-list execution remain fail-closed or unadvertised.
+- The public `sceAgcDriverIsSuspendPointInFlightDirect` gap is closed: all 39
+  active drivers return userspace permission error `0x8a6d0001` without an
+  ioctl. OpenAGC preserves the 32-bit return ABI instead of truncating it to
+  `bool` or substituting internal `QUEUE_STAT`. The separate CDBG helper
+  remains fail-closed pending its private carrier.
 - Other exact active firmware/model profiles are enabled from reproducible
   SPRX evidence but remain hardware-unverified until matching consoles exist.
 - Keep deterministic PM4 builders, descriptors, shader parsing/fusion,

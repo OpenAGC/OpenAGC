@@ -79,8 +79,9 @@ def main() -> int:
                 "query_internal_command": "0x80048127",
                 "query_internal_carrier": groups(
                     carriers, key, "queue_status_internal"),
-                "public_direct_exports": "permission-stub-0x8a6d0001",
-                "query_status": "disabled-semantics-not-exposed",
+                "public_direct_exports":
+                    "submit-and-query-permission-stubs-0x8a6d0001",
+                "query_status": "sony-permission-stub-qualified",
                 "qualification": qualification,
             })
     return 0

@@ -618,7 +618,8 @@ int32_t PS5_SYSV_ABI sceAgcSuspendPoint(
     uint32_t field0, uint32_t field1, uint32_t field2, uint32_t field3)
 {
 #ifdef OPENAGC_PROSPERO
-    return sceAgcDriverSuspendPointSubmitDirect(field0, field1, field2, field3);
+    return sce_agc_internal_suspend_point_submit_primary(
+        field0, field1, field2, field3);
 #else
     (void)field0; (void)field1; (void)field2; (void)field3;
     return AGC_OK;

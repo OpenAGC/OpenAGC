@@ -74,9 +74,15 @@ int32_t PS5_SYSV_ABI sceAgcDriverSubmitMultiCommandBuffers(
 int32_t PS5_SYSV_ABI sceAgcDriverSubmitMultiAcbs(
     uint32_t queue, void *const acbs[], const uint32_t *sizes_in_dwords,
     uint32_t count);
+/* FW 3.20 through 12.70 implement both public Direct suspend exports as
+ * permission stubs returning AGC_DRIVER_ERROR_PERMISSION_INSUFFICIENT. */
 int32_t PS5_SYSV_ABI sceAgcDriverSuspendPointSubmitDirect(
     uint32_t field0, uint32_t field1, uint32_t field2, uint32_t field3);
-bool    PS5_SYSV_ABI sceAgcDriverIsSuspendPointInFlightDirect(uint32_t value);
+int32_t PS5_SYSV_ABI sceAgcDriverIsSuspendPointInFlightDirect(uint32_t value);
+/* Private OpenAGC backend carriers for the separately recovered /dev/gc
+ * primary/final suspend ioctls. These are not Sony firmware exports. */
+int32_t PS5_SYSV_ABI sce_agc_internal_suspend_point_submit_primary(
+    uint32_t field0, uint32_t field1, uint32_t field2, uint32_t field3);
 int32_t PS5_SYSV_ABI sce_agc_internal_suspend_point_submit_final(
     uint32_t field0, uint32_t field1, uint32_t field2, uint32_t field3);
 
@@ -190,7 +196,9 @@ int32_t PS5_SYSV_ABI sceAgcGetDefaultState(AgcContextState *out_state);
 int32_t PS5_SYSV_ABI sceAgcGetRegisterDefaults(AgcContextState *out_state);
 int32_t PS5_SYSV_ABI sceAgcGetDefaultCxStateFlat(void *out_state, uint32_t size);
 
-/* Suspend point */
+/* Suspend-point CDBG helper. Its private driver carrier is not implemented;
+ * OpenAGC returns AGC_ERROR_NOT_SUPPORTED rather than substituting the
+ * unrelated public permission stub. */
 int32_t PS5_SYSV_ABI sceAgcSuspendPointAndCheckStatus(uint32_t value);
 
 /* Sony-style command-buffer cursor packet builders */

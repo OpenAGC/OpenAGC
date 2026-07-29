@@ -24,9 +24,10 @@ Current boundary:
   one-ID workload submit is an independently tested OpenAGC extension, not an
   ABI-compatible implementation of Sony's multi-argument workload exports.
 - Standard-PS5 FW `0x1160` is hardware-qualified for submit16, internal memory,
-  authenticated queue lifecycle, primary/final suspend, public TF-ring,
-  zero-entry HS-offchip carrier, and async setup. Workloads, suspend query,
-  default states, EOP flip, and non-empty HS patch lists remain disabled.
+authenticated queue lifecycle, private primary/final suspend, public TF-ring,
+zero-entry HS-offchip carrier, and async setup. Both public Direct suspend
+exports are corpus-proven `0x8a6d0001` permission stubs. Workloads, EOP flip, and
+non-empty HS patch lists remain disabled.
 - Every active firmware key is runtime-selectable and has exact submit16, internal-memory,
   authenticated-queue, primary-suspend, public TF-ring, HS-offchip, and async
   carrier evidence. Outside the tested FW 5.50 and standard-PS5 FW 11.60
