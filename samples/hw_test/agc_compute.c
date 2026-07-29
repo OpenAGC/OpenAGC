@@ -17,6 +17,7 @@
  */
 
 #include <stdbool.h>
+#include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -30,8 +31,17 @@
 #include "agc_registers.h"
 #include "agc_pm4.h"
 #include "agc_shader.h"
+#include "agc_runtime_diag.h"
 #include "gpu_credentials.h"
 #include <ps5/kernel.h>
+
+#ifndef AGC_EXPECT_FIRMWARE_ABI_KEY
+#define AGC_EXPECT_FIRMWARE_ABI_KEY 0x0550u
+#endif
+
+#ifndef AGC_SELF_TERMINATE
+#define AGC_SELF_TERMINATE 0
+#endif
 
 /* PS5 kernel memory constants */
 #ifndef SCE_KERNEL_PROT_CPU_READ
@@ -167,6 +177,8 @@ static bool allocate_display_buffers(ComputeTest *test) {
     if (res != 0) {
         printf("sceKernelMapDirectMemory failed: 0x%x\n", res);
         sceKernelReleaseDirectMemory(test->direct_memory, test->mapped_size);
+        test->direct_memory = -1;
+        test->mapped_size = 0;
         return false;
     }
 
@@ -289,6 +301,7 @@ static bool init_videoout(ComputeTest *test) {
 
 static bool init_agc(void) {
     int32_t err;
+    AgcDriverRuntimeDiagnostics runtime_diag;
 
     printf("[AGC] sce_agc_initialize()...\n");
     err = sce_agc_initialize();
@@ -297,6 +310,17 @@ static bool init_agc(void) {
         printf("[AGC] FATAL: cannot initialize AGC\n");
         return false;
     }
+
+    err = agcDriverDebugRuntimeProfile(&runtime_diag);
+    bool profile_ok = err == AGC_OK &&
+        (runtime_diag.firmware_version >> 16u) ==
+            AGC_EXPECT_FIRMWARE_ABI_KEY &&
+        runtime_diag.profile.family == AGC_PROSPERO_ABI_STANDARD &&
+        !runtime_diag.profile.is_trinity;
+    printf("[AGC] Runtime profile FW ABI 0x%04X: %s\n",
+           AGC_EXPECT_FIRMWARE_ABI_KEY, profile_ok ? "PASS" : "FAIL");
+    if (!profile_ok)
+        return false;
 
     printf("[AGC] sce_agc_initialize_internal_memory()...\n");
     err = sce_agc_initialize_internal_memory();
@@ -309,14 +333,18 @@ static bool init_agc(void) {
     printf("[AGC] sceAgcDriverNotifyDefaultStates()...\n");
     err = sceAgcDriverNotifyDefaultStates(0);
     printf("[AGC] default states: 0x%08X (%s)\n", (unsigned)err, errstr(err));
-    if (err != AGC_OK)
-        printf("[AGC] WARNING: default state notification failed\n");
+    if (err != AGC_OK) {
+        printf("[AGC] FATAL: default state notification failed\n");
+        return false;
+    }
 
     printf("[AGC] sceAgcDriverSetupAsyncGraphics(1)...\n");
     err = sceAgcDriverSetupAsyncGraphics(1);
     printf("[AGC] async graphics: 0x%08X (%s)\n", (unsigned)err, errstr(err));
-    if (err != AGC_OK)
-        printf("[AGC] WARNING: async graphics setup failed\n");
+    if (err != AGC_OK) {
+        printf("[AGC] FATAL: async graphics setup failed\n");
+        return false;
+    }
 
     return true;
 }
@@ -548,22 +576,33 @@ static void wait_for_flip(ComputeTest *test) {
 
 int main(void) {
     ComputeTest test = { .handle = -1, .direct_memory = -1 };
-    init_agc();
-    init_videoout(&test);
+    bool output_complete = false;
+    bool flip_complete = false;
+    bool agc_attempted = true;
+    bool success = false;
+    int close_result = 0;
+    int equeue_result = 0;
+    int release_result = 0;
+    int32_t shutdown_result = AGC_ERROR_NOT_INITIALIZED;
+
+    if (!init_agc())
+        goto cleanup;
+    if (!init_videoout(&test))
+        goto cleanup;
     /* Step 3: Parse and upload shader */
     printf("\n--- Step 3: Shader loading ---\n");
 
     ParsedShader shader;
     if (!parse_shader(&shader)) {
         printf("FATAL: shader parse failed\n");
-        return 1;
+        goto cleanup;
     }
 
     /* Use full 76-byte GLSL compiled shader from psbc */
     void *shader_gpu_addr = upload_shader_code(shader.code, shader.code_size, &test);
     if (!shader_gpu_addr) {
         printf("FATAL: shader upload failed\n");
-        return 1;
+        goto cleanup;
     }
 
 
@@ -575,7 +614,7 @@ int main(void) {
     for (uint32_t i = 0; i < test.width * test.height; i++) compute_out_pre[i] = 0xDEADBEEF;
 
     if (!dispatch_compute(&test, shader_gpu_addr, &shader, fill_color))
-        return 1;
+        goto cleanup;
 
     /* Step 5: Verify GPU output */
     printf("\n--- Step 5: Verify GPU output ---\n");
@@ -604,7 +643,7 @@ int main(void) {
         if (buf0[i] == expected) match_count++;
     }
     printf("[Readback] Total: %u/%u pixels match\n", match_count, total_pixels);
-    bool output_complete = match_count == total_pixels;
+    output_complete = match_count == total_pixels;
     if (!output_complete)
         printf("[Readback] FAIL: compute dispatch did not fill the entire buffer\n");
 
@@ -616,11 +655,46 @@ int main(void) {
         test.handle, 0, SCE_VIDEO_OUT_FLIP_MODE_VSYNC, 0);
     if (flip_result != 0) {
         printf("[Display] sceVideoOutSubmitFlip failed: 0x%x\n", flip_result);
-        return 1;
+        goto cleanup;
     }
     wait_for_flip(&test);
+    flip_complete = true;
     printf("[Display] GPU output flip completed\n");
     sceKernelUsleep(1000000);
 
-    return output_complete ? 0 : 1;
+cleanup:
+    if (test.flipqueue != 0)
+        equeue_result = sceKernelDeleteEqueue(test.flipqueue);
+    if (test.handle >= 0)
+        close_result = sceVideoOutClose(test.handle);
+    if (test.direct_memory >= 0 && test.mapped_size != 0)
+        release_result = sceKernelReleaseDirectMemory(
+            test.direct_memory, test.mapped_size);
+    if (agc_attempted)
+        shutdown_result = agcDriverShutdown();
+
+    success = output_complete && flip_complete && close_result == 0 &&
+        equeue_result == 0 && release_result == 0 &&
+        shutdown_result == AGC_OK;
+    printf("\n=== Compute Summary ===\n");
+    printf("  Runtime profile: FW ABI 0x%04X\n",
+           AGC_EXPECT_FIRMWARE_ABI_KEY);
+    printf("  GPU output:      %s\n", output_complete ? "PASS" : "FAILED");
+    printf("  Display flip:    %s\n", flip_complete ? "PASS" : "FAILED");
+    printf("  VideoOut cleanup: close=0x%08x equeue=0x%08x release=0x%08x\n",
+           (unsigned)close_result, (unsigned)equeue_result,
+           (unsigned)release_result);
+    printf("  Driver shutdown: %s (0x%08x)\n",
+           shutdown_result == AGC_OK ? "PASS" : "FAILED",
+           (unsigned)shutdown_result);
+    printf("Compute result: %s\n", success ? "PASS" : "FAIL");
+    fflush(stdout);
+    fflush(stderr);
+
+#if AGC_SELF_TERMINATE
+    kill(getpid(), SIGKILL);
+    _exit(success ? 0 : 1);
+#else
+    return success ? 0 : 1;
+#endif
 }

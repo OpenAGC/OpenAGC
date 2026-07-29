@@ -127,6 +127,10 @@ agc_videoout.elf: agc_videoout.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB
 agc_compute.elf: agc_compute.c ps5_video_out.h gpu_credentials.h shaders/fill_color_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -o $@ agc_compute.c $(AGC_LDFLAGS)
 
+agc_compute_fw1160.elf: agc_compute.c ps5_video_out.h gpu_credentials.h shaders/fill_color_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_EXPECT_FIRMWARE_ABI_KEY=0x1160u \
+		-DAGC_SELF_TERMINATE=1 -o $@ agc_compute.c $(AGC_LDFLAGS)
+
 shaders/htile_rmw.spv: shaders/htile_rmw.comp
 	$(GLSLANG) -V --target-env vulkan1.2 $< -o $@
 
@@ -607,6 +611,11 @@ deploy_agc_videoout: agc_videoout.elf
 
 deploy_agc_compute: agc_compute.elf
 	PS5_HOST=$(PS5_HOST) ./run_fw550_conformance.sh --sample agc_compute
+
+.PHONY: deploy_agc_compute_fw1160
+deploy_agc_compute_fw1160: agc_compute_fw1160.elf
+	PS5_HOST=$(PS5_HOST) COMPUTE_ARTIFACT=$(THIS_DIR)/$< \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_compute.sh
 
 deploy_agc_graphics: agc_graphics.elf
 	PS5_HOST=$(PS5_HOST) ./run_fw550_conformance.sh --sample agc_graphics
