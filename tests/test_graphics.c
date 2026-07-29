@@ -145,8 +145,9 @@ static AgcGfx1013FrameState make_frame_state(void)
             AGC_GFX1013_COLOR_FORMAT_8_8_8_8,
             AGC_GFX1013_SURFACE_NUMBER_UNORM,
             AGC_GFX1013_SURFACE_SWAP_ALT,
+            0u, 0u, 0u,
         },
-        .viewport = {1920u, 1080u},
+        .viewport = {1920u, 1080u, 0u},
         .scissor = {0u, 0u, 1920u, 1080u},
         .target_mask = AGC_GFX1013_TARGET_MASK_RGBA0,
         .context_load_control = AGC_GFX1013_CONTEXT_CONTROL_ENABLE,
@@ -1467,8 +1468,9 @@ static void test_gfx1013_fixed_function_packets(void)
         AGC_GFX1013_COLOR_FORMAT_8_8_8_8,
         AGC_GFX1013_SURFACE_NUMBER_UNORM,
         AGC_GFX1013_SURFACE_SWAP_ALT,
+        0u, 0u, 0u,
     };
-    const AgcGfx1013ViewportState viewport = {1920u, 1080u};
+    const AgcGfx1013ViewportState viewport = {1920u, 1080u, 0u};
     const AgcGfx1013ViewportState vulkan_viewport = {
         1920u, 1080u, AGC_GFX1013_CLIP_SPACE_ZERO_TO_ONE,
     };
@@ -2738,8 +2740,9 @@ static void test_gfx1013_fixed_function_rejects_atomically(void)
         AGC_GFX1013_COLOR_FORMAT_8_8_8_8,
         AGC_GFX1013_SURFACE_NUMBER_UNORM,
         AGC_GFX1013_SURFACE_SWAP_ALT,
+        0u, 0u, 0u,
     };
-    const AgcGfx1013ViewportState viewport = {1920u, 1080u};
+    const AgcGfx1013ViewportState viewport = {1920u, 1080u, 0u};
     const AgcGfx1013ViewportState invalid_viewport = {1920u, 1080u, 2u};
     const AgcGfx1013ScissorState scissor = {0u, 0u, 1920u, 1080u};
     AgcGfx1013ColorTargetFormatInfo format_info;
