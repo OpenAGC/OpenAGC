@@ -85,6 +85,12 @@ static void test_archival_and_fw320_firmware_profiles(void)
         TEST_ASSERT(!agcProsperoBuildDirectProfile(
             0x03100000u, false, &direct),
             "uninspected legacy direct profile fails closed");
+        TEST_ASSERT(agcProsperoBuildDirectProfile(
+            0x03200000u, false, &direct),
+            "FW 3.20 direct profile builds");
+        TEST_ASSERT_EQ(direct.shadow_process_properties,
+            AGC_DIRECT_SHADOW_PROPERTY_GN2 | AGC_DIRECT_SHADOW_PROPERTY_GN3,
+            "FW 3.20 standard constructor publishes Gn2/Gn3");
     }
 
     TEST_ASSERT(!agcProsperoBuildRuntimeProfile(0x01000000u, false, &profile),
@@ -132,6 +138,9 @@ static void test_direct_operation_profiles(void)
         "FW 5.50 HS-offchip uses the 0x2c wrapper ioctl");
     TEST_ASSERT(profile.workload_has_sony_stream_table,
         "FW 5.50 exposes its recovered Sony workload table");
+    TEST_ASSERT_EQ(profile.shadow_process_properties,
+        AGC_DIRECT_SHADOW_PROPERTY_GN2 | AGC_DIRECT_SHADOW_PROPERTY_GN3,
+        "FW 5.50 standard constructor publishes Gn2/Gn3 without Gn4");
 
     TEST_ASSERT(agcProsperoBuildDirectProfile(
         0x11600000u, true, &profile), "FW 11.60 direct profile builds");
@@ -149,8 +158,9 @@ static void test_direct_operation_profiles(void)
         "FW 11.60 HS-offchip wrapper enabled");
     TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_WORKLOAD) == 0,
         "FW 11.60 Trinity remains outside the standard workload-table gate");
-    TEST_ASSERT(!profile.workload_requires_shadow_properties,
-        "FW 11.60 Trinity does not inherit the standard-console shadow gate");
+    TEST_ASSERT_EQ(profile.shadow_process_properties,
+        AGC_DIRECT_SHADOW_PROPERTY_GN2,
+        "FW 11.60 Trinity selects the recovered reduced Gn2 branch");
     TEST_ASSERT_EQ(agcPm4Header3Sub(
         AGC_PM4_OP_SET_WORKLOAD, AGC_PM4_SUB_WORKLOAD_BEGIN, 3u),
         0xC0011E80u,
@@ -177,8 +187,10 @@ static void test_direct_operation_profiles(void)
         "FW 11.60 does not select the stalled stream adapter");
     TEST_ASSERT(profile.workload_has_sony_stream_table,
         "standard FW 11.60 exposes its recovered Sony workload table");
-    TEST_ASSERT(profile.workload_requires_shadow_properties,
-        "standard FW 11.60 requires the recovered Gn2/Gn3/Gn4 state");
+    TEST_ASSERT_EQ(profile.shadow_process_properties,
+        AGC_DIRECT_SHADOW_PROPERTY_GN2 | AGC_DIRECT_SHADOW_PROPERTY_GN3 |
+            AGC_DIRECT_SHADOW_PROPERTY_GN4,
+        "standard FW 11.60 constructor publishes Gn2/Gn3/Gn4");
 
     TEST_ASSERT(agcProsperoBuildDirectProfile(
         0x12200000u, false, &profile), "FW 12.20 submit profile builds");
@@ -196,8 +208,10 @@ static void test_direct_operation_profiles(void)
         "FW 12.20 uses the typed HS-offchip ioctl payload");
     TEST_ASSERT_EQ(profile.async_graphics_ioctl, AGC_GC_IOCTL_QUEUE_STATUS,
         "FW 12.20 uses the carrier-proven async setup ioctl");
-    TEST_ASSERT(!profile.workload_requires_shadow_properties,
-        "FW 12.20 does not inherit unevidenced FW 11.60 shadow state");
+    TEST_ASSERT_EQ(profile.shadow_process_properties,
+        AGC_DIRECT_SHADOW_PROPERTY_GN2 | AGC_DIRECT_SHADOW_PROPERTY_GN3 |
+            AGC_DIRECT_SHADOW_PROPERTY_GN4,
+        "standard FW 12.20 shares the corpus-proven Gn2/Gn3/Gn4 state");
     TEST_ASSERT(!agcProsperoBuildDirectProfile(
         0x11600000u, false, NULL), "NULL direct profile rejected");
 }

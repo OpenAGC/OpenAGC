@@ -48,6 +48,12 @@ enum {
     AGC_DIRECT_CAP_EOP_FLIP        = 1u << 11
 };
 
+enum {
+    AGC_DIRECT_SHADOW_PROPERTY_GN2 = 1u << 0,
+    AGC_DIRECT_SHADOW_PROPERTY_GN3 = 1u << 1,
+    AGC_DIRECT_SHADOW_PROPERTY_GN4 = 1u << 2
+};
+
 #define AGC_DIRECT_DEFAULTS_VERSION_UNKNOWN UINT32_MAX
 
 typedef struct AgcProsperoDirectProfile {
@@ -57,7 +63,7 @@ typedef struct AgcProsperoDirectProfile {
     bool submit_uses_frame_close_trailer;
     bool workload_has_sony_stream_table;
     bool workload_uses_sony_stream_packet;
-    bool workload_requires_shadow_properties;
+    uint32_t shadow_process_properties;
     uint32_t submit_ioctl;
     uint32_t queue_create_ioctl;
     uint32_t queue_destroy_ioctl;

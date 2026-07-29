@@ -207,6 +207,20 @@ bool agcProsperoBuildDirectProfile(uint32_t raw_version, bool is_trinity,
     direct.defaults_version = AGC_DIRECT_DEFAULTS_VERSION_UNKNOWN;
     direct.submit_ioctl = AGC_GC_IOCTL_SUBMIT_16;
 
+    /* Every active driver publishes its standard-console register-shadow
+     * state through Gn2/Gn3. Gn4 and its copy/info names begin at FW 6.00.
+     * Trinity's shared carrier selects its reduced Gn2-only branch. Exact
+     * aliases remain the outer support gate, so this does not generalize an
+     * unknown firmware merely because its numeric key is newer. */
+    if (is_trinity) {
+        direct.shadow_process_properties = AGC_DIRECT_SHADOW_PROPERTY_GN2;
+    } else {
+        direct.shadow_process_properties = AGC_DIRECT_SHADOW_PROPERTY_GN2 |
+            AGC_DIRECT_SHADOW_PROPERTY_GN3;
+        if (abi_key >= 0x0600u)
+            direct.shadow_process_properties |= AGC_DIRECT_SHADOW_PROPERTY_GN4;
+    }
+
     /* Every inspected standard-firmware image shares the normalized submit16
      * and multi-DCB carrier group. In an exploited-payload context that group
      * uses the CLOSE transition plus a trailing NOP IB to prevent the final
@@ -243,7 +257,6 @@ bool agcProsperoBuildDirectProfile(uint32_t raw_version, bool is_trinity,
     } else if (abi_key == 0x1160u) {
         direct.capabilities |= AGC_DIRECT_CAP_SUSPEND_FINAL;
         direct.workload_has_sony_stream_table = !is_trinity;
-        direct.workload_requires_shadow_properties = !is_trinity;
     }
 
     if ((direct.capabilities & AGC_DIRECT_CAP_QUEUE) != 0) {

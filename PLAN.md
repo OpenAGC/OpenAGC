@@ -28,10 +28,13 @@ AMD PM4 packet ancestry overlap in useful ways.
   two 40-byte shadow descriptors, and Gn2/Gn3/Gn4 process properties. Require
   two identical passes before promotion.
 - After a successful FW 11.60 candidate, rerun the corresponding direct path
-  on FW 5.50 before enabling any capability. Do not generalize the recovered
-  Gn4 state to Trinity or neighboring firmware without matching SPRX evidence.
+  on FW 5.50 before enabling any capability. Corpus extraction now proves the
+  standard Gn2/Gn3/Gn4 constructor state on every exact active key from 6.00
+  through 12.70 and the reduced Gn2-only Trinity branch from 9.00 onward. This
+  is ABI evidence, not workload qualification; keep untested firmware gated.
 - Evidence and artifact hashes are recorded in
-  `analysis/fw1160_register_shadow_20260729.md`.
+  `analysis/fw1160_register_shadow_20260729.md` and
+  `analysis/agc_driver_shadow_facts.md`.
 
 ### Gfx1013 multi-viewport state
 

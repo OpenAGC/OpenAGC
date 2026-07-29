@@ -33,9 +33,13 @@ enabled, then:
 6. Names the copy, descriptor, and DDID ranges `SceAgcRegShadowCopy`,
    `SceAgcRegShadowInfo`, and `SceAgcDdid`.
 
-The Trinity branch does not execute the same Gn4 path, so OpenAGC gates this
-diagnostic state to exact firmware key `0x1160` on a standard console. No
-neighboring firmware inherits it without separate evidence.
+The Trinity branch does not execute the same Gn4 path. A subsequent extractor
+run across all 39 active driver images found this same standard Gn2/Gn3/Gn4
+contract on every exact key from `0x0600` through `0x1270`, while FW 9.00+
+Trinity carriers select a reduced Gn2-only branch. FW 3.20 through FW 5.50 use
+Gn2/Gn3 without Gn4. The complete evidence and reproducible boundary are in
+`analysis/agc_driver_shadow_facts.md`. This constructor evidence does not by
+itself hardware-qualify workload execution on neighboring firmware.
 
 ## Corrected ELF mapping
 
@@ -74,7 +78,7 @@ next payload; reboot before changing backend families.
 Build artifacts:
 
 - stage 14 SHA-256: `97b778f0c7fba7daaca99ebd0aa9f89494a19a5bdca644d87adf020d1643c10a`
-- stage 15 SHA-256: `7c9251642698cfc1f4c87ee68d8362b6b410c075ea41fd9d23d82845c7d4ac7e`
+- stage 15 SHA-256: `0200ff9b873a953652b858c33cb4c27655cf4897b336314f61aa7638254a683a`
 
 Stage 15 has no `libSceAgcDriver.sprx` dependency. Its `DT_NEEDED` set is
 limited to VideoOut, libkernel, libc, and libnet.

@@ -1026,6 +1026,13 @@ The host-generic implementation now has a tested model for:
   flushing and the stale timer. Do not repeat stage 14; reboot before stage 15,
   which remains the higher-risk shadow-property gate. See
   `analysis/fw1160_register_shadow_20260729.md`.
+  A reproducible scan of all 39 active driver SPRXs now proves that the
+  aperture, descriptor layout, and descriptor words are shared from 3.20
+  through 12.70. Standard profiles publish Gn2/Gn3 through 5.50 and add Gn4
+  from 6.00; FW 9.00+ Trinity carriers use a reduced Gn2-only branch. Runtime
+  profiles record these exact-key facts without enabling workload capability
+  or claiming untested hardware support. See
+  `analysis/agc_driver_shadow_facts.md`.
   The first `agc_fw1160_sony_workload.elf` was hardware-attempted after a clean
   reboot. It patched credentials before `dlopen`, loaded the matching FW 11.60
   module, resolved all required exports, matched the 18/12-dword sizes, and

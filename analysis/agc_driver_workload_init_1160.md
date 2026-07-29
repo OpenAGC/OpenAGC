@@ -77,5 +77,9 @@ register-shadow publication path. The corrected ABI, including an ELF
 file-offset/vaddr mapping error caught before hardware, is documented in
 `analysis/fw1160_register_shadow_20260729.md`. Stage 14 first isolates the
 previously partial 40-dword DCB cache flush. Stage 15 adds the recovered
-Gn2/Gn3/Gn4 state. Neither stage has been hardware-run yet, and neither changes
-the public fail-closed workload capability.
+Gn2/Gn3/Gn4 state. Stage 14 reproduced the stall despite the complete flush;
+do not repeat it. Corpus extraction subsequently proved the same standard
+Gn2/Gn3/Gn4 constructor contract on exact FW 6.00–12.70 keys and the reduced
+Gn2-only Trinity branch, as documented in
+`analysis/agc_driver_shadow_facts.md`. Stage 15 remains an isolated FW 11.60
+hardware gate and does not change the public fail-closed workload capability.

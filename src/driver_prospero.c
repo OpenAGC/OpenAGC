@@ -889,11 +889,10 @@ int32_t agcProsperoRegisterGpuInfoProcessProperty(void)
     return AGC_OK;
 }
 
-/* Reproduce the standard-console FW 11.60 constructor's register-shadow
- * publication exactly. This remains a private qualification prerequisite;
- * the public workload capability stays disabled until the resulting packet
- * path completes twice on hardware. */
-int32_t agcProsperoRegisterWorkloadShadowProperties(void)
+/* Reproduce the standard-console Gn2/Gn3/Gn4 constructor publication exactly.
+ * The private stage-15 gate currently calls this only on FW 11.60; no public
+ * workload capability is inferred from the cross-firmware constructor data. */
+int32_t agcProsperoRegisterStandardShadowProperties(void)
 {
     AgcGcRegisterShadowDescriptor descriptors[2];
     uintptr_t driver_base;
@@ -903,7 +902,10 @@ int32_t agcProsperoRegisterWorkloadShadowProperties(void)
 
     if (!g_prospero.initialized || !g_prospero.mem_initialized)
         return AGC_ERROR_NOT_INITIALIZED;
-    if (!g_prospero.direct_profile.workload_requires_shadow_properties)
+    if (g_prospero.direct_profile.shadow_process_properties !=
+            (AGC_DIRECT_SHADOW_PROPERTY_GN2 |
+             AGC_DIRECT_SHADOW_PROPERTY_GN3 |
+             AGC_DIRECT_SHADOW_PROPERTY_GN4))
         return AGC_ERROR_NOT_SUPPORTED;
     if (g_prospero.shadow_properties_registered)
         return AGC_OK;

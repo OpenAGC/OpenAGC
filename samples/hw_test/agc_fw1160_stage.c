@@ -37,7 +37,7 @@ extern int32_t PS5_SYSV_ABI agcProsperoInitialize(void);
 extern int32_t PS5_SYSV_ABI agcProsperoInitializeInternalMemory(void);
 extern int32_t PS5_SYSV_ABI agcProsperoNotifyDefaultStates(uint32_t flags);
 extern int32_t agcProsperoRegisterGpuInfoProcessProperty(void);
-extern int32_t agcProsperoRegisterWorkloadShadowProperties(void);
+extern int32_t agcProsperoRegisterStandardShadowProperties(void);
 extern int32_t PS5_SYSV_ABI agcProsperoSubmitDcb(
     const AgcCommandBufferSubmit *packet);
 extern int32_t PS5_SYSV_ABI agcProsperoSetupAsyncGraphics(uint32_t pipe_id);
@@ -335,7 +335,7 @@ int main(void)
         return 1;
     }
 #if AGC_FW1160_STAGE == 15
-    result = agcProsperoRegisterWorkloadShadowProperties();
+    result = agcProsperoRegisterStandardShadowProperties();
     printf("workload shadow properties=0x%08X\n", (unsigned)result);
     if (result != AGC_OK) {
         printf("stage 15: workload shadow properties FAIL\n");
