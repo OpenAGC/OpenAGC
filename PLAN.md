@@ -88,10 +88,12 @@ AMD PM4 packet ancestry overlap in useful ways.
   profile and bounded runner: R8, RG8, RGB10A2, R11G11B10, R32, RG32, and
   RGBA32. R8, RG8, RGB10A2, R11G11B10, and R32 passed twice on FW 11.60.
   RG32 passed once; its second verdict and both RGBA32 runs remain pending a
-  reboot because websrv stopped streaming bounded launches. Display-backed
-  RGBA8/BGRA8 and sRGB variants remain deferred
-  until their VideoOut-owned oracle buffers are replaced with real headless
-  allocations. See `analysis/fw1160_color_format_gate_matrix_20260730.md`.
+  reboot because websrv stopped streaming bounded launches. RGBA8/BGRA8 UNORM
+  and sRGB variants now have real headless flexible-memory targets, unchanged
+  native oracles, exact FW 11.60 artifacts, and exact FW 5.50 regression
+  mirrors. Run them after RG32/RGBA32 on the clean boot. See
+  `analysis/fw1160_color_format_gate_matrix_20260730.md` and
+  `analysis/fw1160_rgba8_srgb_headless_gate_audit_20260730.md`.
 - The first uncompressed depth/stencil tier is also built for exact FW 11.60:
   D16, S8-only, then D16+S8. Each target is headless, retains the exact native
   four-draw readback oracle under the current full-rectangle viewport, and

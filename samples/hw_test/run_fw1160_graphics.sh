@@ -49,6 +49,20 @@ case "$EXPECTED_TARGET" in
         grep -Eq '^\[R11G11B10\] Packed color FNV64:.*: PASS$' \
             "$output_file" || exit 1
         ;;
+    RGBA8_UNORM|BGRA8_UNORM)
+        grep -q '^\[Vertex\] Interleaved buffer fetch: PASS$' \
+            "$output_file" || exit 1
+        grep -q '^\[Index\] Bound u16 indexed draw: PASS$' \
+            "$output_file" || exit 1
+        grep -q '^\[Texture\] gfx1013 image + bilinear sampler: PASS$' \
+            "$output_file" || exit 1
+        ;;
+    RGBA8_SRGB|BGRA8_SRGB)
+        grep -Eq '^\[sRGB\] transfer-mismatch=0 converted-channels=[1-9][0-9]*: PASS$' \
+            "$output_file" || exit 1
+        grep -q '^\[sRGB\] changed=[1-9][0-9]* coverage-mismatch=0 alpha-mismatch=0$' \
+            "$output_file" || exit 1
+        ;;
     *)
         grep -Fq "GFX1013 $EXPECTED_TARGET target: PASS" \
             "$output_file" || exit 1

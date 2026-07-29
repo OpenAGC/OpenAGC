@@ -409,10 +409,13 @@ headless artifacts. R8, RG8, RGB10A2, R11G11B10, and R32 each passed twice on
 standard raw firmware `0x11600005`, with reproduced native hashes/histograms,
 1-3 ms fences, clean shutdowns, and no residual process. RG32 passed once;
 its second pass and both RGBA32 runs remain pending after websrv transport
-stopped returning bounded verdicts. RGBA8/BGRA8 and sRGB variants remain
-outside the headless matrix because their current fixtures depend on
-VideoOut-owned buffers; those oracles will not be weakened merely to compile.
-See `analysis/fw1160_color_format_gate_matrix_20260730.md`.
+stopped returning bounded verdicts. RGBA8/BGRA8 UNORM and sRGB now use real
+headless flexible-memory targets. The sRGB pair preserves distinct aligned
+UNORM-control and sRGB-result surfaces plus exact transfer, coverage, alpha,
+conversion-count, and native-hash checks. Exact FW 11.60 and FW 5.50 artifacts
+cross-build without warnings; hardware verdicts remain pending. See
+`analysis/fw1160_color_format_gate_matrix_20260730.md` and
+`analysis/fw1160_rgba8_srgb_headless_gate_audit_20260730.md`.
 
 Exact `0x0550` modern headless mirrors for R16, RG16, R8, RG8, RGB10A2,
 R11G11B10, R32, RG32, and RGBA32 are cross-built without warnings. The shared

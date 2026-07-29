@@ -18,6 +18,10 @@ VideoOut memory:
 | 7 | `R32_FLOAT` | `47d4b25dcd174ff5859073c0221137bf6ecd00b3a76aff91a4ad7e05d178349d` |
 | 8 | `RG32_FLOAT` | `02124e8e89fecb91f5be5c47e3182f009829ce1a5b22ea6055d1b607171a202a` |
 | 9 | `RGBA32_FLOAT` | `1d7b26afc2bee20119c6f178aa630d24cc028b13f377a71f66e6708088dd2952` |
+| 10 | `RGBA8_UNORM` | `09c509f3dac6f6864ed53caf969a0046a33e4f7ad9f5cafe872b8a36b2bef406` |
+| 11 | `BGRA8_UNORM` | `37ed666df195750e32308819a372f5256b4f58caace8a01cb6f7daa0a5e0a840` |
+| 12 | `RGBA8_SRGB` | `92dcd0cb29926a2c1d9aaf24efe3eda6c1c2548225b739a98092d05fa80a1a94` |
+| 13 | `BGRA8_SRGB` | `f73f67b5ae326a4af2bb1ad9dfec4b056f7ee8535e2cf69c7493b3354b40f2bb` |
 
 Every artifact forces firmware ABI key `0x1160`, rejects Trinity hardware,
 uses version-12 defaults through the normal runtime, waits on the bounded EOP
@@ -38,13 +42,15 @@ R32/RG32/RGBA32, RGB10A2, and R11G11B10. CPU preview conversion remains part of
 the FW 5.50 display fixtures but is not compiled or called by headless gates.
 No GPU validation rule was removed.
 
-## Deferred display-backed formats
+## Headless RGBA8 and sRGB formats
 
-`RGBA8_UNORM`, `BGRA8_UNORM`, `RGBA8_SRGB`, and `BGRA8_SRGB` currently use
-VideoOut-owned buffers as one or both native oracle targets. Headless mode
-intentionally leaves those pointers null. They are not included in this matrix
-until the fixture allocates equivalent flexible-memory control and result
-targets. Merely compiling around the null buffers would weaken the oracle.
+`RGBA8_UNORM`, `BGRA8_UNORM`, `RGBA8_SRGB`, and `BGRA8_SRGB` now use real
+flexible-memory targets rather than VideoOut-owned buffers. The sRGB variants
+reserve separate aligned UNORM-control and sRGB-result spans and retain the
+complete transfer, coverage, alpha, conversion-count, and native-hash oracle.
+Exact FW 5.50 mirrors are also built. See
+`fw1160_rgba8_srgb_headless_gate_audit_20260730.md` for layouts, hashes, and
+the guarded hardware order.
 
 ## Hardware policy
 

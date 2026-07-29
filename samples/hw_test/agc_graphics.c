@@ -674,11 +674,11 @@ static void graphics_process_exit(void)
 static uint32_t *cb_buffer = NULL;  /* Command buffer in flexible memory */
 
 static bool allocate_display_buffers(GraphicsTest *test) {
-#if !AGC_GRAPHICS_HEADLESS
     test->buffer_stride = align_up(
         (size_t)test->width * test->height * BYTES_PER_PIXEL,
         DIRECT_MEMORY_ALIGNMENT);
 
+#if !AGC_GRAPHICS_HEADLESS
     test->mapped_size = test->buffer_stride * BUFFER_COUNT;
 
     int res = sceKernelAllocateDirectMemory(
@@ -811,8 +811,14 @@ static bool allocate_display_buffers(GraphicsTest *test) {
     size_t headless_color_size = 0u;
     size_t msaa_color_size = 0u;
     size_t msaa_color_alignment = 1u;
-    size_t rt_size = (size_t)FP16_TARGET_WIDTH * FP16_TARGET_HEIGHT *
+    const size_t default_rt_size =
+        (size_t)FP16_TARGET_WIDTH * FP16_TARGET_HEIGHT *
         (AGC_VALIDATE_RGBA32_FLOAT ? 16u : sizeof(uint64_t));
+    const size_t srgb_rt_size = AGC_GRAPHICS_HEADLESS &&
+        (AGC_VALIDATE_RGBA8_SRGB || AGC_VALIDATE_BGRA8_SRGB) ?
+        test->buffer_stride * 2u : 0u;
+    size_t rt_size = default_rt_size > srgb_rt_size ?
+        default_rt_size : srgb_rt_size;
     size_t rt_alignment = 1u;
     size_t stencil_size = 0u;
     size_t stencil_alignment = 1u;
@@ -3036,11 +3042,11 @@ static const uint8_t kSrgbUpperBound[256] = {
     249, 249, 250, 250, 251, 251, 252, 252, 253, 253, 254, 254, 254, 255, 255, 255,
 };
 
-static bool validate_srgb_transfer(const GraphicsTest *test)
+static bool validate_srgb_transfer(
+    const uint32_t *linear, const uint32_t *srgb,
+    uint32_t width, uint32_t height)
 {
-    const uint32_t *linear = (const uint32_t *)test->buffers[0];
-    const uint32_t *srgb = (const uint32_t *)test->render_target;
-    const uint32_t pixels = test->width * test->height;
+    const uint32_t pixels = width * height;
     uint32_t changed = 0u;
     uint32_t coverage_mismatch = 0u;
     uint32_t alpha_mismatch = 0u;
@@ -3304,19 +3310,28 @@ int main(void) {
 #elif AGC_VALIDATE_RGBA8_SRGB || AGC_VALIDATE_BGRA8_SRGB
     const uint32_t swap = AGC_VALIDATE_BGRA8_SRGB ?
         AGC_GFX1013_SURFACE_SWAP_ALT : AGC_GFX1013_SURFACE_SWAP_STD;
+    void *linear_address = AGC_GRAPHICS_HEADLESS ?
+        test.render_target : test.buffers[0];
+    void *srgb_address = AGC_GRAPHICS_HEADLESS ?
+        (uint8_t *)test.render_target + test.buffer_stride :
+        test.render_target;
     RenderTargetConfig linear_target = {
-        test.buffers[0], test.width, test.height,
+        linear_address, test.width, test.height,
         AGC_GFX1013_COLOR_FORMAT_8_8_8_8,
         AGC_GFX1013_SURFACE_NUMBER_UNORM, swap,
         0u, 0u, AGC_VALIDATE_BGRA8_SRGB ?
-            "BGRA8 UNORM control" : "RGBA8 UNORM control"
+            (AGC_GRAPHICS_HEADLESS ?
+                "BGRA8_UNORM_CONTROL" : "BGRA8 UNORM control") :
+            (AGC_GRAPHICS_HEADLESS ?
+                "RGBA8_UNORM_CONTROL" : "RGBA8 UNORM control")
     };
     RenderTargetConfig srgb_target = {
-        test.render_target, test.width, test.height,
+        srgb_address, test.width, test.height,
         AGC_GFX1013_COLOR_FORMAT_8_8_8_8,
         AGC_GFX1013_SURFACE_NUMBER_SRGB, swap,
         0u, 0u, AGC_VALIDATE_BGRA8_SRGB ?
-            "BGRA8 SRGB" : "RGBA8 SRGB"
+            (AGC_GRAPHICS_HEADLESS ? "BGRA8_SRGB" : "BGRA8 SRGB") :
+            (AGC_GRAPHICS_HEADLESS ? "RGBA8_SRGB" : "RGBA8 SRGB")
     };
     printf("\n--- Step 4a: linear UNORM control draw ---\n");
     if (!dispatch_graphics(&test, &front, &back, &ps, &linear_target)) {
@@ -3328,12 +3343,17 @@ int main(void) {
         printf("FATAL: sRGB render-target draw failed\n");
         return 1;
     }
-    if (!validate_srgb_transfer(&test)) {
+    if (!validate_srgb_transfer(
+            (const uint32_t *)linear_address,
+            (const uint32_t *)srgb_address,
+            test.width, test.height)) {
         printf("FATAL: native packed-memory sRGB transfer failed\n");
         return 1;
     }
+#if !AGC_GRAPHICS_HEADLESS
     memcpy(test.buffers[0], test.render_target, test.buffer_stride);
     memcpy(test.buffers[1], test.render_target, test.buffer_stride);
+#endif
 #elif AGC_VALIDATE_R8_UNORM || AGC_VALIDATE_RG8_UNORM
     const uint32_t components = AGC_VALIDATE_RG8_UNORM ? 2u : 1u;
     RenderTargetConfig native_target = {
@@ -3434,34 +3454,42 @@ int main(void) {
 #endif
 #elif AGC_VALIDATE_RGBA8_STD
     RenderTargetConfig rgba8_target = {
-        test.buffers[0], test.width, test.height,
+        AGC_GRAPHICS_HEADLESS ? test.render_target : test.buffers[0],
+        test.width, test.height,
         AGC_GFX1013_COLOR_FORMAT_8_8_8_8,
         AGC_GFX1013_SURFACE_NUMBER_UNORM,
         AGC_GFX1013_SURFACE_SWAP_STD,
-        0u, 0u, "display RGBA8 standard swap"
+        0u, 0u, AGC_GRAPHICS_HEADLESS ?
+            "RGBA8_UNORM" : "display RGBA8 standard swap"
     };
     printf("\n--- Step 4: RGBA8 standard-swap draw ---\n");
     if (!dispatch_graphics(&test, &front, &back, &ps, &rgba8_target)) {
         printf("FATAL: RGBA8 standard-swap draw failed\n");
         return 1;
     }
+#if !AGC_GRAPHICS_HEADLESS
     memcpy(test.buffers[1], test.buffers[0],
            (size_t)test.width * test.height * BYTES_PER_PIXEL);
+#endif
 #elif AGC_VALIDATE_RGBA8_REFERENCE
     RenderTargetConfig rgba8_target = {
-        test.buffers[0], test.width, test.height,
+        AGC_GRAPHICS_HEADLESS ? test.render_target : test.buffers[0],
+        test.width, test.height,
         AGC_GFX1013_COLOR_FORMAT_8_8_8_8,
         AGC_GFX1013_SURFACE_NUMBER_UNORM,
         AGC_GFX1013_SURFACE_SWAP_ALT,
-        0u, 0u, "display RGBA8"
+        0u, 0u, AGC_GRAPHICS_HEADLESS ?
+            "BGRA8_UNORM" : "display RGBA8"
     };
     printf("\n--- Step 4: RGBA8 reference draw ---\n");
     if (!dispatch_graphics(&test, &front, &back, &ps, &rgba8_target)) {
         printf("FATAL: RGBA8 reference draw failed\n");
         return 1;
     }
+#if !AGC_GRAPHICS_HEADLESS
     memcpy(test.buffers[1], test.buffers[0],
            (size_t)test.width * test.height * BYTES_PER_PIXEL);
+#endif
 #else
     RenderTargetConfig fp16_target = {
         test.render_target, FP16_TARGET_WIDTH, FP16_TARGET_HEIGHT,
