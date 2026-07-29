@@ -1741,9 +1741,9 @@ Acceptance criteria:
 
 ### Priority 3: Additional firmware families
 
-- ⛔ FW 11.60 direct qualification is hardware-blocked. The 2026-07-29 run on
-  standard hardware froze the UI and ended in an automatic console power-off.
-  Runtime selection and `deploy_agc_fw1160` now fail closed.
+- 🚧 FW 11.60 direct qualification is proceeding through isolated gates after
+  the original 2026-07-29 run froze the UI and powered the console off. Runtime
+  selection and the bundled `deploy_agc_fw1160` target remain fail-closed.
 - Before reconsidering FW 11.60, design a reviewed probe that runs exactly one
   operation per boot, uses unbuffered logging, and launches the process-cleanup
   ELF before every payload. Start with version/model detection only; do not
@@ -1755,6 +1755,12 @@ Acceptance criteria:
   raw `0x11600005` and SoC `0x00840f60`.
 - ✅ FW 11.60 stage 2 passed twice: exact internal-memory mappings, DDID
   initialization, and shutdown completed without a freeze or power-off.
+- ✅ FW 11.60 stage 3 passed twice: the shared standard-group submit policy
+  executed a five-dword `WRITE_DATA` marker after 50 ms and 0 ms, then released
+  its memory and shut down cleanly. The same revision passed FW 5.50's complete
+  init/multi-DCB/wait/async/queue/suspend/workload regression lifecycle first.
+- Next isolate async setup, authenticated queue lifecycle, and suspend-point
+  submission as separate two-pass stages.
 - Qualify later gates individually only after the preceding gate passes twice.
   Compute, graphics, and display remain prohibited until the full direct
   lifecycle has passed this staged ladder.

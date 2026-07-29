@@ -66,10 +66,15 @@ On the same standard FW 11.60 console (`0x11600005`, SoC `0x00840f60`):
 - Stage 2 passed twice. All nine internal allocations landed at the same exact
   hinted addresses as FW 5.50/Sony's carrier, DDID initialization completed,
   and shutdown returned `AGC_OK` without a freeze or power-off.
+- Stage 3 passed twice. The shared standard-group CLOSE/trailing-NOP policy
+  submitted one five-dword `WRITE_DATA` DCB; the GPU wrote `0x1160cafe` after
+  50 ms and 0 ms respectively. Flexible-memory release and direct shutdown
+  returned success in both runs.
 - Websrv retained each foreground HTTP pipe until the 20-second client timeout,
   but the cleanup check before the next run found no stale `eboot.elf`.
 
-This hardware result validates the corrected initialization and internal-memory
-path through clean teardown. It strongly localizes the original power-off to
-the corrected pre-submit mapping defects, though it cannot distinguish which
-individual defect was causal. No GPU operation is qualified yet.
+This hardware result validates corrected initialization, internal memory, and
+basic graphics-ring submission through clean teardown. It strongly localizes
+the original power-off to the corrected pre-submit mapping defects, though it
+cannot distinguish which individual defect was causal. Async setup, queue, and
+suspend operations remain isolated pending gates.

@@ -1508,7 +1508,8 @@ The firmware-parameterized conformance result was 1/1 in two seconds
 (`20260729T091752Z-72225`). This supersedes the inconclusive
 2026-07-26 run performed after a contaminating Sony-module probe.
 
-FW 11.60 remains exact-RE-qualified but is hardware-blocked. On 2026-07-29 a
+FW 11.60 remains exact-RE-qualified and runtime-blocked while staged hardware
+requalification proceeds. On 2026-07-29 a
 standard PS5 reported raw `0x11600005`; after model detection was corrected to
 the exact `hw.sce_main_socid` predicate, the direct probe froze the UI and the
 console powered itself off before a buffered operation log was recovered.
@@ -1526,8 +1527,12 @@ multi-DCB markers, wait64, async, queue, suspend, and workload lifecycle
 FW 11.60 staged requalification then passed identity-only stage 0 twice and
 corrected init-plus-shutdown stage 1 twice. The console remained responsive and
 powered on. Isolated stage 2 then passed twice with all nine internal regions at
-Sony's exact hinted addresses and clean shutdown. Every GPU operation remains
-blocked pending its own isolated two-pass gate.
+Sony's exact hinted addresses and clean shutdown. Isolated stage 3 passed twice:
+submit16 returned `AGC_OK`, its five-dword `WRITE_DATA` DCB wrote the expected
+`0x1160cafe` marker after 50 ms and 0 ms, flexible memory released, and direct
+shutdown succeeded. The shared standard-firmware CLOSE/trailing-NOP policy also
+passed the complete FW 5.50 regression lifecycle immediately beforehand. Async,
+queue, and suspend remain blocked pending their own isolated two-pass gates.
 
 ## Next RE Tasks
 
