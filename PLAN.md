@@ -95,9 +95,11 @@ AMD PM4 packet ancestry overlap in useful ways.
   `analysis/fw1160_color_format_gate_matrix_20260730.md` and
   `analysis/fw1160_rgba8_srgb_headless_gate_audit_20260730.md`.
   FW 11.60 websrv stopped returning foreground stdout even though the payload
-  self-terminated cleanly. Exact file-backed variants and a stale-proof FTP
-  polling runner are built for RG32, RGBA32, and the four RGBA8 gates; use the
-  same logged artifact for both qualifying passes.
+  self-terminated cleanly, then stopped entering `main`. An exact logged RG32
+  daemon-loader probe passed the full GPU, readback, shutdown, and final
+  verdict. File-backed variants and a stale-proof FTP polling runner now use
+  that headless-only loader path for RG32, RGBA32, and the four RGBA8 gates;
+  use the same logged artifact for both qualifying passes.
 - The first uncompressed depth/stencil tier is also built for exact FW 11.60:
   D16, S8-only, then D16+S8. Each target is headless, retains the exact native
   four-draw readback oracle under the current full-rectangle viewport, and

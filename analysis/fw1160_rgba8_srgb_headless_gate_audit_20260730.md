@@ -54,8 +54,11 @@ verdict, and compile without warnings.
 
 Because FW 11.60 websrv stopped returning stdout pipes after repeated launches,
 the following otherwise-identical variants write their complete line-buffered
-verdict to a fresh FTP-readable file. The runner deletes stale evidence and
-requires the final verdict before applying every normal oracle:
+verdict to a fresh FTP-readable file. The foreground launcher subsequently
+stopped entering `main`, while an RG32 daemon-loader probe passed every GPU and
+shutdown oracle. The runner therefore uses daemon mode only for these headless,
+self-terminating logged artifacts, deletes stale evidence, and requires the
+fresh final verdict before applying every normal oracle:
 
 | File-backed FW 11.60 target | SHA-256 |
 | --- | --- |

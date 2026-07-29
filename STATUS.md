@@ -425,6 +425,12 @@ polls FTP for a fresh final verdict, and applies the unchanged target-specific
 oracles. This is a transport-only fallback; GPU streams and validation remain
 identical.
 
+The foreground loader later stopped entering the logged ELF at all. The same
+exact RG32 artifact launched headlessly through websrv daemon mode and passed:
+2470-dword submit, immediate fence, 255,744 complete values, zero invalid,
+FNV64 `0x806171be9908c276`, clean shutdown, and final PASS. Logged headless
+gates now use this proven daemon transport; display-backed tests do not.
+
 Exact `0x0550` modern headless mirrors for R16, RG16, R8, RG8, RGB10A2,
 R11G11B10, R32, RG32, and RGBA32 are cross-built without warnings. The shared
 runner is firmware-selectable and retains each target-specific native oracle.

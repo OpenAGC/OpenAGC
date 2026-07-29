@@ -102,13 +102,22 @@ self-terminated without residue, but its foreground stdout pipe returned no
 bytes. The run cannot count without its oracle log. A bounded file-backed mode
 now redirects only the pending headless artifacts to
 `/data/homebrew/openagc_fw1160_graphics/result.log`. The runner deletes that
-file before every launch, starts the foreground payload with `pipe=0`, polls
-FTP for a fresh final `Graphics result:` line, and then applies the same exact
+file before every launch, starts the headless payload through the daemon loader
+with `pipe=0`, polls FTP for a fresh final `Graphics result:` line, and then
+applies the same exact
 log validators. A launch-request timeout is tolerated only inside this mode
 because the fresh final file is the independent completion proof; any other
 HTTP error remains fatal. A stale, missing, or partial file cannot qualify a
 run. The file is opened only after the normal GPU credential transition so the
 homebrew process has the same `/data` access used by the loader.
+
+A controlled RG32 daemon-loader probe captured the complete verdict: exact
+profile, 2470-dword DCB, immediate EOP fence, 255,744 complete samples, zero
+invalid samples, FNV64 `0x806171be9908c276`, driver shutdown PASS, and final
+PASS. This proves that the boot's GPU and direct backend remain healthy while
+the foreground launcher is wedged. Only headless, self-terminating, file-backed
+gates use daemon mode; display-backed qualification still requires foreground
+websrv completion.
 
 | File-backed target | Artifact SHA-256 |
 | --- | --- |
