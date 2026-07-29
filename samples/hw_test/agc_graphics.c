@@ -53,6 +53,10 @@
 #define AGC_SELF_TERMINATE 0
 #endif
 
+#ifndef AGC_GRAPHICS_VARIANT_NAME
+#define AGC_GRAPHICS_VARIANT_NAME "baseline"
+#endif
+
 /* Embedded shader binaries */
 #ifndef AGC_NGG_AMPLIFY
 #define AGC_NGG_AMPLIFY 0
@@ -3265,6 +3269,7 @@ int main(void) {
     setvbuf(stdout, NULL, _IOLBF, 0);
     printf("Result log: %s\n", AGC_RESULT_LOG_PATH);
 #endif
+    printf("Graphics variant: %s\n", AGC_GRAPHICS_VARIANT_NAME);
 
     printf("\n--- Step 1: AGC initialization ---\n");
     if (!init_agc()) return 1;

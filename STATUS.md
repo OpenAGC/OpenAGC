@@ -490,6 +490,15 @@ FP16 pixels, identical FNV64 `0x4a40c2eb4f12bc26`, clean shutdowns, and no
 residual process. The current-source FW 5.50 mirror regression remains
 pending; see `analysis/fw1160_indexed_indirect_gate_plan_20260730.md`.
 
+Exact headless gates are now prepared for the three FW 5.50-qualified NGG
+geometry variants: amplification, line topology, and multiple invocations.
+The sample emits an explicit variant identity into its file-backed verdict and
+the guarded runner requires that exact identity in addition to the existing
+ABI, fence, FP16, shutdown, and final-result checks. Logged FW 11.60 artifacts
+and current-source FW 5.50 mirrors cross-build without warnings; hardware
+execution remains pending. See
+`analysis/fw1160_ngg_geometry_gate_plan_20260730.md`.
+
 Exact next-tier ordinary D16/HTILE and D16 HTILE expclear artifacts now build
 for logged FW 11.60 and mirrored headless FW 5.50 profiles. The shared depth
 runner has detached cleanup, optional stale-proof file verdicts, gate-specific

@@ -8,6 +8,7 @@ GRAPHICS_ARTIFACT=${GRAPHICS_ARTIFACT:?set GRAPHICS_ARTIFACT}
 PROCESS_CLEANUP_ELF=${PROCESS_CLEANUP_ELF:?set PROCESS_CLEANUP_ELF}
 EXPECTED_TARGET=${EXPECTED_TARGET:-offscreen FP16}
 EXPECTED_DRAW_MODE=${EXPECTED_DRAW_MODE:-}
+EXPECTED_VARIANT=${EXPECTED_VARIANT:-}
 EXPECTED_FW_ABI=${EXPECTED_FW_ABI:-0x1160}
 REMOTE_BASE=/data/homebrew/openagc_fw${EXPECTED_FW_ABI#0x}_graphics
 
@@ -70,6 +71,9 @@ cat "$output_file"
 grep -q "Runtime profile FW ABI $EXPECTED_FW_ABI: PASS" "$output_file" || exit 1
 grep -q "GPU completion fence reached" "$output_file" || exit 1
 grep -Fq "Render target $EXPECTED_TARGET at" "$output_file" || exit 1
+if [ -n "$EXPECTED_VARIANT" ]; then
+    grep -Fq "Graphics variant: $EXPECTED_VARIANT" "$output_file" || exit 1
+fi
 if [ -n "$EXPECTED_DRAW_MODE" ]; then
     grep -Fq "[Draw] $EXPECTED_DRAW_MODE: 0x00000000" \
         "$output_file" || exit 1
