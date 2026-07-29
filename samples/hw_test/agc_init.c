@@ -16,6 +16,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <signal.h>
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
@@ -48,6 +49,10 @@
 
 #ifndef AGC_EXPECT_WORKLOAD
 #define AGC_EXPECT_WORKLOAD 1
+#endif
+
+#ifndef AGC_SELF_TERMINATE
+#define AGC_SELF_TERMINATE 0
 #endif
 
 /* Private hardware-test diagnostic; not part of the installed public ABI. */
@@ -244,6 +249,9 @@ int main(void) {
     bool queue_contract_ok = false;
     bool suspend_ok = false;
     bool workload_ok = false;
+    bool submit_memory_release_ok = false;
+    bool shutdown_ok = false;
+    bool success;
     AgcDriverRuntimeDiagnostics runtime_diag;
     SceAgcCb cb;
 
@@ -617,6 +625,20 @@ int main(void) {
                workload_ok ? "PASS" : "FAIL");
     }
 
+    /* --- Step 11: Release sample memory and shut down the public backend. --- */
+    printf("[11] release submit memory...\n");
+    submit_memory_release_ok = munmap(submit_memory, 0x4000u) == 0;
+    printf("    result: %s\n", submit_memory_release_ok ? "PASS" : "FAIL");
+
+    printf("[12] agcDriverShutdown()...\n");
+    err = agcDriverShutdown();
+    shutdown_ok = err == AGC_OK;
+    printf("    result: 0x%08X (%s)\n", (unsigned)err, errstr(err));
+
+    success = profile_ok && defaults_ok && dcb_err == AGC_OK && wait64_ok &&
+        async_ok && queue_contract_ok && suspend_ok && workload_ok &&
+        submit_memory_release_ok && shutdown_ok;
+
     /* --- Summary --- */
     printf("\n=== Summary ===\n");
     printf("  GPU credentials:   %s\n",
@@ -635,9 +657,18 @@ int main(void) {
            queue_contract_ok ? "PASS" : "FAILED");
     printf("  Suspend point:     %s\n", suspend_ok ? "PASS" : "FAILED");
     printf("  Workload contract: %s\n", workload_ok ? "PASS" : "FAILED");
+    printf("  Submit memory:     %s\n",
+           submit_memory_release_ok ? "released" : "FAILED");
+    printf("  Driver shutdown:   %s\n", shutdown_ok ? "PASS" : "FAILED");
     printf("=== Done ===\n");
+    printf("Probe result: %s\n", success ? "PASS" : "FAIL");
+    fflush(stdout);
+    fflush(stderr);
 
-    return (profile_ok && defaults_ok && dcb_err == AGC_OK && wait64_ok &&
-            async_ok && queue_contract_ok && suspend_ok && workload_ok)
-        ? 0 : 1;
+#if AGC_SELF_TERMINATE
+    kill(getpid(), SIGKILL);
+    _exit(success ? 0 : 1);
+#else
+    return success ? 0 : 1;
+#endif
 }

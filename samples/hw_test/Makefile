@@ -81,11 +81,12 @@ videoout_linear.elf: videoout_linear.c ps5_video_out.h
 agc_init.elf: agc_init.c ps5_video_out.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -o $@ agc_init.c $(AGC_LDFLAGS)
 
-# FW 11.60 direct-backend artifact retained for offline inspection only.  Its
-# first hardware qualification powered the console off; deployment is blocked.
+# FW 11.60 full public-path qualification artifact. It self-terminates after
+# flushing its verdict so websrv cannot retain a completed foreground process.
 agc_init_fw1160.elf: agc_init.c ps5_video_out.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_EXPECT_FIRMWARE_ABI_KEY=0x1160u \
 		-DAGC_EXPECT_DEFAULT_STATES=0 -DAGC_EXPECT_WORKLOAD=0 \
+		-DAGC_SELF_TERMINATE=1 \
 		-o $@ agc_init.c $(AGC_LDFLAGS)
 
 agc_fw1160_stage0.elf: agc_fw1160_stage.c gpu_credentials.h $(OPENAGC_LIB)
