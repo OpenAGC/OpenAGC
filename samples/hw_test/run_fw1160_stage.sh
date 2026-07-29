@@ -19,6 +19,7 @@ curl -sS --fail --ftp-create-dirs -T "$PROCESS_CLEANUP_ELF" \
     "ftp://$PS5_HOST:2121/data/homebrew/process_cleanup/eboot.elf" || exit 1
 curl -sS --max-time 20 \
     "http://$PS5_HOST:8080/hbldr?pipe=1&daemon=0&path=/data/homebrew/process_cleanup/eboot.elf" || exit 1
+sleep 2
 
 curl -sS --fail --ftp-create-dirs -T "$STAGE_ARTIFACT" \
     "ftp://$PS5_HOST:2121$REMOTE_BASE/eboot.elf" || exit 1
