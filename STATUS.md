@@ -983,12 +983,17 @@ The host-generic implementation now has a tested model for:
   both standard and Trinity models. `agc_fw1160_stage11.elf` is retained only
   as a bounded requalification gate after additional registered-stream state
   is recovered; do not rerun it unchanged.
-  Offline wrapper recovery now proves Sony appends DCB/ACB workload packets to
-  a caller-owned cursor instead of submitting active and complete separately.
-  `agc_fw1160_stage12.elf` is the new single-submit gate: registered stream 1,
-  active → marker A → complete → marker B in one 40-dword DCB. It is built but
-  remains hardware-pending; the capability stays disabled until two clean
-  passes and a subsequent FW 5.50 regression.
+  Offline wrapper recovery proves Sony appends DCB/ACB workload packets to a
+  caller-owned cursor instead of submitting active and complete separately.
+  `agc_fw1160_stage12.elf` tested that exact single-submit form: registered
+  stream 1, active → marker A → complete → marker B in one 40-dword DCB. The
+  submit returned `AGC_OK`, but neither marker verdict nor shutdown followed
+  and the PS5 UI became unresponsive. The cleanup ELF removed the stale
+  payload, after which ps5debug-NG confirmed no matching `eboot.elf`. Do not
+  rerun stage 12 unchanged. The remaining blocker is Sony driver/module
+  initialization or GPU state beyond the proven process property, table
+  address, packet bytes, and inline lifecycle; recover it offline before a new
+  gate. The capability remains disabled.
   All 39 active Sony drivers are now verified to share that nine-dword
   multi-argument contract, with 18/12-dword maximum reservations. Other
   profiles remain fail-closed until their GPU-info subregion selection is

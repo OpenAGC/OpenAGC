@@ -608,14 +608,19 @@ state. The FW 11.60 workload capability is disabled again. Next RE must recover
 the missing registered-stream state or lifecycle beyond the already proven
 process property, address table, and packet bytes; do not rerun stage 11
 unchanged.
-The recovered `libSceAgc` cursor wrappers show that the missing lifecycle is
+The recovered `libSceAgc` cursor wrappers show that Sony's lifecycle is
 caller-owned and inline: DCB control 0, ACB control 1, with active and complete
-appended to one command stream rather than separately submitted. Stage 12 is
-the bounded requalification gate for that distinct sequence. It registers
-stream 1, builds active → marker A → complete → marker B in one 40-dword DCB,
-submits exactly once, and requires both markers plus clean unregister, memory
-release, shutdown, and self-termination. It must pass twice before any
-FW 11.60 workload capability is reconsidered.
+appended to one command stream rather than separately submitted. Stage 12
+tested that distinct sequence by registering stream 1 and building active →
+marker A → complete → marker B in one 40-dword DCB. The single submit returned
+`AGC_OK`, but neither marker verdict nor shutdown was reached and the PS5 UI
+became unresponsive. The cleanup ELF removed the stale payload and ps5debug-NG
+confirmed that no `eboot.elf` remained. Do not rerun stage 12 unchanged.
+FW 11.60 workload remains disabled. Next, recover the Sony driver/module
+initialization that precedes workload use—particularly GPU/register enable
+state or kernel operations beyond the already proven process property, stream
+table address, packet bytes, and inline cursor lifecycle—before constructing a
+new isolated gate. Reboot the console before that future GPU test.
 
 The Sony workload contract itself is recovered for all active firmware:
 seven active-wrapper and three complete-wrapper groups converge on the same
