@@ -308,7 +308,7 @@ make test
 Current expected host result:
 
 ```text
-4080 passed, 0 failed
+5113 passed, 0 failed
 ```
 
 ### PS5

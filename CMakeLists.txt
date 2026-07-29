@@ -48,6 +48,7 @@ set(OPENAGC_SOURCES
     src/driver_ops.c
     src/driver_registry.c
     src/driver_sony_exports.c
+    src/agc_workload_packet.c
 )
 
 # Platform-specific sources
@@ -110,6 +111,7 @@ if(OPENAGC_BUILD_TESTS)
         tests/test_registers.c
         tests/test_sony_exports.c
         tests/test_driver_registry.c
+        tests/test_workload_packet.c
         tests/test_videoout.c
     )
     target_link_libraries(openagc_tests PRIVATE openagc)

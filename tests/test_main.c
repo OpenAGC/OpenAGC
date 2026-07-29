@@ -23,6 +23,7 @@ void test_suite_register_defaults(void);
 void test_suite_registers(void);
 void test_suite_sony_exports(void);
 void test_suite_driver_registry(void);
+void test_suite_workload_packet(void);
 void test_suite_videoout(void);
 
 int main(void) {
@@ -43,6 +44,7 @@ int main(void) {
     test_suite_registers();
     test_suite_sony_exports();
     test_suite_driver_registry();
+    test_suite_workload_packet();
     test_suite_videoout();
 
     TEST_SUMMARY();

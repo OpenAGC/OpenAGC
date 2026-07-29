@@ -85,7 +85,7 @@ agc_init.elf: agc_init.c ps5_video_out.h $(OPENAGC_LIB)
 # flushing its verdict so websrv cannot retain a completed foreground process.
 agc_init_fw1160.elf: agc_init.c ps5_video_out.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_EXPECT_FIRMWARE_ABI_KEY=0x1160u \
-		-DAGC_EXPECT_DEFAULT_STATES=1 -DAGC_EXPECT_WORKLOAD=0 \
+		-DAGC_EXPECT_DEFAULT_STATES=1 -DAGC_EXPECT_WORKLOAD=1 \
 		-DAGC_SELF_TERMINATE=1 \
 		-o $@ agc_init.c $(AGC_LDFLAGS)
 

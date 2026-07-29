@@ -586,10 +586,11 @@ The registration blocker is now resolved at the ABI level: FW 5.50 and FW
 only maintains a parallel 32-byte userspace descriptor and bitmask. The exact
 18-dword active and 12-dword complete standalone-buffer forms, including their
 private `0x79`/`WRITE_DATA` prefixes, are recorded in
-`analysis/agc_driver_workload_facts.md`. The next gate is a bounded direct
-adapter using an OpenAGC-owned stream slot, host packet fixtures, and the
-existing ordered hardware marker; the capability remains disabled until that
-marker passes twice on FW 11.60.
+`analysis/agc_driver_workload_facts.md`. The bounded direct adapter is now
+implemented for standard-PS5 FW 11.60 using OpenAGC-owned stream slot 1 and
+separate 18/12-dword DCBs; exact host fixtures pass. The existing ordered
+hardware marker is still the promotion gate, and the adapter must pass it twice
+before FW 11.60 workload parity is considered qualified.
 
 The Sony workload contract itself is recovered for all active firmware:
 seven active-wrapper and three complete-wrapper groups converge on the same
@@ -800,7 +801,7 @@ Implemented and host-tested:
 Current expected host test result:
 
 ```text
-5097 passed, 0 failed
+5113 passed, 0 failed
 ```
 
 ## Phase 0: RE Groundwork

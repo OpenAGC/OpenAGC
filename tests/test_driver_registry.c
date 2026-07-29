@@ -146,7 +146,7 @@ static void test_direct_operation_profiles(void)
     TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_HS_OFFCHIP) != 0,
         "FW 11.60 HS-offchip wrapper enabled");
     TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_WORKLOAD) == 0,
-        "FW 11.60 rejects the stalled three-dword workload extension");
+        "FW 11.60 Trinity remains outside the standard workload-table gate");
     TEST_ASSERT_EQ(agcPm4Header3Sub(
         AGC_PM4_OP_SET_WORKLOAD, AGC_PM4_SUB_WORKLOAD_BEGIN, 3u),
         0xC0011E80u,
@@ -163,6 +163,14 @@ static void test_direct_operation_profiles(void)
         "FW 11.60 TF-ring uses 0x80108128, not final suspend");
     TEST_ASSERT_EQ(profile.hs_offchip_ioctl, AGC_GC_IOCTL_SET_HS_OFFCHIP,
         "FW 11.60 HS-offchip uses 0xc010812c, not operation 0x2d");
+
+    TEST_ASSERT(agcProsperoBuildDirectProfile(
+        0x11600000u, false, &profile),
+        "standard-PS5 FW 11.60 direct profile builds");
+    TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_WORKLOAD) != 0,
+        "standard-PS5 FW 11.60 enables the exact Sony workload adapter");
+    TEST_ASSERT(profile.workload_uses_sony_stream_packet,
+        "FW 11.60 selects the registered-stream packet contract");
 
     TEST_ASSERT(agcProsperoBuildDirectProfile(
         0x12200000u, false, &profile), "FW 12.20 submit profile builds");

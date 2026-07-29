@@ -41,6 +41,7 @@
 #include "game_compat_internal.h"
 #include "driver_ops.h"
 #include "driver_registry.h"
+#include "agc_workload_packet.h"
 #include "agc_types.h"
 #include "agc_error.h"
 #include "agc_ioctl.h"
@@ -176,6 +177,9 @@ typedef struct {
     AgcProsperoRegion   multi_trailer; /* payload-context deferred-IB trailer */
     AgcProsperoRegion   primary_defaults;
     AgcProsperoRegion   internal_defaults;
+    AgcProsperoRegion   workload_stream_table;
+    AgcProsperoRegion   workload_active_dcb;
+    AgcProsperoRegion   workload_complete_dcb;
 } AgcProsperoContext;
 
 static AgcProsperoContext g_prospero = {
@@ -499,6 +503,19 @@ static int32_t agcProsperoCarveSubRegion(
     return AGC_OK;
 }
 
+static void agcProsperoFlushRange(const void *address, size_t size)
+{
+    const uintptr_t start = (uintptr_t)address;
+    const uintptr_t end = start + size;
+    uintptr_t cursor = start & ~(uintptr_t)63u;
+
+    while (cursor < end) {
+        clflush((u_long)cursor);
+        cursor += 64u;
+    }
+    mfence();
+}
+
 /* DDID sub-region offsets for default-state blobs and DCB scratch.
  * SceGnmDdid is 0xFC000 (1008 KB). The primary defaults blob needs
  * ~262 KB (127 groups), the internal defaults blob needs ~46 KB (22 groups).
@@ -510,6 +527,11 @@ static int32_t agcProsperoCarveSubRegion(
 #define AGC_DDID_INTERNAL_OFFSET  AGC_DDID_PRIMARY_OFFSET + AGC_DDID_PRIMARY_SIZE
 #define AGC_DDID_MULTI_TRAILER_SIZE 64
 #define AGC_DDID_DCB_OFFSET       0xFC000 - 16  /* last 16 bytes for DCB scratch */
+#define AGC_DDID_WORKLOAD_ACTIVE_OFFSET   (0xFC000u - 0x100u)
+#define AGC_DDID_WORKLOAD_COMPLETE_OFFSET (0xFC000u - 0x80u)
+#define AGC_GPU_INFO_WORKLOAD_TABLE_OFFSET 0x3A000u
+#define AGC_GPU_INFO_WORKLOAD_TABLE_SIZE   0x200u
+#define AGC_OPENAGC_WORKLOAD_STREAM_ID     1u
 
 typedef struct AgcProsperoDefaultsLayout {
     uint32_t primary_cx_length;
@@ -708,6 +730,42 @@ int32_t PS5_SYSV_ABI agcProsperoInitializeInternalMemory(void)
     }
 
     memset(g_prospero.ddid.cpu_addr, 0, g_prospero.ddid.size);
+
+    if (g_prospero.direct_profile.workload_uses_sony_stream_packet) {
+        int32_t workload_ret = agcProsperoCarveSubRegion(
+            &g_prospero.gpu_info, AGC_GPU_INFO_WORKLOAD_TABLE_OFFSET,
+            AGC_GPU_INFO_WORKLOAD_TABLE_SIZE,
+            &g_prospero.workload_stream_table);
+        if (workload_ret == AGC_OK) {
+            workload_ret = agcProsperoCarveSubRegion(&g_prospero.ddid,
+                AGC_DDID_WORKLOAD_ACTIVE_OFFSET,
+                AGC_SONY_WORKLOAD_ACTIVE_DWORDS * sizeof(uint32_t),
+                &g_prospero.workload_active_dcb);
+        }
+        if (workload_ret == AGC_OK) {
+            workload_ret = agcProsperoCarveSubRegion(&g_prospero.ddid,
+                AGC_DDID_WORKLOAD_COMPLETE_OFFSET,
+                AGC_SONY_WORKLOAD_COMPLETE_DWORDS * sizeof(uint32_t),
+                &g_prospero.workload_complete_dcb);
+        }
+        if (workload_ret != AGC_OK) {
+            for (int i = 0;
+                 i < (int)(sizeof(regions) / sizeof(regions[0])); i++)
+                agcProsperoFreeRegion(regions[i].region);
+            return workload_ret;
+        }
+        memset(g_prospero.workload_stream_table.cpu_addr, 0,
+            g_prospero.workload_stream_table.size);
+        memset(g_prospero.workload_active_dcb.cpu_addr, 0,
+            g_prospero.workload_active_dcb.size);
+        memset(g_prospero.workload_complete_dcb.cpu_addr, 0,
+            g_prospero.workload_complete_dcb.size);
+        agcProsperoFlushRange(g_prospero.workload_stream_table.cpu_addr,
+            g_prospero.workload_stream_table.size);
+        printf("    [mem] OpenAgcWorkloadStreams: size=0x%x subregion=%p\n",
+            AGC_GPU_INFO_WORKLOAD_TABLE_SIZE,
+            g_prospero.workload_stream_table.cpu_addr);
+    }
 
     const AgcProsperoDefaultsLayout defaults_layout =
         agcProsperoGetDefaultsLayout();
@@ -1419,9 +1477,10 @@ int32_t PS5_SYSV_ABI agcProsperoSubmitEopFlip(
 /*
  * Workload tracking — prospero backend.
  *
- * This is OpenAGC's historical one-ID convenience ABI. The FW 5.50 and
- * FW 11.60 Sony exports with similar names are multi-argument nine-dword
- * packet builders and are not ABI-compatible adapters for this helper.
+ * This is OpenAGC's one-ID convenience ABI. FW 5.50 retains its independently
+ * hardware-qualified historical packet. Standard-PS5 FW 11.60 adapts one ID
+ * to Sony's exact registered-stream active/complete builders, including their
+ * private prefix packets and GPU-visible stream slot.
  *
  * Packet layout (3 dwords):
  *   [0] header = agcPm4Header3Sub(SET_WORKLOAD, sub, 3)
@@ -1430,12 +1489,57 @@ int32_t PS5_SYSV_ABI agcProsperoSubmitEopFlip(
  */
 static int32_t agcProsperoSubmitWorkload(uint32_t workload_id, uint32_t sub)
 {
+    bool active;
+
     if (!g_prospero.initialized)
+        return AGC_ERROR_NOT_INITIALIZED;
+    if (!g_prospero.mem_initialized)
         return AGC_ERROR_NOT_INITIALIZED;
     if ((g_prospero.direct_profile.capabilities & AGC_DIRECT_CAP_WORKLOAD) == 0)
         return AGC_ERROR_NOT_SUPPORTED;
     if (workload_id == 0)
         return AGC_ERROR_INVALID_ARGUMENT;
+
+    active = sub == AGC_PM4_SUB_WORKLOAD_BEGIN;
+    if (!active && sub != AGC_PM4_SUB_WORKLOAD_END)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    if (g_prospero.direct_profile.workload_uses_sony_stream_packet) {
+        AgcProsperoRegion *dcb_region;
+        uint64_t stream_slot_address;
+        size_t dword_count;
+
+        if (workload_id > 63u)
+            return AGC_ERROR_INVALID_ARGUMENT;
+        dcb_region = active ? &g_prospero.workload_active_dcb :
+            &g_prospero.workload_complete_dcb;
+        if (!dcb_region->cpu_addr ||
+            !g_prospero.workload_stream_table.cpu_addr)
+            return AGC_ERROR_NOT_INITIALIZED;
+        stream_slot_address = g_prospero.workload_stream_table.gpu_addr +
+            AGC_OPENAGC_WORKLOAD_STREAM_ID * sizeof(uint64_t);
+        if (active) {
+            dword_count = agcSonyBuildWorkloadsActivePacket(
+                (uint32_t *)dcb_region->cpu_addr,
+                dcb_region->size / sizeof(uint32_t), false,
+                AGC_OPENAGC_WORKLOAD_STREAM_ID, stream_slot_address,
+                UINT64_C(1) << workload_id);
+        } else {
+            dword_count = agcSonyBuildWorkloadCompletePacket(
+                (uint32_t *)dcb_region->cpu_addr,
+                dcb_region->size / sizeof(uint32_t), false,
+                AGC_OPENAGC_WORKLOAD_STREAM_ID, workload_id,
+                stream_slot_address);
+        }
+        if (dword_count == 0)
+            return AGC_ERROR_INTERNAL;
+        agcProsperoFlushRange(dcb_region->cpu_addr, dcb_region->size);
+
+        AgcCommandBufferSubmit submit = {0};
+        submit.command_address = (uintptr_t)dcb_region->gpu_addr;
+        submit.dword_count = (uint32_t)dword_count;
+        return agcProsperoSubmitDcb(&submit);
+    }
 
     /* Build a 3-dword SET_WORKLOAD packet in a small GPU-visible buffer.
      * Use a sub-region of SceGnmDdid to avoid exhausting flexible memory. */
@@ -1607,6 +1711,12 @@ int32_t PS5_SYSV_ABI agcProsperoShutdown(void)
     memset(&g_prospero.multi_trailer, 0, sizeof(g_prospero.multi_trailer));
     memset(&g_prospero.primary_defaults, 0, sizeof(g_prospero.primary_defaults));
     memset(&g_prospero.internal_defaults, 0, sizeof(g_prospero.internal_defaults));
+    memset(&g_prospero.workload_stream_table, 0,
+        sizeof(g_prospero.workload_stream_table));
+    memset(&g_prospero.workload_active_dcb, 0,
+        sizeof(g_prospero.workload_active_dcb));
+    memset(&g_prospero.workload_complete_dcb, 0,
+        sizeof(g_prospero.workload_complete_dcb));
     agcProsperoFreeRegion(&g_prospero.acqrb);
     agcProsperoFreeRegion(&g_prospero.misc);
     agcProsperoFreeRegion(&g_prospero.cwsr);

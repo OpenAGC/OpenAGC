@@ -13,6 +13,7 @@ SRCS = \
 	src/driver_ops.c \
 	src/driver_registry.c \
 	src/driver_sony_exports.c \
+	src/agc_workload_packet.c \
 	src/driver_generic.c \
 	src/context_state.c \
 	src/register_defaults.c \
@@ -52,6 +53,7 @@ TEST_SRCS = \
 	tests/test_registers.c \
 	tests/test_sony_exports.c \
 	tests/test_driver_registry.c \
+	tests/test_workload_packet.c \
 	tests/test_videoout.c \
 	samples/triangle/triangle.c
 

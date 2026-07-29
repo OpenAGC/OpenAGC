@@ -965,12 +965,15 @@ The host-generic implementation now has a tested model for:
 - 4 AGC-custom flip builders: WaitFlipDone (0x4C), WaitFlip (0x51), InsertWaitFlipDone (0x54), WaitFlipEos (0x4F+0x4E)
 - Workload tracking: generic one-ID convenience state plus typed DCB/ACB
   `SET_WORKLOAD` builders. The independent Prospero one-ID direct operation
-  passed on FW 5.50. It is not Sony-export-compatible: FW 5.50 and 11.60 Sony
-  exports consume multiple arguments and emit nine-dword `0xc0071e00`
-  packets, so no other firmware inherits the convenience capability.
+  passed on FW 5.50. Standard-PS5 FW 11.60 now has a bounded one-ID adapter to
+  the exact Sony registered-stream contract: an OpenAGC-owned 64-bit slot at
+  `SceGnmGpuInfo + 0x3a008`, separate active/complete DCBs, and the recovered
+  18/12-dword prefix-plus-`0xc0071e00` packet forms. Exact host fixtures pass;
+  the ordered post-workload hardware marker remains the promotion gate.
   All 39 active Sony drivers are now verified to share that nine-dword
-  multi-argument contract, with 18/12-dword maximum reservations; this does
-  not promote the incompatible OpenAGC APIs.
+  multi-argument contract, with 18/12-dword maximum reservations. Other
+  profiles remain fail-closed until their GPU-info subregion selection is
+  recovered rather than inferred from packet similarity.
 - FW 5.50 register-defaults blob builder/parser with embedded primary/internal tables
 - Runtime firmware/backend registry: PS5 system-version ABI validation,
   four-digit major/minor ABI keys with complete raw-version diagnostics,
@@ -998,7 +1001,7 @@ make -B test
 Current expected result:
 
 ```text
-4080 passed, 0 failed
+5113 passed, 0 failed
 ```
 
 PS5 prospero backend (cross-compiled, no tests):
