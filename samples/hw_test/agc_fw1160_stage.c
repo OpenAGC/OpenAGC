@@ -29,6 +29,7 @@ extern int PS5_SYSV_ABI sceKernelGetProsperoSystemSwVersion(
     AgcKernelSwVersion *version);
 extern int32_t agcProsperoConfigureRuntimeProfile(uint32_t raw_version);
 extern int32_t PS5_SYSV_ABI agcProsperoInitialize(void);
+extern int32_t PS5_SYSV_ABI agcProsperoInitializeInternalMemory(void);
 extern int32_t PS5_SYSV_ABI agcProsperoShutdown(void);
 extern int32_t agcProsperoGetRuntimeProfile(
     AgcProsperoRuntimeProfile *profile_out);
@@ -89,10 +90,19 @@ int main(void)
         printf("stage 1: initialize FAIL\n");
         return 1;
     }
+#if AGC_FW1160_STAGE >= 2
+    result = agcProsperoInitializeInternalMemory();
+    printf("internal memory=0x%08X\n", (unsigned)result);
+    if (result != AGC_OK) {
+        printf("stage 2: internal memory FAIL\n");
+        (void)agcProsperoShutdown();
+        return 1;
+    }
+#endif
     result = agcProsperoShutdown();
     printf("direct shutdown=0x%08X\n", (unsigned)result);
     if (result != AGC_OK) {
-        printf("stage 1: shutdown FAIL\n");
+        printf("stage %d: shutdown FAIL\n", AGC_FW1160_STAGE);
         return 1;
     }
 #endif
