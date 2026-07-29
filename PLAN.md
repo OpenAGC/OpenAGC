@@ -567,6 +567,10 @@ delete), and leaves the allocation process-owned (`EINVAL` on explicit
 release); those diagnostic returns are not AGC qualification failures because
 process exit reclaims them. Exact GPU output, completed presentation, event
 removal, VideoOut close, and driver shutdown remain mandatory.
+The FW 11.60 graphics gate reuses the proven baseline NGG+PS shaders, PM4 path,
+flexible-memory FP16 target, completion fence, and exact coverage/color oracle.
+Only presentation is skipped, keeping graphics execution independent from the
+still-unqualified FW 11.60 VideoOut linear-buffer contract.
 
 The Sony workload contract itself is recovered for all active firmware:
 seven active-wrapper and three complete-wrapper groups converge on the same

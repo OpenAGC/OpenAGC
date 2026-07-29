@@ -366,6 +366,11 @@ shaders_ngg_invocations: shaders/triangle_vert.spv shaders/triangle_invocations.
 agc_graphics.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -o $@ agc_graphics.c $(AGC_LDFLAGS)
 
+agc_graphics_fw1160.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_EXPECT_FIRMWARE_ABI_KEY=0x1160u \
+		-DAGC_GRAPHICS_HEADLESS=1 -DAGC_SELF_TERMINATE=1 \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
 agc_graphics_indexed.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_DRAW_INDEXED=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
 
@@ -620,6 +625,11 @@ deploy_agc_compute_fw1160: agc_compute_fw1160.elf
 
 deploy_agc_graphics: agc_graphics.elf
 	PS5_HOST=$(PS5_HOST) ./run_fw550_conformance.sh --sample agc_graphics
+
+.PHONY: deploy_agc_graphics_fw1160
+deploy_agc_graphics_fw1160: agc_graphics_fw1160.elf
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
 
 deploy_agc_depth: agc_depth.elf
 	-curl -s "ftp://$(PS5_HOST):2121/" --quote "MKD /data/homebrew/agc_depth"

@@ -15,6 +15,8 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <signal.h>
+#include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <sys/types.h>
@@ -32,11 +34,24 @@
 #include "agc_cb.h"
 #include "agc_pm4.h"
 #include "agc_error.h"
+#include "agc_runtime_diag.h"
 
 /* GPU credential bypass */
 #include "gpu_credentials.h"
 
 #include <ps5/kernel.h>
+
+#ifndef AGC_EXPECT_FIRMWARE_ABI_KEY
+#define AGC_EXPECT_FIRMWARE_ABI_KEY 0x0550u
+#endif
+
+#ifndef AGC_GRAPHICS_HEADLESS
+#define AGC_GRAPHICS_HEADLESS 0
+#endif
+
+#ifndef AGC_SELF_TERMINATE
+#define AGC_SELF_TERMINATE 0
+#endif
 
 /* Embedded shader binaries */
 #ifndef AGC_NGG_AMPLIFY
@@ -590,6 +605,7 @@ intptr_t kernel_dynlib_mapbase_addr(int pid, uint32_t handle);
 int kernel_mprotect(int pid, intptr_t addr, size_t size, int prot);
 
 /* Patch libSceVideoOut to allow linear tiling without debug setting */
+#if !AGC_GRAPHICS_HEADLESS
 static void patch_videoout_linear(void) {
     uint32_t vo_handle = 0;
     if (kernel_dynlib_handle(-1, "libSceVideoOut.sprx", &vo_handle) == 0 && vo_handle) {
@@ -608,6 +624,7 @@ static void patch_videoout_linear(void) {
         }
     }
 }
+#endif
 
 /* ======================================================================== */
 /* Helpers                                                                   */
@@ -624,6 +641,32 @@ static const char *errstr(int32_t err) {
     return "ERROR";
 }
 
+static bool g_graphics_driver_initialized;
+static int32_t g_graphics_shutdown_result = AGC_ERROR_NOT_INITIALIZED;
+
+static int32_t shutdown_graphics_driver(void)
+{
+    if (!g_graphics_driver_initialized)
+        return g_graphics_shutdown_result;
+    g_graphics_shutdown_result = agcDriverShutdown();
+    g_graphics_driver_initialized = false;
+    return g_graphics_shutdown_result;
+}
+
+static void graphics_process_exit(void)
+{
+    if (g_graphics_driver_initialized) {
+        const int32_t result = shutdown_graphics_driver();
+        printf("Driver shutdown: %s (0x%08x)\n",
+               result == AGC_OK ? "PASS" : "FAILED", (unsigned)result);
+        fflush(stdout);
+        fflush(stderr);
+    }
+#if AGC_SELF_TERMINATE
+    kill(getpid(), SIGKILL);
+#endif
+}
+
 /* ======================================================================== */
 /* Memory allocation                                                         */
 /* ======================================================================== */
@@ -631,6 +674,7 @@ static const char *errstr(int32_t err) {
 static uint32_t *cb_buffer = NULL;  /* Command buffer in flexible memory */
 
 static bool allocate_display_buffers(GraphicsTest *test) {
+#if !AGC_GRAPHICS_HEADLESS
     test->buffer_stride = align_up(
         (size_t)test->width * test->height * BYTES_PER_PIXEL,
         DIRECT_MEMORY_ALIGNMENT);
@@ -658,6 +702,7 @@ static bool allocate_display_buffers(GraphicsTest *test) {
     for (int i = 0; i < BUFFER_COUNT; i++) {
         test->buffers[i] = (uint8_t *)test->mapped + i * test->buffer_stride;
     }
+#endif
 
     /* Allocate flexible memory for command buffer + render target + shader code */
     size_t cb_size = DCB_MAPPING_BYTES;  /* two distinct DCB regions */
@@ -863,6 +908,7 @@ static bool allocate_display_buffers(GraphicsTest *test) {
 /* VideoOut init                                                             */
 /* ======================================================================== */
 
+#if !AGC_GRAPHICS_HEADLESS
 static bool init_videoout(GraphicsTest *test) {
     int32_t user_ids[] = { 0xFF, 0, 1, 2 };
     test->handle = -1;
@@ -933,6 +979,7 @@ static bool init_videoout(GraphicsTest *test) {
 
     return true;
 }
+#endif
 
 /* ======================================================================== */
 /* AGC init                                                                  */
@@ -942,6 +989,19 @@ static bool init_agc(void) {
     int32_t err;
     err = sce_agc_initialize();
     if (err != AGC_OK) { printf("sce_agc_initialize failed: 0x%08x\n", (unsigned)err); return false; }
+    g_graphics_driver_initialized = true;
+
+    AgcDriverRuntimeDiagnostics runtime_diag;
+    err = agcDriverDebugRuntimeProfile(&runtime_diag);
+    const bool profile_ok = err == AGC_OK &&
+        (runtime_diag.firmware_version >> 16u) ==
+            AGC_EXPECT_FIRMWARE_ABI_KEY &&
+        runtime_diag.profile.family == AGC_PROSPERO_ABI_STANDARD &&
+        !runtime_diag.profile.is_trinity;
+    printf("Runtime profile FW ABI 0x%04X: %s\n",
+           AGC_EXPECT_FIRMWARE_ABI_KEY, profile_ok ? "PASS" : "FAIL");
+    if (!profile_ok)
+        return false;
 
     err = sce_agc_initialize_internal_memory();
     if (err != AGC_OK) { printf("sce_agc_initialize_internal_memory failed: 0x%08x\n", (unsigned)err); return false; }
@@ -1784,10 +1844,11 @@ static bool dispatch_graphics(GraphicsTest *test,
                 AGC_GFX1013_SWIZZLE_64KB_R_X : 0u,
         },
         .viewport = {
-            AGC_HTILE_MIP_VALIDATION ?
+            .width = AGC_HTILE_MIP_VALIDATION ?
                 test->htile_subresource.width : target->width,
-            AGC_HTILE_MIP_VALIDATION ?
+            .height = AGC_HTILE_MIP_VALIDATION ?
                 test->htile_subresource.height : target->height,
+            .depth_clip_space = AGC_GFX1013_CLIP_SPACE_NEGATIVE_ONE_TO_ONE,
         },
         .scissor = {
             0u, 0u,
@@ -2781,7 +2842,8 @@ static bool dispatch_graphics(GraphicsTest *test,
 #endif
 }
 
-#if !AGC_VALIDATE_RGBA8_REFERENCE && !AGC_VALIDATE_RGBA8_STD && \
+#if !AGC_GRAPHICS_HEADLESS && \
+    !AGC_VALIDATE_RGBA8_REFERENCE && !AGC_VALIDATE_RGBA8_STD && \
     !AGC_VALIDATE_RGB10A2 && !AGC_VALIDATE_R11G11B10 && \
     !AGC_VALIDATE_RGBA8_SRGB && !AGC_VALIDATE_BGRA8_SRGB && \
     !AGC_DEPTH_VALIDATION
@@ -3039,6 +3101,7 @@ static void visualize_rgb10a2(GraphicsTest *test)
 /* Flip helper                                                               */
 /* ======================================================================== */
 
+#if !AGC_GRAPHICS_HEADLESS
 static bool present_preview(GraphicsTest *test) {
     uint32_t accepted = 0;
     uint32_t completed = 0;
@@ -3071,6 +3134,7 @@ static bool present_preview(GraphicsTest *test) {
            accepted, completed);
     return completed == FP16_PREVIEW_FRAMES;
 }
+#endif
 
 #if AGC_VALIDATE_R11G11B10
 static uint8_t ufloat_to_unorm8(uint32_t bits, uint32_t mantissa_bits)
@@ -3130,6 +3194,11 @@ static void visualize_r11g11b10(GraphicsTest *test)
 int main(void) {
     GraphicsTest test = { .handle = -1, .direct_memory = -1 };
 
+    if (atexit(graphics_process_exit) != 0) {
+        printf("FATAL: could not install graphics cleanup handler\n");
+        return 1;
+    }
+
     printf("=== openagc NGG Graphics Draw Call Test ===\n");
 
     printf("\n--- Step 0: GPU credential bypass ---\n");
@@ -3140,8 +3209,16 @@ int main(void) {
     printf("\n--- Step 1: AGC initialization ---\n");
     if (!init_agc()) return 1;
 
-    printf("\n--- Step 2: VideoOut initialization ---\n");
+    printf("\n--- Step 2: Graphics memory initialization ---\n");
+#if AGC_GRAPHICS_HEADLESS
+    test.width = 1920u;
+    test.height = 1080u;
+    test.pitch_pixels = test.width;
+    if (!allocate_display_buffers(&test)) return 1;
+    printf("Headless graphics qualification; VideoOut is isolated\n");
+#else
     if (!init_videoout(&test)) return 1;
+#endif
 
     printf("\n--- Step 3: Shader loading ---\n");
     ParsedGraphicsShader front, back, ps;
@@ -3355,9 +3432,16 @@ int main(void) {
         printf("FATAL: RGBA16F render-target validation failed\n");
         return 1;
     }
+#if !AGC_GRAPHICS_HEADLESS
     visualize_fp16(&test, 4u);
 #endif
+#endif
 
+#if AGC_GRAPHICS_HEADLESS
+    printf("\n--- Step 5: Headless qualification complete ---\n");
+    printf("Presentation: SKIPPED (headless graphics gate)\n");
+    const int close_ret = 0;
+#else
     printf("\n--- Step 5: Display target preview ---\n");
     if (!present_preview(&test)) {
         printf("FATAL: no VideoOut preview flip was accepted\n");
@@ -3379,7 +3463,20 @@ int main(void) {
         printf("FATAL: VideoOut close failed\n");
         return 1;
     }
+#endif
 
-    printf("\nDone.\n");
-    return 0;
+    const int32_t shutdown_ret = shutdown_graphics_driver();
+    printf("Driver shutdown: %s (0x%08x)\n",
+           shutdown_ret == AGC_OK ? "PASS" : "FAILED",
+           (unsigned)shutdown_ret);
+    const bool success = close_ret == 0 && shutdown_ret == AGC_OK;
+    printf("Graphics result: %s\n", success ? "PASS" : "FAIL");
+    fflush(stdout);
+    fflush(stderr);
+#if AGC_SELF_TERMINATE
+    kill(getpid(), SIGKILL);
+    _exit(success ? 0 : 1);
+#else
+    return success ? 0 : 1;
+#endif
 }
