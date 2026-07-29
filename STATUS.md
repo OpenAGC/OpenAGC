@@ -1,5 +1,23 @@
 # openagc Status
 
+## Reusable driver and flexible-memory teardown (2026-07-29)
+
+`agcDriverShutdown` now provides a public, backend-neutral teardown boundary.
+The Prospero implementation destroys owned special queues, releases all nine
+internal system-flexible regions, unmaps the locked GPU MMIO window, closes
+`/dev/gc`, resets runtime selection, and permits reinitialization. Generic
+backend tests cover shutdown, post-shutdown submission rejection, idempotent
+shutdown, and reinitialization.
+
+Prospero flexible allocations now pair
+`sceKernelMapNamedSystemFlexibleMemory` with
+`sceKernelReleaseFlexibleMemory`; `sceKernelMunmap` is retained only if the
+release call fails. This addresses repeated WebSrv renderer launches exhausting
+the global flexible-memory quota even after their processes exited. The clean
+generic build passes 4,436 assertions and the Prospero cross-build passes. A
+fresh-console repeated-launch qualification remains required because the quota
+was already exhausted before this fix was deployed.
+
 ## GFX1013 multi-viewport state (2026-07-29)
 
 OpenAGC now owns an application-neutral 16-slot viewport/scissor array. The

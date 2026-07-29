@@ -15,6 +15,7 @@
 extern int32_t sceKernelMapNamedSystemFlexibleMemory(
     void **addr, size_t size, int type, int flags, const char *name);
 extern int32_t sceKernelMunmap(void *addr, size_t len);
+extern int32_t sceKernelReleaseFlexibleMemory(void *addr, size_t len);
 extern int32_t sceKernelUsleep(uint32_t microseconds);
 extern int32_t sceKernelAllocateDirectMemory(
     int64_t search_start, int64_t search_end, size_t length,
@@ -82,7 +83,9 @@ void PS5_SYSV_ABI agcGpuMemoryFreeFlexible(AgcGpuMemory *memory)
     if (!memory) return;
     if (memory->cpu_address && memory->mapped_size) {
 #if defined(OPENAGC_PROSPERO)
-        sceKernelMunmap(memory->cpu_address, memory->mapped_size);
+        if (sceKernelReleaseFlexibleMemory(
+                memory->cpu_address, memory->mapped_size) != 0)
+            sceKernelMunmap(memory->cpu_address, memory->mapped_size);
 #else
         free(memory->cpu_address);
 #endif

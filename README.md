@@ -27,6 +27,11 @@ builds with ps5-payload-sdk; hardware validation is the remaining step.
   the payload's GPU authorization before opening `/dev/gc`; on FW 5.50 it also
   repairs a detached `td_ucred` using the hardware-proven kernel layout, so
   higher-level APIs and ordinary applications need no launcher/sample header
+- **Reusable driver lifecycle** — `agcDriverShutdown` destroys owned queues,
+  releases all nine internal system-flexible regions, unmaps MMIO, closes
+  `/dev/gc`, and permits clean reinitialization. Flexible-memory frees use
+  `sceKernelReleaseFlexibleMemory`, with unmap retained only as an error
+  fallback, so repeated homebrew launches do not consume the global quota
 - **ACB command building** — `sceAgcAcb*` async compute buffer packets
   (event write, atomic mem/GDS, cond exec, wait-reg-mem, write/copy/dma data,
   mem semaphore, acquire mem, queue reset, rewind, set flip, workload
@@ -357,7 +362,7 @@ TGZ archive from the same install rules.
 Downstream homebrew CMake usage:
 
 ```cmake
-find_package(OpenAGC 0.1 CONFIG REQUIRED)
+find_package(OpenAGC 0.2 CONFIG REQUIRED)
 
 target_link_libraries(my_homebrew PRIVATE OpenAGC::openagc)
 

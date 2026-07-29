@@ -88,6 +88,25 @@ static void test_submit_dcb_validation(void) {
     TEST_ASSERT_EQ(last->dword_count, packet.dword_count, "last DCB dwords");
 }
 
+static void test_shutdown_reinitialize(void) {
+    uint32_t command[2] = {0};
+    AgcCommandBufferSubmit packet = {
+        .command_address = (uintptr_t)command,
+        .dword_count = 2,
+    };
+
+    TEST_ASSERT_EQ(sce_agc_initialize(), AGC_OK,
+        "initialize before shutdown");
+    TEST_ASSERT_EQ(agcDriverShutdown(), AGC_OK,
+        "driver shutdown succeeds");
+    TEST_ASSERT_EQ(sceAgcDriverSubmitDcb(&packet), AGC_ERROR_NOT_INITIALIZED,
+        "submission is rejected after shutdown");
+    TEST_ASSERT_EQ(agcDriverShutdown(), AGC_OK,
+        "driver shutdown is idempotent");
+    TEST_ASSERT_EQ(sce_agc_initialize(), AGC_OK,
+        "driver reinitializes after shutdown");
+}
+
 static void test_multi_dcb_submission(void) {
     uint32_t dcb0[2] = {0};
     uint32_t dcb1[3] = {0};
@@ -344,6 +363,7 @@ void test_suite_driver(void) {
     TEST_RUN(test_submit_packet_layout);
     TEST_RUN(test_pa_debug_permission_stub);
     TEST_RUN(test_submit_dcb_validation);
+    TEST_RUN(test_shutdown_reinitialize);
     TEST_RUN(test_multi_dcb_submission);
     TEST_RUN(test_submit_acb_validation);
     TEST_RUN(test_queue_create_destroy);

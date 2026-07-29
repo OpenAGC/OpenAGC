@@ -70,6 +70,20 @@ int32_t PS5_SYSV_ABI agcGenericInitializeInternalMemory(void)
     return AGC_OK;
 }
 
+int32_t PS5_SYSV_ABI agcGenericShutdown(void)
+{
+    g_agc_initialized = false;
+    memset(g_queues, 0, sizeof(g_queues));
+    g_async_setup_done = false;
+    g_async_pipe_id = 0;
+    g_last_acb_owner = 0;
+    memset(&g_last_dcb_submit, 0, sizeof(g_last_dcb_submit));
+    memset(&g_last_acb_submit, 0, sizeof(g_last_acb_submit));
+    g_active_workload_id = 0;
+    g_workload_active = false;
+    return AGC_OK;
+}
+
 int32_t PS5_SYSV_ABI agcGenericSubmitMultiCommandBuffersDirect(
     uint32_t count,
     void *const dcb_gpu_addrs[],
@@ -355,6 +369,7 @@ const AgcDriverOps agcGenericDriverOps = {
     .name = "generic",
     .initialize = agcGenericInitialize,
     .initialize_internal_memory = agcGenericInitializeInternalMemory,
+    .shutdown = agcGenericShutdown,
     .submit_multi_command_buffers_direct = agcGenericSubmitMultiCommandBuffersDirect,
     .submit_dcb = agcGenericSubmitDcb,
     .submit_acb = agcGenericSubmitAcb,

@@ -69,6 +69,21 @@ int32_t PS5_SYSV_ABI sce_agc_initialize_internal_memory(void)
     AGC_DISPATCH_OR_UNSUPPORTED(initialize_internal_memory, ());
 }
 
+int32_t PS5_SYSV_ABI agcDriverShutdown(void)
+{
+    const AgcDriverOps *ops = agcDriverGetOps();
+    int32_t result;
+
+    if (!ops || !ops->shutdown)
+        return AGC_ERROR_NOT_SUPPORTED;
+    result = ops->shutdown();
+#ifdef OPENAGC_PROSPERO
+    if (result == AGC_OK)
+        g_driver_ops = NULL;
+#endif
+    return result;
+}
+
 int32_t PS5_SYSV_ABI sceAgcDriverSubmitMultiCommandBuffersDirect(
     uint32_t count, void *const dcb_gpu_addrs[], uint32_t *dcb_sizes_in_bytes,
     void *const acb_gpu_addrs[], uint32_t *acb_sizes_in_bytes)

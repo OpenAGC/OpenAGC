@@ -41,6 +41,9 @@ extern "C" {
 /* Initialization */
 int32_t PS5_SYSV_ABI sce_agc_initialize(void);
 int32_t PS5_SYSV_ABI sce_agc_initialize_internal_memory(void);
+/* Releases queues, internal flexible memory, MMIO, and the driver handle.
+ * Safe to call after partial initialization and before reinitializing. */
+int32_t PS5_SYSV_ABI agcDriverShutdown(void);
 
 /* Driver submission */
 int32_t PS5_SYSV_ABI sceAgcDriverSubmitMultiCommandBuffersDirect(

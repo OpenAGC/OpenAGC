@@ -123,6 +123,7 @@ extern int32_t sceKernelReleaseDirectMemory(off_t physicalAddr, size_t length);
  */
 extern int32_t sceKernelMapNamedSystemFlexibleMemory(
     void **addr, size_t size, int type, int flags, const char *name);
+extern int32_t sceKernelReleaseFlexibleMemory(void *addr, size_t len);
 
 /* Named internal memory region allocated by agcProsperoInitializeInternalMemory */
 typedef struct {
@@ -410,7 +411,8 @@ static void agcProsperoFreeRegion(AgcProsperoRegion *region)
     if (!region || region->size == 0)
         return;
 
-    if (region->cpu_addr)
+    if (region->cpu_addr &&
+        sceKernelReleaseFlexibleMemory(region->cpu_addr, region->size) != 0)
         sceKernelMunmap(region->cpu_addr, region->size);
 
     memset(region, 0, sizeof(*region));
@@ -1421,6 +1423,44 @@ int32_t PS5_SYSV_ABI agcProsperoDestroyUserSpecialQueue(void)
     return AGC_ERROR_NOT_FOUND;
 }
 
+int32_t PS5_SYSV_ABI agcProsperoShutdown(void)
+{
+    int i;
+
+    if (!g_prospero.initialized) {
+        return AGC_OK;
+    }
+    for (i = 0; i < AGC_PROSPERO_MAX_QUEUES; ++i) {
+        if (g_prospero.queues[i].in_use) {
+            (void)agcProsperoDestroyUserSpecialQueue();
+        }
+    }
+
+    memset(&g_prospero.multi_trailer, 0, sizeof(g_prospero.multi_trailer));
+    memset(&g_prospero.primary_defaults, 0, sizeof(g_prospero.primary_defaults));
+    memset(&g_prospero.internal_defaults, 0, sizeof(g_prospero.internal_defaults));
+    agcProsperoFreeRegion(&g_prospero.acqrb);
+    agcProsperoFreeRegion(&g_prospero.misc);
+    agcProsperoFreeRegion(&g_prospero.cwsr);
+    agcProsperoFreeRegion(&g_prospero.shadow_reg);
+    agcProsperoFreeRegion(&g_prospero.eop_fifo);
+    agcProsperoFreeRegion(&g_prospero.ddid);
+    agcProsperoFreeRegion(&g_prospero.trap_data);
+    agcProsperoFreeRegion(&g_prospero.trap_code);
+    agcProsperoFreeRegion(&g_prospero.gpu_info);
+
+    if (g_prospero.mmio_base) {
+        (void)munlock(g_prospero.mmio_base, AGC_GC_MMIO_SIZE);
+        (void)munmap(g_prospero.mmio_base, AGC_GC_MMIO_SIZE);
+    }
+    if (g_prospero.gc_fd >= 0) {
+        (void)close(g_prospero.gc_fd);
+    }
+    memset(&g_prospero, 0, sizeof(g_prospero));
+    g_prospero.gc_fd = -1;
+    return AGC_OK;
+}
+
 /* ===================================================================== */
 /* Public API — capture / debug                                          */
 /* ===================================================================== */
@@ -1498,6 +1538,7 @@ const AgcDriverOps agcProsperoDriverOps = {
 .name = "prospero-gc-submit16",
     .initialize = agcProsperoInitialize,
     .initialize_internal_memory = agcProsperoInitializeInternalMemory,
+    .shutdown = agcProsperoShutdown,
     .submit_multi_command_buffers_direct = agcProsperoSubmitMultiCommandBuffersDirect,
     .submit_dcb = agcProsperoSubmitDcb,
     .submit_acb = agcProsperoSubmitAcb,

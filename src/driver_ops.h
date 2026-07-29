@@ -15,6 +15,7 @@ typedef struct AgcDriverOps {
     const char *name;
     int32_t (PS5_SYSV_ABI *initialize)(void);
     int32_t (PS5_SYSV_ABI *initialize_internal_memory)(void);
+    int32_t (PS5_SYSV_ABI *shutdown)(void);
     int32_t (PS5_SYSV_ABI *submit_multi_command_buffers_direct)(
         uint32_t, void *const[], uint32_t *, void *const[], uint32_t *);
     int32_t (PS5_SYSV_ABI *submit_dcb)(const AgcCommandBufferSubmit *);
