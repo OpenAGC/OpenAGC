@@ -230,16 +230,21 @@ bool agcProsperoBuildDirectProfile(uint32_t raw_version, bool is_trinity,
             &direct.defaults_version))
         direct.capabilities |= AGC_DIRECT_CAP_DEFAULT_STATES;
 
-    /* FW 5.50 and standard-PS5 FW 11.60 are hardware-qualified for the
-     * operations enabled here. AGC_DIRECT_CAP_WORKLOAD refers only to
+    /* FW 5.50 and standard-PS5 FW 11.60 have hardware-qualified prerequisites
+     * for the operations enabled here. AGC_DIRECT_CAP_WORKLOAD refers only to
      * OpenAGC's one-ID convenience submission, not Sony's incompatible
-     * multi-argument nine-dword export ABI. EOP flip and suspend query retain
-     * their narrower evidence boundaries. */
+     * multi-argument export ABI. FW 11.60 maps that convenience call onto the
+     * exact Sony stream packets after installing its GPU-info process property.
+     * EOP flip and suspend query retain their narrower evidence boundaries. */
     if (abi_key == 0x0550u) {
         direct.capabilities |= AGC_DIRECT_CAP_SUSPEND_FINAL |
             AGC_DIRECT_CAP_WORKLOAD | AGC_DIRECT_CAP_EOP_FLIP;
     } else if (abi_key == 0x1160u) {
         direct.capabilities |= AGC_DIRECT_CAP_SUSPEND_FINAL;
+        if (!is_trinity) {
+            direct.capabilities |= AGC_DIRECT_CAP_WORKLOAD;
+            direct.workload_uses_sony_stream_packet = true;
+        }
     }
 
     if ((direct.capabilities & AGC_DIRECT_CAP_QUEUE) != 0) {

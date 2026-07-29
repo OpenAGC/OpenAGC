@@ -29,7 +29,9 @@ name pointer and shifting every following argument; the console kernel-panicked.
 That call was removed immediately. Never use the four-argument form on any
 firmware, including FW 5.50.
 
-The exact five-argument carrier is RE evidence, not direct-backend hardware
-qualification. OpenAGC keeps FW 11.60 workloads fail-closed until a guarded
-property-only probe proves the corrected call before any workload packet is
-submitted.
+The exact five-argument carrier is now also hardware-qualified at the isolated
+property-only boundary on standard-PS5 FW `0x11600005`. Stage 10 returned
+`AGC_OK`, completed driver shutdown, and self-terminated without submitting
+PM4. OpenAGC therefore uses this call as an idempotent prerequisite for the
+FW 11.60 workload-stream adapter. Packet execution remains a separate stage-11
+hardware gate.

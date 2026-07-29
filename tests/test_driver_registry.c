@@ -167,10 +167,10 @@ static void test_direct_operation_profiles(void)
     TEST_ASSERT(agcProsperoBuildDirectProfile(
         0x11600000u, false, &profile),
         "standard-PS5 FW 11.60 direct profile builds");
-    TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_WORKLOAD) == 0,
-        "standard-PS5 FW 11.60 workload remains fail-closed after hardware failure");
-    TEST_ASSERT(!profile.workload_uses_sony_stream_packet,
-        "FW 11.60 does not select the unqualified stream adapter");
+    TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_WORKLOAD) != 0,
+        "standard-PS5 FW 11.60 workload stream adapter enabled");
+    TEST_ASSERT(profile.workload_uses_sony_stream_packet,
+        "FW 11.60 selects the Sony stream adapter");
 
     TEST_ASSERT(agcProsperoBuildDirectProfile(
         0x12200000u, false, &profile), "FW 12.20 submit profile builds");

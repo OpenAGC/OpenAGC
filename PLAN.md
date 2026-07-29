@@ -594,15 +594,15 @@ process-property step then caused a kernel panic before a verdict. That call
 used the wrong four-argument order and is removed. All 39 active SPRXs now
 reproducibly prove the correct five-argument carrier as
 `("Sce.Debug:Gnm", gpu_info_base, gpu_info_span, 0, 0)`, with a `0x100000`
-standard span and `0x180000` Trinity span. The workload capability remains
-disabled. The next hardware gate, only after the corrected code is reviewed and
-host/cross builds pass, is a property-only self-terminating probe; it must not
-submit workload PM4 in the same first run.
-That isolated gate is now `agc_fw1160_stage10.elf`: it uses the exact
-five-argument call, applies the proven `SceGnmDumpArea` range name, performs no
-submission, and leaves the workload capability disabled. Host and Prospero
-builds pass. Stage 10 must pass and self-terminate before the workload adapter
-can be reconsidered.
+standard span and `0x180000` Trinity span. The isolated
+`agc_fw1160_stage10.elf` gate used that exact five-argument call, applied the
+proven `SceGnmDumpArea` range name, performed no submission, returned `AGC_OK`,
+shut down, and self-terminated on standard-PS5 FW `0x11600005`. The standard
+FW 11.60 candidate now makes that registration an idempotent prerequisite of
+the exact Sony stream adapter; Trinity remains fail-closed. Stage 11 is the
+next bounded gate: active ID 1, complete ID 1, then an ordered `WRITE_DATA`
+marker with a five-second timeout. It must pass twice before the full public
+qualification artifact advertises workload success.
 
 The Sony workload contract itself is recovered for all active firmware:
 seven active-wrapper and three complete-wrapper groups converge on the same

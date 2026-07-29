@@ -161,6 +161,7 @@ typedef struct {
     int              gc_fd;          /* /dev/gc file descriptor */
     bool             initialized;    /* agcProsperoInitialize succeeded */
     bool             mem_initialized;/* agcProsperoInitializeInternalMemory succeeded */
+    bool             gpu_info_property_registered;/* Sce.Debug:Gnm mapping installed */
     bool             defaults_notified;/* agcProsperoNotifyDefaultStates succeeded */
     bool             async_setup_done;/* agcProsperoSetupAsyncGraphics succeeded */
     void            *mmio_base;      /* GPU register MMIO mapping (0xfe0200000) */
@@ -798,9 +799,10 @@ int32_t PS5_SYSV_ABI agcProsperoInitializeInternalMemory(void)
     return AGC_OK;
 }
 
-/* Private qualification gate. This is deliberately not part of DriverOps and
- * does not grant workload capability. The first hardware run must exercise
- * only this corrected mapping step, never workload PM4 in the same process. */
+/* Install the GPU-info process property used by Sony's workload-stream
+ * machinery. Keep this idempotent: stage probes and future callers may ensure
+ * the prerequisite independently, but the kernel property is installed once
+ * per initialized backend lifetime. */
 int32_t agcProsperoRegisterGpuInfoProcessProperty(void)
 {
     int32_t result;
@@ -808,6 +810,8 @@ int32_t agcProsperoRegisterGpuInfoProcessProperty(void)
     if (!g_prospero.initialized || !g_prospero.mem_initialized ||
         !g_prospero.gpu_info.cpu_addr)
         return AGC_ERROR_NOT_INITIALIZED;
+    if (g_prospero.gpu_info_property_registered)
+        return AGC_OK;
     result = sceKernelSetProcessProperty("Sce.Debug:Gnm",
         g_prospero.gpu_info.cpu_addr, g_prospero.gpu_info.size,
         UINT64_C(0), UINT64_C(0));
@@ -815,7 +819,10 @@ int32_t agcProsperoRegisterGpuInfoProcessProperty(void)
         return AGC_ERROR_INTERNAL;
     result = sceKernelSetVirtualRangeName(g_prospero.gpu_info.cpu_addr,
         g_prospero.gpu_info.size, "SceGnmDumpArea");
-    return result == 0 ? AGC_OK : AGC_ERROR_INTERNAL;
+    if (result != 0)
+        return AGC_ERROR_INTERNAL;
+    g_prospero.gpu_info_property_registered = true;
+    return AGC_OK;
 }
 
 /* ===================================================================== */
@@ -1533,6 +1540,11 @@ static int32_t agcProsperoSubmitWorkload(uint32_t workload_id, uint32_t sub)
         AgcProsperoRegion *dcb_region;
         uint64_t stream_slot_address;
         size_t dword_count;
+        int32_t property_result;
+
+        property_result = agcProsperoRegisterGpuInfoProcessProperty();
+        if (property_result != AGC_OK)
+            return property_result;
 
         if (workload_id > 63u)
             return AGC_ERROR_INVALID_ARGUMENT;

@@ -61,9 +61,13 @@ SPRX's separately observed GPU-info process-property step caused a kernel panic
 before a payload verdict was returned. The experiment used an incorrect
 four-argument order and was removed. Corpus-wide RE now proves the actual call
 as `("Sce.Debug:Gnm", gpu_info_base, gpu_info_span, 0, 0)`; see
-`agc_driver_process_property_facts.md`. The capability remains fail-closed
-until that corrected call passes a guarded property-only probe before any
-workload packet is submitted.
+`agc_driver_process_property_facts.md`. The corrected property-only stage 10
+then passed on standard-PS5 FW `0x11600005`, including clean shutdown and
+self-termination without PM4 submission. The standard FW 11.60 profile now
+selects the exact adapter and installs that property idempotently before its
+first workload call. Stage 11 separately gates active/complete execution with
+an ordered `WRITE_DATA` marker; Trinity and all other unqualified profiles
+remain fail-closed.
 
 ## Exact FW 11.60 builder layout
 

@@ -49,6 +49,10 @@ extern int32_t PS5_SYSV_ABI agcProsperoSetTFRing(
     uintptr_t ring_addr, uint32_t size);
 extern int32_t PS5_SYSV_ABI agcProsperoSetHsOffchipParamDirect(
     uint64_t list_addr, uint32_t num_entries);
+extern int32_t PS5_SYSV_ABI agcProsperoSetWorkloadsActive(
+    uint32_t workload_id);
+extern int32_t PS5_SYSV_ABI agcProsperoSetWorkloadComplete(
+    uint32_t workload_id);
 extern int32_t PS5_SYSV_ABI agcProsperoShutdown(void);
 extern int32_t agcProsperoGetRuntimeProfile(
     AgcProsperoRuntimeProfile *profile_out);
@@ -190,6 +194,75 @@ int main(void)
     printf("GPU-info process property=0x%08X\n", (unsigned)result);
     if (result != AGC_OK) {
         printf("stage 10: GPU-info process property FAIL\n");
+        (void)agcProsperoShutdown();
+        return 1;
+    }
+#endif
+#if AGC_FW1160_STAGE == 11
+    void *workload_memory = (void *)(uintptr_t)0xf02000000ULL;
+    const uint32_t expected_marker = 0x1160D01Du;
+    volatile uint32_t *marker;
+    SceAgcCb cb;
+    AgcCommandBufferSubmit submit;
+    uint32_t waited_ms = 0u;
+
+    result = sceKernelMapNamedSystemFlexibleMemory(&workload_memory, 0x4000u,
+        0x33, 0, "OpenAgcFw1160Workload");
+    printf("workload memory result=%d address=%p\n", result, workload_memory);
+    if (result != 0 || !workload_memory) {
+        printf("stage 11: workload memory FAIL\n");
+        (void)agcProsperoShutdown();
+        return 1;
+    }
+    marker = (volatile uint32_t *)((uint8_t *)workload_memory + 0x1000u);
+    *marker = 0u;
+    agcCbInit(&cb, workload_memory, 0x1000u);
+    if (!sceAgcDcbWriteData(&cb, 2u, 0u,
+            (uint64_t)(uintptr_t)marker, &expected_marker, 1u, 1u, 1u)) {
+        printf("stage 11: marker build FAIL\n");
+        (void)agcProsperoShutdown();
+        (void)sceKernelReleaseFlexibleMemory(workload_memory, 0x4000u);
+        return 1;
+    }
+    clflush((u_long)(uintptr_t)workload_memory);
+    clflush((u_long)(uintptr_t)marker);
+    mfence();
+
+    result = agcProsperoSetWorkloadsActive(1u);
+    printf("workload active=0x%08X\n", (unsigned)result);
+    if (result == AGC_OK) {
+        result = agcProsperoSetWorkloadComplete(1u);
+        printf("workload complete=0x%08X\n", (unsigned)result);
+    }
+    if (result == AGC_OK) {
+        submit.command_address = (uintptr_t)workload_memory;
+        submit.dword_count = agcCbUsedDwords(&cb);
+        submit.reserved = 0u;
+        result = agcProsperoSubmitDcb(&submit);
+        printf("post-workload submit=0x%08X dwords=%u\n",
+            (unsigned)result, submit.dword_count);
+    }
+    while (result == AGC_OK && waited_ms < 5000u) {
+        clflush((u_long)(uintptr_t)marker);
+        mfence();
+        if (*marker == expected_marker)
+            break;
+        usleep(50000u);
+        waited_ms += 50u;
+    }
+    clflush((u_long)(uintptr_t)marker);
+    mfence();
+    printf("post-workload marker=0x%08X expected=0x%08X wait=%u ms\n",
+        *marker, expected_marker, waited_ms);
+    if (result != AGC_OK || *marker != expected_marker) {
+        printf("stage 11: workload sequence FAIL\n");
+        (void)agcProsperoShutdown();
+        return 1;
+    }
+    result = sceKernelReleaseFlexibleMemory(workload_memory, 0x4000u);
+    printf("workload memory release=%d\n", result);
+    if (result != 0) {
+        printf("stage 11: workload memory release FAIL\n");
         (void)agcProsperoShutdown();
         return 1;
     }

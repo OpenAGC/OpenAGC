@@ -972,10 +972,14 @@ The host-generic implementation now has a tested model for:
   GPU-info process-property experiment used a wrong four-argument order, caused
   a kernel panic, and was removed. Corpus-wide RE proves the correct call as
   `("Sce.Debug:Gnm", gpu_info_base, gpu_info_span, 0, 0)` on all 39 active
-  drivers. FW 11.60 workload capability remains disabled pending a corrected,
-  property-only hardware probe. `agc_fw1160_stage10.elf` is that isolated
-  gate: exact five-argument property call, range naming, shutdown, and forced
-  process termination, with no PM4 submission.
+  drivers. The corrected property-only `agc_fw1160_stage10.elf` gate passed on
+  standard-PS5 FW `0x11600005`: exact five-argument property call, range
+  naming, shutdown, and forced process termination, with no PM4 submission.
+  Standard FW 11.60 now selects the exact Sony stream adapter and installs the
+  proven property idempotently before its first workload call; Trinity remains
+  fail-closed. `agc_fw1160_stage11.elf` is the bounded active/complete plus
+  ordered-marker qualification gate and must pass twice before promotion to
+  the full public-path sample.
   All 39 active Sony drivers are now verified to share that nine-dword
   multi-argument contract, with 18/12-dword maximum reservations. Other
   profiles remain fail-closed until their GPU-info subregion selection is
