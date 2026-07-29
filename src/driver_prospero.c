@@ -125,6 +125,8 @@ extern int32_t sceKernelReleaseDirectMemory(off_t physicalAddr, size_t length);
 extern int32_t sceKernelMapNamedSystemFlexibleMemory(
     void **addr, size_t size, int type, int flags, const char *name);
 extern int32_t sceKernelReleaseFlexibleMemory(void *addr, size_t len);
+extern int32_t sceKernelSetVirtualRangeName(
+    const void *addr, size_t len, const char *name);
 
 /* Named internal memory region allocated by agcProsperoInitializeInternalMemory */
 typedef struct {
@@ -430,6 +432,7 @@ static int agcProsperoFindFreeQueue(void)
  */
 static int32_t agcProsperoAllocRegion(AgcProsperoRegion *region,
                                       size_t size, int mem_type,
+                                      uintptr_t address_hint,
                                       const char *name)
 {
     if (!region || size == 0)
@@ -439,7 +442,7 @@ static int32_t agcProsperoAllocRegion(AgcProsperoRegion *region,
 
     /* Use sceKernelMapNamedSystemFlexibleMemory (matches SPRX behavior).
      * The SPRX passes type=0x33 for GPU regions, type=3 for SceGnmGpuInfo. */
-    void *addr = NULL;
+    void *addr = (void *)address_hint;
     int32_t ret = sceKernelMapNamedSystemFlexibleMemory(
         &addr, size, mem_type, 0, name);
     if (ret != 0 || !addr) {
@@ -563,7 +566,7 @@ int32_t PS5_SYSV_ABI agcProsperoInitialize(void)
      * mmap the GPU register space at the fixed address used by the SPRX. */
     if ((query_result.capability_mask & 0xFFFF) == 0) {
         void *mmio = mmap((void *)AGC_GC_MMIO_BASE, AGC_GC_MMIO_SIZE,
-                          PROT_READ | PROT_WRITE, MAP_SHARED,
+                          AGC_GC_MMIO_PROT, MAP_SHARED,
                           g_prospero.gc_fd, 0);
         if (mmio == MAP_FAILED || mmio == NULL) {
             close(g_prospero.gc_fd);
@@ -572,8 +575,9 @@ int32_t PS5_SYSV_ABI agcProsperoInitialize(void)
         }
         g_prospero.mmio_base = mmio;
 
-        /* Lock the mapping to prevent page-out (matches SPRX behavior) */
-        mlock(mmio, AGC_GC_MMIO_SIZE);
+        /* Exact SPRX behavior: name the mapping; do not POSIX-mlock it. */
+        (void)sceKernelSetVirtualRangeName(
+            mmio, AGC_GC_MMIO_SIZE, "SceGnmDingDong");
     }
 
     g_prospero.initialized = true;
@@ -623,19 +627,27 @@ int32_t PS5_SYSV_ABI agcProsperoInitializeInternalMemory(void)
         AgcProsperoRegion *region;
         size_t          size;
         int             mem_type;
+        uintptr_t       address_hint;
         const char     *name;
     } regions[] = {
         { &g_prospero.gpu_info,   g_prospero.profile.gpu_info_span,
-          AGC_FLEX_TYPE_INFO, "SceGnmGpuInfo" },
-        { &g_prospero.trap_code,  0x4000,    AGC_FLEX_TYPE_GPU,  "SceGnmTrapCode"  },
-        { &g_prospero.trap_data,  0x4000,    AGC_FLEX_TYPE_GPU,  "SceGnmTrapData"  },
-        { &g_prospero.ddid,       0xFC000,   AGC_FLEX_TYPE_GPU,  "SceGnmDdid"      },
-        { &g_prospero.eop_fifo,   0x3C000,   AGC_FLEX_TYPE_GPU,  "SceGnmEopFifo"   },
-        { &g_prospero.shadow_reg, 0x4000,    AGC_FLEX_TYPE_GPU,  "SceGnmShadowReg" },
+          AGC_FLEX_TYPE_INFO, AGC_GC_GPU_INFO_ADDRESS_HINT, "SceGnmGpuInfo" },
+        { &g_prospero.trap_code, 0x4000, AGC_FLEX_TYPE_GPU,
+          AGC_GC_INTERNAL_ADDRESS_HINT, "SceGnmTrapCode" },
+        { &g_prospero.trap_data, 0x4000, AGC_FLEX_TYPE_GPU,
+          AGC_GC_INTERNAL_ADDRESS_HINT, "SceGnmTrapData" },
+        { &g_prospero.ddid, 0xFC000, AGC_FLEX_TYPE_GPU,
+          AGC_GC_INTERNAL_ADDRESS_HINT, "SceGnmDdid" },
+        { &g_prospero.eop_fifo, 0x3C000, AGC_FLEX_TYPE_GPU,
+          AGC_GC_INTERNAL_ADDRESS_HINT, "SceGnmEopFifo" },
+        { &g_prospero.shadow_reg, 0x4000, AGC_FLEX_TYPE_GPU,
+          AGC_GC_INTERNAL_ADDRESS_HINT, "SceGnmShadowReg" },
         { &g_prospero.cwsr,       g_prospero.profile.cwsr_size,
-          AGC_FLEX_TYPE_GPU, "SceGnmCwsr" },
-        { &g_prospero.misc,       0x4000,    AGC_FLEX_TYPE_GPU,  "SceGnmMisc"      },
-        { &g_prospero.acqrb,      0x1E0000,  AGC_FLEX_TYPE_GPU,  "SceGnmACQRB"     },
+          AGC_FLEX_TYPE_GPU, AGC_GC_INTERNAL_ADDRESS_HINT, "SceGnmCwsr" },
+        { &g_prospero.misc, 0x4000, AGC_FLEX_TYPE_GPU,
+          AGC_GC_INTERNAL_ADDRESS_HINT, "SceGnmMisc" },
+        { &g_prospero.acqrb, 0x1E0000, AGC_FLEX_TYPE_GPU,
+          AGC_GC_INTERNAL_ADDRESS_HINT, "SceGnmACQRB" },
     };
 
     for (int i = 0; i < (int)(sizeof(regions) / sizeof(regions[0])); i++) {
@@ -644,6 +656,7 @@ int32_t PS5_SYSV_ABI agcProsperoInitializeInternalMemory(void)
         int32_t ret = agcProsperoAllocRegion(regions[i].region,
                                           regions[i].size,
                                           regions[i].mem_type,
+                                          regions[i].address_hint,
                                           regions[i].name);
         if (ret != AGC_OK) {
             printf("FAILED (0x%x)\n", (unsigned)ret);
@@ -654,6 +667,8 @@ int32_t PS5_SYSV_ABI agcProsperoInitializeInternalMemory(void)
         }
         printf("OK (addr=%p)\n", regions[i].region->cpu_addr);
     }
+
+    memset(g_prospero.ddid.cpu_addr, 0, g_prospero.ddid.size);
 
     int32_t trailer_ret = agcProsperoCarveSubRegion(
         &g_prospero.ddid, AGC_DDID_MULTI_TRAILER_OFFSET,
@@ -1545,7 +1560,6 @@ int32_t PS5_SYSV_ABI agcProsperoShutdown(void)
     agcProsperoFreeRegion(&g_prospero.gpu_info);
 
     if (g_prospero.mmio_base) {
-        (void)munlock(g_prospero.mmio_base, AGC_GC_MMIO_SIZE);
         (void)munmap(g_prospero.mmio_base, AGC_GC_MMIO_SIZE);
     }
     if (g_prospero.gc_fd >= 0) {

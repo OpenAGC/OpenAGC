@@ -1748,6 +1748,9 @@ Acceptance criteria:
   operation per boot, uses unbuffered logging, and launches the process-cleanup
   ELF before every payload. Start with version/model detection only; do not
   submit, allocate AGC internal memory, create queues, or map MMIO in that gate.
+- ✅ Added unbuffered `agc_fw1160_stage0.elf` (identity only) and
+  `agc_fw1160_stage1.elf` (corrected init plus immediate shutdown). Their runner
+  launches the process-cleanup ELF before every stage.
 - Qualify later gates individually only after the preceding gate passes twice.
   Compute, graphics, and display remain prohibited until the full direct
   lifecycle has passed this staged ladder.

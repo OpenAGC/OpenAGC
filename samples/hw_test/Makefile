@@ -49,6 +49,8 @@ VIDEOOUT_LDFLAGS := -lSceVideoOut -lkernel
 
 # agc_init: links libopenagc.a + VideoOut + kernel
 AGC_LDFLAGS := $(OPENAGC_LIB) -lSceVideoOut -lkernel
+FW_STAGE_LDFLAGS := $(OPENAGC_LIB) -lSceVideoOut -lkernel
+PROCESS_CLEANUP_ELF ?= $(OPENAGC_ROOT)/../Vulkan-PS5/build-prospero-m2/vulkan_ps5_process_cleanup.elf
 
 # === Targets ===
 
@@ -85,6 +87,12 @@ agc_init_fw1160.elf: agc_init.c ps5_video_out.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_EXPECT_FIRMWARE_ABI_KEY=0x1160u \
 		-DAGC_EXPECT_DEFAULT_STATES=0 -DAGC_EXPECT_WORKLOAD=0 \
 		-o $@ agc_init.c $(AGC_LDFLAGS)
+
+agc_fw1160_stage0.elf: agc_fw1160_stage.c gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_FW1160_STAGE=0 -o $@ $< $(FW_STAGE_LDFLAGS)
+
+agc_fw1160_stage1.elf: agc_fw1160_stage.c gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_FW1160_STAGE=1 -o $@ $< $(FW_STAGE_LDFLAGS)
 
 # Combined AGC + VideoOut test (links libopenagc.a + VideoOut + kernel)
 agc_videoout.elf: agc_videoout.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
@@ -523,6 +531,15 @@ deploy_agc: agc_init.elf
 deploy_agc_fw1160: agc_init_fw1160.elf
 	@echo "FW 11.60 direct deployment disabled after hardware power-off"
 	@false
+
+.PHONY: deploy_agc_fw1160_stage0 deploy_agc_fw1160_stage1
+deploy_agc_fw1160_stage0: agc_fw1160_stage0.elf
+	PS5_HOST=$(PS5_HOST) STAGE=0 STAGE_ARTIFACT=$(THIS_DIR)/$< \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) ./run_fw1160_stage.sh
+
+deploy_agc_fw1160_stage1: agc_fw1160_stage1.elf
+	PS5_HOST=$(PS5_HOST) STAGE=1 STAGE_ARTIFACT=$(THIS_DIR)/$< \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) ./run_fw1160_stage.sh
 
 deploy_agc_videoout: agc_videoout.elf
 	PS5_HOST=$(PS5_HOST) ./run_fw550_conformance.sh --sample agc_videoout

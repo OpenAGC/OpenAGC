@@ -99,6 +99,13 @@ static void test_direct_operation_profiles(void)
 {
     AgcProsperoDirectProfile profile;
 
+    TEST_ASSERT_EQ(AGC_GC_MMIO_PROT, 0x22u,
+        "GC aperture preserves Sony CPU/GPU-write protection");
+    TEST_ASSERT_EQ(AGC_GC_GPU_INFO_ADDRESS_HINT, 0xfe0300000ULL,
+        "GPU-info allocation preserves Sony address hint");
+    TEST_ASSERT_EQ(AGC_GC_INTERNAL_ADDRESS_HINT, 0xf00000000ULL,
+        "internal allocations preserve Sony address hint");
+
     TEST_ASSERT(agcProsperoBuildDirectProfile(
         0x05500008u, false, &profile), "FW 5.50 direct profile builds");
     TEST_ASSERT_EQ(profile.capabilities,

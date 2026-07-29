@@ -333,6 +333,9 @@ _Static_assert(sizeof(AgcGcContextQueryResult) == 0x04,
 /* Fixed GPU register MMIO address used by libSceAgcDriver module_start */
 #define AGC_GC_MMIO_BASE    0xfe0200000ULL
 #define AGC_GC_MMIO_SIZE    0x4000u
+#define AGC_GC_MMIO_PROT    0x22u
+#define AGC_GC_GPU_INFO_ADDRESS_HINT 0xfe0300000ULL
+#define AGC_GC_INTERNAL_ADDRESS_HINT 0xf00000000ULL
 
 /*
  * Makesysmap argument struct (nr=0x09, dir=RW, size=8).

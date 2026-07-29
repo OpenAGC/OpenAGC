@@ -1514,6 +1514,15 @@ the exact `hw.sce_main_socid` predicate, the direct probe froze the UI and the
 console powered itself off before a buffered operation log was recovered.
 Runtime selection now rejects FW 11.60 and every other non-hardware-qualified
 profile. `agc_init_fw1160.elf` is build-only and its deployment target fails.
+Offline comparison then found and fixed four pre-submit mismatches: GC aperture
+protection `0x22`, `sceKernelSetVirtualRangeName` instead of `mlock`, Sony's two
+fixed flexible-memory address hints, and complete DDID zeroing. The sample's
+mutating aperture preflight was also removed. These corrections are not yet
+hardware-qualified; see `analysis/fw1160_direct_poweroff_20260729.md`.
+The corrected implementation then passed the complete FW 5.50 `agc_init`
+hardware probe in two seconds, including exact hinted addresses, defaults,
+multi-DCB markers, wait64, async, queue, suspend, and workload lifecycle
+(`20260729T111638Z-98955`).
 
 ## Next RE Tasks
 

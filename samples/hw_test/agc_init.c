@@ -287,17 +287,8 @@ int main(void) {
         printf("    DIAG: CONTEXT_QUERY 0xC004812E returned %d (errno=%d, cap=0x%X)\n",
                ioret, errno, ctx_query);
 
-        /* Try mmap at the fixed GPU register address used by the SPRX */
-        if (ioret == 0 && (ctx_query & 0xFFFF) == 0) {
-            void *mmio = mmap((void*)0xfe0200000ULL, 0x4000,
-                              PROT_READ | PROT_WRITE, MAP_SHARED, test_fd, 0);
-            if (mmio == MAP_FAILED) {
-                printf("    DIAG: mmap 0xfe0200000 failed (errno=%d)\n", errno);
-            } else {
-                printf("    DIAG: mmap 0xfe0200000 OK (ptr=%p)\n", mmio);
-                munmap(mmio, 0x4000);
-            }
-        }
+        /* Do not map/unmap the GC aperture as a preflight. The real
+         * initialization must own that mapping for the complete lifecycle. */
 
         close(test_fd);
     }
