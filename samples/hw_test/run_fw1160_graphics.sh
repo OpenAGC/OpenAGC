@@ -30,10 +30,36 @@ curl -sS --fail --ftp-create-dirs -T "$GRAPHICS_ARTIFACT" \
     "ftp://$PS5_HOST:2121$REMOTE_BASE/eboot.elf" || exit 1
 output_file=$(mktemp) || exit 2
 trap 'rm -f "$output_file"' EXIT HUP INT TERM
-curl -sS --fail --max-time 30 \
-    "http://$PS5_HOST:8080/hbldr?pipe=1&daemon=0&path=$REMOTE_BASE/eboot.elf" \
-    > "$output_file" 2>&1
-transport_status=$?
+transport_status=0
+if [ -n "${RESULT_LOG_PATH:-}" ]; then
+    result_ftp_url="ftp://$PS5_HOST:2121$RESULT_LOG_PATH"
+    curl -sS --max-time 5 --quote "DELE $RESULT_LOG_PATH" \
+        "ftp://$PS5_HOST:2121/" >/dev/null 2>&1 || true
+    curl -sS --fail --max-time 10 \
+        "http://$PS5_HOST:8080/hbldr?pipe=0&daemon=0&path=$REMOTE_BASE/eboot.elf" \
+        >/dev/null || exit 1
+    result_ready=0
+    attempts=0
+    while [ "$attempts" -lt 30 ]; do
+        if curl -sS --fail --max-time 3 "$result_ftp_url" \
+                -o "$output_file" 2>/dev/null &&
+           grep -q '^Graphics result:' "$output_file"; then
+            result_ready=1
+            break
+        fi
+        attempts=$((attempts + 1))
+        sleep 1
+    done
+    if [ "$result_ready" -ne 1 ]; then
+        echo "timed out waiting for file-backed graphics verdict" >&2
+        exit 1
+    fi
+else
+    curl -sS --fail --max-time 30 \
+        "http://$PS5_HOST:8080/hbldr?pipe=1&daemon=0&path=$REMOTE_BASE/eboot.elf" \
+        > "$output_file" 2>&1
+    transport_status=$?
+fi
 cat "$output_file"
 
 grep -q "Runtime profile FW ABI $EXPECTED_FW_ABI: PASS" "$output_file" || exit 1

@@ -417,6 +417,14 @@ cross-build without warnings; hardware verdicts remain pending. See
 `analysis/fw1160_color_format_gate_matrix_20260730.md` and
 `analysis/fw1160_rgba8_srgb_headless_gate_audit_20260730.md`.
 
+FW 11.60 websrv continued launching and cleanly releasing RG32 but stopped
+delivering its foreground stdout pipe, so those attempts do not count. A
+file-backed qualification mode is now built for RG32, RGBA32, and all four
+headless RGBA8 gates. It removes the prior result, launches with no HTTP pipe,
+polls FTP for a fresh final verdict, and applies the unchanged target-specific
+oracles. This is a transport-only fallback; GPU streams and validation remain
+identical.
+
 Exact `0x0550` modern headless mirrors for R16, RG16, R8, RG8, RGB10A2,
 R11G11B10, R32, RG32, and RGBA32 are cross-built without warnings. The shared
 runner is firmware-selectable and retains each target-specific native oracle.

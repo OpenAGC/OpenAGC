@@ -97,6 +97,25 @@ two seconds, and requires websrv to respond before it uploads the next graphics
 ELF. This preserves the mandatory immediately-preceding cleanup while avoiding
 a false transport failure; residual-process checks still use ps5debug-NG.
 
+After reboot, the same websrv instance again launched RG32 and the process
+self-terminated without residue, but its foreground stdout pipe returned no
+bytes. The run cannot count without its oracle log. A bounded file-backed mode
+now redirects only the pending headless artifacts to
+`/data/homebrew/openagc_fw1160_graphics/result.log`. The runner deletes that
+file before every launch, starts the foreground payload with `pipe=0`, polls
+FTP for a fresh final `Graphics result:` line, and then applies the same exact
+log validators. A stale or partial file therefore cannot qualify a run.
+
+| File-backed target | Artifact SHA-256 |
+| --- | --- |
+| `RG32_FLOAT` | `58978e2029e9c6d06468ad6fdb592990460b1ee1bf96f36885aa1265def181cf` |
+| `RGBA32_FLOAT` | `61e9be6605afdb7a6d42bddb6c4bd05cde9301aaf250b4fc687731a32940c871` |
+
+Both variants retain the exact profile, PM4 stream, readback, shutdown, and
+self-termination code of their streaming counterparts; the only conditional
+addition opens and line-buffers the result file before initialization. Run the
+file-backed RG32 artifact twice rather than mixing evidence from two artifacts.
+
 The five twice-passed formats are hardware-qualified on this FW 11.60 console,
 but project-wide parity promotion still requires matching modern headless FW
 5.50 regressions. The FW 5.50 console was unreachable on ports 8080 and 744

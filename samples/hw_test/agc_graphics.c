@@ -3228,6 +3228,12 @@ static void visualize_r11g11b10(GraphicsTest *test)
 /* ======================================================================== */
 
 int main(void) {
+#ifdef AGC_RESULT_LOG_PATH
+    if (!freopen(AGC_RESULT_LOG_PATH, "w", stdout))
+        return 2;
+    setvbuf(stdout, NULL, _IOLBF, 0);
+    printf("Result log: %s\n", AGC_RESULT_LOG_PATH);
+#endif
     GraphicsTest test = { .handle = -1, .direct_memory = -1 };
 
     if (atexit(graphics_process_exit) != 0) {

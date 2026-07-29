@@ -52,6 +52,22 @@ The 11.60 artifacts force ABI key `0x1160`; the regression mirrors force
 `0x0550`. All reject Trinity hardware, self-terminate after flushing their
 verdict, and compile without warnings.
 
+Because FW 11.60 websrv stopped returning stdout pipes after repeated launches,
+the following otherwise-identical variants write their complete line-buffered
+verdict to a fresh FTP-readable file. The runner deletes stale evidence and
+requires the final verdict before applying every normal oracle:
+
+| File-backed FW 11.60 target | SHA-256 |
+| --- | --- |
+| `RGBA8_UNORM` | `e5194c1becfad460456672978d132b74508dbe93f2a333e09a126a4c7638512a` |
+| `BGRA8_UNORM` | `dac5f41fc6d427790bf1a8eadc4d094eb3c7b0210cf53b8f7a41fd5fd5990feb` |
+| `RGBA8_SRGB` | `a9ec289b08344e5c56c5f3257e0ddd4fd300276fb3ddb0051ce6d723d53d0d0f` |
+| `BGRA8_SRGB` | `de1179e9a384b03d771656b36175a01785e27ea160c76ac04059bd34463b6092` |
+
+Use one file-backed artifact for both qualifying passes of each target. The
+logging mode does not alter the render-target allocation, shader, PM4 stream,
+fence, native readback, or shutdown path.
+
 ## Hardware order
 
 Finish the interrupted `RG32_FLOAT` second pass and both `RGBA32_FLOAT` passes
