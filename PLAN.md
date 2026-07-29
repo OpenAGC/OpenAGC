@@ -42,6 +42,20 @@ AMD PM4 packet ancestry overlap in useful ways.
   `analysis/agc_driver_shadow_facts.md`. The stage-16 boundary and artifact
   hash are in `analysis/fw1160_workload_stage16_plan_20260729.md`.
 
+### FW 11.60 graphics and compute parity gates
+
+- The headless graphics and compute artifacts are audited, rebuilt, and do not
+  call any workload API. They use the exact `0x1160` standard profile,
+  version-12 defaults, async setup, bounded completion/readback oracles, clean
+  shutdown, and forced self-termination.
+- On the next clean reboot, run graphics first and compute second, each through
+  its guarded cleanup runner. Run the higher-risk workload stage 16 last so a
+  workload stall cannot consume the boot session before independent parity
+  evidence is collected.
+- Require two identical passes per capability, then rerun the corresponding FW
+  5.50 paths before promotion. See
+  `analysis/fw1160_graphics_compute_gate_audit_20260729.md`.
+
 ### Gfx1013 multi-viewport state
 
 - Provide one application-neutral typed array for up to 16 Vulkan-style

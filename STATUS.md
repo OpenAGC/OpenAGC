@@ -1049,6 +1049,12 @@ The host-generic implementation now has a tested model for:
   defaults, async setup, ordinary preflight, full flush, and ordered markers.
   It is built but not hardware-run; public FW 11.60 workload remains disabled.
   See `analysis/fw1160_workload_stage16_plan_20260729.md`.
+  The independent headless FW 11.60 graphics and compute gates were also
+  rebuilt and audited. They contain no workload calls, require the exact
+  standard `0x1160` profile, and enforce bounded GPU/readback plus shutdown
+  oracles. On the next clean boot they run before stage 16, in increasing risk
+  order, so workload failure cannot hide independent parity results. See
+  `analysis/fw1160_graphics_compute_gate_audit_20260729.md`.
   The first `agc_fw1160_sony_workload.elf` was hardware-attempted after a clean
   reboot. It patched credentials before `dlopen`, loaded the matching FW 11.60
   module, resolved all required exports, matched the 18/12-dword sizes, and
