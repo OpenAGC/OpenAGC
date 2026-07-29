@@ -62,10 +62,11 @@ builds with ps5-payload-sdk; hardware validation is the remaining step.
 - **Application-neutral capabilities** — `agcGfx1013GetCapabilities` reports
   qualified gfx1013 dimensions, Wave32/compute limits, render/depth formats,
   sample counts, and flexible/direct memory profiles without Vulkan coupling
-- **Application-neutral buffer copies** — `agcGfx1013CopyBuffer` records raw
-  gfx1013 `DMA_DATA` copies, validates four-byte alignment and 48-bit address
-  ranges, splits transfers larger than one packet, and rejects insufficient
-  command-buffer space atomically
+- **Application-neutral buffer copies** — `agcGfx1013CopyBuffer` records the
+  seven-dword gfx1013 `DMA_DATA` memory-copy packet with L2 source/destination
+  selection and CP synchronization, validates four-byte alignment and 48-bit
+  address ranges, splits transfers at the 21-bit byte-count limit, and rejects
+  insufficient command-buffer space atomically
 - **Application-neutral raster primitives** — typed topology translation and
   primitive-size state own gfx1013 point-size, point-clamp, and line-width
   encodings for higher-level APIs without exposing register values

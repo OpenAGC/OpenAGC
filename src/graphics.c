@@ -715,7 +715,7 @@ int32_t PS5_SYSV_ABI agcGfx1013CopyBuffer(
     uint64_t byte_count)
 {
     const uint64_t address_limit = UINT64_C(1) << 48u;
-    const uint64_t maximum_packet_bytes = UINT64_C(0xfffffffc);
+    const uint64_t maximum_packet_bytes = UINT64_C(0x1ffffc);
 
     if (!cb || source_address == 0u || destination_address == 0u ||
         byte_count == 0u)
@@ -729,17 +729,23 @@ int32_t PS5_SYSV_ABI agcGfx1013CopyBuffer(
 
     uint64_t packet_count = byte_count / maximum_packet_bytes +
         (byte_count % maximum_packet_bytes != 0u);
-    if (packet_count > UINT32_MAX / 8u ||
-        agcCbRemainingDwords(cb) < (uint32_t)packet_count * 8u)
+    if (packet_count > UINT32_MAX / 7u ||
+        agcCbRemainingDwords(cb) < (uint32_t)packet_count * 7u)
         return AGC_ERROR_BUFFER_TOO_SMALL;
 
     while (byte_count != 0u) {
         uint32_t packet_bytes = byte_count > maximum_packet_bytes ?
             (uint32_t)maximum_packet_bytes : (uint32_t)byte_count;
-        uint32_t *packet = agcCbAllocDwords(cb, 8u);
-        if (!packet || sceAgcAcbDmaData(packet, 8u, source_address,
-                destination_address, packet_bytes, 0u, 0u) != 8)
+        uint32_t *packet = agcCbAllocDwords(cb, 7u);
+        if (!packet)
             return AGC_ERROR_INTERNAL;
+        packet[0] = agcPm4Header3(AGC_PM4_OP_DMA_DATA, 7u);
+        packet[1] = UINT32_C(0xe0300000); /* L2 source/destination, CP sync. */
+        packet[2] = (uint32_t)source_address;
+        packet[3] = (uint32_t)(source_address >> 32u);
+        packet[4] = (uint32_t)destination_address;
+        packet[5] = (uint32_t)(destination_address >> 32u);
+        packet[6] = packet_bytes;
         source_address += packet_bytes;
         destination_address += packet_bytes;
         byte_count -= packet_bytes;

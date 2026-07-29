@@ -464,15 +464,25 @@ reject unqualified DrawIndex controls.
 
 ## Application-facing buffer-copy composition (2026-07-28)
 
-`agcGfx1013CopyBuffer` now hides the raw Ariel `DMA_DATA` encoding behind an
-application-neutral gfx1013 API for higher-level drivers. It accepts aligned
-48-bit source/destination ranges, splits transfers at the packet byte-count
-limit, and preflights all required DCB space so a short buffer is rejected
-without partial emission. Exact host fixtures cover the single-packet stream,
-a transfer just over 4 GiB split into two packets, alignment rejection, and
-atomic short-buffer failure. The complete host suite and the Prospero static
-library build pass; Vulkan-level copy semantics and hardware readback remain
-the consumer's next qualification step.
+`agcGfx1013CopyBuffer` now hides the raw seven-dword gfx1013 `DMA_DATA`
+encoding behind an application-neutral API for higher-level drivers. It uses
+L2 source/destination addressing with CP synchronization, accepts aligned
+48-bit ranges, splits transfers at `0x1ffffc` bytes (the dword-aligned 21-bit
+packet limit), and preflights all required DCB space so a short buffer is
+rejected without partial emission. Exact host fixtures cover the single-packet
+stream, a transfer crossing the packet limit, alignment rejection, and atomic
+short-buffer failure.
+
+FW 5.50 validation on 2026-07-29 submitted a four-packet 8,294,400-byte copy
+from an SDL render target to a direct VideoOut buffer. The copy fence,
+presentation, and subsequent CPU readback all completed, the process exited
+cleanly, and the qualification runner found no GPU fault, queue reset, system
+power event, or leaked presentation owner. The earlier eight-dword ACB layout
+and recovered DCB compatibility wrapper were both rejected by hardware (bad
+packet/unmapped-address and reserved-bit faults respectively); they are not
+used by this API. Exact copied-color validation remains part of the SDL
+renderer color/readback work; see
+`analysis/fw550_buffer_copy_consumer_validation_20260729.md`.
 
 ## FW 5.50 combined stencil/HTILE expclear qualification (2026-07-27)
 

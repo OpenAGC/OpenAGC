@@ -588,38 +588,36 @@ static void test_gfx1013_buffer_copy_packets(void)
     TEST_ASSERT_EQ(agcGfx1013CopyBuffer(&cb,
         UINT64_C(0x200010000), UINT64_C(0x200020000), 0x100u), AGC_OK,
         "gfx1013 buffer copy succeeds");
-    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 8u,
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 7u,
         "gfx1013 buffer copy exact dword count");
     TEST_ASSERT_EQ(agcPm4Opcode(buffer[0]), AGC_PM4_OP_DMA_DATA,
         "gfx1013 buffer copy uses raw DMA_DATA");
-    TEST_ASSERT_EQ(buffer[1], 0u,
-        "gfx1013 buffer copy disables byte swapping");
-    TEST_ASSERT_EQ(buffer[2], 0x100u,
-        "gfx1013 buffer copy byte count");
-    TEST_ASSERT_EQ(buffer[3], 0x00020000u,
-        "gfx1013 buffer copy destination low");
-    TEST_ASSERT_EQ(buffer[4], 2u,
-        "gfx1013 buffer copy destination high");
-    TEST_ASSERT_EQ(buffer[5], 0x00010000u,
+    TEST_ASSERT_EQ(buffer[1], 0xe0300000u,
+        "gfx1013 buffer copy uses L2 addresses and CP synchronization");
+    TEST_ASSERT_EQ(buffer[2], 0x00010000u,
         "gfx1013 buffer copy source low");
-    TEST_ASSERT_EQ(buffer[6], 2u,
+    TEST_ASSERT_EQ(buffer[3], 2u,
         "gfx1013 buffer copy source high");
-    TEST_ASSERT_EQ(buffer[7], 0u,
-        "gfx1013 buffer copy reserved word");
+    TEST_ASSERT_EQ(buffer[4], 0x00020000u,
+        "gfx1013 buffer copy destination low");
+    TEST_ASSERT_EQ(buffer[5], 2u,
+        "gfx1013 buffer copy destination high");
+    TEST_ASSERT_EQ(buffer[6], 0x100u,
+        "gfx1013 buffer copy byte count");
 
     agcCbInit(&cb, buffer, sizeof(buffer));
     TEST_ASSERT_EQ(agcGfx1013CopyBuffer(&cb,
         UINT64_C(0x200010000), UINT64_C(0x200020000),
-        UINT64_C(0x100000000)), AGC_OK,
+        UINT64_C(0x200000)), AGC_OK,
         "gfx1013 large buffer copy splits into packets");
-    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 16u,
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 14u,
         "gfx1013 split buffer copy exact dword count");
-    TEST_ASSERT_EQ(buffer[2], 0xfffffffcu,
+    TEST_ASSERT_EQ(buffer[6], 0x1ffffcu,
         "gfx1013 split buffer copy first packet maximum");
-    TEST_ASSERT_EQ(buffer[10], 4u,
+    TEST_ASSERT_EQ(buffer[13], 4u,
         "gfx1013 split buffer copy remainder");
 
-    agcCbInit(&cb, buffer, 7u * sizeof(uint32_t));
+    agcCbInit(&cb, buffer, 6u * sizeof(uint32_t));
     TEST_ASSERT_EQ(agcGfx1013CopyBuffer(&cb,
         UINT64_C(0x200010000), UINT64_C(0x200020000), 4u),
         AGC_ERROR_BUFFER_TOO_SMALL,
