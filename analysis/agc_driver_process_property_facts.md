@@ -33,5 +33,7 @@ The exact five-argument carrier is now also hardware-qualified at the isolated
 property-only boundary on standard-PS5 FW `0x11600005`. Stage 10 returned
 `AGC_OK`, completed driver shutdown, and self-terminated without submitting
 PM4. OpenAGC therefore uses this call as an idempotent prerequisite for the
-FW 11.60 workload-stream adapter. Packet execution remains a separate stage-11
-hardware gate.
+FW 11.60 workload-stream adapter candidate. Packet execution remained a
+separate stage-11 hardware gate and failed: the exact active/complete sequence
+stalled the process and UI despite the proven property call. The property ABI
+is qualified, but it is not sufficient evidence to enable workload capability.

@@ -598,11 +598,16 @@ standard span and `0x180000` Trinity span. The isolated
 `agc_fw1160_stage10.elf` gate used that exact five-argument call, applied the
 proven `SceGnmDumpArea` range name, performed no submission, returned `AGC_OK`,
 shut down, and self-terminated on standard-PS5 FW `0x11600005`. The standard
-FW 11.60 candidate now makes that registration an idempotent prerequisite of
-the exact Sony stream adapter; Trinity remains fail-closed. Stage 11 is the
-next bounded gate: active ID 1, complete ID 1, then an ordered `WRITE_DATA`
-marker with a five-second timeout. It must pass twice before the full public
-qualification artifact advertises workload success.
+FW 11.60 stage 11 then made that registration an idempotent prerequisite of
+the exact Sony stream adapter and submitted active ID 1, complete ID 1, then
+an ordered `WRITE_DATA` marker. Both workload submissions returned `AGC_OK`,
+but the process and PS5 UI stalled before the bounded polling loop could print
+its five-second verdict. ps5debug-NG still enumerated PID 104 but could not
+attach; the process-cleanup ELF removed it and restored a no-stale-process
+state. The FW 11.60 workload capability is disabled again. Next RE must recover
+the missing registered-stream state or lifecycle beyond the already proven
+process property, address table, and packet bytes; do not rerun stage 11
+unchanged.
 
 The Sony workload contract itself is recovered for all active firmware:
 seven active-wrapper and three complete-wrapper groups converge on the same

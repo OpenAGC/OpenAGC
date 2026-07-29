@@ -975,11 +975,14 @@ The host-generic implementation now has a tested model for:
   drivers. The corrected property-only `agc_fw1160_stage10.elf` gate passed on
   standard-PS5 FW `0x11600005`: exact five-argument property call, range
   naming, shutdown, and forced process termination, with no PM4 submission.
-  Standard FW 11.60 now selects the exact Sony stream adapter and installs the
-  proven property idempotently before its first workload call; Trinity remains
-  fail-closed. `agc_fw1160_stage11.elf` is the bounded active/complete plus
-  ordered-marker qualification gate and must pass twice before promotion to
-  the full public-path sample.
+  Stage 11 then installed that property idempotently and submitted the exact
+  Sony active/complete packets. Both calls returned `AGC_OK`, but the process
+  and PS5 UI stalled before the ordered-marker loop could report its bounded
+  verdict. ps5debug-NG enumerated the process but debugger attach failed; the
+  cleanup ELF removed it. FW 11.60 workload capability is disabled again, for
+  both standard and Trinity models. `agc_fw1160_stage11.elf` is retained only
+  as a bounded requalification gate after additional registered-stream state
+  is recovered; do not rerun it unchanged.
   All 39 active Sony drivers are now verified to share that nine-dword
   multi-argument contract, with 18/12-dword maximum reservations. Other
   profiles remain fail-closed until their GPU-info subregion selection is
