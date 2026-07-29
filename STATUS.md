@@ -410,6 +410,15 @@ outside the headless matrix because their current fixtures depend on
 VideoOut-owned buffers; those oracles will not be weakened merely to compile.
 See `analysis/fw1160_color_format_gate_matrix_20260730.md`.
 
+The uncompressed D16, S8-only, and D16+S8 paths now have exact FW 11.60
+headless artifacts and a cleanup-first bounded runner. Their native D16, S8,
+color, marker, fence, shutdown, and final-verdict oracles are unchanged from
+the FW 5.50-qualified fixtures. They are built, not hardware-qualified, and
+must pass twice each in increasing risk order after a clean reboot before the
+matching FW 5.50 regression. HTILE, expclear, compressed metadata, and MSAA
+are deliberately outside this first tier. See
+`analysis/fw1160_uncompressed_depth_gate_audit_20260730.md`.
+
 ## FW 5.50 sRGB render-target qualification (2026-07-27)
 
 Append-only public presets `RGBA8_SRGB` and `BGRA8_SRGB` are host-tested and

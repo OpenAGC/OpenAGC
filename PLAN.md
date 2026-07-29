@@ -89,6 +89,13 @@ AMD PM4 packet ancestry overlap in useful ways.
   packing risk. Display-backed RGBA8/BGRA8 and sRGB variants remain deferred
   until their VideoOut-owned oracle buffers are replaced with real headless
   allocations. See `analysis/fw1160_color_format_gate_matrix_20260730.md`.
+- The first uncompressed depth/stencil tier is also built for exact FW 11.60:
+  D16, S8-only, then D16+S8. Each target is headless, retains the exact native
+  FW 5.50-qualified readback distributions, and runs through a cleanup-first
+  bounded harness. Run each twice in that order only after a clean reboot,
+  then regress the corresponding FW 5.50 artifacts. Do not advance to HTILE,
+  expclear, compressed metadata, or MSAA until all three base gates qualify.
+  See `analysis/fw1160_uncompressed_depth_gate_audit_20260730.md`.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and

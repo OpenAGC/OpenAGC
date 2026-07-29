@@ -529,6 +529,21 @@ agc_stencil_s8.elf: shaders_depth agc_graphics.c ps5_video_out.h gpu_credentials
 agc_depth_stencil_d16_s8.elf: shaders_depth agc_graphics.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_DEPTH_VALIDATION=1 -DAGC_D16_VALIDATION=1 -DAGC_STENCIL_VALIDATION=1 -DAGC_D16_S8_VALIDATION=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
 
+FW1160_DEPTH_FLAGS := $(FW1160_GRAPHICS_FLAGS) -DAGC_DEPTH_VALIDATION=1
+
+agc_depth_d16_fw1160.elf: shaders_depth agc_graphics.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW1160_DEPTH_FLAGS) -DAGC_D16_VALIDATION=1 \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_stencil_s8_fw1160.elf: shaders_depth agc_graphics.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW1160_DEPTH_FLAGS) -DAGC_STENCIL_VALIDATION=1 \
+		-DAGC_S8_ONLY_VALIDATION=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_depth_stencil_d16_s8_fw1160.elf: shaders_depth agc_graphics.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW1160_DEPTH_FLAGS) -DAGC_D16_VALIDATION=1 \
+		-DAGC_STENCIL_VALIDATION=1 -DAGC_D16_S8_VALIDATION=1 \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
 agc_depth_d16_htile.elf: shaders_depth agc_graphics.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_DEPTH_VALIDATION=1 -DAGC_D16_VALIDATION=1 -DAGC_D16_HTILE_VALIDATION=1 -DAGC_HTILE_VALIDATION=1 -DAGC_HTILE_OPERATION_VALIDATION=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
 
@@ -816,6 +831,20 @@ deploy_agc_graphics_rgba32_float_fw1160: agc_graphics_rgba32_float_fw1160.elf
 	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
 		EXPECTED_TARGET=RGBA32_FLOAT PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) \
 		sh ./run_fw1160_graphics.sh
+
+.PHONY: deploy_agc_depth_d16_fw1160 deploy_agc_stencil_s8_fw1160 \
+	deploy_agc_depth_stencil_d16_s8_fw1160
+deploy_agc_depth_d16_fw1160: agc_depth_d16_fw1160.elf
+	PS5_HOST=$(PS5_HOST) DEPTH_ARTIFACT=$(THIS_DIR)/$< \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_depth.sh
+
+deploy_agc_stencil_s8_fw1160: agc_stencil_s8_fw1160.elf
+	PS5_HOST=$(PS5_HOST) DEPTH_ARTIFACT=$(THIS_DIR)/$< \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_depth.sh
+
+deploy_agc_depth_stencil_d16_s8_fw1160: agc_depth_stencil_d16_s8_fw1160.elf
+	PS5_HOST=$(PS5_HOST) DEPTH_ARTIFACT=$(THIS_DIR)/$< \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_depth.sh
 
 deploy_agc_depth: agc_depth.elf
 	-curl -s "ftp://$(PS5_HOST):2121/" --quote "MKD /data/homebrew/agc_depth"

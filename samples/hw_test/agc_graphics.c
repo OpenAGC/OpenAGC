@@ -3270,8 +3270,10 @@ int main(void) {
                    (AGC_STENCIL_VALIDATION ? "+S8 stencil" : " depth"));
         return 1;
     }
+#if !AGC_GRAPHICS_HEADLESS
     memcpy(test.buffers[1], test.buffers[0],
            (size_t)test.width * test.height * BYTES_PER_PIXEL);
+#endif
 #elif AGC_VALIDATE_RGBA8_SRGB || AGC_VALIDATE_BGRA8_SRGB
     const uint32_t swap = AGC_VALIDATE_BGRA8_SRGB ?
         AGC_GFX1013_SURFACE_SWAP_ALT : AGC_GFX1013_SURFACE_SWAP_STD;
