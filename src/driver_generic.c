@@ -24,6 +24,7 @@
 #include "agc_types.h"
 #include "agcdriver.h"
 #include "driver_ops.h"
+#include "agc_workload_state.h"
 
 #include <string.h>
 
@@ -62,6 +63,8 @@ int32_t PS5_SYSV_ABI agcGenericInitialize(void)
     memset(&g_last_acb_submit, 0, sizeof(g_last_acb_submit));
     g_active_workload_id = 0;
     g_workload_active    = false;
+    agcSonyWorkloadConfigureStreamTable(UINT64_C(0x100000000));
+    agcSonyWorkloadResetStreamState();
     return AGC_OK;
 }
 
@@ -81,6 +84,8 @@ int32_t PS5_SYSV_ABI agcGenericShutdown(void)
     memset(&g_last_acb_submit, 0, sizeof(g_last_acb_submit));
     g_active_workload_id = 0;
     g_workload_active = false;
+    agcSonyWorkloadConfigureStreamTable(0);
+    agcSonyWorkloadResetStreamState();
     return AGC_OK;
 }
 

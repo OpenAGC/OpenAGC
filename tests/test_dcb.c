@@ -3,6 +3,17 @@
 #include "agc_pm4.h"
 #include "agc_cb.h"
 #include "game_compat_internal.h"
+#include "agc_workload_state.h"
+
+static void prepare_workload_stream(uint32_t stream_id)
+{
+    uint8_t descriptor[32] = {0};
+
+    agcSonyWorkloadConfigureStreamTable(UINT64_C(0x100000000));
+    agcSonyWorkloadResetStreamState();
+    TEST_ASSERT_EQ(sceAgcDriverRegisterWorkloadStream(stream_id, descriptor),
+        AGC_OK, "register workload stream for DCB test");
+}
 
 static void test_dcb_init_null(void) {
     int32_t r = sceAgcDcbInitializeDefaultHardwareState(NULL, 100);
@@ -58,38 +69,54 @@ static void test_dcb_flip(void) {
 static void test_dcb_set_workload_complete(void) {
     uint32_t buffer[64];
     SceAgcCb cb;
+    prepare_workload_stream(1u);
     agcCbInit(&cb, buffer, sizeof(buffer));
 
-    uint32_t *cmd = sceAgcDcbSetWorkloadComplete(&cb, 0x11223344u, 0x0u);
+    uint32_t *cmd = sceAgcDcbSetWorkloadComplete(&cb, 1u, 1u);
     TEST_ASSERT(cmd != NULL, "SetWorkloadComplete should return non-NULL");
-    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_SET_WORKLOAD, "SetWorkloadComplete opcode");
-    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 8, "SetWorkloadComplete length");
-    TEST_ASSERT_EQ(cmd[1], 0x11223344u, "SetWorkloadComplete workload_id");
-    TEST_ASSERT_EQ(cmd[2], 0x0u, "SetWorkloadComplete flags");
+    TEST_ASSERT_EQ(cmd[0], 0xc0017904u, "SetWorkloadComplete DCB prefix");
+    TEST_ASSERT_EQ(cmd[2], 0xcd000021u, "SetWorkloadComplete IDs");
+    TEST_ASSERT_EQ(cmd[3], 0xc0071e00u, "SetWorkloadComplete packet header");
+    TEST_ASSERT_EQ(cmd[4], 0x40000275u, "SetWorkloadComplete DCB control");
+    TEST_ASSERT_EQ(cmd[5], 0x00000008u, "SetWorkloadComplete slot low");
+    TEST_ASSERT_EQ(cmd[6], 0x00000001u, "SetWorkloadComplete slot high");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 12u,
+        "SetWorkloadComplete cursor advance");
 }
 
 static void test_dcb_set_workload_stream_inactive(void) {
     uint32_t buffer[64];
     SceAgcCb cb;
+    prepare_workload_stream(1u);
     agcCbInit(&cb, buffer, sizeof(buffer));
 
-    uint32_t *cmd = sceAgcDcbSetWorkloadStreamInactive(&cb, 0x11223344u);
+    uint32_t *cmd = sceAgcDcbSetWorkloadStreamInactive(&cb, 1u);
     TEST_ASSERT(cmd != NULL, "SetWorkloadStreamInactive should return non-NULL");
-    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_SET_WORKLOAD, "SetWorkloadStreamInactive opcode");
-    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 8, "SetWorkloadStreamInactive length");
-    TEST_ASSERT_EQ(cmd[1], 0x11223344u, "SetWorkloadStreamInactive workload_id");
+    TEST_ASSERT_EQ(cmd[0], 0xc0027904u, "SetWorkloadStreamInactive DCB prefix");
+    TEST_ASSERT_EQ(cmd[2], 0xcc000001u, "SetWorkloadStreamInactive stream");
+    TEST_ASSERT_EQ(cmd[4], 0xc0033704u, "SetWorkloadStreamInactive payload");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 9u,
+        "SetWorkloadStreamInactive cursor advance");
 }
 
 static void test_dcb_set_workloads_active(void) {
     uint32_t buffer[64];
     SceAgcCb cb;
+    const uint32_t workload_ids[] = {1u, 63u};
+    prepare_workload_stream(1u);
     agcCbInit(&cb, buffer, sizeof(buffer));
 
-    uint32_t *cmd = sceAgcDcbSetWorkloadsActive(&cb, 0x12345678u, NULL, 0);
+    uint32_t *cmd = sceAgcDcbSetWorkloadsActive(&cb, 1u,
+        workload_ids, 2u);
     TEST_ASSERT(cmd != NULL, "SetWorkloadsActive should return non-NULL");
-    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_SET_WORKLOAD, "SetWorkloadsActive opcode");
-    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 8, "SetWorkloadsActive length");
-    TEST_ASSERT_EQ(cmd[1], 0x12345678u, "SetWorkloadsActive flags");
+    TEST_ASSERT_EQ(cmd[0], 0xc0027904u, "SetWorkloadsActive DCB prefix");
+    TEST_ASSERT_EQ(cmd[2], 0xcc000001u, "SetWorkloadsActive stream");
+    TEST_ASSERT_EQ(cmd[3], 0x00000002u, "SetWorkloadsActive mask low");
+    TEST_ASSERT_EQ(cmd[7], 0x80000000u, "SetWorkloadsActive mask high");
+    TEST_ASSERT_EQ(cmd[9], 0xc0071e00u, "SetWorkloadsActive packet header");
+    TEST_ASSERT_EQ(cmd[10], 0x40000267u, "SetWorkloadsActive DCB control");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 18u,
+        "SetWorkloadsActive cursor advance");
 }
 
 static void test_dcb_atomic_gds(void) {
@@ -931,23 +958,28 @@ static void test_batch2_dcb_context_state_op(void) {
 static void test_batch2_dcb_workload_helpers(void) {
     SceAgcCb cb;
     uint32_t buf[64];
+    const uint32_t workload_ids[] = {1u};
+    prepare_workload_stream(1u);
     agcCbInit(&cb, buf, sizeof(buf));
 
     /* SetWorkloadsActive */
-    uint32_t *cmd = sceAgcDcbSetWorkloadsActive(&cb, 0x1234, NULL, 0);
+    uint32_t *cmd = sceAgcDcbSetWorkloadsActive(&cb, 1u,
+        workload_ids, 1u);
     TEST_ASSERT(cmd != 0, "DcbSetWorkloadsActive returns non-NULL");
-    TEST_ASSERT_EQ(agcPm4Opcode(cmd[0]), AGC_PM4_OP_SET_WORKLOAD, "DcbSetWorkloadsActive opcode 0x1E");
-    TEST_ASSERT_EQ(agcPm4Length(cmd[0]), 8u, "DcbSetWorkloadsActive length 8");
+    TEST_ASSERT_EQ(cmd[9], 0xc0071e00u,
+        "DcbSetWorkloadsActive exact SET_WORKLOAD header");
 
     /* SetWorkloadComplete */
-    cmd = sceAgcDcbSetWorkloadComplete(&cb, 0x42, 0);
+    cmd = sceAgcDcbSetWorkloadComplete(&cb, 1u, 1u);
     TEST_ASSERT(cmd != 0, "DcbSetWorkloadComplete returns non-NULL");
-    TEST_ASSERT_EQ(cmd[1], 0x42u, "DcbSetWorkloadComplete workload_id");
+    TEST_ASSERT_EQ(cmd[2], 0xcd000021u,
+        "DcbSetWorkloadComplete stream/workload IDs");
 
     /* SetWorkloadStreamInactive */
-    cmd = sceAgcDcbSetWorkloadStreamInactive(&cb, 0x99);
+    cmd = sceAgcDcbSetWorkloadStreamInactive(&cb, 1u);
     TEST_ASSERT(cmd != 0, "DcbSetWorkloadStreamInactive returns non-NULL");
-    TEST_ASSERT_EQ(cmd[1], 0x99u, "DcbSetWorkloadStreamInactive workload_id");
+    TEST_ASSERT_EQ(cmd[2], 0xcc000001u,
+        "DcbSetWorkloadStreamInactive stream ID");
 }
 
 /* Forward declarations for batch 3 tests (defined after test_suite_dcb). */
@@ -1664,6 +1696,7 @@ static void test_batch3_ref_driver_stubs(void) {
     TEST_ASSERT_EQ(sceAgcDriverUnregisterResource(0), AGC_ERROR_NOT_SUPPORTED,
         "UnregisterResource returns NOT_SUPPORTED");
 
+    agcSonyWorkloadResetStreamState();
     uint8_t workload_stream[32] = {0xA5u};
     TEST_ASSERT_EQ((uint32_t)sceAgcDriverRegisterWorkloadStream(0, workload_stream),
         AGC_DRIVER_ERROR_INVALID_VALUE,

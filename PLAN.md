@@ -611,9 +611,12 @@ unchanged.
 
 The Sony workload contract itself is recovered for all active firmware:
 seven active-wrapper and three complete-wrapper groups converge on the same
-nine-dword `0xc0071e00` packet and 18/12-dword maximum reservations. It remains
-disabled because OpenAGC's one-ID direct extension and eight-dword DCB/ACB
-builders are different ABIs, not because the cross-firmware packet is unknown.
+nine-dword `0xc0071e00` packet and 18/12-dword maximum reservations. OpenAGC's
+public DCB and ACB cursor ABIs now match those exact active/complete forms plus
+the nine-dword inactive prefix. DCB passes control 0 and ACB control 1, matching
+the FW 11.60 wrappers; registered stream state supplies the backend GPU slot
+address. This fixes the userspace builders without re-enabling the distinct
+one-ID submit-owning convenience operation on FW 11.60.
 
 The fail-closed audit also separates FW 5.50-only EOP-flip evidence from the
 common direct-operation group. Unimplemented target-ring and Razor/capture
@@ -818,7 +821,7 @@ Implemented and host-tested:
 Current expected host test result:
 
 ```text
-5113 passed, 0 failed
+5135 passed, 0 failed
 ```
 
 ## Phase 0: RE Groundwork

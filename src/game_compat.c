@@ -33,6 +33,8 @@
 #include "agc_registers.h"
 #include "agc_shader.h"
 #include "agc_types.h"
+#include "agc_workload_packet.h"
+#include "agc_workload_state.h"
 #include "game_compat_internal.h"
 
 #include <stdlib.h>
@@ -318,42 +320,16 @@ int32_t PS5_SYSV_ABI sceAgcDriverUnregisterResource(uint32_t resource_id)
     return AGC_ERROR_NOT_SUPPORTED;
 }
 
-/* FW 5.50 workload-stream table: IDs 1..31, one 32-byte record per ID. */
-static uint32_t s_workload_stream_mask;
-static uint8_t s_workload_streams[32][32];
-
 int32_t PS5_SYSV_ABI sceAgcDriverRegisterWorkloadStream(
     uint32_t stream_id, const void *stream)
 {
-    if (stream_id < 1u || stream_id > 31u)
-        return (int32_t)AGC_DRIVER_ERROR_INVALID_VALUE;
-
-    uint32_t bit = 1u << stream_id;
-    if ((s_workload_stream_mask & bit) != 0)
-        return (int32_t)AGC_DRIVER_ERROR_INVALID_VALUE;
-    if (!stream)
-        return (int32_t)AGC_DRIVER_ERROR_INVALID_ARGUMENT;
-
-    memcpy(s_workload_streams[stream_id], stream,
-        sizeof(s_workload_streams[stream_id]));
-    s_workload_stream_mask |= bit;
-    return AGC_OK;
+    return agcSonyWorkloadRegisterStream(stream_id, stream);
 }
 
 int32_t PS5_SYSV_ABI sceAgcDriverUnregisterWorkloadStream(
     uint32_t stream_id)
 {
-    if (stream_id < 1u || stream_id > 31u)
-        return (int32_t)AGC_DRIVER_ERROR_INVALID_VALUE;
-
-    uint32_t bit = 1u << stream_id;
-    if ((s_workload_stream_mask & bit) == 0)
-        return (int32_t)AGC_DRIVER_ERROR_NOT_REGISTERED;
-
-    memset(s_workload_streams[stream_id], 0,
-        sizeof(s_workload_streams[stream_id]));
-    s_workload_stream_mask &= ~bit;
-    return AGC_OK;
+    return agcSonyWorkloadUnregisterStream(stream_id);
 }
 
 /* FW 5.50 ZLJk9r2+2Aw, SCoAN5fYlUM, and U9ueyEhSkF4 are identical
@@ -2312,64 +2288,71 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbContextStateOp(
     }
 }
 
-/* DCB workload helpers — these delegate to the same packet format as
- * the ACB/VshDcb variants but operate on a DCB cursor. The SPRX calls
- * internal helper functions that compute the packet size and fill it in. */
+/* Exact DCB workload cursor wrappers. FW 11.60 passes control=false to the
+ * common libSceAgcDriver builders; ACB passes true. */
 
 uint32_t *PS5_SYSV_ABI sceAgcDcbSetWorkloadsActive(
-    SceAgcCb *cb, uint32_t flags, const void *data, uint32_t data_size)
+    SceAgcCb *cb, uint32_t stream_id, const uint32_t *workload_ids,
+    uint32_t workload_count)
 {
-    (void)data;
-    /* SPRX calls an internal helper that builds a SET_WORKLOAD packet.
-     * We emit a simple 8-dword packet matching the ACB format. */
-    uint32_t *cmd = agcCbAllocDwords(cb, 8);
+    uint64_t slot_address;
+    uint64_t workload_mask = 0;
+    uint32_t *cmd;
+    uint32_t i;
+
+    if (!workload_ids || workload_count < 1u || workload_count > 63u ||
+        !agcSonyWorkloadGetStreamSlotAddress(stream_id, &slot_address))
+        return 0;
+    for (i = 0; i < workload_count; ++i) {
+        if (workload_ids[i] > 63u ||
+            (workload_mask & (UINT64_C(1) << workload_ids[i])) != 0)
+            return 0;
+        workload_mask |= UINT64_C(1) << workload_ids[i];
+    }
+    cmd = agcCbAllocDwords(cb, AGC_SONY_WORKLOAD_ACTIVE_DWORDS);
     if (!cmd)
         return 0;
-
-    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_WORKLOAD, 8);
-    cmd[1] = flags;
-    cmd[2] = 0;
-    cmd[3] = 0;
-    cmd[4] = 0;
-    cmd[5] = 0;
-    cmd[6] = 0;
-    cmd[7] = data_size;
+    if (agcSonyBuildWorkloadsActivePacket(cmd,
+            AGC_SONY_WORKLOAD_ACTIVE_DWORDS, false, stream_id,
+            slot_address, workload_mask) == 0)
+        return 0;
     return cmd;
 }
 
 uint32_t *PS5_SYSV_ABI sceAgcDcbSetWorkloadComplete(
-    SceAgcCb *cb, uint32_t workload_id, uint32_t flags)
+    SceAgcCb *cb, uint32_t stream_id, uint32_t workload_id)
 {
-    uint32_t *cmd = agcCbAllocDwords(cb, 8);
+    uint64_t slot_address;
+    uint32_t *cmd;
+
+    if (!agcSonyWorkloadGetStreamSlotAddress(stream_id, &slot_address) ||
+        workload_id > 63u)
+        return 0;
+    cmd = agcCbAllocDwords(cb, AGC_SONY_WORKLOAD_COMPLETE_DWORDS);
     if (!cmd)
         return 0;
-
-    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_WORKLOAD, 8);
-    cmd[1] = workload_id;
-    cmd[2] = flags;
-    cmd[3] = 0;
-    cmd[4] = 0;
-    cmd[5] = 0;
-    cmd[6] = 0;
-    cmd[7] = 0;
+    if (agcSonyBuildWorkloadCompletePacket(cmd,
+            AGC_SONY_WORKLOAD_COMPLETE_DWORDS, false, stream_id,
+            workload_id, slot_address) == 0)
+        return 0;
     return cmd;
 }
 
 uint32_t *PS5_SYSV_ABI sceAgcDcbSetWorkloadStreamInactive(
-    SceAgcCb *cb, uint32_t workload_id)
+    SceAgcCb *cb, uint32_t stream_id)
 {
-    uint32_t *cmd = agcCbAllocDwords(cb, 8);
+    uint64_t slot_address;
+    uint32_t *cmd;
+
+    if (!agcSonyWorkloadGetStreamSlotAddress(stream_id, &slot_address))
+        return 0;
+    (void)slot_address;
+    cmd = agcCbAllocDwords(cb, AGC_SONY_WORKLOAD_INACTIVE_DWORDS);
     if (!cmd)
         return 0;
-
-    cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_WORKLOAD, 8);
-    cmd[1] = workload_id;
-    cmd[2] = 0;
-    cmd[3] = 0;
-    cmd[4] = 0;
-    cmd[5] = 0;
-    cmd[6] = 0;
-    cmd[7] = 0;
+    if (agcSonyBuildWorkloadStreamInactivePacket(cmd,
+            AGC_SONY_WORKLOAD_INACTIVE_DWORDS, false, stream_id) == 0)
+        return 0;
     return cmd;
 }
 

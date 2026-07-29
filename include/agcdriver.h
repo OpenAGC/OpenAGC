@@ -405,12 +405,13 @@ int32_t PS5_SYSV_ABI sceAgcAcbWriteData(
 int32_t PS5_SYSV_ABI sceAgcAcbSetFlip(
     uint32_t *acb, uint32_t size_dw, uint32_t vo_handle, uint32_t buf_idx,
     uint32_t vsync);
-int32_t PS5_SYSV_ABI sceAgcAcbSetWorkloadComplete(
-    uint32_t *acb, uint32_t size_dw, AgcWorkloadId workload);
-int32_t PS5_SYSV_ABI sceAgcAcbSetWorkloadStreamInactive(
-    uint32_t *acb, uint32_t size_dw, AgcWorkloadId workload);
-int32_t PS5_SYSV_ABI sceAgcAcbSetWorkloadsActive(
-    uint32_t *acb, uint32_t size_dw, uint32_t flags);
+uint32_t *PS5_SYSV_ABI sceAgcAcbSetWorkloadComplete(
+    SceAgcCb *cb, uint32_t stream_id, uint32_t workload_id);
+uint32_t *PS5_SYSV_ABI sceAgcAcbSetWorkloadStreamInactive(
+    SceAgcCb *cb, uint32_t stream_id);
+uint32_t *PS5_SYSV_ABI sceAgcAcbSetWorkloadsActive(
+    SceAgcCb *cb, uint32_t stream_id, const uint32_t *workload_ids,
+    uint32_t workload_count);
 uint32_t *PS5_SYSV_ABI sceAgcAcbPushMarker(
     SceAgcCb *cb, const char *marker, uint32_t color);
 uint32_t *PS5_SYSV_ABI sceAgcAcbPopMarker(SceAgcCb *cb);
@@ -726,13 +727,14 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbContextStateOp(
 uint32_t *PS5_SYSV_ABI sceAgcUnknownQj7QZpgr9Uw(
     SceAgcCb *cb, uint32_t operation);
 
-/* DCB workload helpers (delegate to ACB-style packets) */
+/* Exact DCB workload cursor helpers. */
 uint32_t *PS5_SYSV_ABI sceAgcDcbSetWorkloadsActive(
-    SceAgcCb *cb, uint32_t flags, const void *data, uint32_t data_size);
+    SceAgcCb *cb, uint32_t stream_id, const uint32_t *workload_ids,
+    uint32_t workload_count);
 uint32_t *PS5_SYSV_ABI sceAgcDcbSetWorkloadComplete(
-    SceAgcCb *cb, uint32_t workload_id, uint32_t flags);
+    SceAgcCb *cb, uint32_t stream_id, uint32_t workload_id);
 uint32_t *PS5_SYSV_ABI sceAgcDcbSetWorkloadStreamInactive(
-    SceAgcCb *cb, uint32_t workload_id);
+    SceAgcCb *cb, uint32_t stream_id);
 
 /* ===================================================================== */
 /* DCB register direct setters — single register writes                  */

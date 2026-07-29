@@ -81,3 +81,24 @@ size_t agcSonyBuildWorkloadCompletePacket(uint32_t *dst,
     dst[11] = 0;
     return AGC_SONY_WORKLOAD_COMPLETE_DWORDS;
 }
+
+size_t agcSonyBuildWorkloadStreamInactivePacket(uint32_t *dst,
+    size_t capacity_dwords, bool control, uint32_t stream_id)
+{
+    uint32_t prefix_sub = control ? 0u : 1u;
+
+    if (!dst || capacity_dwords < AGC_SONY_WORKLOAD_INACTIVE_DWORDS ||
+        stream_id < 1u || stream_id > 31u)
+        return 0;
+
+    dst[0] = agcPm4Header3Sub(AGC_PM4_OP_SET_UCONFIG_REG, prefix_sub, 4);
+    dst[1] = UINT32_C(0x00000342);
+    dst[2] = AGC_WORKLOAD_PREFIX_ACTIVE | stream_id;
+    dst[3] = 0;
+    dst[4] = agcPm4Header3Sub(AGC_PM4_OP_WRITE_DATA, prefix_sub, 5);
+    dst[5] = UINT32_C(0x06010000);
+    dst[6] = UINT32_C(0x0000c343);
+    dst[7] = 0;
+    dst[8] = 0;
+    return AGC_SONY_WORKLOAD_INACTIVE_DWORDS;
+}

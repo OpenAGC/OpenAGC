@@ -23,14 +23,34 @@ helper compiler forms:
   packet controls `0x267` and `0x275` respectively;
 - the exported maximum sizes are 18 dwords for active and 12 for complete.
 
-This proves a common Sony ABI contract, not compatibility with OpenAGC's
-existing APIs. The Sony exports take a command-buffer base/cursor, stream ID,
-and workload collection or ID, and depend on registered-stream private state.
-OpenAGC's public one-ID driver calls are a separate submit-owning extension
-that passed on FW 5.50 only. The existing eight-dword DCB/ACB builders also do
-not match the nine-dword Sony packet. Therefore Sony-compatible workload
-capability remains disabled on every firmware; only the independently tested
-FW 5.50 extension retains its narrowly scoped direct capability.
+The Sony exports take a command-buffer base/cursor, stream ID, and workload
+collection or ID, and depend on registered-stream private state. OpenAGC's
+public DCB and ACB cursor wrappers now reproduce that contract: DCB passes
+control 0, ACB passes control 1, active reserves 18 dwords, complete 12, and
+inactive emits the nine-dword zero-mask prefix. OpenAGC's public one-ID driver
+calls remain a separate submit-owning extension that passed on FW 5.50 only;
+correct cursor builders do not justify enabling that convenience operation on
+FW 11.60 or other unqualified profiles.
+
+## Cursor wrapper ABI
+
+FW 11.60 `libSceAgc.sprx` independently proves the public cursor contracts.
+The DCB wrappers at `0x7e90`, `0x7f50`, and `0x8000` pass control `0` to the
+driver builders; the ACB wrappers at `0x1fe0`, `0x2090`, and `0x2130` pass
+control `1`. Their exact C-level argument shapes are:
+
+```c
+uint32_t *SetWorkloadsActive(SceAgcCb *cb, uint32_t stream_id,
+    const uint32_t *workload_ids, uint32_t workload_count);
+uint32_t *SetWorkloadComplete(SceAgcCb *cb, uint32_t stream_id,
+    uint32_t workload_id);
+uint32_t *SetWorkloadStreamInactive(SceAgcCb *cb, uint32_t stream_id);
+```
+
+Each wrapper queries the exact required size, grows the cursor if necessary,
+calls the driver builder at the current cursor, advances only on success, and
+returns the packet start. The inactive driver builder emits the same nine-dword
+active prefix with a zero 64-bit mask and no final `SET_WORKLOAD` packet.
 
 ## Registered-stream state
 
@@ -110,10 +130,11 @@ Complete uses the same standalone-buffer control form:
 When the boolean control argument is set, bit 2 is clear in both prefix packet
 headers and bit 30 is clear in the final packet control. Active accepts a set
 of distinct IDs and ORs `1ULL << id` for each. Complete accepts one ID. The
-OpenAGC one-ID adapter can therefore use one registered private stream and a
-single-bit mask without narrowing the recovered packet contract. It does not
-yet reproduce the loader-owned GPU-info mapping state, as the hardware failures
-above demonstrate.
+cursor wrappers use one registered private stream and the caller's workload
+set without narrowing the recovered packet contract. They append into the
+caller's DCB/ACB exactly as Sony does. The failed one-ID adapter instead
+submitted active and complete as separate driver-owned DCBs; that distinct
+lifecycle remains disabled.
 
 KytyPS5 reserves 18 and 12 dwords but emits `IT_NOP` emulator metadata.
 SharpEmu has no workload builders. Neither is hardware-packet evidence.

@@ -14,6 +14,7 @@ SRCS = \
 	src/driver_registry.c \
 	src/driver_sony_exports.c \
 	src/agc_workload_packet.c \
+	src/agc_workload_state.c \
 	src/driver_generic.c \
 	src/context_state.c \
 	src/register_defaults.c \

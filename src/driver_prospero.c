@@ -42,6 +42,7 @@
 #include "driver_ops.h"
 #include "driver_registry.h"
 #include "agc_workload_packet.h"
+#include "agc_workload_state.h"
 #include "agc_types.h"
 #include "agc_error.h"
 #include "agc_ioctl.h"
@@ -737,18 +738,20 @@ int32_t PS5_SYSV_ABI agcProsperoInitializeInternalMemory(void)
 
     memset(g_prospero.ddid.cpu_addr, 0, g_prospero.ddid.size);
 
-    if (g_prospero.direct_profile.workload_uses_sony_stream_packet) {
+    if (g_prospero.direct_profile.workload_has_sony_stream_table) {
         int32_t workload_ret = agcProsperoCarveSubRegion(
             &g_prospero.gpu_info, AGC_GPU_INFO_WORKLOAD_TABLE_OFFSET,
             AGC_GPU_INFO_WORKLOAD_TABLE_SIZE,
             &g_prospero.workload_stream_table);
-        if (workload_ret == AGC_OK) {
+        if (workload_ret == AGC_OK &&
+            g_prospero.direct_profile.workload_uses_sony_stream_packet) {
             workload_ret = agcProsperoCarveSubRegion(&g_prospero.ddid,
                 AGC_DDID_WORKLOAD_ACTIVE_OFFSET,
                 AGC_SONY_WORKLOAD_ACTIVE_DWORDS * sizeof(uint32_t),
                 &g_prospero.workload_active_dcb);
         }
-        if (workload_ret == AGC_OK) {
+        if (workload_ret == AGC_OK &&
+            g_prospero.direct_profile.workload_uses_sony_stream_packet) {
             workload_ret = agcProsperoCarveSubRegion(&g_prospero.ddid,
                 AGC_DDID_WORKLOAD_COMPLETE_OFFSET,
                 AGC_SONY_WORKLOAD_COMPLETE_DWORDS * sizeof(uint32_t),
@@ -762,12 +765,17 @@ int32_t PS5_SYSV_ABI agcProsperoInitializeInternalMemory(void)
         }
         memset(g_prospero.workload_stream_table.cpu_addr, 0,
             g_prospero.workload_stream_table.size);
-        memset(g_prospero.workload_active_dcb.cpu_addr, 0,
-            g_prospero.workload_active_dcb.size);
-        memset(g_prospero.workload_complete_dcb.cpu_addr, 0,
-            g_prospero.workload_complete_dcb.size);
+        if (g_prospero.workload_active_dcb.cpu_addr)
+            memset(g_prospero.workload_active_dcb.cpu_addr, 0,
+                g_prospero.workload_active_dcb.size);
+        if (g_prospero.workload_complete_dcb.cpu_addr)
+            memset(g_prospero.workload_complete_dcb.cpu_addr, 0,
+                g_prospero.workload_complete_dcb.size);
         agcProsperoFlushRange(g_prospero.workload_stream_table.cpu_addr,
             g_prospero.workload_stream_table.size);
+        agcSonyWorkloadConfigureStreamTable(
+            g_prospero.workload_stream_table.gpu_addr);
+        agcSonyWorkloadResetStreamState();
         printf("    [mem] OpenAgcWorkloadStreams: size=0x%x subregion=%p\n",
             AGC_GPU_INFO_WORKLOAD_TABLE_SIZE,
             g_prospero.workload_stream_table.cpu_addr);
@@ -1754,6 +1762,8 @@ int32_t PS5_SYSV_ABI agcProsperoShutdown(void)
         sizeof(g_prospero.workload_active_dcb));
     memset(&g_prospero.workload_complete_dcb, 0,
         sizeof(g_prospero.workload_complete_dcb));
+    agcSonyWorkloadConfigureStreamTable(0);
+    agcSonyWorkloadResetStreamState();
     agcProsperoFreeRegion(&g_prospero.acqrb);
     agcProsperoFreeRegion(&g_prospero.misc);
     agcProsperoFreeRegion(&g_prospero.cwsr);

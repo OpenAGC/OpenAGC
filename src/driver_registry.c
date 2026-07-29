@@ -239,8 +239,10 @@ bool agcProsperoBuildDirectProfile(uint32_t raw_version, bool is_trinity,
     if (abi_key == 0x0550u) {
         direct.capabilities |= AGC_DIRECT_CAP_SUSPEND_FINAL |
             AGC_DIRECT_CAP_WORKLOAD | AGC_DIRECT_CAP_EOP_FLIP;
+        direct.workload_has_sony_stream_table = true;
     } else if (abi_key == 0x1160u) {
         direct.capabilities |= AGC_DIRECT_CAP_SUSPEND_FINAL;
+        direct.workload_has_sony_stream_table = !is_trinity;
     }
 
     if ((direct.capabilities & AGC_DIRECT_CAP_QUEUE) != 0) {

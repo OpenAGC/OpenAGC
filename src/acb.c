@@ -20,10 +20,13 @@
  * ACB (Async Compute Buffer) command building functions.
  */
 
+#include "agc_cb.h"
 #include "agc_error.h"
 #include "agc_pm4.h"
 #include "agc_types.h"
 #include "agcdriver.h"
+#include "agc_workload_packet.h"
+#include "agc_workload_state.h"
 
 #include <string.h>
 
@@ -447,71 +450,69 @@ int32_t PS5_SYSV_ABI sceAgcAcbSetFlip(
     return 7;
 }
 
-int32_t PS5_SYSV_ABI sceAgcAcbSetWorkloadComplete(
-    uint32_t *acb, uint32_t size_dw, AgcWorkloadId workload)
+uint32_t *PS5_SYSV_ABI sceAgcAcbSetWorkloadComplete(
+    SceAgcCb *cb, uint32_t stream_id, uint32_t workload_id)
 {
-    if (!acb || size_dw < 8)
-        return AGC_ERROR_CB_INVALID_SIZE;
+    uint64_t slot_address;
+    uint32_t *cmd;
 
-    /*
-     * IT_SET_WORKLOAD (Ariel-specific opcode 0x1E on PS5).
-     * Packet layout (8 dwords):
-     *   [0] header
-     *   [1] workload id (low 32 bits)
-     *   [2-7] reserved (0)
-     */
-    acb[0] = agcPm4Header3(AGC_PM4_OP_SET_WORKLOAD, 8);
-    acb[1] = (uint32_t)(workload & 0xFFFFFFFFu);
-    acb[2] = 0;
-    acb[3] = 0;
-    acb[4] = 0;
-    acb[5] = 0;
-    acb[6] = 0;
-    acb[7] = 0;
-    return 8;
+    if (!agcSonyWorkloadGetStreamSlotAddress(stream_id, &slot_address) ||
+        workload_id > 63u)
+        return 0;
+    cmd = agcCbAllocDwords(cb, AGC_SONY_WORKLOAD_COMPLETE_DWORDS);
+    if (!cmd)
+        return 0;
+    if (agcSonyBuildWorkloadCompletePacket(cmd,
+            AGC_SONY_WORKLOAD_COMPLETE_DWORDS, true, stream_id,
+            workload_id, slot_address) == 0)
+        return 0;
+    return cmd;
 }
 
-int32_t PS5_SYSV_ABI sceAgcAcbSetWorkloadStreamInactive(
-    uint32_t *acb, uint32_t size_dw, AgcWorkloadId workload)
+uint32_t *PS5_SYSV_ABI sceAgcAcbSetWorkloadStreamInactive(
+    SceAgcCb *cb, uint32_t stream_id)
 {
-    if (!acb || size_dw < 3)
-        return AGC_ERROR_CB_INVALID_SIZE;
+    uint64_t slot_address;
+    uint32_t *cmd;
 
-    /*
-     * IT_AGC_0x79 (Ariel-specific workload-stream control opcode on PS5).
-     * Packet layout (3 dwords):
-     *   [0] header
-     *   [1] fixed control word 0x00000342
-     *   [2] workload id (low 32 bits)
-     */
-    acb[0] = agcPm4Header3(AGC_PM4_OP_SET_UCONFIG_REG, 3);
-    acb[1] = 0x00000342u;
-    acb[2] = (uint32_t)(workload & 0xFFFFFFFFu);
-    return 3;
+    if (!agcSonyWorkloadGetStreamSlotAddress(stream_id, &slot_address))
+        return 0;
+    (void)slot_address;
+    cmd = agcCbAllocDwords(cb, AGC_SONY_WORKLOAD_INACTIVE_DWORDS);
+    if (!cmd)
+        return 0;
+    if (agcSonyBuildWorkloadStreamInactivePacket(cmd,
+            AGC_SONY_WORKLOAD_INACTIVE_DWORDS, true, stream_id) == 0)
+        return 0;
+    return cmd;
 }
 
-int32_t PS5_SYSV_ABI sceAgcAcbSetWorkloadsActive(
-    uint32_t *acb, uint32_t size_dw, uint32_t flags)
+uint32_t *PS5_SYSV_ABI sceAgcAcbSetWorkloadsActive(
+    SceAgcCb *cb, uint32_t stream_id, const uint32_t *workload_ids,
+    uint32_t workload_count)
 {
-    if (!acb || size_dw < 8)
-        return AGC_ERROR_CB_INVALID_SIZE;
+    uint64_t slot_address;
+    uint64_t workload_mask = 0;
+    uint32_t *cmd;
+    uint32_t i;
 
-    /*
-     * IT_SET_WORKLOAD (Ariel-specific opcode 0x1E on PS5).
-     * Packet layout (8 dwords):
-     *   [0] header
-     *   [1] flags
-     *   [2-7] reserved (0)
-     */
-    acb[0] = agcPm4Header3(AGC_PM4_OP_SET_WORKLOAD, 8);
-    acb[1] = flags;
-    acb[2] = 0;
-    acb[3] = 0;
-    acb[4] = 0;
-    acb[5] = 0;
-    acb[6] = 0;
-    acb[7] = 0;
-    return 8;
+    if (!workload_ids || workload_count < 1u || workload_count > 63u ||
+        !agcSonyWorkloadGetStreamSlotAddress(stream_id, &slot_address))
+        return 0;
+    for (i = 0; i < workload_count; ++i) {
+        if (workload_ids[i] > 63u ||
+            (workload_mask & (UINT64_C(1) << workload_ids[i])) != 0)
+            return 0;
+        workload_mask |= UINT64_C(1) << workload_ids[i];
+    }
+    cmd = agcCbAllocDwords(cb, AGC_SONY_WORKLOAD_ACTIVE_DWORDS);
+    if (!cmd)
+        return 0;
+    if (agcSonyBuildWorkloadsActivePacket(cmd,
+            AGC_SONY_WORKLOAD_ACTIVE_DWORDS, true, stream_id,
+            slot_address, workload_mask) == 0)
+        return 0;
+    return cmd;
 }
 
 int32_t PS5_SYSV_ABI sceAgcSuspendPointAndCheckStatus(uint32_t value)

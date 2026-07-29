@@ -366,9 +366,13 @@ PM4 convention (PM4 opcodes cross-verified against HLE reference and SPRX):
   - `sceAgcDcbContextStateOp` — variable-length `IT_SET_*_REG` (op selects
     register space), 1 header + 1 offset + `reg_count` data dwords
   - `sceAgcDcbResetQueue` — `IT_AGC_0x79` (0x79), 3 dwords
-  - `sceAgcDcbSetWorkloadComplete` — `IT_SET_WORKLOAD` (0x1E), 8 dwords
-  - `sceAgcDcbSetWorkloadStreamInactive` — `IT_AGC_0x79` (0x79), 3 dwords
-  - `sceAgcDcbSetWorkloadsActive` — `IT_SET_WORKLOAD` (0x1E), 8 dwords
+  - `sceAgcDcbSetWorkloadComplete` — exact 12-dword prefix plus
+    `IT_SET_WORKLOAD` (0x1E), DCB control 0
+  - `sceAgcDcbSetWorkloadStreamInactive` — exact 9-dword zero-mask prefix
+  - `sceAgcDcbSetWorkloadsActive` — exact 18-dword prefix plus
+    `IT_SET_WORKLOAD` (0x1E), DCB control 0
+  - ACB workload wrappers share those layouts with control 1 and use the exact
+    cursor ABI rather than the former raw-buffer approximation
   - `sceAgcDcbSetPreemption` — NOP placeholder (opcode pending), 2 dwords
   - `sceAgcDcbWaitUntilSafeForRendering` — NOP with `WAIT_FLIP_DONE`
     subcommand, 7 dwords

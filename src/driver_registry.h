@@ -53,6 +53,7 @@ typedef struct AgcProsperoDirectProfile {
     uint32_t capabilities;
     uint32_t defaults_version;
     bool submit_uses_frame_close_trailer;
+    bool workload_has_sony_stream_table;
     bool workload_uses_sony_stream_packet;
     uint32_t submit_ioctl;
     uint32_t queue_create_ioctl;

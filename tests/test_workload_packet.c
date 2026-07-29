@@ -78,10 +78,37 @@ static void test_sony_workload_control_and_validation(void)
         "Sony complete rejects workload 64");
 }
 
+static void test_sony_workload_stream_inactive(void)
+{
+    uint32_t packet[AGC_SONY_WORKLOAD_INACTIVE_DWORDS];
+    const uint32_t expected_dcb[] = {
+        0xc0027904u, 0x00000342u, 0xcc000001u, 0x00000000u,
+        0xc0033704u, 0x06010000u, 0x0000c343u, 0x00000000u,
+        0x00000000u,
+    };
+
+    memset(packet, 0xa5, sizeof(packet));
+    TEST_ASSERT_EQ(agcSonyBuildWorkloadStreamInactivePacket(packet,
+        AGC_SONY_WORKLOAD_INACTIVE_DWORDS, false, 1u),
+        AGC_SONY_WORKLOAD_INACTIVE_DWORDS,
+        "Sony workload inactive packet size");
+    TEST_ASSERT(memcmp(packet, expected_dcb, sizeof(expected_dcb)) == 0,
+        "Sony workload inactive DCB bytes");
+    TEST_ASSERT_EQ(agcSonyBuildWorkloadStreamInactivePacket(packet,
+        AGC_SONY_WORKLOAD_INACTIVE_DWORDS, true, 1u),
+        AGC_SONY_WORKLOAD_INACTIVE_DWORDS,
+        "Sony workload inactive ACB packet size");
+    TEST_ASSERT_EQ(packet[0], 0xc0027900u,
+        "Sony inactive ACB prefix control");
+    TEST_ASSERT_EQ(packet[4], 0xc0033700u,
+        "Sony inactive ACB payload control");
+}
+
 void test_suite_workload_packet(void)
 {
     TEST_SUITE("Sony Workload Packets");
     TEST_RUN(test_sony_workloads_active_standalone);
     TEST_RUN(test_sony_workload_complete_standalone);
     TEST_RUN(test_sony_workload_control_and_validation);
+    TEST_RUN(test_sony_workload_stream_inactive);
 }

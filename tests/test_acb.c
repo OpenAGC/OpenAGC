@@ -2,6 +2,17 @@
 #include "agc_cb.h"
 #include "agcdriver.h"
 #include "agc_pm4.h"
+#include "agc_workload_state.h"
+
+static void prepare_acb_workload_stream(uint32_t stream_id)
+{
+    uint8_t descriptor[32] = {0};
+
+    agcSonyWorkloadConfigureStreamTable(UINT64_C(0x100000000));
+    agcSonyWorkloadResetStreamState();
+    TEST_ASSERT_EQ(sceAgcDriverRegisterWorkloadStream(stream_id, descriptor),
+        AGC_OK, "register workload stream for ACB test");
+}
 
 static void test_acb_init_null(void) {
     int32_t r = sceAgcAcbInitializeDefaultHardwareState_pre0090(NULL, 100);
@@ -229,33 +240,52 @@ static void test_acb_set_flip(void) {
 
 static void test_acb_set_workload_complete(void) {
     uint32_t buf[64];
-    int32_t r = sceAgcAcbSetWorkloadComplete(buf, 64, 0xAABBCCDD11223344u);
-    TEST_ASSERT_EQ(r, 8, "SetWorkloadComplete should write 8 dwords");
-    TEST_ASSERT_EQ(agcPm4Opcode(buf[0]), AGC_PM4_OP_SET_WORKLOAD, "SetWorkloadComplete opcode");
-    TEST_ASSERT_EQ(agcPm4Length(buf[0]), 8, "SetWorkloadComplete length");
-    TEST_ASSERT_EQ(buf[1], 0x11223344u, "SetWorkloadComplete workload lo");
-    TEST_ASSERT_EQ(buf[2], 0x0u, "SetWorkloadComplete reserved 2");
-    TEST_ASSERT_EQ(buf[7], 0x0u, "SetWorkloadComplete reserved 7");
+    SceAgcCb cb;
+    prepare_acb_workload_stream(1u);
+    agcCbInit(&cb, buf, sizeof(buf));
+    uint32_t *cmd = sceAgcAcbSetWorkloadComplete(&cb, 1u, 1u);
+    TEST_ASSERT(cmd != NULL, "SetWorkloadComplete should return packet start");
+    TEST_ASSERT_EQ(cmd[0], 0xc0017900u, "SetWorkloadComplete ACB prefix");
+    TEST_ASSERT_EQ(cmd[2], 0xcd000021u, "SetWorkloadComplete IDs");
+    TEST_ASSERT_EQ(cmd[3], 0xc0071e00u, "SetWorkloadComplete packet header");
+    TEST_ASSERT_EQ(cmd[4], 0x00000275u, "SetWorkloadComplete ACB control");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 12u,
+        "SetWorkloadComplete cursor advance");
 }
 
 static void test_acb_set_workload_stream_inactive(void) {
     uint32_t buf[64];
-    int32_t r = sceAgcAcbSetWorkloadStreamInactive(buf, 64, 0xAABBCCDD11223344u);
-    TEST_ASSERT_EQ(r, 3, "SetWorkloadStreamInactive should write 3 dwords");
-    TEST_ASSERT_EQ(agcPm4Opcode(buf[0]), AGC_PM4_OP_SET_UCONFIG_REG, "SetWorkloadStreamInactive opcode");
-    TEST_ASSERT_EQ(agcPm4Length(buf[0]), 3, "SetWorkloadStreamInactive length");
-    TEST_ASSERT_EQ(buf[1], 0x00000342u, "SetWorkloadStreamInactive control");
-    TEST_ASSERT_EQ(buf[2], 0x11223344u, "SetWorkloadStreamInactive workload lo");
+    SceAgcCb cb;
+    prepare_acb_workload_stream(1u);
+    agcCbInit(&cb, buf, sizeof(buf));
+    uint32_t *cmd = sceAgcAcbSetWorkloadStreamInactive(&cb, 1u);
+    TEST_ASSERT(cmd != NULL,
+        "SetWorkloadStreamInactive should return packet start");
+    TEST_ASSERT_EQ(cmd[0], 0xc0027900u,
+        "SetWorkloadStreamInactive ACB prefix");
+    TEST_ASSERT_EQ(cmd[2], 0xcc000001u,
+        "SetWorkloadStreamInactive stream");
+    TEST_ASSERT_EQ(cmd[4], 0xc0033700u,
+        "SetWorkloadStreamInactive ACB payload");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 9u,
+        "SetWorkloadStreamInactive cursor advance");
 }
 
 static void test_acb_set_workloads_active(void) {
     uint32_t buf[64];
-    int32_t r = sceAgcAcbSetWorkloadsActive(buf, 64, 0x12345678u);
-    TEST_ASSERT_EQ(r, 8, "SetWorkloadsActive should write 8 dwords");
-    TEST_ASSERT_EQ(agcPm4Opcode(buf[0]), AGC_PM4_OP_SET_WORKLOAD, "SetWorkloadsActive opcode");
-    TEST_ASSERT_EQ(agcPm4Length(buf[0]), 8, "SetWorkloadsActive length");
-    TEST_ASSERT_EQ(buf[1], 0x12345678u, "SetWorkloadsActive flags");
-    TEST_ASSERT_EQ(buf[7], 0x0u, "SetWorkloadsActive reserved 7");
+    SceAgcCb cb;
+    const uint32_t workload_ids[] = {1u, 63u};
+    prepare_acb_workload_stream(1u);
+    agcCbInit(&cb, buf, sizeof(buf));
+    uint32_t *cmd = sceAgcAcbSetWorkloadsActive(&cb, 1u,
+        workload_ids, 2u);
+    TEST_ASSERT(cmd != NULL, "SetWorkloadsActive should return packet start");
+    TEST_ASSERT_EQ(cmd[0], 0xc0027900u, "SetWorkloadsActive ACB prefix");
+    TEST_ASSERT_EQ(cmd[4], 0xc0033700u, "SetWorkloadsActive ACB payload");
+    TEST_ASSERT_EQ(cmd[9], 0xc0071e00u, "SetWorkloadsActive packet header");
+    TEST_ASSERT_EQ(cmd[10], 0x00000267u, "SetWorkloadsActive ACB control");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 18u,
+        "SetWorkloadsActive cursor advance");
 }
 
 static void test_acb_atomic_gds(void) {

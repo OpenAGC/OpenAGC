@@ -130,6 +130,8 @@ static void test_direct_operation_profiles(void)
         "FW 5.50 TF-ring uses the public 0x28 wrapper ioctl");
     TEST_ASSERT_EQ(profile.hs_offchip_ioctl, AGC_GC_IOCTL_SET_HS_OFFCHIP,
         "FW 5.50 HS-offchip uses the 0x2c wrapper ioctl");
+    TEST_ASSERT(profile.workload_has_sony_stream_table,
+        "FW 5.50 exposes its recovered Sony workload table");
 
     TEST_ASSERT(agcProsperoBuildDirectProfile(
         0x11600000u, true, &profile), "FW 11.60 direct profile builds");
@@ -171,6 +173,8 @@ static void test_direct_operation_profiles(void)
         "standard-PS5 FW 11.60 workload remains fail-closed after stage 11 stall");
     TEST_ASSERT(!profile.workload_uses_sony_stream_packet,
         "FW 11.60 does not select the stalled stream adapter");
+    TEST_ASSERT(profile.workload_has_sony_stream_table,
+        "standard FW 11.60 exposes its recovered Sony workload table");
 
     TEST_ASSERT(agcProsperoBuildDirectProfile(
         0x12200000u, false, &profile), "FW 12.20 submit profile builds");

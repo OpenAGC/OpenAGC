@@ -1014,7 +1014,7 @@ make -B test
 Current expected result:
 
 ```text
-5113 passed, 0 failed
+5135 passed, 0 failed
 ```
 
 PS5 prospero backend (cross-compiled, no tests):
@@ -1227,7 +1227,9 @@ DCB packet builders:
 - `sceAgcDcbContextStateOp` — 4-op context state switch (CLEAR_STATE /
   SET_CONTEXT_REG / SET_CX_REG_INDIRECT / combined)
 - `sceAgcDcbSetWorkloadsActive` / `SetWorkloadComplete` / `SetWorkloadStreamInactive`
-  — DCB cursor workload helpers (SET_WORKLOAD 0x1E, 8 dwords)
+  — exact registered-stream cursor helpers: 18-dword active, 12-dword
+  complete, and 9-dword inactive packets. DCB selects control 0; ACB selects
+  control 1. Both use the backend-provided GPU stream-table address.
 
 DCB register direct setters (3 dwords each):
 - `sceAgcDcbSetCfRegisterDirect` — `IT_SET_CONFIG_REG` (0x68)
