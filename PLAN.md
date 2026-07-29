@@ -567,10 +567,13 @@ delete), and leaves the allocation process-owned (`EINVAL` on explicit
 release); those diagnostic returns are not AGC qualification failures because
 process exit reclaims them. Exact GPU output, completed presentation, event
 removal, VideoOut close, and driver shutdown remain mandatory.
-The FW 11.60 graphics gate reuses the proven baseline NGG+PS shaders, PM4 path,
-flexible-memory FP16 target, completion fence, and exact coverage/color oracle.
-Only presentation is skipped, keeping graphics execution independent from the
-still-unqualified FW 11.60 VideoOut linear-buffer contract.
+The FW 11.60 graphics gate reused the proven baseline NGG+PS shaders, 2,470-
+dword PM4 path, flexible-memory FP16 target, completion fence, and exact
+coverage/color oracle. It passed twice with 255,744 changed pixels, eight
+sampled colors, no invalid components, and packed hash `0x4a40c2eb4f12bc26`.
+The same revision then passed FW 5.50's 1,800-flip graphics conformance sample.
+Only FW 11.60 presentation is skipped, keeping proven graphics execution
+independent from its still-unqualified VideoOut linear-buffer contract.
 
 The Sony workload contract itself is recovered for all active firmware:
 seven active-wrapper and three complete-wrapper groups converge on the same
@@ -1803,6 +1806,10 @@ Acceptance criteria:
 - ✅ FW 11.60 headless compute passed twice: the gfx1013 dispatch reached its
   completion fence in 1-2 ms and exactly 2,073,600/2,073,600 pixels matched
   `0xff00ff00`. The original FW 5.50 compute-plus-VideoOut sample then passed.
+- ✅ FW 11.60 headless graphics passed twice with Wave32 NGG+PS execution,
+  255,744 FP16 pixels, eight sampled colors, no invalid components, and exact
+  FNV64 `0x4a40c2eb4f12bc26`. FW 5.50 then passed the same draw and all 1,800
+  VideoOut flips.
 - Workloads, suspend query, EOP flip, FW 11.60 VideoOut presentation, and
   non-empty HS patch-list execution remain fail-closed or unadvertised.
 - Other exact active firmware/model profiles are enabled from reproducible

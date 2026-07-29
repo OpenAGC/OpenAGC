@@ -64,7 +64,11 @@ Standard-PS5 FW 11.60 is hardware-qualified for submit16, standard internal
 memory, authenticated queue create/destroy, primary and final suspend
 submission, public TF-ring setup, the zero-entry HS-offchip carrier, async
 graphics setup, and version-12/V10 register defaults. Real gfx1013 compute
-execution also passed twice with an exact 2,073,600-pixel output oracle.
+execution also passed twice with an exact 2,073,600-pixel output oracle. Wave32
+NGG+PS graphics passed twice with the same 2,470-dword baseline DCB and exact
+FP16 readback hash `0x4a40c2eb4f12bc26` used on FW 5.50. This qualifies
+graphics execution, not the separately unresolved FW 11.60 VideoOut linear
+presentation path.
 Trinity sizing remains exact-RE-qualified and hardware unverified. Its workload
 wrappers build a larger, different packet
 contract than OpenAGC's one-ID workload helper, so workload calls fail closed.
