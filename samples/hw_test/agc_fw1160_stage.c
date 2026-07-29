@@ -35,6 +35,7 @@ extern int PS5_SYSV_ABI sceKernelGetProsperoSystemSwVersion(
 extern int32_t agcProsperoConfigureRuntimeProfile(uint32_t raw_version);
 extern int32_t PS5_SYSV_ABI agcProsperoInitialize(void);
 extern int32_t PS5_SYSV_ABI agcProsperoInitializeInternalMemory(void);
+extern int32_t PS5_SYSV_ABI agcProsperoNotifyDefaultStates(uint32_t flags);
 extern int32_t agcProsperoRegisterGpuInfoProcessProperty(void);
 extern int32_t PS5_SYSV_ABI agcProsperoSubmitDcb(
     const AgcCommandBufferSubmit *packet);
@@ -267,30 +268,60 @@ int main(void)
         return 1;
     }
 #endif
-#if AGC_FW1160_STAGE == 12
+#if AGC_FW1160_STAGE == 12 || AGC_FW1160_STAGE == 13
     void *workload_memory = (void *)(uintptr_t)0xf02000000ULL;
     const uint32_t active_marker_value = 0x1160A012u;
     const uint32_t complete_marker_value = 0x1160C012u;
+#if AGC_FW1160_STAGE == 13
+    const uint32_t preflight_marker_value = 0x1160F013u;
+#endif
     const uint32_t workload_ids[] = {1u};
     uint8_t stream_descriptor[32] = {0};
     volatile uint32_t *active_marker;
     volatile uint32_t *complete_marker;
+#if AGC_FW1160_STAGE == 13
+    volatile uint32_t *preflight_marker;
+#endif
     SceAgcCb cb;
     AgcCommandBufferSubmit submit;
     uint32_t waited_ms = 0u;
 
-    result = agcProsperoRegisterGpuInfoProcessProperty();
-    printf("GPU-info process property=0x%08X\n", (unsigned)result);
+#if AGC_FW1160_STAGE == 13
+    /* FW 5.50's qualified full-path workload test runs only after defaults
+     * notification and async setup. Both prerequisites are independently
+     * qualified on FW 11.60; stage 13 restores that normal driver sequence
+     * before testing the otherwise unchanged inline Sony workload ABI. */
+    result = agcProsperoNotifyDefaultStates(0u);
+    printf("default states=0x%08X\n", (unsigned)result);
     if (result != AGC_OK) {
-        printf("stage 12: GPU-info process property FAIL\n");
+        printf("stage 13: default states FAIL\n");
         (void)agcProsperoShutdown();
         return 1;
     }
-    memcpy(stream_descriptor, "OpenAGC stage 12", sizeof("OpenAGC stage 12"));
+    result = agcProsperoSetupAsyncGraphics(1u);
+    printf("async graphics=0x%08X\n", (unsigned)result);
+    if (result != AGC_OK) {
+        printf("stage 13: async graphics FAIL\n");
+        (void)agcProsperoShutdown();
+        return 1;
+    }
+#endif
+
+    result = agcProsperoRegisterGpuInfoProcessProperty();
+    printf("GPU-info process property=0x%08X\n", (unsigned)result);
+    if (result != AGC_OK) {
+        printf("stage %d: GPU-info process property FAIL\n",
+            AGC_FW1160_STAGE);
+        (void)agcProsperoShutdown();
+        return 1;
+    }
+    (void)snprintf((char *)stream_descriptor, sizeof(stream_descriptor),
+        "OpenAGC stage %d", AGC_FW1160_STAGE);
     result = sceAgcDriverRegisterWorkloadStream(1u, stream_descriptor);
     printf("workload stream register=0x%08X\n", (unsigned)result);
     if (result != AGC_OK) {
-        printf("stage 12: workload stream register FAIL\n");
+        printf("stage %d: workload stream register FAIL\n",
+            AGC_FW1160_STAGE);
         (void)agcProsperoShutdown();
         return 1;
     }
@@ -298,15 +329,59 @@ int main(void)
         0x33, 0, "OpenAgcFw1160InlineWorkload");
     printf("workload memory result=%d address=%p\n", result, workload_memory);
     if (result != 0 || !workload_memory) {
-        printf("stage 12: workload memory FAIL\n");
+        printf("stage %d: workload memory FAIL\n", AGC_FW1160_STAGE);
         (void)sceAgcDriverUnregisterWorkloadStream(1u);
         (void)agcProsperoShutdown();
         return 1;
     }
     active_marker = (volatile uint32_t *)((uint8_t *)workload_memory + 0x1000u);
     complete_marker = active_marker + 1;
+#if AGC_FW1160_STAGE == 13
+    preflight_marker = active_marker + 2;
+#endif
     active_marker[0] = 0u;
     complete_marker[0] = 0u;
+#if AGC_FW1160_STAGE == 13
+    preflight_marker[0] = 0u;
+    agcCbInit(&cb, workload_memory, 0x1000u);
+    if (!sceAgcDcbWriteData(&cb, 2u, 0u,
+            (uint64_t)(uintptr_t)preflight_marker, &preflight_marker_value,
+            1u, 1u, 1u)) {
+        printf("stage 13: preflight marker build FAIL\n");
+        (void)sceAgcDriverUnregisterWorkloadStream(1u);
+        (void)agcProsperoShutdown();
+        (void)sceKernelReleaseFlexibleMemory(workload_memory, 0x4000u);
+        return 1;
+    }
+    clflush((u_long)(uintptr_t)workload_memory);
+    clflush((u_long)(uintptr_t)preflight_marker);
+    mfence();
+    submit.command_address = (uintptr_t)workload_memory;
+    submit.dword_count = agcCbUsedDwords(&cb);
+    submit.reserved = 0u;
+    result = agcProsperoSubmitDcb(&submit);
+    waited_ms = 0u;
+    while (result == AGC_OK && waited_ms < 5000u) {
+        clflush((u_long)(uintptr_t)preflight_marker);
+        mfence();
+        if (*preflight_marker == preflight_marker_value)
+            break;
+        usleep(50000u);
+        waited_ms += 50u;
+    }
+    clflush((u_long)(uintptr_t)preflight_marker);
+    mfence();
+    printf("preflight submit=0x%08X marker=0x%08X wait=%u ms\n",
+        (unsigned)result, *preflight_marker, waited_ms);
+    if (result != AGC_OK || *preflight_marker != preflight_marker_value) {
+        printf("stage 13: preflight execution FAIL\n");
+        (void)sceAgcDriverUnregisterWorkloadStream(1u);
+        (void)agcProsperoShutdown();
+        (void)sceKernelReleaseFlexibleMemory(workload_memory, 0x4000u);
+        return 1;
+    }
+#endif
+
     agcCbInit(&cb, workload_memory, 0x1000u);
     if (!sceAgcDcbSetWorkloadsActive(&cb, 1u, workload_ids, 1u) ||
         !sceAgcDcbWriteData(&cb, 2u, 0u,
@@ -316,7 +391,8 @@ int main(void)
         !sceAgcDcbWriteData(&cb, 2u, 0u,
             (uint64_t)(uintptr_t)complete_marker, &complete_marker_value,
             1u, 1u, 1u)) {
-        printf("stage 12: inline workload DCB build FAIL\n");
+        printf("stage %d: inline workload DCB build FAIL\n",
+            AGC_FW1160_STAGE);
         (void)sceAgcDriverUnregisterWorkloadStream(1u);
         (void)agcProsperoShutdown();
         (void)sceKernelReleaseFlexibleMemory(workload_memory, 0x4000u);
@@ -347,21 +423,24 @@ int main(void)
         *active_marker, *complete_marker, waited_ms);
     if (result != AGC_OK || *active_marker != active_marker_value ||
         *complete_marker != complete_marker_value) {
-        printf("stage 12: inline workload sequence FAIL\n");
+        printf("stage %d: inline workload sequence FAIL\n",
+            AGC_FW1160_STAGE);
         (void)agcProsperoShutdown();
         return 1;
     }
     result = sceAgcDriverUnregisterWorkloadStream(1u);
     printf("workload stream unregister=0x%08X\n", (unsigned)result);
     if (result != AGC_OK) {
-        printf("stage 12: workload stream unregister FAIL\n");
+        printf("stage %d: workload stream unregister FAIL\n",
+            AGC_FW1160_STAGE);
         (void)agcProsperoShutdown();
         return 1;
     }
     result = sceKernelReleaseFlexibleMemory(workload_memory, 0x4000u);
     printf("workload memory release=%d\n", result);
     if (result != 0) {
-        printf("stage 12: workload memory release FAIL\n");
+        printf("stage %d: workload memory release FAIL\n",
+            AGC_FW1160_STAGE);
         (void)agcProsperoShutdown();
         return 1;
     }

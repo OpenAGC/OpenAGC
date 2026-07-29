@@ -91,6 +91,30 @@ therefore registered-stream state or lifecycle beyond the proven property,
 address table, and packet bytes. FW 11.60, Trinity, and all other unqualified
 profiles remain fail-closed; do not rerun stage 11 unchanged.
 
+Stage 12 then used the exact caller-owned DCB lifecycle recovered from
+`libSceAgc`: active, marker, complete, and marker in one submission. The
+submit returned `AGC_OK`, but the first marker was never observed and the UI
+stalled. Cleanup removed the payload. This rules out separate submissions as
+the sole cause; do not rerun stage 12 unchanged.
+
+The FW 11.60 workload initializer at driver vaddr `0xa50` was subsequently
+traced end to end. It performs no workload-specific ioctl: it selects GPU-info
+region 2, validates a span of at least `0x100` bytes and 16-byte alignment,
+reserves stream 0, clears the 32-entry metadata array, writes `"System"`, and
+initializes a userspace mutex. The active and complete builders independently
+prove that the packet carries the address of `table_base + stream_id * 8`, not
+the value stored in that slot. OpenAGC already matches those facts; see
+`agc_driver_workload_init_1160.md`.
+
+The next bounded gate is stage 13. Unlike stages 11 and 12, it restores the
+normal sequence already used by the qualified FW 5.50 full-path test:
+register-default notification and async-graphics setup first, followed by a
+non-workload marker oracle, then the otherwise unchanged inline workload DCB.
+Both prerequisites and ordinary marker submission are independently qualified
+on FW 11.60. Stage 13 is build-only pending a clean console reboot; its result
+cannot promote the capability until it passes twice and FW 5.50 regresses
+cleanly.
+
 ## Exact FW 11.60 builder layout
 
 The private prefix helper emits nine dwords for the active call's eight-byte

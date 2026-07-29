@@ -994,6 +994,14 @@ The host-generic implementation now has a tested model for:
   initialization or GPU state beyond the proven process property, table
   address, packet bytes, and inline lifecycle; recover it offline before a new
   gate. The capability remains disabled.
+  The FW 11.60 initializer at `0xa50` is now fully traced and contains no
+  hidden workload ioctl or GPU write. It validates GPU-info region 2, reserves
+  stream 0, initializes descriptors and a mutex, while both builders emit the
+  address of `table_base + stream_id * 8`; OpenAGC already matches this.
+  Stage 13 restores the normal FW 5.50-qualified surrounding sequence—default
+  states and async setup—then requires a pre-workload marker before attempting
+  the unchanged inline DCB. It is built as a reboot-only pending gate and has
+  not been launched.
   All 39 active Sony drivers are now verified to share that nine-dword
   multi-argument contract, with 18/12-dword maximum reservations. Other
   profiles remain fail-closed until their GPU-info subregion selection is

@@ -1518,9 +1518,9 @@ int32_t PS5_SYSV_ABI agcProsperoSubmitEopFlip(
  * Workload tracking — prospero backend.
  *
  * This is OpenAGC's one-ID convenience ABI. FW 5.50 retains its independently
- * hardware-qualified historical packet. Standard-PS5 FW 11.60 adapts one ID
- * to Sony's exact registered-stream active/complete builders, including their
- * private prefix packets and GPU-visible stream slot.
+ * hardware-qualified historical packet. The Sony registered-stream packet
+ * form remains implemented for bounded qualification, but FW 11.60 keeps the
+ * capability disabled after both standalone and inline submissions stalled.
  *
  * Packet layout (3 dwords):
  *   [0] header = agcPm4Header3Sub(SET_WORKLOAD, sub, 3)

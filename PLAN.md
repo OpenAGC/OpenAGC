@@ -621,6 +621,15 @@ initialization that precedes workload use—particularly GPU/register enable
 state or kernel operations beyond the already proven process property, stream
 table address, packet bytes, and inline cursor lifecycle—before constructing a
 new isolated gate. Reboot the console before that future GPU test.
+Offline tracing now proves the workload initializer itself contains no hidden
+ioctl or GPU write: it only selects GPU-info region 2, validates its span and
+alignment, reserves stream 0, initializes descriptors, and creates a mutex.
+The builders also carry the address of the selected 64-bit slot, exactly as
+OpenAGC does. Stage 13 is prepared to test the remaining evidenced difference
+from the FW 5.50 qualified path: it performs FW 11.60-qualified default-state
+notification and async setup, proves a normal marker executes, then submits the
+unchanged inline workload DCB. Keep it hardware-pending until the console is
+rebooted; require two clean passes before promotion.
 
 The Sony workload contract itself is recovered for all active firmware:
 seven active-wrapper and three complete-wrapper groups converge on the same
