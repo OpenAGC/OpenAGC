@@ -57,3 +57,34 @@ FW 5.50 artifact after each promoted tuple.
 The first two gates and their exact commands are detailed in
 `fw1160_narrow_fp16_gate_audit_20260730.md`. Later gates use the corresponding
 `deploy_agc_graphics_<format>_fw1160` Make target.
+
+## FW 11.60 hardware result
+
+The standard PS5 reporting raw firmware `0x11600005` completed this matrix:
+
+| Target | Qualifying fences | Reproduced native oracle | State |
+| --- | --- | --- | --- |
+| R8_UNORM | 1 ms, 1 ms | changed `255043`, distinct `8`, FNV64 `0x6fe253259c7b0455` | passed twice |
+| RG8_UNORM | 1 ms, 1 ms | changed `255744`, distinct `8`, FNV64 `0x6babce1afaa81b2c` | passed twice |
+| RGB10A2_UNORM | 1 ms, 1 ms | histogram `{35857,27914,36523,155450}` | passed twice |
+| R11G11B10_FLOAT | 1 ms, 1 ms | FNV64 `0x4b75c00e8a6bb04d` | passed twice |
+| R32_FLOAT | 1 ms, 3 ms | changed/complete `255744`, invalid `0`, FNV64 `0x43e0f1986c4ec883` | passed twice |
+| RG32_FLOAT | 1 ms | changed/complete `255744`, invalid `0`, FNV64 `0x806171be9908c276` | one pass |
+| RGBA32_FLOAT | not run | — | pending |
+
+Every qualifying run reported the exact `0x1160` profile, passed the Wave32
+and completion-marker audits, shut the driver down, returned final graphics
+PASS, and left no `eboot` according to ps5debug-NG.
+
+After the first RG32 pass, the next two cleanup foreground requests timed out
+without launching RG32 and left no process. A daemon-mode cleanup then
+completed and ps5debug-NG again proved an empty process list, but the following
+RG32 websrv request produced no stdout before its 30-second transport bound and
+also left no process. There is no captured GPU verdict for that request, so it
+does not count. Stop this boot here; reboot and reinject ps5debug-NG before the
+second RG32 pass and both RGBA32 passes.
+
+The five twice-passed formats are hardware-qualified on this FW 11.60 console,
+but project-wide parity promotion still requires matching modern headless FW
+5.50 regressions. The FW 5.50 console was unreachable on ports 8080 and 744
+during this session.

@@ -404,10 +404,12 @@ awaits matching modern headless FW 5.50 regressions, particularly because the
 current R16 artifact differs from the older display-backed retained hash. See
 `analysis/fw1160_narrow_fp16_gate_audit_20260730.md`.
 
-The remaining FW 5.50-qualified offscreen formats now also have exact FW 11.60
-headless artifacts: R8, RG8, RGB10A2, R11G11B10, R32, RG32, and RGBA32. All
-cross-build without warnings and retain their format-specific native oracles.
-They are built, not hardware-qualified. RGBA8/BGRA8 and sRGB variants remain
+The remaining FW 5.50-qualified offscreen formats also have exact FW 11.60
+headless artifacts. R8, RG8, RGB10A2, R11G11B10, and R32 each passed twice on
+standard raw firmware `0x11600005`, with reproduced native hashes/histograms,
+1-3 ms fences, clean shutdowns, and no residual process. RG32 passed once;
+its second pass and both RGBA32 runs remain pending after websrv transport
+stopped returning bounded verdicts. RGBA8/BGRA8 and sRGB variants remain
 outside the headless matrix because their current fixtures depend on
 VideoOut-owned buffers; those oracles will not be weakened merely to compile.
 See `analysis/fw1160_color_format_gate_matrix_20260730.md`.

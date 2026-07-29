@@ -86,8 +86,10 @@ AMD PM4 packet ancestry overlap in useful ways.
   `analysis/fw1160_narrow_fp16_gate_audit_20260730.md`.
 - Seven additional offscreen format gates now build under the same exact
   profile and bounded runner: R8, RG8, RGB10A2, R11G11B10, R32, RG32, and
-  RGBA32. Run them only after R16/RG16 qualify, in increasing byte-width and
-  packing risk. Display-backed RGBA8/BGRA8 and sRGB variants remain deferred
+  RGBA32. R8, RG8, RGB10A2, R11G11B10, and R32 passed twice on FW 11.60.
+  RG32 passed once; its second verdict and both RGBA32 runs remain pending a
+  reboot because websrv stopped streaming bounded launches. Display-backed
+  RGBA8/BGRA8 and sRGB variants remain deferred
   until their VideoOut-owned oracle buffers are replaced with real headless
   allocations. See `analysis/fw1160_color_format_gate_matrix_20260730.md`.
 - The first uncompressed depth/stencil tier is also built for exact FW 11.60:
