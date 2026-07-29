@@ -636,16 +636,19 @@ This rules out those surrounding prerequisites as the missing state. Do not
 rerun stage 13 unchanged. Keep FW 11.60 workload disabled and recover the
 GPU-side `SET_WORKLOAD` state transition or required queue/register
 programming before constructing another gate.
-The opt-in installed-driver oracle was run once after a clean reboot. FW
+The first opt-in installed-driver oracle was run once after a clean reboot. FW
 11.60's matching module loaded, all exact exports resolved, the 18/12-dword
 sizes matched, and async setup returned `AGC_OK`. Its ordinary `WRITE_DATA`
 preflight returned `AGC_OK` but left the marker zero after 5,000 ms, so the
-safety gate prevented stream registration and workload emission. This matches
-the installed payload-context limitation previously seen on FW 5.50: the Sony
-module cannot serve as an execution oracle under websrv. Do not rerun it
-unchanged. Continue offline recovery of the module's submit-mode routing and
-the GPU-side `SET_WORKLOAD` queue/register state before another direct gate;
-see `analysis/fw1160_sony_workload_attempt_20260729.md`.
+safety gate prevented stream registration and workload emission. Static review
+then found that the preflight itself omitted the already hardware-proven NOP
+trailer required to advance the final graphics descriptor in this payload
+context. The failure is therefore inconclusive, not a Sony-backend rejection.
+The revised oracle submits two observable DCBs plus a 16-dword NOP trailer
+through Sony's multi-DCB export and flushes all cache lines occupied by the
+40-dword workload DCB. It is build-qualified for one fresh-boot attempt; do not
+rerun the original artifact. See
+`analysis/fw1160_sony_workload_attempt_20260729.md`.
 
 The Sony workload contract itself is recovered for all active firmware:
 seven active-wrapper and three complete-wrapper groups converge on the same

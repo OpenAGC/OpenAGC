@@ -27,16 +27,17 @@ for process teardown, printed its failure verdict, and killed itself. This is
 the same installed-backend limitation previously observed on FW 5.50: an
 installed payload-context submit can report success without executing the DCB.
 
-## Consequence
+## Revised interpretation
 
 This attempt does not answer whether Sony-private workload state would make
-the nine-dword packets execute, because the installed backend cannot pass an
-ordinary command-buffer execution oracle in the websrv homebrew-loader
-context. `libSceAgcDriver` is therefore not a usable replacement backend and
-cannot be used to qualify the workload path here.
+the nine-dword packets execute. Its single-DCB preflight did not account for
+the already hardware-proven exploited-payload rule that the final submitted
+graphics descriptor remains deferred. OpenAGC's working direct backend avoids
+that condition by appending a GPU-visible 16-dword NOP descriptor.
 
-Do not repeat this oracle unchanged. The next investigation must compare the
-installed module's `submit.mode = 1` initialization and submission routing
-with the working direct `/dev/gc` submit16 path, or recover the missing
-GPU-side `SET_WORKLOAD` queue/register state offline. The console must be
-rebooted before any further direct `/dev/gc` GPU test.
+The revised oracle therefore uses Sony's `sceAgcDriverSubmitMultiDcbs` with two
+observable DCBs followed by the same harmless 16-dword NOP trailer. It also
+flushes every cache line occupied by the 40-dword workload DCB. The first
+attempt remains useful evidence that the safety gate worked, but it is not
+evidence that the installed backend is unusable. Do not repeat the original
+single-DCB artifact. The console was rebooted before the revised test boundary.

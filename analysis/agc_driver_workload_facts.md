@@ -113,14 +113,17 @@ in 50 ms. The unchanged inline workload submit returned `AGC_OK` and then
 stalled without reaching either marker. This rules out those surrounding
 prerequisites and must not be rerun unchanged.
 
-The opt-in installed-driver oracle documented in
+The first opt-in installed-driver oracle documented in
 `fw1160_sony_workload_oracle.md` was run once after a clean reboot. The matching
 module loaded, its exact workload exports and sizes resolved, and async setup
 returned `AGC_OK`. Its ordinary `WRITE_DATA` preflight also returned `AGC_OK`,
 but the marker remained zero after 5,000 ms. The safety gate prevented any
-workload packet from being emitted. The installed payload-context backend
-therefore cannot serve as the oracle and must not be retried unchanged; see
-`fw1160_sony_workload_attempt_20260729.md`.
+workload packet from being emitted. That single-DCB preflight omitted the
+hardware-proven NOP trailer needed to advance the final graphics descriptor in
+this payload context, so the result is inconclusive. The revised oracle uses
+Sony's multi-DCB export with two observable DCBs plus a 16-dword NOP trailer and
+flushes the full 40-dword workload buffer. Do not retry the original artifact;
+see `fw1160_sony_workload_attempt_20260729.md`.
 
 ## Exact FW 11.60 builder layout
 

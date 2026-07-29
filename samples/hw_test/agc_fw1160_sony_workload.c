@@ -27,6 +27,7 @@
 enum {
     ORACLE_MEMORY_SIZE = 0x4000,
     ORACLE_DCB_SIZE = 0x1000,
+    ORACLE_DCB_COUNT = 3,
     ORACLE_STREAM_ID = 1,
     ORACLE_WORKLOAD_ID = 1,
     ORACLE_ACTIVE_DWORDS = 18,
@@ -43,8 +44,9 @@ typedef struct AgcKernelSwVersion {
 _Static_assert(sizeof(AgcKernelSwVersion) == 0x30,
     "PS5 system software version ABI size");
 
-typedef int32_t (PS5_SYSV_ABI *SonySubmitDcbFn)(
-    const AgcCommandBufferSubmit *packet);
+typedef int32_t (PS5_SYSV_ABI *SonySubmitMultiDcbsFn)(
+    void *const dcb_gpu_addrs[], const uint32_t *dcb_sizes_in_dwords,
+    uint32_t count);
 typedef int32_t (PS5_SYSV_ABI *SonySetupAsyncGraphicsFn)(uint32_t pipe_id);
 typedef int32_t (PS5_SYSV_ABI *SonyRegisterWorkloadStreamFn)(
     uint32_t stream_id, const void *descriptor);
@@ -81,26 +83,34 @@ static int load_symbol(void *module, const char *name,
     return 0;
 }
 
-static uint32_t wait_for_markers(volatile uint32_t *first,
-    uint32_t first_expected, volatile uint32_t *second,
-    uint32_t second_expected)
+static void flush_range(const void *address, size_t size)
+{
+    const uint8_t *bytes = address;
+
+    for (size_t offset = 0; offset < size; offset += 64u)
+        clflush((u_long)(uintptr_t)(bytes + offset));
+}
+
+static uint32_t wait_for_markers(volatile uint32_t *const markers[],
+    const uint32_t expected[], uint32_t count)
 {
     uint32_t waited_ms = 0;
 
     while (waited_ms < 5000u) {
-        clflush((u_long)(uintptr_t)first);
-        if (second)
-            clflush((u_long)(uintptr_t)second);
+        uint32_t matched = 0;
+
+        for (uint32_t i = 0; i < count; ++i)
+            clflush((u_long)(uintptr_t)markers[i]);
         mfence();
-        if (*first == first_expected &&
-            (!second || *second == second_expected))
+        for (uint32_t i = 0; i < count; ++i)
+            matched += *markers[i] == expected[i];
+        if (matched == count)
             break;
         usleep(50000u);
         waited_ms += 50u;
     }
-    clflush((u_long)(uintptr_t)first);
-    if (second)
-        clflush((u_long)(uintptr_t)second);
+    for (uint32_t i = 0; i < count; ++i)
+        clflush((u_long)(uintptr_t)markers[i]);
     mfence();
     return waited_ms;
 }
@@ -108,12 +118,14 @@ static uint32_t wait_for_markers(volatile uint32_t *first,
 int main(void)
 {
     const uint32_t preflight_value = 0x11605a01u;
+    const uint32_t preflight_second_value = 0x11605a04u;
     const uint32_t active_value = 0x11605a02u;
     const uint32_t complete_value = 0x11605a03u;
+    const uint32_t workload_tail_value = 0x11605a05u;
     const uint32_t workload_ids[] = {ORACLE_WORKLOAD_ID};
     uint8_t stream_descriptor[32] = {0};
     AgcKernelSwVersion firmware = {0};
-    SonySubmitDcbFn submit_dcb = NULL;
+    SonySubmitMultiDcbsFn submit_multi_dcbs = NULL;
     SonySetupAsyncGraphicsFn setup_async_graphics = NULL;
     SonyRegisterWorkloadStreamFn register_stream = NULL;
     SonyUnregisterWorkloadStreamFn unregister_stream = NULL;
@@ -124,12 +136,15 @@ int main(void)
     void *module = NULL;
     void *memory = NULL;
     volatile uint32_t *preflight_marker = NULL;
+    volatile uint32_t *preflight_second_marker = NULL;
     volatile uint32_t *active_marker = NULL;
     volatile uint32_t *complete_marker = NULL;
+    volatile uint32_t *workload_tail_marker = NULL;
     uint32_t socid = 0;
     size_t socid_size = sizeof(socid);
     SceAgcCb cb;
-    AgcCommandBufferSubmit submit = {0};
+    void *dcb_addresses[ORACLE_DCB_COUNT] = {0};
+    uint32_t dcb_dwords[ORACLE_DCB_COUNT] = {0};
     uint32_t waited_ms;
     int32_t result;
     int memory_mapped = 0;
@@ -176,7 +191,7 @@ int main(void)
 #define LOAD_SONY(storage, symbol) \
     if (load_symbol(module, symbol, &(storage), sizeof(storage)) != 0) \
         goto done
-    LOAD_SONY(submit_dcb, "sceAgcDriverSubmitDcb");
+    LOAD_SONY(submit_multi_dcbs, "sceAgcDriverSubmitMultiDcbs");
     LOAD_SONY(setup_async_graphics, "sceAgcDriverSetupAsyncGraphics");
     LOAD_SONY(register_stream, "sceAgcDriverRegisterWorkloadStream");
     LOAD_SONY(unregister_stream, "sceAgcDriverUnregisterWorkloadStream");
@@ -209,9 +224,11 @@ int main(void)
         goto done;
     memory_mapped = 1;
     memset(memory, 0, ORACLE_MEMORY_SIZE);
-    preflight_marker = (volatile uint32_t *)((uint8_t *)memory + 0x1000u);
-    active_marker = preflight_marker + 1;
-    complete_marker = preflight_marker + 2;
+    preflight_marker = (volatile uint32_t *)((uint8_t *)memory + 0x3000u);
+    preflight_second_marker = preflight_marker + 1;
+    active_marker = preflight_marker + 2;
+    complete_marker = preflight_marker + 3;
+    workload_tail_marker = preflight_marker + 4;
 
     agcCbInit(&cb, memory, ORACLE_DCB_SIZE);
     if (!sceAgcDcbWriteData(&cb, 2u, 0u,
@@ -220,18 +237,47 @@ int main(void)
         printf("installed preflight build: FAIL\n");
         goto done;
     }
-    clflush((u_long)(uintptr_t)memory);
-    clflush((u_long)(uintptr_t)preflight_marker);
+    dcb_addresses[0] = memory;
+    dcb_dwords[0] = agcCbUsedDwords(&cb);
+    agcCbInit(&cb, (uint8_t *)memory + 0x1000u, ORACLE_DCB_SIZE);
+    if (!sceAgcDcbWriteData(&cb, 2u, 0u,
+            (uint64_t)(uintptr_t)preflight_second_marker,
+            &preflight_second_value, 1u, 1u, 1u)) {
+        printf("installed preflight second build: FAIL\n");
+        goto done;
+    }
+    dcb_addresses[1] = (uint8_t *)memory + 0x1000u;
+    dcb_dwords[1] = agcCbUsedDwords(&cb);
+    agcCbInit(&cb, (uint8_t *)memory + 0x2000u, ORACLE_DCB_SIZE);
+    if (!sceAgcCbNop(&cb, 16u)) {
+        printf("installed preflight trailer build: FAIL\n");
+        goto done;
+    }
+    dcb_addresses[2] = (uint8_t *)memory + 0x2000u;
+    dcb_dwords[2] = agcCbUsedDwords(&cb);
+    flush_range(memory, dcb_dwords[0] * sizeof(uint32_t));
+    flush_range((uint8_t *)memory + 0x1000u,
+        dcb_dwords[1] * sizeof(uint32_t));
+    flush_range((uint8_t *)memory + 0x2000u,
+        dcb_dwords[2] * sizeof(uint32_t));
+    flush_range((const void *)preflight_marker, 5u * sizeof(uint32_t));
     mfence();
-    submit.command_address = (uintptr_t)memory;
-    submit.dword_count = agcCbUsedDwords(&cb);
-    result = submit_dcb(&submit);
+    result = submit_multi_dcbs(dcb_addresses, dcb_dwords, ORACLE_DCB_COUNT);
     submission_unresolved = result == AGC_OK;
-    waited_ms = result == AGC_OK ? wait_for_markers(preflight_marker,
-        preflight_value, NULL, 0u) : 0u;
-    printf("installed preflight submit=0x%08X marker=0x%08X wait=%u ms\n",
-        (unsigned)result, *preflight_marker, waited_ms);
-    if (result != AGC_OK || *preflight_marker != preflight_value) {
+    {
+        volatile uint32_t *const markers[] = {
+            preflight_marker, preflight_second_marker,
+        };
+        const uint32_t expected[] = {
+            preflight_value, preflight_second_value,
+        };
+        waited_ms = result == AGC_OK ? wait_for_markers(markers, expected, 2u) : 0u;
+    }
+    printf("installed preflight submit=0x%08X markers=0x%08X/0x%08X "
+           "wait=%u ms\n", (unsigned)result, *preflight_marker,
+           *preflight_second_marker, waited_ms);
+    if (result != AGC_OK || *preflight_marker != preflight_value ||
+        *preflight_second_marker != preflight_second_value) {
         printf("installed preflight execution: FAIL; workload not attempted\n");
         goto done;
     }
@@ -248,6 +294,7 @@ int main(void)
 
     *active_marker = 0u;
     *complete_marker = 0u;
+    *workload_tail_marker = 0u;
     agcCbInit(&cb, memory, ORACLE_DCB_SIZE);
     uint32_t *packet = agcCbAllocDwords(&cb, ORACLE_ACTIVE_DWORDS);
     if (!packet || set_active(packet, 0u, ORACLE_STREAM_ID,
@@ -269,21 +316,39 @@ int main(void)
     }
     printf("installed inline workload DCB dwords=%u\n",
         agcCbUsedDwords(&cb));
-    clflush((u_long)(uintptr_t)memory);
-    clflush((u_long)(uintptr_t)active_marker);
+    dcb_addresses[0] = memory;
+    dcb_dwords[0] = agcCbUsedDwords(&cb);
+    agcCbInit(&cb, (uint8_t *)memory + 0x1000u, ORACLE_DCB_SIZE);
+    if (!sceAgcDcbWriteData(&cb, 2u, 0u,
+            (uint64_t)(uintptr_t)workload_tail_marker,
+            &workload_tail_value, 1u, 1u, 1u)) {
+        printf("installed workload tail build: FAIL\n");
+        goto done;
+    }
+    dcb_dwords[1] = agcCbUsedDwords(&cb);
+    flush_range(memory, dcb_dwords[0] * sizeof(uint32_t));
+    flush_range((uint8_t *)memory + 0x1000u,
+        dcb_dwords[1] * sizeof(uint32_t));
+    flush_range((const void *)active_marker, 3u * sizeof(uint32_t));
     mfence();
-    submit.command_address = (uintptr_t)memory;
-    submit.dword_count = agcCbUsedDwords(&cb);
-    submit.reserved = 0u;
-    result = submit_dcb(&submit);
+    result = submit_multi_dcbs(dcb_addresses, dcb_dwords, ORACLE_DCB_COUNT);
     submission_unresolved = result == AGC_OK;
-    waited_ms = result == AGC_OK ? wait_for_markers(active_marker,
-        active_value, complete_marker, complete_value) : 0u;
+    {
+        volatile uint32_t *const markers[] = {
+            active_marker, complete_marker, workload_tail_marker,
+        };
+        const uint32_t expected[] = {
+            active_value, complete_value, workload_tail_value,
+        };
+        waited_ms = result == AGC_OK ? wait_for_markers(markers, expected, 3u) : 0u;
+    }
     printf("installed workload submit=0x%08X active=0x%08X "
-           "complete=0x%08X wait=%u ms\n",
-        (unsigned)result, *active_marker, *complete_marker, waited_ms);
+           "complete=0x%08X tail=0x%08X wait=%u ms\n",
+        (unsigned)result, *active_marker, *complete_marker,
+        *workload_tail_marker, waited_ms);
     if (result != AGC_OK || *active_marker != active_value ||
-        *complete_marker != complete_value)
+        *complete_marker != complete_value ||
+        *workload_tail_marker != workload_tail_value)
         goto done;
     submission_unresolved = 0;
     passed = 1;

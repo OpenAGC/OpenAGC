@@ -151,6 +151,10 @@ fw1160_sony_workload_check: agc_fw1160_sony_workload.elf
 		echo "$< is missing the exact runtime module name" >&2; \
 		exit 1; \
 	}
+	@$(READELF) -p .rodata $< | grep -q 'sceAgcDriverSubmitMultiDcbs' || { \
+		echo "$< is missing the installed multi-DCB trailer path" >&2; \
+		exit 1; \
+	}
 	@echo "FW 11.60 Sony workload oracle dependency split: PASS"
 
 # Combined AGC + VideoOut test (links libopenagc.a + VideoOut + kernel)

@@ -24,16 +24,17 @@ The payload enforces this order:
 4. Resolve every required export from that module-specific handle.
 5. Require the module's packet-size exports to return 18 and 12 dwords.
 6. Call the installed async setup export.
-7. Submit an ordinary installed-driver `WRITE_DATA` marker and require it to
-   execute before registering or building a workload packet.
+7. Submit two ordinary installed-driver `WRITE_DATA` marker DCBs followed by a
+   16-dword NOP trailer through `sceAgcDriverSubmitMultiDcbs`, and require both
+   markers to execute before registering or building a workload packet.
 8. Register stream 1 through the installed module, call its exact active and
-   complete builders into one DCB, and submit through its `SubmitDcb` export.
+   complete builders into one DCB, append a tail-marker DCB and NOP trailer,
+   and submit through its `SubmitMultiDcbs` export.
 
-The preflight gate is important: FW 5.50 testing previously showed that an
-installed payload-context submit could return `AGC_OK` without executing a
-marker. If FW 11.60 behaves the same way, the oracle stops before workload use
-and records that the installed backend cannot answer the state hypothesis in
-this environment.
+The trailer is required by hardware evidence: the exploited-payload graphics
+ring defers its final descriptor. OpenAGC's qualified direct backend appends the
+same harmless trailer. The preflight gate still stops before workload use if
+both observable descriptors do not execute.
 
 The ELF has no `libSceAgcDriver.sprx` `DT_NEEDED` entry; preloading would run
 module initialization before `main` can patch credentials. The Make verifier
@@ -82,16 +83,19 @@ a direct `/dev/gc` payload later in the same boot session.
 
 ## Hardware result
 
-The guarded oracle was run once on standard-PS5 FW `0x11600005`. Module load,
+The original guarded oracle was run once on standard-PS5 FW `0x11600005`. Module load,
 all export resolutions, the 18/12-dword size checks, and installed async setup
 passed. The installed ordinary `WRITE_DATA` preflight returned `AGC_OK`, but
 its marker remained zero after 5,000 ms. The workload safety gate worked: no
 stream was registered and no workload packet was emitted.
 
-This reproduces the installed payload-context submission limitation previously
-seen on FW 5.50. It neither confirms nor disproves the Sony-private workload
-state hypothesis, because the installed backend cannot execute the control
-DCB required to make that comparison. Do not rerun the oracle unchanged. See
-`fw1160_sony_workload_attempt_20260729.md` for the exact artifact and result.
+That single-DCB preflight was later found to omit the hardware-proven trailing
+NOP descriptor required to advance the caller's final work in this payload
+context. The result is therefore inconclusive rather than an installed-backend
+rejection. The revised oracle uses two observable DCBs plus the NOP trailer and
+flushes the complete workload DCB range. See
+`fw1160_sony_workload_attempt_20260729.md` for the original artifact and
+interpretation.
 
-Status: hardware-attempted; installed preflight failed; workload not attempted.
+Status: original single-DCB preflight inconclusive; revised multi-DCB oracle
+build-qualified and hardware pending.
