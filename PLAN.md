@@ -1753,6 +1753,8 @@ Acceptance criteria:
   launches the process-cleanup ELF before every stage.
 - ✅ FW 11.60 stages 0 and 1 each passed twice on standard hardware reporting
   raw `0x11600005` and SoC `0x00840f60`.
+- ✅ FW 11.60 stage 2 passed twice: exact internal-memory mappings, DDID
+  initialization, and shutdown completed without a freeze or power-off.
 - Qualify later gates individually only after the preceding gate passes twice.
   Compute, graphics, and display remain prohibited until the full direct
   lifecycle has passed this staged ladder.

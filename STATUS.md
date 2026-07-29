@@ -1525,8 +1525,9 @@ multi-DCB markers, wait64, async, queue, suspend, and workload lifecycle
 (`20260729T111638Z-98955`).
 FW 11.60 staged requalification then passed identity-only stage 0 twice and
 corrected init-plus-shutdown stage 1 twice. The console remained responsive and
-powered on. Internal memory and every GPU operation remain blocked pending
-their own isolated two-pass gates.
+powered on. Isolated stage 2 then passed twice with all nine internal regions at
+Sony's exact hinted addresses and clean shutdown. Every GPU operation remains
+blocked pending its own isolated two-pass gate.
 
 ## Next RE Tasks
 

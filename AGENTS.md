@@ -313,11 +313,12 @@ process-cleanup ELF and launches it before every test:
 ```sh
 make -C samples/hw_test deploy_agc_fw1160_stage0 PS5_HOST=<fw1160-console>
 make -C samples/hw_test deploy_agc_fw1160_stage1 PS5_HOST=<fw1160-console>
+make -C samples/hw_test deploy_agc_fw1160_stage2 PS5_HOST=<fw1160-console>
 ```
 
 Stage 0 performs no `/dev/gc` operation. Stage 1 performs initialization and
-immediate shutdown only. Do not advance to internal memory or submission in the
-same ELF.
+immediate shutdown only. Stage 2 adds internal allocation and teardown only.
+Do not add submission or another GPU operation to these ELFs.
 
 **3. `agc_videoout.elf` — Combined AGC + VideoOut test**
 

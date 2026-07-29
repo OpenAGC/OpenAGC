@@ -55,8 +55,13 @@ On the same standard FW 11.60 console (`0x11600005`, SoC `0x00840f60`):
 - Stage 1 passed twice. Profile configuration, corrected direct initialization,
   and direct shutdown each returned `AGC_OK`; the UI remained responsive and
   the console stayed powered on.
+- Stage 2 passed twice. All nine internal allocations landed at the same exact
+  hinted addresses as FW 5.50/Sony's carrier, DDID initialization completed,
+  and shutdown returned `AGC_OK` without a freeze or power-off.
 - Websrv retained each foreground HTTP pipe until the 20-second client timeout,
   but the cleanup check before the next run found no stale `eboot.elf`.
 
-This hardware result validates the corrected pre-memory initialization path.
-It does not yet qualify internal allocation or any GPU operation.
+This hardware result validates the corrected initialization and internal-memory
+path through clean teardown. It strongly localizes the original power-off to
+the corrected pre-submit mapping defects, though it cannot distinguish which
+individual defect was causal. No GPU operation is qualified yet.
