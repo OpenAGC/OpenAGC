@@ -598,6 +598,11 @@ standard span and `0x180000` Trinity span. The workload capability remains
 disabled. The next hardware gate, only after the corrected code is reviewed and
 host/cross builds pass, is a property-only self-terminating probe; it must not
 submit workload PM4 in the same first run.
+That isolated gate is now `agc_fw1160_stage10.elf`: it uses the exact
+five-argument call, applies the proven `SceGnmDumpArea` range name, performs no
+submission, and leaves the workload capability disabled. Host and Prospero
+builds pass. Stage 10 must pass and self-terminate before the workload adapter
+can be reconsidered.
 
 The Sony workload contract itself is recovered for all active firmware:
 seven active-wrapper and three complete-wrapper groups converge on the same

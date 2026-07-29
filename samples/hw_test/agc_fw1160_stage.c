@@ -35,6 +35,7 @@ extern int PS5_SYSV_ABI sceKernelGetProsperoSystemSwVersion(
 extern int32_t agcProsperoConfigureRuntimeProfile(uint32_t raw_version);
 extern int32_t PS5_SYSV_ABI agcProsperoInitialize(void);
 extern int32_t PS5_SYSV_ABI agcProsperoInitializeInternalMemory(void);
+extern int32_t agcProsperoRegisterGpuInfoProcessProperty(void);
 extern int32_t PS5_SYSV_ABI agcProsperoSubmitDcb(
     const AgcCommandBufferSubmit *packet);
 extern int32_t PS5_SYSV_ABI agcProsperoSetupAsyncGraphics(uint32_t pipe_id);
@@ -180,6 +181,15 @@ int main(void)
     printf("submit memory release=%d\n", result);
     if (result != 0) {
         printf("stage 3: submit memory release FAIL\n");
+        (void)agcProsperoShutdown();
+        return 1;
+    }
+#endif
+#if AGC_FW1160_STAGE == 10
+    result = agcProsperoRegisterGpuInfoProcessProperty();
+    printf("GPU-info process property=0x%08X\n", (unsigned)result);
+    if (result != AGC_OK) {
+        printf("stage 10: GPU-info process property FAIL\n");
         (void)agcProsperoShutdown();
         return 1;
     }

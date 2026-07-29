@@ -973,7 +973,9 @@ The host-generic implementation now has a tested model for:
   a kernel panic, and was removed. Corpus-wide RE proves the correct call as
   `("Sce.Debug:Gnm", gpu_info_base, gpu_info_span, 0, 0)` on all 39 active
   drivers. FW 11.60 workload capability remains disabled pending a corrected,
-  property-only hardware probe.
+  property-only hardware probe. `agc_fw1160_stage10.elf` is that isolated
+  gate: exact five-argument property call, range naming, shutdown, and forced
+  process termination, with no PM4 submission.
   All 39 active Sony drivers are now verified to share that nine-dword
   multi-argument contract, with 18/12-dword maximum reservations. Other
   profiles remain fail-closed until their GPU-info subregion selection is

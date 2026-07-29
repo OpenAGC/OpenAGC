@@ -128,6 +128,11 @@ extern int32_t sceKernelMapNamedSystemFlexibleMemory(
 extern int32_t sceKernelReleaseFlexibleMemory(void *addr, size_t len);
 extern int32_t sceKernelSetVirtualRangeName(
     const void *addr, size_t len, const char *name);
+/* Exact five-argument carrier recovered from every active Sony driver.
+ * NID: -W4xI5aVI8w. Do not reorder this as a property selector first. */
+extern int32_t sceKernelSetProcessProperty(
+    const char *name, const void *addr, size_t len,
+    uint64_t reserved0, uint64_t reserved1);
 
 /* Named internal memory region allocated by agcProsperoInitializeInternalMemory */
 typedef struct {
@@ -791,6 +796,26 @@ int32_t PS5_SYSV_ABI agcProsperoInitializeInternalMemory(void)
 
     g_prospero.mem_initialized = true;
     return AGC_OK;
+}
+
+/* Private qualification gate. This is deliberately not part of DriverOps and
+ * does not grant workload capability. The first hardware run must exercise
+ * only this corrected mapping step, never workload PM4 in the same process. */
+int32_t agcProsperoRegisterGpuInfoProcessProperty(void)
+{
+    int32_t result;
+
+    if (!g_prospero.initialized || !g_prospero.mem_initialized ||
+        !g_prospero.gpu_info.cpu_addr)
+        return AGC_ERROR_NOT_INITIALIZED;
+    result = sceKernelSetProcessProperty("Sce.Debug:Gnm",
+        g_prospero.gpu_info.cpu_addr, g_prospero.gpu_info.size,
+        UINT64_C(0), UINT64_C(0));
+    if (result != 0)
+        return AGC_ERROR_INTERNAL;
+    result = sceKernelSetVirtualRangeName(g_prospero.gpu_info.cpu_addr,
+        g_prospero.gpu_info.size, "SceGnmDumpArea");
+    return result == 0 ? AGC_OK : AGC_ERROR_INTERNAL;
 }
 
 /* ===================================================================== */
