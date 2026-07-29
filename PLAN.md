@@ -23,11 +23,14 @@ AMD PM4 packet ancestry overlap in useful ways.
 - Stage 14 completed once and still stalled after its ordinary preflight
   marker passed. The complete 40-dword flush and reset timer therefore rule
   out cache coherency as the missing requirement; do not repeat it.
-- Reboot/clean the process, then run stage 15,
-  which adds the exact FW 11.60 standard-console 2 MiB driver aperture,
-  two 40-byte shadow descriptors, and Gn2/Gn3/Gn4 process properties. Require
-  two identical passes before promotion.
-- After a successful FW 11.60 candidate, rerun the corresponding direct path
+- Stage 15 completed once and reproduced the stall after its exact 2 MiB
+  aperture, two descriptors, and Gn2/Gn3/Gn4 publications all returned
+  `AGC_OK`; do not repeat it. The ordinary preflight marker still completed in
+  50 ms, so the recovered constructor state is not sufficient.
+- Recover the GPU-side `SET_WORKLOAD` queue/register transition from the exact
+  FW 11.60 driver and matching cross-firmware carriers before constructing a
+  stage 16. Keep that next gate isolated and fail closed.
+- After a successful FW 11.60 candidate passes twice, rerun the corresponding direct path
   on FW 5.50 before enabling any capability. Corpus extraction now proves the
   standard Gn2/Gn3/Gn4 constructor state on every exact active key from 6.00
   through 12.70 and the reduced Gn2-only Trinity branch from 9.00 onward. This

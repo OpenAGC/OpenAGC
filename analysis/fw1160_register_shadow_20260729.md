@@ -99,3 +99,24 @@ ps5debug-NG process-list query also returned no `eboot.elf`, and websrv plus
 TCP 744 remained reachable. This reproduces stage 13 after eliminating partial
 cache flushing and the stale timer as causes. Do not repeat stage 14. Reboot
 before the higher-risk stage 15 shadow-property gate.
+
+## Stage 15 hardware result
+
+After a clean reboot, stage 15 was launched once on the same standard PS5 FW
+`0x11600005` through the guarded runner. The immediately preceding cleanup
+payload found no stale `eboot.elf`. Initialization, all internal mappings,
+version-12 defaults, async setup, the `Sce.Debug:Gnm` property, the recovered
+2 MiB aperture and Gn2/Gn3/Gn4 shadow publications, and workload stream
+registration all returned `AGC_OK`. The ordinary preflight submit completed
+its `0x1160f015` marker in 50 ms. The fully flushed 40-dword workload DCB then
+returned `AGC_OK`, but no workload marker, verdict, or shutdown text arrived
+before the 20-second websrv timeout.
+
+ps5debug-NG found the stalled payload as PID 110 named `eboot.elf`. The
+established cleanup ELF removed it; a second process-list query returned an
+empty result, while websrv and TCP 744 remained reachable. Do not repeat stage
+15 unchanged. The standard constructor aperture, descriptor copy, and
+Gn2/Gn3/Gn4 publications are therefore not sufficient to make the direct
+inline `SET_WORKLOAD` packet complete. Public FW 11.60 workload capability
+remains disabled. Recover the GPU-side queue/register transition offline before
+constructing another hardware gate.

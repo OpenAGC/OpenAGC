@@ -1033,6 +1033,14 @@ The host-generic implementation now has a tested model for:
   profiles record these exact-key facts without enabling workload capability
   or claiming untested hardware support. See
   `analysis/agc_driver_shadow_facts.md`.
+  Stage 15 then published the recovered standard FW 11.60 aperture and all
+  three properties successfully. Its ordinary preflight marker completed in
+  50 ms and the fully flushed inline workload submit returned `AGC_OK`, but no
+  workload marker or shutdown followed before timeout. ps5debug-NG found PID
+  110; the cleanup ELF removed it and restored an empty `eboot.elf` list while
+  both services remained reachable. This rules out the recovered constructor
+  shadow state as a sufficient prerequisite. Do not repeat stage 15; recover
+  the GPU-side queue/register transition before another gate.
   The first `agc_fw1160_sony_workload.elf` was hardware-attempted after a clean
   reboot. It patched credentials before `dlopen`, loaded the matching FW 11.60
   module, resolved all required exports, matched the 18/12-dword sizes, and

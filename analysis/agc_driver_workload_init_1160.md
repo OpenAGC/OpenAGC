@@ -83,3 +83,8 @@ Gn2/Gn3/Gn4 constructor contract on exact FW 6.00–12.70 keys and the reduced
 Gn2-only Trinity branch, as documented in
 `analysis/agc_driver_shadow_facts.md`. Stage 15 remains an isolated FW 11.60
 hardware gate and does not change the public fail-closed workload capability.
+Stage 15 was subsequently run once: every shadow publication returned
+`AGC_OK`, the ordinary preflight marker completed, and the workload submit
+returned `AGC_OK`, but the inline marker still never advanced. The cleanup ELF
+removed the stalled PID afterward. The recovered constructor state is not
+sufficient; do not repeat stage 15 unchanged.
