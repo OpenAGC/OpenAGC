@@ -888,8 +888,11 @@ numeric ranges.
 - Register-default selection is no longer inferred from firmware generation.
   All 39 active `libSceAgc` images use the same runtime hardware-table selector
   (80-byte records, version field at `0x44`), while their versioned dispatchers
-  accept upper bounds of 7, 8, 9, or 12. Only FW 5.50's selected version 8 is
-  hardware-qualified; every other direct default-state operation fails closed.
+  accept upper bounds of 7, 8, 9, or 12. FW 5.50's selected version 8 is
+  hardware-qualified. FW 11.60 selects version 12, which maps to the recovered
+  V10 tables; its exact 79/29/20 primary and 9/15/3 internal dimensions and
+  `0xf000` internal DDID slot are host-qualified and await repeat hardware
+  qualification. Every other direct default-state operation fails closed.
 
 See `analysis/agc_driver_abi_families.tsv`,
 `analysis/agc_driver_abi_1160.md`, `analysis/agc_driver_operation_facts.tsv`,

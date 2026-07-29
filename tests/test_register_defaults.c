@@ -158,6 +158,60 @@ static void test_register_defaults_v8(void) {
     TEST_ASSERT_EQ(internal[4].registers[0].value, 0xFFFFFFFFu, "v8 internal[4] reg value");
 }
 
+static void test_register_defaults_v10_blob_layout(void) {
+    uint32_t primary_count = 0;
+    uint32_t internal_count = 0;
+    const AgcRegisterDefaultsGroup *primary =
+        agcRegisterDefaultsGetPrimaryGroupsForVersion(
+            AGC_REGISTER_DEFAULTS_VERSION_12, &primary_count);
+    const AgcRegisterDefaultsGroup *internal =
+        agcRegisterDefaultsGetInternalGroupsForVersion(
+            AGC_REGISTER_DEFAULTS_VERSION_12, &internal_count);
+
+    TEST_ASSERT(primary != NULL, "version 12 maps to the v10 primary table");
+    TEST_ASSERT(internal != NULL, "version 12 maps to the v10 internal table");
+    TEST_ASSERT_EQ(primary_count, 128u, "v10 primary group count");
+    TEST_ASSERT_EQ(internal_count, 28u, "v10 internal group count");
+
+    size_t primary_size = agcRegisterDefaultsComputeSize(
+        primary_count,
+        AGC_REGISTER_DEFAULTS_V10_PRIMARY_CX_LENGTH,
+        AGC_REGISTER_DEFAULTS_V10_PRIMARY_SH_LENGTH,
+        AGC_REGISTER_DEFAULTS_V10_PRIMARY_UC_LENGTH);
+    size_t internal_size = agcRegisterDefaultsComputeSize(
+        internal_count,
+        AGC_REGISTER_DEFAULTS_V10_INTERNAL_CX_LENGTH,
+        AGC_REGISTER_DEFAULTS_V10_INTERNAL_SH_LENGTH,
+        AGC_REGISTER_DEFAULTS_V10_INTERNAL_UC_LENGTH);
+
+    TEST_ASSERT(primary_size <= 0x41000u, "v10 primary blob fits the DDID slot");
+    TEST_ASSERT(internal_size > 0xC000u, "v10 internal blob exceeds the v8 slot");
+    TEST_ASSERT(internal_size <= 0xF000u, "v10 internal blob fits its DDID slot");
+
+    uint8_t *primary_blob = (uint8_t *)malloc(primary_size);
+    uint8_t *internal_blob = (uint8_t *)malloc(internal_size);
+    TEST_ASSERT(primary_blob != NULL, "allocated v10 primary blob");
+    TEST_ASSERT(internal_blob != NULL, "allocated v10 internal blob");
+    if (primary_blob != NULL && internal_blob != NULL) {
+        TEST_ASSERT_EQ(agcRegisterDefaultsBuild(
+            primary_blob, primary_size, (uint64_t)(uintptr_t)primary_blob,
+            primary, primary_count,
+            AGC_REGISTER_DEFAULTS_V10_PRIMARY_CX_LENGTH,
+            AGC_REGISTER_DEFAULTS_V10_PRIMARY_SH_LENGTH,
+            AGC_REGISTER_DEFAULTS_V10_PRIMARY_UC_LENGTH),
+            AGC_OK, "v10 primary blob builds with exact dimensions");
+        TEST_ASSERT_EQ(agcRegisterDefaultsBuild(
+            internal_blob, internal_size, (uint64_t)(uintptr_t)internal_blob,
+            internal, internal_count,
+            AGC_REGISTER_DEFAULTS_V10_INTERNAL_CX_LENGTH,
+            AGC_REGISTER_DEFAULTS_V10_INTERNAL_SH_LENGTH,
+            AGC_REGISTER_DEFAULTS_V10_INTERNAL_UC_LENGTH),
+            AGC_OK, "v10 internal blob builds with exact dimensions");
+    }
+    free(internal_blob);
+    free(primary_blob);
+}
+
 /* Version selection tests — verify all versions return valid data */
 static void test_register_defaults_version_selection(void) {
     /* Version 0 (also used for 1, 2, 3) */
@@ -275,6 +329,7 @@ void test_suite_register_defaults(void) {
     TEST_RUN(test_register_defaults_build_too_many_regs);
     TEST_RUN(test_register_defaults_fw550_tables);
     TEST_RUN(test_register_defaults_v8);
+    TEST_RUN(test_register_defaults_v10_blob_layout);
     TEST_RUN(test_register_defaults_version_selection);
     TEST_RUN(test_register_defaults_get_defaults2);
 }

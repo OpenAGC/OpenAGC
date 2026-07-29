@@ -504,13 +504,52 @@ static int32_t agcProsperoCarveSubRegion(
  * ~262 KB (127 groups), the internal defaults blob needs ~46 KB (22 groups).
  * We carve from the start of DDID to fit both, plus DCB scratch at the end. */
 #define AGC_DDID_PRIMARY_SIZE     0x41000   /* 260 KB for primary defaults */
-#define AGC_DDID_INTERNAL_SIZE    0xC000    /* 48 KB for internal defaults */
+#define AGC_DDID_INTERNAL_V8_SIZE 0xC000    /* 48 KB for version 8 */
+#define AGC_DDID_INTERNAL_V10_SIZE 0xF000   /* 60 KB for version 10 */
 #define AGC_DDID_PRIMARY_OFFSET   0x00000   /* start of DDID */
 #define AGC_DDID_INTERNAL_OFFSET  AGC_DDID_PRIMARY_OFFSET + AGC_DDID_PRIMARY_SIZE
-#define AGC_DDID_MULTI_TRAILER_OFFSET \
-    (AGC_DDID_INTERNAL_OFFSET + AGC_DDID_INTERNAL_SIZE)
 #define AGC_DDID_MULTI_TRAILER_SIZE 64
 #define AGC_DDID_DCB_OFFSET       0xFC000 - 16  /* last 16 bytes for DCB scratch */
+
+typedef struct AgcProsperoDefaultsLayout {
+    uint32_t primary_cx_length;
+    uint32_t primary_sh_length;
+    uint32_t primary_uc_length;
+    uint32_t internal_cx_length;
+    uint32_t internal_sh_length;
+    uint32_t internal_uc_length;
+    size_t internal_blob_size;
+} AgcProsperoDefaultsLayout;
+
+static AgcProsperoDefaultsLayout agcProsperoGetDefaultsLayout(void)
+{
+    if (g_prospero.direct_profile.defaults_version ==
+        AGC_REGISTER_DEFAULTS_VERSION_12) {
+        const AgcProsperoDefaultsLayout layout = {
+            AGC_REGISTER_DEFAULTS_V10_PRIMARY_CX_LENGTH,
+            AGC_REGISTER_DEFAULTS_V10_PRIMARY_SH_LENGTH,
+            AGC_REGISTER_DEFAULTS_V10_PRIMARY_UC_LENGTH,
+            AGC_REGISTER_DEFAULTS_V10_INTERNAL_CX_LENGTH,
+            AGC_REGISTER_DEFAULTS_V10_INTERNAL_SH_LENGTH,
+            AGC_REGISTER_DEFAULTS_V10_INTERNAL_UC_LENGTH,
+            AGC_DDID_INTERNAL_V10_SIZE,
+        };
+        return layout;
+    }
+
+    {
+        const AgcProsperoDefaultsLayout layout = {
+            AGC_REGISTER_DEFAULTS_V8_PRIMARY_CX_LENGTH,
+            AGC_REGISTER_DEFAULTS_V8_PRIMARY_SH_LENGTH,
+            AGC_REGISTER_DEFAULTS_V8_PRIMARY_UC_LENGTH,
+            AGC_REGISTER_DEFAULTS_V8_INTERNAL_CX_LENGTH,
+            AGC_REGISTER_DEFAULTS_V8_INTERNAL_SH_LENGTH,
+            AGC_REGISTER_DEFAULTS_V8_INTERNAL_UC_LENGTH,
+            AGC_DDID_INTERNAL_V8_SIZE,
+        };
+        return layout;
+    }
+}
 
 /* ===================================================================== */
 /* Public API — initialization                                           */
@@ -670,8 +709,12 @@ int32_t PS5_SYSV_ABI agcProsperoInitializeInternalMemory(void)
 
     memset(g_prospero.ddid.cpu_addr, 0, g_prospero.ddid.size);
 
+    const AgcProsperoDefaultsLayout defaults_layout =
+        agcProsperoGetDefaultsLayout();
+    const size_t multi_trailer_offset =
+        AGC_DDID_INTERNAL_OFFSET + defaults_layout.internal_blob_size;
     int32_t trailer_ret = agcProsperoCarveSubRegion(
-        &g_prospero.ddid, AGC_DDID_MULTI_TRAILER_OFFSET,
+        &g_prospero.ddid, multi_trailer_offset,
         AGC_DDID_MULTI_TRAILER_SIZE, &g_prospero.multi_trailer);
     if (trailer_ret != AGC_OK) {
         for (int i = 0; i < (int)(sizeof(regions) / sizeof(regions[0])); i++)
@@ -1157,14 +1200,18 @@ int32_t PS5_SYSV_ABI agcProsperoNotifyDefaultStates(uint32_t flags)
         agcRegisterDefaultsGetInternalGroupsForVersion(
             g_prospero.direct_profile.defaults_version, &internal_count);
 
+    const AgcProsperoDefaultsLayout layout = agcProsperoGetDefaultsLayout();
+
     size_t primary_size = agcRegisterDefaultsComputeSize(
-        primary_count, AGC_PRIMARY_CX_LENGTH, AGC_PRIMARY_SH_LENGTH, AGC_PRIMARY_UC_LENGTH);
+        primary_count, layout.primary_cx_length, layout.primary_sh_length,
+        layout.primary_uc_length);
     size_t internal_size = agcRegisterDefaultsComputeSize(
-        internal_count, AGC_INTERNAL_CX_LENGTH, AGC_INTERNAL_SH_LENGTH, AGC_INTERNAL_UC_LENGTH);
+        internal_count, layout.internal_cx_length, layout.internal_sh_length,
+        layout.internal_uc_length);
     printf("    [defaults] primary: %u groups, size=0x%zx (blob=0x%x)\n",
            primary_count, primary_size, AGC_DDID_PRIMARY_SIZE);
     printf("    [defaults] internal: %u groups, size=0x%zx (blob=0x%x)\n",
-           internal_count, internal_size, AGC_DDID_INTERNAL_SIZE);
+           internal_count, internal_size, (unsigned)layout.internal_blob_size);
 
     int32_t ret = agcProsperoCarveSubRegion(
         &g_prospero.ddid, AGC_DDID_PRIMARY_OFFSET, AGC_DDID_PRIMARY_SIZE,
@@ -1176,7 +1223,7 @@ int32_t PS5_SYSV_ABI agcProsperoNotifyDefaultStates(uint32_t flags)
     }
 
     ret = agcProsperoCarveSubRegion(
-        &g_prospero.ddid, AGC_DDID_INTERNAL_OFFSET, AGC_DDID_INTERNAL_SIZE,
+        &g_prospero.ddid, AGC_DDID_INTERNAL_OFFSET, layout.internal_blob_size,
         &g_prospero.internal_defaults);
     if (ret != AGC_OK) {
         printf("    [defaults] ERROR: carve internal failed: 0x%x\n", ret);
@@ -1189,9 +1236,9 @@ int32_t PS5_SYSV_ABI agcProsperoNotifyDefaultStates(uint32_t flags)
         g_prospero.primary_defaults.gpu_addr,
         primary_groups,
         primary_count,
-        AGC_PRIMARY_CX_LENGTH,
-        AGC_PRIMARY_SH_LENGTH,
-        AGC_PRIMARY_UC_LENGTH);
+        layout.primary_cx_length,
+        layout.primary_sh_length,
+        layout.primary_uc_length);
     if (ret != AGC_OK) {
         printf("    [defaults] ERROR: build primary failed: 0x%x (required=0x%zx, blob=0x%zx)\n",
                ret, primary_size, g_prospero.primary_defaults.size);
@@ -1206,9 +1253,9 @@ int32_t PS5_SYSV_ABI agcProsperoNotifyDefaultStates(uint32_t flags)
         g_prospero.internal_defaults.gpu_addr,
         internal_groups,
         internal_count,
-        AGC_INTERNAL_CX_LENGTH,
-        AGC_INTERNAL_SH_LENGTH,
-        AGC_INTERNAL_UC_LENGTH);
+        layout.internal_cx_length,
+        layout.internal_sh_length,
+        layout.internal_uc_length);
     if (ret != AGC_OK) {
         printf("    [defaults] ERROR: build internal failed: 0x%x (required=0x%zx, blob=0x%zx)\n",
                ret, internal_size, g_prospero.internal_defaults.size);
