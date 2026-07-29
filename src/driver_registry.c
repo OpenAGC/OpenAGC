@@ -7,35 +7,35 @@
 #include "agc_error.h"
 
 static const uint32_t g_legacy_v1_aliases[] = {
-    0x01000000u
+    0x0100u
 };
 
 static uint32_t g_runtime_firmware_version;
 
 static const uint32_t g_legacy_v2_aliases[] = {
-    0x02000000u, 0x02500000u
+    0x0200u, 0x0250u
 };
 
 static const uint32_t g_legacy_v3_aliases[] = {
-    0x03000000u, 0x03200000u
+    0x0300u, 0x0320u
 };
 
 /*
- * Exact standard-PS5 builds whose libSceAgcDriver direct-submit ABI was
+ * Exact standard-PS5 builds whose direct /dev/gc submit ABI was
  * inspected. Keep this fail-closed: never replace the aliases with a range.
  * PS5 Pro has a different CWSR profile and is outside this backend contract.
  */
 static const uint32_t g_standard_direct_aliases[] = {
-    0x04000000u, 0x04030000u, 0x04500000u, 0x04510000u,
-    0x05020000u, 0x05100000u, 0x05500000u,
-    0x06000000u, 0x06020000u, 0x06500000u,
-    0x07010000u, 0x07200000u, 0x07400000u, 0x07600000u, 0x07610000u,
-    0x08000000u, 0x08200000u, 0x08400000u, 0x08600000u,
-    0x09000000u, 0x09050000u, 0x09200000u, 0x09400000u, 0x09600000u,
-    0x10010000u, 0x10200000u, 0x10400000u, 0x10600000u,
-    0x11000000u, 0x11200000u, 0x11400000u, 0x11600000u,
-    0x12000000u, 0x12020000u, 0x12200000u, 0x12400000u,
-    0x12600000u, 0x12700000u
+    0x0400u, 0x0403u, 0x0450u, 0x0451u,
+    0x0502u, 0x0510u, 0x0550u,
+    0x0600u, 0x0602u, 0x0650u,
+    0x0701u, 0x0720u, 0x0740u, 0x0760u, 0x0761u,
+    0x0800u, 0x0820u, 0x0840u, 0x0860u,
+    0x0900u, 0x0905u, 0x0920u, 0x0940u, 0x0960u,
+    0x1001u, 0x1020u, 0x1040u, 0x1060u,
+    0x1100u, 0x1120u, 0x1140u, 0x1160u,
+    0x1200u, 0x1202u, 0x1220u, 0x1240u,
+    0x1260u, 0x1270u
 };
 
 static uint16_t agcBcdByte(uint32_t value)
@@ -43,9 +43,9 @@ static uint16_t agcBcdByte(uint32_t value)
     return (uint16_t)(((value >> 4) & 0xfu) * 10u + (value & 0xfu));
 }
 
-static uint32_t agcFirmwareAbiKey(uint32_t raw_version)
+static uint16_t agcFirmwareAbiKey(uint32_t raw_version)
 {
-    return raw_version & 0xffff0000u;
+    return (uint16_t)(raw_version >> 16);
 }
 
 AgcFirmwareVersion agcFirmwareNormalize(uint32_t raw_version)
@@ -62,7 +62,7 @@ AgcFirmwareVersion agcFirmwareNormalize(uint32_t raw_version)
 bool agcProsperoStandardDirectAbiSupportsFirmware(uint32_t raw_version)
 {
     size_t i;
-    uint32_t abi_key = agcFirmwareAbiKey(raw_version);
+    uint16_t abi_key = agcFirmwareAbiKey(raw_version);
 
     for (i = 0; i < sizeof(g_standard_direct_aliases) /
                     sizeof(g_standard_direct_aliases[0]); ++i) {
@@ -86,7 +86,7 @@ static bool agcFirmwareAliasContains(const uint32_t *aliases,
 
 bool agcProsperoFirmwareSupported(uint32_t raw_version)
 {
-    uint32_t abi_key = agcFirmwareAbiKey(raw_version);
+    uint16_t abi_key = agcFirmwareAbiKey(raw_version);
 
     return agcFirmwareAliasContains(g_legacy_v1_aliases,
                sizeof(g_legacy_v1_aliases) / sizeof(g_legacy_v1_aliases[0]),
@@ -104,7 +104,7 @@ bool agcProsperoBuildRuntimeProfile(uint32_t raw_version, bool is_trinity,
     AgcProsperoRuntimeProfile *profile_out)
 {
     AgcProsperoRuntimeProfile profile = {0};
-    uint32_t abi_key = agcFirmwareAbiKey(raw_version);
+    uint16_t abi_key = agcFirmwareAbiKey(raw_version);
 
     if (!profile_out)
         return false;
