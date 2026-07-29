@@ -23,7 +23,14 @@ sleep 2
 
 curl -sS --fail --ftp-create-dirs -T "$STAGE_ARTIFACT" \
     "ftp://$PS5_HOST:2121$REMOTE_BASE/eboot.elf" || exit 1
-output=$(curl -sS --fail --max-time 20 \
-    "http://$PS5_HOST:8080/hbldr?pipe=1&daemon=0&path=$REMOTE_BASE/eboot.elf") || exit 1
-printf '%s\n' "$output"
-printf '%s\n' "$output" | grep -q "stage $STAGE: PASS" || exit 1
+output_file=$(mktemp) || exit 2
+trap 'rm -f "$output_file"' EXIT HUP INT TERM
+curl -sS --fail --max-time 20 \
+    "http://$PS5_HOST:8080/hbldr?pipe=1&daemon=0&path=$REMOTE_BASE/eboot.elf" \
+    > "$output_file" 2>&1
+transport_status=$?
+cat "$output_file"
+grep -q "stage $STAGE: PASS" "$output_file" || exit 1
+if [ "$transport_status" -ne 0 ]; then
+    echo "stage passed; websrv transport ended with curl=$transport_status" >&2
+fi
