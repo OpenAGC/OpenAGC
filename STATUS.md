@@ -943,7 +943,11 @@ The host-generic implementation now has a tested model for:
 - Async-compute queue submission: generic backend queue tracking (32 slots), ACB submit validates queue in-use, full create→submit→destroy flow tested
 - 13 new DCB builders from SPRX disassembly: ReleaseMem, IndirectBuffer, DrawIndirect, DrawIndex2, DrawIndexIndirect, DrawIndirectMulti, DrawIndexIndirectMulti, SetPredication, EventWrite, SetConfigReg, SetShReg, SetUconfigReg
 - 4 AGC-custom flip builders: WaitFlipDone (0x4C), WaitFlip (0x51), InsertWaitFlipDone (0x54), WaitFlipEos (0x4F+0x4E)
-- Workload tracking: sceAgcDriverSetWorkloadsActive / SetWorkloadComplete with SET_WORKLOAD (0x1E) submit on prospero
+- Workload tracking: generic one-ID convenience state plus typed DCB/ACB
+  `SET_WORKLOAD` builders. The independent Prospero one-ID direct operation
+  passed on FW 5.50. It is not Sony-export-compatible: FW 5.50 and 11.60 Sony
+  exports consume multiple arguments and emit nine-dword `0xc0071e00`
+  packets, so no other firmware inherits the convenience capability.
 - FW 5.50 register-defaults blob builder/parser with embedded primary/internal tables
 - Runtime firmware/backend registry: PS5 system-version ABI validation,
   four-digit major/minor ABI keys with complete raw-version diagnostics,
@@ -1437,7 +1441,8 @@ later payload processes, so it must never be followed by a direct fallback in
 the same boot session; see `analysis/sony_export_forwarding_550.md`.
 
 Direct `/dev/gc` operations are now independently capability-gated. FW 5.50
-retains its qualified set; FW 11.60 enables its statically proven submit,
+retains its qualified set, including the independently hardware-proven
+workload convenience submit; FW 11.60 enables its statically proven submit,
 standard/Trinity memory, queue, primary/final suspend, TF-ring, HS-offchip, and
 async set; its workload, suspend-query, and defaults operations fail closed.
 All other active keys currently expose only the common submit16 baseline.

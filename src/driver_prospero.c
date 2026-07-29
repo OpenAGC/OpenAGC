@@ -1292,14 +1292,9 @@ int32_t PS5_SYSV_ABI agcProsperoSubmitEopFlip(
 /*
  * Workload tracking — prospero backend.
  *
- * RE'd from libSceAgcDriver.sprx ordinals 87 (UM9b9NunSrE, BeginWorkload)
- * and 88 (i6bfTi13ApA, EndWorkload). Both functions:
- *   - Validate workload_id (error 0x8a6c0033 if invalid/zero)
- *   - Build a SET_WORKLOAD (0x1E) PM4 packet with a subcommand
- *   - Submit it to the GPU via the submit ioctl
- *
- * The 0xcc / 0xcd prefix bits in the SPRX correspond to the begin/end
- * subcommand selectors (AGC_PM4_SUB_WORKLOAD_BEGIN / _END).
+ * This is OpenAGC's historical one-ID convenience ABI. The FW 5.50 and
+ * FW 11.60 Sony exports with similar names are multi-argument nine-dword
+ * packet builders and are not ABI-compatible adapters for this helper.
  *
  * Packet layout (3 dwords):
  *   [0] header = agcPm4Header3Sub(SET_WORKLOAD, sub, 3)

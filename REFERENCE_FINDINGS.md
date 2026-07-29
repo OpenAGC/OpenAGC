@@ -599,8 +599,8 @@ identification only) at:
 
 | NID | Identified Name | Evidence |
 |-----|-----------------|----------|
-| `UM9b9NunSrE` | `sceAgcDriverSetWorkloadsActive` | SET_WORKLOAD 0x1E, errors 0x8a6c0033/34 |
-| `i6bfTi13ApA` | `sceAgcDriverSetWorkloadComplete` | SET_WORKLOAD 0x1E, calls 0x6bb0 |
+| `UM9b9NunSrE` | `sceAgcDriverSetWorkloadsActive` | Multi-argument nine-dword SET_WORKLOAD 0x1E builder; not OpenAGC's one-ID ABI |
+| `i6bfTi13ApA` | `sceAgcDriverSetWorkloadComplete` | Multi-argument nine-dword SET_WORKLOAD 0x1E builder; not OpenAGC's one-ID ABI |
 | `Hj4eWnDektQ` | `sceAgcDriverSubmitCommandBuffers` | INDIRECT_BUFFER 0x3F, error 0x8a6d0001 |
 | `XNbrdwCsZ9A` | `sceAgcDriverMapComputeQueue` | Error 0x8a6d0000, validation max 0x1f queues |
 | `b4fpgH5ZXxQ` | `sceAgcDriverInitializeQueue` | Atomic counter, "[AgcDriver" string |

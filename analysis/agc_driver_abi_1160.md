@@ -64,7 +64,10 @@ FW 11.60 is statically qualified (hardware pending) for submit16, standard and
 Trinity internal-memory sizing, authenticated queue create/destroy, primary
 and final suspend submission, public TF-ring setup, HS-offchip setup, and async
 graphics setup. Its workload wrappers build a larger, different packet
-contract than OpenAGC's FW 5.50 workload helper, so workload calls fail closed.
+contract than OpenAGC's one-ID workload helper, so workload calls fail closed.
+The one-ID helper remains enabled only on FW 5.50 because its independent
+three-dword submission path passed the real-console qualification sample; it
+must not be inferred from the Sony export's ABI on other firmware.
 Both public/direct suspend-query exports are permission stubs. The internal
 `0x80048127` helper's result semantics are not exposed by those wrappers, so
 suspend query remains disabled. `libSceAgc` exposes a versioned 0..12 defaults
@@ -72,9 +75,11 @@ dispatcher, but its no-argument API reads the selected version from a runtime
 hardware table. Static analysis of the driver wrapper does not establish the
 selected 11.60 value, so default-state construction also remains disabled.
 
-The 11.60 workload-active and workload-complete exports emit nine-dword
-`0xc0071e00` packets. That contract differs from OpenAGC's FW 5.50 three-dword
-convenience packets and is explicitly not enabled for 11.60.
+The Sony 5.50 and 11.60 workload-active and workload-complete exports emit
+nine-dword `0xc0071e00` packets and consume multiple arguments. That contract
+differs from OpenAGC's three-dword, one-ID convenience packet. The latter is a
+hardware-qualified FW 5.50 extension, not a Sony-compatible export, and stays
+disabled for 11.60.
 
 The standard-console internal allocations are unchanged from FW 5.50:
 

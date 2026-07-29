@@ -1526,16 +1526,14 @@ Purpose:
 
 Allow a single game-facing OpenAGC ABI to run across supported PS5 firmware
 versions without exposing firmware-private ioctl layouts to applications.
-Match the compatibility model used by retail titles where practical: prefer
-the installed userspace driver that matches the running kernel, while keeping
-validated direct backends as fallbacks.
+Keep OpenAGC independent of the installed userspace driver: select an exact
+firmware profile and issue only statically verified `/dev/gc` operations.
 
 Architecture:
 
 ```text
 Game -> stable OpenAGC public ABI
-     -> installed Sony driver-export backend (preferred)
-     -> validated per-firmware /dev/gc backend (fallback)
+     -> exact per-firmware /dev/gc backend
      -> safe AGC_ERROR_UNSUPPORTED result for unknown interfaces
 ```
 
@@ -1556,6 +1554,35 @@ Recovery and implementation sequence:
    private structure or ioctl argument.
 6. Build the generic and Prospero targets. Without matching FW 3.20 hardware,
    label the result **SPRX-confirmed, hardware pending**.
+
+| Capability | Direct `/dev/gc` status |
+| --- | --- |
+| Firmware selection | Exact four-digit aliases; incomplete profiles fail closed |
+| Submission | Submit16 command and layout recovered across inspected families; hardware-qualified on FW 5.50 |
+| Queue management | Per-key request, token, and layout evidence required before enabling |
+| Suspend points | Primary/final submit and query are independently capability-gated |
+| Workloads | The one-ID OpenAGC convenience submit is distinct from Sony's multi-argument nine-dword builders and is enabled only with direct evidence |
+| TF ring | Public `0x80108128` and privileged `0xC0108120` roles are separate |
+| HS offchip | FW 5.50 and 11.60 use `0xC010812C`; unrelated `0xC008812D` assumptions are rejected |
+| Internal memory | Standard and Trinity sizes require exact per-key facts |
+| Default states | Register-defaults version is selected only from an exact profile fact |
+
+### Priority 0: Correct unsafe or overstated assumptions
+
+1. Rename the `0xC0108139` verifier check to its actual suspend-final role.
+2. Add independent TF-ring checks for the public and privileged commands,
+   including direction, immediate size, field offsets, and call semantics.
+3. Resolve the HS-offchip `0xC008812D` versus `0xC010812C` discrepancy from
+   named wrapper disassembly before enabling either command for another key.
+4. Remove the hardcoded defaults-version 8 selection. Add an exact
+   `register_defaults_version` fact to each qualified firmware profile; return
+   `AGC_ERROR_NOT_SUPPORTED` when it is unknown.
+5. Split broad backend eligibility from operation support. An exact firmware
+   match may select a backend, but each direct operation must check its own
+   capability bit before issuing an ioctl or PM4 submission.
+6. Correct status text and verifier success messages so installed export
+   presence, RE-qualified direct ABI, and hardware qualification are reported
+   as distinct evidence levels.
 
 Acceptance criteria:
 
@@ -1581,7 +1608,8 @@ Acceptance criteria:
 - ✅ `AgcDriverOps` preserves the public ABI across generic and Prospero
   implementations.
 - ✅ Exact firmware detection, backend selection, and per-operation direct
-  capability gates fail closed. FW 5.50 retains its qualified operations;
+  capability gates fail closed. FW 5.50 retains its hardware-qualified one-ID
+  workload convenience path without claiming Sony export ABI compatibility;
   FW 11.60 enables only wrapper-proven operations, while workloads,
   suspend-query, and defaults remain disabled pending exact evidence.
 - ✅ The primary Prospero target links no `SceAgcDriver` stub and the

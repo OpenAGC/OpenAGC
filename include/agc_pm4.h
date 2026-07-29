@@ -42,9 +42,10 @@ typedef enum AgcPm4Opcode {
     AGC_PM4_OP_DISPATCH_INDIRECT         = 0x16,
     AGC_PM4_OP_ATOMIC_MEM                = 0x1B,
     AGC_PM4_OP_ATOMIC_GDS                = 0x1D,
-    /* Opcode 0x1E is used for both ATOMIC_MEM (sub=0, 9 dwords) and
-     * SET_WORKLOAD (sub=0x20/0x21, 3 dwords) on AGC. The SPRX function
-     * sceAgcDcbAtomicMem uses 0x1E with sub=0. */
+    /* Opcode 0x1E is shared by AGC atomic-memory and workload packets.
+     * Sony's FW 5.50/11.60 driver workload builders emit nine dwords with
+     * header 0xc0071e00; OpenAGC's cursor builders model their own typed
+     * eight-dword form. */
     AGC_PM4_OP_SET_WORKLOAD              = 0x1E,
     AGC_PM4_OP_ATOMIC_MEM_AGC            = 0x1E,  /* alias */
     AGC_PM4_OP_SET_PREDICATION           = 0x20,
@@ -144,10 +145,8 @@ typedef enum AgcPm4Subcommand {
     AGC_PM4_SUB_FLIP             = 0x17,
     AGC_PM4_SUB_RELEASE_MEM      = 0x18,
     AGC_PM4_SUB_DMA_DATA         = 0x19,
-    /* SET_WORKLOAD subcommands — used by sceAgcDriverSetWorkloadsActive /
-     * sceAgcDriverSetWorkloadComplete (libSceAgcDriver.sprx ordinals 87/88).
-     * The 0xcc / 0xcd prefix bits in the SPRX correspond to these
-     * subcommand selectors within the SET_WORKLOAD opcode (0x1E). */
+    /* Historical OpenAGC one-ID convenience selectors. These are not the
+     * ABI or complete packet contract of Sony's similarly named exports. */
     AGC_PM4_SUB_WORKLOAD_BEGIN    = 0x20,
     AGC_PM4_SUB_WORKLOAD_END      = 0x21,
 } AgcPm4Subcommand;

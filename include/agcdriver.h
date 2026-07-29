@@ -106,10 +106,10 @@ int32_t PS5_SYSV_ABI sceAgcDriverSubmitEopFlip(
     void *video_out_handle, uint32_t display_buf_index,
     uint32_t flip_mode, void *present_ptr);
 
-/* Workload tracking — begin/end a workload on the GPU.
- * Matches SPRX ordinals 87/88 (UM9b9NunSrE / i6bfTi13ApA) in
- * libSceAgcDriver.sprx. These build and submit a SET_WORKLOAD
- * (0x1E) PM4 packet with different subcommands.
+/* OpenAGC workload convenience API — begin/end one workload on the GPU.
+ * This is not ABI-compatible with Sony's similarly named multi-argument
+ * packet builders. The direct FW 5.50 implementation builds and submits its
+ * own hardware-qualified SET_WORKLOAD (0x1E) packet.
  * \param workload_id  Workload ID (validated by SPRX; must be non-zero)
  * Returns 0 on success, AGC error code on failure. */
 int32_t PS5_SYSV_ABI sceAgcDriverSetWorkloadsActive(uint32_t workload_id);
