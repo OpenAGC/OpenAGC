@@ -20,12 +20,13 @@ AMD PM4 packet ancestry overlap in useful ways.
 
 - Keep the public workload capability disabled while testing isolated causes
   of the standard-console inline `SET_WORKLOAD` stall.
-- Run stage 14 first. It changes stage 13 only by flushing the complete
-  40-dword DCB and resetting the post-preflight timer. Require two identical
-  passes before promotion.
-- Only if stage 14 still stalls, reboot/clean the process and run stage 15,
+- Stage 14 completed once and still stalled after its ordinary preflight
+  marker passed. The complete 40-dword flush and reset timer therefore rule
+  out cache coherency as the missing requirement; do not repeat it.
+- Reboot/clean the process, then run stage 15,
   which adds the exact FW 11.60 standard-console 2 MiB driver aperture,
-  two 40-byte shadow descriptors, and Gn2/Gn3/Gn4 process properties.
+  two 40-byte shadow descriptors, and Gn2/Gn3/Gn4 process properties. Require
+  two identical passes before promotion.
 - After a successful FW 11.60 candidate, rerun the corresponding direct path
   on FW 5.50 before enabling any capability. Do not generalize the recovered
   Gn4 state to Trinity or neighboring firmware without matching SPRX evidence.

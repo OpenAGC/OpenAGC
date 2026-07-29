@@ -348,9 +348,9 @@ the cleanup ELF immediately beforehand.
 
 Stages 10-13 preserve the completed process-property and stalled workload
 history and must not be rerun unchanged. Stage 14 is the full-DCB-flush-only
-counterfactual; stage 15 adds the standard-console FW 11.60 Gn2/Gn3/Gn4
-register-shadow state. Run stage 14 first and use stage 15 only if stage 14
-still stalls. See `analysis/fw1160_register_shadow_20260729.md`.
+counterfactual; it reproduced the stall once and must not be repeated. Stage 15
+adds the standard-console FW 11.60 Gn2/Gn3/Gn4 register-shadow state. Reboot
+before running stage 15. See `analysis/fw1160_register_shadow_20260729.md`.
 
 **2c. `agc_fw1160_sony_workload.elf` — installed-driver workload oracle**
 

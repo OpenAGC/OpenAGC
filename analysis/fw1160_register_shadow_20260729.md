@@ -71,10 +71,27 @@ hardware launch must use the guarded Make target so the process-cleanup ELF is
 the immediately preceding payload. A stalled stage must be killed before any
 next payload; reboot before changing backend families.
 
-Build artifacts prepared but not yet hardware-run:
+Build artifacts:
 
 - stage 14 SHA-256: `97b778f0c7fba7daaca99ebd0aa9f89494a19a5bdca644d87adf020d1643c10a`
 - stage 15 SHA-256: `7c9251642698cfc1f4c87ee68d8362b6b410c075ea41fd9d23d82845c7d4ac7e`
 
 Stage 15 has no `libSceAgcDriver.sprx` dependency. Its `DT_NEEDED` set is
 limited to VideoOut, libkernel, libc, and libnet.
+
+## Stage 14 hardware result
+
+Stage 14 was launched once on standard PS5 FW `0x11600005` through the guarded
+runner. The immediately preceding cleanup payload found no stale `eboot.elf`.
+Initialization, all nine internal mappings, version-12 defaults, async setup,
+the corrected `Sce.Debug:Gnm` property, and stream registration returned
+`AGC_OK`. The ordinary preflight submit completed its `0x1160f014` marker in
+50 ms. The fully flushed 40-dword inline workload DCB then returned `AGC_OK`,
+but neither workload marker nor shutdown text arrived before the 20-second
+websrv timeout.
+
+The cleanup payload afterward reported zero stale `eboot.elf` matches, a live
+ps5debug-NG process-list query also returned no `eboot.elf`, and websrv plus
+TCP 744 remained reachable. This reproduces stage 13 after eliminating partial
+cache flushing and the stale timer as causes. Do not repeat stage 14. Reboot
+before the higher-risk stage 15 shadow-property gate.

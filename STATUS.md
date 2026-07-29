@@ -1018,8 +1018,13 @@ The host-generic implementation now has a tested model for:
   rejected before hardware because it confused raw file offset `0x10220` with
   mapped vaddr `0x10220`; the correct leading words are
   `{0, 0x3bf, 0x2000, 0x2281}`. Exact host bytes and the ELF mapping are now
-  verifier-locked. Neither stage has been hardware-run yet. Run stage 14 first;
-  stage 15 remains the higher-risk fallback. See
+  verifier-locked. Stage 14 then reproduced the stall: its normal preflight
+  marker completed in 50 ms and the fully flushed 40-dword workload submit
+  returned `AGC_OK`, but no workload marker or shutdown followed before the
+  20-second timeout. Cleanup and ps5debug-NG found no residual `eboot.elf`, and
+  both network services remained reachable. This rules out partial cache
+  flushing and the stale timer. Do not repeat stage 14; reboot before stage 15,
+  which remains the higher-risk shadow-property gate. See
   `analysis/fw1160_register_shadow_20260729.md`.
   The first `agc_fw1160_sony_workload.elf` was hardware-attempted after a clean
   reboot. It patched credentials before `dlopen`, loaded the matching FW 11.60
