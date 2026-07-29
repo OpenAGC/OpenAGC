@@ -146,10 +146,14 @@ bool agcProsperoFirmwareSupported(uint32_t raw_version)
 {
     uint16_t abi_key = agcFirmwareAbiKey(raw_version);
 
-    /* Runtime support is narrower than the RE profile catalog.  FW 11.60
-     * powered off a standard PS5 during its first direct qualification run;
-     * keep every non-hardware-qualified profile fail-closed. */
-    return abi_key == 0x0550u;
+    /* FW 5.50 and standard-PS5 FW 11.60 hardware-qualify both endpoints of
+     * this compatibility group.  The external SPRX corpus independently
+     * verifies the common submit, memory, queue, primary-suspend, TF-ring,
+     * HS-offchip, and async carriers for every listed intermediate key.
+     * Retain exact alias membership so an uninspected key inside the numeric
+     * interval still fails closed. */
+    return abi_key >= 0x0550u && abi_key <= 0x1160u &&
+        agcProsperoStandardDirectAbiSupportsFirmware(raw_version);
 }
 
 bool agcProsperoBuildRuntimeProfile(uint32_t raw_version, bool is_trinity,
