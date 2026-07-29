@@ -402,6 +402,14 @@ headless R16/RG16 builds. R16 and RG16 must each pass twice after a clean reboot
 and then be regressed on FW 5.50 before they are advertised as FW 11.60
 capabilities. See `analysis/fw1160_narrow_fp16_gate_audit_20260730.md`.
 
+The remaining FW 5.50-qualified offscreen formats now also have exact FW 11.60
+headless artifacts: R8, RG8, RGB10A2, R11G11B10, R32, RG32, and RGBA32. All
+cross-build without warnings and retain their format-specific native oracles.
+They are built, not hardware-qualified. RGBA8/BGRA8 and sRGB variants remain
+outside the headless matrix because their current fixtures depend on
+VideoOut-owned buffers; those oracles will not be weakened merely to compile.
+See `analysis/fw1160_color_format_gate_matrix_20260730.md`.
+
 ## FW 5.50 sRGB render-target qualification (2026-07-27)
 
 Append-only public presets `RGBA8_SRGB` and `BGRA8_SRGB` are host-tested and

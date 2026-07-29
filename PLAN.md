@@ -83,6 +83,12 @@ AMD PM4 packet ancestry overlap in useful ways.
   stage-17 stall, reinject ps5debug-NG, and require two passes per format before
   the corresponding FW 5.50 regression. See
   `analysis/fw1160_narrow_fp16_gate_audit_20260730.md`.
+- Seven additional offscreen format gates now build under the same exact
+  profile and bounded runner: R8, RG8, RGB10A2, R11G11B10, R32, RG32, and
+  RGBA32. Run them only after R16/RG16 qualify, in increasing byte-width and
+  packing risk. Display-backed RGBA8/BGRA8 and sRGB variants remain deferred
+  until their VideoOut-owned oracle buffers are replaced with real headless
+  allocations. See `analysis/fw1160_color_format_gate_matrix_20260730.md`.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and

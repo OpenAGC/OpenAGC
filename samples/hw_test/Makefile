@@ -432,6 +432,34 @@ agc_graphics_rg16_float_fw1160.elf: agc_graphics.c ps5_video_out.h gpu_credentia
 	$(CC) $(CFLAGS) $(FW1160_GRAPHICS_FLAGS) -DAGC_VALIDATE_RG16_FLOAT=1 \
 		-o $@ agc_graphics.c $(AGC_LDFLAGS)
 
+agc_graphics_rgb10a2_fw1160.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW1160_GRAPHICS_FLAGS) -DAGC_VALIDATE_RGB10A2=1 \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_graphics_r11g11b10_fw1160.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW1160_GRAPHICS_FLAGS) -DAGC_VALIDATE_R11G11B10=1 \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_graphics_r8_unorm_fw1160.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW1160_GRAPHICS_FLAGS) -DAGC_VALIDATE_R8_UNORM=1 \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_graphics_rg8_unorm_fw1160.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW1160_GRAPHICS_FLAGS) -DAGC_VALIDATE_RG8_UNORM=1 \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_graphics_r32_float_fw1160.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW1160_GRAPHICS_FLAGS) -DAGC_VALIDATE_R32_FLOAT=1 \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_graphics_rg32_float_fw1160.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW1160_GRAPHICS_FLAGS) -DAGC_VALIDATE_RG32_FLOAT=1 \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_graphics_rgba32_float_fw1160.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW1160_GRAPHICS_FLAGS) -DAGC_VALIDATE_RGBA32_FLOAT=1 \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
 agc_graphics_indexed.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_DRAW_INDEXED=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
 
@@ -732,7 +760,14 @@ deploy_agc_graphics: agc_graphics.elf
 
 .PHONY: deploy_agc_graphics_fw1160 \
 	deploy_agc_graphics_r16_float_fw1160 \
-	deploy_agc_graphics_rg16_float_fw1160
+	deploy_agc_graphics_rg16_float_fw1160 \
+	deploy_agc_graphics_rgb10a2_fw1160 \
+	deploy_agc_graphics_r11g11b10_fw1160 \
+	deploy_agc_graphics_r8_unorm_fw1160 \
+	deploy_agc_graphics_rg8_unorm_fw1160 \
+	deploy_agc_graphics_r32_float_fw1160 \
+	deploy_agc_graphics_rg32_float_fw1160 \
+	deploy_agc_graphics_rgba32_float_fw1160
 deploy_agc_graphics_fw1160: agc_graphics_fw1160.elf
 	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
@@ -745,6 +780,41 @@ deploy_agc_graphics_r16_float_fw1160: agc_graphics_r16_float_fw1160.elf
 deploy_agc_graphics_rg16_float_fw1160: agc_graphics_rg16_float_fw1160.elf
 	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
 		EXPECTED_TARGET=RG16_FLOAT PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) \
+		sh ./run_fw1160_graphics.sh
+
+deploy_agc_graphics_rgb10a2_fw1160: agc_graphics_rgb10a2_fw1160.elf
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_TARGET='offscreen RGB10A2' PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) \
+		sh ./run_fw1160_graphics.sh
+
+deploy_agc_graphics_r11g11b10_fw1160: agc_graphics_r11g11b10_fw1160.elf
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_TARGET='offscreen R11G11B10 FLOAT' PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) \
+		sh ./run_fw1160_graphics.sh
+
+deploy_agc_graphics_r8_unorm_fw1160: agc_graphics_r8_unorm_fw1160.elf
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_TARGET=R8_UNORM PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) \
+		sh ./run_fw1160_graphics.sh
+
+deploy_agc_graphics_rg8_unorm_fw1160: agc_graphics_rg8_unorm_fw1160.elf
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_TARGET=RG8_UNORM PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) \
+		sh ./run_fw1160_graphics.sh
+
+deploy_agc_graphics_r32_float_fw1160: agc_graphics_r32_float_fw1160.elf
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_TARGET=R32_FLOAT PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) \
+		sh ./run_fw1160_graphics.sh
+
+deploy_agc_graphics_rg32_float_fw1160: agc_graphics_rg32_float_fw1160.elf
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_TARGET=RG32_FLOAT PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) \
+		sh ./run_fw1160_graphics.sh
+
+deploy_agc_graphics_rgba32_float_fw1160: agc_graphics_rgba32_float_fw1160.elf
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_TARGET=RGBA32_FLOAT PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) \
 		sh ./run_fw1160_graphics.sh
 
 deploy_agc_depth: agc_depth.elf

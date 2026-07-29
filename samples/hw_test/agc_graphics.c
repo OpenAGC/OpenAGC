@@ -3061,6 +3061,7 @@ static bool validate_srgb_transfer(const GraphicsTest *test)
 #endif
 
 #if AGC_VALIDATE_RGB10A2
+#if !AGC_GRAPHICS_HEADLESS
 static void visualize_rgb10a2(GraphicsTest *test)
 {
     const uint32_t *source = (const uint32_t *)test->render_target;
@@ -3095,6 +3096,7 @@ static void visualize_rgb10a2(GraphicsTest *test)
     printf("[RGB10A2] CPU preview: %ux%u centered on RGBA8 display\n",
            preview_width, preview_height);
 }
+#endif
 #endif
 
 /* ======================================================================== */
@@ -3137,6 +3139,7 @@ static bool present_preview(GraphicsTest *test) {
 #endif
 
 #if AGC_VALIDATE_R11G11B10
+#if !AGC_GRAPHICS_HEADLESS
 static uint8_t ufloat_to_unorm8(uint32_t bits, uint32_t mantissa_bits)
 {
     const uint32_t mantissa_mask = (1u << mantissa_bits) - 1u;
@@ -3185,6 +3188,7 @@ static void visualize_r11g11b10(GraphicsTest *test)
     printf("[R11G11B10] CPU preview: %ux%u centered on RGBA8 display\n",
            preview_width, preview_height);
 }
+#endif
 #endif
 
 /* ======================================================================== */
@@ -3317,7 +3321,9 @@ int main(void) {
                native_target.name);
         return 1;
     }
+#if !AGC_GRAPHICS_HEADLESS
     visualize_native(&test, components, 1u);
+#endif
 #elif AGC_VALIDATE_R32_FLOAT || AGC_VALIDATE_RG32_FLOAT || \
       AGC_VALIDATE_RGBA32_FLOAT
     const uint32_t components = AGC_VALIDATE_RGBA32_FLOAT ? 4u :
@@ -3338,7 +3344,9 @@ int main(void) {
                native_target.name);
         return 1;
     }
+#if !AGC_GRAPHICS_HEADLESS
     visualize_native(&test, components, 4u);
+#endif
 #elif AGC_VALIDATE_R16_FLOAT || AGC_VALIDATE_RG16_FLOAT
     const uint32_t components = AGC_VALIDATE_RG16_FLOAT ? 2u : 1u;
     RenderTargetConfig fp16_narrow_target = {
@@ -3375,7 +3383,9 @@ int main(void) {
         printf("FATAL: R11G11B10 render-target validation failed\n");
         return 1;
     }
+#if !AGC_GRAPHICS_HEADLESS
     visualize_r11g11b10(&test);
+#endif
 #elif AGC_VALIDATE_RGB10A2
     RenderTargetConfig rgb10a2_target = {
         test.render_target, FP16_TARGET_WIDTH, FP16_TARGET_HEIGHT,
@@ -3390,7 +3400,9 @@ int main(void) {
         printf("FATAL: RGB10A2 render-target validation failed\n");
         return 1;
     }
+#if !AGC_GRAPHICS_HEADLESS
     visualize_rgb10a2(&test);
+#endif
 #elif AGC_VALIDATE_RGBA8_STD
     RenderTargetConfig rgba8_target = {
         test.buffers[0], test.width, test.height,

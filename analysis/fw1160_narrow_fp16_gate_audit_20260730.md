@@ -43,8 +43,8 @@ Artifact hashes:
 
 | Artifact | SHA-256 |
 |---|---|
-| `agc_graphics_r16_float_fw1160.elf` | `0a6826bd8b4cf2fb4ee552509918a68e80180535cf72f96a3466b59f300b7f8b` |
-| `agc_graphics_rg16_float_fw1160.elf` | `15089e7a48b13d03f1e30fc3cde8101a4d830b30fd6f03d96e45afd5797583b3` |
+| `agc_graphics_r16_float_fw1160.elf` | `c1745a15151a80fe65e0d1f7f5cc29fc47cb6cc3651d0e7aa5d5dde3261847de` |
+| `agc_graphics_rg16_float_fw1160.elf` | `09aaade1661b52cb8498122d1a9ccf0f5ec17a6ed2a32325ec3fd75a812f3c20` |
 
 ## Hardware boundary
 
