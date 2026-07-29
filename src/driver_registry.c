@@ -182,21 +182,22 @@ bool agcProsperoBuildDirectProfile(uint32_t raw_version, bool is_trinity,
      * Archival FW 1.x, 2.x, and 3.00 remain outside this promotion. */
     if (abi_key == 0x0320u ||
         agcProsperoStandardDirectAbiSupportsFirmware(raw_version)) {
-        direct.capabilities |= AGC_DIRECT_CAP_MEMORY | AGC_DIRECT_CAP_TF_RING |
-            AGC_DIRECT_CAP_HS_OFFCHIP | AGC_DIRECT_CAP_ASYNC_GRAPHICS;
+        direct.capabilities |= AGC_DIRECT_CAP_MEMORY | AGC_DIRECT_CAP_QUEUE |
+            AGC_DIRECT_CAP_TF_RING | AGC_DIRECT_CAP_HS_OFFCHIP |
+            AGC_DIRECT_CAP_ASYNC_GRAPHICS;
     }
 
     /* FW 5.50 is hardware-qualified.  FW 11.60 is statically qualified from
      * its exact public/internal wrappers; operations whose wrapper contract
      * differs (workloads) or remains unknown (defaults/query) stay disabled. */
     if (abi_key == 0x0550u) {
-        direct.capabilities |= AGC_DIRECT_CAP_QUEUE |
-            AGC_DIRECT_CAP_SUSPEND_PRIMARY | AGC_DIRECT_CAP_SUSPEND_FINAL |
+        direct.capabilities |= AGC_DIRECT_CAP_SUSPEND_PRIMARY |
+            AGC_DIRECT_CAP_SUSPEND_FINAL |
             AGC_DIRECT_CAP_WORKLOAD | AGC_DIRECT_CAP_DEFAULT_STATES;
         direct.defaults_version = 8u;
     } else if (abi_key == 0x1160u) {
-        direct.capabilities |= AGC_DIRECT_CAP_QUEUE |
-            AGC_DIRECT_CAP_SUSPEND_PRIMARY | AGC_DIRECT_CAP_SUSPEND_FINAL;
+        direct.capabilities |= AGC_DIRECT_CAP_SUSPEND_PRIMARY |
+            AGC_DIRECT_CAP_SUSPEND_FINAL;
     }
 
     if ((direct.capabilities & AGC_DIRECT_CAP_QUEUE) != 0) {

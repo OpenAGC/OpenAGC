@@ -54,8 +54,8 @@ def load_fingerprints(path: Path) -> dict[tuple[str, str], str]:
 
 def evidence_for(key: str) -> dict[str, str]:
     evidence = {
-        "enabled_direct_ops": "submit16,memory,tf-ring,hs-offchip,async",
-        "queue": "disabled-pending-layout",
+        "enabled_direct_ops": "submit16,memory,queue,tf-ring,hs-offchip,async",
+        "queue": "RE-exact-authenticated-0xc0408121-0xc00c810e-hardware-pending",
         "suspend_submit": "disabled-pending-layout",
         "suspend_query": "disabled-permission-export",
         "workload": "disabled-not-adapted",
