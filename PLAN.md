@@ -1586,8 +1586,88 @@ Recovery and implementation sequence:
 
 Acceptance criteria:
 
-- FW 3.20 is the documented lowest active target and has a complete provenance
-  record for every enabled private operation.
+- No verifier label names a different ioctl than the command it checks.
+- No direct operation runs on a firmware key without an exact capability fact.
+- Unknown defaults, TF-ring, HS-offchip, workload, or suspend-query ABIs fail
+  with `AGC_ERROR_NOT_SUPPORTED` rather than reusing FW 5.50 behavior.
+- Generic and Prospero builds pass with no new warnings, and host tests cover
+  each disabled/enabled capability boundary.
+
+### Per-operation firmware profile model
+
+Each active four-digit key should resolve to a record containing, at minimum:
+
+- direct capability flags for submission, queue, suspend-submit,
+  suspend-query, workload, TF-ring, HS-offchip, memory, and default states;
+- ioctl command words and typed argument-layout identifiers for every enabled
+  private operation;
+- queue tokens, ring/read-pointer/metadata offsets, and authentication policy;
+- standard and Trinity memory sizes and working offsets where applicable;
+- exact register-default table version;
+- provenance identifying the SPRX wrapper, unique fingerprint group, and
+  hardware status.
+
+A function name or NID must never enable a direct ioctl without independent
+command, layout, and behavior evidence.
+
+### Cross-firmware recovery workflow
+
+1. Extract the relevant named wrapper bodies from all active SPRXs and compute
+   normalized fingerprints that ignore load addresses and relocation noise.
+2. Group identical implementations. Inspect one representative of every
+   unique body, then verify that every profile assigned to the group matches
+   the complete command/layout/constant set.
+3. Record positive and negative evidence per operation. Missing wrappers and
+   permission stubs become explicit unsupported capabilities.
+4. Generate verifier fixtures from the recorded facts; do not use a single
+   incidental hexadecimal constant as proof of an operation.
+5. Add host tests for profile lookup, capability gating, typed structure
+   layout, command selection, and nearby-key rejection.
+6. Run the clean generic and Prospero builds. Mark the result
+   **RE-verified, hardware pending** until matching hardware passes the ordered
+   smoke tests.
+
+The generated `analysis/agc_driver_operation_facts.tsv` now provides the
+39-key operation ledger and normalized wrapper-group mapping. It is
+deliberately conservative: only FW 5.50's hardware-qualified set and FW
+11.60's exact-RE-qualified subset exceed submit16. Remaining keys are promoted
+from this ledger only after their internal command/layout facts are recovered.
+
+### Priority 1: FW 11.60 modern and Trinity reference
+
+FW 11.60 has the strongest later-firmware analysis and includes the runtime
+`sceKernelHasTrinityMode` branch. Fully recover its queue, suspend, TF-ring,
+HS-offchip, memory, default-state, and workload facts first. Use it to define
+the modern standard/Trinity profile shape without inferring compatibility for
+other FW 9+ keys.
+
+Acceptance criteria:
+
+- Every enabled FW 11.60 direct operation has named-wrapper disassembly,
+  command/layout fixtures, and explicit standard/Trinity memory facts.
+- Standard and Trinity direct profiles expose distinct, accurate diagnostics.
+- Status remains RE-verified and hardware pending until the FW 11.60 console
+  passes the ordered hardware sequence.
+
+### Priority 2: FW 3.20 lowest active cross-firmware profile
+
+Recovery and implementation status:
+
+1. FW 3.20 `libSceAgc.sprx` and `libSceAgcDriver.sprx` exports and
+   firmware-sensitive wrappers are inventoried.
+2. Submit16 and a subset of queue/memory constants are recovered as the
+   legacy-v3 family. Suspend, TF-ring, HS-offchip, workload, and default-state
+   details still require the workflow above.
+3. Exact key `0x0320` selects the legacy-v3 direct family; missing operations
+   remain unavailable instead of inheriting the FW 4.00+ surface.
+4. Profile-selection tests and the current subset verifier pass. This is not a
+   complete direct-backend qualification. Matching FW 3.20 hardware is still
+   required before any hardware-supported claim.
+
+Acceptance criteria:
+
+- FW 3.20 is the documented lowest active target and gains a complete
+  provenance record for every enabled private operation.
 - No FW 5.50 private request is reused solely because FW 3.20 is nearby.
 - Exact FW 3.20 aliases select only capabilities proven by its firmware.
 - Unknown, FW 1.00, and FW 2.x missing operations continue to fail closed.

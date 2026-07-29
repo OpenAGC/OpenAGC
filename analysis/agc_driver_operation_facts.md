@@ -1,0 +1,56 @@
+# AGC driver operation facts
+
+`agc_driver_operation_facts.tsv` is the conservative operation-level ledger
+for every active four-digit firmware key. Regenerate it with:
+
+```sh
+python3 tools/build_agc_driver_operation_ledger.py \
+  --output analysis/agc_driver_operation_facts.tsv
+```
+
+The operation columns state what the direct backend may actually issue. The
+fingerprint columns identify normalized Sony export-wrapper groups from
+`agc_driver_wrapper_fingerprints.tsv`; a shared digest is grouping evidence,
+not permission to enable an operation. Internal command words, complete
+payload layouts, memory constants, and defaults selection must also be exact.
+
+Current boundary:
+
+- FW `0x0550` is hardware-qualified for its listed direct operations. Its
+  one-ID workload submit is an independently tested OpenAGC extension, not an
+  ABI-compatible implementation of Sony's multi-argument workload exports.
+- FW `0x1160` is exact-RE-qualified and hardware-pending for the listed subset.
+  Workloads, suspend query, and default states remain disabled.
+- Every other active firmware key is submit16-only. Its other fields record
+  the precise reason each operation remains disabled.
+- The direct-named Sony suspend, TF-ring, and HS-offchip exports are common
+  permission stubs across all 39 profiles. Direct `/dev/gc` support therefore
+  depends on separately recovered internal ioctl paths, never export presence.
+
+FW 3.20 remains the lowest active compatibility target. FW 1.00 and 2.x stay
+archival and are intentionally absent from this active-operation ledger.
+
+## Workload packet evidence
+
+The workload APIs have three distinct contracts and must not be conflated:
+
+| Source/API | Active form | Complete form | Evidence level |
+|---|---:|---:|---|
+| OpenAGC driver convenience API | 3 dwords | 3 dwords | Passed on real FW 5.50 hardware |
+| Sony FW 5.50 driver packet builder | 18 dwords maximum | 12 dwords maximum | Exact SPRX disassembly |
+| KytyPS5 HLE DCB builder | 18-dword NOP placeholder | 12-dword NOP placeholder | Interface/size model only |
+| SharpEmu | Not implemented | Not implemented | No workload evidence |
+
+The Sony builder's active path emits a variable prefix followed by a
+nine-dword packet headed by `0xc0071e00`; its maximum reservation is 18
+dwords. The complete path emits a three-dword prefix plus the same nine-dword
+packet, for 12 dwords. Kyty preserves those reservation sizes and some logical
+fields but deliberately writes `IT_NOP`, so it is not a hardware-encoding
+reference. OpenAGC's existing eight-dword DCB/ACB builders do not match this
+evidence and are not used to promote any firmware workload capability.
+
+The three-dword OpenAGC direct helper is a separate submit-owning extension.
+It returned `AGC_OK` for active and complete on FW 5.50 and completed the
+bounded hardware sample without a hang. That proves its tested 5.50 scope but
+does not establish Sony export ABI compatibility or portability to another
+firmware.

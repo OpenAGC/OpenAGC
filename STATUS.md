@@ -1449,6 +1449,11 @@ All other active keys currently expose only the common submit16 baseline.
 `analysis/agc_driver_wrapper_fingerprints.tsv` records normalized groups for
 the exported wrappers across all 39 SPRXs. These groups guide further static
 promotion but do not replace internal-command and payload-layout evidence.
+`analysis/agc_driver_operation_facts.tsv` expands those groups into one
+operation-level row per active four-digit key, recording the enabled direct
+subset and the exact reason every other operation remains disabled. The
+generated ledger currently leaves all keys except hardware-qualified `0x0550`
+and exact-RE-qualified `0x1160` at the common submit16 baseline.
 FW 5.50 `sceAgcDriverSubmitToHDRScopesACQ` is deliberately unavailable: its
 body at vaddr `0x2eb0` dereferences an input structure through `rdi`, while
 OpenAGC's current compatibility declaration has no argument. Forwarding it
