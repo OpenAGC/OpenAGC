@@ -43,6 +43,10 @@
 #define AGC_SELF_TERMINATE 0
 #endif
 
+#ifndef AGC_COMPUTE_HEADLESS
+#define AGC_COMPUTE_HEADLESS 0
+#endif
+
 /* PS5 kernel memory constants */
 #ifndef SCE_KERNEL_PROT_CPU_READ
 #define SCE_KERNEL_PROT_CPU_READ  0x01
@@ -125,16 +129,19 @@ typedef struct {
 } ComputeTest;
 
 
+#if !AGC_COMPUTE_HEADLESS
 static size_t align_up(size_t value, size_t alignment) {
     const size_t remainder = value % alignment;
     return remainder == 0 ? value : value + (alignment - remainder);
 }
+#endif
 
 static const char *errstr(int32_t err) {
     return agcErrorString(err);
 }
 
 /* Patch libSceVideoOut to allow linear tiling without debug setting */
+#if !AGC_COMPUTE_HEADLESS
 static void patch_videoout_linear(void) {
     uint32_t vo_handle = 0;
     if (kernel_dynlib_handle(-1, "libSceVideoOut.sprx", &vo_handle) == 0 && vo_handle) {
@@ -153,7 +160,40 @@ static void patch_videoout_linear(void) {
         }
     }
 }
+#endif
 
+static bool allocate_compute_buffers(ComputeTest *test) {
+    /* Allocate command buffer AND dedicated compute output buffer in Flexible Memory.
+     * Flexible memory is automatically mapped in both CPU and GPU MMU VMID spaces. */
+    size_t cb_size = cb_buffer_dwords * 4;
+    void *cb_addr = NULL;
+    int cb_ret = sceKernelMapNamedSystemFlexibleMemory(
+        &cb_addr, cb_size, 0x33, 0, "agc_compute_cb");
+    if (cb_ret != 0 || !cb_addr) {
+        printf("sceKernelMapNamedSystemFlexibleMemory failed for CB: %d\n", cb_ret);
+        return false;
+    }
+    cb_buffer = (uint32_t *)cb_addr;
+
+    /* Allocate 10MB Flexible Memory pool for compute shader output + code */
+    size_t pool_size = 16 * 1024 * 1024;
+    void *pool_addr = NULL;
+    int pool_ret = sceKernelMapNamedSystemFlexibleMemory(
+        &pool_addr, pool_size, 0x33, 0, "agc_compute_pool");
+    if (pool_ret != 0 || !pool_addr) {
+        printf("sceKernelMapNamedSystemFlexibleMemory failed for pool: %d\n", pool_ret);
+        return false;
+    }
+    test->compute_buffer = pool_addr;
+
+    printf("Command buffer: %zu bytes at %p (flexible memory, GPU-visible)\n",
+           cb_size, cb_buffer);
+    printf("Compute buffer: %zu bytes at %p (flexible memory, GPU-visible)\n",
+           pool_size, test->compute_buffer);
+    return true;
+}
+
+#if !AGC_COMPUTE_HEADLESS
 static bool allocate_display_buffers(ComputeTest *test) {
     const size_t buffer_size =
         (size_t)test->pitch_pixels * test->height * BYTES_PER_PIXEL;
@@ -186,33 +226,8 @@ static bool allocate_display_buffers(ComputeTest *test) {
         test->buffers[i] = (uint8_t *)test->mapped + i * test->buffer_stride;
     }
 
-    /* Allocate command buffer AND dedicated compute output buffer in Flexible Memory.
-     * Flexible memory is automatically mapped in both CPU and GPU MMU VMID spaces. */
-    size_t cb_size = cb_buffer_dwords * 4;
-    void *cb_addr = NULL;
-    int cb_ret = sceKernelMapNamedSystemFlexibleMemory(
-        &cb_addr, cb_size, 0x33, 0, "agc_compute_cb");
-    if (cb_ret != 0 || !cb_addr) {
-        printf("sceKernelMapNamedSystemFlexibleMemory failed for CB: %d\n", cb_ret);
+    if (!allocate_compute_buffers(test))
         return false;
-    }
-    cb_buffer = (uint32_t *)cb_addr;
-
-    /* Allocate 10MB Flexible Memory pool for compute shader output + code */
-    size_t pool_size = 16 * 1024 * 1024;
-    void *pool_addr = NULL;
-    int pool_ret = sceKernelMapNamedSystemFlexibleMemory(
-        &pool_addr, pool_size, 0x33, 0, "agc_compute_pool");
-    if (pool_ret != 0 || !pool_addr) {
-        printf("sceKernelMapNamedSystemFlexibleMemory failed for pool: %d\n", pool_ret);
-        return false;
-    }
-    test->compute_buffer = pool_addr;
-
-    printf("Command buffer: %zu bytes at %p (flexible memory, GPU-visible)\n",
-           cb_size, cb_buffer);
-    printf("Compute buffer: %zu bytes at %p (flexible memory, GPU-visible)\n",
-           pool_size, test->compute_buffer);
     printf("Display buffers: %zu bytes each, %d buffers at %p (garlic memory)\n",
            test->buffer_stride, BUFFER_COUNT, test->mapped);
     return true;
@@ -298,6 +313,7 @@ static bool init_videoout(ComputeTest *test) {
            test->width, test->height, test->pitch_pixels, test->buffer_stride);
     return true;
 }
+#endif
 
 static bool init_agc(void) {
     int32_t err;
@@ -568,11 +584,13 @@ static bool dispatch_compute(ComputeTest *test, void *shader_addr,
     return true;
 }
 
+#if !AGC_COMPUTE_HEADLESS
 static void wait_for_flip(ComputeTest *test) {
     SceKernelEvent events[1];
     int out = 0;
     sceKernelWaitEqueue(test->flipqueue, events, 1, &out, NULL);
 }
+#endif
 
 int main(void) {
     ComputeTest test = { .handle = -1, .direct_memory = -1 };
@@ -587,8 +605,17 @@ int main(void) {
 
     if (!init_agc())
         goto cleanup;
+#if AGC_COMPUTE_HEADLESS
+    test.width = 1920;
+    test.height = 1080;
+    test.pitch_pixels = test.width;
+    if (!allocate_compute_buffers(&test))
+        goto cleanup;
+    printf("[Display] headless compute qualification; VideoOut is isolated\n");
+#else
     if (!init_videoout(&test))
         goto cleanup;
+#endif
     /* Step 3: Parse and upload shader */
     printf("\n--- Step 3: Shader loading ---\n");
 
@@ -648,7 +675,11 @@ int main(void) {
         printf("[Readback] FAIL: compute dispatch did not fill the entire buffer\n");
 
 
-    /* Copy rendered output to display buffer */
+    /* Copy rendered output to display buffer when presentation is enabled. */
+#if AGC_COMPUTE_HEADLESS
+    flip_complete = true;
+    printf("[Display] headless qualification completed\n");
+#else
     memcpy(test.buffers[0], buf0, total_pixels * 4);
 
     int flip_result = sceVideoOutSubmitFlip(
@@ -661,6 +692,7 @@ int main(void) {
     flip_complete = true;
     printf("[Display] GPU output flip completed\n");
     sceKernelUsleep(1000000);
+#endif
 
 cleanup:
     if (test.flipqueue != 0)
@@ -680,7 +712,13 @@ cleanup:
     printf("  Runtime profile: FW ABI 0x%04X\n",
            AGC_EXPECT_FIRMWARE_ABI_KEY);
     printf("  GPU output:      %s\n", output_complete ? "PASS" : "FAILED");
-    printf("  Display flip:    %s\n", flip_complete ? "PASS" : "FAILED");
+    printf("  Presentation:    %s\n",
+#if AGC_COMPUTE_HEADLESS
+           "SKIPPED (headless compute gate)"
+#else
+           flip_complete ? "PASS" : "FAILED"
+#endif
+    );
     printf("  VideoOut cleanup: close=0x%08x equeue=0x%08x release=0x%08x\n",
            (unsigned)close_result, (unsigned)equeue_result,
            (unsigned)release_result);

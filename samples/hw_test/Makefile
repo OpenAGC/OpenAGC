@@ -129,7 +129,8 @@ agc_compute.elf: agc_compute.c ps5_video_out.h gpu_credentials.h shaders/fill_co
 
 agc_compute_fw1160.elf: agc_compute.c ps5_video_out.h gpu_credentials.h shaders/fill_color_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_EXPECT_FIRMWARE_ABI_KEY=0x1160u \
-		-DAGC_SELF_TERMINATE=1 -o $@ agc_compute.c $(AGC_LDFLAGS)
+		-DAGC_COMPUTE_HEADLESS=1 -DAGC_SELF_TERMINATE=1 \
+		-o $@ agc_compute.c $(AGC_LDFLAGS)
 
 shaders/htile_rmw.spv: shaders/htile_rmw.comp
 	$(GLSLANG) -V --target-env vulkan1.2 $< -o $@

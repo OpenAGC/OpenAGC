@@ -552,9 +552,11 @@ proven. Register defaults are exact-profile gated: FW 5.50 version 8 and FW
 11.60 version 12 are hardware-qualified. Version 12 maps to the recovered V10
 tables and uses its exact larger internal DDID slot; two FW 11.60 runs built
 both blobs, executed the post-default GPU markers, and shut down cleanly.
-The next FW 11.60 parity gate is a separately guarded compute artifact with an
-exact 2,073,600-pixel output oracle, VideoOut cleanup, driver shutdown, and
-forced process termination.
+The next FW 11.60 parity gate is a separately guarded headless compute artifact
+with an exact 2,073,600-pixel output oracle, driver shutdown, and forced process
+termination. Presentation is isolated because FW 11.60 rejects the FW 5.50
+`libSceVideoOut` linear-buffer patch offset; its VideoOut contract will be
+qualified independently rather than guessed during compute testing.
 
 The Sony workload contract itself is recovered for all active firmware:
 seven active-wrapper and three complete-wrapper groups converge on the same
