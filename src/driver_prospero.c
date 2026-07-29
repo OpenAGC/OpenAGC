@@ -1038,7 +1038,7 @@ int32_t PS5_SYSV_ABI agcProsperoSetTargetRingForDiag(void)
 {
     /* No direct ioctl mapping — diagnostic target ring setup.
      * The firmware uses a large-arg ioctl or direct register write. */
-    return AGC_OK;
+    return AGC_ERROR_NOT_SUPPORTED;
 }
 
 /* ===================================================================== */
@@ -1265,6 +1265,9 @@ int32_t PS5_SYSV_ABI agcProsperoSubmitEopFlip(
 {
     if (!g_prospero.initialized)
         return AGC_ERROR_NOT_INITIALIZED;
+    if ((g_prospero.direct_profile.capabilities &
+            AGC_DIRECT_CAP_EOP_FLIP) == 0)
+        return AGC_ERROR_NOT_SUPPORTED;
 
     /* Validate display buffer index (SPRX: r8d+2 < 0x12 → index < 16). */
     if (display_buf_index >= AGC_PROSPERO_MAX_DISPLAY_BUFFERS)
@@ -1506,33 +1509,33 @@ int32_t PS5_SYSV_ABI agcProsperoShutdown(void)
 int32_t PS5_SYSV_ABI agcProsperoRegisterCaptureInterface(void)
 {
     /* TODO: Razor ACQ registration via WFDebug ioctls. */
-    return AGC_OK;
+    return AGC_ERROR_NOT_SUPPORTED;
 }
 
 int32_t PS5_SYSV_ABI agcProsperoDeregisterCaptureInterface(void)
 {
-    return AGC_OK;
+    return AGC_ERROR_NOT_SUPPORTED;
 }
 
 int32_t PS5_SYSV_ABI agcProsperoAcquireRazorACQ(void)
 {
     /* TODO: WFDebug ioctl nr=0x15. */
-    return AGC_OK;
+    return AGC_ERROR_NOT_SUPPORTED;
 }
 
 int32_t PS5_SYSV_ABI agcProsperoReleaseRazorACQ(void)
 {
-    return AGC_OK;
+    return AGC_ERROR_NOT_SUPPORTED;
 }
 
 int32_t PS5_SYSV_ABI agcProsperoSubmitToRazorACQ(void)
 {
-    return AGC_OK;
+    return AGC_ERROR_NOT_SUPPORTED;
 }
 
 int32_t PS5_SYSV_ABI agcProsperoSubmitToHDRScopesACQ(void)
 {
-    return AGC_OK;
+    return AGC_ERROR_NOT_SUPPORTED;
 }
 
 uint32_t PS5_SYSV_ABI agcProsperoGetPaDebugInterfaceVersion(void)

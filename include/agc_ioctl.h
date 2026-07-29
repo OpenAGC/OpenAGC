@@ -38,8 +38,9 @@
  * analysis/ps5_openagc_audit.md.
  *
  * openagc is a clean rewrite — these constants are recovered ABI facts, not
- * copied code. The ioctl table is FW-version-specific; 5.50 is the first
- * target. Other FW versions would populate a different table.
+ * copied code. The operation-specific facts used by the direct backend are
+ * reproduced across every active firmware in analysis/*.tsv; unrelated
+ * ioctl-table entries remain FW 5.50 reference data and are not promoted.
  *
  * Nothing here is used by the generic host backend. It exists so the prospero
  * backend (driver_prospero.c) has a typed surface to call into once native
@@ -296,6 +297,10 @@ typedef struct AgcGcFrameOpenArg {
     uint32_t flags;
     uint32_t reserved;
 } AgcGcFrameOpenArg;
+_Static_assert(offsetof(AgcGcFrameOpenArg, flags) == 0x00,
+    "AgcGcFrameOpenArg flags offset mismatch");
+_Static_assert(offsetof(AgcGcFrameOpenArg, reserved) == 0x04,
+    "AgcGcFrameOpenArg reserved offset mismatch");
 _Static_assert(sizeof(AgcGcFrameOpenArg) == 0x08,
     "AgcGcFrameOpenArg size mismatch");
 
@@ -316,6 +321,8 @@ _Static_assert(sizeof(AgcGcFrameOpenArg) == 0x08,
 typedef struct AgcGcContextQueryResult {
     uint32_t capability_mask;   /* (field40 != 0) << 16 | (field30 != 0) */
 } AgcGcContextQueryResult;
+_Static_assert(offsetof(AgcGcContextQueryResult, capability_mask) == 0x00,
+    "AgcGcContextQueryResult capability_mask offset mismatch");
 _Static_assert(sizeof(AgcGcContextQueryResult) == 0x04,
     "AgcGcContextQueryResult size mismatch");
 
@@ -341,6 +348,8 @@ _Static_assert(sizeof(AgcGcContextQueryResult) == 0x04,
 typedef struct AgcGcMakesysmapArg8 {
     uint64_t addr;          /* in: CPU VA, out: GPU VA */
 } AgcGcMakesysmapArg8;
+_Static_assert(offsetof(AgcGcMakesysmapArg8, addr) == 0x00,
+    "AgcGcMakesysmapArg8 addr offset mismatch");
 _Static_assert(sizeof(AgcGcMakesysmapArg8) == 0x08,
     "AgcGcMakesysmapArg8 size mismatch");
 
@@ -352,6 +361,12 @@ typedef struct AgcGcMakesysmapArg12 {
     uint32_t gpu_addr_hi;
     uint32_t size;
 } AgcGcMakesysmapArg12;
+_Static_assert(offsetof(AgcGcMakesysmapArg12, gpu_addr_lo) == 0x00,
+    "AgcGcMakesysmapArg12 gpu_addr_lo offset mismatch");
+_Static_assert(offsetof(AgcGcMakesysmapArg12, gpu_addr_hi) == 0x04,
+    "AgcGcMakesysmapArg12 gpu_addr_hi offset mismatch");
+_Static_assert(offsetof(AgcGcMakesysmapArg12, size) == 0x08,
+    "AgcGcMakesysmapArg12 size offset mismatch");
 _Static_assert(sizeof(AgcGcMakesysmapArg12) == 0x0C,
     "AgcGcMakesysmapArg12 size mismatch");
 
@@ -476,10 +491,22 @@ _Static_assert(sizeof(AgcGcQueueCreateArg) == 0x40,
     "AgcGcQueueCreateArg size mismatch");
 _Static_assert(offsetof(AgcGcQueueCreateArg, magic1) == 0x00,
     "AgcGcQueueCreateArg magic1 offset mismatch");
+_Static_assert(offsetof(AgcGcQueueCreateArg, magic2) == 0x04,
+    "AgcGcQueueCreateArg magic2 offset mismatch");
+_Static_assert(offsetof(AgcGcQueueCreateArg, magic3) == 0x08,
+    "AgcGcQueueCreateArg magic3 offset mismatch");
+_Static_assert(offsetof(AgcGcQueueCreateArg, token) == 0x0C,
+    "AgcGcQueueCreateArg token offset mismatch");
 _Static_assert(offsetof(AgcGcQueueCreateArg, read_ptr_addr) == 0x10,
     "AgcGcQueueCreateArg read_ptr_addr offset mismatch");
+_Static_assert(offsetof(AgcGcQueueCreateArg, caller_arg) == 0x18,
+    "AgcGcQueueCreateArg caller_arg offset mismatch");
 _Static_assert(offsetof(AgcGcQueueCreateArg, mmio_base) == 0x20,
     "AgcGcQueueCreateArg mmio_base offset mismatch");
+_Static_assert(offsetof(AgcGcQueueCreateArg, pipe_id) == 0x28,
+    "AgcGcQueueCreateArg pipe_id offset mismatch");
+_Static_assert(offsetof(AgcGcQueueCreateArg, flags) == 0x2C,
+    "AgcGcQueueCreateArg flags offset mismatch");
 _Static_assert(offsetof(AgcGcQueueCreateArg, ring_addr) == 0x30,
     "AgcGcQueueCreateArg ring_addr offset mismatch");
 _Static_assert(offsetof(AgcGcQueueCreateArg, ring_size) == 0x38,
@@ -509,6 +536,12 @@ typedef struct AgcGcQueueDestroyArg {
     uint32_t magic2;        /* offset 0x04: 0x8b4cdd90 */
     uint32_t magic3;        /* offset 0x08: 0x99f68d6c */
 } AgcGcQueueDestroyArg;
+_Static_assert(offsetof(AgcGcQueueDestroyArg, magic1) == 0x00,
+    "AgcGcQueueDestroyArg magic1 offset mismatch");
+_Static_assert(offsetof(AgcGcQueueDestroyArg, magic2) == 0x04,
+    "AgcGcQueueDestroyArg magic2 offset mismatch");
+_Static_assert(offsetof(AgcGcQueueDestroyArg, magic3) == 0x08,
+    "AgcGcQueueDestroyArg magic3 offset mismatch");
 _Static_assert(sizeof(AgcGcQueueDestroyArg) == 0x0C,
     "AgcGcQueueDestroyArg size mismatch");
 

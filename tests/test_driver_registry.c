@@ -107,7 +107,7 @@ static void test_direct_operation_profiles(void)
         AGC_DIRECT_CAP_SUSPEND_PRIMARY | AGC_DIRECT_CAP_SUSPEND_FINAL |
         AGC_DIRECT_CAP_WORKLOAD | AGC_DIRECT_CAP_TF_RING |
         AGC_DIRECT_CAP_HS_OFFCHIP | AGC_DIRECT_CAP_DEFAULT_STATES |
-        AGC_DIRECT_CAP_ASYNC_GRAPHICS,
+        AGC_DIRECT_CAP_ASYNC_GRAPHICS | AGC_DIRECT_CAP_EOP_FLIP,
         "FW 5.50 exposes only its qualified direct operations");
     TEST_ASSERT_EQ(profile.defaults_version, 8u,
         "FW 5.50 selects register-defaults version 8");
@@ -134,6 +134,8 @@ static void test_direct_operation_profiles(void)
         "FW 11.60 unknown suspend-query semantics fail closed");
     TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_DEFAULT_STATES) == 0,
         "FW 11.60 unknown defaults version fails closed");
+    TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_EOP_FLIP) == 0,
+        "FW 11.60 cannot inherit FW 5.50-only EOP flip evidence");
     TEST_ASSERT_EQ(profile.defaults_version,
         AGC_DIRECT_DEFAULTS_VERSION_UNKNOWN,
         "FW 11.60 never inherits FW 5.50 defaults version");
@@ -205,6 +207,8 @@ static void test_common_operation_carrier_profiles(void)
                 "FW 5.50 exact runtime defaults selection is enabled");
             TEST_ASSERT_EQ(profile.defaults_version, 8u,
                 "FW 5.50 exact runtime defaults selection remains V8");
+            TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_EOP_FLIP) != 0,
+                "FW 5.50 exact EOP flip path remains enabled");
         } else {
             TEST_ASSERT((profile.capabilities &
                 AGC_DIRECT_CAP_DEFAULT_STATES) == 0,
@@ -212,6 +216,8 @@ static void test_common_operation_carrier_profiles(void)
             TEST_ASSERT_EQ(profile.defaults_version,
                 AGC_DIRECT_DEFAULTS_VERSION_UNKNOWN,
                 "dispatcher upper bound cannot select a defaults version");
+            TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_EOP_FLIP) == 0,
+                "unverified EOP flip path fails closed");
         }
     }
 

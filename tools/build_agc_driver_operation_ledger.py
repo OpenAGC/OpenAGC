@@ -93,7 +93,8 @@ def evidence_for(key: str, defaults: dict[str, tuple[str, str]]) -> dict[str, st
         evidence.update({
             "enabled_direct_ops": (
                 "submit16,memory,queue,suspend-primary,suspend-final,"
-                "workload-extension,tf-ring,hs-offchip,defaults-v8,async"
+                "workload-extension,tf-ring,hs-offchip,defaults-v8,async,"
+                "eop-flip"
             ),
             "queue": "hardware-qualified",
             "suspend_submit": "hardware-qualified-primary-final",

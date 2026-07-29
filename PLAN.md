@@ -554,6 +554,11 @@ nine-dword `0xc0071e00` packet and 18/12-dword maximum reservations. It remains
 disabled because OpenAGC's one-ID direct extension and eight-dword DCB/ACB
 builders are different ABIs, not because the cross-firmware packet is unknown.
 
+The fail-closed audit also separates FW 5.50-only EOP-flip evidence from the
+common direct-operation group. Unimplemented target-ring and Razor/capture
+operations must return `AGC_ERROR_NOT_SUPPORTED`; export-table presence or a
+placeholder backend function is never a capability grant.
+
 Cache synchronization semantics follow this audit and become an earlier
 blocker only if the expanded game corpus exercises an unresolved path. VRS and
 ray tracing remain later feature tracks driven by verified FW 5.50 ABI evidence

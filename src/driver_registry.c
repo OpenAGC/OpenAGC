@@ -224,7 +224,7 @@ bool agcProsperoBuildDirectProfile(uint32_t raw_version, bool is_trinity,
      * differs (workloads) or remains unknown (defaults/query) stay disabled. */
     if (abi_key == 0x0550u) {
         direct.capabilities |= AGC_DIRECT_CAP_SUSPEND_FINAL |
-            AGC_DIRECT_CAP_WORKLOAD;
+            AGC_DIRECT_CAP_WORKLOAD | AGC_DIRECT_CAP_EOP_FLIP;
     } else if (abi_key == 0x1160u) {
         direct.capabilities |= AGC_DIRECT_CAP_SUSPEND_FINAL;
     }

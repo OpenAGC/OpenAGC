@@ -876,6 +876,9 @@ numeric ranges.
   proven 22 MiB CWSR allocation, 16 MiB working offset, and 1.5 MiB GPU-info
   span. Standard PS5 retains 16 MiB, 10 MiB, and 1 MiB respectively.
 - Unknown firmware builds fail closed.
+- The Prospero EOP-flip path is now separately gated to its FW 5.50 evidence.
+  Unimplemented target-ring and Razor/capture operations return
+  `AGC_ERROR_NOT_SUPPORTED` instead of reporting false success.
 - Register-default selection is no longer inferred from firmware generation.
   All 39 active `libSceAgc` images use the same runtime hardware-table selector
   (80-byte records, version field at `0x44`), while their versioned dispatchers
