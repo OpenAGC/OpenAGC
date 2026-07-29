@@ -196,6 +196,28 @@ Use websrv for exploited-PS5 hardware validation. Do not use
 `prospero-deploy`; its direct-loader context does not foreground VideoOut
 reliably for the graphics samples.
 
+### ps5debug-NG
+
+The local ps5debug-NG source tree and deployable payload are:
+
+```sh
+/Users/bizkut/Downloads/PS5/homebrew/ps5debug-NG
+/Users/bizkut/Downloads/PS5/homebrew/ps5debug-NG/ps5debug-NG.elf
+```
+
+Upload the ELF to websrv FTP and launch it as a daemon through port 8080.
+The debugger command server listens on TCP port 744; verify that port before
+using any debugger-assisted process or kernel-log checks.
+
+```sh
+curl -s "ftp://$PS5_HOST:2121/" \
+  --quote "MKD /data/homebrew/ps5debug-NG" 2>&1
+curl -T /Users/bizkut/Downloads/PS5/homebrew/ps5debug-NG/ps5debug-NG.elf \
+  "ftp://$PS5_HOST:2121/data/homebrew/ps5debug-NG/eboot.elf"
+curl -s "http://$PS5_HOST:8080/hbldr?pipe=1&daemon=1&path=/data/homebrew/ps5debug-NG/eboot.elf"
+nc -z -w 5 "$PS5_HOST" 744
+```
+
 **1. Homebrew via websrv (exploited PS5 with etaHEN):**
 
 The PS5 runs a `websrv` on port 8080 (HTTP) and 2121 (FTP) that serves as a
