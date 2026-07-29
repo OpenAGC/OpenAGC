@@ -1055,6 +1055,13 @@ The host-generic implementation now has a tested model for:
   oracles. On the next clean boot they run before stage 16, in increasing risk
   order, so workload failure cannot hide independent parity results. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md`.
+  The headless graphics baseline subsequently passed twice on standard FW
+  `0x11600005`. Both runs passed exact profile selection, version-12 defaults,
+  Wave32 NGG/PS audit, indexed draw, completion fence, 1536x1536 RGBA16F
+  readback, driver shutdown, and final verdict. ps5debug-NG found no residual
+  process. This qualifies baseline graphics on FW 11.60; advanced FW 5.50
+  variants remain separately gated. See
+  `analysis/fw1160_graphics_qualification_20260730.md`.
   The first `agc_fw1160_sony_workload.elf` was hardware-attempted after a clean
   reboot. It patched credentials before `dlopen`, loaded the matching FW 11.60
   module, resolved all required exports, matched the 18/12-dword sizes, and

@@ -44,17 +44,21 @@ AMD PM4 packet ancestry overlap in useful ways.
 
 ### FW 11.60 graphics and compute parity gates
 
-- The headless graphics and compute artifacts are audited, rebuilt, and do not
-  call any workload API. They use the exact `0x1160` standard profile,
+- The headless graphics baseline passed twice on standard FW `0x11600005`:
+  exact profile, Wave32 NGG/PS audit, indexed draw, bounded fence, RGBA16F
+  readback, clean shutdown, and no residual process. Baseline graphics is now
+  hardware-qualified for FW 11.60.
+- The headless compute artifact is audited, rebuilt, and does not call any
+  workload API. It uses the exact `0x1160` standard profile,
   version-12 defaults, async setup, bounded completion/readback oracles, clean
   shutdown, and forced self-termination.
-- On the next clean reboot, run graphics first and compute second, each through
-  its guarded cleanup runner. Run the higher-risk workload stage 16 last so a
-  workload stall cannot consume the boot session before independent parity
-  evidence is collected.
+- Run compute next through its guarded cleanup runner. Run the higher-risk
+  workload stage 16 last so a workload stall cannot consume the boot session
+  before independent parity evidence is collected.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
-  `analysis/fw1160_graphics_compute_gate_audit_20260729.md`.
+  `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and
+  `analysis/fw1160_graphics_qualification_20260730.md`.
 
 ### Gfx1013 multi-viewport state
 
