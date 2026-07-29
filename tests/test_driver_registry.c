@@ -117,6 +117,8 @@ static void test_direct_operation_profiles(void)
         "FW 5.50 exposes only its qualified direct operations");
     TEST_ASSERT_EQ(profile.defaults_version, 8u,
         "FW 5.50 selects register-defaults version 8");
+    TEST_ASSERT(profile.submit_uses_frame_close_trailer,
+        "FW 5.50 retains its hardware-proven close/trailer workaround");
     TEST_ASSERT_EQ(profile.tf_ring_ioctl, AGC_GC_IOCTL_SET_TF_RING,
         "FW 5.50 TF-ring uses the public 0x28 wrapper ioctl");
     TEST_ASSERT_EQ(profile.hs_offchip_ioctl, AGC_GC_IOCTL_SET_HS_OFFCHIP,
@@ -126,6 +128,8 @@ static void test_direct_operation_profiles(void)
         0x11600000u, true, &profile), "FW 11.60 direct profile builds");
     TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_SUBMIT) != 0,
         "FW 11.60 submit16 enabled");
+    TEST_ASSERT(profile.submit_uses_frame_close_trailer,
+        "FW 11.60 shares the standard submit completion policy");
     TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_MEMORY) != 0,
         "FW 11.60 standard/Trinity memory profile enabled");
     TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_QUEUE) != 0,
@@ -207,6 +211,13 @@ static void test_common_operation_carrier_profiles(void)
             "active profile retains HS-offchip command");
         TEST_ASSERT_EQ(profile.async_graphics_ioctl, AGC_GC_IOCTL_QUEUE_STATUS,
             "active profile retains async setup command");
+        if (active_keys[i] == 0x0320u) {
+            TEST_ASSERT(!profile.submit_uses_frame_close_trailer,
+                "legacy-v3 does not inherit the standard submit policy");
+        } else {
+            TEST_ASSERT(profile.submit_uses_frame_close_trailer,
+                "standard compatibility group shares one submit policy");
+        }
         if (active_keys[i] == 0x0550u) {
             TEST_ASSERT((profile.capabilities &
                 AGC_DIRECT_CAP_DEFAULT_STATES) != 0,

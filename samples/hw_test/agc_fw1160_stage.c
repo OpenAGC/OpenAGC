@@ -1,11 +1,15 @@
 /* SPDX-License-Identifier: Apache-2.0 */
-/* Narrow FW 11.60 qualification stages. Never add GPU work to this file. */
+/* Narrow FW 11.60 qualification stages. Add only one isolated gate at a time. */
 
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/sysctl.h>
+#include <unistd.h>
+#include <machine/cpufunc.h>
 
+#include "agc_cb.h"
+#include "agcdriver.h"
 #include "agc_error.h"
 #include "agc_runtime_diag.h"
 #include "agc_types.h"
@@ -33,6 +37,10 @@ extern int32_t PS5_SYSV_ABI agcProsperoInitializeInternalMemory(void);
 extern int32_t PS5_SYSV_ABI agcProsperoShutdown(void);
 extern int32_t agcProsperoGetRuntimeProfile(
     AgcProsperoRuntimeProfile *profile_out);
+extern int sceKernelMapNamedSystemFlexibleMemory(
+    void **virtual_address, size_t length, int protection, int flags,
+    const char *name);
+extern int sceKernelReleaseFlexibleMemory(void *address, size_t length);
 
 int main(void)
 {
@@ -95,6 +103,67 @@ int main(void)
     printf("internal memory=0x%08X\n", (unsigned)result);
     if (result != AGC_OK) {
         printf("stage 2: internal memory FAIL\n");
+        (void)agcProsperoShutdown();
+        return 1;
+    }
+#endif
+#if AGC_FW1160_STAGE >= 3
+    void *submit_memory = (void *)(uintptr_t)0xf02000000ULL;
+    const uint32_t expected_marker = 0x1160CAFEu;
+    volatile uint32_t *marker;
+    SceAgcCb cb;
+    AgcCommandBufferSubmit submit;
+    uint32_t waited_ms = 0u;
+
+    result = sceKernelMapNamedSystemFlexibleMemory(&submit_memory, 0x4000u,
+        0x33, 0, "OpenAgcFw1160Submit");
+    printf("submit memory result=%d address=%p\n", result, submit_memory);
+    if (result != 0 || !submit_memory) {
+        printf("stage 3: submit memory FAIL\n");
+        (void)agcProsperoShutdown();
+        return 1;
+    }
+
+    marker = (volatile uint32_t *)((uint8_t *)submit_memory + 0x1000u);
+    *marker = 0u;
+    agcCbInit(&cb, submit_memory, 0x1000u);
+    if (!sceAgcDcbWriteData(&cb, 2u, 0u,
+            (uint64_t)(uintptr_t)marker, &expected_marker, 1u, 1u, 1u)) {
+        printf("stage 3: WRITE_DATA build FAIL\n");
+        (void)agcProsperoShutdown();
+        (void)sceKernelReleaseFlexibleMemory(submit_memory, 0x4000u);
+        return 1;
+    }
+    clflush((u_long)(uintptr_t)submit_memory);
+    clflush((u_long)(uintptr_t)marker);
+    mfence();
+
+    submit.command_address = (uintptr_t)submit_memory;
+    submit.dword_count = agcCbUsedDwords(&cb);
+    result = sceAgcDriverSubmitDcb(&submit);
+    printf("single DCB submit=0x%08X dwords=%u\n",
+        (unsigned)result, submit.dword_count);
+    while (result == AGC_OK && waited_ms < 5000u) {
+        clflush((u_long)(uintptr_t)marker);
+        mfence();
+        if (*marker == expected_marker)
+            break;
+        usleep(50000u);
+        waited_ms += 50u;
+    }
+    clflush((u_long)(uintptr_t)marker);
+    mfence();
+    printf("marker=0x%08X expected=0x%08X wait=%u ms\n",
+        *marker, expected_marker, waited_ms);
+    if (result != AGC_OK || *marker != expected_marker) {
+        printf("stage 3: submission FAIL\n");
+        (void)agcProsperoShutdown();
+        return 1;
+    }
+    result = sceKernelReleaseFlexibleMemory(submit_memory, 0x4000u);
+    printf("submit memory release=%d\n", result);
+    if (result != 0) {
+        printf("stage 3: submit memory release FAIL\n");
         (void)agcProsperoShutdown();
         return 1;
     }

@@ -52,6 +52,7 @@ typedef struct AgcProsperoDirectProfile {
     AgcProsperoRuntimeProfile runtime;
     uint32_t capabilities;
     uint32_t defaults_version;
+    bool submit_uses_frame_close_trailer;
     uint32_t submit_ioctl;
     uint32_t queue_create_ioctl;
     uint32_t queue_destroy_ioctl;

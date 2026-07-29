@@ -699,8 +699,10 @@ int32_t PS5_SYSV_ABI agcProsperoInitializeInternalMemory(void)
 /*
  * Submit multiple command buffers (DCB + ACB) to the GPU.
  *
- * Builds CB descriptors for each DCB and ACB, issues the FW 5.50 frame-state
- * ioctl (nr=0x01), then submits the complete array with ioctl nr=0x02.
+ * Builds CB descriptors for each DCB and ACB, then submits the complete array
+ * with ioctl nr=0x02. The standard compatibility group additionally uses its
+ * FW 5.50-hardware-proven payload completion sequence: frame-state ioctl
+ * nr=0x01 plus a trailing NOP IB.
  *
  * The kernel path:
  *   gc_submit_with_pid → common graphics-ring submit
@@ -741,8 +743,9 @@ int32_t PS5_SYSV_ABI agcProsperoSubmitMultiCommandBuffersDirect(
     uint32_t total_cbs = num_dcbs + num_acbs;
     if (total_cbs == 0 || total_cbs >= AGC_GC_NUM_CBS_MAX)
         return AGC_ERROR_INVALID_ARGUMENT;
-    if (!g_prospero.mem_initialized ||
-        g_prospero.multi_trailer.gpu_addr == 0)
+    if (g_prospero.direct_profile.submit_uses_frame_close_trailer &&
+        (!g_prospero.mem_initialized ||
+         g_prospero.multi_trailer.gpu_addr == 0))
         return AGC_ERROR_NOT_INITIALIZED;
 
     /* Build CB descriptor array on stack (max 0xFFF = 4095 CBs, but
@@ -793,12 +796,14 @@ int32_t PS5_SYSV_ABI agcProsperoSubmitMultiCommandBuffersDirect(
         cb_idx++;
     }
 
-    /* In the FW 5.50 exploited-payload context, the graphics ring defers the
-     * final descriptor until the next submit. Append a harmless GPU-visible
-     * NOP IB so every caller-provided DCB/ACB executes in the current frame. */
-    agcProsperoBuildCbDescriptor(&cb_descs[cb_idx],
-        g_prospero.multi_trailer.gpu_addr, 16, false);
-    cb_idx++;
+    if (g_prospero.direct_profile.submit_uses_frame_close_trailer) {
+        /* In the standard exploited-payload context, the graphics ring can
+         * defer the final descriptor until the next submit. Append a harmless
+         * GPU-visible NOP IB so every caller CB executes in this frame. */
+        agcProsperoBuildCbDescriptor(&cb_descs[cb_idx],
+            g_prospero.multi_trailer.gpu_addr, 16, false);
+        cb_idx++;
+    }
 
     /* Build submit ioctl arg */
     AgcGcSubmitArgs submit_arg = {0};
@@ -806,13 +811,12 @@ int32_t PS5_SYSV_ABI agcProsperoSubmitMultiCommandBuffersDirect(
     submit_arg.num_cbs = cb_idx;
     submit_arg.cb_array = (uint64_t)(uintptr_t)cb_descs;
 
-    /* FW 5.50 sceAgcDriverSubmitMultiDcbs issues this 8-byte frame-state
-     * ioctl with queue type 3 immediately before submitting the descriptor
-     * array. The single-DCB path does not use it. */
-    uint32_t frame_arg[2] = {3u, 0u};
-    int frame_ret = agcProsperoIoctl(AGC_GC_IOCTL_CLOSE, frame_arg);
-    if (frame_ret < 0)
-        return AGC_ERROR_SUBMIT_FAILED;
+    if (g_prospero.direct_profile.submit_uses_frame_close_trailer) {
+        uint32_t frame_arg[2] = {3u, 0u};
+        int frame_ret = agcProsperoIoctl(AGC_GC_IOCTL_CLOSE, frame_arg);
+        if (frame_ret < 0)
+            return AGC_ERROR_SUBMIT_FAILED;
+    }
 
     if ((g_prospero.direct_profile.capabilities & AGC_DIRECT_CAP_SUBMIT) == 0)
         return AGC_ERROR_NOT_SUPPORTED;
@@ -827,11 +831,9 @@ int32_t PS5_SYSV_ABI agcProsperoSubmitMultiCommandBuffersDirect(
 /*
  * Submit a single DCB (draw command buffer) to the GPU.
  *
- * Wraps the caller CB and the FW 5.50 completion trailer in one frame. The
- * exploited-payload graphics ring defers the final descriptor, so submitting
- * the caller CB alone can return success without executing it until a later
- * submit. Keeping the workaround here preserves a synchronous public DCB
- * contract for application-neutral clients such as Vulkan.
+ * Standard-firmware profiles wrap the caller CB and completion trailer in one
+ * frame. This preserves the shared Sony carrier ABI while applying the
+ * payload-context completion behavior hardware-proven on FW 5.50.
  */
 int32_t PS5_SYSV_ABI agcProsperoSubmitDcb(const AgcCommandBufferSubmit *packet)
 {
@@ -840,8 +842,9 @@ int32_t PS5_SYSV_ABI agcProsperoSubmitDcb(const AgcCommandBufferSubmit *packet)
     if (!packet || packet->command_address == 0 || packet->dword_count == 0)
         return AGC_ERROR_INVALID_ARGUMENT;
 
-    if (!g_prospero.mem_initialized ||
-        g_prospero.multi_trailer.gpu_addr == 0)
+    if (g_prospero.direct_profile.submit_uses_frame_close_trailer &&
+        (!g_prospero.mem_initialized ||
+         g_prospero.multi_trailer.gpu_addr == 0))
         return AGC_ERROR_NOT_INITIALIZED;
 
     AgcGcCommandBuffer cb_desc_storage[3];
@@ -850,18 +853,24 @@ int32_t PS5_SYSV_ABI agcProsperoSubmitDcb(const AgcCommandBufferSubmit *packet)
     agcProsperoBuildCbDescriptor(&cb_descs[0],
                                (uint64_t)packet->command_address,
                                packet->dword_count, false);
-    agcProsperoBuildCbDescriptor(&cb_descs[1],
-                               g_prospero.multi_trailer.gpu_addr, 16, false);
+    uint32_t descriptor_count = 1u;
+    if (g_prospero.direct_profile.submit_uses_frame_close_trailer) {
+        agcProsperoBuildCbDescriptor(&cb_descs[1],
+                                   g_prospero.multi_trailer.gpu_addr, 16, false);
+        descriptor_count++;
+    }
 
     AgcGcSubmitArgs submit_arg = {0};
     submit_arg.queue_type = 3;  /* 3 = graphics queue (SPRX-confirmed) */
-    submit_arg.num_cbs = 2;
+    submit_arg.num_cbs = descriptor_count;
     submit_arg.cb_array = (uint64_t)(uintptr_t)cb_descs;
 
-    uint32_t frame_arg[2] = {3u, 0u};
-    int frame_ret = agcProsperoIoctl(AGC_GC_IOCTL_CLOSE, frame_arg);
-    if (frame_ret < 0)
-        return AGC_ERROR_SUBMIT_FAILED;
+    if (g_prospero.direct_profile.submit_uses_frame_close_trailer) {
+        uint32_t frame_arg[2] = {3u, 0u};
+        int frame_ret = agcProsperoIoctl(AGC_GC_IOCTL_CLOSE, frame_arg);
+        if (frame_ret < 0)
+            return AGC_ERROR_SUBMIT_FAILED;
+    }
 
     if ((g_prospero.direct_profile.capabilities & AGC_DIRECT_CAP_SUBMIT) == 0)
         return AGC_ERROR_NOT_SUPPORTED;

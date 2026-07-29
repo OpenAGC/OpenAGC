@@ -202,6 +202,14 @@ bool agcProsperoBuildDirectProfile(uint32_t raw_version, bool is_trinity,
     direct.defaults_version = AGC_DIRECT_DEFAULTS_VERSION_UNKNOWN;
     direct.submit_ioctl = AGC_GC_IOCTL_SUBMIT_16;
 
+    /* Every inspected standard-firmware image shares the normalized submit16
+     * and multi-DCB carrier group. In an exploited-payload context that group
+     * uses the CLOSE transition plus a trailing NOP IB to prevent the final
+     * descriptor from remaining deferred. FW 5.50 supplies the hardware proof;
+     * the policy belongs to the compatibility group, not one firmware key. */
+    direct.submit_uses_frame_close_trailer =
+        profile.family == AGC_PROSPERO_ABI_STANDARD;
+
     /* Every active FW 3.20-12.70 image has a named public wrapper and a
      * fully fingerprinted private carrier for these three operations. Later
      * TF/HS groups only add explicit zeroing of the reserved fourth dword.

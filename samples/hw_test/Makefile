@@ -97,6 +97,9 @@ agc_fw1160_stage1.elf: agc_fw1160_stage.c gpu_credentials.h $(OPENAGC_LIB)
 agc_fw1160_stage2.elf: agc_fw1160_stage.c gpu_credentials.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_FW1160_STAGE=2 -o $@ $< $(FW_STAGE_LDFLAGS)
 
+agc_fw1160_stage3.elf: agc_fw1160_stage.c gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_FW1160_STAGE=3 -o $@ $< $(FW_STAGE_LDFLAGS)
+
 # Combined AGC + VideoOut test (links libopenagc.a + VideoOut + kernel)
 agc_videoout.elf: agc_videoout.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -o $@ agc_videoout.c $(AGC_LDFLAGS)
@@ -536,7 +539,7 @@ deploy_agc_fw1160: agc_init_fw1160.elf
 	@false
 
 .PHONY: deploy_agc_fw1160_stage0 deploy_agc_fw1160_stage1 \
-	deploy_agc_fw1160_stage2
+	deploy_agc_fw1160_stage2 deploy_agc_fw1160_stage3
 deploy_agc_fw1160_stage0: agc_fw1160_stage0.elf
 	PS5_HOST=$(PS5_HOST) STAGE=0 STAGE_ARTIFACT=$(THIS_DIR)/$< \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) ./run_fw1160_stage.sh
@@ -547,6 +550,10 @@ deploy_agc_fw1160_stage1: agc_fw1160_stage1.elf
 
 deploy_agc_fw1160_stage2: agc_fw1160_stage2.elf
 	PS5_HOST=$(PS5_HOST) STAGE=2 STAGE_ARTIFACT=$(THIS_DIR)/$< \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) ./run_fw1160_stage.sh
+
+deploy_agc_fw1160_stage3: agc_fw1160_stage3.elf
+	PS5_HOST=$(PS5_HOST) STAGE=3 STAGE_ARTIFACT=$(THIS_DIR)/$< \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) ./run_fw1160_stage.sh
 
 deploy_agc_videoout: agc_videoout.elf
