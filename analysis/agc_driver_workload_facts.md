@@ -53,6 +53,15 @@ bounded adapter can carve and clear the exact subregion itself. It must still
 emit the private prefix and final hardware packet below; using the slot address
 alone is insufficient.
 
+Hardware qualification showed that ownership of the virtual span is not by
+itself sufficient. On standard-PS5 FW 11.60 the exact 18/12-dword adapter
+returned `AGC_OK` for active and complete, but the ordered following marker
+timed out at zero after five seconds. A follow-up attempt to reproduce the
+SPRX's separately observed GPU-info process-property step caused a kernel panic
+before a payload verdict was returned. That call is removed and the capability
+is fail-closed. Do not retry it from a direct payload without first recovering
+the exact export ABI, loader prerequisites, and initialization sequence.
+
 ## Exact FW 11.60 builder layout
 
 The private prefix helper emits nine dwords for the active call's eight-byte
@@ -93,7 +102,9 @@ When the boolean control argument is set, bit 2 is clear in both prefix packet
 headers and bit 30 is clear in the final packet control. Active accepts a set
 of distinct IDs and ORs `1ULL << id` for each. Complete accepts one ID. The
 OpenAGC one-ID adapter can therefore use one registered private stream and a
-single-bit mask without narrowing the recovered hardware contract.
+single-bit mask without narrowing the recovered packet contract. It does not
+yet reproduce the loader-owned GPU-info mapping state, as the hardware failures
+above demonstrate.
 
 KytyPS5 reserves 18 and 12 dwords but emits `IT_NOP` emulator metadata.
 SharpEmu has no workload builders. Neither is hardware-packet evidence.

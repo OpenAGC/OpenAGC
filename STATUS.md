@@ -965,11 +965,12 @@ The host-generic implementation now has a tested model for:
 - 4 AGC-custom flip builders: WaitFlipDone (0x4C), WaitFlip (0x51), InsertWaitFlipDone (0x54), WaitFlipEos (0x4F+0x4E)
 - Workload tracking: generic one-ID convenience state plus typed DCB/ACB
   `SET_WORKLOAD` builders. The independent Prospero one-ID direct operation
-  passed on FW 5.50. Standard-PS5 FW 11.60 now has a bounded one-ID adapter to
-  the exact Sony registered-stream contract: an OpenAGC-owned 64-bit slot at
-  `SceGnmGpuInfo + 0x3a008`, separate active/complete DCBs, and the recovered
-  18/12-dword prefix-plus-`0xc0071e00` packet forms. Exact host fixtures pass;
-  the ordered post-workload hardware marker remains the promotion gate.
+  passed on FW 5.50. The standard-PS5 FW 11.60 candidate uses an OpenAGC-owned
+  64-bit slot at `SceGnmGpuInfo + 0x3a008`, separate active/complete DCBs, and
+  the recovered 18/12-dword prefix-plus-`0xc0071e00` packet forms. Exact host
+  fixtures pass, but the ordered hardware marker timed out. A subsequent
+  GPU-info process-property experiment caused a kernel panic and was removed.
+  FW 11.60 workload capability is therefore disabled again.
   All 39 active Sony drivers are now verified to share that nine-dword
   multi-argument contract, with 18/12-dword maximum reservations. Other
   profiles remain fail-closed until their GPU-info subregion selection is
