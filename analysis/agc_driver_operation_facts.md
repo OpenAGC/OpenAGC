@@ -36,6 +36,9 @@ Current boundary:
   Only FW 5.50 has a hardware-observed selected version (8), so all other
   direct defaults operations remain disabled even when their versioned
   dispatcher accepts version 8, 9, or 12.
+- `agc_driver_ring_facts.tsv` semantically verifies the 16-byte TF/HS payloads
+  behind each carrier group. FW 12.x adds explicit reserved-dword zeroing;
+  OpenAGC's zero-initialized typed arguments satisfy both forms.
 
 FW 3.20 remains the lowest active compatibility target. FW 1.00 and 2.x stay
 archival and are intentionally absent from this active-operation ledger.
