@@ -18,6 +18,17 @@ generic build passes 4,436 assertions and the Prospero cross-build passes. A
 fresh-console repeated-launch qualification remains required because the quota
 was already exhausted before this fix was deployed.
 
+## Full-extent viewport correction (2026-07-29)
+
+`agcGfx1013SetViewport` now maps NDC across the full requested width and height.
+The previous X scale used `min(width, height)`, which silently forced every
+rectangular target into a centered square. SDL hardware testing exposed the
+defect as 420-pixel black bars on both sides of a 1920x1080 target and black
+top-left readback despite correct centered pixels. Exact packet fixtures now
+require an X scale and offset of 960 for 1920x1080, while the Y scale remains
+-540. Aspect preservation belongs in the application's projection or explicit
+viewport choice, not this public full-extent helper.
+
 ## GFX1013 multi-viewport state (2026-07-29)
 
 OpenAGC now owns an application-neutral 16-slot viewport/scissor array. The
@@ -593,7 +604,7 @@ closes the post-fence matrix checkpoint.
 ### Reusable gfx1013 fixed-function state
 
 The FW 5.50 sample-only fixed-function PM4 setup has been promoted into
-atomic public builders for color-target binding, aspect-preserving viewport,
+atomic public builders for color-target binding, full-extent viewport,
 screen/window/generic/viewport scissors, target mask, depth-disabled state,
 and V8 graphics register defaults. The builders preflight their complete
 packet allocation and leave the command-buffer cursor unchanged on invalid

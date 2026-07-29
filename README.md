@@ -74,6 +74,10 @@ builds with ps5-payload-sdk; hardware validation is the remaining step.
   transforms and per-slot scissors program all 16 gfx1013 viewport slots,
   validate atomically, and can be reapplied after shader binding by baseline
   and tessellation draw wrappers
+- **Full-extent legacy viewport** — the compact width/height viewport helper
+  maps normalized device coordinates across the complete rectangular target;
+  applications that need aspect preservation own it in their projection or
+  explicit viewport dimensions
 - **Application-neutral color blending** — typed blend factors and operations
   program both CB blend controls and conservative per-target SX optimization
   state, including the gfx1013 SRC1 factors required by dual-source blending;

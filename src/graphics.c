@@ -2553,7 +2553,6 @@ int32_t PS5_SYSV_ABI agcGfx1013SetViewport(
     SceAgcCb *cb, const AgcGfx1013ViewportState *state)
 {
     uint32_t *cmd;
-    uint32_t extent;
     uint32_t regs[6];
 
     if (!cb || !state || state->width == 0u || state->height == 0u ||
@@ -2563,10 +2562,9 @@ int32_t PS5_SYSV_ABI agcGfx1013SetViewport(
     if (agcCbRemainingDwords(cb) < 15u)
         return AGC_ERROR_BUFFER_TOO_SMALL;
 
-    extent = state->width < state->height ? state->width : state->height;
-    regs[0] = agcGfx1013FloatBits((float)extent * 0.5f);
+    regs[0] = agcGfx1013FloatBits((float)state->width * 0.5f);
     regs[1] = agcGfx1013FloatBits((float)state->width * 0.5f);
-    regs[2] = agcGfx1013FloatBits(-(float)extent * 0.5f);
+    regs[2] = agcGfx1013FloatBits(-(float)state->height * 0.5f);
     regs[3] = agcGfx1013FloatBits((float)state->height * 0.5f);
     if (state->depth_clip_space == AGC_GFX1013_CLIP_SPACE_ZERO_TO_ONE) {
         regs[4] = agcGfx1013FloatBits(1.0f);

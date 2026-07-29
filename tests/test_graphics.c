@@ -1490,7 +1490,7 @@ static void test_gfx1013_fixed_function_packets(void)
     const uint32_t expected_viewport[15] = {
         agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 8u),
         AGC_REG_PA_CL_VPORT_XSCALE,
-        0x44070000u, 0x44700000u, 0xc4070000u,
+        0x44700000u, 0x44700000u, 0xc4070000u,
         0x44070000u, 0x3f000000u, 0x3f000000u,
         agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 4u),
         AGC_REG_PA_SC_VPORT_ZMIN_0, 0u, 0x3f800000u,
@@ -1500,7 +1500,7 @@ static void test_gfx1013_fixed_function_packets(void)
     const uint32_t expected_vulkan_viewport[15] = {
         agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 8u),
         AGC_REG_PA_CL_VPORT_XSCALE,
-        0x44070000u, 0x44700000u, 0xc4070000u,
+        0x44700000u, 0x44700000u, 0xc4070000u,
         0x44070000u, 0x3f800000u, 0u,
         agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 4u),
         AGC_REG_PA_SC_VPORT_ZMIN_0, 0u, 0x3f800000u,
