@@ -580,6 +580,16 @@ both three-dword calls returned `AGC_OK`, but the ordered post-workload
 again. The strengthened marker oracle remains active for FW 5.50, and any FW
 11.60 adapter must reproduce the recovered nine-dword Sony contract plus its
 registered-stream state rather than treating submit acceptance as execution.
+The registration blocker is now resolved at the ABI level: FW 5.50 and FW
+11.60 both use the 32-entry GPU-visible table at standard-console
+`SceGnmGpuInfo + 0x3a000`, with one 64-bit slot per stream; public registration
+only maintains a parallel 32-byte userspace descriptor and bitmask. The exact
+18-dword active and 12-dword complete standalone-buffer forms, including their
+private `0x79`/`WRITE_DATA` prefixes, are recorded in
+`analysis/agc_driver_workload_facts.md`. The next gate is a bounded direct
+adapter using an OpenAGC-owned stream slot, host packet fixtures, and the
+existing ordered hardware marker; the capability remains disabled until that
+marker passes twice on FW 11.60.
 
 The Sony workload contract itself is recovered for all active firmware:
 seven active-wrapper and three complete-wrapper groups converge on the same
