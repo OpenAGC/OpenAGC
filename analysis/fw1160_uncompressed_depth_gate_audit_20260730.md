@@ -2,12 +2,13 @@
 
 ## Scope
 
-This gate carries the three FW 5.50-qualified, uncompressed gfx1013
+This gate carries the four FW 5.50-qualified, uncompressed gfx1013
 depth/stencil paths to a standard PS5 running exact firmware ABI `0x1160`:
 
-1. `D16_UNORM` depth only;
-2. `S8_UINT` stencil only;
-3. combined `D16_UNORM + S8_UINT`.
+1. `D32_FLOAT` depth only;
+2. `D16_UNORM` depth only;
+3. `S8_UINT` stencil only;
+4. combined `D16_UNORM + S8_UINT`.
 
 The artifacts are headless and self-terminating. They use the exact standard
 FW 11.60 backend profile, version-12 defaults, bounded GPU completion fence,
@@ -19,6 +20,7 @@ stencil surface ABIs.
 
 | Artifact | SHA-256 |
 | --- | --- |
+| `agc_depth_d32_fw1160_logged.elf` | `84b82e4ad6cc9d658e9af710d91ad0b344cfe50d9c99298907c9b45d8a1a8274` |
 | `agc_depth_d16_fw1160.elf` | `f9c26bd6373ecb5ce87fedb492e95a3646d0506665b464cf06eb44ccb4ae2949` |
 | `agc_stencil_s8_fw1160.elf` | `c2c679296601e93857fb62ce0e7fc1a764dfba31246884bc15d5f265907d2fca` |
 | `agc_depth_stencil_d16_s8_fw1160.elf` | `561f0acc085666eccd9c83c417203d300f85da9a66cf61504585b2cf642d9ced` |
@@ -61,6 +63,9 @@ geometry observed by the first completed D16 submission:
 
 - D16: 1,617,408 clear-one samples, 228,096 near samples, 228,096 far samples,
   and exactly 228,096 green plus 228,096 red color pixels.
+- D32: the same exact logical classes using native float encodings:
+  1,617,408 clear-one, 228,096 near, and 228,096 far samples, plus the same
+  exact color counts.
 - S8-only: 2,165,248 zero bytes, 456,192 bytes equal to `0x5a`, no other
   stencil values, and exactly 228,096 green plus 228,096 red color pixels.
 - D16+S8: both exact D16 and S8 distributions above, plus the same exact
@@ -79,7 +84,7 @@ live debugger and process list after every launch. Stop immediately on a
 timeout, stale `eboot.elf`, UI degradation, GPU fault/reset, process-stop, or
 panic signature; reboot before any further GPU payload.
 
-After all six FW 11.60 runs pass identically, rerun the corresponding FW 5.50
+After all eight FW 11.60 runs pass identically, rerun the corresponding FW 5.50
 artifacts to rule out regression before promoting these capabilities. HTILE,
 expclear, compressed depth/stencil, and MSAA require later, separately bounded
 gates.
@@ -101,10 +106,17 @@ shutdown PASS, and final graphics PASS. ps5debug-NG found no residual `eboot`
 after every run; its port 744 and websrv port 8080 remained responsive after
 the matrix.
 
-This hardware-qualifies the three base uncompressed paths on the tested FW
+This hardware-qualifies the three completed base uncompressed paths on the tested FW
 11.60 console. Project-wide promotion remains pending the matching modern
 headless regression on FW 5.50. The two earlier rejected harness-development
 runs do not count toward the two-pass result.
+
+The original matrix inadvertently omitted the separately FW 5.50-qualified
+uncompressed D32 path. An exact logged FW 11.60 artifact and exact headless
+FW 5.50 mirror are now built. The runner requires the same current
+full-rectangle color counts and exact native D32 classes listed above. Run D32
+twice on FW 11.60 before any compressed HTILE gate; its FW 5.50 mirror remains
+part of the pending regression matrix.
 
 ## FW 5.50 regression artifacts
 
@@ -114,12 +126,13 @@ shutdown, and self-termination paths as the FW 11.60 gates:
 
 | Artifact | SHA-256 |
 | --- | --- |
+| `agc_depth_d32_fw550_headless.elf` | `54ca186bc6aac7e3c335b03bd62cf07084f7a0f15ea48631524df1d25566e9de` |
 | `agc_depth_d16_fw550_headless.elf` | `e3ac54d0edcd003246a9517f03879ed37f22cdf573b1202ade2c699b6881ebf0` |
 | `agc_stencil_s8_fw550_headless.elf` | `8059abd5a68c44f8ea1d05215f374550063ba552b500f6f9a3050e565553eef3` |
 | `agc_depth_stencil_d16_s8_fw550_headless.elf` | `3866dd4dcf82e1a5425e23c401e7794702dac8b359009f70852cb0583fd6b001` |
 
 `run_fw1160_depth.sh` now accepts an `EXPECTED_FW_ABI` selector and derives a
 firmware-specific remote path. The FW 5.50 deploy targets set it to `0x0550`;
-the default remains exact `0x1160`. Run D16, S8-only, and D16+S8 once each on
+the default remains exact `0x1160`. Run D32, D16, S8-only, and D16+S8 once each on
 the FW 5.50 console. Any mismatch blocks promotion and requires stopping the
 matrix.

@@ -76,6 +76,12 @@ if [ "${EXPECTED_D16_FULL_RECT:-0}" -eq 1 ]; then
     grep -q '^\[Depth Readback\] raw D16: one=1617408 near=228096 far=228096$' \
         "$output_file" || exit 1
 fi
+if [ "${EXPECTED_D32_FULL_RECT:-0}" -eq 1 ]; then
+    grep -q '^\[Depth Readback\] green=228096 red=228096 ' \
+        "$output_file" || exit 1
+    grep -q '^\[Depth Readback\] raw D32: one=1617408 near=228096 far=228096$' \
+        "$output_file" || exit 1
+fi
 grep -q "Driver shutdown: PASS" "$output_file" || exit 1
 grep -q "Graphics result: PASS" "$output_file" || exit 1
 if grep -Eq "FAIL|FATAL|MISMATCH|timed out" "$output_file"; then

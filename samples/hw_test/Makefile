@@ -645,6 +645,10 @@ agc_depth_stencil_d16_s8_fw1160.elf: shaders_depth agc_graphics.c ps5_video_out.
 		-DAGC_STENCIL_VALIDATION=1 -DAGC_D16_S8_VALIDATION=1 \
 		-o $@ agc_graphics.c $(AGC_LDFLAGS)
 
+agc_depth_d32_fw1160_logged.elf: shaders_depth agc_graphics.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW1160_DEPTH_LOG_FLAGS) \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
 agc_depth_d16_fw550_headless.elf: shaders_depth agc_graphics.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) $(FW550_HEADLESS_DEPTH_FLAGS) -DAGC_D16_VALIDATION=1 \
 		-o $@ agc_graphics.c $(AGC_LDFLAGS)
@@ -656,6 +660,10 @@ agc_stencil_s8_fw550_headless.elf: shaders_depth agc_graphics.c ps5_video_out.h 
 agc_depth_stencil_d16_s8_fw550_headless.elf: shaders_depth agc_graphics.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) $(FW550_HEADLESS_DEPTH_FLAGS) -DAGC_D16_VALIDATION=1 \
 		-DAGC_STENCIL_VALIDATION=1 -DAGC_D16_S8_VALIDATION=1 \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_depth_d32_fw550_headless.elf: shaders_depth agc_graphics.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW550_HEADLESS_DEPTH_FLAGS) \
 		-o $@ agc_graphics.c $(AGC_LDFLAGS)
 
 agc_depth_d16_htile_fw1160_logged.elf: shaders_depth agc_graphics.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
@@ -1060,6 +1068,7 @@ deploy_agc_graphics_bgra8_srgb_fw550_headless: agc_graphics_bgra8_srgb_fw550_hea
 
 .PHONY: deploy_agc_depth_d16_fw1160 deploy_agc_stencil_s8_fw1160 \
 	deploy_agc_depth_stencil_d16_s8_fw1160 \
+	deploy_agc_depth_d32_fw1160_logged \
 	deploy_agc_depth_d16_htile_fw1160_logged \
 	deploy_agc_depth_d16_expclear_fw1160_logged
 deploy_agc_depth_d16_fw1160: agc_depth_d16_fw1160.elf
@@ -1073,6 +1082,12 @@ deploy_agc_stencil_s8_fw1160: agc_stencil_s8_fw1160.elf
 deploy_agc_depth_stencil_d16_s8_fw1160: agc_depth_stencil_d16_s8_fw1160.elf
 	PS5_HOST=$(PS5_HOST) DEPTH_ARTIFACT=$(THIS_DIR)/$< \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_depth.sh
+
+deploy_agc_depth_d32_fw1160_logged: agc_depth_d32_fw1160_logged.elf
+	PS5_HOST=$(PS5_HOST) DEPTH_ARTIFACT=$(THIS_DIR)/$< \
+		RESULT_LOG_PATH=/data/homebrew/openagc_fw1160_depth/result.log \
+		EXPECTED_D32_FULL_RECT=1 PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) \
+		sh ./run_fw1160_depth.sh
 
 deploy_agc_depth_d16_htile_fw1160_logged: agc_depth_d16_htile_fw1160_logged.elf
 	PS5_HOST=$(PS5_HOST) DEPTH_ARTIFACT=$(THIS_DIR)/$< \
@@ -1089,6 +1104,7 @@ deploy_agc_depth_d16_expclear_fw1160_logged: agc_depth_d16_expclear_fw1160_logge
 .PHONY: deploy_agc_depth_d16_fw550_headless \
 	deploy_agc_stencil_s8_fw550_headless \
 	deploy_agc_depth_stencil_d16_s8_fw550_headless \
+	deploy_agc_depth_d32_fw550_headless \
 	deploy_agc_depth_d16_htile_fw550_headless \
 	deploy_agc_depth_d16_expclear_fw550_headless
 deploy_agc_depth_d16_fw550_headless: agc_depth_d16_fw550_headless.elf
@@ -1105,6 +1121,11 @@ deploy_agc_depth_stencil_d16_s8_fw550_headless: agc_depth_stencil_d16_s8_fw550_h
 	PS5_HOST=$(PS5_HOST) DEPTH_ARTIFACT=$(THIS_DIR)/$< \
 		EXPECTED_FW_ABI=0x0550 PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) \
 		sh ./run_fw1160_depth.sh
+
+deploy_agc_depth_d32_fw550_headless: agc_depth_d32_fw550_headless.elf
+	PS5_HOST=$(PS5_HOST) DEPTH_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_FW_ABI=0x0550 EXPECTED_D32_FULL_RECT=1 \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_depth.sh
 
 deploy_agc_depth_d16_htile_fw550_headless: agc_depth_d16_htile_fw550_headless.elf
 	PS5_HOST=$(PS5_HOST) DEPTH_ARTIFACT=$(THIS_DIR)/$< \
