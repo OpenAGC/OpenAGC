@@ -31,7 +31,7 @@
 0x1100	11.00/system/common/lib/libSceAgc.sprx	2JtWUUiYBXs	0x9db0	476	251c69c9f7602011	12	Wi82ArQtAwg	0xa170	46	bb62427f6ba9c47b	runtime-hardware-table	0x50	0x44	unknown	runtime-selected-not-static
 0x1120	11.20/lib/libSceAgc.sprx	2JtWUUiYBXs	0x9db0	476	251c69c9f7602011	12	Wi82ArQtAwg	0xa170	46	bb62427f6ba9c47b	runtime-hardware-table	0x50	0x44	unknown	runtime-selected-not-static
 0x1140	11.40/system/common/lib/libSceAgc.sprx	2JtWUUiYBXs	0x9db0	476	251c69c9f7602011	12	Wi82ArQtAwg	0xa170	46	bb62427f6ba9c47b	runtime-hardware-table	0x50	0x44	unknown	runtime-selected-not-static
-0x1160	11.60/system/common/lib/libSceAgc.sprx	2JtWUUiYBXs	0x9db0	476	251c69c9f7602011	12	Wi82ArQtAwg	0xa170	46	bb62427f6ba9c47b	runtime-hardware-table	0x50	0x44	unknown	runtime-selected-not-static
+0x1160	11.60/system/common/lib/libSceAgc.sprx	2JtWUUiYBXs	0x9db0	476	251c69c9f7602011	12	Wi82ArQtAwg	0xa170	46	bb62427f6ba9c47b	runtime-hardware-table	0x50	0x44	12	FW11.60-hardware-qualified
 0x1200	12.00/system/common/lib/libSceAgc.sprx	2JtWUUiYBXs	0x9ed0	476	251c69c9f7602011	12	Wi82ArQtAwg	0xa290	46	bb62427f6ba9c47b	runtime-hardware-table	0x50	0x44	unknown	runtime-selected-not-static
 0x1202	12.02/system/common/lib/libSceAgc.sprx	2JtWUUiYBXs	0x9ed0	476	251c69c9f7602011	12	Wi82ArQtAwg	0xa290	46	bb62427f6ba9c47b	runtime-hardware-table	0x50	0x44	unknown	runtime-selected-not-static
 0x1220	12.20/system/common/lib/libSceAgc.sprx	2JtWUUiYBXs	0x9ed0	476	251c69c9f7602011	12	Wi82ArQtAwg	0xa290	46	bb62427f6ba9c47b	runtime-hardware-table	0x50	0x44	unknown	runtime-selected-not-static

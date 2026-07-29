@@ -110,7 +110,7 @@ def evidence_for(key: str, defaults: dict[str, tuple[str, str]]) -> dict[str, st
         evidence.update({
             "enabled_direct_ops": (
                 "submit16,memory,queue,suspend-primary,suspend-final,"
-                "tf-ring,hs-offchip,async"
+                "tf-ring,hs-offchip,defaults-v12,async"
             ),
             "queue": "hardware-qualified-authenticated-0xc0408121-0xc00c810e",
             "suspend_submit": "hardware-qualified-primary-final",
@@ -118,6 +118,7 @@ def evidence_for(key: str, defaults: dict[str, tuple[str, str]]) -> dict[str, st
             "tf_ring": "hardware-qualified-public-0x80108128",
             "hs_offchip": "hardware-qualified-zero-entry-carrier-0xc010812c",
             "memory": "hardware-qualified-standard-RE-exact-Trinity",
+            "defaults": "hardware-qualified-v12",
             "async_graphics": "hardware-qualified-0x80048126",
             "qualification": "hardware-qualified-standard-FW11.60",
         })

@@ -149,8 +149,12 @@ def main() -> int:
             stride, field_offset, selector = runtime_selector(runtime_body)
         except ValueError as error:
             raise SystemExit(f"{key}: {error}") from error
-        selected = "8" if key == "0x0550" else "unknown"
-        evidence = "FW5.50-hardware-qualified" if key == "0x0550" else "runtime-selected-not-static"
+        selected_versions = {
+            "0x0550": ("8", "FW5.50-hardware-qualified"),
+            "0x1160": ("12", "FW11.60-hardware-qualified"),
+        }
+        selected, evidence = selected_versions.get(
+            key, ("unknown", "runtime-selected-not-static"))
         rows.append((
             key, relative_path, VERSIONED_NID, f"0x{versioned_address:x}",
             str(versioned_size), fingerprint(versioned_body), str(maximum),

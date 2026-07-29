@@ -548,10 +548,10 @@ queue management, primary suspend, public TF ring, HS offchip, async setup,
 and standard/Trinity memory facts are exact-RE-qualified per firmware. FW 11.60
 is the modern/Trinity reference and FW 3.20 remains the lowest active target.
 Workloads remain disabled unless their exact direct contract is separately
-proven. Register defaults are exact-profile gated: FW 5.50 version 8 is
-hardware-qualified, while FW 11.60 version 12 maps to the recovered V10 tables
-and is host-qualified with its larger internal DDID slot, pending repeat
-hardware qualification.
+proven. Register defaults are exact-profile gated: FW 5.50 version 8 and FW
+11.60 version 12 are hardware-qualified. Version 12 maps to the recovered V10
+tables and uses its exact larger internal DDID slot; two FW 11.60 runs built
+both blobs, executed the post-default GPU markers, and shut down cleanly.
 
 The Sony workload contract itself is recovered for all active firmware:
 seven active-wrapper and three complete-wrapper groups converge on the same
