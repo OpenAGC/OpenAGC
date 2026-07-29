@@ -133,6 +133,12 @@ agc_fw1160_stage12.elf: agc_fw1160_stage.c gpu_credentials.h $(OPENAGC_LIB)
 agc_fw1160_stage13.elf: agc_fw1160_stage.c gpu_credentials.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_FW1160_STAGE=13 -o $@ $< $(FW_STAGE_LDFLAGS)
 
+agc_fw1160_stage14.elf: agc_fw1160_stage.c gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_FW1160_STAGE=14 -o $@ $< $(FW_STAGE_LDFLAGS)
+
+agc_fw1160_stage15.elf: agc_fw1160_stage.c gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_FW1160_STAGE=15 -o $@ $< $(FW_STAGE_LDFLAGS)
+
 # Opt-in oracle for the console's own FW 11.60 libSceAgcDriver. This target
 # intentionally has no SceAgcDriver DT_NEEDED entry: credentials must be
 # patched before the payload calls dlopen(), and no direct backend is started.
@@ -611,7 +617,8 @@ deploy_agc_fw1160: agc_init_fw1160.elf
 	deploy_agc_fw1160_stage6 deploy_agc_fw1160_stage7 \
 	deploy_agc_fw1160_stage8 deploy_agc_fw1160_stage9 \
 	deploy_agc_fw1160_stage10 deploy_agc_fw1160_stage11 \
-	deploy_agc_fw1160_stage12 deploy_agc_fw1160_stage13
+	deploy_agc_fw1160_stage12 deploy_agc_fw1160_stage13 \
+	deploy_agc_fw1160_stage14 deploy_agc_fw1160_stage15
 deploy_agc_fw1160_stage0: agc_fw1160_stage0.elf
 	PS5_HOST=$(PS5_HOST) STAGE=0 STAGE_ARTIFACT=$(THIS_DIR)/$< \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) ./run_fw1160_stage.sh
@@ -666,6 +673,14 @@ deploy_agc_fw1160_stage12: agc_fw1160_stage12.elf
 
 deploy_agc_fw1160_stage13: agc_fw1160_stage13.elf
 	PS5_HOST=$(PS5_HOST) STAGE=13 STAGE_ARTIFACT=$(THIS_DIR)/$< \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) ./run_fw1160_stage.sh
+
+deploy_agc_fw1160_stage14: agc_fw1160_stage14.elf
+	PS5_HOST=$(PS5_HOST) STAGE=14 STAGE_ARTIFACT=$(THIS_DIR)/$< \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) ./run_fw1160_stage.sh
+
+deploy_agc_fw1160_stage15: agc_fw1160_stage15.elf
+	PS5_HOST=$(PS5_HOST) STAGE=15 STAGE_ARTIFACT=$(THIS_DIR)/$< \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) ./run_fw1160_stage.sh
 
 .PHONY: deploy_agc_fw1160_sony_workload

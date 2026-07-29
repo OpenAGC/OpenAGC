@@ -13,13 +13,15 @@ readelf=${READELF:-llvm-readelf}
 tmp_base=${TMPDIR:-/tmp}/openagc-fw1160.$$
 driver_disasm=$tmp_base.driver.disasm
 driver_symbols=$tmp_base.driver.symbols
+driver_strings=$tmp_base.driver.strings
 agc_disasm=$tmp_base.agc.disasm
 agc_symbols=$tmp_base.agc.symbols
-trap 'rm -f "$driver_disasm" "$driver_symbols" "$agc_disasm" "$agc_symbols"' \
+trap 'rm -f "$driver_disasm" "$driver_symbols" "$driver_strings" "$agc_disasm" "$agc_symbols"' \
     EXIT HUP INT TERM
 
 "$objdump" -d "$driver" >"$driver_disasm"
 "$readelf" -Ws "$driver" >"$driver_symbols"
+strings "$driver" >"$driver_strings"
 "$objdump" -d "$agc" >"$agc_disasm"
 "$readelf" -Ws "$agc" >"$agc_symbols"
 
@@ -104,6 +106,38 @@ require "$driver_disasm" "standard CWSR allocation" '^ *7d7c:.*\$0x1000000'
 require "$driver_disasm" "standard CWSR work offset" '^ *7e5b:.*\$0xa00000'
 require "$driver_disasm" "Trinity CWSR work offset" '^ *7e60:.*\$0x1000000'
 require "$driver_disasm" "Trinity GPU-info span" '^ *a920:.*\$0x180000'
+
+# The standard-console constructor allocates a distinct 2 MiB direct-memory
+# aperture immediately below /dev/gc MMIO, then publishes its two 0x19000
+# register-shadow slices through Gn2/Gn3/Gn4. The vmovups at 0x75d6 reads
+# virtual address 0x10220. In this sectionless ELF that virtual address maps to
+# file offset 0x14220 (LOAD file=0x10000, vaddr=0xc000); do not confuse it with
+# raw file offset 0x10220, which contains unrelated bytes.
+require "$driver_disasm" "driver-memory address hint" \
+    '^ *501:.*\$0xfe0000000'
+require "$driver_disasm" "standard driver-memory size" \
+    '^ *540:.*\$0x200000'
+require "$driver_disasm" "driver-memory type" '^ *577:.*\$0xc, %r8d'
+require "$driver_disasm" "driver-memory CPU/GPU protection" \
+    '^ *593:.*\$0x33, %edx'
+require "$driver_disasm" "register-shadow first four words load" \
+    '^ *75d6:.*0x10220'
+require "$driver_disasm" "register-shadow final two words" \
+    '^ *75e3:.*\$0x284300002400'
+shadow_words=$(od -An -tx1 -j $((0x14220)) -N 16 "$driver" | tr -d ' \n')
+if [ "$shadow_words" != 00000000bf0300000020000081220000 ]; then
+    echo "FAIL: FW 11.60 register-shadow words at mapped vaddr 0x10220" >&2
+    exit 1
+fi
+require "$driver_disasm" "standard Gn2/Gn3/Gn4 helper call" \
+    '^ *786a:.*0x7f70'
+require "$driver_disasm" "two 40-byte shadow descriptor copies" \
+    '^ *8003:.*0x28\(%rax\)'
+for property_name in Sce.Debug:Gn2 Sce.Debug:Gn3 Sce.Debug:Gn4 \
+    SceAgcRegShadow SceAgcRegShadowCopy SceAgcRegShadowInfo \
+    SceAgcGprDumpArea SceAgcDdid; do
+    require "$driver_strings" "$property_name name" "^${property_name}$"
+done
 
 # libSceAgc exposes a versioned 0..12 dispatcher, but the no-argument API reads
 # a runtime-selected table field. This proves that 11.60 cannot safely inherit

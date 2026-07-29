@@ -334,8 +334,41 @@ _Static_assert(sizeof(AgcGcContextQueryResult) == 0x04,
 #define AGC_GC_MMIO_BASE    0xfe0200000ULL
 #define AGC_GC_MMIO_SIZE    0x4000u
 #define AGC_GC_MMIO_PROT    0x22u
+#define AGC_GC_DRIVER_MEMORY_ADDRESS_HINT 0xfe0000000ULL
+#define AGC_GC_DRIVER_MEMORY_SIZE         0x200000u
+#define AGC_GC_DRIVER_MEMORY_ALIGNMENT    0x200000u
+#define AGC_GC_DRIVER_MEMORY_TYPE         0x0cu
+#define AGC_GC_DRIVER_MEMORY_PROT         0x33u
+#define AGC_GC_REG_SHADOW_FIRST_OFFSET    0x8000u
+#define AGC_GC_REG_SHADOW_SECOND_OFFSET   0x21000u
+#define AGC_GC_REG_SHADOW_SLICE_SIZE      0x19000u
+#define AGC_GC_REG_SHADOW_TOTAL_SIZE      0x32000u
+#define AGC_GC_REG_SHADOW_RANGE0           0x0000u
+#define AGC_GC_REG_SHADOW_RANGE1           0x03bfu
+#define AGC_GC_REG_SHADOW_RANGE2           0x2000u
+#define AGC_GC_REG_SHADOW_RANGE3           0x2281u
+#define AGC_GC_REG_SHADOW_RANGE4           0x2400u
+#define AGC_GC_REG_SHADOW_RANGE5           0x2843u
 #define AGC_GC_GPU_INFO_ADDRESS_HINT 0xfe0300000ULL
 #define AGC_GC_INTERNAL_ADDRESS_HINT 0xf00000000ULL
+
+/* Standard-console FW 11.60 copies two of these exact records into
+ * SceGnmShadowReg before publishing the Sce.Debug:Gn4 process property. */
+typedef struct AgcGcRegisterShadowDescriptor {
+    uint64_t address;
+    uint32_t size;
+    uint32_t register_ranges[6];
+    uint32_t reserved;
+} AgcGcRegisterShadowDescriptor;
+
+_Static_assert(sizeof(AgcGcRegisterShadowDescriptor) == 0x28,
+    "FW 11.60 register-shadow descriptor ABI size");
+_Static_assert(offsetof(AgcGcRegisterShadowDescriptor, size) == 0x08,
+    "FW 11.60 register-shadow descriptor size offset");
+_Static_assert(offsetof(AgcGcRegisterShadowDescriptor, register_ranges) == 0x0c,
+    "FW 11.60 register-shadow descriptor ranges offset");
+_Static_assert(offsetof(AgcGcRegisterShadowDescriptor, reserved) == 0x24,
+    "FW 11.60 register-shadow descriptor reserved offset");
 
 /*
  * Makesysmap argument struct (nr=0x09, dir=RW, size=8).

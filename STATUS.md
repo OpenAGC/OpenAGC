@@ -1009,6 +1009,18 @@ The host-generic implementation now has a tested model for:
   queue/register programming rather than defaults, async setup, process
   property, registration, address selection, packet bytes, or cursor lifecycle.
   The capability remains disabled.
+  A new offline audit found two bounded next gates. Stage 14 fixes the prior
+  partial cache flush: the inline workload command is 40 dwords (160 bytes),
+  while stages 12/13 flushed only the first 64-byte line. Stage 15 additionally
+  reconstructs the standard-console FW 11.60 constructor's separate 2 MiB
+  `SceAgcDriver` aperture, two exact 40-byte register-shadow descriptors, and
+  Gn2/Gn3/Gn4 process properties. The first draft descriptor constants were
+  rejected before hardware because it confused raw file offset `0x10220` with
+  mapped vaddr `0x10220`; the correct leading words are
+  `{0, 0x3bf, 0x2000, 0x2281}`. Exact host bytes and the ELF mapping are now
+  verifier-locked. Neither stage has been hardware-run yet. Run stage 14 first;
+  stage 15 remains the higher-risk fallback. See
+  `analysis/fw1160_register_shadow_20260729.md`.
   The first `agc_fw1160_sony_workload.elf` was hardware-attempted after a clean
   reboot. It patched credentials before `dlopen`, loaded the matching FW 11.60
   module, resolved all required exports, matched the 18/12-dword sizes, and

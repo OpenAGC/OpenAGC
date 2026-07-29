@@ -71,3 +71,11 @@ ps5debug-NG port 744 remained reachable. Stage 13 must not be rerun unchanged.
 The remaining investigation is the GPU-side `SET_WORKLOAD` state transition or
 required queue/register programming, not defaults, async setup, process
 property, stream registration, slot address, packet bytes, or cursor lifecycle.
+
+Subsequent constructor tracing recovered a separate standard-console
+register-shadow publication path. The corrected ABI, including an ELF
+file-offset/vaddr mapping error caught before hardware, is documented in
+`analysis/fw1160_register_shadow_20260729.md`. Stage 14 first isolates the
+previously partial 40-dword DCB cache flush. Stage 15 adds the recovered
+Gn2/Gn3/Gn4 state. Neither stage has been hardware-run yet, and neither changes
+the public fail-closed workload capability.

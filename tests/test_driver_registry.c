@@ -149,6 +149,8 @@ static void test_direct_operation_profiles(void)
         "FW 11.60 HS-offchip wrapper enabled");
     TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_WORKLOAD) == 0,
         "FW 11.60 Trinity remains outside the standard workload-table gate");
+    TEST_ASSERT(!profile.workload_requires_shadow_properties,
+        "FW 11.60 Trinity does not inherit the standard-console shadow gate");
     TEST_ASSERT_EQ(agcPm4Header3Sub(
         AGC_PM4_OP_SET_WORKLOAD, AGC_PM4_SUB_WORKLOAD_BEGIN, 3u),
         0xC0011E80u,
@@ -175,6 +177,8 @@ static void test_direct_operation_profiles(void)
         "FW 11.60 does not select the stalled stream adapter");
     TEST_ASSERT(profile.workload_has_sony_stream_table,
         "standard FW 11.60 exposes its recovered Sony workload table");
+    TEST_ASSERT(profile.workload_requires_shadow_properties,
+        "standard FW 11.60 requires the recovered Gn2/Gn3/Gn4 state");
 
     TEST_ASSERT(agcProsperoBuildDirectProfile(
         0x12200000u, false, &profile), "FW 12.20 submit profile builds");
@@ -192,8 +196,36 @@ static void test_direct_operation_profiles(void)
         "FW 12.20 uses the typed HS-offchip ioctl payload");
     TEST_ASSERT_EQ(profile.async_graphics_ioctl, AGC_GC_IOCTL_QUEUE_STATUS,
         "FW 12.20 uses the carrier-proven async setup ioctl");
+    TEST_ASSERT(!profile.workload_requires_shadow_properties,
+        "FW 12.20 does not inherit unevidenced FW 11.60 shadow state");
     TEST_ASSERT(!agcProsperoBuildDirectProfile(
         0x11600000u, false, NULL), "NULL direct profile rejected");
+}
+
+static void test_fw1160_register_shadow_descriptors(void)
+{
+    static const uint32_t expected_words[20] = {
+        0xe0008000u, 0x0000000fu, 0x00019000u,
+        0x00000000u, 0x000003bfu, 0x00002000u, 0x00002281u,
+        0x00002400u, 0x00002843u, 0x00000000u,
+        0xe0021000u, 0x0000000fu, 0x00019000u,
+        0x00000000u, 0x000003bfu, 0x00002000u, 0x00002281u,
+        0x00002400u, 0x00002843u, 0x00000000u,
+    };
+    AgcGcRegisterShadowDescriptor descriptors[2];
+
+    memset(descriptors, 0xa5, sizeof(descriptors));
+    TEST_ASSERT(agcProsperoBuildFw1160RegisterShadowDescriptors(
+        AGC_GC_DRIVER_MEMORY_ADDRESS_HINT, descriptors),
+        "FW 11.60 register-shadow descriptors build");
+    TEST_ASSERT(memcmp(descriptors, expected_words, sizeof(expected_words)) == 0,
+        "FW 11.60 register-shadow descriptor bytes match SPRX evidence");
+    TEST_ASSERT(!agcProsperoBuildFw1160RegisterShadowDescriptors(
+        AGC_GC_DRIVER_MEMORY_ADDRESS_HINT, NULL),
+        "NULL FW 11.60 register-shadow output rejected");
+    TEST_ASSERT(!agcProsperoBuildFw1160RegisterShadowDescriptors(
+        UINT64_MAX, descriptors),
+        "overflowing FW 11.60 register-shadow base rejected");
 }
 
 static void test_common_operation_carrier_profiles(void)
@@ -422,6 +454,7 @@ void test_suite_driver_registry(void)
     TEST_RUN(test_standard_direct_firmware_aliases);
     TEST_RUN(test_archival_and_fw320_firmware_profiles);
     TEST_RUN(test_direct_operation_profiles);
+    TEST_RUN(test_fw1160_register_shadow_descriptors);
     TEST_RUN(test_common_operation_carrier_profiles);
     TEST_RUN(test_trinity_runtime_profile);
     TEST_RUN(test_runtime_profile_diagnostic_labels);

@@ -51,7 +51,7 @@ The prospero build compiles `driver_prospero.c` with native `/dev/gc` ioctl call
 It links against `kernel` and `SceVideoOut`; the direct backend does not depend
 on or preload `libSceAgcDriver.sprx`.
 
-Expected host test result: `5137 passed, 0 failed`. Any change that drops this
+Expected host test result: `5144 passed, 0 failed`. Any change that drops this
 count is a regression — fix it before declaring the task done.
 
 ## Verification Checklist
@@ -345,6 +345,12 @@ immediate shutdown only. Stage 2 adds internal allocation and teardown only.
 Stages 3-9 isolate submit, async, queue, suspend, TF-ring, and HS-offchip
 carriers. Always use their guarded Make targets; never launch a probe without
 the cleanup ELF immediately beforehand.
+
+Stages 10-13 preserve the completed process-property and stalled workload
+history and must not be rerun unchanged. Stage 14 is the full-DCB-flush-only
+counterfactual; stage 15 adds the standard-console FW 11.60 Gn2/Gn3/Gn4
+register-shadow state. Run stage 14 first and use stage 15 only if stage 14
+still stalls. See `analysis/fw1160_register_shadow_20260729.md`.
 
 **2c. `agc_fw1160_sony_workload.elf` — installed-driver workload oracle**
 

@@ -37,6 +37,7 @@ extern int32_t PS5_SYSV_ABI agcProsperoInitialize(void);
 extern int32_t PS5_SYSV_ABI agcProsperoInitializeInternalMemory(void);
 extern int32_t PS5_SYSV_ABI agcProsperoNotifyDefaultStates(uint32_t flags);
 extern int32_t agcProsperoRegisterGpuInfoProcessProperty(void);
+extern int32_t agcProsperoRegisterWorkloadShadowProperties(void);
 extern int32_t PS5_SYSV_ABI agcProsperoSubmitDcb(
     const AgcCommandBufferSubmit *packet);
 extern int32_t PS5_SYSV_ABI agcProsperoSetupAsyncGraphics(uint32_t pipe_id);
@@ -61,6 +62,18 @@ extern int sceKernelMapNamedSystemFlexibleMemory(
     void **virtual_address, size_t length, int protection, int flags,
     const char *name);
 extern int sceKernelReleaseFlexibleMemory(void *address, size_t length);
+
+static void flush_range(const void *address, size_t size)
+{
+    uintptr_t cursor = (uintptr_t)address & ~(uintptr_t)63u;
+    const uintptr_t end = (uintptr_t)address + size;
+
+    while (cursor < end) {
+        clflush((u_long)cursor);
+        cursor += 64u;
+    }
+    mfence();
+}
 
 int main(void)
 {
@@ -268,40 +281,46 @@ int main(void)
         return 1;
     }
 #endif
-#if AGC_FW1160_STAGE == 12 || AGC_FW1160_STAGE == 13
+#if AGC_FW1160_STAGE >= 12 && AGC_FW1160_STAGE <= 15
     void *workload_memory = (void *)(uintptr_t)0xf02000000ULL;
-    const uint32_t active_marker_value = 0x1160A012u;
-    const uint32_t complete_marker_value = 0x1160C012u;
-#if AGC_FW1160_STAGE == 13
-    const uint32_t preflight_marker_value = 0x1160F013u;
+    const uint32_t active_marker_value = AGC_FW1160_STAGE >= 14
+        ? (AGC_FW1160_STAGE == 15 ? 0x1160A015u : 0x1160A014u)
+        : 0x1160A012u;
+    const uint32_t complete_marker_value = AGC_FW1160_STAGE >= 14
+        ? (AGC_FW1160_STAGE == 15 ? 0x1160C015u : 0x1160C014u)
+        : 0x1160C012u;
+#if AGC_FW1160_STAGE >= 13
+    const uint32_t preflight_marker_value = AGC_FW1160_STAGE >= 14
+        ? (AGC_FW1160_STAGE == 15 ? 0x1160F015u : 0x1160F014u)
+        : 0x1160F013u;
 #endif
     const uint32_t workload_ids[] = {1u};
     uint8_t stream_descriptor[32] = {0};
     volatile uint32_t *active_marker;
     volatile uint32_t *complete_marker;
-#if AGC_FW1160_STAGE == 13
+#if AGC_FW1160_STAGE >= 13
     volatile uint32_t *preflight_marker;
 #endif
     SceAgcCb cb;
     AgcCommandBufferSubmit submit;
     uint32_t waited_ms = 0u;
 
-#if AGC_FW1160_STAGE == 13
+#if AGC_FW1160_STAGE >= 13
     /* FW 5.50's qualified full-path workload test runs only after defaults
      * notification and async setup. Both prerequisites are independently
-     * qualified on FW 11.60; stage 13 restores that normal driver sequence
-     * before testing the otherwise unchanged inline Sony workload ABI. */
+     * qualified on FW 11.60; stages 13+ restore that normal driver sequence
+     * before testing the inline Sony workload ABI. */
     result = agcProsperoNotifyDefaultStates(0u);
     printf("default states=0x%08X\n", (unsigned)result);
     if (result != AGC_OK) {
-        printf("stage 13: default states FAIL\n");
+        printf("stage %d: default states FAIL\n", AGC_FW1160_STAGE);
         (void)agcProsperoShutdown();
         return 1;
     }
     result = agcProsperoSetupAsyncGraphics(1u);
     printf("async graphics=0x%08X\n", (unsigned)result);
     if (result != AGC_OK) {
-        printf("stage 13: async graphics FAIL\n");
+        printf("stage %d: async graphics FAIL\n", AGC_FW1160_STAGE);
         (void)agcProsperoShutdown();
         return 1;
     }
@@ -315,6 +334,15 @@ int main(void)
         (void)agcProsperoShutdown();
         return 1;
     }
+#if AGC_FW1160_STAGE == 15
+    result = agcProsperoRegisterWorkloadShadowProperties();
+    printf("workload shadow properties=0x%08X\n", (unsigned)result);
+    if (result != AGC_OK) {
+        printf("stage 15: workload shadow properties FAIL\n");
+        (void)agcProsperoShutdown();
+        return 1;
+    }
+#endif
     (void)snprintf((char *)stream_descriptor, sizeof(stream_descriptor),
         "OpenAGC stage %d", AGC_FW1160_STAGE);
     result = sceAgcDriverRegisterWorkloadStream(1u, stream_descriptor);
@@ -336,24 +364,29 @@ int main(void)
     }
     active_marker = (volatile uint32_t *)((uint8_t *)workload_memory + 0x1000u);
     complete_marker = active_marker + 1;
-#if AGC_FW1160_STAGE == 13
+#if AGC_FW1160_STAGE >= 13
     preflight_marker = active_marker + 2;
 #endif
     active_marker[0] = 0u;
     complete_marker[0] = 0u;
-#if AGC_FW1160_STAGE == 13
+#if AGC_FW1160_STAGE >= 13
     preflight_marker[0] = 0u;
     agcCbInit(&cb, workload_memory, 0x1000u);
     if (!sceAgcDcbWriteData(&cb, 2u, 0u,
             (uint64_t)(uintptr_t)preflight_marker, &preflight_marker_value,
             1u, 1u, 1u)) {
-        printf("stage 13: preflight marker build FAIL\n");
+        printf("stage %d: preflight marker build FAIL\n",
+            AGC_FW1160_STAGE);
         (void)sceAgcDriverUnregisterWorkloadStream(1u);
         (void)agcProsperoShutdown();
         (void)sceKernelReleaseFlexibleMemory(workload_memory, 0x4000u);
         return 1;
     }
+#if AGC_FW1160_STAGE >= 14
+    flush_range(workload_memory, agcCbUsedDwords(&cb) * sizeof(uint32_t));
+#else
     clflush((u_long)(uintptr_t)workload_memory);
+#endif
     clflush((u_long)(uintptr_t)preflight_marker);
     mfence();
     submit.command_address = (uintptr_t)workload_memory;
@@ -374,7 +407,8 @@ int main(void)
     printf("preflight submit=0x%08X marker=0x%08X wait=%u ms\n",
         (unsigned)result, *preflight_marker, waited_ms);
     if (result != AGC_OK || *preflight_marker != preflight_marker_value) {
-        printf("stage 13: preflight execution FAIL\n");
+        printf("stage %d: preflight execution FAIL\n",
+            AGC_FW1160_STAGE);
         (void)sceAgcDriverUnregisterWorkloadStream(1u);
         (void)agcProsperoShutdown();
         (void)sceKernelReleaseFlexibleMemory(workload_memory, 0x4000u);
@@ -399,7 +433,11 @@ int main(void)
         return 1;
     }
     printf("inline workload DCB dwords=%u\n", agcCbUsedDwords(&cb));
+#if AGC_FW1160_STAGE >= 14
+    flush_range(workload_memory, agcCbUsedDwords(&cb) * sizeof(uint32_t));
+#else
     clflush((u_long)(uintptr_t)workload_memory);
+#endif
     clflush((u_long)(uintptr_t)active_marker);
     mfence();
 
@@ -408,6 +446,7 @@ int main(void)
     submit.reserved = 0u;
     result = agcProsperoSubmitDcb(&submit);
     printf("inline workload submit=0x%08X\n", (unsigned)result);
+    waited_ms = 0u;
     while (result == AGC_OK && waited_ms < 5000u) {
         clflush((u_long)(uintptr_t)active_marker);
         mfence();

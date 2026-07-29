@@ -243,6 +243,7 @@ bool agcProsperoBuildDirectProfile(uint32_t raw_version, bool is_trinity,
     } else if (abi_key == 0x1160u) {
         direct.capabilities |= AGC_DIRECT_CAP_SUSPEND_FINAL;
         direct.workload_has_sony_stream_table = !is_trinity;
+        direct.workload_requires_shadow_properties = !is_trinity;
     }
 
     if ((direct.capabilities & AGC_DIRECT_CAP_QUEUE) != 0) {
@@ -263,6 +264,32 @@ bool agcProsperoBuildDirectProfile(uint32_t raw_version, bool is_trinity,
     direct.runtime.supports_tf_ring =
         (direct.capabilities & AGC_DIRECT_CAP_TF_RING) != 0;
     *profile_out = direct;
+    return true;
+}
+
+bool agcProsperoBuildFw1160RegisterShadowDescriptors(uint64_t driver_base,
+    AgcGcRegisterShadowDescriptor descriptors_out[2])
+{
+    static const uint32_t register_ranges[6] = {
+        AGC_GC_REG_SHADOW_RANGE0, AGC_GC_REG_SHADOW_RANGE1,
+        AGC_GC_REG_SHADOW_RANGE2, AGC_GC_REG_SHADOW_RANGE3,
+        AGC_GC_REG_SHADOW_RANGE4, AGC_GC_REG_SHADOW_RANGE5,
+    };
+
+    if (!descriptors_out ||
+        driver_base > UINT64_MAX - AGC_GC_REG_SHADOW_SECOND_OFFSET)
+        return false;
+
+    memset(descriptors_out, 0,
+        sizeof(AgcGcRegisterShadowDescriptor) * 2u);
+    descriptors_out[0].address =
+        driver_base + AGC_GC_REG_SHADOW_FIRST_OFFSET;
+    descriptors_out[0].size = AGC_GC_REG_SHADOW_SLICE_SIZE;
+    memcpy(descriptors_out[0].register_ranges, register_ranges,
+        sizeof(register_ranges));
+    descriptors_out[1] = descriptors_out[0];
+    descriptors_out[1].address =
+        driver_base + AGC_GC_REG_SHADOW_SECOND_OFFSET;
     return true;
 }
 

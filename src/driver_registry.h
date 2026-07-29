@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "agc_ioctl.h"
 #include "agc_runtime_diag.h"
 #include "driver_ops.h"
 
@@ -56,6 +57,7 @@ typedef struct AgcProsperoDirectProfile {
     bool submit_uses_frame_close_trailer;
     bool workload_has_sony_stream_table;
     bool workload_uses_sony_stream_packet;
+    bool workload_requires_shadow_properties;
     uint32_t submit_ioctl;
     uint32_t queue_create_ioctl;
     uint32_t queue_destroy_ioctl;
@@ -83,6 +85,8 @@ bool agcProsperoBuildRuntimeProfile(uint32_t raw_version, bool is_trinity,
     AgcProsperoRuntimeProfile *profile_out);
 bool agcProsperoBuildDirectProfile(uint32_t raw_version, bool is_trinity,
     AgcProsperoDirectProfile *profile_out);
+bool agcProsperoBuildFw1160RegisterShadowDescriptors(uint64_t driver_base,
+    AgcGcRegisterShadowDescriptor descriptors_out[2]);
 const AgcDriverRegistryEntry *agcDriverRegistryLookup(
     const AgcDriverRegistryEntry *entries, size_t entry_count,
     uint32_t raw_version, uint32_t required_capabilities);

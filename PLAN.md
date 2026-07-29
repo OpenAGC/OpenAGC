@@ -16,6 +16,22 @@ AMD PM4 packet ancestry overlap in useful ways.
 
 ## Current Execution Order
 
+### FW 11.60 workload parity gate
+
+- Keep the public workload capability disabled while testing isolated causes
+  of the standard-console inline `SET_WORKLOAD` stall.
+- Run stage 14 first. It changes stage 13 only by flushing the complete
+  40-dword DCB and resetting the post-preflight timer. Require two identical
+  passes before promotion.
+- Only if stage 14 still stalls, reboot/clean the process and run stage 15,
+  which adds the exact FW 11.60 standard-console 2 MiB driver aperture,
+  two 40-byte shadow descriptors, and Gn2/Gn3/Gn4 process properties.
+- After a successful FW 11.60 candidate, rerun the corresponding direct path
+  on FW 5.50 before enabling any capability. Do not generalize the recovered
+  Gn4 state to Trinity or neighboring firmware without matching SPRX evidence.
+- Evidence and artifact hashes are recorded in
+  `analysis/fw1160_register_shadow_20260729.md`.
+
 ### Gfx1013 multi-viewport state
 
 - Provide one application-neutral typed array for up to 16 Vulkan-style

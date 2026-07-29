@@ -111,9 +111,13 @@
 extern int32_t sceKernelAllocateDirectMemory(
     int64_t searchStart, int64_t searchEnd, size_t length,
     uint64_t alignment, int memoryType, off_t *physicalAddrOut);
+extern size_t sceKernelGetDirectMemorySize(void);
 extern int32_t sceKernelMapDirectMemory(
     void **virtualAddr, size_t length, int prot, int flags,
     off_t physicalAddr, uint64_t alignment);
+extern int32_t sceKernelMapNamedDirectMemory(
+    void **virtualAddr, size_t length, int prot, int flags,
+    off_t physicalAddr, uint64_t alignment, const char *name);
 extern int32_t sceKernelMunmap(void *addr, size_t len);
 extern int32_t sceKernelReleaseDirectMemory(off_t physicalAddr, size_t length);
 
@@ -163,6 +167,7 @@ typedef struct {
     bool             initialized;    /* agcProsperoInitialize succeeded */
     bool             mem_initialized;/* agcProsperoInitializeInternalMemory succeeded */
     bool             gpu_info_property_registered;/* Sce.Debug:Gnm mapping installed */
+    bool             shadow_properties_registered;/* Gn2/Gn3/Gn4 mappings installed */
     bool             defaults_notified;/* agcProsperoNotifyDefaultStates succeeded */
     bool             async_setup_done;/* agcProsperoSetupAsyncGraphics succeeded */
     void            *mmio_base;      /* GPU register MMIO mapping (0xfe0200000) */
@@ -171,6 +176,7 @@ typedef struct {
     AgcProsperoRuntimeProfile profile; /* firmware and hardware ABI profile */
     AgcProsperoDirectProfile direct_profile; /* exact per-operation /dev/gc ABI */
     AgcProsperoQueue    queues[AGC_PROSPERO_MAX_QUEUES];
+    AgcProsperoRegion   driver_memory; /* hinted SceAgcDriver direct-memory aperture */
     /* Internal memory regions — sizes from SPRX disassembly (FW 5.50) */
     AgcProsperoRegion   gpu_info;    /* SceGnmGpuInfo:   0x100000 (1 MB) */
     AgcProsperoRegion   trap_code;   /* SceGnmTrapCode:  0x4000   (16 KB) */
@@ -484,6 +490,56 @@ static void agcProsperoFreeRegion(AgcProsperoRegion *region)
         sceKernelReleaseFlexibleMemory(region->cpu_addr, region->size) != 0)
         sceKernelMunmap(region->cpu_addr, region->size);
 
+    memset(region, 0, sizeof(*region));
+}
+
+/* Allocate the constructor-owned direct-memory aperture used as the register
+ * shadow and shadow-copy carrier. This is not /dev/gc MMIO: Sony maps a
+ * separate 2 MB allocation immediately below the 0xfe0200000 MMIO page. */
+static int32_t agcProsperoAllocateDriverMemory(void)
+{
+    AgcProsperoRegion *region = &g_prospero.driver_memory;
+    void *address;
+    off_t physical_address = 0;
+    int32_t result;
+
+    if (region->cpu_addr)
+        return AGC_OK;
+
+    result = sceKernelAllocateDirectMemory(0,
+        (int64_t)sceKernelGetDirectMemorySize(),
+        AGC_GC_DRIVER_MEMORY_SIZE, AGC_GC_DRIVER_MEMORY_ALIGNMENT,
+        AGC_GC_DRIVER_MEMORY_TYPE, &physical_address);
+    if (result != 0)
+        return AGC_ERROR_OUT_OF_MEMORY;
+
+    address = (void *)(uintptr_t)AGC_GC_DRIVER_MEMORY_ADDRESS_HINT;
+    result = sceKernelMapNamedDirectMemory(&address,
+        AGC_GC_DRIVER_MEMORY_SIZE, AGC_GC_DRIVER_MEMORY_PROT, 0,
+        physical_address, AGC_GC_DRIVER_MEMORY_ALIGNMENT, "SceAgcDriver");
+    if (result != 0 || !address) {
+        (void)sceKernelReleaseDirectMemory(physical_address,
+            AGC_GC_DRIVER_MEMORY_SIZE);
+        return AGC_ERROR_OUT_OF_MEMORY;
+    }
+
+    memset(address, 0, AGC_GC_DRIVER_MEMORY_SIZE);
+    region->cpu_addr = address;
+    region->gpu_addr = (uint64_t)(uintptr_t)address;
+    region->physical_addr = physical_address;
+    region->size = AGC_GC_DRIVER_MEMORY_SIZE;
+    return AGC_OK;
+}
+
+static void agcProsperoFreeDriverMemory(void)
+{
+    AgcProsperoRegion *region = &g_prospero.driver_memory;
+
+    if (!region->size)
+        return;
+    if (region->cpu_addr)
+        (void)sceKernelMunmap(region->cpu_addr, region->size);
+    (void)sceKernelReleaseDirectMemory(region->physical_addr, region->size);
     memset(region, 0, sizeof(*region));
 }
 
@@ -830,6 +886,91 @@ int32_t agcProsperoRegisterGpuInfoProcessProperty(void)
     if (result != 0)
         return AGC_ERROR_INTERNAL;
     g_prospero.gpu_info_property_registered = true;
+    return AGC_OK;
+}
+
+/* Reproduce the standard-console FW 11.60 constructor's register-shadow
+ * publication exactly. This remains a private qualification prerequisite;
+ * the public workload capability stays disabled until the resulting packet
+ * path completes twice on hardware. */
+int32_t agcProsperoRegisterWorkloadShadowProperties(void)
+{
+    AgcGcRegisterShadowDescriptor descriptors[2];
+    uintptr_t driver_base;
+    uintptr_t register_shadow_base;
+    uintptr_t cwsr_copy_base;
+    int32_t result;
+
+    if (!g_prospero.initialized || !g_prospero.mem_initialized)
+        return AGC_ERROR_NOT_INITIALIZED;
+    if (!g_prospero.direct_profile.workload_requires_shadow_properties)
+        return AGC_ERROR_NOT_SUPPORTED;
+    if (g_prospero.shadow_properties_registered)
+        return AGC_OK;
+    if (!g_prospero.ddid.cpu_addr || !g_prospero.cwsr.cpu_addr ||
+        !g_prospero.shadow_reg.cpu_addr)
+        return AGC_ERROR_NOT_INITIALIZED;
+
+    result = agcProsperoAllocateDriverMemory();
+    if (result != AGC_OK)
+        return result;
+
+    driver_base = (uintptr_t)g_prospero.driver_memory.cpu_addr;
+    register_shadow_base = driver_base + AGC_GC_REG_SHADOW_FIRST_OFFSET;
+    cwsr_copy_base = (uintptr_t)g_prospero.cwsr.cpu_addr +
+        g_prospero.profile.cwsr_work_offset;
+
+    if (!agcProsperoBuildFw1160RegisterShadowDescriptors(driver_base,
+            descriptors)) {
+        agcProsperoFreeDriverMemory();
+        return AGC_ERROR_INTERNAL;
+    }
+
+    result = sceKernelSetProcessProperty("Sce.Debug:Gn2",
+        g_prospero.ddid.cpu_addr, g_prospero.ddid.size,
+        (uint64_t)cwsr_copy_base, AGC_GC_REG_SHADOW_TOTAL_SIZE);
+    if (result != 0)
+        return AGC_ERROR_INTERNAL;
+    result = sceKernelSetVirtualRangeName((void *)register_shadow_base,
+        AGC_GC_REG_SHADOW_TOTAL_SIZE, "SceAgcRegShadow");
+    if (result != 0)
+        return AGC_ERROR_INTERNAL;
+
+    memcpy(g_prospero.shadow_reg.cpu_addr, descriptors,
+        sizeof(descriptors));
+    agcProsperoFlushRange(g_prospero.shadow_reg.cpu_addr,
+        sizeof(descriptors));
+
+    result = sceKernelSetProcessProperty("Sce.Debug:Gn3",
+        g_prospero.cwsr.cpu_addr, g_prospero.profile.cwsr_work_offset,
+        UINT64_C(0), UINT64_C(0));
+    if (result != 0)
+        return AGC_ERROR_INTERNAL;
+    result = sceKernelSetVirtualRangeName(g_prospero.cwsr.cpu_addr,
+        g_prospero.profile.cwsr_work_offset, "SceAgcGprDumpArea");
+    if (result != 0)
+        return AGC_ERROR_INTERNAL;
+
+    result = sceKernelSetProcessProperty("Sce.Debug:Gn4",
+        (void *)register_shadow_base, AGC_GC_REG_SHADOW_TOTAL_SIZE,
+        (uint64_t)(uintptr_t)g_prospero.shadow_reg.cpu_addr,
+        g_prospero.shadow_reg.size);
+    if (result != 0)
+        return AGC_ERROR_INTERNAL;
+    result = sceKernelSetVirtualRangeName((void *)cwsr_copy_base,
+        AGC_GC_REG_SHADOW_TOTAL_SIZE, "SceAgcRegShadowCopy");
+    if (result != 0)
+        return AGC_ERROR_INTERNAL;
+    result = sceKernelSetVirtualRangeName(g_prospero.shadow_reg.cpu_addr,
+        g_prospero.shadow_reg.size, "SceAgcRegShadowInfo");
+    if (result != 0)
+        return AGC_ERROR_INTERNAL;
+    result = sceKernelSetVirtualRangeName(g_prospero.ddid.cpu_addr,
+        g_prospero.ddid.size, "SceAgcDdid");
+    if (result != 0)
+        return AGC_ERROR_INTERNAL;
+
+    g_prospero.shadow_properties_registered = true;
     return AGC_OK;
 }
 
@@ -1751,6 +1892,7 @@ int32_t PS5_SYSV_ABI agcProsperoShutdown(void)
     agcProsperoFreeRegion(&g_prospero.trap_data);
     agcProsperoFreeRegion(&g_prospero.trap_code);
     agcProsperoFreeRegion(&g_prospero.gpu_info);
+    agcProsperoFreeDriverMemory();
 
     if (g_prospero.mmio_base) {
         (void)munmap(g_prospero.mmio_base, AGC_GC_MMIO_SIZE);
