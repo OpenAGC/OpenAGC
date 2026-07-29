@@ -96,6 +96,14 @@ On the same standard FW 11.60 console (`0x11600005`, SoC `0x00840f60`):
   primary suspend submission returned `AGC_OK`; queue destroy and shutdown
   also succeeded. ps5debug-NG reported no `eboot.elf` after the monitored
   stage 5 and stage 6 runs.
+- Stage 7 passed twice. Final suspend returned `AGC_OK` after the qualified
+  primary-suspend sequence; queue and driver teardown remained clean.
+- Stage 8 passed twice. An aligned mapped 16 KiB TF ring was accepted, the GC
+  context shut down, and the ring memory released successfully.
+- Stage 9 passed twice. The HS-offchip carrier accepted an aligned list pointer
+  with zero entries, then context teardown and memory release succeeded. This
+  qualifies the request/layout boundary, not non-empty patch-list execution.
+- ps5debug-NG reported no `eboot.elf` after every monitored stage 7-9 run.
 - Websrv retained each foreground HTTP pipe until the 20-second client timeout,
   but the cleanup check before the next run found no stale `eboot.elf`.
 
@@ -104,4 +112,5 @@ basic graphics-ring submission through clean teardown. It strongly localizes
 the original power-off to the corrected pre-submit mapping defects, though it
 cannot distinguish which individual defect was causal. Basic submit, async,
 authenticated queue lifecycle, and primary suspend are now qualified. Final
-suspend, TF-ring, and HS-offchip operations remain isolated pending gates.
+suspend and TF-ring are also qualified. The HS-offchip zero-entry carrier is
+qualified, while non-empty patch-list semantics remain hardware-pending.

@@ -1539,8 +1539,12 @@ lifecycle artifact is not mistaken for a GPU black-screen failure. Queue and
 suspend stages then each passed twice: authenticated queue handle 0 was created
 and destroyed cleanly, and primary suspend returned `AGC_OK` while that queue
 was active. ps5debug-NG confirmed no `eboot.elf` remained after the monitored
-runs. Final suspend, TF-ring, and HS-offchip remain pending; workload and
-default-state ABIs remain disabled by design.
+runs. Subsequent stages 7 and 8 each passed twice, qualifying final suspend and
+an aligned mapped 16 KiB TF ring. Stage 9 passed twice with an aligned
+HS-offchip list pointer and zero entries, qualifying its ioctl/payload boundary
+but not non-empty patch-list execution. All monitored runs shut down cleanly,
+released temporary memory, and left no `eboot.elf` according to ps5debug-NG.
+Workload and default-state ABIs remain disabled by design.
 
 ## Next RE Tasks
 

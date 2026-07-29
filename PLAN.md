@@ -1767,9 +1767,16 @@ Acceptance criteria:
 - ✅ FW 11.60 stage 6 passed twice: primary suspend returned `AGC_OK` while the
   qualified queue was active; teardown succeeded and ps5debug-NG confirmed no
   residual `eboot.elf` process.
-- Next isolate final suspend, TF-ring, and HS-offchip setup. Defaults and
-  workload remain disabled because their 11.60 contracts are not established
-  as compatible with OpenAGC's current APIs.
+- ✅ FW 11.60 stage 7 passed twice: final suspend and the complete queue
+  teardown returned `AGC_OK`.
+- ✅ FW 11.60 stage 8 passed twice: an aligned mapped 16 KiB TF ring was
+  accepted, followed by clean context shutdown and memory release.
+- ✅ FW 11.60 stage 9 passed twice: the HS-offchip zero-entry carrier accepted
+  an aligned list pointer. This qualifies the ABI boundary, not non-empty
+  patch-list execution.
+- Next enable exact runtime key `0x1160` and run the public init/submit/queue/
+  suspend lifecycle end-to-end. Keep defaults, workloads, suspend query, EOP
+  flip, and non-empty HS patch-list execution fail-closed or unadvertised.
 - Qualify later gates individually only after the preceding gate passes twice.
   Compute, graphics, and display remain prohibited until the full direct
   lifecycle has passed this staged ladder.
