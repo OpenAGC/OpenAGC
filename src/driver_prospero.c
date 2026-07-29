@@ -205,8 +205,7 @@ int32_t agcProsperoConfigureRuntimeProfile(uint32_t raw_version)
 {
     bool is_trinity = false;
 
-    /* sceKernelHasTrinityMode first appears in the inspected FW 9.00 driver. */
-    if (raw_version >= 0x09000000u) {
+    if (agcProsperoFirmwareUsesTrinityPredicate(raw_version)) {
         int32_t result = agcProsperoQueryTrinityMode(&is_trinity);
 
         if (result != AGC_OK)

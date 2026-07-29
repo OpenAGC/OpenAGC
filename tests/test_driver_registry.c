@@ -145,7 +145,8 @@ static void test_direct_operation_profiles(void)
     TEST_ASSERT(agcProsperoBuildDirectProfile(
         0x12200000u, false, &profile), "FW 12.20 submit profile builds");
     TEST_ASSERT_EQ(profile.capabilities,
-        AGC_DIRECT_CAP_SUBMIT | AGC_DIRECT_CAP_TF_RING |
+        AGC_DIRECT_CAP_SUBMIT | AGC_DIRECT_CAP_MEMORY |
+        AGC_DIRECT_CAP_TF_RING |
         AGC_DIRECT_CAP_HS_OFFCHIP | AGC_DIRECT_CAP_ASYNC_GRAPHICS,
         "FW 12.20 exposes only its exact carrier-qualified subset");
     TEST_ASSERT(profile.runtime.supports_tf_ring,
@@ -181,6 +182,8 @@ static void test_common_operation_carrier_profiles(void)
             "active carrier-qualified profile builds");
         TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_TF_RING) != 0,
             "active profile exposes exact public TF-ring carrier");
+        TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_MEMORY) != 0,
+            "active profile exposes exact internal-memory carrier");
         TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_HS_OFFCHIP) != 0,
             "active profile exposes exact HS-offchip carrier");
         TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_ASYNC_GRAPHICS) != 0,
@@ -205,7 +208,8 @@ static void test_common_operation_carrier_profiles(void)
                 "archival submit-only profile still builds");
             TEST_ASSERT((profile.capabilities & (AGC_DIRECT_CAP_TF_RING |
                 AGC_DIRECT_CAP_HS_OFFCHIP |
-                AGC_DIRECT_CAP_ASYNC_GRAPHICS)) == 0,
+                AGC_DIRECT_CAP_ASYNC_GRAPHICS |
+                AGC_DIRECT_CAP_MEMORY)) == 0,
                 "archival profile cannot inherit active carrier facts");
         }
     }
@@ -214,6 +218,17 @@ static void test_common_operation_carrier_profiles(void)
 static void test_trinity_runtime_profile(void)
 {
     AgcProsperoRuntimeProfile profile;
+
+    TEST_ASSERT(!agcProsperoFirmwareUsesTrinityPredicate(0x08600000u),
+        "FW 8.60 has no Trinity predicate import");
+    TEST_ASSERT(agcProsperoFirmwareUsesTrinityPredicate(0x09000000u),
+        "FW 9.00 exact key introduces Trinity predicate");
+    TEST_ASSERT(agcProsperoFirmwareUsesTrinityPredicate(0x12700000u),
+        "FW 12.70 exact key retains Trinity predicate");
+    TEST_ASSERT(!agcProsperoFirmwareUsesTrinityPredicate(0x09700000u),
+        "unknown neighboring key cannot inherit Trinity behavior");
+    TEST_ASSERT(!agcProsperoBuildRuntimeProfile(0x08600000u, true, &profile),
+        "pre-Trinity firmware rejects an impossible Trinity model");
 
     TEST_ASSERT(agcProsperoBuildRuntimeProfile(0x11600000u, true, &profile),
         "Trinity profile builds for inspected later firmware");

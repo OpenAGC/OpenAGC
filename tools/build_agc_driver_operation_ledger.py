@@ -23,6 +23,13 @@ FINGERPRINT_COLUMNS = {
     "sceAgcDriverSetupAsyncGraphics": "async_group",
 }
 
+TRINITY_KEYS = {
+    "0x0900", "0x0905", "0x0920", "0x0940", "0x0960",
+    "0x1001", "0x1020", "0x1040", "0x1060",
+    "0x1100", "0x1120", "0x1140", "0x1160",
+    "0x1200", "0x1202", "0x1220", "0x1240", "0x1260", "0x1270",
+}
+
 
 def rows_without_comments(path: Path):
     with path.open(encoding="utf-8", newline="") as source:
@@ -47,18 +54,20 @@ def load_fingerprints(path: Path) -> dict[tuple[str, str], str]:
 
 def evidence_for(key: str) -> dict[str, str]:
     evidence = {
-        "enabled_direct_ops": "submit16,tf-ring,hs-offchip,async",
+        "enabled_direct_ops": "submit16,memory,tf-ring,hs-offchip,async",
         "queue": "disabled-pending-layout",
         "suspend_submit": "disabled-pending-layout",
         "suspend_query": "disabled-permission-export",
         "workload": "disabled-not-adapted",
         "tf_ring": "RE-exact-public-0x80108128-hardware-pending",
         "hs_offchip": "RE-exact-0xc010812c-hardware-pending",
-        "memory": "disabled-pending-layout",
+        "memory": "RE-exact-standard-Trinity-hardware-pending",
         "defaults": "disabled-version-unknown",
         "async_graphics": "RE-exact-0x80048126-hardware-pending",
         "qualification": "RE-operation-carriers-hardware-pending",
     }
+    if key not in TRINITY_KEYS:
+        evidence["memory"] = "RE-exact-standard-hardware-pending"
     if key == "0x0550":
         evidence.update({
             "enabled_direct_ops": (

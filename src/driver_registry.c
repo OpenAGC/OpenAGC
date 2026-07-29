@@ -39,6 +39,13 @@ static const uint32_t g_standard_direct_aliases[] = {
     0x1260u, 0x1270u
 };
 
+static const uint32_t g_trinity_profile_aliases[] = {
+    0x0900u, 0x0905u, 0x0920u, 0x0940u, 0x0960u,
+    0x1001u, 0x1020u, 0x1040u, 0x1060u,
+    0x1100u, 0x1120u, 0x1140u, 0x1160u,
+    0x1200u, 0x1202u, 0x1220u, 0x1240u, 0x1260u, 0x1270u
+};
+
 static uint16_t agcBcdByte(uint32_t value)
 {
     return (uint16_t)(((value >> 4) & 0xfu) * 10u + (value & 0xfu));
@@ -85,6 +92,15 @@ static bool agcFirmwareAliasContains(const uint32_t *aliases,
     return false;
 }
 
+bool agcProsperoFirmwareUsesTrinityPredicate(uint32_t raw_version)
+{
+    uint16_t abi_key = agcFirmwareAbiKey(raw_version);
+
+    return agcFirmwareAliasContains(g_trinity_profile_aliases,
+        sizeof(g_trinity_profile_aliases) /
+            sizeof(g_trinity_profile_aliases[0]), abi_key);
+}
+
 bool agcProsperoFirmwareSupported(uint32_t raw_version)
 {
     uint16_t abi_key = agcFirmwareAbiKey(raw_version);
@@ -122,6 +138,8 @@ bool agcProsperoBuildDirectProfile(uint32_t raw_version, bool is_trinity,
     uint16_t abi_key = agcFirmwareAbiKey(raw_version);
 
     if (!profile_out)
+        return false;
+    if (is_trinity && !agcProsperoFirmwareUsesTrinityPredicate(raw_version))
         return false;
 
     if (agcFirmwareAliasContains(g_legacy_v1_aliases,
@@ -164,7 +182,7 @@ bool agcProsperoBuildDirectProfile(uint32_t raw_version, bool is_trinity,
      * Archival FW 1.x, 2.x, and 3.00 remain outside this promotion. */
     if (abi_key == 0x0320u ||
         agcProsperoStandardDirectAbiSupportsFirmware(raw_version)) {
-        direct.capabilities |= AGC_DIRECT_CAP_TF_RING |
+        direct.capabilities |= AGC_DIRECT_CAP_MEMORY | AGC_DIRECT_CAP_TF_RING |
             AGC_DIRECT_CAP_HS_OFFCHIP | AGC_DIRECT_CAP_ASYNC_GRAPHICS;
     }
 
@@ -172,12 +190,12 @@ bool agcProsperoBuildDirectProfile(uint32_t raw_version, bool is_trinity,
      * its exact public/internal wrappers; operations whose wrapper contract
      * differs (workloads) or remains unknown (defaults/query) stay disabled. */
     if (abi_key == 0x0550u) {
-        direct.capabilities |= AGC_DIRECT_CAP_MEMORY | AGC_DIRECT_CAP_QUEUE |
+        direct.capabilities |= AGC_DIRECT_CAP_QUEUE |
             AGC_DIRECT_CAP_SUSPEND_PRIMARY | AGC_DIRECT_CAP_SUSPEND_FINAL |
             AGC_DIRECT_CAP_WORKLOAD | AGC_DIRECT_CAP_DEFAULT_STATES;
         direct.defaults_version = 8u;
     } else if (abi_key == 0x1160u) {
-        direct.capabilities |= AGC_DIRECT_CAP_MEMORY | AGC_DIRECT_CAP_QUEUE |
+        direct.capabilities |= AGC_DIRECT_CAP_QUEUE |
             AGC_DIRECT_CAP_SUSPEND_PRIMARY | AGC_DIRECT_CAP_SUSPEND_FINAL;
     }
 

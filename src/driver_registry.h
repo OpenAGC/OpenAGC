@@ -73,6 +73,7 @@ typedef struct AgcDriverRegistryEntry {
 AgcFirmwareVersion agcFirmwareNormalize(uint32_t raw_version);
 bool agcProsperoFirmwareSupported(uint32_t raw_version);
 bool agcProsperoStandardDirectAbiSupportsFirmware(uint32_t raw_version);
+bool agcProsperoFirmwareUsesTrinityPredicate(uint32_t raw_version);
 bool agcProsperoBuildRuntimeProfile(uint32_t raw_version, bool is_trinity,
     AgcProsperoRuntimeProfile *profile_out);
 bool agcProsperoBuildDirectProfile(uint32_t raw_version, bool is_trinity,
