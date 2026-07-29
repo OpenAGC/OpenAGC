@@ -107,7 +107,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("firmware_root", type=Path)
     parser.add_argument("--ledger", type=Path,
-        default=Path("analysis/agc_installed_driver_versions.tsv"))
+        default=Path("analysis/agc_firmware_versions.tsv"))
     parser.add_argument("--aerolib", type=Path, required=True)
     parser.add_argument("--readelf", default="llvm-readelf")
     parser.add_argument("--objdump", default="llvm-objdump")

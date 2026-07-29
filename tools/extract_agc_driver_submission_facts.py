@@ -121,7 +121,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("firmware_root", type=Path)
     parser.add_argument("--profiles", type=Path,
-                        default=Path("analysis/agc_installed_driver_versions.tsv"))
+        default=Path("analysis/agc_firmware_versions.tsv"))
     parser.add_argument("--readelf", default="llvm-readelf")
     parser.add_argument("--objdump", default="llvm-objdump")
     parser.add_argument("--output", type=Path)

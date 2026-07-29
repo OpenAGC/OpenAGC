@@ -127,7 +127,7 @@ def evidence_for(key: str, defaults: dict[str, tuple[str, str]]) -> dict[str, st
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--profiles", type=Path,
-        default=Path("analysis/agc_installed_driver_versions.tsv"))
+        default=Path("analysis/agc_firmware_versions.tsv"))
     parser.add_argument("--fingerprints", type=Path,
         default=Path("analysis/agc_driver_wrapper_fingerprints.tsv"))
     parser.add_argument("--defaults", type=Path,

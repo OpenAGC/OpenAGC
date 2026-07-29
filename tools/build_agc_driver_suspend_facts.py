@@ -40,7 +40,7 @@ def groups(carriers: dict[tuple[str, str], set[str]], key: str,
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--profiles", type=Path,
-        default=Path("analysis/agc_installed_driver_versions.tsv"))
+        default=Path("analysis/agc_firmware_versions.tsv"))
     parser.add_argument("--carriers", type=Path,
         default=Path("analysis/agc_driver_command_carriers.tsv"))
     parser.add_argument("--output", type=Path, required=True)
