@@ -18,10 +18,10 @@ VideoOut memory:
 | 7 | `R32_FLOAT` | `47d4b25dcd174ff5859073c0221137bf6ecd00b3a76aff91a4ad7e05d178349d` |
 | 8 | `RG32_FLOAT` | `02124e8e89fecb91f5be5c47e3182f009829ce1a5b22ea6055d1b607171a202a` |
 | 9 | `RGBA32_FLOAT` | `1d7b26afc2bee20119c6f178aa630d24cc028b13f377a71f66e6708088dd2952` |
-| 10 | `RGBA8_UNORM` | `09c509f3dac6f6864ed53caf969a0046a33e4f7ad9f5cafe872b8a36b2bef406` |
-| 11 | `BGRA8_UNORM` | `37ed666df195750e32308819a372f5256b4f58caace8a01cb6f7daa0a5e0a840` |
-| 12 | `RGBA8_SRGB` | `92dcd0cb29926a2c1d9aaf24efe3eda6c1c2548225b739a98092d05fa80a1a94` |
-| 13 | `BGRA8_SRGB` | `f73f67b5ae326a4af2bb1ad9dfec4b056f7ee8535e2cf69c7493b3354b40f2bb` |
+| 10 | `RGBA8_UNORM` | `fc826cc3eafafb1fa890bfbd25223e393bce5b3737d0835edc646fe54b10c487` |
+| 11 | `BGRA8_UNORM` | `bf9a83c16b31ad37fcc35b86d936fe80c07f22df8da93136bb6dc1f97333aed8` |
+| 12 | `RGBA8_SRGB` | `de4a621acc733359783cea0d30baa17552a3c0afc42213c8325318136b046baf` |
+| 13 | `BGRA8_SRGB` | `5c2bc1e83d3b89d19a17ab310e7656d59f1d7a5c28d2475473169fa735337bd7` |
 
 Every artifact forces firmware ABI key `0x1160`, rejects Trinity hardware,
 uses version-12 defaults through the normal runtime, waits on the bounded EOP
@@ -75,8 +75,8 @@ The standard PS5 reporting raw firmware `0x11600005` completed this matrix:
 | RGB10A2_UNORM | 1 ms, 1 ms | histogram `{35857,27914,36523,155450}` | passed twice |
 | R11G11B10_FLOAT | 1 ms, 1 ms | FNV64 `0x4b75c00e8a6bb04d` | passed twice |
 | R32_FLOAT | 1 ms, 3 ms | changed/complete `255744`, invalid `0`, FNV64 `0x43e0f1986c4ec883` | passed twice |
-| RG32_FLOAT | 1 ms | changed/complete `255744`, invalid `0`, FNV64 `0x806171be9908c276` | one pass |
-| RGBA32_FLOAT | not run | — | pending |
+| RG32_FLOAT | immediate, immediate | changed/complete `255744`, invalid `0`, FNV64 `0x806171be9908c276` | passed twice (logged artifact) |
+| RGBA32_FLOAT | immediate, immediate | changed/complete `255744`, invalid `0`, FNV64 `0x1e8771ed63381dce` | passed twice (logged artifact) |
 
 Every qualifying run reported the exact `0x1160` profile, passed the Wave32
 and completion-marker audits, shut the driver down, returned final graphics
@@ -129,7 +129,7 @@ self-termination code of their streaming counterparts; the only conditional
 addition opens and line-buffers the result file before initialization. Run the
 file-backed RG32 artifact twice rather than mixing evidence from two artifacts.
 
-The five twice-passed formats are hardware-qualified on this FW 11.60 console,
+All seven formats are hardware-qualified on this FW 11.60 console,
 but project-wide parity promotion still requires matching modern headless FW
 5.50 regressions. The FW 5.50 console was unreachable on ports 8080 and 744
 during this session.

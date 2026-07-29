@@ -86,9 +86,10 @@ AMD PM4 packet ancestry overlap in useful ways.
   `analysis/fw1160_narrow_fp16_gate_audit_20260730.md`.
 - Seven additional offscreen format gates now build under the same exact
   profile and bounded runner: R8, RG8, RGB10A2, R11G11B10, R32, RG32, and
-  RGBA32. R8, RG8, RGB10A2, R11G11B10, and R32 passed twice on FW 11.60.
-  RG32 passed once; its second verdict and both RGBA32 runs remain pending a
-  reboot because websrv stopped streaming bounded launches. RGBA8/BGRA8 UNORM
+  RGBA32. All seven passed twice on FW 11.60; logged RG32 reproduced FNV64
+  `0x806171be9908c276` and logged RGBA32 reproduced
+  `0x1e8771ed63381dce`, with zero invalid samples and clean shutdowns.
+  RGBA8/BGRA8 UNORM
   and sRGB variants now have real headless flexible-memory targets, unchanged
   native oracles, exact FW 11.60 artifacts, and exact FW 5.50 regression
   mirrors. Run them after RG32/RGBA32 on the clean boot. See
@@ -100,6 +101,11 @@ AMD PM4 packet ancestry overlap in useful ways.
   verdict. File-backed variants and a stale-proof FTP polling runner now use
   that headless-only loader path for RG32, RGBA32, and the four RGBA8 gates;
   use the same logged artifact for both qualifying passes.
+  The first RGBA8_UNORM gate found a stale centered-square coverage oracle:
+  GPU execution, fence, marker, and shutdown passed, but the current headless
+  full-rectangle viewport produced 224,640 pixels rather than the obsolete
+  126,293 expectation. The validator now uses rectangular area in headless
+  mode and retains the square formula for display fixtures; rebuild and retry.
 - The first uncompressed depth/stencil tier is also built for exact FW 11.60:
   D16, S8-only, then D16+S8. Each target is headless, retains the exact native
   four-draw readback oracle under the current full-rectangle viewport, and

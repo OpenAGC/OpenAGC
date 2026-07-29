@@ -19,7 +19,8 @@ targets cannot overlap and retain identical low address alignment.
 `RGBA8_UNORM` and `BGRA8_UNORM` retain the complete baseline graphics audit:
 the expected render-target name, ordered GPU markers and bounded EOP fence,
 nonzero triangle coverage, interleaved vertex fetch, bound u16 indexed draw,
-and gfx1013 image plus bilinear-sampler checks.
+and gfx1013 image plus bilinear-sampler checks. They also emit and require a
+native packed FNV64 readback hash.
 
 `RGBA8_SRGB` and `BGRA8_SRGB` draw the same workload first into the UNORM
 control and then into the native sRGB target. Their CPU readback requires:
@@ -39,14 +40,14 @@ headless gates.
 
 | Firmware | Target | SHA-256 |
 | --- | --- | --- |
-| 11.60 | `RGBA8_UNORM` | `09c509f3dac6f6864ed53caf969a0046a33e4f7ad9f5cafe872b8a36b2bef406` |
-| 11.60 | `BGRA8_UNORM` | `37ed666df195750e32308819a372f5256b4f58caace8a01cb6f7daa0a5e0a840` |
-| 11.60 | `RGBA8_SRGB` | `92dcd0cb29926a2c1d9aaf24efe3eda6c1c2548225b739a98092d05fa80a1a94` |
-| 11.60 | `BGRA8_SRGB` | `f73f67b5ae326a4af2bb1ad9dfec4b056f7ee8535e2cf69c7493b3354b40f2bb` |
-| 5.50 | `RGBA8_UNORM` | `14ef47de0c9f7a0784ceee60cbc048a9caa87865910e8be7f0e7b3321fe27c94` |
-| 5.50 | `BGRA8_UNORM` | `3a3f873941de40fd9533adb76843dae2c00aa33f3d8631b3273896b1d99f68eb` |
-| 5.50 | `RGBA8_SRGB` | `fbac8690a796d92eba253e195b8e97377f4fdfefd193744410a0ccc789bdabc9` |
-| 5.50 | `BGRA8_SRGB` | `b6d12b1f42f36da9954a74728265c0b56312df6fe03f3141e131994ede64334c` |
+| 11.60 | `RGBA8_UNORM` | `fc826cc3eafafb1fa890bfbd25223e393bce5b3737d0835edc646fe54b10c487` |
+| 11.60 | `BGRA8_UNORM` | `bf9a83c16b31ad37fcc35b86d936fe80c07f22df8da93136bb6dc1f97333aed8` |
+| 11.60 | `RGBA8_SRGB` | `de4a621acc733359783cea0d30baa17552a3c0afc42213c8325318136b046baf` |
+| 11.60 | `BGRA8_SRGB` | `5c2bc1e83d3b89d19a17ab310e7656d59f1d7a5c28d2475473169fa735337bd7` |
+| 5.50 | `RGBA8_UNORM` | `80fd88e8b8b612ecfadbd98ae9014e60aa3aab3f8c29d0bb901676a7afc7011e` |
+| 5.50 | `BGRA8_UNORM` | `65709b46f52bfbe6db56d026428b50c088f78c024d7fe391b67714a3ef83c6b0` |
+| 5.50 | `RGBA8_SRGB` | `9f4556eeddd622ca12d188728f66f68a72ffb9813f988793548fb02215476caf` |
+| 5.50 | `BGRA8_SRGB` | `fdabd12d284515a426a38a0778c4f28ffb0eb617e7ef29f7d324500a00eebb77` |
 
 The 11.60 artifacts force ABI key `0x1160`; the regression mirrors force
 `0x0550`. All reject Trinity hardware, self-terminate after flushing their
@@ -62,14 +63,24 @@ fresh final verdict before applying every normal oracle:
 
 | File-backed FW 11.60 target | SHA-256 |
 | --- | --- |
-| `RGBA8_UNORM` | `833638d9e719b9e18657a3fdfea3bc3f289eaf91b72a1fd526f64972dc90bad8` |
-| `BGRA8_UNORM` | `789ac9567a86e49a4c5d651936c7290294177f75785310675b54f7be8d91308e` |
-| `RGBA8_SRGB` | `b31298715ea342fcd4300b115d8dbceb58c1d31c57032cecbce0c409058e40da` |
-| `BGRA8_SRGB` | `8a87bb36a1f73df8edcdce20789806c2c3a599581692fbb69e49373b301d4342` |
+| `RGBA8_UNORM` | `da1c8cab69f099b1ab58f1ee506893e2070e95ad139198a7009b9147a9d83fbe` |
+| `BGRA8_UNORM` | `997900d3f1419713109006cc0bc2ac64495e834bd57c0e7c0d5958945e5e8375` |
+| `RGBA8_SRGB` | `b31f04e8bbf9a87ed1120548c9ea712d54c420ed727e0337b2d50b9e34fb3a45` |
+| `BGRA8_SRGB` | `fb69aac11b7bce9f189a0362fe23db070780a4ea9b71d350278d1f29f325a02f` |
 
 Use one file-backed artifact for both qualifying passes of each target. The
 logging mode does not alter the render-target allocation, shader, PM4 stream,
 fence, native readback, or shutdown path.
+
+The first FW 11.60 RGBA8_UNORM attempt exposed a retained-oracle bug rather
+than a GPU failure. The current public viewport covers the full 1920x1080
+rectangle and rendered 224,640 pixels, but the display-era validator still
+computed its expectation from `min(width,height)^2` (about 126,293 pixels).
+The DCB fenced immediately, marker and vertex fetch passed, and shutdown was
+clean; only the obsolete coverage-derived index and texture verdicts failed.
+Headless RGBA8 now derives expected coverage from `width*height`, while
+display-backed fixtures retain the centered-square formula. This is the same
+full-rectangle distinction already established by the FW 11.60 depth gates.
 
 ## Hardware order
 

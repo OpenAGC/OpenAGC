@@ -405,11 +405,12 @@ current R16 artifact differs from the older display-backed retained hash. See
 `analysis/fw1160_narrow_fp16_gate_audit_20260730.md`.
 
 The remaining FW 5.50-qualified offscreen formats also have exact FW 11.60
-headless artifacts. R8, RG8, RGB10A2, R11G11B10, and R32 each passed twice on
-standard raw firmware `0x11600005`, with reproduced native hashes/histograms,
-1-3 ms fences, clean shutdowns, and no residual process. RG32 passed once;
-its second pass and both RGBA32 runs remain pending after websrv transport
-stopped returning bounded verdicts. RGBA8/BGRA8 UNORM and sRGB now use real
+headless artifacts. R8, RG8, RGB10A2, R11G11B10, R32, RG32, and RGBA32 each
+passed twice on standard raw firmware `0x11600005`, with reproduced native
+hashes/histograms, bounded fences, clean shutdowns, and no residual process.
+Logged RG32 reproduced FNV64 `0x806171be9908c276`; logged RGBA32 reproduced
+`0x1e8771ed63381dce`, both with 255,744 complete and zero invalid samples.
+RGBA8/BGRA8 UNORM and sRGB now use real
 headless flexible-memory targets. The sRGB pair preserves distinct aligned
 UNORM-control and sRGB-result surfaces plus exact transfer, coverage, alpha,
 conversion-count, and native-hash checks. Exact FW 11.60 and FW 5.50 artifacts
@@ -430,6 +431,15 @@ exact RG32 artifact launched headlessly through websrv daemon mode and passed:
 2470-dword submit, immediate fence, 255,744 complete values, zero invalid,
 FNV64 `0x806171be9908c276`, clean shutdown, and final PASS. Logged headless
 gates now use this proven daemon transport; display-backed tests do not.
+
+The first headless RGBA8_UNORM run exposed a fixture regression: the GPU DCB,
+fence, marker, vertex fetch, driver shutdown, and process exit all succeeded,
+but the retained display-era coverage oracle expected a centered square. The
+current public full-extent viewport rendered 224,640 pixels across 1920x1080,
+so index and texture verdicts failed against the obsolete 126,293 estimate.
+Headless RGBA8 coverage now uses rectangular area, display-backed coverage
+keeps the retained square formula, and UNORM gates additionally report a
+native packed FNV64 hash.
 
 Exact `0x0550` modern headless mirrors for R16, RG16, R8, RG8, RGB10A2,
 R11G11B10, R32, RG32, and RGBA32 are cross-built without warnings. The shared

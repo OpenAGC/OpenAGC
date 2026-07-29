@@ -85,6 +85,8 @@ case "$EXPECTED_TARGET" in
             "$output_file" || exit 1
         ;;
     RGBA8_UNORM|BGRA8_UNORM)
+        grep -Eq '^\[RGBA8\] changed=[1-9][0-9]* distinct=[3-9][0-9]* packed-fnv64=0x[0-9a-f]{16}: PASS$' \
+            "$output_file" || exit 1
         grep -q '^\[Vertex\] Interleaved buffer fetch: PASS$' \
             "$output_file" || exit 1
         grep -q '^\[Index\] Bound u16 indexed draw: PASS$' \

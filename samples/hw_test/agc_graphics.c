@@ -2785,6 +2785,9 @@ static bool dispatch_graphics(GraphicsTest *test,
 #if AGC_VALIDATE_R11G11B10
     uint64_t packed_color_hash = UINT64_C(1469598103934665603);
 #endif
+#if AGC_VALIDATE_RGBA8_STD || AGC_VALIDATE_RGBA8_REFERENCE
+    uint64_t rgba8_packed_hash = UINT64_C(1469598103934665603);
+#endif
     for (uint32_t i = 0; i < target_pixels; i++) {
         uint32_t color = rt[i];
         if (color == DIAGNOSTIC_CLEAR_COLOR)
@@ -2796,6 +2799,10 @@ static bool dispatch_graphics(GraphicsTest *test,
 #if AGC_VALIDATE_R11G11B10
         packed_color_hash ^= color;
         packed_color_hash *= UINT64_C(1099511628211);
+#endif
+#if AGC_VALIDATE_RGBA8_STD || AGC_VALIDATE_RGBA8_REFERENCE
+        rgba8_packed_hash ^= color;
+        rgba8_packed_hash *= UINT64_C(1099511628211);
 #endif
         if (unique_color_count < 8) {
             bool seen = false;
@@ -2815,15 +2822,18 @@ static bool dispatch_graphics(GraphicsTest *test,
         printf("  color[%u] = 0x%08x\n", i, unique_colors[i]);
     const uint32_t viewport_extent =
         target->width < target->height ? target->width : target->height;
+    const uint64_t viewport_area = AGC_GRAPHICS_HEADLESS ?
+        (uint64_t)target->width * target->height :
+        (uint64_t)viewport_extent * viewport_extent;
 #if AGC_TESS_GEOMETRY
     /* The combined TES+GS control shrinks every microtriangle around its
      * centroid by 0.78, reducing ideal RGBA8 coverage by 0.78^2. */
     const uint32_t expected_changed = (uint32_t)
-        (((uint64_t)viewport_extent * viewport_extent * 1774u * 1521u) /
+        ((viewport_area * 1774u * 1521u) /
          (16384u * 2500u));
 #else
     const uint32_t expected_changed = (uint32_t)
-        (((uint64_t)viewport_extent * viewport_extent * 1774u) / 16384u);
+        ((viewport_area * 1774u) / 16384u);
 #endif
     const uint32_t coverage_tolerance = 1024u;
     printf("[Readback] Expected triangle coverage: about %u (+/-%u)\n",
@@ -2869,6 +2879,14 @@ static bool dispatch_graphics(GraphicsTest *test,
            packed_hash_pass ? "PASS" : "FAIL");
     return vertex_fetch_pass && indexed_draw_pass && texture_sampler_pass &&
            packed_hash_pass;
+#elif AGC_VALIDATE_RGBA8_STD || AGC_VALIDATE_RGBA8_REFERENCE
+    const bool rgba8_native_pass = vertex_fetch_pass && indexed_draw_pass &&
+        texture_sampler_pass;
+    printf("[RGBA8] changed=%u distinct=%u packed-fnv64=0x%016llx: %s\n",
+           changed, unique_color_count,
+           (unsigned long long)rgba8_packed_hash,
+           rgba8_native_pass ? "PASS" : "FAIL");
+    return rgba8_native_pass;
 #else
     return vertex_fetch_pass && indexed_draw_pass && texture_sampler_pass;
 #endif
