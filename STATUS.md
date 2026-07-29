@@ -413,10 +413,12 @@ See `analysis/fw1160_color_format_gate_matrix_20260730.md`.
 The uncompressed D16, S8-only, and D16+S8 paths now have exact FW 11.60
 headless artifacts and a cleanup-first bounded runner. Their native D16, S8,
 color, marker, fence, shutdown, and final-verdict oracles exercise the same
-four-draw fixture under the current full-rectangle viewport. They are built,
-not hardware-qualified, and must pass twice each in increasing risk order
-before the matching modern headless FW 5.50 regression. HTILE, expclear,
-compressed metadata, and MSAA are deliberately outside this first tier. See
+four-draw fixture under the current full-rectangle viewport. D16, S8-only,
+and D16+S8 each passed twice on standard FW `0x11600005`; all fences completed
+in 1-3 ms, all exact native distributions matched, shutdown passed, and
+ps5debug-NG found no residual process. Project-wide promotion awaits the
+matching modern headless FW 5.50 regression. HTILE, expclear, compressed
+metadata, and MSAA are deliberately outside this first tier. See
 `analysis/fw1160_uncompressed_depth_gate_audit_20260730.md`.
 
 An initial D16 launch stopped before PM4 construction/submission because the

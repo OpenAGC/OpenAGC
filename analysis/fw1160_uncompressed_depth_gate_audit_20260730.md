@@ -83,3 +83,25 @@ After all six FW 11.60 runs pass identically, rerun the corresponding FW 5.50
 artifacts to rule out regression before promoting these capabilities. HTILE,
 expclear, compressed depth/stencil, and MSAA require later, separately bounded
 gates.
+
+## FW 11.60 hardware result
+
+All three uncompressed gates passed twice on the standard PS5 reporting raw
+firmware `0x11600005`:
+
+| Gate | Run 1 fence | Run 2 fence | Exact native result |
+| --- | ---: | ---: | --- |
+| D16 | 1 ms | 1 ms | color `228096/228096`; D16 `1617408/228096/228096` |
+| S8-only | 1 ms | 1 ms | color `228096/228096`; S8 `2165248/456192/0` |
+| D16+S8 | 1 ms | 3 ms | both exact D16 and S8 distributions above |
+
+Every qualifying run reported the exact `0x1160` profile, Wave32 NGG and PS,
+all four stage markers plus the completion marker, `SubmitDcb: AGC_OK`, driver
+shutdown PASS, and final graphics PASS. ps5debug-NG found no residual `eboot`
+after every run; its port 744 and websrv port 8080 remained responsive after
+the matrix.
+
+This hardware-qualifies the three base uncompressed paths on the tested FW
+11.60 console. Project-wide promotion remains pending the matching modern
+headless regression on FW 5.50. The two earlier rejected harness-development
+runs do not count toward the two-pass result.
