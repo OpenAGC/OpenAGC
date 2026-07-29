@@ -108,8 +108,8 @@ int32_t PS5_SYSV_ABI sceAgcDriverSubmitEopFlip(
 
 /* OpenAGC workload convenience API — begin/end one workload on the GPU.
  * This is not ABI-compatible with Sony's similarly named multi-argument
- * packet builders. The direct FW 5.50 implementation builds and submits its
- * own hardware-qualified SET_WORKLOAD (0x1E) packet.
+ * packet builders. Exact direct profiles may build and submit OpenAGC's own
+ * separately qualified SET_WORKLOAD (0x1E) packet.
  * \param workload_id  Workload ID (validated by SPRX; must be non-zero)
  * Returns 0 on success, AGC error code on failure. */
 int32_t PS5_SYSV_ABI sceAgcDriverSetWorkloadsActive(uint32_t workload_id);

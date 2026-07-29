@@ -619,6 +619,37 @@ int main(void) {
             printf("    Workload ended\n");
         else
             printf("    WARNING: EndWorkload failed\n");
+
+        if (workload_ok) {
+            const uint32_t workload_marker = 0xD01DCAFEu;
+            submit_markers[0] = 0u;
+            cb_buffers[0][4] = workload_marker;
+            clflush((u_long)(uintptr_t)submit_markers);
+            clflush((u_long)(uintptr_t)cb_buffers[0]);
+            mfence();
+
+            AgcCommandBufferSubmit workload_probe = {
+                .command_address = (uintptr_t)cb_buffers[0],
+                .dword_count = used_dwords[0],
+                .reserved = 0u,
+            };
+            err = sceAgcDriverSubmitDcb(&workload_probe);
+            uint32_t workload_wait_ms = 0u;
+            while (workload_wait_ms < 5000u) {
+                clflush((u_long)(uintptr_t)submit_markers);
+                mfence();
+                if (submit_markers[0] == workload_marker)
+                    break;
+                usleep(50000u);
+                workload_wait_ms += 50u;
+            }
+            printf("[10c] post-workload marker after %u ms: 0x%08X (%s)\n",
+                   workload_wait_ms, submit_markers[0],
+                   err == AGC_OK && submit_markers[0] == workload_marker ?
+                       "PASS" : "FAIL");
+            workload_ok = err == AGC_OK &&
+                submit_markers[0] == workload_marker;
+        }
     } else {
         workload_ok = !AGC_EXPECT_WORKLOAD && err == AGC_ERROR_NOT_SUPPORTED;
         printf("    Workload fail-closed contract: %s\n",

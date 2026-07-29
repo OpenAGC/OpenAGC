@@ -574,6 +574,10 @@ sampled colors, no invalid components, and packed hash `0x4a40c2eb4f12bc26`.
 The same revision then passed FW 5.50's 1,800-flip graphics conformance sample.
 Only FW 11.60 presentation is skipped, keeping proven graphics execution
 independent from its still-unqualified VideoOut linear-buffer contract.
+FW 11.60 workload parity is staged only for OpenAGC's explicitly separate
+one-ID convenience extension. The public-path probe now requires a submitted
+post-workload `WRITE_DATA` marker, so two accepted calls cannot be mistaken for
+GPU execution if either three-dword packet stalls the ordered submit stream.
 
 The Sony workload contract itself is recovered for all active firmware:
 seven active-wrapper and three complete-wrapper groups converge on the same
