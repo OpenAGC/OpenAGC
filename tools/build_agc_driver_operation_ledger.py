@@ -112,14 +112,14 @@ def evidence_for(key: str, defaults: dict[str, tuple[str, str]]) -> dict[str, st
                 "submit16,memory,queue,suspend-primary,suspend-final,"
                 "tf-ring,hs-offchip,async"
             ),
-            "queue": "RE-exact-authenticated-0xc0408121-0xc00c810e",
-            "suspend_submit": "RE-exact-0xc010811c-0xc0108139",
+            "queue": "hardware-qualified-authenticated-0xc0408121-0xc00c810e",
+            "suspend_submit": "hardware-qualified-primary-final",
             "workload": "disabled-nine-dword-Sony-ABI",
-            "tf_ring": "RE-exact-public-0x80108128",
-            "hs_offchip": "RE-exact-0xc010812c",
-            "memory": "RE-exact-standard-Trinity",
-            "async_graphics": "RE-exact-0x80048126",
-            "qualification": "RE-exact-hardware-pending",
+            "tf_ring": "hardware-qualified-public-0x80108128",
+            "hs_offchip": "hardware-qualified-zero-entry-carrier-0xc010812c",
+            "memory": "hardware-qualified-standard-RE-exact-Trinity",
+            "async_graphics": "hardware-qualified-0x80048126",
+            "qualification": "hardware-qualified-standard-FW11.60",
         })
     return evidence
 

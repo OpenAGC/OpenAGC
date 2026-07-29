@@ -60,10 +60,11 @@ The typed layouts shared with FW 5.50 and locked by `_Static_assert` in
 
 ## Direct-operation status
 
-FW 11.60 is statically qualified (hardware pending) for submit16, standard and
-Trinity internal-memory sizing, authenticated queue create/destroy, primary
-and final suspend submission, public TF-ring setup, HS-offchip setup, and async
-graphics setup. Its workload wrappers build a larger, different packet
+Standard-PS5 FW 11.60 is hardware-qualified for submit16, standard internal
+memory, authenticated queue create/destroy, primary and final suspend
+submission, public TF-ring setup, the zero-entry HS-offchip carrier, and async
+graphics setup. Trinity sizing remains exact-RE-qualified and hardware
+unverified. Its workload wrappers build a larger, different packet
 contract than OpenAGC's one-ID workload helper, so workload calls fail closed.
 The one-ID helper remains enabled only on FW 5.50 because its independent
 three-dword submission path passed the real-console qualification sample; it
@@ -118,6 +119,6 @@ available. Standard PS5 uses a `0x1000000` CWSR allocation, a
 `0xa00000` CWSR working offset, and a `0x100000` GPU-info span. Trinity/PS5 Pro
 uses `0x1600000`, `0x1000000`, and `0x180000`, respectively.
 
-Only FW 5.50 has been exercised on real hardware. Other registered builds are
-RE-verified aliases and must remain documented as awaiting per-firmware
-hardware validation.
+FW 5.50 and standard-PS5 FW 11.60 have been exercised on real hardware. Every
+other active exact key is runtime-selectable from its SPRX-verified operation
+subset but remains hardware-unverified on matching firmware/model hardware.

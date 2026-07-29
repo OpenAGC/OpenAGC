@@ -23,12 +23,15 @@ Current boundary:
 - FW `0x0550` is hardware-qualified for its listed direct operations. Its
   one-ID workload submit is an independently tested OpenAGC extension, not an
   ABI-compatible implementation of Sony's multi-argument workload exports.
-- FW `0x1160` is exact-RE-qualified and hardware-pending for the listed subset.
-  Workloads, suspend query, and default states remain disabled.
-- Every active firmware key has exact submit16, internal-memory,
+- Standard-PS5 FW `0x1160` is hardware-qualified for submit16, internal memory,
+  authenticated queue lifecycle, primary/final suspend, public TF-ring,
+  zero-entry HS-offchip carrier, and async setup. Workloads, suspend query,
+  default states, EOP flip, and non-empty HS patch lists remain disabled.
+- Every active firmware key is runtime-selectable and has exact submit16, internal-memory,
   authenticated-queue, primary-suspend, public TF-ring, HS-offchip, and async
-  carrier evidence. Outside FW 5.50 these operations remain hardware-pending;
-  other fields record why each operation stays disabled.
+  carrier evidence. Outside the tested FW 5.50 and standard-PS5 FW 11.60
+  profiles these operations remain hardware-unverified; other fields record
+  why each operation stays disabled.
 - The direct-named Sony suspend, TF-ring, and HS-offchip exports are common
   permission stubs across all 39 profiles. Direct `/dev/gc` support therefore
   depends on separately recovered internal ioctl paths, never export presence.

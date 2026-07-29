@@ -1460,14 +1460,15 @@ selection. Installed-module probing also changed submission behavior across
 later payload processes, so it must never be followed by a direct fallback in
 the same boot session; see `analysis/sony_export_forwarding_550.md`.
 
-Direct `/dev/gc` operations are now independently capability-gated. FW 5.50
+Direct `/dev/gc` operations are independently capability-gated. FW 5.50
 retains its qualified set, including the independently hardware-proven
-workload convenience submit; FW 11.60 enables its statically proven submit,
-standard/Trinity memory, queue, primary/final suspend, TF-ring, HS-offchip, and
-async set; its workload, suspend-query, and defaults operations fail closed.
-All other active keys expose the common submit16, exact internal-memory,
+workload convenience submit. Standard-PS5 FW 11.60 is hardware-qualified for
+submit, memory, queue, primary/final suspend, TF-ring, the zero-entry
+HS-offchip carrier, and async setup; its workload, suspend-query, defaults,
+EOP-flip, and non-empty HS patch-list operations fail closed. Every other
+active exact key exposes the common SPRX-qualified submit16, internal-memory,
 authenticated-queue, primary-suspend, public TF-ring, HS-offchip, and async
-carrier-qualified subset. Matching hardware validation is pending.
+subset and is explicitly hardware-unverified.
 FW 1.00, 2.x, and 3.00 aliases remain preserved as archival RE evidence but
 are rejected by supported-firmware and runtime/direct-profile selection;
 FW 3.20 is the lowest active runtime target.
@@ -1483,8 +1484,8 @@ operation-level row per active four-digit key, recording the enabled direct
 subset and the exact reason every other operation remains disabled. The
 generated ledger gives all 39 keys the common exact submit16, internal-memory,
 authenticated-queue, primary-suspend, public TF-ring, HS-offchip, and async
-subset; only hardware-qualified `0x0550` and the deeper exact-RE-qualified
-`0x1160` profile enable additional operations.
+subset; only hardware-qualified `0x0550` and standard-PS5 `0x1160` profiles
+enable their separately proven additional operations.
 `analysis/agc_firmware_versions.tsv` is the direct evidence index used by every
 extractor; the direct analysis no longer depends on an installed-driver profile
 ledger.
@@ -1508,23 +1509,12 @@ The firmware-parameterized conformance result was 1/1 in two seconds
 (`20260729T091752Z-72225`). This supersedes the inconclusive
 2026-07-26 run performed after a contaminating Sony-module probe.
 
-FW 11.60 remains exact-RE-qualified and runtime-blocked while staged hardware
-requalification proceeds. On 2026-07-29 a
-standard PS5 reported raw `0x11600005`; after model detection was corrected to
-the exact `hw.sce_main_socid` predicate, the direct probe froze the UI and the
-console powered itself off before a buffered operation log was recovered.
-Runtime selection now rejects FW 11.60 and every other non-hardware-qualified
-profile. `agc_init_fw1160.elf` is build-only and its deployment target fails.
-Offline comparison then found and fixed four pre-submit mismatches: GC aperture
-protection `0x22`, `sceKernelSetVirtualRangeName` instead of `mlock`, Sony's two
-fixed flexible-memory address hints, and complete DDID zeroing. The sample's
-mutating aperture preflight was also removed. These corrections are not yet
-hardware-qualified; see `analysis/fw1160_direct_poweroff_20260729.md`.
-The corrected implementation then passed the complete FW 5.50 `agc_init`
-hardware probe in two seconds, including exact hinted addresses, defaults,
-multi-DCB markers, wait64, async, queue, suspend, and workload lifecycle
-(`20260729T111638Z-98955`).
-FW 11.60 staged requalification then passed identity-only stage 0 twice and
+On 2026-07-29 an initial standard-PS5 FW 11.60 probe powered the console off.
+SPRX comparison identified and corrected four pre-submit mismatches: GC
+aperture protection `0x22`, `sceKernelSetVirtualRangeName` instead of `mlock`,
+Sony's fixed flexible-memory address hints, and complete DDID zeroing. The
+sample's mutating aperture preflight was also removed. FW 11.60 staged
+requalification then passed identity-only stage 0 twice and
 corrected init-plus-shutdown stage 1 twice. The console remained responsive and
 powered on. Isolated stage 2 then passed twice with all nine internal regions at
 Sony's exact hinted addresses and clean shutdown. Isolated stage 3 passed twice:
@@ -1545,6 +1535,18 @@ HS-offchip list pointer and zero entries, qualifying its ioctl/payload boundary
 but not non-empty patch-list execution. All monitored runs shut down cleanly,
 released temporary memory, and left no `eboot.elf` according to ps5debug-NG.
 Workload and default-state ABIs remain disabled by design.
+
+After that ladder, ordinary runtime selection for exact key `0x1160` passed
+the complete public `agc_init_fw1160.elf` lifecycle twice on raw FW
+`0x11600005`: all mappings, three two-DCB marker frames, nine-dword wait64,
+async setup, authenticated queue lifecycle, primary suspend, memory release,
+and driver shutdown passed. Defaults and the FW 5.50-only workload extension
+returned the expected `AGC_ERROR_NOT_SUPPORTED`. The sample self-terminated,
+and ps5debug-NG confirmed no residual `eboot.elf`. The same teardown revision
+then passed the full FW 5.50 `agc_init` regression, including V8 defaults and
+workload lifecycle. Every exact active key from FW 3.20 through FW 12.70 is now
+runtime-selectable for its SPRX-qualified operation subset; untested profiles
+remain explicitly hardware-unverified.
 
 ## Next RE Tasks
 

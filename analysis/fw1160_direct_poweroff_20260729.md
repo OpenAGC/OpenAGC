@@ -5,8 +5,9 @@
 On 2026-07-29 a standard PS5 reported system software `0x11600005`. The first
 probe that passed firmware/model selection froze the UI and the console powered
 itself off. Websrv stopped responding before the buffered operation log was
-delivered, so the last completed operation cannot be claimed from runtime
-evidence. Full FW 11.60 deployment remains disabled.
+delivered, so the last completed operation could not be identified at the
+time. The corrected implementation has since passed the complete staged and
+public-path qualification described below.
 
 ## Recovered initialization mismatches
 
@@ -114,3 +115,20 @@ cannot distinguish which individual defect was causal. Basic submit, async,
 authenticated queue lifecycle, and primary suspend are now qualified. Final
 suspend and TF-ring are also qualified. The HS-offchip zero-entry carrier is
 qualified, while non-empty patch-list semantics remain hardware-pending.
+
+## Full public-path result
+
+After the staged ladder passed, exact runtime key `0x1160` was enabled and
+`agc_init_fw1160.elf` exercised the ordinary public selector twice. Each run
+was immediately preceded by the process-cleanup ELF and reported raw firmware
+`0x11600005`, standard-PS5 model selection, and `prospero-gc-submit16`.
+
+Both runs passed all nine internal mappings, three consecutive two-DCB marker
+frames, the exact nine-dword `WAIT_REG_MEM64` packet, async setup,
+authenticated queue create/destroy, primary suspend, sample-memory release,
+and `agcDriverShutdown`. Default states and the OpenAGC workload extension
+returned the expected `AGC_ERROR_NOT_SUPPORTED`. The sample flushed
+`Probe result: PASS` and self-terminated; ps5debug-NG confirmed no residual
+`eboot.elf`. The same teardown revision then passed the complete FW 5.50
+`agc_init` regression, including V8 defaults and the FW 5.50-only workload
+extension.

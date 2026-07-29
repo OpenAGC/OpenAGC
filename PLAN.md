@@ -181,7 +181,7 @@ official SDK parity, all-firmware support, VRS, or ray-tracing completeness.
 | 3. Re-run the complete FW 5.50 websrv suite | **Complete** | Revision `c0633c7` passed the dependency-ordered base, compute, baseline/NGG, tessellation, and combined-stage matrix through curl/websrv. Required three-run repeats were deterministic, every applicable case completed 1,800/1,800 flips, and the sequential run had no hang, panic, or UI crash. |
 | 4. Investigate FRAME_OPEN EINVAL and PA-debug EPERM | **Complete** | FW 5.50 `FRAME_OPEN` is absent from the kernel dispatcher. The PA-debug export is a userspace permission stub returning `0x8A6D0001`; neither result is an unresolved graphics blocker. |
 | 5. Publish a homebrew-facing example | **Complete** | `samples/triangle` retains the minimal command-recording example. `examples/cube` is a separate installed-package consumer that owns allocation, shader upload, resource tables, triple-buffered frame resources, bounded fences, continuous vertex/index updates, VideoOut presentation, and cleanup. Its staged Prospero install/consumer build passes without repository include or library paths. Two FW `0x05500008` curl/websrv runs presented 3,600 rotating-cube frames and exited cleanly. Retail import audits remain bounded ABI evidence only. |
-| 6. Add cross-firmware backend profiles | **Operation-level promotion in progress** | FW 3.20 is the lowest active target. All 39 exact keys now have submit16, internal-memory, authenticated-queue, primary-suspend, public TF-ring, HS-offchip, and async carrier evidence; suspend-final/query, workload, and default-state promotion remains capability-specific and hardware-pending outside FW 5.50. |
+| 6. Add cross-firmware backend profiles | **Complete for the SPRX-qualified common subset** | All 39 exact active keys from FW 3.20 through FW 12.70 are runtime-selectable for their submit16, internal-memory, authenticated-queue, primary-suspend, public TF-ring, HS-offchip, and async carrier evidence. FW 5.50 and standard-PS5 FW 11.60 are hardware-qualified; other exact profiles remain hardware-unverified, and firmware-specific operations stay independently gated. |
 
 ### 1. Promote the hardware-proven graphics state into OpenAGC
 
@@ -1547,12 +1547,12 @@ reboot). Do not re-apply these changes without careful analysis:
 
 ## Phase 8: Firmware Forward Compatibility
 
-Status: in progress. The stable operations table, exact-match runtime registry,
-FW 5.50 direct backend, and collision-safe Sony-export candidate are present.
-FW 5.50 is the active hardware target. FW 3.20 remains the intended lowest
-active cross-firmware target but its implementation is deferred until the FW
-5.50 graphics path is mature. FW 1.00 and 2.x are archival RE profiles only;
-FW 11.60, PS5 Pro, and Sony-export GPU submission remain pending.
+Status: common direct-backend profile selection complete. All 39 exact active
+keys from FW 3.20 through FW 12.70 are runtime-selectable with per-operation
+gates. FW 5.50 and standard-PS5 FW 11.60 are hardware-qualified; other
+firmware/model profiles, including PS5 Pro, remain hardware-unverified. FW 1.00,
+2.x, and 3.00 remain archival RE profiles, and Sony-export GPU submission is
+not selected automatically.
 
 Purpose:
 
@@ -1663,29 +1663,29 @@ The generated `analysis/agc_driver_operation_facts.tsv` now provides the
 39-key operation ledger and normalized wrapper-group mapping. It is
 deliberately conservative: all keys receive only the common carrier-proven
 submit16, internal-memory, authenticated-queue, primary-suspend, public TF-ring,
-HS-offchip, and async subset. FW 5.50's
-hardware-qualified set and FW 11.60's deeper exact-RE-qualified subset add
-further operations; remaining capabilities require internal layout recovery.
+HS-offchip, and async subset. FW 5.50 and standard-PS5 FW 11.60 add only their
+separately hardware-qualified operations; remaining capabilities require
+exact layout recovery and matching hardware evidence.
 The companion `analysis/agc_driver_command_carriers.tsv` now groups the full
 private ioctl carrier functions. It proves one common submit16, primary
 suspend, and privileged-TF carrier, while preserving the multiple queue,
 public-TF, HS, final-suspend, and async groups for explicit review.
 
-### Priority 1: FW 11.60 modern and Trinity reference
+### Completed: FW 11.60 modern standard-console reference
 
-FW 11.60 has the strongest later-firmware analysis and includes the runtime
-`sceKernelHasTrinityMode` branch. Fully recover its queue, suspend, TF-ring,
-HS-offchip, memory, default-state, and workload facts first. Use it to define
-the modern standard/Trinity profile shape without inferring compatibility for
-other FW 9+ keys.
+FW 11.60 provides the later-firmware reference and includes the runtime
+`sceKernelHasTrinityMode` branch. Its queue, suspend, TF-ring, HS-offchip,
+memory, default-state, and workload boundaries are recovered. The standard
+console passed the complete staged and public-path ladders; Trinity remains
+SPRX-qualified and hardware-unverified.
 
 Acceptance criteria:
 
 - Every enabled FW 11.60 direct operation has named-wrapper disassembly,
   command/layout fixtures, and explicit standard/Trinity memory facts.
 - Standard and Trinity direct profiles expose distinct, accurate diagnostics.
-- Status remains RE-verified and hardware pending until the FW 11.60 console
-  passes the ordered hardware sequence.
+- Standard-PS5 status is hardware-qualified after two complete public-path
+  runs; Trinity stays hardware-unverified until matching hardware is tested.
 
 ### Priority 2: FW 3.20 lowest active cross-firmware profile
 
@@ -1728,8 +1728,9 @@ Acceptance criteria:
 - ✅ Exact firmware detection, backend selection, and per-operation direct
   capability gates fail closed. FW 5.50 retains its hardware-qualified one-ID
   workload convenience path without claiming Sony export ABI compatibility;
-  FW 11.60 enables only wrapper-proven operations, while workloads,
-  suspend-query, and defaults remain disabled pending exact evidence.
+  Standard-PS5 FW 11.60 passed its wrapper-proven operation set twice, while
+  workloads, suspend-query, defaults, EOP flip, and non-empty HS patch lists
+  remain disabled.
 - ✅ The primary Prospero target links no `SceAgcDriver` stub and the
   resulting hardware-test ELF has no `libSceAgcDriver.sprx` dependency.
 - ✅ The direct `/dev/gc` backend passed the clean FW 5.500.008 init,
@@ -1739,15 +1740,10 @@ Acceptance criteria:
   installed-driver profile is required for runtime selection or RE validation.
 - Maintain per-firmware NID/module aliases without assuming NID stability.
 
-### Priority 3: Additional firmware families
+### Completed hardware gate: standard-PS5 FW 11.60
 
-- 🚧 FW 11.60 direct qualification is proceeding through isolated gates after
-  the original 2026-07-29 run froze the UI and powered the console off. Runtime
-  selection and the bundled `deploy_agc_fw1160` target remain fail-closed.
-- Before reconsidering FW 11.60, design a reviewed probe that runs exactly one
-  operation per boot, uses unbuffered logging, and launches the process-cleanup
-  ELF before every payload. Start with version/model detection only; do not
-  submit, allocate AGC internal memory, create queues, or map MMIO in that gate.
+- ✅ The original 2026-07-29 power-off was followed by an operation-at-a-time
+  staged ladder, with the process-cleanup ELF immediately before every payload.
 - ✅ Added unbuffered `agc_fw1160_stage0.elf` (identity only) and
   `agc_fw1160_stage1.elf` (corrected init plus immediate shutdown). Their runner
   launches the process-cleanup ELF before every stage.
@@ -1774,12 +1770,15 @@ Acceptance criteria:
 - ✅ FW 11.60 stage 9 passed twice: the HS-offchip zero-entry carrier accepted
   an aligned list pointer. This qualifies the ABI boundary, not non-empty
   patch-list execution.
-- Next enable exact runtime key `0x1160` and run the public init/submit/queue/
-  suspend lifecycle end-to-end. Keep defaults, workloads, suspend query, EOP
-  flip, and non-empty HS patch-list execution fail-closed or unadvertised.
-- Qualify later gates individually only after the preceding gate passes twice.
-  Compute, graphics, and display remain prohibited until the full direct
-  lifecycle has passed this staged ladder.
+- ✅ Exact runtime key `0x1160` passed the ordinary public init, memory,
+  multi-DCB marker, nine-dword wait64, async, queue, suspend, release, and
+  shutdown lifecycle twice. ps5debug-NG found no residual process.
+- ✅ The same teardown revision passed the complete FW 5.50 lifecycle,
+  including V8 defaults and the FW 5.50 workload extension.
+- Defaults, workloads, suspend query, EOP flip, and non-empty HS patch-list
+  execution remain fail-closed or unadvertised on FW 11.60.
+- Other exact active firmware/model profiles are enabled from reproducible
+  SPRX evidence but remain hardware-unverified until matching consoles exist.
 - Keep deterministic PM4 builders, descriptors, shader parsing/fusion,
   primitive state, and interpolant mapping inside OpenAGC.
 

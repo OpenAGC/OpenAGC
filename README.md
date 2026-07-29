@@ -215,9 +215,11 @@ Host-verified and awaiting application-level hardware qualification:
 - Byte-sized hull LDS allocation rounded to gfx10.3's 1024-byte allocation
   granularity and patched into the resource register's 512-byte encoding
 
-Firmware policy: FW 3.20 is the lowest active compatibility target. FW 1.00
-and 2.x aliases are retained only as archival RE data and are not advertised
-as supported; missing legacy-only operations remain fail-closed.
+Firmware policy: every exact active profile from FW 3.20 through FW 12.70 is
+runtime-selectable for its SPRX-qualified operation subset. FW 5.50 and
+standard-PS5 FW 11.60 are hardware-qualified; the remaining exact profiles are
+hardware-unverified. Unknown keys and FW 1.00/2.x/3.00 archival aliases remain
+fail-closed, as do firmware-specific operations without matching evidence.
 
 ### Deploy the Wave32 graphics test with etaHEN websrv
 

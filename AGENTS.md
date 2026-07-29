@@ -51,7 +51,7 @@ The prospero build compiles `driver_prospero.c` with native `/dev/gc` ioctl call
 It links against `kernel` and `SceVideoOut`; the direct backend does not depend
 on or preload `libSceAgcDriver.sprx`.
 
-Expected host test result: `5003 passed, 0 failed`. Any change that drops this
+Expected host test result: `5086 passed, 0 failed`. Any change that drops this
 count is a regression — fix it before declaring the task done.
 
 ## Verification Checklist
@@ -286,29 +286,29 @@ If this works, the display pipeline is functional.
 Adapted from `freegnm-examples/triangle/` submit pattern. Tests the
 native `/dev/gc` backend via `libopenagc.a`:
 - `sce_agc_initialize()` — `/dev/gc` open + `CONTEXT_QUERY` ioctl (0xc004812e) + mmap GPU registers at 0xfe0200000
-- `sce_agc_initialize_internal_memory()` — allocate 8 named internal regions
+- `sce_agc_initialize_internal_memory()` — allocate 9 named internal regions
 - `sceAgcDriverNotifyDefaultStates()` — build primary/internal register-defaults blobs
 - `sceAgcDriverSuspendPointSubmitDirect()` — submit a suspend point
 - `sceAgcDriverGetPaDebugInterfaceVersion()` — FW 5.50 permission-stub check
 - `sceAgcDriverSubmitDcb()` — NOP packet submission
 - `_sceAgcDriverCreateUserSpecialQueue()` / `DestroyUserSpecialQueue()`
 
-**2b. `agc_init_fw1160.elf` — FW 11.60 direct-backend probe**
+**2b. `agc_init_fw1160.elf` — FW 11.60 full public-path test**
 
-Retained for offline inspection only. The first direct hardware qualification
-on a standard FW 11.60 PS5 froze the UI and the console powered itself off.
-Runtime selection and the deployment target are disabled until a new staged,
-one-operation-per-boot probe is reviewed:
+The original standard-PS5 FW 11.60 power-off was resolved through the staged
+ladder documented in `analysis/fw1160_direct_poweroff_20260729.md`. The full
+artifact passed twice manually and once through its guarded deployment target.
+It expects defaults and the FW 5.50 workload extension to fail closed, releases
+its memory, shuts the driver down, flushes its verdict, and self-terminates.
+
+The deployment target requires the process-cleanup ELF and launches it
+immediately before the test:
 
 ```sh
-make -C samples/hw_test agc_init_fw1160.elf  # build only; do not deploy
+make -C samples/hw_test deploy_agc_fw1160 PS5_HOST=<fw1160-console>
 ```
 
-Do not use either firmware probe artifact on the FW 11.60 console.
-
-Use only the narrow staged probes after reviewing
-`analysis/fw1160_direct_poweroff_20260729.md`. Their runner requires the
-process-cleanup ELF and launches it before every test:
+The narrow staged probes remain available for regression isolation:
 
 ```sh
 make -C samples/hw_test deploy_agc_fw1160_stage0 PS5_HOST=<fw1160-console>
@@ -318,7 +318,9 @@ make -C samples/hw_test deploy_agc_fw1160_stage2 PS5_HOST=<fw1160-console>
 
 Stage 0 performs no `/dev/gc` operation. Stage 1 performs initialization and
 immediate shutdown only. Stage 2 adds internal allocation and teardown only.
-Do not add submission or another GPU operation to these ELFs.
+Stages 3-9 isolate submit, async, queue, suspend, TF-ring, and HS-offchip
+carriers. Always use their guarded Make targets; never launch a probe without
+the cleanup ELF immediately beforehand.
 
 **3. `agc_videoout.elf` — Combined AGC + VideoOut test**
 

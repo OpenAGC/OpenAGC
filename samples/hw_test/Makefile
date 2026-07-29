@@ -554,8 +554,8 @@ deploy_agc: agc_init.elf
 
 .PHONY: deploy_agc_fw1160
 deploy_agc_fw1160: agc_init_fw1160.elf
-	@echo "FW 11.60 direct deployment disabled after hardware power-off"
-	@false
+	PS5_HOST=$(PS5_HOST) FULL_ARTIFACT=$(THIS_DIR)/$< \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_full.sh
 
 .PHONY: deploy_agc_fw1160_stage0 deploy_agc_fw1160_stage1 \
 	deploy_agc_fw1160_stage2 deploy_agc_fw1160_stage3 \
