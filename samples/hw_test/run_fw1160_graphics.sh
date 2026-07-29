@@ -37,7 +37,11 @@ if [ -n "${RESULT_LOG_PATH:-}" ]; then
         "ftp://$PS5_HOST:2121/" >/dev/null 2>&1 || true
     curl -sS --fail --max-time 10 \
         "http://$PS5_HOST:8080/hbldr?pipe=0&daemon=0&path=$REMOTE_BASE/eboot.elf" \
-        >/dev/null || exit 1
+        >/dev/null
+    launch_status=$?
+    if [ "$launch_status" -ne 0 ] && [ "$launch_status" -ne 28 ]; then
+        exit 1
+    fi
     result_ready=0
     attempts=0
     while [ "$attempts" -lt 30 ]; do

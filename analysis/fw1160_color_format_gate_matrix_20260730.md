@@ -104,12 +104,16 @@ now redirects only the pending headless artifacts to
 `/data/homebrew/openagc_fw1160_graphics/result.log`. The runner deletes that
 file before every launch, starts the foreground payload with `pipe=0`, polls
 FTP for a fresh final `Graphics result:` line, and then applies the same exact
-log validators. A stale or partial file therefore cannot qualify a run.
+log validators. A launch-request timeout is tolerated only inside this mode
+because the fresh final file is the independent completion proof; any other
+HTTP error remains fatal. A stale, missing, or partial file cannot qualify a
+run. The file is opened only after the normal GPU credential transition so the
+homebrew process has the same `/data` access used by the loader.
 
 | File-backed target | Artifact SHA-256 |
 | --- | --- |
-| `RG32_FLOAT` | `58978e2029e9c6d06468ad6fdb592990460b1ee1bf96f36885aa1265def181cf` |
-| `RGBA32_FLOAT` | `61e9be6605afdb7a6d42bddb6c4bd05cde9301aaf250b4fc687731a32940c871` |
+| `RG32_FLOAT` | `2b27fcc4820b951b289a45c081ed002bc6c2808e462e08170e1bef234130b13f` |
+| `RGBA32_FLOAT` | `53f47e52cdf42b4eca654fd09945c920f8d9a72f351f1cc9e5e1162eeb3c9df8` |
 
 Both variants retain the exact profile, PM4 stream, readback, shutdown, and
 self-termination code of their streaming counterparts; the only conditional

@@ -59,10 +59,10 @@ requires the final verdict before applying every normal oracle:
 
 | File-backed FW 11.60 target | SHA-256 |
 | --- | --- |
-| `RGBA8_UNORM` | `e5194c1becfad460456672978d132b74508dbe93f2a333e09a126a4c7638512a` |
-| `BGRA8_UNORM` | `dac5f41fc6d427790bf1a8eadc4d094eb3c7b0210cf53b8f7a41fd5fd5990feb` |
-| `RGBA8_SRGB` | `a9ec289b08344e5c56c5f3257e0ddd4fd300276fb3ddb0051ce6d723d53d0d0f` |
-| `BGRA8_SRGB` | `de1179e9a384b03d771656b36175a01785e27ea160c76ac04059bd34463b6092` |
+| `RGBA8_UNORM` | `833638d9e719b9e18657a3fdfea3bc3f289eaf91b72a1fd526f64972dc90bad8` |
+| `BGRA8_UNORM` | `789ac9567a86e49a4c5d651936c7290294177f75785310675b54f7be8d91308e` |
+| `RGBA8_SRGB` | `b31298715ea342fcd4300b115d8dbceb58c1d31c57032cecbce0c409058e40da` |
+| `BGRA8_SRGB` | `8a87bb36a1f73df8edcdce20789806c2c3a599581692fbb69e49373b301d4342` |
 
 Use one file-backed artifact for both qualifying passes of each target. The
 logging mode does not alter the render-target allocation, shader, PM4 stream,

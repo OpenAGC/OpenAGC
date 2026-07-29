@@ -3228,12 +3228,6 @@ static void visualize_r11g11b10(GraphicsTest *test)
 /* ======================================================================== */
 
 int main(void) {
-#ifdef AGC_RESULT_LOG_PATH
-    if (!freopen(AGC_RESULT_LOG_PATH, "w", stdout))
-        return 2;
-    setvbuf(stdout, NULL, _IOLBF, 0);
-    printf("Result log: %s\n", AGC_RESULT_LOG_PATH);
-#endif
     GraphicsTest test = { .handle = -1, .direct_memory = -1 };
 
     if (atexit(graphics_process_exit) != 0) {
@@ -3247,6 +3241,12 @@ int main(void) {
     int cred_err = set_gpu_credentials();
     printf("GPU credentials: %s\n", cred_err == 0 ? "OK" : "FAILED");
     if (cred_err != 0) return 1;
+#ifdef AGC_RESULT_LOG_PATH
+    if (!freopen(AGC_RESULT_LOG_PATH, "w", stdout))
+        return 2;
+    setvbuf(stdout, NULL, _IOLBF, 0);
+    printf("Result log: %s\n", AGC_RESULT_LOG_PATH);
+#endif
 
     printf("\n--- Step 1: AGC initialization ---\n");
     if (!init_agc()) return 1;
