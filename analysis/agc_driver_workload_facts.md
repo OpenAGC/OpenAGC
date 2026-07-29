@@ -58,9 +58,12 @@ itself sufficient. On standard-PS5 FW 11.60 the exact 18/12-dword adapter
 returned `AGC_OK` for active and complete, but the ordered following marker
 timed out at zero after five seconds. A follow-up attempt to reproduce the
 SPRX's separately observed GPU-info process-property step caused a kernel panic
-before a payload verdict was returned. That call is removed and the capability
-is fail-closed. Do not retry it from a direct payload without first recovering
-the exact export ABI, loader prerequisites, and initialization sequence.
+before a payload verdict was returned. The experiment used an incorrect
+four-argument order and was removed. Corpus-wide RE now proves the actual call
+as `("Sce.Debug:Gnm", gpu_info_base, gpu_info_span, 0, 0)`; see
+`agc_driver_process_property_facts.md`. The capability remains fail-closed
+until that corrected call passes a guarded property-only probe before any
+workload packet is submitted.
 
 ## Exact FW 11.60 builder layout
 

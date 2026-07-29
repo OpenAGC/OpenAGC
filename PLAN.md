@@ -590,10 +590,14 @@ private `0x79`/`WRITE_DATA` prefixes, are recorded in
 adapter using OpenAGC-owned stream slot 1 and separate 18/12-dword DCBs matches
 the exact host fixtures, but its ordered hardware marker still timed out after
 both calls returned `AGC_OK`. Attempting the separately observed GPU-info
-process-property step then caused a kernel panic before a verdict. That call is
-removed and the workload capability is disabled again. Further work must first
-recover the exact loader-owned GPU-info mapping and initialization contract; no
-additional hardware attempt may guess it.
+process-property step then caused a kernel panic before a verdict. That call
+used the wrong four-argument order and is removed. All 39 active SPRXs now
+reproducibly prove the correct five-argument carrier as
+`("Sce.Debug:Gnm", gpu_info_base, gpu_info_span, 0, 0)`, with a `0x100000`
+standard span and `0x180000` Trinity span. The workload capability remains
+disabled. The next hardware gate, only after the corrected code is reviewed and
+host/cross builds pass, is a property-only self-terminating probe; it must not
+submit workload PM4 in the same first run.
 
 The Sony workload contract itself is recovered for all active firmware:
 seven active-wrapper and three complete-wrapper groups converge on the same

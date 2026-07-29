@@ -30,8 +30,14 @@ Disassembled from `libSceAgcDriver.sprx` (decrypted, FW 5.50).
 4. Store fd at output param
 5. If global [0x1aba0] (SceGnmGpuInfo) is already set:
    - Clear and reinitialize the GPU info area
-   - `sceKernelSetProcessProperty(0, 0x100000, gpu_info_ptr, 0)` — lock 1MB
-   - `sceKernelSetVirtualRangeName(gpu_info_ptr, 0x100000, "SceGnmSysmap", 0)`
+   - `sceKernelSetProcessProperty("Sce.Debug:Gnm", gpu_info_ptr, 0x100000,
+     0, 0)` — exact five-argument GPU-info property carrier
+   - `sceKernelSetVirtualRangeName(gpu_info_ptr, 0x100000,
+     "SceGnmDumpArea")`
+
+The earlier four-argument interpretation was incorrect. Cross-firmware
+verification in `agc_driver_process_property_facts.md` confirms the five
+arguments above for all 39 active drivers.
 6. Call `sce_agc_initialize_internal_memory()` at 0x7e70
 
 ## Internal Memory Allocation (0x7e70) — `sce_agc_initialize_internal_memory`

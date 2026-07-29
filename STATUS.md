@@ -969,8 +969,11 @@ The host-generic implementation now has a tested model for:
   64-bit slot at `SceGnmGpuInfo + 0x3a008`, separate active/complete DCBs, and
   the recovered 18/12-dword prefix-plus-`0xc0071e00` packet forms. Exact host
   fixtures pass, but the ordered hardware marker timed out. A subsequent
-  GPU-info process-property experiment caused a kernel panic and was removed.
-  FW 11.60 workload capability is therefore disabled again.
+  GPU-info process-property experiment used a wrong four-argument order, caused
+  a kernel panic, and was removed. Corpus-wide RE proves the correct call as
+  `("Sce.Debug:Gnm", gpu_info_base, gpu_info_span, 0, 0)` on all 39 active
+  drivers. FW 11.60 workload capability remains disabled pending a corrected,
+  property-only hardware probe.
   All 39 active Sony drivers are now verified to share that nine-dword
   multi-argument contract, with 18/12-dword maximum reservations. Other
   profiles remain fail-closed until their GPU-info subregion selection is
