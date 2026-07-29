@@ -62,9 +62,11 @@ The typed layouts shared with FW 5.50 and locked by `_Static_assert` in
 
 Standard-PS5 FW 11.60 is hardware-qualified for submit16, standard internal
 memory, authenticated queue create/destroy, primary and final suspend
-submission, public TF-ring setup, the zero-entry HS-offchip carrier, and async
-graphics setup. Trinity sizing remains exact-RE-qualified and hardware
-unverified. Its workload wrappers build a larger, different packet
+submission, public TF-ring setup, the zero-entry HS-offchip carrier, async
+graphics setup, and version-12/V10 register defaults. Real gfx1013 compute
+execution also passed twice with an exact 2,073,600-pixel output oracle.
+Trinity sizing remains exact-RE-qualified and hardware unverified. Its workload
+wrappers build a larger, different packet
 contract than OpenAGC's one-ID workload helper, so workload calls fail closed.
 The one-ID helper remains enabled only on FW 5.50 because its independent
 three-dword submission path passed the real-console qualification sample; it
@@ -72,9 +74,10 @@ must not be inferred from the Sony export's ABI on other firmware.
 Both public/direct suspend-query exports are permission stubs. The internal
 `0x80048127` helper's result semantics are not exposed by those wrappers, so
 suspend query remains disabled. `libSceAgc` exposes a versioned 0..12 defaults
-dispatcher, but its no-argument API reads the selected version from a runtime
-hardware table. Static analysis of the driver wrapper does not establish the
-selected 11.60 value, so default-state construction also remains disabled.
+dispatcher, and its no-argument API reads the selected version from a runtime
+hardware table. FW 11.60 initialization supplies version 12, which maps to the
+recovered V10 tables; the exact 79/29/20 primary and 9/15/3 internal dimensions
+and larger `0xf000` internal DDID slot passed twice on hardware.
 
 The Sony 5.50 and 11.60 workload-active and workload-complete exports emit
 nine-dword `0xc0071e00` packets and consume multiple arguments. That contract

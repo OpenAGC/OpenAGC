@@ -1468,8 +1468,9 @@ Direct `/dev/gc` operations are independently capability-gated. FW 5.50
 retains its qualified set, including the independently hardware-proven
 workload convenience submit. Standard-PS5 FW 11.60 is hardware-qualified for
 submit, memory, queue, primary/final suspend, TF-ring, the zero-entry
-HS-offchip carrier, and async setup; its workload, suspend-query, defaults,
-EOP-flip, and non-empty HS patch-list operations fail closed. Every other
+HS-offchip carrier, async setup, and version-12/V10 defaults. Its workload,
+suspend-query, EOP-flip, and non-empty HS patch-list operations fail closed.
+Real gfx1013 compute execution is also hardware-qualified on FW 11.60. Every other
 active exact key exposes the common SPRX-qualified submit16, internal-memory,
 authenticated-queue, primary-suspend, public TF-ring, HS-offchip, and async
 subset and is explicitly hardware-unverified.
@@ -1538,6 +1539,11 @@ an aligned mapped 16 KiB TF ring. Stage 9 passed twice with an aligned
 HS-offchip list pointer and zero entries, qualifying its ioctl/payload boundary
 but not non-empty patch-list execution. All monitored runs shut down cleanly,
 released temporary memory, and left no `eboot.elf` according to ps5debug-NG.
+Version-12/V10 register defaults then passed twice with exact blob sizes
+`0x40a40` and `0xe268`. A guarded headless compute artifact subsequently
+executed the fill shader twice, reached its fence in 1-2 ms, and produced
+2,073,600/2,073,600 matching `0xff00ff00` pixels before clean driver shutdown.
+The original FW 5.50 compute-plus-VideoOut conformance sample passed afterward.
 Workload and default-state ABIs remain disabled by design.
 
 After that ladder, ordinary runtime selection for exact key `0x1160` passed

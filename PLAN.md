@@ -552,11 +552,13 @@ proven. Register defaults are exact-profile gated: FW 5.50 version 8 and FW
 11.60 version 12 are hardware-qualified. Version 12 maps to the recovered V10
 tables and uses its exact larger internal DDID slot; two FW 11.60 runs built
 both blobs, executed the post-default GPU markers, and shut down cleanly.
-The next FW 11.60 parity gate is a separately guarded headless compute artifact
-with an exact 2,073,600-pixel output oracle, driver shutdown, and forced process
-termination. Presentation is isolated because FW 11.60 rejects the FW 5.50
-`libSceVideoOut` linear-buffer patch offset; its VideoOut contract will be
-qualified independently rather than guessed during compute testing.
+FW 11.60's separately guarded headless compute artifact passed twice with the
+exact 2,073,600-pixel output oracle, driver shutdown, and forced process
+termination. Both runs executed the gfx1013 shader and filled every pixel with
+`0xff00ff00`; the original FW 5.50 compute-plus-VideoOut conformance sample then
+passed unchanged. Presentation remains isolated because FW 11.60 rejects the
+FW 5.50 `libSceVideoOut` linear-buffer patch offset; its VideoOut contract will
+be qualified independently rather than guessed during compute testing.
 The shared compute sample removes its flip event and closes VideoOut before
 driver shutdown. It also reports best-effort unregister, event-queue, unmap,
 and direct-memory results. FW 5.50 keeps the currently scanned buffer set
@@ -1744,9 +1746,9 @@ Acceptance criteria:
 - ✅ Exact firmware detection, backend selection, and per-operation direct
   capability gates fail closed. FW 5.50 retains its hardware-qualified one-ID
   workload convenience path without claiming Sony export ABI compatibility;
-  Standard-PS5 FW 11.60 passed its wrapper-proven operation set twice, while
-  workloads, suspend-query, defaults, EOP flip, and non-empty HS patch lists
-  remain disabled.
+  Standard-PS5 FW 11.60 passed its wrapper-proven operation set twice, plus
+  version-12/V10 defaults and real compute execution. Workloads, suspend-query,
+  EOP flip, and non-empty HS patch lists remain disabled.
 - ✅ The primary Prospero target links no `SceAgcDriver` stub and the
   resulting hardware-test ELF has no `libSceAgcDriver.sprx` dependency.
 - ✅ The direct `/dev/gc` backend passed the clean FW 5.500.008 init,
@@ -1791,8 +1793,14 @@ Acceptance criteria:
   shutdown lifecycle twice. ps5debug-NG found no residual process.
 - ✅ The same teardown revision passed the complete FW 5.50 lifecycle,
   including V8 defaults and the FW 5.50 workload extension.
-- Defaults, workloads, suspend query, EOP flip, and non-empty HS patch-list
-  execution remain fail-closed or unadvertised on FW 11.60.
+- ✅ FW 11.60 version-12/V10 register defaults passed twice with exact
+  79/29/20 primary and 9/15/3 internal dimensions, post-default GPU markers,
+  and clean shutdown. FW 5.50 retained its original V8 DDID layout.
+- ✅ FW 11.60 headless compute passed twice: the gfx1013 dispatch reached its
+  completion fence in 1-2 ms and exactly 2,073,600/2,073,600 pixels matched
+  `0xff00ff00`. The original FW 5.50 compute-plus-VideoOut sample then passed.
+- Workloads, suspend query, EOP flip, FW 11.60 VideoOut presentation, and
+  non-empty HS patch-list execution remain fail-closed or unadvertised.
 - Other exact active firmware/model profiles are enabled from reproducible
   SPRX evidence but remain hardware-unverified until matching consoles exist.
 - Keep deterministic PM4 builders, descriptors, shader parsing/fusion,
