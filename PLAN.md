@@ -608,6 +608,14 @@ state. The FW 11.60 workload capability is disabled again. Next RE must recover
 the missing registered-stream state or lifecycle beyond the already proven
 process property, address table, and packet bytes; do not rerun stage 11
 unchanged.
+The recovered `libSceAgc` cursor wrappers show that the missing lifecycle is
+caller-owned and inline: DCB control 0, ACB control 1, with active and complete
+appended to one command stream rather than separately submitted. Stage 12 is
+the bounded requalification gate for that distinct sequence. It registers
+stream 1, builds active → marker A → complete → marker B in one 40-dword DCB,
+submits exactly once, and requires both markers plus clean unregister, memory
+release, shutdown, and self-termination. It must pass twice before any
+FW 11.60 workload capability is reconsidered.
 
 The Sony workload contract itself is recovered for all active firmware:
 seven active-wrapper and three complete-wrapper groups converge on the same

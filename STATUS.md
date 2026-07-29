@@ -983,6 +983,12 @@ The host-generic implementation now has a tested model for:
   both standard and Trinity models. `agc_fw1160_stage11.elf` is retained only
   as a bounded requalification gate after additional registered-stream state
   is recovered; do not rerun it unchanged.
+  Offline wrapper recovery now proves Sony appends DCB/ACB workload packets to
+  a caller-owned cursor instead of submitting active and complete separately.
+  `agc_fw1160_stage12.elf` is the new single-submit gate: registered stream 1,
+  active → marker A → complete → marker B in one 40-dword DCB. It is built but
+  remains hardware-pending; the capability stays disabled until two clean
+  passes and a subsequent FW 5.50 regression.
   All 39 active Sony drivers are now verified to share that nine-dword
   multi-argument contract, with 18/12-dword maximum reservations. Other
   profiles remain fail-closed until their GPU-info subregion selection is
