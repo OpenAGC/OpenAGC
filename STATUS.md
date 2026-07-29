@@ -1536,7 +1536,11 @@ setup then returned `AGC_OK` with clean shutdown twice in isolated stage 4. Its
 foreground homebrew process required manual UI termination despite returning
 from `main`; staged probes now flush PASS and self-terminate so this loader
 lifecycle artifact is not mistaken for a GPU black-screen failure. Queue and
-suspend remain blocked pending their own isolated two-pass gates.
+suspend stages then each passed twice: authenticated queue handle 0 was created
+and destroyed cleanly, and primary suspend returned `AGC_OK` while that queue
+was active. ps5debug-NG confirmed no `eboot.elf` remained after the monitored
+runs. Final suspend, TF-ring, and HS-offchip remain pending; workload and
+default-state ABIs remain disabled by design.
 
 ## Next RE Tasks
 

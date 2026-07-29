@@ -1762,8 +1762,14 @@ Acceptance criteria:
 - ✅ FW 11.60 stage 4 passed twice: async setup and direct shutdown returned
   `AGC_OK`. The foreground app's black screen was a loader lifecycle artifact;
   probes now flush PASS and self-terminate instead of requiring manual UI kill.
-- Next isolate authenticated queue lifecycle and suspend-point submission as
-  separate two-pass stages.
+- ✅ FW 11.60 stage 5 passed twice: authenticated queue create returned handle
+  0 and queue destroy plus shutdown returned `AGC_OK`.
+- ✅ FW 11.60 stage 6 passed twice: primary suspend returned `AGC_OK` while the
+  qualified queue was active; teardown succeeded and ps5debug-NG confirmed no
+  residual `eboot.elf` process.
+- Next isolate final suspend, TF-ring, and HS-offchip setup. Defaults and
+  workload remain disabled because their 11.60 contracts are not established
+  as compatible with OpenAGC's current APIs.
 - Qualify later gates individually only after the preceding gate passes twice.
   Compute, graphics, and display remain prohibited until the full direct
   lifecycle has passed this staged ladder.

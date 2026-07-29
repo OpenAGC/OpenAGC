@@ -87,11 +87,18 @@ On the same standard FW 11.60 console (`0x11600005`, SoC `0x00840f60`):
   leaving the UI black until the app was killed manually; this was a homebrew
   process-lifecycle issue, not a GPU failure. Later staged probes self-terminate
   after flushing their result.
+- Stage 5 passed twice. Async setup, authenticated queue create (handle 0),
+  queue destroy, and shutdown all returned success.
+- Stage 6 passed twice. With the qualified async/queue prerequisites active,
+  primary suspend submission returned `AGC_OK`; queue destroy and shutdown
+  also succeeded. ps5debug-NG reported no `eboot.elf` after the monitored
+  stage 5 and stage 6 runs.
 - Websrv retained each foreground HTTP pipe until the 20-second client timeout,
   but the cleanup check before the next run found no stale `eboot.elf`.
 
 This hardware result validates corrected initialization, internal memory, and
 basic graphics-ring submission through clean teardown. It strongly localizes
 the original power-off to the corrected pre-submit mapping defects, though it
-cannot distinguish which individual defect was causal. Async setup is now
-qualified; queue and suspend operations remain isolated pending gates.
+cannot distinguish which individual defect was causal. Basic submit, async,
+authenticated queue lifecycle, and primary suspend are now qualified. Final
+suspend, TF-ring, and HS-offchip operations remain isolated pending gates.
