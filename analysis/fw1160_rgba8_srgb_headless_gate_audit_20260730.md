@@ -57,7 +57,10 @@ verdict, and compile without warnings.
 Finish the interrupted `RG32_FLOAT` second pass and both `RGBA32_FLOAT` passes
 on a clean FW 11.60 boot first. Then run `RGBA8_UNORM`, `BGRA8_UNORM`,
 `RGBA8_SRGB`, and `BGRA8_SRGB` twice each, with the established cleanup ELF
-immediately before every launch. Confirm no residual `eboot.elf` and inspect
+immediately before every launch. The runner uses detached cleanup because that
+helper intentionally self-terminates with `SIGKILL`; it waits and requires a
+responsive websrv before uploading the graphics ELF. Confirm no residual
+`eboot.elf` and inspect
 the live ps5debug-NG fault log after each verdict. Stop on the first stall,
 mismatch, panic, page fault, bad packet, or GPU reset.
 

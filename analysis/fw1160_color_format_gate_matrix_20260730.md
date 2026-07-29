@@ -90,6 +90,13 @@ also left no process. There is no captured GPU verdict for that request, so it
 does not count. Stop this boot here; reboot and reinject ps5debug-NG before the
 second RG32 pass and both RGBA32 passes.
 
+The cleanup helper deliberately ends with `SIGKILL`, so websrv can retain a
+foreground pipe until the client timeout even after the helper has finished.
+The guarded graphics runner now launches cleanup with `pipe=0&daemon=1`, waits
+two seconds, and requires websrv to respond before it uploads the next graphics
+ELF. This preserves the mandatory immediately-preceding cleanup while avoiding
+a false transport failure; residual-process checks still use ps5debug-NG.
+
 The five twice-passed formats are hardware-qualified on this FW 11.60 console,
 but project-wide parity promotion still requires matching modern headless FW
 5.50 regressions. The FW 5.50 console was unreachable on ports 8080 and 744
