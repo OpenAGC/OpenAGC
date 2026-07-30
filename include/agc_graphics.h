@@ -646,6 +646,7 @@ typedef struct AgcGfx1013EopFenceState {
 } AgcGfx1013EopFenceState;
 
 typedef enum AgcGfx1013ResourceUsage {
+    /* UNDEFINED may be a source or a zero-packet discard destination. */
     AGC_GFX1013_RESOURCE_USAGE_UNDEFINED = 0,
     AGC_GFX1013_RESOURCE_USAGE_RENDER_TARGET,
     AGC_GFX1013_RESOURCE_USAGE_COMPUTE_WRITE,

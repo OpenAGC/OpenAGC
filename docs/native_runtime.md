@@ -199,6 +199,20 @@ present-chain dependency delays image collection. The identical Prospero
 artifact is built but not yet deployed; see
 [`runtime_batch_deferred_retirement_host_20260731.md`](../analysis/runtime_batch_deferred_retirement_host_20260731.md).
 
+Runtime API v15 makes `Undefined` a valid destination as well as an initial
+source. Transitioning to it discards prior contents and records no PM4 packet,
+including when the prior usage was a writer; the runtime still commits the new
+Host-owned state only after successful submission. A later use must transition
+from `Undefined` to its required typed state. This avoids a pointless cache
+writeback for data the application explicitly abandoned.
+
+The low-level oracle enumerates every one of the 100 gfx1013 usage pairs. It
+checks exact dword counts and release/NOP/acquire packet positions for each
+pair, while the existing representative fixtures continue to lock every packet
+word. The public runtime fixture also submits and resets a
+`HostRead -> Undefined` buffer discard. See
+[`runtime_transition_matrix_host_20260731.md`](../analysis/runtime_transition_matrix_host_20260731.md).
+
 Descriptor binding is also state-gated before descriptor-table mutation:
 sampled, uniform, and input descriptors require `ShaderRead`; storage
 descriptors require `ShaderRead` or `ShaderWrite` for legacy reflection. The

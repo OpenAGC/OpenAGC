@@ -55,11 +55,11 @@ at most one final flip, and compiles five guarded stages:
 
 The post-failure staged artifact hashes are:
 
-- Stage 0: `c4f860d2fb6ea1796d464bf071bda0c2d7e9d92c87a35222b7edaf02e19fa5bf`
-- Stage 1: `559ba3edcad597cfd9fe989b3b35233dc7abd5cb0cced782feb8074d2e7cb3ab`
-- Stage 2: `862c9b83cf160c28451c853d5ffede5ebf181d52d88a42c1f0fbc1426aba5837`
-- Stage 3: `3efa4c4193fbeef45fa62f4b5baa669e7c5fa72a7aaf50ec91528d863e2c06aa`
-- Stage 4: `08053309b9886d213a511552a5d3df5709c9a2393a4c7d199936430a4114d214`
+- Stage 0: `b854e893dc71960a0a1437544029137a4021f66805c862fcc57b820240b30e80`
+- Stage 1: `5e393865a26f3546d2e2c215016a13351b1f575787dc661fe1e454b7dcf83ad0`
+- Stage 2: `1f875676672609696b5d0c8a160f67c6fe50bce42978be9326259e91542b7a18`
+- Stage 3: `146da9bbaab98af25e52e5f8900e01e887ecc7dec2b943c73886552313b2e25b`
+- Stage 4: `db8fe65252ece4874c9179774898189b5e04db09dceb0109e70c2816df4616f7`
 
 After the console is rebooted, run each stage once in order. Stop immediately
 on a timeout, missing verdict, teardown error, or service loss. Presentation

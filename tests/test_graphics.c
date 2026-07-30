@@ -1492,6 +1492,66 @@ static void test_gfx1013_resource_transitions(void)
     TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
         "depth-read-to-shader-read is an explicit no-op");
 
+    for (uint32_t before = 0u;
+         before < AGC_GFX1013_RESOURCE_USAGE_COUNT; ++before) {
+        for (uint32_t after = 0u;
+             after < AGC_GFX1013_RESOURCE_USAGE_COUNT; ++after) {
+            bool writes = before == AGC_GFX1013_RESOURCE_USAGE_RENDER_TARGET ||
+                before == AGC_GFX1013_RESOURCE_USAGE_COMPUTE_WRITE ||
+                before == AGC_GFX1013_RESOURCE_USAGE_COPY_DESTINATION ||
+                before == AGC_GFX1013_RESOURCE_USAGE_DEPTH_STENCIL_WRITE;
+            bool release_needed = before != after &&
+                after != AGC_GFX1013_RESOURCE_USAGE_UNDEFINED && writes;
+            bool acquire_needed = before != after &&
+                before != AGC_GFX1013_RESOURCE_USAGE_UNDEFINED &&
+                after != AGC_GFX1013_RESOURCE_USAGE_UNDEFINED &&
+                after != AGC_GFX1013_RESOURCE_USAGE_PRESENT &&
+                after != AGC_GFX1013_RESOURCE_USAGE_HOST_READ &&
+                (release_needed ||
+                 before == AGC_GFX1013_RESOURCE_USAGE_PRESENT);
+            uint32_t expected_dwords =
+                (release_needed &&
+                 before == AGC_GFX1013_RESOURCE_USAGE_DEPTH_STENCIL_WRITE ?
+                    AGC_GFX1013_DB_META_FLUSH_DWORDS : 0u) +
+                (release_needed ? AGC_GFX1013_EOP_FENCE_DWORDS : 0u) +
+                (acquire_needed ? AGC_GFX1013_ACQUIRE_MEM_DWORDS : 0u);
+
+            transition.before = (AgcGfx1013ResourceUsage)before;
+            transition.after = (AgcGfx1013ResourceUsage)after;
+            transition.completion_address = 0u;
+            transition.completion_value = 0u;
+            TEST_ASSERT_EQ(agcGfx1013GetResourceTransitionDwords(
+                &transition, &dword_count), AGC_OK,
+                "complete transition matrix sizes every valid pair");
+            TEST_ASSERT_EQ(dword_count, expected_dwords,
+                "complete transition matrix returns exact packet size");
+            agcCbReset(&cb, buffer, sizeof(buffer));
+            TEST_ASSERT_EQ(agcGfx1013TransitionResource(&cb, &transition),
+                AGC_OK, "complete transition matrix emits every valid pair");
+            TEST_ASSERT_EQ(agcCbUsedDwords(&cb), expected_dwords,
+                "complete transition matrix advances by exact packet size");
+            if (release_needed) {
+                uint32_t release_offset =
+                    before == AGC_GFX1013_RESOURCE_USAGE_DEPTH_STENCIL_WRITE ?
+                        AGC_GFX1013_DB_META_FLUSH_DWORDS : 0u;
+                TEST_ASSERT_EQ(agcPm4Opcode(buffer[release_offset]),
+                    AGC_PM4_OP_RELEASE_MEM,
+                    "matrix writer transition starts exact release packet");
+                TEST_ASSERT_EQ(agcPm4Opcode(buffer[release_offset + 8u]),
+                    AGC_PM4_OP_NOP,
+                    "matrix writer transition preserves NOP trailer");
+            }
+            if (acquire_needed)
+                TEST_ASSERT_EQ(agcPm4Opcode(
+                    buffer[expected_dwords - AGC_GFX1013_ACQUIRE_MEM_DWORDS]),
+                    AGC_PM4_OP_ACQUIRE_MEM,
+                    "matrix consumer transition ends exact acquire packet");
+            if (after == AGC_GFX1013_RESOURCE_USAGE_UNDEFINED)
+                TEST_ASSERT_EQ(expected_dwords, 0u,
+                    "discard destination is an explicit zero-packet change");
+        }
+    }
+
     transition.before = AGC_GFX1013_RESOURCE_USAGE_RENDER_TARGET;
     transition.after = AGC_GFX1013_RESOURCE_USAGE_SHADER_READ;
     agcCbReset(&cb, buffer,

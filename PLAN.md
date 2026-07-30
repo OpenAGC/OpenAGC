@@ -609,9 +609,18 @@ and command/dependency release. A 32-cycle generic stress test submits two
 typed DCBs per cycle, queues both referenced resources, verifies collection is
 busy before command reset, then proves deferred count, allocation count, and
 live bytes return exactly to baseline. The matching Prospero artifact
-`333a0f82a29f4535cf87bc741860d1a32c748b09449f4aaa463f677a835206d2`
+`030fc66604db48d217eb7c4b140c16880516419ae82cd76ac829b9168fa47f1f`
 is ready but hardware qualification awaits console recovery. See
 `analysis/runtime_batch_deferred_retirement_host_20260731.md`.
+
+Runtime API v15 completes the exact low-level host transition matrix and fixes
+the runtime discard contract. All 100 before/after pairs now have computed and
+emitted dword-count coverage plus exact release/NOP/acquire packet-shape gates.
+`Undefined` is accepted as a zero-packet discard destination, including for a
+prior writer, because discarded contents require neither writeback nor
+invalidation. A public runtime `HostRead -> Undefined` command records,
+submits, commits, resets, and destroys cleanly. See
+`analysis/runtime_transition_matrix_host_20260731.md`.
 
 Exit criteria: exact host fixtures cover the supported transition matrix and
 atomic short-buffer failure; FW 5.50 and FW 11.60 gates cover render-to-shader,

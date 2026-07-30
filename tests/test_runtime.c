@@ -2874,6 +2874,26 @@ static void test_runtime_resource_transitions(void)
     TEST_ASSERT_EQ(agcResetCommandBuffer(compute_command), AGC_OK,
         "failed transition command resets without state commit");
 
+    transition.buffer_size = buffer_desc.size;
+    transition.before = kAgcResourceUsageHostRead;
+    transition.after = kAgcResourceUsageUndefined;
+    transition.before_owner = kAgcResourceOwnerHost;
+    transition.after_owner = kAgcResourceOwnerHost;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(compute_command), AGC_OK,
+        "discard transition command begins");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(compute_command, 1u,
+        &transition), AGC_OK,
+        "host-read-to-undefined discard transition records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(compute_command), AGC_OK,
+        "discard transition command ends");
+    submit.command_buffers = &compute_command;
+    TEST_ASSERT_EQ(agcQueueSubmit(compute_queue, &submit, fence), AGC_OK,
+        "discard transition submits and commits state");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(compute_command), AGC_OK,
+        "discard transition command resets");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "discard transition fence resets");
+
     image_desc.width = 8u;
     image_desc.height = 8u;
     image_desc.format = AGC_FORMAT_RGBA8_UNORM;

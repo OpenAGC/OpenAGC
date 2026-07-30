@@ -181,9 +181,16 @@ recycling storage. Generic coverage passes 32 two-command batch cycles with
 buffer and image retirement, pre-reset busy collection, command reset, and
 exact deferred/live-count/live-byte baselines; present-chain retention is also
 covered. Prospero builds the identical stress artifact with SHA-256
-`333a0f82a29f4535cf87bc741860d1a32c748b09449f4aaa463f677a835206d2`,
+`030fc66604db48d217eb7c4b140c16880516419ae82cd76ac829b9168fa47f1f`,
 but it remains hardware-unqualified while the FW 5.50 console is offline. See
 `analysis/runtime_batch_deferred_retirement_host_20260731.md`.
+Runtime API v15 accepts `Undefined` as the documented discard destination.
+Discard is a zero-packet state change even after a writer; all other release,
+NOP trailer, depth-metadata flush, and acquire rules are unchanged. The exact
+10-by-10 low-level usage matrix now has exhaustive size, emission, and packet-
+shape coverage, and a submitted public-runtime `HostRead -> Undefined` row
+proves state commit/reset. The complete host suite passes 16,402 assertions;
+see `analysis/runtime_transition_matrix_host_20260731.md`.
 Descriptor binds now fail closed without an explicit compatible typed state:
 read-only descriptors require `shader-read`; storage descriptors require
 `shader-read` or `shader-write` while reflection lacks per-binding access

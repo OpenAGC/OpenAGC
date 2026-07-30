@@ -35,7 +35,7 @@ The present-chain fixture additionally retires an image while the chain retains
 it, verifies new presentation is rejected, destroys the chain, and then
 collects the image.
 
-The complete host binary passes 15,891 assertions with zero failures. Generic
+The complete host binary passes 16,402 assertions with zero failures. Generic
 and Prospero builds complete without warnings.
 
 ## Prospero artifact
@@ -43,7 +43,7 @@ and Prospero builds complete without warnings.
 `samples/hw_test/agc_runtime_retirement_stress.elf` carries the same 32-cycle
 sequence and bounded waits.
 
-- SHA-256: `333a0f82a29f4535cf87bc741860d1a32c748b09449f4aaa463f677a835206d2`
+- SHA-256: `030fc66604db48d217eb7c4b140c16880516419ae82cd76ac829b9168fa47f1f`
 - Expected verdict: `BATCH_RETIREMENT_STRESS PASS`
 - Expected teardown: both labels, fence, both command buffers, queue, and
   device return `AGC_OK`.

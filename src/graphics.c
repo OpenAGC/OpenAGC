@@ -1211,14 +1211,15 @@ static int32_t agcGfx1013ValidateTransition(
     if (!transition || !release || !acquire)
         return AGC_ERROR_INVALID_ARGUMENT;
     if (transition->before >= AGC_GFX1013_RESOURCE_USAGE_COUNT ||
-        transition->after == AGC_GFX1013_RESOURCE_USAGE_UNDEFINED ||
         transition->after >= AGC_GFX1013_RESOURCE_USAGE_COUNT)
         return AGC_ERROR_INVALID_ARGUMENT;
 
     *release = transition->before != transition->after &&
+        transition->after != AGC_GFX1013_RESOURCE_USAGE_UNDEFINED &&
         agcGfx1013UsageWrites(transition->before);
     *acquire = transition->before != transition->after &&
         transition->before != AGC_GFX1013_RESOURCE_USAGE_UNDEFINED &&
+        transition->after != AGC_GFX1013_RESOURCE_USAGE_UNDEFINED &&
         transition->after != AGC_GFX1013_RESOURCE_USAGE_PRESENT &&
         transition->after != AGC_GFX1013_RESOURCE_USAGE_HOST_READ &&
         (*release ||
