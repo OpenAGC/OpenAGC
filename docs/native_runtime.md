@@ -109,8 +109,10 @@ signal, without CPU waits; see
 [`runtime_batch_submit_label_lists_fw550_20260731.md`](../analysis/runtime_batch_submit_label_lists_fw550_20260731.md).
 The equivalent label-only compute-queue form also passed; see
 [`runtime_compute_batch_submit_label_lists_fw550_20260731.md`](../analysis/runtime_compute_batch_submit_label_lists_fw550_20260731.md).
-Other batch forms, compute workload batching, and FW 11.60 remain
-hardware-unqualified.
+The exact FW 5.50 compute-workload form also passed with reflected dispatch in
+the first DCB, a verified label tail in the second, a batch fence, and readback;
+see [`runtime_compute_batch_fw550_20260731.md`](../analysis/runtime_compute_batch_fw550_20260731.md).
+Other batch forms, larger batches, and FW 11.60 remain hardware-unqualified.
 
 `AgcGpuLabel` provides the first GPU-side dependency primitive. A producer
 records `agcCmdSignalGpuLabel`; it emits the qualified EOP release write. A

@@ -490,8 +490,10 @@ final-DCB signal without CPU waits, artifact
 `32112756c2446146758409b1605fa8c55a6385d270f454af2cadcfb4262d054b`.
 The equivalent native compute-queue oracle also passed without CPU waits,
 artifact `95caaab9277368f06db8907147604e8e8dbc3296189fd80e5e15a37f0d46f9a2`.
-Both results cover only two nonempty DCBs carrying label EOP writes; FW 11.60
-and broader compute-batch workload qualification remain open.
+Artifact `b4d21c6673d74af2b997e695605018ff4499df4998782fc243f18523e7c7576e`
+also passed a reflected compute dispatch in the first DCB, a verified label in
+the second, one batch fence, and 64-word readback on exact FW 5.50. FW 11.60,
+larger batches, and non-compute workload batch forms remain open.
 
 Runtime API v8 adds the first typed queue-ownership handoff: a v2 transition
 releases a whole GPU-written resource on its source queue and writes the

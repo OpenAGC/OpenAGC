@@ -26,6 +26,10 @@
 #define AGC_SELF_TERMINATE 0
 #endif
 
+#ifndef AGC_COMPUTE_BATCH
+#define AGC_COMPUTE_BATCH 0
+#endif
+
 enum {
     kOutputWordCount = 64u,
     kCompletionTimeoutNs = 200000000u,
@@ -61,8 +65,15 @@ int main(void)
     AgcComputePipeline pipeline = NULL;
     AgcBuffer output = NULL;
     AgcGpuLabel label = NULL;
+#if AGC_COMPUTE_BATCH
+    AgcGpuLabel batch_label = NULL;
+#endif
     AgcCommandBuffer signal_command_buffer = NULL;
     AgcCommandBuffer command_buffer = NULL;
+#if AGC_COMPUTE_BATCH
+    AgcCommandBuffer batch_tail_command_buffer = NULL;
+    AgcCommandBuffer batch_commands[2] = { NULL, NULL };
+#endif
     AgcFence signal_fence = NULL;
     AgcFence fence = NULL;
     uint32_t push_constants[2] = {kOutputWordCount, kFillColor};
@@ -75,6 +86,9 @@ int main(void)
     int32_t result;
 
     printf("=== OpenAGC native-runtime compute sample ===\n");
+#if AGC_COMPUTE_BATCH
+    puts("Mode: two-command compute batch");
+#endif
     if (set_gpu_credentials() != 0) {
         puts("GPU credentials: FAIL");
         goto cleanup;
@@ -153,6 +167,13 @@ int main(void)
     report_result("agcCreateCommandBuffer(signal)", result);
     if (result != AGC_OK)
         goto cleanup;
+#if AGC_COMPUTE_BATCH
+    result = agcCreateCommandBuffer(device, &command_desc,
+        &batch_tail_command_buffer);
+    report_result("agcCreateCommandBuffer(batch tail)", result);
+    if (result != AGC_OK)
+        goto cleanup;
+#endif
     result = agcCreateFence(device, &fence_desc, &fence);
     report_result("agcCreateFence", result);
     if (result != AGC_OK)
@@ -166,6 +187,12 @@ int main(void)
     report_result("agcCreateGpuLabel", result);
     if (result != AGC_OK)
         goto cleanup;
+#if AGC_COMPUTE_BATCH
+    result = agcCreateGpuLabel(device, &label_desc, &batch_label);
+    report_result("agcCreateGpuLabel(batch tail)", result);
+    if (result != AGC_OK)
+        goto cleanup;
+#endif
 
     result = agcBeginCommandBuffer(signal_command_buffer);
     report_result("agcBeginCommandBuffer(signal)", result);
@@ -237,6 +264,20 @@ int main(void)
     report_result("agcEndCommandBuffer", result);
     if (result != AGC_OK)
         goto cleanup;
+#if AGC_COMPUTE_BATCH
+    result = agcBeginCommandBuffer(batch_tail_command_buffer);
+    report_result("agcBeginCommandBuffer(batch tail)", result);
+    if (result != AGC_OK)
+        goto cleanup;
+    result = agcCmdSignalGpuLabel(batch_tail_command_buffer, batch_label, 1u);
+    report_result("agcCmdSignalGpuLabel(batch tail)", result);
+    if (result != AGC_OK)
+        goto cleanup;
+    result = agcEndCommandBuffer(batch_tail_command_buffer);
+    report_result("agcEndCommandBuffer(batch tail)", result);
+    if (result != AGC_OK)
+        goto cleanup;
+#endif
     submit.command_buffer_count = 1u;
     submit.command_buffers = &signal_command_buffer;
     result = agcQueueSubmit(queue, &submit, signal_fence);
@@ -244,9 +285,17 @@ int main(void)
     if (result != AGC_OK)
         goto cleanup;
     signal_submitted = true;
+#if AGC_COMPUTE_BATCH
+    batch_commands[0] = command_buffer;
+    batch_commands[1] = batch_tail_command_buffer;
+    submit.command_buffer_count = 2u;
+    submit.command_buffers = batch_commands;
+#else
     submit.command_buffers = &command_buffer;
+#endif
     result = agcQueueSubmit(queue, &submit, fence);
-    report_result("agcQueueSubmit", result);
+    report_result(AGC_COMPUTE_BATCH ? "agcQueueSubmit(batch)" :
+        "agcQueueSubmit", result);
     if (result != AGC_OK)
         goto cleanup;
     submitted = true;
@@ -272,6 +321,15 @@ int main(void)
     printf("GPU label diagnostics: value=0x%08x submission=%llu\n",
         label_info.observed_value,
         (unsigned long long)label_info.last_signal_submission_id);
+#if AGC_COMPUTE_BATCH
+    result = agcGetGpuLabelInfo(batch_label, &label_info);
+    report_result("agcGetGpuLabelInfo(batch tail)", result);
+    if (result != AGC_OK || label_info.scheduled_value != 1u ||
+        label_info.observed_value != 1u) {
+        puts("Batch-tail GPU label diagnostics: FAIL");
+        goto cleanup;
+    }
+#endif
     result = agcGetFenceInfo(fence, &fence_info);
     report_result("agcGetFenceInfo", result);
     if (result != AGC_OK || fence_info.state != AGC_FENCE_STATE_SIGNALED ||
@@ -310,6 +368,14 @@ cleanup:
         if (result != AGC_OK)
             passed = false;
     }
+#if AGC_COMPUTE_BATCH
+    if (batch_tail_command_buffer && (!submitted || completed)) {
+        result = agcResetCommandBuffer(batch_tail_command_buffer);
+        report_result("agcResetCommandBuffer(batch tail)", result);
+        if (result != AGC_OK)
+            passed = false;
+    }
+#endif
     if (fence) {
         result = agcDestroyFence(fence);
         report_result("agcDestroyFence", result);
@@ -328,6 +394,14 @@ cleanup:
         if (result != AGC_OK)
             passed = false;
     }
+#if AGC_COMPUTE_BATCH
+    if (batch_label) {
+        result = agcDestroyGpuLabel(batch_label);
+        report_result("agcDestroyGpuLabel(batch tail)", result);
+        if (result != AGC_OK)
+            passed = false;
+    }
+#endif
     if (signal_command_buffer) {
         result = agcDestroyCommandBuffer(signal_command_buffer);
         report_result("agcDestroyCommandBuffer(signal)", result);
@@ -340,6 +414,14 @@ cleanup:
         if (result != AGC_OK)
             passed = false;
     }
+#if AGC_COMPUTE_BATCH
+    if (batch_tail_command_buffer) {
+        result = agcDestroyCommandBuffer(batch_tail_command_buffer);
+        report_result("agcDestroyCommandBuffer(batch tail)", result);
+        if (result != AGC_OK)
+            passed = false;
+    }
+#endif
     if (output) {
         result = agcDestroyBuffer(output);
         report_result("agcDestroyBuffer", result);
@@ -370,7 +452,8 @@ cleanup:
         if (result != AGC_OK)
             passed = false;
     }
-    printf("Native runtime compute result: %s\n", passed ? "PASS" : "FAIL");
+    printf("Native runtime compute%s result: %s\n",
+        AGC_COMPUTE_BATCH ? " batch" : "", passed ? "PASS" : "FAIL");
     fflush(stdout);
     fflush(stderr);
 #if AGC_SELF_TERMINATE

@@ -322,6 +322,13 @@ agc_runtime_compute.elf: shaders_runtime_compute agc_runtime_compute.c \
 		gpu_credentials.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -o $@ agc_runtime_compute.c $(AGC_LDFLAGS)
 
+# Reflected compute dispatch in the first DCB, followed by a nonempty
+# label-only tail DCB and one runtime batch fence. It is a separate artifact
+# from the single-DCB native-runtime compute qualification sample.
+agc_runtime_compute_batch.elf: shaders_runtime_compute agc_runtime_compute.c \
+		gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_COMPUTE_BATCH=1 -o $@ agc_runtime_compute.c $(AGC_LDFLAGS)
+
 # Bounded public-runtime completion diagnostic. It records no application
 # commands; agcQueueSubmit supplies the runtime-owned EOP fence packet.
 agc_runtime_eop.elf: agc_runtime_eop.c gpu_credentials.h $(OPENAGC_LIB)

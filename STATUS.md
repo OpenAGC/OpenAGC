@@ -116,6 +116,10 @@ FW 5.50; see `analysis/runtime_batch_submit_label_lists_fw550_20260731.md`.
 The same label-only two-DCB batch form passed on the native compute queue,
 artifact `95caaab9277368f06db8907147604e8e8dbc3296189fd80e5e15a37f0d46f9a2`;
 see `analysis/runtime_compute_batch_submit_label_lists_fw550_20260731.md`.
+Artifact `b4d21c6673d74af2b997e695605018ff4499df4998782fc243f18523e7c7576e`
+then passed reflected compute dispatch in the first DCB, a verified EOP label
+in the second, one batch fence, readback, and teardown on exact FW 5.50; see
+`analysis/runtime_compute_batch_fw550_20260731.md`.
 FW 11.60 remains hardware-unqualified.
 
 ## Native resource and memory management complete (2026-07-30)
