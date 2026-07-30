@@ -245,6 +245,13 @@ clean shutdown, final PASS, and no residual process. Depth-only combined
 expclear is hardware-qualified on both endpoints. Proceed to pinned FW 11.60
 stencil-only pass 1; both-aspect remains blocked.
 
+FW 11.60 stencil-only pass 1 selected aspect `0x2`, produced expected metadata
+`0xfffff0ff` across all `49152` selected words with zero mismatch, zero outside
+change, and preserved reserved bits, and reproduced the exact allocation-aware
+D32 and S8 distributions. It completed immediately, shut down cleanly, returned
+final PASS, and left no residual process. The recipe now freezes `49152`; one
+identical replay remains before the FW 5.50 stencil-only mirror.
+
 ## Higher-level consumers
 
 The following FW 5.50-qualified application-facing paths still need bounded

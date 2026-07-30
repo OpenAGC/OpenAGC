@@ -2647,7 +2647,8 @@ deploy_agc_depth_stencil_expclear_depth_fw1160_logged: agc_depth_stencil_expclea
 deploy_agc_depth_stencil_expclear_stencil_fw1160_logged: agc_depth_stencil_expclear_stencil_fw1160_logged.elf
 	PS5_HOST=$(PS5_HOST) DEPTH_ARTIFACT=$(THIS_DIR)/$< \
 		RESULT_LOG_PATH=/data/homebrew/openagc_fw1160_depth/result.log \
-		EXPECTED_HTILE_INITIAL=fffff30f EXPECTED_D32_FULL_RECT=1 \
+		EXPECTED_HTILE_INITIAL=fffff30f EXPECTED_HTILE_CHANGED=49152 \
+		EXPECTED_D32_FULL_RECT=1 \
 		EXPECTED_D32_ONE_COUNT=1755648 EXPECTED_STENCIL_FULL_RECT=1 \
 		EXPECTED_COMBINED_EXPCLEAR_ASPECTS=2 \
 		EXPECTED_ARTIFACT_SHA256=edbb8672c26b7f1eb1aedb57c9c27a77da89edba5d05435ed06bb68d65498a7a \

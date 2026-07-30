@@ -581,6 +581,10 @@ the runner and shared teardown on FW 11.60 only.
   metadata, allocation-aware D32, S8, fence, shutdown, and cleanup oracles.
   Depth-only combined expclear is qualified on both endpoints. Run stencil-only
   FW 11.60 pass 1 next; keep both-aspect blocked.
+- FW 11.60 stencil-only pass 1 reproduced aspect `0x2`, expected metadata
+  `0xfffff0ff`, zero RMW mismatches/outside changes, `49152` changed words,
+  exact allocation-aware D32 and S8 values, clean shutdown, and no residual
+  process. Freeze `49152` and replay once before the FW 5.50 mirror.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and
