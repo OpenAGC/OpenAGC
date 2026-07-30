@@ -3175,6 +3175,297 @@ static void test_runtime_image_transfer(void)
         "image transfer device destroys");
 }
 
+static void test_runtime_partial_resource_handoffs(void)
+{
+    AgcDevice device = create_device();
+    AgcQueue compute_queue = create_queue(device, kAgcQueueCompute);
+    AgcQueue graphics_queue = create_queue(device, kAgcQueueGraphics);
+    AgcBufferDesc buffer_desc = AGC_BUFFER_DESC_INIT;
+    AgcImageDesc image_desc = AGC_IMAGE_DESC_INIT;
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
+    AgcGpuLabelDesc label_desc = AGC_GPU_LABEL_DESC_INIT;
+    AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    AgcResourceTransition setup[2] = {
+        AGC_RESOURCE_TRANSITION_INIT, AGC_RESOURCE_TRANSITION_INIT };
+    AgcResourceTransition releases[4] = {
+        AGC_RESOURCE_TRANSITION_V2_INIT, AGC_RESOURCE_TRANSITION_V2_INIT,
+        AGC_RESOURCE_TRANSITION_V2_INIT, AGC_RESOURCE_TRANSITION_V2_INIT };
+    AgcResourceTransition acquires[4];
+    AgcResourceTransition probe = AGC_RESOURCE_TRANSITION_INIT;
+    AgcResourceStateInfo info = AGC_RESOURCE_STATE_INFO_INIT;
+    AgcImageSubresourceRange image_ranges[2] = {
+        { AGC_IMAGE_ASPECT_COLOR_BIT, 0u, 1u, 0u, 1u, 0u },
+        { AGC_IMAGE_ASPECT_COLOR_BIT, 1u, 1u, 1u, 1u, 0u } };
+    AgcBuffer buffer = NULL;
+    AgcImage image = NULL;
+    AgcCommandBuffer compute = NULL;
+    AgcCommandBuffer graphics = NULL;
+    AgcCommandBuffer competing = NULL;
+    AgcCommandBuffer batch_commands[2];
+    AgcFence fence = NULL;
+    AgcGpuLabel labels[4] = { NULL, NULL, NULL, NULL };
+    uint32_t i;
+
+    buffer_desc.size = 256u;
+    buffer_desc.usage = AGC_BUFFER_USAGE_STORAGE_BIT;
+    image_desc.width = 8u;
+    image_desc.height = 8u;
+    image_desc.mip_levels = 2u;
+    image_desc.array_layers = 2u;
+    image_desc.format = AGC_FORMAT_RGBA8_UNORM;
+    image_desc.usage = AGC_IMAGE_USAGE_STORAGE_BIT |
+        AGC_IMAGE_USAGE_SAMPLED_BIT;
+    command_desc.queue_type = kAgcQueueCompute;
+    command_desc.capacity_dwords = 512u;
+    TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &buffer), AGC_OK,
+        "partial-handoff buffer creates");
+    TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &image), AGC_OK,
+        "partial-handoff image creates");
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &compute),
+        AGC_OK, "partial-handoff compute command creates");
+    command_desc.queue_type = kAgcQueueGraphics;
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &graphics),
+        AGC_OK, "partial-handoff graphics command creates");
+    command_desc.queue_type = kAgcQueueCompute;
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &competing),
+        AGC_OK, "partial-handoff competing command creates");
+    TEST_ASSERT_EQ(agcCreateFence(device, &fence_desc, &fence), AGC_OK,
+        "partial-handoff fence creates");
+    for (i = 0u; i < 4u; ++i) {
+        TEST_ASSERT_EQ(agcCreateGpuLabel(device, &label_desc, &labels[i]),
+            AGC_OK, "partial-handoff dependency label creates");
+    }
+
+    setup[0].resource_type = kAgcResourceTypeBuffer;
+    setup[0].buffer = buffer;
+    setup[0].buffer_size = buffer_desc.size;
+    setup[0].before = kAgcResourceUsageUndefined;
+    setup[0].after = kAgcResourceUsageShaderWrite;
+    setup[0].before_owner = kAgcResourceOwnerHost;
+    setup[0].after_owner = kAgcResourceOwnerCompute;
+    setup[1].resource_type = kAgcResourceTypeImage;
+    setup[1].image = image;
+    setup[1].image_range.aspect_mask = AGC_IMAGE_ASPECT_COLOR_BIT;
+    setup[1].image_range.mip_level_count = image_desc.mip_levels;
+    setup[1].image_range.array_layer_count = image_desc.array_layers;
+    setup[1].before = kAgcResourceUsageUndefined;
+    setup[1].after = kAgcResourceUsageShaderWrite;
+    setup[1].before_owner = kAgcResourceOwnerHost;
+    setup[1].after_owner = kAgcResourceOwnerCompute;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(compute), AGC_OK,
+        "partial-handoff setup begins");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(compute, 2u, setup), AGC_OK,
+        "partial-handoff setup records both resources");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(compute), AGC_OK,
+        "partial-handoff setup ends");
+    submit.command_buffer_count = 1u;
+    submit.command_buffers = &compute;
+    TEST_ASSERT_EQ(agcQueueSubmit(compute_queue, &submit, fence), AGC_OK,
+        "partial-handoff setup submits");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(compute), AGC_OK,
+        "partial-handoff setup command resets");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "partial-handoff setup fence resets");
+
+    for (i = 0u; i < 4u; ++i) {
+        releases[i].before = kAgcResourceUsageShaderWrite;
+        releases[i].after = kAgcResourceUsageShaderRead;
+        releases[i].before_owner = kAgcResourceOwnerCompute;
+        releases[i].after_owner = kAgcResourceOwnerGraphics;
+        releases[i].flags = AGC_RESOURCE_TRANSITION_RELEASE_BIT;
+        releases[i].dependency_label = labels[i];
+        releases[i].dependency_value = 1u;
+    }
+    releases[0].resource_type = kAgcResourceTypeBuffer;
+    releases[0].buffer = buffer;
+    releases[0].buffer_offset = 0u;
+    releases[0].buffer_size = 64u;
+    releases[1].resource_type = kAgcResourceTypeBuffer;
+    releases[1].buffer = buffer;
+    releases[1].buffer_offset = 128u;
+    releases[1].buffer_size = 64u;
+    releases[2].resource_type = kAgcResourceTypeImage;
+    releases[2].image = image;
+    releases[2].image_range = image_ranges[0];
+    releases[3].resource_type = kAgcResourceTypeImage;
+    releases[3].image = image;
+    releases[3].image_range = image_ranges[1];
+
+    acquires[0] = releases[0];
+    acquires[1] = releases[0];
+    acquires[1].dependency_label = labels[1];
+    acquires[1].buffer_offset = 32u;
+    acquires[1].buffer_size = 32u;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(compute), AGC_OK,
+        "first independently recorded overlapping release begins");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(compute, 1u, &acquires[0]),
+        AGC_OK, "first independently recorded release succeeds");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(compute), AGC_OK,
+        "first independently recorded release ends");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(competing), AGC_OK,
+        "second independently recorded overlapping release begins");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(competing, 1u, &acquires[1]),
+        AGC_OK, "second independently recorded release succeeds alone");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(competing), AGC_OK,
+        "second independently recorded release ends");
+    batch_commands[0] = compute;
+    batch_commands[1] = competing;
+    submit.command_buffer_count = 2u;
+    submit.command_buffers = batch_commands;
+    TEST_ASSERT_EQ(agcQueueSubmit(compute_queue, &submit, fence),
+        AGC_ERROR_INVALID_STATE,
+        "batch rejects independently recorded overlapping releases");
+    info = (AgcResourceStateInfo)AGC_RESOURCE_STATE_INFO_INIT;
+    TEST_ASSERT_EQ(agcGetBufferRangeStateInfo(buffer, 0u, 64u, &info),
+        AGC_OK, "rejected overlap batch preserves buffer diagnostics");
+    TEST_ASSERT_EQ(info.flags, 0u,
+        "rejected overlap batch publishes no pending transfer");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(competing), AGC_OK,
+        "competing overlap command resets");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(compute), AGC_OK,
+        "first overlap command resets");
+    submit.command_buffer_count = 1u;
+    submit.command_buffers = &compute;
+
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(compute), AGC_OK,
+        "disjoint partial releases begin");
+    for (i = 0u; i < 4u; ++i) {
+        TEST_ASSERT_EQ(agcCmdTransitionResources(compute, 1u, &releases[i]),
+            AGC_OK,
+            "multiple disjoint buffer and image releases record together");
+    }
+    TEST_ASSERT_EQ(agcEndCommandBuffer(compute), AGC_OK,
+        "disjoint partial releases end");
+    TEST_ASSERT_EQ(agcQueueSubmit(compute_queue, &submit, fence), AGC_OK,
+        "disjoint partial releases submit");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(compute), AGC_OK,
+        "disjoint partial release command resets");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "disjoint partial release fence resets");
+    TEST_ASSERT_EQ(agcDestroyGpuLabel(labels[0]), AGC_ERROR_BUSY,
+        "pending partial transfer retains its dependency label");
+
+    TEST_ASSERT_EQ(agcGetBufferStateInfo(buffer, &info),
+        AGC_ERROR_NOT_SUPPORTED,
+        "whole buffer query rejects mixed pending-transfer coverage");
+    info = (AgcResourceStateInfo)AGC_RESOURCE_STATE_INFO_INIT;
+    TEST_ASSERT_EQ(agcGetBufferRangeStateInfo(buffer, 0u, 64u, &info),
+        AGC_OK, "first pending buffer range is queryable");
+    TEST_ASSERT_EQ(info.flags, AGC_RESOURCE_STATE_TRANSFER_PENDING_BIT,
+        "first pending buffer range reports its transfer");
+    TEST_ASSERT(info.transfer_label == labels[0],
+        "first pending buffer range reports the exact dependency");
+    info = (AgcResourceStateInfo)AGC_RESOURCE_STATE_INFO_INIT;
+    TEST_ASSERT_EQ(agcGetBufferRangeStateInfo(buffer, 64u, 64u, &info),
+        AGC_OK, "disjoint buffer range remains queryable");
+    TEST_ASSERT_EQ(info.flags, 0u,
+        "disjoint buffer range remains independently usable");
+    info = (AgcResourceStateInfo)AGC_RESOURCE_STATE_INFO_INIT;
+    TEST_ASSERT_EQ(agcGetImageStateInfo(image, &info),
+        AGC_ERROR_NOT_SUPPORTED,
+        "whole image query rejects mixed pending-transfer coverage");
+    TEST_ASSERT_EQ(agcGetImageSubresourceStateInfo(image, &image_ranges[1],
+        &info), AGC_OK, "second pending image range is queryable");
+    TEST_ASSERT(info.transfer_label == labels[3],
+        "second pending image range reports the exact dependency");
+
+    probe = releases[0];
+    probe.buffer_offset = 32u;
+    probe.buffer_size = 64u;
+    probe.dependency_value = 2u;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(compute), AGC_OK,
+        "overlapping pending-range probe begins");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(compute, 1u, &probe),
+        AGC_ERROR_INVALID_STATE,
+        "normal transition cannot overlap a pending partial transfer");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(compute), AGC_OK,
+        "overlapping pending-range probe resets");
+    probe.buffer_offset = 64u;
+    probe.buffer_size = 64u;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(compute), AGC_OK,
+        "disjoint pending-range probe begins");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(compute, 1u, &probe), AGC_OK,
+        "normal transition may use a disjoint pending-resource range");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(compute), AGC_OK,
+        "disjoint pending-range probe resets without publication");
+
+    for (i = 0u; i < 4u; ++i) {
+        acquires[i] = releases[i];
+        acquires[i].flags = AGC_RESOURCE_TRANSITION_ACQUIRE_BIT;
+    }
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(graphics), AGC_OK,
+        "partial acquire reservation probe begins");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(graphics, 1u, &acquires[0]),
+        AGC_OK, "one exact partial acquire reserves its transfer");
+    info = (AgcResourceStateInfo)AGC_RESOURCE_STATE_INFO_INIT;
+    TEST_ASSERT_EQ(agcGetBufferRangeStateInfo(buffer, 0u, 64u, &info),
+        AGC_OK, "reserved partial acquire is queryable");
+    TEST_ASSERT_EQ(info.flags, AGC_RESOURCE_STATE_TRANSFER_PENDING_BIT |
+        AGC_RESOURCE_STATE_ACQUIRE_RECORDED_BIT,
+        "partial acquire reservation is reported independently");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(graphics), AGC_OK,
+        "reset clears only the selected acquire reservation");
+    info = (AgcResourceStateInfo)AGC_RESOURCE_STATE_INFO_INIT;
+    TEST_ASSERT_EQ(agcGetBufferRangeStateInfo(buffer, 0u, 64u, &info),
+        AGC_OK, "reset partial acquire remains pending");
+    TEST_ASSERT_EQ(info.flags, AGC_RESOURCE_STATE_TRANSFER_PENDING_BIT,
+        "reset removes the selected acquire-recorded diagnostic");
+
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(graphics), AGC_OK,
+        "all exact partial acquires begin");
+    for (i = 0u; i < 4u; ++i) {
+        TEST_ASSERT_EQ(agcCmdTransitionResources(graphics, 1u, &acquires[i]),
+            AGC_OK, "all exact disjoint partial acquires record together");
+    }
+    TEST_ASSERT_EQ(agcEndCommandBuffer(graphics), AGC_OK,
+        "all exact partial acquires end");
+    submit.command_buffers = &graphics;
+    TEST_ASSERT_EQ(agcQueueSubmit(graphics_queue, &submit, fence), AGC_OK,
+        "all exact partial acquires submit");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(graphics), AGC_OK,
+        "all exact partial acquire command resets");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "all exact partial acquire fence resets");
+    info = (AgcResourceStateInfo)AGC_RESOURCE_STATE_INFO_INIT;
+    TEST_ASSERT_EQ(agcGetBufferRangeStateInfo(buffer, 0u, 64u, &info),
+        AGC_OK, "acquired buffer range is queryable");
+    TEST_ASSERT_EQ(info.usage, kAgcResourceUsageShaderRead,
+        "acquired buffer range publishes destination usage");
+    TEST_ASSERT_EQ(info.owner, kAgcResourceOwnerGraphics,
+        "acquired buffer range publishes destination owner");
+    TEST_ASSERT_EQ(info.flags, 0u,
+        "acquired buffer range clears transfer diagnostics");
+    info = (AgcResourceStateInfo)AGC_RESOURCE_STATE_INFO_INIT;
+    TEST_ASSERT_EQ(agcGetImageSubresourceStateInfo(image, &image_ranges[0],
+        &info), AGC_OK, "acquired image range is queryable");
+    TEST_ASSERT_EQ(info.owner, kAgcResourceOwnerGraphics,
+        "acquired image range publishes destination owner");
+
+    for (i = 0u; i < 4u; ++i) {
+        TEST_ASSERT_EQ(agcDestroyGpuLabel(labels[i]), AGC_OK,
+            "partial-handoff dependency label destroys");
+    }
+    TEST_ASSERT_EQ(agcDestroyFence(fence), AGC_OK,
+        "partial-handoff fence destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(competing), AGC_OK,
+        "partial-handoff competing command destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(graphics), AGC_OK,
+        "partial-handoff graphics command destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(compute), AGC_OK,
+        "partial-handoff compute command destroys");
+    TEST_ASSERT_EQ(agcDestroyImage(image), AGC_OK,
+        "partial-handoff image destroys");
+    TEST_ASSERT_EQ(agcDestroyBuffer(buffer), AGC_OK,
+        "partial-handoff buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(graphics_queue), AGC_OK,
+        "partial-handoff graphics queue destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(compute_queue), AGC_OK,
+        "partial-handoff compute queue destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "partial-handoff device destroys");
+}
+
 static void test_runtime_resource_transitions(void)
 {
     AgcDevice device = create_device();
@@ -3336,12 +3627,11 @@ static void test_runtime_resource_transitions(void)
     handoff.buffer_offset = 16u;
     handoff.buffer_size = 32u;
     TEST_ASSERT_EQ(agcBeginCommandBuffer(compute_command), AGC_OK,
-        "partial handoff rejection command begins");
+        "partial handoff probe command begins");
     TEST_ASSERT_EQ(agcCmdTransitionResources(compute_command, 1u, &handoff),
-        AGC_ERROR_NOT_SUPPORTED,
-        "partial cross-queue ownership transfer fails closed");
+        AGC_OK, "partial cross-queue ownership transfer records");
     TEST_ASSERT_EQ(agcResetCommandBuffer(compute_command), AGC_OK,
-        "partial handoff rejection command resets");
+        "unsubmitted partial handoff resets without publishing state");
     handoff.buffer_offset = 0u;
     handoff.buffer_size = buffer_desc.size;
     TEST_ASSERT_EQ(agcBeginCommandBuffer(compute_command), AGC_OK,
@@ -7158,6 +7448,7 @@ void test_suite_runtime(void)
     TEST_RUN(test_runtime_gpu_label_timeline_waits);
     TEST_RUN(test_runtime_submit_label_lists);
     TEST_RUN(test_runtime_image_transfer);
+    TEST_RUN(test_runtime_partial_resource_handoffs);
     TEST_RUN(test_runtime_resource_transitions);
     TEST_RUN(test_runtime_sampled_image_handoff);
     TEST_RUN(test_runtime_color_target_binding);

@@ -30,6 +30,9 @@ Runtime API v9 adds version-2 `AgcSubmitInfo` wait/signal lists through typed
 Runtime API v19 adds bounded host status/wait operations for monotonic label
 points and a v2 `AgcGpuLabelInfo` diagnostic tail while preserving its
 104-byte v1 prefix.
+Runtime API v20 extends cross-queue ownership transfers to exact buffer byte
+ranges and image aspect/mip/layer ranges, with multiple disjoint transfers
+pending on one resource.
 OpenAGC rejects unknown versions, nonzero flags, or nonzero reserved fields
 without partial object or command creation.
 
@@ -438,8 +441,8 @@ mip/layer/aspects, and descriptors validate the exact image-view range.
 Whole-image copy and VideoOut presentation require a uniform complete-image
 state. `agcGetImageSubresourceStateInfo` queries a uniform selected range;
 `agcGetImageStateInfo` returns `AGC_ERROR_NOT_SUPPORTED` when any aspect,
-mip, or layer differs. HTILE images, partial cross-queue ownership transfers,
-and unqualified usage combinations still fail closed. A resource may appear
+mip, or layer differs. HTILE images and unqualified usage combinations still
+fail closed. A resource may appear
 only once in one transition call; applications record disjoint or later state
 changes in ordered calls.
 
@@ -455,10 +458,16 @@ EOP. Only after source submission may the destination queue record the matching
 `AGC_RESOURCE_TRANSITION_ACQUIRE_BIT`; it emits an exact `WAIT_REG_MEM` then
 the qualified all-cache invalidate. The source state remains committed until
 release submit and destination state publishes only after acquire submit. A
-pending handoff accepts one acquire command; reset releases that reservation.
-The current v2 handoff scope is whole resources whose source usage writes GPU
-memory; partial ownership transfers, HTILE, and other handoff forms fail
-closed. Submit-list label dependencies remain available independently.
+pending range accepts one exact acquire command; reset releases only that
+reservation. Runtime API v20 permits several non-overlapping pending transfers
+on one resource. Releases may cover exact buffer byte ranges or image
+aspect/mip/layer ranges; acquires must match a committed range, destination
+state, label, and value exactly. Overlapping pending or batch releases reject
+before driver mutation, while disjoint ranges remain usable. Range diagnostics
+report one uniform pending transfer and reject mixed pending/nonpending or
+differently keyed coverage as ambiguous. Pending ranges retain their labels
+until acquire submission. HTILE and other unqualified handoff forms remain
+fail-closed. Submit-list label dependencies remain available independently.
 
 ## Current qualification boundary
 

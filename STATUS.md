@@ -228,9 +228,21 @@ and ordered-batch submission reject repeat, decreasing, stale, and post-
 `UINT32_MAX` signals transactionally. Clean generic coverage passes 16,760
 assertions; the Prospero library and pinned timeline-wait artifact build with
 no new warnings. See `analysis/runtime_gpu_label_timeline_host_20260731.md`.
-The pending FW 5.50 presentation stages, batch-retirement stress, and timeline
-wait are now exposed only through seven cleanup-first, SHA-256-pinned Make
-deployment targets.
+Runtime API v20 extends graphics/compute ownership handoffs to exact buffer
+byte ranges and image aspect/mip/layer ranges. Each resource can hold several
+disjoint pending transfers; exact acquires reserve and consume one range,
+reset clears only that reservation, pending ranges retain their dependency
+labels, and overlapping stale or independently recorded batch releases reject
+transactionally before driver mutation. Uniform range diagnostics expose one
+pending transfer while mixed coverage fails closed. Clean generic coverage
+passes 16,851 assertions; Prospero compilation is tracked separately from
+exact-firmware execution. See
+`analysis/runtime_partial_ownership_transfers_host_20260731.md`.
+The first FW 5.50 attempt stopped before upload because the configured console
+accepted neither websrv port 8080 nor FTP port 2121; no hardware payload ran.
+The pending FW 5.50 presentation stages, batch-retirement stress, timeline
+wait, and partial-range handoffs are exposed only through nine cleanup-first,
+SHA-256-pinned Make deployment targets.
 The shared runner verifies firmware, exact verdict, error-free device teardown,
 transport completion, and post-run service health. A host mock locks successful
 flow plus hash/verdict failure paths; CTest passes 7/7 suites. See

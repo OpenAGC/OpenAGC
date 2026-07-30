@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-#define AGC_RUNTIME_API_VERSION 19u
+#define AGC_RUNTIME_API_VERSION 20u
 #define AGC_RUNTIME_STRUCTURE_VERSION_1 1u
 #define AGC_RUNTIME_STRUCTURE_VERSION_2 2u
 #define AGC_RUNTIME_PROFILE_NAME_SIZE 48u
@@ -325,7 +325,8 @@ typedef struct AgcResourceTransition {
       NULL, 0u, 0u, {0u, 0u} }
 
 /* Read-only snapshot of the state committed by successful queue submission.
- * A pending ownership transfer reports its destination state and dependency;
+ * A uniformly covered pending ownership range reports its destination state
+ * and dependency; mixed transfer coverage fails closed as ambiguous.
  * the committed usage/owner remain unchanged until the matching acquire is
  * submitted. Reference counts explain a BUSY destruction result without
  * exposing allocation addresses or backend objects. */

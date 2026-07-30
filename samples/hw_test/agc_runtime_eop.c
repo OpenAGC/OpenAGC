@@ -5,8 +5,9 @@
  * compute-owned writable-resource state, then validates the v2 compute-to-
  * graphics RELEASE/ACQUIRE protocol: the source EOP release writes a label,
  * and the graphics queue waits for that label before its all-cache acquire.
- * AGC_IMAGE_HANDOFF selects a whole RGBA8 storage image; the default remains
- * the historically qualified storage-buffer oracle.
+ * AGC_IMAGE_HANDOFF selects an RGBA8 storage image; AGC_PARTIAL_HANDOFF
+ * restricts the transfer to one buffer byte range or one image mip/layer.
+ * The default remains the historically qualified whole storage-buffer oracle.
  * Do not hardware-qualify this probe until it is explicitly deployed and both
  * fences complete.
  */
@@ -31,6 +32,10 @@
 
 #ifndef AGC_TIMELINE_WAIT
 #define AGC_TIMELINE_WAIT 0
+#endif
+
+#ifndef AGC_PARTIAL_HANDOFF
+#define AGC_PARTIAL_HANDOFF 0
 #endif
 
 enum { kCompletionTimeoutNs = 200000000u };
@@ -119,13 +124,17 @@ int main(void)
 #if AGC_IMAGE_HANDOFF
     image_desc.width = 8u;
     image_desc.height = 8u;
+#if AGC_PARTIAL_HANDOFF
+    image_desc.mip_levels = 2u;
+    image_desc.array_layers = 2u;
+#endif
     image_desc.format = AGC_FORMAT_RGBA8_UNORM;
     image_desc.usage = AGC_IMAGE_USAGE_STORAGE_BIT |
         AGC_IMAGE_USAGE_SAMPLED_BIT;
     result = agcCreateImage(device, &image_desc, &image);
     report_result("agcCreateImage", result);
 #else
-    buffer_desc.size = 64u;
+    buffer_desc.size = AGC_PARTIAL_HANDOFF ? 128u : 64u;
     buffer_desc.usage = AGC_BUFFER_USAGE_STORAGE_BIT |
         AGC_BUFFER_USAGE_TRANSFER_SRC_BIT | AGC_BUFFER_USAGE_TRANSFER_DST_BIT;
     buffer_desc.flags = AGC_BUFFER_CREATE_READBACK_BIT;
@@ -191,10 +200,20 @@ int main(void)
     handoff.image_range.aspect_mask = AGC_IMAGE_ASPECT_COLOR_BIT;
     handoff.image_range.mip_level_count = image_desc.mip_levels;
     handoff.image_range.array_layer_count = image_desc.array_layers;
+#if AGC_PARTIAL_HANDOFF
+    handoff.image_range.base_mip_level = 1u;
+    handoff.image_range.mip_level_count = 1u;
+    handoff.image_range.base_array_layer = 1u;
+    handoff.image_range.array_layer_count = 1u;
+#endif
 #else
     handoff.resource_type = kAgcResourceTypeBuffer;
     handoff.buffer = buffer;
     handoff.buffer_size = buffer_desc.size;
+#if AGC_PARTIAL_HANDOFF
+    handoff.buffer_offset = 32u;
+    handoff.buffer_size = 64u;
+#endif
 #endif
     handoff.before = kAgcResourceUsageShaderWrite;
     handoff.after = kAgcResourceUsageShaderRead;
@@ -360,7 +379,8 @@ cleanup:
         if (result != AGC_OK)
             passed = false;
     }
-    printf("Native runtime %s handoff result: %s\n",
+    printf("Native runtime %s%s handoff result: %s\n",
+        AGC_PARTIAL_HANDOFF ? "partial " : "",
         AGC_IMAGE_HANDOFF ? "image" : "buffer", passed ? "PASS" : "FAIL");
     fflush(stdout);
     fflush(stderr);

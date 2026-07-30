@@ -75,6 +75,7 @@ typedef struct AgcRuntimeBatchTransitionState {
     void *resource;
     AgcResourceUsage usage;
     AgcResourceOwner owner;
+    uint32_t flags;
     uint32_t command_index;
     uint64_t buffer_offset;
     uint64_t buffer_size;
@@ -88,6 +89,27 @@ typedef struct AgcRuntimeBufferStateRange {
     AgcResourceUsage usage;
     AgcResourceOwner owner;
 } AgcRuntimeBufferStateRange;
+
+typedef struct AgcRuntimePendingTransfer {
+    AgcResourceUsage usage;
+    AgcResourceOwner owner;
+    AgcGpuLabel label;
+    AgcCommandBuffer acquire_command;
+    uint32_t value;
+    uint32_t reserved0;
+    uint64_t buffer_offset;
+    uint64_t buffer_size;
+    AgcImageSubresourceRange image_range;
+} AgcRuntimePendingTransfer;
+
+typedef struct AgcRuntimeTransferSnapshot {
+    uint32_t pending;
+    uint32_t acquire_recorded;
+    AgcResourceUsage usage;
+    AgcResourceOwner owner;
+    AgcGpuLabel label;
+    uint32_t value;
+} AgcRuntimeTransferSnapshot;
 
 typedef struct AgcRuntimeRecordedLabelWait {
     AgcGpuLabel label;
@@ -182,12 +204,10 @@ struct AgcBufferImpl {
     uint32_t create_flags;
     void *storage;
     AgcRuntimeAllocation *allocation;
-    AgcResourceUsage transfer_usage;
-    AgcResourceOwner transfer_owner;
-    AgcGpuLabel transfer_label;
-    AgcCommandBuffer transfer_acquire_command;
-    uint32_t transfer_value;
-    uint32_t transfer_pending;
+    uint32_t transfer_count;
+    uint32_t transfer_capacity;
+    AgcRuntimePendingTransfer *transfers;
+    AgcRuntimePendingTransfer inline_transfer;
     uint32_t deferred;
     uint32_t state_range_count;
     uint32_t state_range_capacity;
@@ -207,12 +227,10 @@ struct AgcImageImpl {
     AgcResourceOwner owner_state;
     uint32_t subresource_state_count;
     uint16_t *subresource_states;
-    AgcResourceUsage transfer_usage;
-    AgcResourceOwner transfer_owner;
-    AgcGpuLabel transfer_label;
-    AgcCommandBuffer transfer_acquire_command;
-    uint32_t transfer_value;
-    uint32_t transfer_pending;
+    uint32_t transfer_count;
+    uint32_t transfer_capacity;
+    AgcRuntimePendingTransfer *transfers;
+    AgcRuntimePendingTransfer inline_transfer;
     uint32_t deferred;
 };
 
@@ -1821,6 +1839,8 @@ int32_t PS5_SYSV_ABI agcCreateBuffer(
     buffer->size = desc->size;
     buffer->usage = desc->usage;
     buffer->create_flags = desc->flags;
+    buffer->transfer_capacity = 1u;
+    buffer->transfers = &buffer->inline_transfer;
     buffer->state_range_count = 1u;
     buffer->state_range_capacity = 1u;
     buffer->state_ranges = &buffer->inline_state_range;
@@ -1838,7 +1858,7 @@ int32_t PS5_SYSV_ABI agcDestroyBuffer(AgcBuffer buffer)
         !agcDeviceValid(buffer->device)) {
         return AGC_ERROR_INVALID_ARGUMENT;
     }
-    if (buffer->recorded_refs != 0u || buffer->transfer_pending)
+    if (buffer->recorded_refs != 0u || buffer->transfer_count != 0u)
         return AGC_ERROR_BUSY;
     if (buffer->deferred)
         return AGC_ERROR_INVALID_STATE;
@@ -1846,33 +1866,41 @@ int32_t PS5_SYSV_ABI agcDestroyBuffer(AgcBuffer buffer)
     agcRuntimeFree(device, buffer->allocation);
     if (buffer->state_ranges != &buffer->inline_state_range)
         agcFree(device, buffer->state_ranges);
+    if (buffer->transfers != &buffer->inline_transfer)
+        agcFree(device, buffer->transfers);
     buffer->magic = 0u;
     agcDestroyChild(device, buffer);
     return AGC_OK;
 }
+
+static int agcBufferRangeTransferSnapshot(const AgcBuffer buffer,
+    uint64_t offset, uint64_t size, AgcRuntimeTransferSnapshot *snapshot);
 
 static int32_t agcGetBufferRangeStateInfoImpl(AgcBuffer buffer,
     uint64_t offset, uint64_t size, AgcResourceStateInfo *info)
 {
     AgcResourceUsage usage;
     AgcResourceOwner owner;
+    AgcRuntimeTransferSnapshot transfer;
 
-    if (!agcBufferCommittedRangeState(buffer, offset, size, &usage, &owner))
+    if (!agcBufferCommittedRangeState(buffer, offset, size, &usage, &owner) ||
+        !agcBufferRangeTransferSnapshot(buffer, offset, size, &transfer))
         return AGC_ERROR_NOT_SUPPORTED;
 
     *info = (AgcResourceStateInfo)AGC_RESOURCE_STATE_INFO_INIT;
     info->resource_type = kAgcResourceTypeBuffer;
     info->usage = usage;
     info->owner = owner;
-    info->transfer_usage = buffer->transfer_usage;
-    info->transfer_owner = buffer->transfer_owner;
-    info->transfer_label = buffer->transfer_label;
-    info->transfer_value = buffer->transfer_value;
     info->recorded_reference_count = buffer->recorded_refs;
-    if (buffer->transfer_pending)
+    if (transfer.pending) {
         info->flags |= AGC_RESOURCE_STATE_TRANSFER_PENDING_BIT;
-    if (buffer->transfer_acquire_command)
-        info->flags |= AGC_RESOURCE_STATE_ACQUIRE_RECORDED_BIT;
+        info->transfer_usage = transfer.usage;
+        info->transfer_owner = transfer.owner;
+        info->transfer_label = transfer.label;
+        info->transfer_value = transfer.value;
+        if (transfer.acquire_recorded)
+            info->flags |= AGC_RESOURCE_STATE_ACQUIRE_RECORDED_BIT;
+    }
     if (buffer->deferred)
         info->flags |= AGC_RESOURCE_STATE_DEFERRED_BIT;
     return AGC_OK;
@@ -1952,6 +1980,260 @@ static int agcImageRangeIsWhole(const AgcImage image,
         range->mip_level_count == image->desc.mip_levels &&
         range->base_array_layer == 0u &&
         range->array_layer_count == image->desc.array_layers;
+}
+
+static int agcBufferRangesOverlap(uint64_t first_offset, uint64_t first_size,
+    uint64_t second_offset, uint64_t second_size)
+{
+    return first_offset < second_offset + second_size &&
+        second_offset < first_offset + first_size;
+}
+
+static int agcImageRangesEqual(const AgcImageSubresourceRange *first,
+    const AgcImageSubresourceRange *second)
+{
+    return first->aspect_mask == second->aspect_mask &&
+        first->base_mip_level == second->base_mip_level &&
+        first->mip_level_count == second->mip_level_count &&
+        first->base_array_layer == second->base_array_layer &&
+        first->array_layer_count == second->array_layer_count;
+}
+
+static int agcImageRangesOverlap(const AgcImageSubresourceRange *first,
+    const AgcImageSubresourceRange *second)
+{
+    return (first->aspect_mask & second->aspect_mask) != 0u &&
+        first->base_mip_level <
+            second->base_mip_level + second->mip_level_count &&
+        second->base_mip_level <
+            first->base_mip_level + first->mip_level_count &&
+        first->base_array_layer <
+            second->base_array_layer + second->array_layer_count &&
+        second->base_array_layer <
+            first->base_array_layer + first->array_layer_count;
+}
+
+static int agcImageRangeContainsSubresource(
+    const AgcImageSubresourceRange *range, AgcImageAspectFlags aspect,
+    uint32_t mip, uint32_t layer)
+{
+    return (range->aspect_mask & aspect) != 0u &&
+        mip >= range->base_mip_level &&
+        mip - range->base_mip_level < range->mip_level_count &&
+        layer >= range->base_array_layer &&
+        layer - range->base_array_layer < range->array_layer_count;
+}
+
+static int32_t agcEnsureTransferCapacity(AgcDevice device,
+    AgcRuntimePendingTransfer **transfers, uint32_t *capacity,
+    AgcRuntimePendingTransfer *inline_transfer, uint32_t count,
+    uint32_t required)
+{
+    AgcRuntimePendingTransfer *replacement;
+    uint32_t new_capacity;
+
+    if (required <= *capacity)
+        return AGC_OK;
+    if (required > AGC_RUNTIME_MAX_RECORDED_TRANSITIONS)
+        return AGC_ERROR_OUT_OF_MEMORY;
+    new_capacity = *capacity;
+    while (new_capacity < required) {
+        if (new_capacity > AGC_RUNTIME_MAX_RECORDED_TRANSITIONS / 2u) {
+            new_capacity = AGC_RUNTIME_MAX_RECORDED_TRANSITIONS;
+            break;
+        }
+        new_capacity *= 2u;
+    }
+    replacement = agcAlloc(device,
+        (size_t)new_capacity * sizeof(*replacement),
+        _Alignof(AgcRuntimePendingTransfer));
+    if (!replacement)
+        return AGC_ERROR_OUT_OF_MEMORY;
+    if (count != 0u)
+        memcpy(replacement, *transfers, (size_t)count * sizeof(*replacement));
+    if (*transfers != inline_transfer)
+        agcFree(device, *transfers);
+    *transfers = replacement;
+    *capacity = new_capacity;
+    return AGC_OK;
+}
+
+static int32_t agcBufferEnsureTransferCapacity(AgcBuffer buffer,
+    uint32_t required)
+{
+    return agcEnsureTransferCapacity(buffer->device, &buffer->transfers,
+        &buffer->transfer_capacity, &buffer->inline_transfer,
+        buffer->transfer_count, required);
+}
+
+static int32_t agcImageEnsureTransferCapacity(AgcImage image,
+    uint32_t required)
+{
+    return agcEnsureTransferCapacity(image->device, &image->transfers,
+        &image->transfer_capacity, &image->inline_transfer,
+        image->transfer_count, required);
+}
+
+static AgcRuntimePendingTransfer *agcBufferFindTransfer(AgcBuffer buffer,
+    uint64_t offset, uint64_t size)
+{
+    uint32_t i;
+    for (i = 0u; i < buffer->transfer_count; ++i) {
+        AgcRuntimePendingTransfer *transfer = &buffer->transfers[i];
+        if (transfer->buffer_offset == offset && transfer->buffer_size == size)
+            return transfer;
+    }
+    return NULL;
+}
+
+static AgcRuntimePendingTransfer *agcImageFindTransfer(AgcImage image,
+    const AgcImageSubresourceRange *range)
+{
+    uint32_t i;
+    for (i = 0u; i < image->transfer_count; ++i) {
+        AgcRuntimePendingTransfer *transfer = &image->transfers[i];
+        if (agcImageRangesEqual(&transfer->image_range, range))
+            return transfer;
+    }
+    return NULL;
+}
+
+static int agcBufferTransferOverlaps(const AgcBuffer buffer,
+    uint64_t offset, uint64_t size)
+{
+    uint32_t i;
+    for (i = 0u; i < buffer->transfer_count; ++i)
+        if (agcBufferRangesOverlap(offset, size,
+                buffer->transfers[i].buffer_offset,
+                buffer->transfers[i].buffer_size))
+            return 1;
+    return 0;
+}
+
+static int agcImageTransferOverlaps(const AgcImage image,
+    const AgcImageSubresourceRange *range)
+{
+    uint32_t i;
+    for (i = 0u; i < image->transfer_count; ++i)
+        if (agcImageRangesOverlap(range, &image->transfers[i].image_range))
+            return 1;
+    return 0;
+}
+
+static void agcRemoveTransfer(AgcRuntimePendingTransfer *transfers,
+    uint32_t *count, AgcRuntimePendingTransfer *transfer)
+{
+    uint32_t index = (uint32_t)(transfer - transfers);
+    if (index + 1u < *count)
+        memmove(&transfers[index], &transfers[index + 1u],
+            (size_t)(*count - index - 1u) * sizeof(*transfers));
+    (*count)--;
+}
+
+static int agcTransferSnapshotsEqual(
+    const AgcRuntimeTransferSnapshot *first,
+    const AgcRuntimeTransferSnapshot *second)
+{
+    return first->pending == second->pending &&
+        (!first->pending ||
+         (first->acquire_recorded == second->acquire_recorded &&
+          first->usage == second->usage && first->owner == second->owner &&
+          first->label == second->label && first->value == second->value));
+}
+
+static AgcRuntimeTransferSnapshot agcTransferSnapshot(
+    const AgcRuntimePendingTransfer *transfer)
+{
+    AgcRuntimeTransferSnapshot snapshot = {0};
+    if (transfer) {
+        snapshot.pending = 1u;
+        snapshot.acquire_recorded = transfer->acquire_command != NULL;
+        snapshot.usage = transfer->usage;
+        snapshot.owner = transfer->owner;
+        snapshot.label = transfer->label;
+        snapshot.value = transfer->value;
+    }
+    return snapshot;
+}
+
+static int agcBufferRangeTransferSnapshot(const AgcBuffer buffer,
+    uint64_t offset, uint64_t size, AgcRuntimeTransferSnapshot *snapshot)
+{
+    const uint64_t end = offset + size;
+    uint64_t position = offset;
+    int found = 0;
+
+    while (position < end) {
+        const AgcRuntimePendingTransfer *covering = NULL;
+        AgcRuntimeTransferSnapshot segment;
+        uint64_t next = end;
+        uint32_t i;
+
+        for (i = 0u; i < buffer->transfer_count; ++i) {
+            const AgcRuntimePendingTransfer *transfer = &buffer->transfers[i];
+            uint64_t transfer_end =
+                transfer->buffer_offset + transfer->buffer_size;
+            if (transfer->buffer_offset <= position && position < transfer_end)
+                covering = transfer;
+            if (transfer->buffer_offset > position &&
+                transfer->buffer_offset < next)
+                next = transfer->buffer_offset;
+            if (transfer_end > position && transfer_end < next)
+                next = transfer_end;
+        }
+        segment = agcTransferSnapshot(covering);
+        if (!found) {
+            *snapshot = segment;
+            found = 1;
+        } else if (!agcTransferSnapshotsEqual(snapshot, &segment)) {
+            return 0;
+        }
+        position = next;
+    }
+    return found;
+}
+
+static int agcImageRangeTransferSnapshot(const AgcImage image,
+    const AgcImageSubresourceRange *range,
+    AgcRuntimeTransferSnapshot *snapshot)
+{
+    AgcImageAspectFlags aspect;
+    int found = 0;
+
+    for (aspect = 1u; aspect <= AGC_IMAGE_ASPECT_STENCIL_BIT;
+         aspect <<= 1u) {
+        uint32_t layer;
+        if ((range->aspect_mask & aspect) == 0u)
+            continue;
+        for (layer = range->base_array_layer;
+             layer < range->base_array_layer + range->array_layer_count;
+             ++layer) {
+            uint32_t mip;
+            for (mip = range->base_mip_level;
+                 mip < range->base_mip_level + range->mip_level_count;
+                 ++mip) {
+                const AgcRuntimePendingTransfer *covering = NULL;
+                AgcRuntimeTransferSnapshot cell;
+                uint32_t i;
+
+                for (i = 0u; i < image->transfer_count; ++i)
+                    if (agcImageRangeContainsSubresource(
+                            &image->transfers[i].image_range,
+                            aspect, mip, layer)) {
+                        covering = &image->transfers[i];
+                        break;
+                    }
+                cell = agcTransferSnapshot(covering);
+                if (!found) {
+                    *snapshot = cell;
+                    found = 1;
+                } else if (!agcTransferSnapshotsEqual(snapshot, &cell)) {
+                    return 0;
+                }
+            }
+        }
+    }
+    return found;
 }
 
 static uint16_t agcImagePackState(AgcResourceUsage usage,
@@ -2127,6 +2409,8 @@ int32_t PS5_SYSV_ABI agcCreateImage(
     image->device = device;
     image->desc = *desc;
     image->layout = layout;
+    image->transfer_capacity = 1u;
+    image->transfers = &image->inline_transfer;
     *image_out = image;
     return AGC_OK;
 }
@@ -2140,7 +2424,7 @@ int32_t PS5_SYSV_ABI agcDestroyImage(AgcImage image)
         return AGC_ERROR_INVALID_ARGUMENT;
     }
     if (image->dependency_refs != 0u || image->recorded_refs != 0u ||
-        image->transfer_pending)
+        image->transfer_count != 0u)
         return AGC_ERROR_BUSY;
     if (image->deferred)
         return AGC_ERROR_INVALID_STATE;
@@ -2148,6 +2432,8 @@ int32_t PS5_SYSV_ABI agcDestroyImage(AgcImage image)
     agcRuntimeFree(device, image->allocation);
     if (image->subresource_states)
         agcFree(device, image->subresource_states);
+    if (image->transfers != &image->inline_transfer)
+        agcFree(device, image->transfers);
     image->magic = 0u;
     agcDestroyChild(device, image);
     return AGC_OK;
@@ -2158,24 +2444,27 @@ static int32_t agcGetImageSubresourceStateInfoImpl(AgcImage image,
 {
     AgcResourceUsage usage;
     AgcResourceOwner owner;
+    AgcRuntimeTransferSnapshot transfer;
 
-    if (!agcImageCommittedRangeState(image, range, &usage, &owner))
+    if (!agcImageCommittedRangeState(image, range, &usage, &owner) ||
+        !agcImageRangeTransferSnapshot(image, range, &transfer))
         return AGC_ERROR_NOT_SUPPORTED;
 
     *info = (AgcResourceStateInfo)AGC_RESOURCE_STATE_INFO_INIT;
     info->resource_type = kAgcResourceTypeImage;
     info->usage = usage;
     info->owner = owner;
-    info->transfer_usage = image->transfer_usage;
-    info->transfer_owner = image->transfer_owner;
-    info->transfer_label = image->transfer_label;
-    info->transfer_value = image->transfer_value;
     info->recorded_reference_count = image->recorded_refs;
     info->dependency_reference_count = image->dependency_refs;
-    if (image->transfer_pending)
+    if (transfer.pending) {
         info->flags |= AGC_RESOURCE_STATE_TRANSFER_PENDING_BIT;
-    if (image->transfer_acquire_command)
-        info->flags |= AGC_RESOURCE_STATE_ACQUIRE_RECORDED_BIT;
+        info->transfer_usage = transfer.usage;
+        info->transfer_owner = transfer.owner;
+        info->transfer_label = transfer.label;
+        info->transfer_value = transfer.value;
+        if (transfer.acquire_recorded)
+            info->flags |= AGC_RESOURCE_STATE_ACQUIRE_RECORDED_BIT;
+    }
     if (image->deferred)
         info->flags |= AGC_RESOURCE_STATE_DEFERRED_BIT;
     return AGC_OK;
@@ -2331,7 +2620,7 @@ int32_t PS5_SYSV_ABI agcPresent(AgcPresentChain present_chain,
     range = (AgcImageSubresourceRange){ agcRuntimeImageAspectMask(image), 0u,
         image->desc.mip_levels, 0u, image->desc.array_layers, 0u };
     if (image->magic != AGC_MAGIC_IMAGE || image->deferred ||
-        image->transfer_pending ||
+        image->transfer_count != 0u ||
         !agcImageCommittedRangeState(image, &range, &usage, &owner) ||
         usage != kAgcResourceUsageVideoOutScanout ||
         owner != kAgcResourceOwnerGraphics)
@@ -4649,12 +4938,16 @@ static void agcReleaseCommandReferences(AgcCommandBuffer command_buffer)
             continue;
         if (record->resource_type == kAgcResourceTypeBuffer) {
             AgcBuffer buffer = (AgcBuffer)record->resource;
-            if (buffer->transfer_acquire_command == command_buffer)
-                buffer->transfer_acquire_command = NULL;
+            AgcRuntimePendingTransfer *transfer = agcBufferFindTransfer(buffer,
+                record->buffer_offset, record->buffer_size);
+            if (transfer && transfer->acquire_command == command_buffer)
+                transfer->acquire_command = NULL;
         } else {
             AgcImage image = (AgcImage)record->resource;
-            if (image->transfer_acquire_command == command_buffer)
-                image->transfer_acquire_command = NULL;
+            AgcRuntimePendingTransfer *transfer = agcImageFindTransfer(image,
+                &record->image_range);
+            if (transfer && transfer->acquire_command == command_buffer)
+                transfer->acquire_command = NULL;
         }
     }
     command_buffer->recorded_buffer_count = 0u;
@@ -5468,17 +5761,6 @@ static int agcCommandBufferRangeState(AgcCommandBuffer command_buffer,
     return found;
 }
 
-static int agcImageRangeContainsSubresource(
-    const AgcImageSubresourceRange *range, AgcImageAspectFlags aspect,
-    uint32_t mip, uint32_t layer)
-{
-    return (range->aspect_mask & aspect) != 0u &&
-        mip >= range->base_mip_level &&
-        mip - range->base_mip_level < range->mip_level_count &&
-        layer >= range->base_array_layer &&
-        layer - range->base_array_layer < range->array_layer_count;
-}
-
 static int agcCommandImageRangeState(AgcCommandBuffer command_buffer,
     AgcImage image, const AgcImageSubresourceRange *range,
     AgcResourceUsage *usage, AgcResourceOwner *owner)
@@ -5570,6 +5852,31 @@ static void agcCommandTransitionState(AgcCommandBuffer command_buffer,
     }
 }
 
+static int agcCommandRecordedReleaseOverlaps(
+    const AgcCommandBuffer command_buffer, AgcResourceType resource_type,
+    const void *resource, uint64_t buffer_offset, uint64_t buffer_size,
+    const AgcImageSubresourceRange *image_range)
+{
+    uint32_t i;
+
+    for (i = 0u; i < command_buffer->recorded_transition_count; ++i) {
+        const AgcRuntimeRecordedTransition *record =
+            &command_buffer->recorded_transitions[i];
+        if (record->resource_type != resource_type ||
+            record->resource != resource ||
+            record->flags != AGC_RESOURCE_TRANSITION_RELEASE_BIT)
+            continue;
+        if (resource_type == kAgcResourceTypeBuffer) {
+            if (agcBufferRangesOverlap(buffer_offset, buffer_size,
+                    record->buffer_offset, record->buffer_size))
+                return 1;
+        } else if (agcImageRangesOverlap(image_range, &record->image_range)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 static int32_t agcRuntimeValidateTransition(
     AgcCommandBuffer command_buffer, const AgcResourceTransition *transition,
     void **resource_out, AgcGfx1013ResourceTransition *low_transition,
@@ -5636,11 +5943,6 @@ static int32_t agcRuntimeValidateTransition(
             !agcRuntimeBufferUsageSupports(buffer, transition->before) ||
             !agcRuntimeBufferUsageSupports(buffer, transition->after))
             return AGC_ERROR_INVALID_ARGUMENT;
-        if ((flags == AGC_RESOURCE_TRANSITION_RELEASE_BIT ||
-             flags == AGC_RESOURCE_TRANSITION_ACQUIRE_BIT) &&
-            (transition->buffer_offset != 0u ||
-             transition->buffer_size != buffer->size))
-            return AGC_ERROR_NOT_SUPPORTED;
         resource = buffer;
     } else {
         AgcImage image = transition->image;
@@ -5652,10 +5954,6 @@ static int32_t agcRuntimeValidateTransition(
             !agcRuntimeImageUsageSupports(image, transition->after) ||
             !agcImageRangeValid(image, &transition->image_range))
             return AGC_ERROR_INVALID_ARGUMENT;
-        if ((flags == AGC_RESOURCE_TRANSITION_RELEASE_BIT ||
-             flags == AGC_RESOURCE_TRANSITION_ACQUIRE_BIT) &&
-            !agcImageRangeIsWhole(image, &transition->image_range))
-            return AGC_ERROR_NOT_SUPPORTED;
         resource = image;
     }
     if (agcRuntimeUsageIsGpu(transition->after) &&
@@ -5685,12 +5983,21 @@ static int32_t agcRuntimeValidateTransition(
          current_owner != transition->before_owner) &&
         flags != AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT)
         return AGC_ERROR_INVALID_STATE;
-    if (flags != AGC_RESOURCE_TRANSITION_ACQUIRE_BIT &&
-        ((transition->resource_type == kAgcResourceTypeBuffer &&
-          ((AgcBuffer)resource)->transfer_pending) ||
-         (transition->resource_type == kAgcResourceTypeImage &&
-          ((AgcImage)resource)->transfer_pending)))
-        return AGC_ERROR_INVALID_STATE;
+    if (flags != AGC_RESOURCE_TRANSITION_ACQUIRE_BIT) {
+        int overlap;
+        if (transition->resource_type == kAgcResourceTypeBuffer) {
+            overlap = agcBufferTransferOverlaps((AgcBuffer)resource,
+                transition->buffer_offset, transition->buffer_size);
+        } else {
+            overlap = agcImageTransferOverlaps((AgcImage)resource,
+                &transition->image_range);
+        }
+        if (overlap || agcCommandRecordedReleaseOverlaps(command_buffer,
+                transition->resource_type, resource,
+                transition->buffer_offset, transition->buffer_size,
+                &transition->image_range))
+            return AGC_ERROR_INVALID_STATE;
+    }
     if (agcRuntimeUsageIsGpu(transition->before) &&
         transition->before_owner != agcRuntimeCommandOwner(command_buffer))
         if (flags != AGC_RESOURCE_TRANSITION_ACQUIRE_BIT)
@@ -5711,18 +6018,13 @@ static int32_t agcRuntimeValidateTransition(
             transition->before == kAgcResourceUsageCopyDestination ||
             transition->before == kAgcResourceUsageColorTarget ||
             transition->before == kAgcResourceUsageDepthStencilWrite;
-        uint32_t pending;
 
         if (!agcRuntimeUsageIsGpu(transition->before) ||
             !agcRuntimeUsageIsGpu(transition->after) || !writes ||
             transition->before_owner == transition->after_owner ||
             transition->before_owner != agcRuntimeCommandOwner(command_buffer))
             return AGC_ERROR_NOT_SUPPORTED;
-        if (transition->resource_type == kAgcResourceTypeBuffer)
-            pending = ((AgcBuffer)resource)->transfer_pending;
-        else
-            pending = ((AgcImage)resource)->transfer_pending;
-        if (pending || value <=
+        if (value <=
                 agcCommandLatestLabelSignalValue(command_buffer, label))
             return AGC_ERROR_INVALID_STATE;
         low_transition->before = before;
@@ -5732,12 +6034,7 @@ static int32_t agcRuntimeValidateTransition(
         low_transition->completion_value = value;
         *emit_low_transition = 1u;
     } else if (flags == AGC_RESOURCE_TRANSITION_ACQUIRE_BIT) {
-        AgcResourceUsage pending_usage;
-        AgcResourceOwner pending_owner;
-        AgcGpuLabel pending_label;
-        uint32_t pending_value;
-        AgcCommandBuffer pending_command;
-        uint32_t pending;
+        AgcRuntimePendingTransfer *pending_transfer;
 
         if (!agcRuntimeUsageIsGpu(transition->before) ||
             !agcRuntimeUsageIsGpu(transition->after) ||
@@ -5745,25 +6042,17 @@ static int32_t agcRuntimeValidateTransition(
             transition->after_owner != agcRuntimeCommandOwner(command_buffer))
             return AGC_ERROR_NOT_SUPPORTED;
         if (transition->resource_type == kAgcResourceTypeBuffer) {
-            AgcBuffer buffer = (AgcBuffer)resource;
-            pending = buffer->transfer_pending;
-            pending_usage = buffer->transfer_usage;
-            pending_owner = buffer->transfer_owner;
-            pending_label = buffer->transfer_label;
-            pending_value = buffer->transfer_value;
-            pending_command = buffer->transfer_acquire_command;
+            pending_transfer = agcBufferFindTransfer((AgcBuffer)resource,
+                transition->buffer_offset, transition->buffer_size);
         } else {
-            AgcImage image = (AgcImage)resource;
-            pending = image->transfer_pending;
-            pending_usage = image->transfer_usage;
-            pending_owner = image->transfer_owner;
-            pending_label = image->transfer_label;
-            pending_value = image->transfer_value;
-            pending_command = image->transfer_acquire_command;
+            pending_transfer = agcImageFindTransfer((AgcImage)resource,
+                &transition->image_range);
         }
-        if (!pending || pending_usage != transition->after ||
-            pending_owner != transition->after_owner || pending_label != label ||
-            pending_value != value || pending_command ||
+        if (!pending_transfer || pending_transfer->usage != transition->after ||
+            pending_transfer->owner != transition->after_owner ||
+            pending_transfer->label != label ||
+            pending_transfer->value != value ||
+            pending_transfer->acquire_command ||
             label->last_signal_submission_id == 0u ||
             label->last_signal_value != value)
             return AGC_ERROR_INVALID_STATE;
@@ -5927,10 +6216,35 @@ static int32_t agcReserveSubmissionBufferStates(
                     ->recorded_transitions[transition_index];
             AgcBuffer buffer;
             uint32_t count = 0u;
+            uint32_t release_count = 0u;
             uint32_t i;
 
             if (record->resource_type == kAgcResourceTypeImage) {
                 AgcImage image = (AgcImage)record->resource;
+                for (i = 0u; i < command_count; ++i) {
+                    uint32_t j;
+                    for (j = 0u; j <
+                            command_buffers[i]->recorded_transition_count;
+                         ++j) {
+                        const AgcRuntimeRecordedTransition *candidate =
+                            &command_buffers[i]->recorded_transitions[j];
+                        if (candidate->resource_type ==
+                                kAgcResourceTypeImage &&
+                            candidate->resource == image &&
+                            candidate->flags ==
+                                AGC_RESOURCE_TRANSITION_RELEASE_BIT)
+                            release_count++;
+                    }
+                }
+                if (release_count > AGC_RUNTIME_MAX_RECORDED_TRANSITIONS -
+                        image->transfer_count)
+                    return AGC_ERROR_OUT_OF_MEMORY;
+                {
+                    int32_t transfer_result = agcImageEnsureTransferCapacity(
+                        image, image->transfer_count + release_count);
+                    if (transfer_result != AGC_OK)
+                        return transfer_result;
+                }
                 if (!agcImageRangeIsWhole(image, &record->image_range)) {
                     int32_t image_result =
                         agcImageEnsureSubresourceStates(image);
@@ -5949,9 +6263,22 @@ static int32_t agcReserveSubmissionBufferStates(
                     const AgcRuntimeRecordedTransition *candidate =
                         &command_buffers[i]->recorded_transitions[j];
                     if (candidate->resource_type == kAgcResourceTypeBuffer &&
-                        candidate->resource == buffer)
+                        candidate->resource == buffer) {
                         count++;
+                        if (candidate->flags ==
+                                AGC_RESOURCE_TRANSITION_RELEASE_BIT)
+                            release_count++;
+                    }
                 }
+            }
+            if (release_count > AGC_RUNTIME_MAX_RECORDED_TRANSITIONS -
+                    buffer->transfer_count)
+                return AGC_ERROR_OUT_OF_MEMORY;
+            {
+                int32_t transfer_result = agcBufferEnsureTransferCapacity(
+                    buffer, buffer->transfer_count + release_count);
+                if (transfer_result != AGC_OK)
+                    return transfer_result;
             }
             if (count > (AGC_RUNTIME_MAX_BUFFER_STATE_RANGES -
                     buffer->state_range_count) / 2u)
@@ -6002,6 +6329,70 @@ static int32_t agcValidateSubmissionTransitions(
                 &command_buffer->recorded_transitions[transition_index];
             AgcResourceUsage usage;
             AgcResourceOwner owner;
+            uint32_t prior_index;
+
+            if (record->flags == AGC_RESOURCE_TRANSITION_ACQUIRE_BIT) {
+                AgcRuntimePendingTransfer *transfer;
+                if (record->resource_type == kAgcResourceTypeBuffer) {
+                    transfer = agcBufferFindTransfer(
+                        (AgcBuffer)record->resource, record->buffer_offset,
+                        record->buffer_size);
+                } else {
+                    transfer = agcImageFindTransfer(
+                        (AgcImage)record->resource, &record->image_range);
+                }
+                if (!transfer || transfer->usage != record->after ||
+                    transfer->owner != record->after_owner ||
+                    transfer->label != record->dependency_label ||
+                    transfer->value != record->dependency_value ||
+                    transfer->acquire_command != command_buffer ||
+                    transfer->label->last_signal_submission_id == 0u ||
+                    transfer->label->last_signal_value != transfer->value) {
+                    result = AGC_ERROR_INVALID_STATE;
+                    break;
+                }
+            } else {
+                int overlaps;
+                if (record->resource_type == kAgcResourceTypeBuffer) {
+                    overlaps = agcBufferTransferOverlaps(
+                        (AgcBuffer)record->resource, record->buffer_offset,
+                        record->buffer_size);
+                } else {
+                    overlaps = agcImageTransferOverlaps(
+                        (AgcImage)record->resource, &record->image_range);
+                }
+                if (overlaps) {
+                    result = AGC_ERROR_INVALID_STATE;
+                    break;
+                }
+            }
+            if (record->flags == AGC_RESOURCE_TRANSITION_RELEASE_BIT) {
+                for (prior_index = 0u; prior_index < state_count;
+                     ++prior_index) {
+                    const AgcRuntimeBatchTransitionState *prior =
+                        &states[prior_index];
+                    int overlaps;
+                    if (prior->flags !=
+                            AGC_RESOURCE_TRANSITION_RELEASE_BIT ||
+                        prior->resource_type != record->resource_type ||
+                        prior->resource != record->resource)
+                        continue;
+                    if (record->resource_type == kAgcResourceTypeBuffer) {
+                        overlaps = agcBufferRangesOverlap(
+                            prior->buffer_offset, prior->buffer_size,
+                            record->buffer_offset, record->buffer_size);
+                    } else {
+                        overlaps = agcImageRangesOverlap(&prior->image_range,
+                            &record->image_range);
+                    }
+                    if (overlaps) {
+                        result = AGC_ERROR_INVALID_STATE;
+                        break;
+                    }
+                }
+                if (result != AGC_OK)
+                    break;
+            }
 
             if (record->resource_type == kAgcResourceTypeBuffer) {
                 if (!agcBatchBufferRangeState((AgcBuffer)record->resource,
@@ -6034,6 +6425,7 @@ static int32_t agcValidateSubmissionTransitions(
             states[state_count].owner =
                 record->flags == AGC_RESOURCE_TRANSITION_RELEASE_BIT ?
                     record->before_owner : record->after_owner;
+            states[state_count].flags = record->flags;
             states[state_count].command_index = i;
             states[state_count].buffer_offset = record->buffer_offset;
             states[state_count].buffer_size = record->buffer_size;
@@ -6058,36 +6450,54 @@ static void agcCommitCommandTransitions(AgcCommandBuffer command_buffer)
         if (record->resource_type == kAgcResourceTypeBuffer) {
             AgcBuffer buffer = (AgcBuffer)record->resource;
             if (record->flags == AGC_RESOURCE_TRANSITION_RELEASE_BIT) {
-                buffer->transfer_usage = record->after;
-                buffer->transfer_owner = record->after_owner;
-                buffer->transfer_label = record->dependency_label;
-                buffer->transfer_value = record->dependency_value;
-                buffer->transfer_pending = 1u;
+                AgcRuntimePendingTransfer *transfer =
+                    &buffer->transfers[buffer->transfer_count++];
+                record->dependency_label->recorded_refs++;
+                *transfer = (AgcRuntimePendingTransfer){
+                    .usage = record->after,
+                    .owner = record->after_owner,
+                    .label = record->dependency_label,
+                    .value = record->dependency_value,
+                    .buffer_offset = record->buffer_offset,
+                    .buffer_size = record->buffer_size };
             } else {
                 agcBufferCommitRangeState(buffer, record->buffer_offset,
                     record->buffer_size, record->after,
                     record->after_owner);
                 if (record->flags == AGC_RESOURCE_TRANSITION_ACQUIRE_BIT) {
-                    buffer->transfer_label = NULL;
-                    buffer->transfer_acquire_command = NULL;
-                    buffer->transfer_pending = 0u;
+                    AgcRuntimePendingTransfer *transfer =
+                        agcBufferFindTransfer(buffer, record->buffer_offset,
+                            record->buffer_size);
+                    if (transfer) {
+                        transfer->label->recorded_refs--;
+                        agcRemoveTransfer(buffer->transfers,
+                            &buffer->transfer_count, transfer);
+                    }
                 }
             }
         } else {
             AgcImage image = (AgcImage)record->resource;
             if (record->flags == AGC_RESOURCE_TRANSITION_RELEASE_BIT) {
-                image->transfer_usage = record->after;
-                image->transfer_owner = record->after_owner;
-                image->transfer_label = record->dependency_label;
-                image->transfer_value = record->dependency_value;
-                image->transfer_pending = 1u;
+                AgcRuntimePendingTransfer *transfer =
+                    &image->transfers[image->transfer_count++];
+                record->dependency_label->recorded_refs++;
+                *transfer = (AgcRuntimePendingTransfer){
+                    .usage = record->after,
+                    .owner = record->after_owner,
+                    .label = record->dependency_label,
+                    .value = record->dependency_value,
+                    .image_range = record->image_range };
             } else {
                 agcImageCommitRangeState(image, &record->image_range,
                     record->after, record->after_owner);
                 if (record->flags == AGC_RESOURCE_TRANSITION_ACQUIRE_BIT) {
-                    image->transfer_label = NULL;
-                    image->transfer_acquire_command = NULL;
-                    image->transfer_pending = 0u;
+                    AgcRuntimePendingTransfer *transfer =
+                        agcImageFindTransfer(image, &record->image_range);
+                    if (transfer) {
+                        transfer->label->recorded_refs--;
+                        agcRemoveTransfer(image->transfers,
+                            &image->transfer_count, transfer);
+                    }
                 }
             }
         }
@@ -6511,13 +6921,20 @@ int32_t PS5_SYSV_ABI agcCmdTransitionResources(
                 command_buffer->recorded_label_signal_count++] =
                 (AgcRuntimeRecordedLabelSignal){ label, value };
         } else if (flags == AGC_RESOURCE_TRANSITION_ACQUIRE_BIT) {
+            AgcRuntimePendingTransfer *transfer;
             command_buffer->recorded_label_waits[
                 command_buffer->recorded_label_wait_count++] =
                 (AgcRuntimeRecordedLabelWait){ label, value };
-            if (transitions[i].resource_type == kAgcResourceTypeBuffer)
-                ((AgcBuffer)resource)->transfer_acquire_command = command_buffer;
-            else
-                ((AgcImage)resource)->transfer_acquire_command = command_buffer;
+            if (transitions[i].resource_type == kAgcResourceTypeBuffer) {
+                transfer = agcBufferFindTransfer((AgcBuffer)resource,
+                    transitions[i].buffer_offset, transitions[i].buffer_size);
+            } else {
+                transfer = agcImageFindTransfer((AgcImage)resource,
+                    &transitions[i].image_range);
+            }
+            if (!transfer)
+                return AGC_ERROR_INTERNAL;
+            transfer->acquire_command = command_buffer;
         }
     }
     return AGC_OK;
@@ -8944,7 +9361,7 @@ int32_t PS5_SYSV_ABI agcDestroyBufferDeferred(
     if (!buffer || buffer->magic != AGC_MAGIC_BUFFER ||
         !agcDeviceValid(buffer->device) || buffer->deferred)
         return AGC_ERROR_INVALID_ARGUMENT;
-    if (buffer->transfer_pending)
+    if (buffer->transfer_count != 0u)
         return AGC_ERROR_BUSY;
     if (fence && fence->signaled && buffer->recorded_refs == 0u)
         return agcDestroyBuffer(buffer);
@@ -8963,7 +9380,7 @@ int32_t PS5_SYSV_ABI agcDestroyImageDeferred(
     if (!image || image->magic != AGC_MAGIC_IMAGE ||
         !agcDeviceValid(image->device) || image->deferred)
         return AGC_ERROR_INVALID_ARGUMENT;
-    if (image->transfer_pending)
+    if (image->transfer_count != 0u)
         return AGC_ERROR_BUSY;
     if (fence && fence->signaled && image->dependency_refs == 0u &&
         image->recorded_refs == 0u)

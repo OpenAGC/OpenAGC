@@ -65,7 +65,8 @@ contract using host memory; it is not a non-PS5 GPU backend.
   release operations.
 - Direct write-combined memory for scanout-compatible resources.
 - Typed resource transitions covering render, depth/stencil, compute, copy,
-  shader-read, host-read, and presentation use.
+  shader-read, host-read, and presentation use, including exact byte- and
+  image-subresource-range graphics/compute ownership handoffs.
 - Bounded label/fence waits; hardware samples never depend on an unbounded
   polling loop.
 - Reusable VideoOut buffer registration, FIFO/VSYNC presentation, event

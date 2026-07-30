@@ -662,8 +662,18 @@ than wrapping. The generic suite covers transactional rejection and final
 publication; the cleanup-first FW 5.50 artifact is pinned pending reachable
 websrv. See `analysis/runtime_gpu_label_timeline_host_20260731.md`.
 
+Runtime API v20 extends the ownership protocol to exact buffer byte ranges and
+image aspect/mip/layer ranges. Multiple disjoint releases may remain pending
+on one resource; each acquire must match one committed range and dependency
+point exactly. Overlap, stale recording, mixed diagnostic coverage, and batch
+conflicts fail before driver mutation, while reset and acquire affect only the
+selected transfer. Pending ranges own their label reference. The generic gate
+passes 16,851 assertions; exact-firmware execution remains a distinct
+qualification step. See
+`analysis/runtime_partial_ownership_transfers_host_20260731.md`.
+
 The pending FW 5.50 presentation ladder, retirement stress, and timeline wait
-now have one shared fail-closed runner. All seven Make targets pin the current
+now have one shared fail-closed runner. All nine Make targets pin the current
 artifact hash,
 launch the process-cleanup ELF first, verify service recovery, require exact
 firmware/verdict/device-teardown lines, reject error text and transport
