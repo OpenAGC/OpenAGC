@@ -60,3 +60,13 @@ The guarded run reproduced `224640` changed pixels, regions
 `0x5327e8ad53b3a455`. The fence, marker, shutdown, memory cleanup, verdict,
 self-termination, and residual-process check all passed. Repeat the identical
 artifact once.
+
+## BC4 UNORM pass 2
+
+The identical artifact reproduced `224640` changed pixels, regions
+`{74880,74880,74880}`, zero decode mismatches/error, and FNV64
+`0x5327e8ad53b3a455`. Every lifecycle gate and the post-run residual-process
+check passed again.
+
+BC4 UNORM is hardware-qualified on exact FW 5.50 and FW 11.60. BC4 SNORM is
+next.

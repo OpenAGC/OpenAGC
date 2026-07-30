@@ -1175,11 +1175,11 @@ artifact twice and reproduced `224640` changed pixels, regions
 `0x7ed831bc232c8da1` on both runs. BC1 UNORM and SRGB are hardware-qualified
 on both endpoints. Continue in the planned order with BC4 UNORM/SNORM.
 
-BC4 UNORM pass 1 on FW 5.50 used exact pinned SHA-256
+BC4 UNORM on FW 5.50 used exact pinned SHA-256
 `f74c393112fc465eace431a3fe288095ae4b3bf5ee993e8147ed0e9a2f22f2a4`
-and reproduced `224640` changed pixels, regions `{74880,74880,74880}`, zero
-decode mismatches/error, and FNV64 `0x5327e8ad53b3a455`. Repeat the identical
-artifact once before BC4 SNORM.
+twice and reproduced `224640` changed pixels, regions `{74880,74880,74880}`,
+zero decode mismatches/error, and FNV64 `0x5327e8ad53b3a455` on both runs. BC4
+UNORM is hardware-qualified on both endpoints; qualify BC4 SNORM next.
 The final firmware-neutral bytes are pinned as SHA-256
 `f74c393112fc465eace431a3fe288095ae4b3bf5ee993e8147ed0e9a2f22f2a4`
 for BC4 UNORM and
