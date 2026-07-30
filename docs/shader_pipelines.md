@@ -19,6 +19,9 @@ adjacent-stage linkage masks, the embedded front stage and its interface masks,
 and geometry input/output topology, vertex limits, and invocation count.
 Reflection v2 retains the fixed 5,744-byte serialized size; the runtime also
 accepts existing v1/compiler-API-14 records with their former reserved tail.
+The compiler's FNV-1a stage-linkage hash covers the four interface masks; the
+runtime recomputes it and rejects altered linkage metadata before creating a
+shader handle.
 
 Create a reflected shader with `AGC_SHADER_DESC_INIT`, setting `code`,
 `code_size`, and `reflection`; fused records also set `front_code` and
@@ -46,6 +49,10 @@ descriptor/push mismatch, unsupported wave/scratch/LDS requirement, or
 unsupported state returns an error and leaves the output handle `NULL`.
 Command binding preflights capacity and required resources; failure leaves the
 command cursor unchanged.
+
+Graphics scratch is not yet packaged and therefore fails pipeline creation.
+Compiler-reflected gfx1013 LDS sizes are bounded before bind generation;
+tessellation additionally uses the explicit reflected hull-LDS requirement.
 
 ## Resource and dynamic binding
 
@@ -87,9 +94,11 @@ color/depth/stencil formats, complete depth/stencil testing, the declared
 dynamic states above, and the qualified gfx1013 bind groups. In the geometry
 form, `geometry_shader` owns both compiler records and `vertex_shader` must be
 `NULL`; supplying both is rejected instead of silently ignoring either
-handle. The packaged geometry subset accepts triangle input, three input
-vertices, and one invocation. Line, adjacency, and multi-invocation forms
-remain fail-closed before PM4 emission.
+handle. The packaged geometry subset accepts compiler-reflected triangle or
+line input, derives the qualified gfx1013 primitive type, permits the
+compiler's invocation count, and requires indexed draws to contain complete
+three- or two-vertex input primitives. Point and adjacency inputs remain
+fail-closed before PM4 emission.
 
 Tessellation uses compiler-owned fused bundles as well. Set
 `tessellation_control_shader` to an HsBack/HsFront bundle whose front program
@@ -108,13 +117,13 @@ compiler reflection. The runtime lazily owns one device-wide gfx1013 off-chip
 ring, factor ring, and descriptor table, preflights TF-ring support, publishes
 the table, and reuses the storage across tessellation pipelines. Indexed draws
 must contain whole input-control-point patches. The combined geometry form
-currently retains the triangle-input, three-vertex, one-invocation geometry
-limit above.
+accepts the same qualified triangle/line and invocation metadata while its
+indexed input remains a complete tessellation patch.
 
 Compute supports Wave32, at most 1,024 invocations per group, no scratch, and
 at most 64 KiB LDS, including direct or indirect reflected descriptor-set
-addressing. Alpha-to-coverage, alpha-to-one, the remaining geometry
-topologies, and Prospero submission remain fail-closed.
+addressing. Alpha-to-coverage, alpha-to-one, point/adjacency geometry inputs,
+and Prospero submission remain fail-closed.
 
 ## Qualification
 

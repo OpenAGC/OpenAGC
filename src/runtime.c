@@ -199,6 +199,8 @@ struct AgcGraphicsPipelineImpl {
     uint32_t tessellation_input_control_points;
     uint32_t tessellation_tcs_offchip_layout;
     uint32_t tessellation_tes_offchip_layout;
+    uint32_t primitive_type;
+    uint32_t geometry_input_vertices;
     uint32_t bind_dword_count;
     uint32_t resource_layout_requires_bindings;
     uint32_t bind_words[AGC_RUNTIME_PIPELINE_BIND_MAX_DWORDS];
@@ -1800,6 +1802,21 @@ static uint64_t agcShaderHashBytes(
     return hash;
 }
 
+static uint64_t agcShaderLinkageHash(
+    const AgcShaderReflection *reflection)
+{
+    uint64_t hash = UINT64_C(14695981039346656037);
+
+    hash = agcShaderHashBytes(hash, &reflection->stage_input_mask,
+        sizeof(reflection->stage_input_mask));
+    hash = agcShaderHashBytes(hash, &reflection->stage_output_mask,
+        sizeof(reflection->stage_output_mask));
+    hash = agcShaderHashBytes(hash, &reflection->patch_input_mask,
+        sizeof(reflection->patch_input_mask));
+    return agcShaderHashBytes(hash, &reflection->patch_output_mask,
+        sizeof(reflection->patch_output_mask));
+}
+
 static int agcShaderRecordMatchesStage(
     AgcShaderStage stage, AgcShaderReflectionFlags flags,
     uint8_t type)
@@ -1961,6 +1978,7 @@ static int agcShaderReflectionValid(
             AGC_SHADER_RECORD_VERSION_GEN5 ||
         (reflection->wave_size != 32u && reflection->wave_size != 64u) ||
         reflection->hash_algorithm != AGC_SHADER_HASH_FNV1A64 ||
+        reflection->stage_linkage_hash != agcShaderLinkageHash(reflection) ||
         reflection->entry_point[0] == '\0' ||
         !memchr(reflection->entry_point, '\0',
             sizeof(reflection->entry_point)) ||
@@ -3032,7 +3050,7 @@ static int32_t agcBuildGraphicsPipelineBind(
             pipeline->tessellation_tes_offchip_layout;
         tess_shader_state.hull_lds_size =
             pipeline->hull_shader->reflection.tessellation_lds_size;
-        tess_shader_state.primitive_type = 9u;
+        tess_shader_state.primitive_type = pipeline->primitive_type;
         tessellation.offchip_ring_address = agcAllocationGpuAddress(
             pipeline->device->tessellation_offchip_allocation);
         tessellation.factor_ring_address = agcAllocationGpuAddress(
@@ -3061,7 +3079,7 @@ static int32_t agcBuildGraphicsPipelineBind(
             &pixel_record, pixel_sh, &shader_state.pixel);
         shader_state.primitive_back_code_address =
             pipeline->primitive_shader->front_program_gpu_address;
-        shader_state.primitive_type = 4u;
+        shader_state.primitive_type = pipeline->primitive_type;
         result = agcGfx1013BindVsPs(&cb, &shader_state);
     }
     if (result != AGC_OK)
@@ -3155,6 +3173,38 @@ static int32_t agcBuildGraphicsPipelineBind(
         return AGC_ERROR_INTERNAL;
     pipeline->bind_dword_count = (uint32_t)agcCbUsedDwords(&cb);
     return AGC_OK;
+}
+
+static int agcPipelineGeometrySubsetValid(
+    const AgcShaderReflection *reflection)
+{
+    uint32_t required_vertices;
+
+    if (reflection->geometry_input_primitive ==
+            AGC_SHADER_PRIMITIVE_LINES)
+        required_vertices = 2u;
+    else if (reflection->geometry_input_primitive ==
+            AGC_SHADER_PRIMITIVE_TRIANGLES)
+        required_vertices = 3u;
+    else
+        return 0;
+    return reflection->geometry_vertices_in == required_vertices &&
+        (reflection->geometry_output_primitive ==
+             AGC_SHADER_PRIMITIVE_LINE_STRIP ||
+         reflection->geometry_output_primitive ==
+             AGC_SHADER_PRIMITIVE_TRIANGLE_STRIP);
+}
+
+static uint32_t agcPipelinePrimitiveType(
+    AgcShader primitive, int tessellated)
+{
+    if (tessellated)
+        return 9u;
+    if (primitive->stage == kAgcShaderStageGs &&
+        primitive->reflection.geometry_input_primitive ==
+            AGC_SHADER_PRIMITIVE_LINES)
+        return 2u;
+    return 4u;
 }
 
 int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
@@ -3252,10 +3302,7 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
            AGC_SHADER_REFLECTION_FUSED_STAGE_BIT)) !=
              (AGC_SHADER_REFLECTION_NGG_BIT |
               AGC_SHADER_REFLECTION_FUSED_STAGE_BIT) ||
-         primitive->reflection.geometry_input_primitive !=
-             AGC_SHADER_PRIMITIVE_TRIANGLES ||
-         primitive->reflection.geometry_vertices_in != 3u ||
-         primitive->reflection.geometry_invocations != 1u)) {
+         !agcPipelineGeometrySubsetValid(&primitive->reflection))) {
         return AGC_ERROR_NOT_SUPPORTED;
     }
     if (tessellated) {
@@ -3293,10 +3340,7 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
             return AGC_ERROR_VALIDATION_FAILED;
         }
         if (desc->geometry_shader &&
-            (prim->geometry_input_primitive !=
-                 AGC_SHADER_PRIMITIVE_TRIANGLES ||
-             prim->geometry_vertices_in != 3u ||
-             prim->geometry_invocations != 1u)) {
+            !agcPipelineGeometrySubsetValid(prim)) {
             return AGC_ERROR_NOT_SUPPORTED;
         }
         layout = (AgcGfx1013TessellationLayoutState){
@@ -3325,6 +3369,14 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
     result = agcPipelineValidateShaderUserData(&ps->reflection);
     if (result != AGC_OK)
         return result;
+    if (primitive->reflection.scratch_bytes_per_wave != 0u ||
+        ps->reflection.scratch_bytes_per_wave != 0u ||
+        (hull && hull->reflection.scratch_bytes_per_wave != 0u))
+        return AGC_ERROR_NOT_SUPPORTED;
+    if (primitive->reflection.lds_size > 65536u ||
+        ps->reflection.lds_size != 0u ||
+        (hull && hull->reflection.lds_size > 65536u))
+        return AGC_ERROR_NOT_SUPPORTED;
     if ((primitive->reflection.flags & AGC_SHADER_REFLECTION_NGG_BIT) == 0u ||
         ps->reflection.wave_size != 32u)
         return AGC_ERROR_NOT_SUPPORTED;
@@ -3510,6 +3562,11 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
     pipeline->multisample = multisample;
     pipeline->dynamic_state_mask = desc->dynamic_state_mask;
     pipeline->resource_layout = resource_layout;
+    pipeline->primitive_type = agcPipelinePrimitiveType(
+        primitive, tessellated);
+    if (primitive->stage == kAgcShaderStageGs)
+        pipeline->geometry_input_vertices =
+            primitive->reflection.geometry_vertices_in;
     if (hull) {
         pipeline->tessellation_input_control_points =
             hull->reflection.tessellation_input_control_points;
@@ -4830,6 +4887,11 @@ int32_t PS5_SYSV_ABI agcCmdDrawIndexed(AgcCommandBuffer command_buffer,
     if (command_buffer->graphics_pipeline->hull_shader &&
         index_count % command_buffer->graphics_pipeline->
             tessellation_input_control_points != 0u)
+        return AGC_ERROR_VALIDATION_FAILED;
+    if (!command_buffer->graphics_pipeline->hull_shader &&
+        command_buffer->graphics_pipeline->geometry_input_vertices != 0u &&
+        index_count % command_buffer->graphics_pipeline->
+            geometry_input_vertices != 0u)
         return AGC_ERROR_VALIDATION_FAILED;
     vertex_stage = command_buffer->graphics_pipeline->hull_shader ?
         command_buffer->graphics_pipeline->hull_shader :

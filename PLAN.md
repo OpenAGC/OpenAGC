@@ -261,16 +261,19 @@ tables and fail closed if mixed ambiguously within a shader. Compiler-emitted
 NGG and tessellation main/front binary subtype pairs are validated as complete
 logical shader bundles. Reflection v2 adds compiler-derived front-stage
 interfaces and geometry topology/limit facts without changing its serialized
-size; v1/API-14 artifacts remain accepted. The full generic suite reports
-13,993 passed. The first compiler-fused VS-front/GS-back geometry pipeline is
-also host-packaged for triangle input, three input vertices, and one
-invocation; redundant standalone VS handles and unsupported geometry forms
-fail before PM4 emission, and host submission verifies continuation patching.
+size; v1/API-14 artifacts remain accepted. The runtime recomputes the
+compiler's FNV-1a stage-linkage hash over its four interface masks before
+accepting a reflected shader. The full generic suite reports 14,025 passed.
+Compiler-fused VS-front/GS-back geometry pipelines are
+host-packaged for the already-qualified triangle and line inputs plus compiler
+invocation counts; redundant standalone VS handles, incomplete input
+primitives, and unqualified point/adjacency forms fail before PM4 emission,
+and host submission verifies continuation patching.
 Compiler-fused VS/TCS plus TES/NGG and TES-to-geometry pipelines are also
 host-packaged. They validate complete stage and patch linkage, derive off-chip
 layouts from reflection, reuse runtime-owned device rings, require whole-patch
 draws, and pass isolated and combined host submission tests.
-Remaining geometry forms, remaining
+Remaining unqualified geometry forms, remaining
 unqualified fixed options, and any explicit PS5 hardware promotion remain
 open; do not label this milestone complete yet.
 

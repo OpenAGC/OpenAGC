@@ -142,6 +142,21 @@ static uint64_t shader_fixture_hash(const void *data, size_t size)
         UINT64_C(14695981039346656037), data, size);
 }
 
+static uint64_t shader_fixture_linkage_hash(
+    const AgcShaderReflection *reflection)
+{
+    uint64_t hash = UINT64_C(14695981039346656037);
+
+    hash = shader_fixture_hash_update(hash, &reflection->stage_input_mask,
+        sizeof(reflection->stage_input_mask));
+    hash = shader_fixture_hash_update(hash, &reflection->stage_output_mask,
+        sizeof(reflection->stage_output_mask));
+    hash = shader_fixture_hash_update(hash, &reflection->patch_input_mask,
+        sizeof(reflection->patch_input_mask));
+    return shader_fixture_hash_update(hash, &reflection->patch_output_mask,
+        sizeof(reflection->patch_output_mask));
+}
+
 static AgcShader create_shader_with_reflection(AgcDevice device,
     AgcShaderStage stage, const AgcShaderReflection *requirements)
 {
@@ -213,7 +228,6 @@ static AgcShader create_shader_with_reflection(AgcDevice device,
     reflection.hash_algorithm = AGC_SHADER_HASH_FNV1A64;
     reflection.code_offset = offsetof(RuntimeShaderFixture, code);
     reflection.code_size = sizeof(binary.code);
-    reflection.code_hash = shader_fixture_hash(&binary, sizeof(binary));
     if (reflection.entry_point[0] == '\0')
         memcpy(reflection.entry_point, "main", sizeof("main"));
     if (stage == kAgcShaderStageCs) {
@@ -229,6 +243,8 @@ static AgcShader create_shader_with_reflection(AgcDevice device,
         if (reflection.pixel_shader_sample_count == 0u)
             reflection.pixel_shader_sample_count = 1u;
     }
+    reflection.stage_linkage_hash = shader_fixture_linkage_hash(&reflection);
+    reflection.code_hash = shader_fixture_hash(&binary, sizeof(binary));
     desc.stage = stage;
     desc.code = &binary;
     desc.code_size = sizeof(binary);
@@ -341,6 +357,7 @@ static AgcShader create_ngg_shader_bundle(AgcDevice device,
         &front_binary, sizeof(front_binary));
     if (reflection.entry_point[0] == '\0')
         memcpy(reflection.entry_point, "main", sizeof("main"));
+    reflection.stage_linkage_hash = shader_fixture_linkage_hash(&reflection);
 
     desc.stage = stage;
     desc.code = &binary;
@@ -417,6 +434,7 @@ static AgcShader create_tessellation_control_bundle(AgcDevice device,
         &front_binary, sizeof(front_binary));
     if (reflection.entry_point[0] == '\0')
         memcpy(reflection.entry_point, "main", sizeof("main"));
+    reflection.stage_linkage_hash = shader_fixture_linkage_hash(&reflection);
 
     desc.stage = kAgcShaderStageHs;
     desc.code = &binary;
@@ -1291,6 +1309,9 @@ static void test_runtime_shader_reflection_contract(void)
         "shader reflection names its deterministic hash algorithm");
     TEST_ASSERT(reflection.code_hash != 0u,
         "shader reflection preserves a nonzero code hash");
+    TEST_ASSERT_EQ(reflection.stage_linkage_hash,
+        shader_fixture_linkage_hash(&reflection),
+        "shader reflection preserves an integrity-checked linkage hash");
 
     reflection = (AgcShaderReflection)AGC_SHADER_REFLECTION_INIT;
     reflection.version++;
@@ -1355,10 +1376,20 @@ static void test_runtime_shader_reflection_contract(void)
         reflection.code_hash = shader_fixture_hash(
             &back_only, sizeof(back_only));
         memcpy(reflection.entry_point, "main", sizeof("main"));
+        reflection.stage_linkage_hash = shader_fixture_linkage_hash(
+            &reflection);
         desc.stage = kAgcShaderStageVs;
         desc.code = &back_only;
         desc.code_size = sizeof(back_only);
         desc.reflection = &reflection;
+        reflection.stage_linkage_hash ^= UINT64_C(1);
+        TEST_ASSERT_EQ(agcCreateShader(device, &desc, &invalid),
+            AGC_ERROR_SHADER_INVALID,
+            "corrupt stage linkage reflection fails closed");
+        TEST_ASSERT(invalid == NULL,
+            "corrupt linkage leaves shader output null");
+        reflection.stage_linkage_hash = shader_fixture_linkage_hash(
+            &reflection);
         TEST_ASSERT_EQ(agcCreateShader(device, &desc, &invalid),
             AGC_ERROR_SHADER_INVALID_TYPE,
             "NGG back record without its front program fails closed");
@@ -1962,6 +1993,8 @@ static void test_runtime_geometry_pipeline_bundle(void)
 
     gs_requirements.geometry_input_primitive =
         AGC_SHADER_PRIMITIVE_LINES;
+    gs_requirements.geometry_output_primitive =
+        AGC_SHADER_PRIMITIVE_LINE_STRIP;
     gs_requirements.geometry_vertices_in = 2u;
     geometry = create_ngg_shader_bundle(
         device, kAgcShaderStageGs, &gs_requirements);
@@ -1971,14 +2004,85 @@ static void test_runtime_geometry_pipeline_bundle(void)
     pipeline_desc.pixel_shader = pixel;
     pipeline = NULL;
     TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc,
-        &pipeline), AGC_ERROR_NOT_SUPPORTED,
-        "unpackaged line-input geometry fails before PM4");
-    TEST_ASSERT(pipeline == NULL,
-        "unsupported geometry topology leaves pipeline output null");
+        &pipeline), AGC_OK,
+        "compiler-reflected line-input geometry creates pipeline");
+    buffer_desc.usage = AGC_BUFFER_USAGE_VERTEX_BIT;
+    TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &vertex_buffer),
+        AGC_OK, "line geometry vertex buffer creates");
+    buffer_desc.usage = AGC_BUFFER_USAGE_INDEX_BIT;
+    TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &index_buffer),
+        AGC_OK, "line geometry index buffer creates");
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
+        AGC_OK, "line geometry command buffer creates");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+        "line geometry command buffer begins");
+    TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(command, pipeline), AGC_OK,
+        "line geometry pipeline binds");
+    vertex_binding.buffer = vertex_buffer;
+    TEST_ASSERT_EQ(agcCmdBindVertexBuffers(command, 1u, &vertex_binding),
+        AGC_OK, "line geometry vertex table binds");
+    TEST_ASSERT_EQ(agcCmdBindIndexBuffer(command, index_buffer, 0u,
+        kAgcIndexSize16), AGC_OK, "line geometry index buffer binds");
+    TEST_ASSERT_EQ(agcCmdDrawIndexed(command, 1u, 1u, 0u, 0, 0u),
+        AGC_ERROR_VALIDATION_FAILED,
+        "line geometry rejects an incomplete input primitive");
+    TEST_ASSERT_EQ(agcCmdDrawIndexed(command, 2u, 1u, 0u, 0, 0u),
+        AGC_OK, "complete line geometry input records");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+        "line geometry command buffer resets");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+        "line geometry command buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyBuffer(index_buffer), AGC_OK,
+        "line geometry index buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyBuffer(vertex_buffer), AGC_OK,
+        "line geometry vertex buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(pipeline), AGC_OK,
+        "line geometry pipeline destroys");
     TEST_ASSERT_EQ(agcDestroyShader(pixel), AGC_OK,
         "line-input geometry pixel shader destroys");
     TEST_ASSERT_EQ(agcDestroyShader(geometry), AGC_OK,
         "line-input geometry bundle destroys");
+
+    gs_requirements.geometry_input_primitive =
+        AGC_SHADER_PRIMITIVE_TRIANGLES;
+    gs_requirements.geometry_output_primitive =
+        AGC_SHADER_PRIMITIVE_TRIANGLE_STRIP;
+    gs_requirements.geometry_vertices_in = 3u;
+    gs_requirements.geometry_invocations = 2u;
+    geometry = create_ngg_shader_bundle(
+        device, kAgcShaderStageGs, &gs_requirements);
+    pixel = create_shader_with_reflection(
+        device, kAgcShaderStagePs, &ps_requirements);
+    pipeline_desc.geometry_shader = geometry;
+    pipeline_desc.pixel_shader = pixel;
+    pipeline = NULL;
+    TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc,
+        &pipeline), AGC_OK,
+        "compiler-reflected multi-invocation geometry creates pipeline");
+    TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(pipeline), AGC_OK,
+        "multi-invocation geometry pipeline destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(pixel), AGC_OK,
+        "multi-invocation geometry pixel shader destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(geometry), AGC_OK,
+        "multi-invocation geometry bundle destroys");
+
+    gs_requirements.scratch_bytes_per_wave = 256u;
+    geometry = create_ngg_shader_bundle(
+        device, kAgcShaderStageGs, &gs_requirements);
+    pixel = create_shader_with_reflection(
+        device, kAgcShaderStagePs, &ps_requirements);
+    pipeline_desc.geometry_shader = geometry;
+    pipeline_desc.pixel_shader = pixel;
+    pipeline = NULL;
+    TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc,
+        &pipeline), AGC_ERROR_NOT_SUPPORTED,
+        "graphics scratch requirement fails before PM4 emission");
+    TEST_ASSERT(pipeline == NULL,
+        "unsupported graphics scratch leaves pipeline output null");
+    TEST_ASSERT_EQ(agcDestroyShader(pixel), AGC_OK,
+        "scratch-requiring geometry pixel shader destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(geometry), AGC_OK,
+        "scratch-requiring geometry bundle destroys");
     TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
         "geometry pipeline queue destroys");
     TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
@@ -2122,6 +2226,23 @@ static void test_runtime_tessellation_pipeline_bundles(void)
             "redundant tessellation stage leaves pipeline output null");
     }
     pipeline_desc.tessellation_evaluation_shader = NULL;
+    {
+        AgcShaderReflection invocation_requirements = gs_requirements;
+        AgcShader invocation_geometry;
+        AgcGraphicsPipeline invocation_pipeline = NULL;
+        invocation_requirements.geometry_invocations = 2u;
+        invocation_geometry = create_ngg_shader_bundle(
+            device, kAgcShaderStageGs, &invocation_requirements);
+        pipeline_desc.geometry_shader = invocation_geometry;
+        TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc,
+            &invocation_pipeline), AGC_OK,
+            "tessellated multi-invocation geometry creates pipeline");
+        TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(invocation_pipeline),
+            AGC_OK,
+            "tessellated multi-invocation geometry pipeline destroys");
+        TEST_ASSERT_EQ(agcDestroyShader(invocation_geometry), AGC_OK,
+            "tessellated multi-invocation geometry bundle destroys");
+    }
     pipeline_desc.geometry_shader = NULL;
     {
         AgcShaderReflection mismatch_requirements = ds_requirements;

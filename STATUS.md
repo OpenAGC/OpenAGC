@@ -27,7 +27,7 @@ pipelines. Prospero builds the same API, but native queue submission remains
 fail-closed pending an explicit hardware-promotion gate.
 
 1. **Complete pipeline safety.** Audit the host-tested reflection/pipeline
-   slice for remaining geometry forms and any still-needed
+   slice for any still-needed
    qualified fixed options while preserving transactional failure for every
    unsupported combination.
 2. **Own transitions and synchronization.** Track explicit resource usage and
@@ -97,6 +97,9 @@ relocated, GPU-addressable copy; `agcGetShaderReflection` exposes the validated
 metadata. The validator now accepts the compiler's actual gfx1013
 `GsBack`/`GsFront` and `HsBack`/`HsFront` binary subtype pairs, checks both
 halves against the reflected logical stage, and rejects an orphan back record.
+It recomputes the compiler's FNV-1a stage-linkage hash over the four interface
+masks, rejecting altered linkage metadata before a shader handle becomes
+visible.
 
 Runtime API v2 graphics pipelines validate reflected NGG VS + Wave32 PS stage
 linkage, vertex/resource layouts, exact MRT count, float/normalized versus
@@ -138,10 +141,11 @@ The first fused geometry pipeline is packaged without exposing the compiler's
 front/back split to applications. A `geometry_shader` handle containing the
 compiler-emitted VS-front/GS-back pair owns the primitive stage, so a redundant
 standalone `vertex_shader` is rejected. Pipeline creation validates reflection
-v2 front-stage linkage and currently accepts only triangle input, three input
-vertices, and one invocation. Host submission proves that the low-level bind
-patches the front-stage continuation address. Other geometry topologies and
-invocation counts fail before PM4 emission.
+v2 front-stage linkage, accepts the already-qualified triangle and line input
+forms plus compiler invocation counts, and derives the matching primitive type.
+Indexed draws must contain a complete two- or three-vertex GS input primitive.
+Host submission proves that the low-level bind patches the front-stage
+continuation address. Point and adjacency inputs remain fail-closed.
 
 Tessellation pipeline packaging now consumes the compiler's HsBack/HsFront
 VS/TCS bundle and either a TES/NGG bundle or a TES-front/GS-back geometry
@@ -161,7 +165,9 @@ linkage, vertex-stride, descriptor, push-range, and unbound-resource cases. It
 also exercises successful descriptor/push dispatch, vertex-table drawing,
 direct and indirect descriptor addressing, resource retention/reset, exact
 depth/stencil register state, legacy state normalization, multisample minimums,
-and required dynamic-state gating. The full generic suite now reports 13,993
+and required dynamic-state gating. Graphics scratch remains unsupported and
+fails during pipeline creation; reflected gfx1013 LDS requirements are bounded
+before bind generation. The full generic suite now reports 14,025
 passed and 0 failed; the compiler's
 library, varying/export, NGG, and tessellation suites pass. This slice is
 host-tested only. No PS5 hardware test was run or claimed. See
