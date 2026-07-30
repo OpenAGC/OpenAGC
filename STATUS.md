@@ -230,8 +230,10 @@ SINT16_ABGR export 8. Exact host coverage locks
 short command buffer, invalid enums, and maximum 64-bit layout arithmetic.
 The dedicated `ivec4` shader uses SINT16_ABGR export 8 and exact
 coordinate-derived values spanning `-32768..32767`. Its isolated portable
-gate builds and passes firmware-neutral dependency verification. Final-byte
-pinning and hardware execution remain pending.
+gate builds and passes firmware-neutral dependency verification. The final
+unexecuted ELF is pinned as SHA-256
+`3083e2f6ce3ff30d22508c93e51b58bb73f7a36e9ba5e2d255c3c32be7e79652`.
+Two identical-byte FW 11.60 runs and exact FW 5.50 replay remain pending.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability

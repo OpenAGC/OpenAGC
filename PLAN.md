@@ -341,7 +341,10 @@ the runner and shared teardown on FW 11.60 only.
   arithmetic pass. Its dedicated `ivec4` shader uses SINT16_ABGR export 8 and
   produces exact coordinate-derived values spanning `-32768..32767`. The
   isolated portable gate builds and passes firmware-neutral dependency
-  verification. Pin its final bytes before execution.
+  verification. The final unexecuted ELF is pinned as SHA-256
+  `3083e2f6ce3ff30d22508c93e51b58bb73f7a36e9ba5e2d255c3c32be7e79652`.
+  Run those identical bytes twice on FW 11.60; exact FW 5.50 replay remains
+  pending.
 - Seven additional offscreen format gates now build under the same exact
   profile and bounded runner: R8, RG8, RGB10A2, R11G11B10, R32, RG32, and
   RGBA32. All seven passed twice on FW 11.60; logged RG32 reproduced FNV64
