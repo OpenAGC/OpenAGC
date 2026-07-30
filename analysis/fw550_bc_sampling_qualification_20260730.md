@@ -40,6 +40,16 @@ The guarded run produced `224640` changed pixels, regions
 cleanup, final verdict, self-termination, and residual-process check passed.
 Repeat the identical artifact once.
 
+## BC5 UNORM pass 2
+
+The identical artifact reproduced `224640` changed pixels, regions
+`{74880,74880,74880}`, full R/G ranges, zero decode mismatches/error, channel
+independence, and FNV64 `0x3bc37aa96460e455`. Every lifecycle gate and the
+post-run residual-process check passed again.
+
+BC5 UNORM is hardware-qualified on exact FW 5.50 and FW 11.60. BC5 SNORM is
+next.
+
 ## BC3 SRGB pass 2
 
 The identical artifact reproduced `224640` changed pixels, regions
