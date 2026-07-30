@@ -59,10 +59,11 @@ reserved bits. A host oracle accepts the correct aspect and rejects a mismatch.
 This is preparation only; no new combined-depth hardware qualification is
 claimed.
 
-Ordinary D16 HTILE is now hardware-qualified twice on FW 5.50. The pinned
-current-source artifact reproduced exact D16 classes, clean teardown, and
-`7408` changed HTILE words from `0xfffc000f` on both runs; the guarded recipe
-now freezes that count. FW 11.60 replay remains pending before expclear.
+Ordinary D16 HTILE is now hardware-qualified twice on each endpoint. The
+pinned current-source artifacts reproduced exact D16 classes, clean teardown,
+no residual process, and `7408` changed HTILE words from `0xfffc000f` on all
+four runs; both guarded recipes freeze that count. D16 expclear is the active
+compressed-depth gate.
 
 ## Regression safety fixes (2026-07-29)
 

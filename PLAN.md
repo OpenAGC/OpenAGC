@@ -476,6 +476,10 @@ the runner and shared teardown on FW 11.60 only.
   D16 values and `7408` changed metadata words on both runs. That count is now
   frozen in the runner. Run the exact FW 11.60 ordinary mirror twice next;
   proceed to D16 expclear only if both passes reproduce one another.
+- FW 11.60 ordinary D16 HTILE has now also passed twice with the same `7408`
+  metadata count and exact D16 values. The ordinary tuple is qualified on both
+  endpoints. Run pinned FW 11.60 D16 expclear pass 1 next, freeze its exact
+  metadata count, replay once, then run the pinned FW 5.50 mirror.
 - The next isolated compressed-depth artifacts are prepared but hardware
   gated: ordinary D16/HTILE first, then D16 HTILE expclear. Exact logged
   `0x1160` artifacts and exact headless `0x0550` mirrors build without

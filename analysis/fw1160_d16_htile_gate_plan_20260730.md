@@ -111,6 +111,12 @@ classes and the same `7408` changed HTILE words seen twice on FW 5.50, shut
 down cleanly, and left no residual `eboot.bin`. The FW 11.60 recipe now freezes
 `7408`; one identical cleanup-first replay remains before expclear is allowed.
 
+The second FW 11.60 ordinary pass reproduced `7408`, the exact D16 classes,
+clean shutdown, and no residual process. Ordinary D16 HTILE is therefore
+hardware-qualified on both FW 5.50 and FW 11.60. The pinned FW 11.60 D16
+expclear artifact is now the active gate; its first pass must establish the
+new exact changed-word count before replay.
+
 Both D16 expclear endpoint artifacts are also staged but remain launch-blocked
 behind the two FW 11.60 ordinary passes. Forced relinks reproduced exact hashes
 `740b5645214ccd13dc6e8099f7b35d98600dde0a89f9f97f3b8c04df3c9bc55f`
