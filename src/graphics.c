@@ -19,6 +19,32 @@ static int32_t agcGfx1013ValidateTessellationState(
 static int32_t agcGfx1013ValidateFrameState(
     const AgcGfx1013FrameState *state);
 
+/* Preserve the application-facing raw packet ABI that was independently
+ * hardware-qualified before the Sony export signatures were recovered. */
+static uint32_t *agcGfx1013EmitQualifiedIndirect(
+    SceAgcCb *cb, uint32_t opcode, uint32_t data_offset,
+    uint32_t base_vertex_location, uint32_t start_instance_location,
+    uint32_t draw_count, uint32_t stride, uint32_t draw_initiator)
+{
+    uint32_t dwords = draw_count == 1u ? 5u : 7u;
+    uint32_t *cmd = agcCbAllocDwords(cb, dwords);
+
+    if (!cmd)
+        return NULL;
+    cmd[0] = agcPm4Header3(opcode, dwords);
+    cmd[1] = data_offset;
+    cmd[2] = base_vertex_location & 0xffffu;
+    cmd[3] = start_instance_location & 0xffffu;
+    if (draw_count == 1u) {
+        cmd[4] = draw_initiator;
+    } else {
+        cmd[4] = draw_count;
+        cmd[5] = stride;
+        cmd[6] = draw_initiator;
+    }
+    return cmd;
+}
+
 static bool agcGfx1013AddressIsProgramCompatible(uint64_t address)
 {
     return address != 0u && (address & 0xffu) == 0u &&
@@ -679,33 +705,19 @@ int32_t PS5_SYSV_ABI agcGfx1013DrawBaselineIndirect(
             cb, 0u, state->argument_buffer_address))
         return AGC_ERROR_INTERNAL;
     if (state->draw_count == 1u) {
-        if (state->indexed) {
-            if (!sceAgcDcbDrawIndexIndirect(
-                    cb, state->argument_offset,
-                    state->base_vertex_location,
-                    state->start_instance_location,
-                    state->draw_initiator))
-                return AGC_ERROR_INTERNAL;
-        } else if (!sceAgcDcbDrawIndirect(
-                       cb, state->argument_offset,
-                       state->base_vertex_location,
-                       state->start_instance_location,
-                       state->draw_initiator))
-            return AGC_ERROR_INTERNAL;
-    } else if (state->indexed) {
-        if (!sceAgcDcbDrawIndexIndirectMulti(
-                cb, state->argument_offset,
-                state->base_vertex_location,
-                state->start_instance_location,
-                state->draw_count, state->stride,
+        if (!agcGfx1013EmitQualifiedIndirect(
+                cb, state->indexed ? AGC_PM4_OP_DRAW_INDEX_INDIRECT :
+                                     AGC_PM4_OP_DRAW_INDIRECT,
+                state->argument_offset, state->base_vertex_location,
+                state->start_instance_location, 1u, 0u,
                 state->draw_initiator))
             return AGC_ERROR_INTERNAL;
-    } else if (!sceAgcDcbDrawIndirectMulti(
-                   cb, state->argument_offset,
-                   state->base_vertex_location,
-                   state->start_instance_location,
-                   state->draw_count, state->stride,
-                   state->draw_initiator))
+    } else if (!agcGfx1013EmitQualifiedIndirect(
+                   cb, state->indexed ? AGC_PM4_OP_DRAW_INDEX_INDIRECT_MULTI :
+                                        AGC_PM4_OP_DRAW_INDIRECT_MULTI,
+                   state->argument_offset, state->base_vertex_location,
+                   state->start_instance_location, state->draw_count,
+                   state->stride, state->draw_initiator))
         return AGC_ERROR_INTERNAL;
     return AGC_OK;
 }

@@ -120,6 +120,11 @@ AgcFirmwareVersion agcFirmwareNormalize(uint32_t raw_version)
     return version;
 }
 
+uint16_t agcDriverRuntimeFirmwareAbiKey(void)
+{
+    return agcFirmwareAbiKey(g_runtime_firmware_version);
+}
+
 bool agcProsperoStandardDirectAbiSupportsFirmware(uint32_t raw_version)
 {
     size_t i;

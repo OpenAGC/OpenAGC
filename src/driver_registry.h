@@ -96,6 +96,7 @@ typedef struct AgcDriverRegistryEntry {
 } AgcDriverRegistryEntry;
 
 AgcFirmwareVersion agcFirmwareNormalize(uint32_t raw_version);
+uint16_t agcDriverRuntimeFirmwareAbiKey(void);
 bool agcProsperoFirmwareSupported(uint32_t raw_version);
 bool agcProsperoStandardDirectAbiSupportsFirmware(uint32_t raw_version);
 bool agcProsperoFirmwareUsesTrinityPredicate(uint32_t raw_version);

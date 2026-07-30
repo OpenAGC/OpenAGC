@@ -25,6 +25,8 @@
 #include "agc_registers.h"
 #include "agc_types.h"
 #include "agcdriver.h"
+#include "driver_registry.h"
+#include "indirect_draw.h"
 #include "memset_exclusive_shader.h"
 
 #include <string.h>
@@ -864,17 +866,54 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbIndirectBuffer(
     return cmd;
 }
 
-/* sceAgcDcbDrawIndirect (NID 1rZSWUv1IRc) — IT_DRAW_INDIRECT (0x24), 5 dwords.
- * SPRX evidence: 0x28000000000 (VGT_INDEX_TYPE), validation 0x4/0x5.
- * Layout (shadPS4 PM4CmdDrawIndirect):
- *   [0] header
- *   [1] data_offset
- *   [2] base_vtx_loc[15:0]
- *   [3] start_inst_loc[15:0]
- *   [4] draw_initiator */
+static uint32_t agcIndirectRegisterOffset(
+    uint64_t modifier, uint32_t enable_bit, uint32_t field_shift)
+{
+    uint32_t selector = (uint32_t)((modifier >> 29u) & 7u);
+    uint32_t base = 0x8cu;
+
+    if (selector == 3u || selector == 5u)
+        base += 0x80u;
+    if ((modifier & (UINT64_C(1) << enable_bit)) == 0u)
+        return 0x280u;
+    return base + (uint32_t)((modifier >> field_shift) & 0x1fu);
+}
+
+uint32_t agcIndirectDrawInitiator(uint64_t modifier, bool legacy_fw320)
+{
+    uint32_t initiator = 2u;
+
+    if ((modifier & (UINT64_C(1) << 32u)) == 0u) {
+        initiator |= (uint32_t)((modifier >> 3u) & 0x20u);
+        if (legacy_fw320)
+            initiator |= (uint32_t)((modifier << 24u) & UINT64_C(0xe0000000));
+    }
+    return initiator;
+}
+
+static uint32_t agcIndirectControl(
+    uint64_t modifier, uint32_t count_indirect, bool indexed)
+{
+    uint32_t control = agcIndirectRegisterOffset(modifier, 3u, 24u);
+
+    control |= (uint32_t)((modifier & UINT64_C(0x10)) << 23u);
+    control |= (count_indirect & 1u) << 30u;
+    control |= (uint32_t)((modifier & UINT64_C(0x8)) << 28u);
+    if (indexed)
+        control |= (uint32_t)((modifier & UINT64_C(0x2)) << 27u);
+    return control;
+}
+
+static bool agcIndirectUsesLegacyFw320Initiator(void)
+{
+    return agcDriverRuntimeFirmwareAbiKey() == 0x0320u;
+}
+
+/* sceAgcDcbDrawIndirect (NID 1q1titRBL6o) — IT_DRAW_INDIRECT (0x24).
+ * The public ABI is (cb, data_offset, modifier); modifier fields select the
+ * base-vertex and start-instance register locations encoded in dwords 2-3. */
 uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndirect(
-    SceAgcCb *cb, uint32_t data_offset, uint32_t base_vtx_loc,
-    uint32_t start_inst_loc, uint32_t draw_initiator)
+    SceAgcCb *cb, uint32_t data_offset, uint64_t modifier)
 {
     uint32_t *cmd = agcCbAllocDwords(cb, 5);
     if (!cmd)
@@ -882,9 +921,10 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndirect(
 
     cmd[0] = agcPm4Header3(AGC_PM4_OP_DRAW_INDIRECT, 5);
     cmd[1] = data_offset;
-    cmd[2] = base_vtx_loc & 0xFFFFu;
-    cmd[3] = start_inst_loc & 0xFFFFu;
-    cmd[4] = draw_initiator;
+    cmd[2] = agcIndirectRegisterOffset(modifier, 0u, 9u);
+    cmd[3] = agcIndirectRegisterOffset(modifier, 2u, 19u);
+    cmd[4] = agcIndirectDrawInitiator(
+        modifier, agcIndirectUsesLegacyFw320Initiator());
     return cmd;
 }
 
@@ -914,84 +954,98 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndex2(
     return cmd;
 }
 
-/* sceAgcDcbDrawIndexIndirect (NID t1vNu082-jM) — IT_DRAW_INDEX_INDIRECT (0x25), 5 dwords.
- * SPRX evidence: 0x28000000000, bextrl 0x509/0x50e/0x513, validation 0x4/0x5.
- * Layout (shadPS4 PM4CmdDrawIndexIndirect):
- *   [0] header
- *   [1] data_offset
- *   [2] base_vtx_loc[15:0]
- *   [3] start_inst_loc[15:0]
- *   [4] draw_initiator */
+/* sceAgcDcbDrawIndexIndirect (NID t1vNu082-jM) — indexed modifier variant. */
 uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndexIndirect(
-    SceAgcCb *cb, uint32_t data_offset, uint32_t base_vtx_loc,
-    uint32_t start_inst_loc, uint32_t draw_initiator)
+    SceAgcCb *cb, uint32_t data_offset, uint64_t modifier)
 {
+    uint64_t locations;
     uint32_t *cmd = agcCbAllocDwords(cb, 5);
     if (!cmd)
         return 0;
 
+    locations = agcIndirectRegisterOffset(modifier, 0u, 9u);
+    if ((modifier & UINT64_C(0x2)) != 0u) {
+        locations |= (uint64_t)agcIndirectRegisterOffset(
+            modifier, 1u, 14u) << 16u;
+        locations |= UINT64_C(1) << 60u;
+    }
+    locations |= (uint64_t)agcIndirectRegisterOffset(
+        modifier, 2u, 19u) << 32u;
     cmd[0] = agcPm4Header3(AGC_PM4_OP_DRAW_INDEX_INDIRECT, 5);
     cmd[1] = data_offset;
-    cmd[2] = base_vtx_loc & 0xFFFFu;
-    cmd[3] = start_inst_loc & 0xFFFFu;
-    cmd[4] = draw_initiator;
+    cmd[2] = (uint32_t)locations;
+    cmd[3] = (uint32_t)(locations >> 32u);
+    cmd[4] = agcIndirectDrawInitiator(
+        modifier, agcIndirectUsesLegacyFw320Initiator());
     return cmd;
 }
 
-/* sceAgcDcbDrawIndirectMulti (NID kUlvghKs-mA) — IT_DRAW_INDIRECT_MULTI
- * (0x2C), 7 dwords. This PS5 layout is hardware-qualified on FW 5.50.
- *   [0] header
- *   [1] data_offset
- *   [2] base_vtx_loc[15:0]
- *   [3] start_inst_loc[15:0]
- *   [4] count
- *   [5] stride
- *   [6] draw_initiator */
+/* The multi builders reserve their 64-byte GetSize maximum before writing.
+ * Sony calls zero-payload user-data wrappers around the ten-dword core, but
+ * sceAgcDriverUserDataImmediateWritePacket is a zero-dword stub on every
+ * active FW 3.20-12.70 profile, so the cursor advances by exactly ten. */
 uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndirectMulti(
-    SceAgcCb *cb, uint32_t data_offset, uint32_t base_vtx_loc,
-    uint32_t start_inst_loc, uint32_t count, uint32_t stride,
-    uint32_t draw_initiator)
+    SceAgcCb *cb, uint32_t data_offset, uint32_t count_indirect,
+    uint32_t max_count_or_count, const volatile void *count_address,
+    uint32_t stride, uint64_t modifier)
 {
-    uint32_t *cmd = agcCbAllocDwords(cb, 7);
+    uintptr_t count = (uintptr_t)count_address;
+    uint32_t *cmd;
+
+    if (agcCbRemainingDwords(cb) <
+        sceAgcDcbDrawIndirectMultiGetSize() / sizeof(uint32_t))
+        return 0;
+    cmd = agcCbAllocDwords(cb, 10);
     if (!cmd)
         return 0;
 
-    cmd[0] = agcPm4Header3(AGC_PM4_OP_DRAW_INDIRECT_MULTI, 7);
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_DRAW_INDIRECT_MULTI, 10);
     cmd[1] = data_offset;
-    cmd[2] = base_vtx_loc & 0xFFFFu;
-    cmd[3] = start_inst_loc & 0xFFFFu;
-    cmd[4] = count;
-    cmd[5] = stride;
-    cmd[6] = draw_initiator;
+    cmd[2] = agcIndirectRegisterOffset(modifier, 0u, 9u);
+    cmd[3] = agcIndirectRegisterOffset(modifier, 2u, 19u);
+    cmd[4] = agcIndirectControl(modifier, count_indirect, false);
+    cmd[5] = max_count_or_count;
+    cmd[6] = (uint32_t)count & ~3u;
+    cmd[7] = (uint32_t)((uint64_t)count >> 32u);
+    cmd[8] = stride;
+    cmd[9] = agcIndirectDrawInitiator(
+        modifier, agcIndirectUsesLegacyFw320Initiator());
     return cmd;
 }
 
-/* sceAgcDcbDrawIndexIndirectMulti (NID ypVBz4uPKcQ) —
- * IT_DRAW_INDEX_INDIRECT_MULTI (0x38), 7 dwords. This PS5 layout is
- * hardware-qualified on FW 5.50.
- *   [0] header
- *   [1] data_offset
- *   [2] base_vtx_loc[15:0]
- *   [3] start_inst_loc[15:0]
- *   [4] count
- *   [5] stride
- *   [6] draw_initiator */
 uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndexIndirectMulti(
-    SceAgcCb *cb, uint32_t data_offset, uint32_t base_vtx_loc,
-    uint32_t start_inst_loc, uint32_t count, uint32_t stride,
-    uint32_t draw_initiator)
+    SceAgcCb *cb, uint32_t data_offset, uint32_t count_indirect,
+    uint32_t max_count_or_count, const volatile void *count_address,
+    uint32_t stride, uint64_t modifier)
 {
-    uint32_t *cmd = agcCbAllocDwords(cb, 7);
+    uintptr_t count = (uintptr_t)count_address;
+    uint64_t locations;
+    uint32_t *cmd;
+
+    if (agcCbRemainingDwords(cb) <
+        sceAgcDcbDrawIndexIndirectMultiGetSize() / sizeof(uint32_t))
+        return 0;
+    cmd = agcCbAllocDwords(cb, 10);
     if (!cmd)
         return 0;
 
-    cmd[0] = agcPm4Header3(AGC_PM4_OP_DRAW_INDEX_INDIRECT_MULTI, 7);
+    locations = agcIndirectRegisterOffset(modifier, 0u, 9u);
+    if ((modifier & UINT64_C(0x2)) != 0u)
+        locations |= (uint64_t)agcIndirectRegisterOffset(
+            modifier, 1u, 14u) << 16u;
+    locations |= (uint64_t)agcIndirectRegisterOffset(
+        modifier, 2u, 19u) << 32u;
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_DRAW_INDEX_INDIRECT_MULTI, 10);
     cmd[1] = data_offset;
-    cmd[2] = base_vtx_loc & 0xFFFFu;
-    cmd[3] = start_inst_loc & 0xFFFFu;
-    cmd[4] = count;
-    cmd[5] = stride;
-    cmd[6] = draw_initiator;
+    cmd[2] = (uint32_t)locations;
+    cmd[3] = (uint32_t)(locations >> 32u);
+    cmd[4] = agcIndirectControl(modifier, count_indirect, true);
+    cmd[5] = max_count_or_count;
+    cmd[6] = (uint32_t)count & ~3u;
+    cmd[7] = (uint32_t)((uint64_t)count >> 32u);
+    cmd[8] = stride;
+    cmd[9] = agcIndirectDrawInitiator(
+        modifier, agcIndirectUsesLegacyFw320Initiator());
     return cmd;
 }
 

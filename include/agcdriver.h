@@ -296,10 +296,9 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbGetLodStats(
 uint32_t *PS5_SYSV_ABI sceAgcDcbIndirectBuffer(
     SceAgcCb *cb, uint64_t gpu_addr, uint32_t size_dwords, uint32_t vmid);
 
-/* IT_DRAW_INDIRECT (opcode 0x24) — 5-dword indirect draw. NID: 1rZSWUv1IRc */
+/* IT_DRAW_INDIRECT (opcode 0x24) — 5-dword indirect draw. NID: 1q1titRBL6o */
 uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndirect(
-    SceAgcCb *cb, uint32_t data_offset, uint32_t base_vtx_loc,
-    uint32_t start_inst_loc, uint32_t draw_initiator);
+    SceAgcCb *cb, uint32_t data_offset, uint64_t modifier);
 
 /* IT_DRAW_INDEX_2 (opcode 0x27) — 6-dword indexed draw. NID: q88lQ+GP5Yk */
 uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndex2(
@@ -308,22 +307,21 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndex2(
 
 /* IT_DRAW_INDEX_INDIRECT (opcode 0x25) — 5-dword indirect indexed draw. NID: t1vNu082-jM */
 uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndexIndirect(
-    SceAgcCb *cb, uint32_t data_offset, uint32_t base_vtx_loc,
-    uint32_t start_inst_loc, uint32_t draw_initiator);
+    SceAgcCb *cb, uint32_t data_offset, uint64_t modifier);
 
-/* IT_DRAW_INDIRECT_MULTI (opcode 0x2C) — 7-dword multi indirect draw.
+/* IT_DRAW_INDIRECT_MULTI (opcode 0x2C) — 10-dword multi indirect draw.
  * NID: kUlvghKs-mA */
 uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndirectMulti(
-    SceAgcCb *cb, uint32_t data_offset, uint32_t base_vtx_loc,
-    uint32_t start_inst_loc, uint32_t count, uint32_t stride,
-    uint32_t draw_initiator);
+    SceAgcCb *cb, uint32_t data_offset, uint32_t count_indirect,
+    uint32_t max_count_or_count, const volatile void *count_address,
+    uint32_t stride, uint64_t modifier);
 
-/* IT_DRAW_INDEX_INDIRECT_MULTI (opcode 0x38) — 7-dword multi indirect indexed
+/* IT_DRAW_INDEX_INDIRECT_MULTI (opcode 0x38) — 10-dword multi indirect indexed
  * draw. NID: ypVBz4uPKcQ */
 uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndexIndirectMulti(
-    SceAgcCb *cb, uint32_t data_offset, uint32_t base_vtx_loc,
-    uint32_t start_inst_loc, uint32_t count, uint32_t stride,
-    uint32_t draw_initiator);
+    SceAgcCb *cb, uint32_t data_offset, uint32_t count_indirect,
+    uint32_t max_count_or_count, const volatile void *count_address,
+    uint32_t stride, uint64_t modifier);
 
 /* IT_SET_PREDICATION (opcode 0x20) — 3-dword predication setup. NID: bbFueFP+J4k */
 uint32_t *PS5_SYSV_ABI sceAgcDcbSetPredication(
