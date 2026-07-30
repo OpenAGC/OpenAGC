@@ -81,6 +81,16 @@ mismatches/error, channel independence, and FNV64 `0x6d3c92b92851ab4a`.
 All fixture, format, lifecycle, and residual-process gates passed. Repeat the
 identical artifact once.
 
+## BC6 UFLOAT pass 2
+
+The identical artifact reproduced `224640` changed pixels, fixture counts
+`{74880,74880,18760,56120}`, range `0..220`, zero decode mismatches/error,
+channel independence, and FNV64 `0x6d3c92b92851ab4a`. Every lifecycle gate and
+the post-run residual-process check passed again.
+
+BC6 UFLOAT is hardware-qualified on exact FW 5.50 and FW 11.60. BC6 SFLOAT is
+next.
+
 ## BC7 UNORM pass 2
 
 The identical artifact reproduced `224640` changed pixels, mode counts
