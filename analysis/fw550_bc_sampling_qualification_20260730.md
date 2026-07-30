@@ -19,4 +19,12 @@ Artifact SHA-256:
 - completion fence, marker, driver shutdown, memory cleanup, final verdict,
   self-termination, and residual-process check: PASS
 
-Repeat the identical artifact once before advancing to BC1 SRGB.
+## BC1 UNORM pass 2
+
+The identical artifact reproduced `224640` changed pixels, regions
+`{74880,74880,74880}`, zero exact mismatches, and FNV64
+`0x611e681989bb483d`. All lifecycle gates and the post-run residual-process
+check passed again.
+
+BC1 UNORM is hardware-qualified on exact FW 5.50 and FW 11.60. BC1 SRGB is
+next.

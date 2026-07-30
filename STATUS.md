@@ -784,11 +784,12 @@ Both BC6 variants, and the complete planned BC1-BC7 sampling matrix, are
 hardware-qualified on exact FW 11.60. FW 5.50 identical-byte replay remains a
 separate endpoint qualification.
 
-That endpoint replay is now active. BC1 UNORM pass 1 on FW 5.50 used the exact
-FW 11.60-qualified artifact and reproduced `224640` changed pixels, equal
+That endpoint replay is now active. BC1 UNORM on FW 5.50 used the exact FW
+11.60-qualified artifact twice and reproduced `224640` changed pixels, equal
 `{74880,74880,74880}` regions, zero mismatches, and FNV64
-`0x611e681989bb483d`. Fence, shutdown, cleanup, final verdict, and process exit
-all passed; the identical replay remains required.
+`0x611e681989bb483d` on both runs. Fence, shutdown, cleanup, final verdict, and
+process exit all passed. BC1 UNORM is hardware-qualified on both endpoints;
+BC1 SRGB is next.
 BC7 UNORM passed twice on FW 11.60 with identical `224640` changed pixels,
 mode counts `{4:205880,6:18760}`, alpha range `0..255`, zero exact mismatches,
 channel independence, and FNV64 `0xf46729633292d01b`. BC7 UNORM is
