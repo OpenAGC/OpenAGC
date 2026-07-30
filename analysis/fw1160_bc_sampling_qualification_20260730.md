@@ -138,4 +138,11 @@ Corrected BC4 artifacts were preserved before execution:
 The corrected UNORM artifact passed with `224640` changed pixels,
 `{74880,74880,74880}` regions, zero decode mismatches, zero maximum error, and
 FNV64 `0x5327e8ad53b3a455`. Fence, marker, shutdown, cleanup, verdict, and
-self-termination passed. Repeat the identical bytes once.
+self-termination passed.
+
+## BC4 UNORM corrected pass 2
+
+The identical artifact reproduced `224640` changed pixels,
+`{74880,74880,74880}` regions, zero decode mismatches/error, and FNV64
+`0x5327e8ad53b3a455`. All lifecycle gates passed again. BC4 UNORM is
+hardware-qualified on exact FW 11.60; BC4 SNORM is next.

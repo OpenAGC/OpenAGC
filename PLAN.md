@@ -1092,9 +1092,10 @@ scalar fixture. Compressed formats now use a three-color baseline diversity
 floor while retaining their stronger format-specific oracles. Retry the
 corrected pinned UNORM artifact twice, then SNORM twice.
 
-Corrected BC4 UNORM pass 1 succeeded on FW 11.60 with `224640` changed
+Corrected BC4 UNORM passed twice on FW 11.60 with identical `224640` changed
 pixels, `{74880,74880,74880}` regions, zero decode mismatches, zero maximum
-error, and FNV64 `0x5327e8ad53b3a455`. Repeat the identical artifact once.
+error, and FNV64 `0x5327e8ad53b3a455`. BC4 UNORM is hardware-qualified on
+FW 11.60; qualify BC4 SNORM next.
 The final firmware-neutral bytes are pinned as SHA-256
 `f74c393112fc465eace431a3fe288095ae4b3bf5ee993e8147ed0e9a2f22f2a4`
 for BC4 UNORM and
