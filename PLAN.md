@@ -1200,6 +1200,12 @@ twice and reproduced `224640` changed pixels, regions `{74880,74880,74880}`,
 alpha range `0..255`, zero exact mismatches, and FNV64
 `0x0a8a977e6f2c8da1` on both runs. Both BC2 variants are hardware-qualified on
 both endpoints; qualify BC3 next.
+
+BC3 UNORM pass 1 on FW 5.50 used pinned SHA-256
+`54807cec76c1b1e0d6669d4e72110e1dec55933b76a4f40a5da79098bea0b1af`
+and reproduced `224640` changed pixels, regions `{74880,74880,74880}`, alpha
+range `0..255`, zero exact mismatches, and FNV64 `0xae513a67c9bb483d`.
+Repeat the identical artifact once.
 The final firmware-neutral bytes are pinned as SHA-256
 `f74c393112fc465eace431a3fe288095ae4b3bf5ee993e8147ed0e9a2f22f2a4`
 for BC4 UNORM and
