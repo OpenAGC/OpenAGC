@@ -451,8 +451,13 @@ streams; the latter exercises endpoint p-bits and shared four-bit RGBA
 indices. Mesa's BPTC decompressor independently reproduced the generated
 endpoint and interpolation results. The bounded oracle recognizes both modes,
 requires exact decoded RGBA8 values, full alpha range, channel independence,
-and every mip/layer region, and records a native hash. Artifact pinning and
-hardware execution remain pending.
+and every mip/layer region, and records a native hash. Exact artifacts are
+now pinned as SHA-256
+`f25e212385ba34487c713fd842ab90a18049cb1cf462ddfb91a0e6df4aff7881`
+(UNORM) and
+`8fd9d8e06587123a63cbdde5aa49b32f2ba77799827a0c637669bdbd8ec7c63e`
+(SRGB), with no-prerequisite FW 11.60 and FW 5.50 guarded targets. Hardware
+execution remains pending a clean FW 11.60 boot.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability

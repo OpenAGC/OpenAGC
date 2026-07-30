@@ -115,6 +115,10 @@ PINNED_BC5_UNORM_SHA256 := 313dfca6a5e088f0cb9eca2c8e12133ed66fbb211150a9b0dd7a0
 PINNED_BC5_UNORM_ELF := $(THIS_DIR)/pinned/agc_graphics_bc5_unorm-$(PINNED_BC5_UNORM_SHA256).elf
 PINNED_BC5_SNORM_SHA256 := 3e001fab86e7e7371bd58716e4560431c4ac84be7c3b674ca9c76dacf685d759
 PINNED_BC5_SNORM_ELF := $(THIS_DIR)/pinned/agc_graphics_bc5_snorm-$(PINNED_BC5_SNORM_SHA256).elf
+PINNED_BC7_UNORM_SHA256 := f25e212385ba34487c713fd842ab90a18049cb1cf462ddfb91a0e6df4aff7881
+PINNED_BC7_UNORM_ELF := $(THIS_DIR)/pinned/agc_graphics_bc7_unorm-$(PINNED_BC7_UNORM_SHA256).elf
+PINNED_BC7_SRGB_SHA256 := 8fd9d8e06587123a63cbdde5aa49b32f2ba77799827a0c637669bdbd8ec7c63e
+PINNED_BC7_SRGB_ELF := $(THIS_DIR)/pinned/agc_graphics_bc7_srgb-$(PINNED_BC7_SRGB_SHA256).elf
 PINNED_MULTI_INDIRECT_SHA256 := 230809ee6ba03cc10cd136fc269d4c9e08f9ccfcec356f23d6d2b31b98df826c
 PINNED_MULTI_INDIRECT_ELF := $(THIS_DIR)/pinned/agc_graphics_multi_indirect-$(PINNED_MULTI_INDIRECT_SHA256).elf
 PINNED_MULTI_INDEXED_INDIRECT_SHA256 := afea810a97e36dfae517866acc21889202dbb9c63da04746801382442874f5a6
@@ -1603,6 +1607,10 @@ deploy_agc_graphics: agc_graphics.elf
 	deploy_agc_graphics_bc5_unorm_portable_fw550 \
 	deploy_agc_graphics_bc5_snorm_portable_fw1160 \
 	deploy_agc_graphics_bc5_snorm_portable_fw550 \
+	deploy_agc_graphics_bc7_unorm_portable_fw1160 \
+	deploy_agc_graphics_bc7_unorm_portable_fw550 \
+	deploy_agc_graphics_bc7_srgb_portable_fw1160 \
+	deploy_agc_graphics_bc7_srgb_portable_fw550 \
 	deploy_agc_graphics_multi_indirect_portable_fw1160 \
 	deploy_agc_graphics_multi_indexed_indirect_portable_fw1160 \
 	deploy_agc_graphics_count_indirect_portable_fw1160 \
@@ -2032,6 +2040,34 @@ deploy_agc_graphics_bc5_snorm_portable_fw550:
 	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(PINNED_BC5_SNORM_ELF) \
 		EXPECTED_FW_ABI=0x0550 EXPECTED_TARGET=BC5_SNORM \
 		EXPECTED_ARTIFACT_SHA256=$(PINNED_BC5_SNORM_SHA256) \
+		RESULT_LOG_PATH=/data/homebrew/openagc_portable_graphics/result.log \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
+
+deploy_agc_graphics_bc7_unorm_portable_fw1160:
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(PINNED_BC7_UNORM_ELF) \
+		EXPECTED_FW_ABI=0x1160 EXPECTED_TARGET=BC7_UNORM \
+		EXPECTED_ARTIFACT_SHA256=$(PINNED_BC7_UNORM_SHA256) \
+		RESULT_LOG_PATH=/data/homebrew/openagc_portable_graphics/result.log \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
+
+deploy_agc_graphics_bc7_unorm_portable_fw550:
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(PINNED_BC7_UNORM_ELF) \
+		EXPECTED_FW_ABI=0x0550 EXPECTED_TARGET=BC7_UNORM \
+		EXPECTED_ARTIFACT_SHA256=$(PINNED_BC7_UNORM_SHA256) \
+		RESULT_LOG_PATH=/data/homebrew/openagc_portable_graphics/result.log \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
+
+deploy_agc_graphics_bc7_srgb_portable_fw1160:
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(PINNED_BC7_SRGB_ELF) \
+		EXPECTED_FW_ABI=0x1160 EXPECTED_TARGET=BC7_SRGB \
+		EXPECTED_ARTIFACT_SHA256=$(PINNED_BC7_SRGB_SHA256) \
+		RESULT_LOG_PATH=/data/homebrew/openagc_portable_graphics/result.log \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
+
+deploy_agc_graphics_bc7_srgb_portable_fw550:
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(PINNED_BC7_SRGB_ELF) \
+		EXPECTED_FW_ABI=0x0550 EXPECTED_TARGET=BC7_SRGB \
+		EXPECTED_ARTIFACT_SHA256=$(PINNED_BC7_SRGB_SHA256) \
 		RESULT_LOG_PATH=/data/homebrew/openagc_portable_graphics/result.log \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
 

@@ -844,8 +844,13 @@ weights were independently checked against Mesa's BPTC decompressor. The CPU
 oracle recognizes both modes, applies SRGB only to RGB, requires exact RGBA8
 agreement, full alpha range, channel independence, and all mip/layer regions,
 and records a native hash. Other BC7 modes remain separate coverage expansion,
-not a prerequisite for proving the native BC7 resource path. Pin final neutral
-bytes before hardware execution.
+not a prerequisite for proving the native BC7 resource path. The pinned
+SHA-256 values are
+`f25e212385ba34487c713fd842ab90a18049cb1cf462ddfb91a0e6df4aff7881`
+for BC7 UNORM and
+`8fd9d8e06587123a63cbdde5aa49b32f2ba77799827a0c637669bdbd8ec7c63e`
+for BC7 SRGB. Their FW 11.60 and identical-byte FW 5.50 guarded targets have
+no build prerequisites.
 
 Use dedicated, deterministic source blocks containing endpoint, index,
 alpha, signed-range, and edge-block cases appropriate to each format. A
