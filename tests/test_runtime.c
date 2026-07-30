@@ -969,6 +969,8 @@ static void test_runtime_dynamic_graphics_state(void)
     depth_stencil.back.compare_mask = 0xc3u;
     depth_stencil.back.write_mask = 0xa5u;
     pipeline_desc.depth_stencil = &depth_stencil;
+    rasterization.cull_mode = AGC_CULL_MODE_FRONT_BIT;
+    rasterization.front_face = AGC_FRONT_FACE_CLOCKWISE;
     rasterization.depth_bias_enable = 1u;
     pipeline_desc.rasterization = &rasterization;
     pipeline_desc.dynamic_state_mask = AGC_DYNAMIC_STATE_VIEWPORT_BIT |
@@ -1029,6 +1031,15 @@ static void test_runtime_dynamic_graphics_state(void)
         "dynamic-state command buffer submits");
     captured = agcDriverDebugLastDcbSubmit();
     words = (const uint32_t *)(uintptr_t)captured->command_address;
+    TEST_ASSERT(runtime_find_context_register(words, captured->dword_count,
+        AGC_REG_PA_SU_SC_MODE_CNTL, &value),
+        "static fill/cull/front-face rasterization state is emitted");
+    TEST_ASSERT_EQ(value,
+        (1u << AGC_REG_PA_SU_SC_MODE_CNTL_CULL_FRONT_SHIFT) |
+        ((uint32_t)AGC_FRONT_FACE_CLOCKWISE <<
+            AGC_REG_PA_SU_SC_MODE_CNTL_FACE_SHIFT) |
+        AGC_GFX1013_DEPTH_BIAS_RASTER_MODE,
+        "static rasterization state preserves fill, cull, face, and depth bias");
     TEST_ASSERT(runtime_find_context_register(words, captured->dword_count,
         AGC_REG_DB_STENCILREFMASK, &value),
         "dynamic front stencil reference is emitted");

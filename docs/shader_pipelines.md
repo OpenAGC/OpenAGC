@@ -89,7 +89,8 @@ depth-only layout with implicit 0–1 bounds; v1 stencil requests fail closed.
 
 The currently host-tested graphics subset is an NGG vertex shader plus a
 Wave32 pixel shader or a compiler-fused VS-front/GS-back geometry bundle plus
-a Wave32 pixel shader, supported fill/cull/front-face rasterization, supported
+a Wave32 pixel shader, supported fill/cull/front-face rasterization (including
+exact `PA_SU_SC_MODE_CNTL` encoding), supported
 color/depth/stencil formats, complete depth/stencil testing, the declared
 dynamic states above, and the qualified gfx1013 bind groups. In the geometry
 form, `geometry_shader` owns both compiler records and `vertex_shader` must be
