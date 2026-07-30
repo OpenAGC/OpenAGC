@@ -183,6 +183,10 @@ FW 5.50 partial-rate pass 1 produced zero writes to all four sample-ID counters
 and exact total `5061792`, with intact guards and the unchanged base oracle.
 The exact tuple is frozen for replay.
 
+FW 5.50 partial-rate pass 2 reproduced every exact value and clean lifecycle.
+Both full-4x and partial-2x OpenAGC sample-rate modes are hardware-qualified on
+FW 5.50; FW 11.60 endpoint parity remains.
+
 All four subresource artifacts now reproduce across two relinks, avoid AGC
 SPRX dependencies, are preserved under full hashes, and have cleanup-first
 hash-pinned deploy targets with exact color and selected/outside metadata

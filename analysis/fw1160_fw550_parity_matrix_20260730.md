@@ -343,6 +343,11 @@ rate total and independently demonstrates the programmed two-iteration mode.
 The base color/D32 oracle, fence, teardown, self-termination, and debugger
 absence passed. The exact `0,0,0,0,5061792` tuple is frozen for replay.
 
+FW 5.50 partial-rate pass 2 reproduced the exact total, zero sample counters,
+guards, base oracle, fence, teardown, self-termination, and debugger absence.
+Both full-4x and partial-2x OpenAGC sample-rate modes are hardware-qualified on
+FW 5.50. Proceed to FW 11.60 full first using its distinct pinned artifact.
+
 That prerequisite sequence is now complete. Two relinks against the committed
 shader records reproduced all eight artifacts byte-for-byte, and dependency
 inspection found only VideoOut, kernel, libc, and networking. The exact FW

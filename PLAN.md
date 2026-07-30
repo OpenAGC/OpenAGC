@@ -697,6 +697,8 @@ the runner and shared teardown on FW 11.60 only.
   mode is qualified on this endpoint. Run the pinned partial-2x artifact next.
 - FW 5.50 partial-rate pass 1 produced exact tuple `0,0,0,0,5061792`, intact
   guards, unchanged base oracles, and no residual process. Replay it once.
+- FW 5.50 partial-rate pass 2 reproduced every exact oracle. Both sample-rate
+  modes are qualified there. Run the pinned FW 11.60 full-4x artifact next.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and
