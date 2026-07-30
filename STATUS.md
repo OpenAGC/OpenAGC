@@ -399,6 +399,11 @@ The independent CPU decoder covers both BC4 interpolation modes and special
 terminal entries; the runner requires zero decoded mismatches, exact UNORM,
 SNORM within one stored-byte rounding unit, all selection regions, and a native
 hash. Hardware execution remains pending.
+The exact artifacts are pinned as SHA-256
+`32f37917fe28c139c4c63749277a36c5e007099538b63f1973044816f248f4e0`
+(UNORM) and
+`ade37660a18fc1e28481afd543f326e684d02297527cd13f5077234d049b705e`
+(SNORM), with no-prerequisite FW 11.60 and FW 5.50 targets.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability

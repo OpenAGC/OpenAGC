@@ -787,6 +787,11 @@ target so negative and positive ranges remain observable. The CPU oracle
 decodes the block independently, requires exact UNORM output and at most one
 stored-byte rounding unit for SNORM, validates all mip/layer regions, and emits
 a native hash. Pin final bytes before hardware execution.
+The final firmware-neutral bytes are pinned as SHA-256
+`32f37917fe28c139c4c63749277a36c5e007099538b63f1973044816f248f4e0`
+for BC4 UNORM and
+`ade37660a18fc1e28481afd543f326e684d02297527cd13f5077234d049b705e`
+for BC4 SNORM. Both endpoint targets are no-build guarded replays.
 
 Use dedicated, deterministic source blocks containing endpoint, index,
 alpha, signed-range, and edge-block cases appropriate to each format. A
