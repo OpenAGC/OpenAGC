@@ -692,6 +692,9 @@ pixels, equal `74880` region counts, zero decode mismatches/error, and FNV64
 BC4 SNORM also passed twice with equal coverage/region counts, zero decode
 mismatches/error, and FNV64 `0x16b22a8b52c7ce8d`. Both BC4 variants are
 hardware-qualified on exact FW 11.60.
+BC7 SRGB pass 1 also succeeded with identical coverage/mode counts, alpha range
+`0..255`, zero exact mismatches, channel independence, and FNV64
+`0x74a3526f9a3eef65`; pass 2 remains required.
 BC5 SNORM also passed twice with equal coverage/region counts, full remapped
 R/G ranges, zero decode mismatches/error, channel independence, and FNV64
 `0xf1464077ada8ce8d`. Both BC5 variants are hardware-qualified on exact

@@ -248,6 +248,14 @@ The identical artifact reproduced `224640` changed pixels,
 `0xf46729633292d01b`. All lifecycle gates passed again. BC7 UNORM is
 hardware-qualified on exact FW 11.60; BC7 SRGB is next.
 
+## BC7 SRGB pass 1
+
+The pinned SRGB artifact passed with `224640` changed pixels,
+`{74880,74880,74880}` regions, mode counts `{4:205880,6:18760}`, alpha range
+`0..255`, zero exact mismatches, channel independence, and FNV64
+`0x74a3526f9a3eef65`. All lifecycle gates passed. Repeat the identical bytes
+once.
+
 ## BC3 UNORM pass 2
 
 The identical artifact reproduced `224640` changed pixels,
