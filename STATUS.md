@@ -806,6 +806,11 @@ full remapped R/G ranges, zero decode mismatches/error, channel independence,
 and FNV64 `0xf1464077ada8ce8d`. All lifecycle gates passed. Both BC5 variants
 are hardware-qualified on exact FW 5.50 and FW 11.60.
 
+BC7 UNORM pass 1 on FW 5.50 used the exact FW 11.60-qualified bytes and
+reproduced `224640` changed pixels, mode counts `{4:205880,6:18760}`, alpha
+range `0..255`, zero exact mismatches, channel independence, and FNV64
+`0xf46729633292d01b`. All lifecycle gates passed; one replay remains.
+
 BC3 UNORM on FW 5.50 used the exact FW 11.60-qualified bytes twice and
 reproduced `224640` changed pixels, equal regions, alpha range `0..255`, zero
 exact mismatches, and FNV64 `0xae513a67c9bb483d` on both runs. All lifecycle
