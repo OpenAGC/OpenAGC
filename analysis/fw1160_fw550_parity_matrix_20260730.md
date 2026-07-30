@@ -358,6 +358,11 @@ fence, file-backed verdict, teardown, self-termination, and debugger absence.
 Full-4x sample-rate shading is hardware-qualified on both endpoints. Run the
 pinned FW 11.60 partial-2x artifact next.
 
+FW 11.60 partial-rate pass 1 exactly matched FW 5.50: sample counters stayed
+`0,0,0,0`, total was `5061792`, and all guards and base oracles passed. The
+file-backed verdict, fence, teardown, self-termination, and debugger absence
+also passed. Freeze the exact tuple for one identical-byte replay.
+
 That prerequisite sequence is now complete. Two relinks against the committed
 shader records reproduced all eight artifacts byte-for-byte, and dependency
 inspection found only VideoOut, kernel, libc, and networking. The exact FW

@@ -703,6 +703,8 @@ the runner and shared teardown on FW 11.60 only.
   tuple, guards, base oracles, and clean lifecycle. Replay the frozen tuple.
 - FW 11.60 full-rate pass 2 reproduced every exact oracle. Full-4x parity is
   qualified on both endpoints. Run FW 11.60 partial-2x next.
+- FW 11.60 partial-rate pass 1 exactly matched FW 5.50's zero counters and
+  total `5061792`, with all lifecycle checks passing. Replay the frozen tuple.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and
