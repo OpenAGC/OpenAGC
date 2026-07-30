@@ -46,3 +46,8 @@ mismatches, distinct FNV64 hashes `0xac93e4f1b2bde483` and
 `0x998a600f39b5c3c3`, packed hash `0xe23c2e22716fa113`, an immediate fence,
 clean teardown, self-termination, and no residual `eboot.bin`. Replay once
 before promotion.
+
+The identical-byte replay reproduced every lane count, range, mismatch count,
+lane hash, packed hash, fence, teardown, self-termination, and debugger absence.
+RG32_UINT is hardware-qualified on FW 11.60; the original no-verdict attempt is
+fully attributed to the stale loader boot.

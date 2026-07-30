@@ -539,6 +539,9 @@ once: both lanes span the full unsigned range with zero exact mismatches,
 distinct hashes, packed FNV64 `0xe23c2e22716fa113`, clean teardown, and no
 residual process. One identical replay remains before promotion.
 
+The identical replay reproduced every exact RG32_UINT oracle and clean
+lifecycle. RG32_UINT is hardware-qualified on FW 11.60; RGBA32_UINT is next.
+
 `AGC_GFX1013_RT_FORMAT_RGBA32_UINT` is appended at value 28 and maps to
 `(format=0x0e, number=UINT, swap=standard)`, 16 bytes per pixel, and
 `32_ABGR` export 9. Host coverage locks `CB_COLOR0_INFO=0x00070438`, exact PM4,

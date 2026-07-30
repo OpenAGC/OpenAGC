@@ -850,6 +850,9 @@ all six pinned artifacts for identical-byte FW 5.50 replay and proceed to the
   `0xe23c2e22716fa113`, clean teardown, and no residual process. Replay the same
   pinned bytes once before advancing to `RGBA32_UINT`.
 
+  The replay reproduced every exact oracle and clean lifecycle. `RG32_UINT` is
+  hardware-qualified on FW 11.60; advance to the pinned `RGBA32_UINT` gate.
+
 - `RGBA32_UINT` is host-qualified as append-only value 28 with gfx1013
   `32_32_32_32`, UINT, standard swap, 16 bytes per pixel, and `32_ABGR`
   export 9. Exact PM4 (`CB_COLOR0_INFO=0x00070438`), all-profile selection,
