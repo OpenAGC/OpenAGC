@@ -404,7 +404,8 @@ Run this after both `videoout_linear` and `agc_init` pass individually.
 Tests actual GPU compute shader execution — the first sample to submit
 non-NOP commands to the GPU:
 - GPU credential bypass + AGC init + VideoOut (same as agc_videoout)
-- libSceVideoOut.sprx runtime patch (NOP the linear tiling check at 0x7e61)
+- firmware-keyed libSceVideoOut.sprx runtime patch (FW 5.50 `+0x7e61`,
+  FW 11.60 `+0x9922`) with exact instruction verification and restoration
 - Load a compute shader binary (`fill_color.sb`) compiled by `openagc-psbc`
   from GLSL → SPIR-V → ACO → AgcShaderRecord format
 - Upload shader code to GPU-accessible garlic memory

@@ -50,6 +50,7 @@ set(OPENAGC_SOURCES
     src/driver_sony_exports.c
     src/agc_workload_packet.c
     src/agc_workload_state.c
+    src/videoout_patch.c
 )
 
 # Platform-specific sources

@@ -39,6 +39,19 @@ before copying it. Suspend-point and PA-debug queries now return safe fallback
 values while no backend is selected, including before Prospero initialization
 and after shutdown.
 
+## Firmware-keyed VideoOut linear registration (2026-07-30)
+
+The application-neutral Prospero VideoOut backend no longer writes the FW 5.50
+instruction at `libSceVideoOut+0x7e61` on every console. Exact local SPRX
+comparison recovered FW 11.60's corresponding branch at `+0x9922`; both
+profiles carry their full six-byte signatures. Runtime selection normalizes
+the full system version to the four-digit ABI key, verifies the instruction
+before patching, restores it immediately after registration, and rejects
+unknown firmware layouts. Host fixtures lock both profiles and the Prospero
+library cross-builds without warnings. FW 11.60 presentation hardware
+qualification is still pending. See
+`analysis/videoout_linear_patch_versions_20260730.md`.
+
 ## Reusable driver and flexible-memory teardown (2026-07-29)
 
 `agcDriverShutdown` now provides a public, backend-neutral teardown boundary.

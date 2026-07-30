@@ -22,6 +22,7 @@ matching current-source FW 5.50 mirror still needs to run.
 | HS-offchip carrier | Zero-entry form qualified | Non-empty patch-list execution is missing |
 | Workload packets | Fail closed | Every known direct and inline form stalls; recover a new prerequisite before another gate |
 | EOP flip | Disabled | FW 11.60 hardware qualification is missing |
+| Linear VideoOut registration patch | Prepared | FW 11.60 SPRX branch recovered at `+0x9922`; bounded presentation gate pending |
 
 Suspend-point query is a disabled permission export on both profiles and is
 not a parity gap.
@@ -86,7 +87,9 @@ The following FW 5.50-qualified application-facing paths still need bounded
 FW 11.60 gates: multi-viewport, cube arrays, dual-source blending, sample-rate
 shading counters, application-neutral GPU authorization, VideoOut-integrated
 graphics and compute, EOP flip, non-empty HS-offchip lists, and the standalone
-cube consumer.
+cube consumer. The firmware-keyed linear-registration patch needed by the
+VideoOut gates is now host-tested from exact FW 5.50 and FW 11.60 SPRX evidence;
+see `analysis/videoout_linear_patch_versions_20260730.md`.
 
 Occlusion queries, polygon modes, general MRT blending, and wide point/line
 policy are not parity blockers yet because they are not hardware-qualified on

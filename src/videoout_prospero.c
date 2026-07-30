@@ -2,6 +2,7 @@
 
 #include "agc_videoout.h"
 #include "agc_error.h"
+#include "videoout_patch.h"
 
 #include <ps5/kernel.h>
 
@@ -73,10 +74,16 @@ static int32_t validate_create_info(const AgcVideoOutCreateInfo *info)
 
 static int32_t set_linear_registration_patch(bool enable)
 {
-    static const uint8_t original[6] = {0x0f, 0x84, 0x15, 0x02, 0x00, 0x00};
-    static const uint8_t patched[6] = {0x90, 0x90, 0x90, 0x90, 0x90, 0x90};
+    static const uint8_t patched[AGC_VIDEOOUT_LINEAR_PATCH_SIZE] = {
+        0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
+    };
     static const int text_protection = 0x4; /* execute-only, as originally mapped */
+    const AgcVideoOutLinearPatch *patch =
+        agcVideoOutFindLinearPatch(kernel_get_fw_version());
     uint32_t module = 0;
+
+    if (!patch)
+        return AGC_ERROR_NOT_SUPPORTED;
     if (kernel_dynlib_handle(-1, "libSceVideoOut.sprx", &module) != 0 ||
         module == 0)
         return AGC_ERROR_NOT_FOUND;
@@ -84,18 +91,19 @@ static int32_t set_linear_registration_patch(bool enable)
     if (!base)
         return AGC_ERROR_NOT_FOUND;
 
-    uint8_t *address = (uint8_t *)(base + 0x7e61);
-    const uint8_t *expected = enable ? original : patched;
-    const uint8_t *replacement = enable ? patched : original;
+    uint8_t *address = (uint8_t *)(base + patch->text_offset);
+    const uint8_t *expected = enable ? patch->original : patched;
+    const uint8_t *replacement = enable ? patched : patch->original;
     intptr_t page = (intptr_t)address & ~(intptr_t)0xfff;
     if (kernel_mprotect(-1, page, 0x2000, 0x7) != 0)
         return AGC_ERROR_INTERNAL;
-    if (memcmp(address, expected, sizeof(original)) != 0) {
+    if (memcmp(address, expected, sizeof(patch->original)) != 0) {
         return kernel_mprotect(-1, page, 0x2000, text_protection) == 0 ?
             AGC_ERROR_NOT_SUPPORTED : AGC_ERROR_INTERNAL;
     }
-    memcpy(address, replacement, sizeof(original));
-    __builtin___clear_cache((char *)address, (char *)address + sizeof(original));
+    memcpy(address, replacement, sizeof(patch->original));
+    __builtin___clear_cache((char *)address,
+                            (char *)address + sizeof(patch->original));
     if (kernel_mprotect(-1, page, 0x2000, text_protection) != 0)
         return AGC_ERROR_INTERNAL;
     return AGC_OK;
