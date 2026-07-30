@@ -366,8 +366,10 @@ the runner and shared teardown on FW 11.60 only.
   `16_16_16_16`, SINT, standard swap, eight bytes per pixel, and
   SINT16_ABGR export 8. Exact PM4 (`CB_COLOR0_INFO=0x00070530`), all-profile
   selection, every short-buffer boundary, invalid-enum behavior, and maximum
-  64-bit layout arithmetic pass. Extend the signed portable gate to four
-  independent lanes next.
+  64-bit layout arithmetic pass. The portable gate now exercises four exact
+  signed lanes, signed range/diversity, all six pairwise independence checks,
+  and the packed hash, and passes firmware-neutral dependency verification.
+  Pin its final bytes next.
 - Seven additional offscreen format gates now build under the same exact
   profile and bounded runner: R8, RG8, RGB10A2, R11G11B10, R32, RG32, and
   RGBA32. All seven passed twice on FW 11.60; logged RG32 reproduced FNV64

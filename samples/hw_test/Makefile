@@ -658,6 +658,12 @@ agc_graphics_rg16_sint_portable.elf: agc_graphics.c ps5_video_out.h gpu_credenti
 	../../tools/verify_firmware_neutral_elf.sh $@ \
 		/data/homebrew/openagc_portable_graphics/result.log
 
+agc_graphics_rgba16_sint_portable.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/sint16_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(PORTABLE_GRAPHICS_FLAGS) -DAGC_VALIDATE_RGBA16_SINT=1 \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+	../../tools/verify_firmware_neutral_elf.sh $@ \
+		/data/homebrew/openagc_portable_graphics/result.log
+
 agc_graphics_r16_float_fw1160.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) $(FW1160_GRAPHICS_FLAGS) -DAGC_VALIDATE_R16_FLOAT=1 \
 		-o $@ agc_graphics.c $(AGC_LDFLAGS)

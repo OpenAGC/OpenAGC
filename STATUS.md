@@ -260,7 +260,10 @@ replay remains pending. See
 SINT16_ABGR export 8. Exact host coverage locks
 `CB_COLOR0_INFO=0x00070530`, the complete PM4 stream, all 39 profiles, every
 short command buffer, invalid enums, and maximum 64-bit layout arithmetic.
-The portable four-lane hardware gate remains pending.
+The portable gate now exercises four exact signed lanes, signed range and
+diversity, all six pairwise independence checks, and the packed hash, and
+passes firmware-neutral dependency verification. Final-byte pinning and
+hardware execution remain pending.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability
