@@ -480,8 +480,8 @@ the runner and shared teardown on FW 11.60 only.
   metadata count and exact D16 values. The ordinary tuple is qualified on both
   endpoints. Run pinned FW 11.60 D16 expclear pass 1 next, freeze its exact
   metadata count, replay once, then run the pinned FW 5.50 mirror.
-- FW 11.60 D16 expclear passed twice and its pinned FW 5.50 mirror passed once
-  with exact D16 values and `49152` changed HTILE words on every run. All runs
+- FW 11.60 D16 expclear and its pinned FW 5.50 mirror each passed twice with
+  exact D16 values and `49152` changed HTILE words on every run. All runs
   completed cleanup-first, shut down cleanly, and left no residual process.
   D16 expclear is qualified on both endpoints. Advance to the already prepared
   D32 HTILE ordinary/decompress/resummarize tier next; keep combined D32+S8,

@@ -142,3 +142,11 @@ driver shutdown, final PASS, and no residual `eboot.bin`. D16 HTILE expclear
 is therefore hardware-qualified on both endpoints. Proceed to the separately
 prepared D32 HTILE ordinary/decompress/resummarize gate; do not skip ahead to
 combined D32+S8 or MSAA.
+
+A later completion audit replayed the same hash-enforced FW 5.50 artifact
+`41904f868ef6171ec854e80f79e281b8c681b009caf4d7dbc0979edfba498c32` to
+match the two-pass endpoint rule. It again produced `49152` changed HTILE
+words, exact D16 classes, bounded completion, zero-valued memory cleanup,
+driver shutdown, final PASS, self-termination, and no residual `eboot.bin`.
+D16 expclear therefore has two accepted identical-byte passes on both exact
+FW 5.50 and FW 11.60.

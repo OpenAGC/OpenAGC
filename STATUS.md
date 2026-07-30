@@ -250,11 +250,13 @@ Ordinary D16 HTILE is now hardware-qualified twice on each endpoint. The
 pinned current-source artifacts reproduced exact D16 classes, clean teardown,
 no residual process, and `7408` changed HTILE words from `0xfffc000f` on all
 four runs; both guarded recipes freeze that count. D16 expclear is also
-hardware-qualified on both endpoints: FW 11.60 passed twice and the pinned FW
-5.50 mirror passed once with exact D16 classes and `49152` changed HTILE words
-from `0xfffffff0`. Every accepted run completed cleanup-first, reached its
+hardware-qualified twice on both endpoints, with exact D16 classes and `49152`
+changed HTILE words from `0xfffffff0` on all four runs. Every accepted run
+completed cleanup-first, reached its
 fence, shut down the driver, returned PASS, and left no residual process. D32
-HTILE ordinary/decompress/resummarize is now the active compressed-depth gate.
+HTILE ordinary/decompress/resummarize, expclear, combined D32+S8 aspect
+expclear, mip/array isolation, and MSAA parity were subsequently qualified as
+recorded above.
 
 ## Regression safety fixes (2026-07-29)
 
