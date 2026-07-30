@@ -105,6 +105,13 @@
     !(AGC_DRAW_INDIRECT || AGC_DRAW_INDEXED_INDIRECT)
 #error "multiple indirect records require an indirect draw mode"
 #endif
+#ifndef AGC_INDIRECT_COUNT_BUFFER
+#define AGC_INDIRECT_COUNT_BUFFER 0
+#endif
+#if AGC_INDIRECT_COUNT_BUFFER && \
+    (!AGC_DRAW_INDIRECT || AGC_INDIRECT_DRAW_COUNT != 2)
+#error "count-buffer gate requires two non-indexed indirect records"
+#endif
 
 #ifndef AGC_DEPTH_VALIDATION
 #define AGC_DEPTH_VALIDATION 0
@@ -446,6 +453,7 @@ int sceKernelDeleteEqueue(SceKernelEqueue equeue);
 #define TEXTURE_DATA_OFFSET 0xB000u
 #define TEXTURE_DESC_OFFSET 0xC000u
 #define DRAW_ARGS_OFFSET    0xD000u
+#define DRAW_COUNT_OFFSET   0xD100u
 #define INDEX_TYPE_16      0u
 #define DEPTH_SWIZZLE_64KB_Z_X AGC_GFX1013_SWIZZLE_64KB_Z_X
 #define DEPTH_HTILE_PROVISIONAL_PIPE_COUNT 8u
@@ -1864,6 +1872,13 @@ static bool dispatch_graphics(GraphicsTest *test,
 #if AGC_DRAW_INDIRECT || AGC_DRAW_INDEXED_INDIRECT
     uint32_t *draw_args = (uint32_t *)
         ((uint8_t *)test->compute_buffer + DRAW_ARGS_OFFSET);
+#if AGC_INDIRECT_COUNT_BUFFER
+    volatile uint32_t *indirect_count = (volatile uint32_t *)
+        ((uint8_t *)test->compute_buffer + DRAW_COUNT_OFFSET);
+    *indirect_count = AGC_INDIRECT_DRAW_COUNT;
+#else
+    volatile uint32_t *indirect_count = NULL;
+#endif
 #if AGC_DRAW_INDEXED_INDIRECT
 #if AGC_INDIRECT_DRAW_COUNT == 2
     static const uint32_t indexed_indirect_args[10] = {
@@ -1890,6 +1905,11 @@ static bool dispatch_graphics(GraphicsTest *test,
     printf("[Indirect] args=%p records=%u count=3 instances=1 "
            "second-base=%u\n", draw_args, AGC_INDIRECT_DRAW_COUNT,
            AGC_INDIRECT_DRAW_COUNT == 2 ? 3u : 0u);
+#if AGC_INDIRECT_COUNT_BUFFER
+    printf("[Indirect Count] address=%p value=%u maximum=%u\n",
+           (const void *)indirect_count, *indirect_count,
+           AGC_INDIRECT_DRAW_COUNT);
+#endif
 #endif
     /* RGBA8 texels: red, green / blue, white. Bilinear sampling produces a
      * visibly distinct two-dimensional gradient inside the triangle. */
@@ -2423,14 +2443,22 @@ static bool dispatch_graphics(GraphicsTest *test,
             AGC_REG_SPI_SHADER_USER_DATA_GS_0 + 4u,
         .draw_initiator = 2u,
         .indexed = AGC_DRAW_INDEXED_INDIRECT,
+        .count_address = AGC_INDIRECT_COUNT_BUFFER ?
+            (uint64_t)(uintptr_t)indirect_count : 0u,
+        .count_indirect = AGC_INDIRECT_COUNT_BUFFER,
     };
     state_error = agcGfx1013DrawBaselineIndirect(&cb, &indirect_draw);
 #if AGC_AUDIT_SONY_MULTI_INDIRECT
     if (state_error == AGC_OK) {
-        static const uint32_t expected_packet[10] = {
+        const uint32_t expected_packet[10] = {
             AGC_DRAW_INDEXED_INDIRECT ? 0xc0083800u : 0xc0082c00u,
-            0u, 0x08fu, 0x090u, 0x280u,
-            AGC_INDIRECT_DRAW_COUNT, 0u, 0u,
+            0u, 0x08fu, 0x090u,
+            AGC_INDIRECT_COUNT_BUFFER ? 0x40000280u : 0x280u,
+            AGC_INDIRECT_DRAW_COUNT,
+            AGC_INDIRECT_COUNT_BUFFER ?
+                ((uint32_t)(uintptr_t)indirect_count & ~3u) : 0u,
+            AGC_INDIRECT_COUNT_BUFFER ?
+                (uint32_t)((uint64_t)(uintptr_t)indirect_count >> 32u) : 0u,
             AGC_DRAW_INDEXED_INDIRECT ? 20u : 16u, 2u,
         };
         uint32_t used = agcCbUsedDwords(&cb);
@@ -2925,6 +2953,10 @@ static bool dispatch_graphics(GraphicsTest *test,
         printf("[Multi Draw] distinct second geometry: %s "
                "(changed=%u max_x=%u)\n",
                multi_draw_pass ? "PASS" : "FAIL", changed, max_x);
+#if AGC_INDIRECT_COUNT_BUFFER
+        printf("[Indirect Count] GPU-selected records=2: %s\n",
+               multi_draw_pass ? "PASS" : "FAIL");
+#endif
 #else
         const bool multi_draw_pass = true;
 #endif

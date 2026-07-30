@@ -540,6 +540,32 @@ static void test_gfx1013_indexed_indirect_draw_wrappers(void)
     indirect.base_vertex_location = 0x08fu;
     indirect.start_instance_location = 0x090u;
     indirect.draw_initiator = 2u;
+    indirect.count_indirect = 1u;
+    indirect.count_address = UINT64_C(0x200040004);
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndirect(&cb, &indirect), AGC_OK,
+        "gfx1013 indirect accepts GPU count buffer");
+    TEST_ASSERT_EQ(buffer[44], 0x40000280u,
+        "gfx1013 indirect enables count-buffer control");
+    TEST_ASSERT_EQ(buffer[46], 0x00040004u,
+        "gfx1013 indirect count address low");
+    TEST_ASSERT_EQ(buffer[47], 2u,
+        "gfx1013 indirect count address high");
+    indirect.count_address++;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndirect(&cb, &indirect),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "gfx1013 indirect rejects unaligned count address");
+    indirect.count_address = 0u;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndirect(&cb, &indirect),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "gfx1013 indirect rejects missing count buffer");
+    indirect.count_indirect = 0u;
+
+    indirect.base_vertex_location = 0x08fu;
+    indirect.start_instance_location = 0x090u;
+    indirect.draw_initiator = 2u;
 
     indirect.indexed = 1u;
     indirect.index_buffer_address = UINT64_C(0x200030000);

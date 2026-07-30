@@ -729,6 +729,9 @@ typedef struct AgcGfx1013IndirectDrawState {
      * form 0x22. */
     uint32_t draw_initiator;
     uint32_t indexed;
+    /* Optional GPU-written draw count. draw_count remains the maximum. */
+    uint64_t count_address;
+    uint32_t count_indirect;
 } AgcGfx1013IndirectDrawState;
 
 /* Shader-driven resolve. The draw must bind a sampler2DMS pixel shader and

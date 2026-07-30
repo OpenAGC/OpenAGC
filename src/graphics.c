@@ -663,11 +663,18 @@ int32_t PS5_SYSV_ABI agcGfx1013DrawBaselineIndirect(
 
     if (!cb || !state || state->argument_buffer_address == 0u ||
         state->draw_count == 0u || state->indexed > 1u ||
+        state->count_indirect > 1u ||
         state->draw_index_enable != 0u ||
         state->draw_index_location != 0u ||
         (state->argument_buffer_address & 7u) != 0u ||
         (state->argument_buffer_address >> 48) != 0u ||
         (state->argument_offset & 3u) != 0u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if ((state->count_indirect != 0u &&
+         (state->count_address == 0u ||
+          (state->count_address & 3u) != 0u ||
+          (state->count_address >> 48u) != 0u)) ||
+        (state->count_indirect == 0u && state->count_address != 0u))
         return AGC_ERROR_INVALID_ARGUMENT;
     if (!agcGfx1013IndirectModifier(
             state->base_vertex_location, state->start_instance_location,
@@ -717,11 +724,15 @@ int32_t PS5_SYSV_ABI agcGfx1013DrawBaselineIndirect(
             cb, 0u, state->argument_buffer_address))
         return AGC_ERROR_INTERNAL;
     if (!(state->indexed ? sceAgcDcbDrawIndexIndirectMulti(
-              cb, state->argument_offset, 0u, state->draw_count, NULL,
+              cb, state->argument_offset, state->count_indirect,
+              state->draw_count,
+              (const volatile void *)(uintptr_t)state->count_address,
               state->draw_count > 1u ? state->stride : minimum_stride,
               modifier) :
           sceAgcDcbDrawIndirectMulti(
-              cb, state->argument_offset, 0u, state->draw_count, NULL,
+              cb, state->argument_offset, state->count_indirect,
+              state->draw_count,
+              (const volatile void *)(uintptr_t)state->count_address,
               state->draw_count > 1u ? state->stride : minimum_stride,
               modifier)))
         return AGC_ERROR_INTERNAL;

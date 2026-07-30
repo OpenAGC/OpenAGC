@@ -10,6 +10,7 @@ EXPECTED_TARGET=${EXPECTED_TARGET:-offscreen FP16}
 EXPECTED_DRAW_MODE=${EXPECTED_DRAW_MODE:-}
 EXPECTED_PACKET_AUDIT=${EXPECTED_PACKET_AUDIT:-}
 REQUIRE_MULTI_DRAW_ORACLE=${REQUIRE_MULTI_DRAW_ORACLE:-0}
+REQUIRE_COUNT_BUFFER_ORACLE=${REQUIRE_COUNT_BUFFER_ORACLE:-0}
 EXPECTED_VARIANT=${EXPECTED_VARIANT:-}
 REQUIRE_TESS_RINGS=${REQUIRE_TESS_RINGS:-0}
 EXPECTED_FW_ABI=${EXPECTED_FW_ABI:-0x1160}
@@ -86,6 +87,10 @@ if [ -n "$EXPECTED_PACKET_AUDIT" ]; then
 fi
 if [ "$REQUIRE_MULTI_DRAW_ORACLE" -eq 1 ]; then
     grep -Fq '[Multi Draw] distinct second geometry: PASS' \
+        "$output_file" || exit 1
+fi
+if [ "$REQUIRE_COUNT_BUFFER_ORACLE" -eq 1 ]; then
+    grep -Fq '[Indirect Count] GPU-selected records=2: PASS' \
         "$output_file" || exit 1
 fi
 if [ "$REQUIRE_TESS_RINGS" -eq 1 ]; then
