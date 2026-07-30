@@ -534,6 +534,11 @@ no residual `eboot.elf`; reboot and reinjection are required before retrying.
 Two FW 11.60 passes and the identical-byte FW 5.50 replay remain pending. See
 `analysis/fw1160_rg32_uint_first_attempt_20260730.md`.
 
+The required clean-boot retry of the same pinned RG32_UINT bytes now passes
+once: both lanes span the full unsigned range with zero exact mismatches,
+distinct hashes, packed FNV64 `0xe23c2e22716fa113`, clean teardown, and no
+residual process. One identical replay remains before promotion.
+
 `AGC_GFX1013_RT_FORMAT_RGBA32_UINT` is appended at value 28 and maps to
 `(format=0x0e, number=UINT, swap=standard)`, 16 bytes per pixel, and
 `32_ABGR` export 9. Host coverage locks `CB_COLOR0_INFO=0x00070438`, exact PM4,

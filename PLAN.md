@@ -845,6 +845,11 @@ all six pinned artifacts for identical-byte FW 5.50 replay and proceed to the
   twice. Preserve FW 5.50 replay as pending. See
   `analysis/fw1160_rg32_uint_first_attempt_20260730.md`.
 
+  The required clean-boot retry now passes once with both exact lanes, full
+  unsigned range, zero mismatches, independent hashes, packed hash
+  `0xe23c2e22716fa113`, clean teardown, and no residual process. Replay the same
+  pinned bytes once before advancing to `RGBA32_UINT`.
+
 - `RGBA32_UINT` is host-qualified as append-only value 28 with gfx1013
   `32_32_32_32`, UINT, standard swap, 16 bytes per pixel, and `32_ABGR`
   export 9. Exact PM4 (`CB_COLOR0_INFO=0x00070438`), all-profile selection,

@@ -36,3 +36,13 @@ missing payload verdict into a pass.
 5. Require two complete, identical-byte passes before qualification.
 
 Do not rebuild or replace the pinned ELF. FW 5.50 replay remains pending.
+
+## Clean-boot resolution
+
+After the console reboot and ps5debug-NG reinjection, the same pinned ELF
+completed pass 1 through the cleanup-first file-backed target. Both lanes
+contained 255,744 exact samples spanning `0x00000000..0xffffffff`, with zero
+mismatches, distinct FNV64 hashes `0xac93e4f1b2bde483` and
+`0x998a600f39b5c3c3`, packed hash `0xe23c2e22716fa113`, an immediate fence,
+clean teardown, self-termination, and no residual `eboot.bin`. Replay once
+before promotion.
