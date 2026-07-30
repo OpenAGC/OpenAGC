@@ -154,9 +154,16 @@ hardware-unqualified. Artifact
 `83342910f2fd15210f9219796eaccacead441f3bd02b8866d966b54c8a44675d` also
 passed the three-DCB reflected compute-to-copy-to-shader-read chain, one
 bounded batch fence, and 64-word final readback on exact standard PS5 FW 5.50;
-see `analysis/runtime_compute_copy_shader_fw550_20260731.md`. Images,
-graphics consumers, cross-queue ownership, partial ranges, multi-packet
-copies, and FW 11.60 remain unqualified.
+see `analysis/runtime_compute_copy_shader_fw550_20260731.md`. Graphics
+consumers, cross-queue ownership, partial ranges, and FW 11.60 remain
+unqualified for buffer copies.
+Runtime API v12 adds `agcCmdCopyImage` for complete, identical image layouts in
+typed `CopySource` and `CopyDestination` state. Host coverage rejects
+incompatible and overlapping resources, retains both images, and splits a
+four-megabyte allocation into three DMA packets. Exact FW 5.50 artifact
+`29110963a218ac7e5de2fc5073c23d5373e7eaa1365ccb3e2b6cf26fe1f85046`
+passed twice with identical 256-word source/destination hashes and clean
+teardown; see `analysis/runtime_image_copy_fw550_20260731.md`.
 Descriptor binds now fail closed without an explicit compatible typed state:
 read-only descriptors require `shader-read`; storage descriptors require
 `shader-read` or `shader-write` while reflection lacks per-binding access

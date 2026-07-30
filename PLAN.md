@@ -537,8 +537,19 @@ then passed the complete same-queue compute-to-copy-to-shader-read slice: a
 reflected producer dispatch, dependent `shader-write -> copy-source`, typed
 copy, `copy-destination -> shader-read`, reflected consumer dispatch, and
 final host readback in one three-DCB batch on exact standard PS5 FW 5.50.
-Images, graphics consumers, cross-queue ownership, partial ranges,
-multi-packet copies, and other firmware profiles remain open.
+Graphics consumers, cross-queue ownership, partial ranges, and other firmware
+profiles remain open for buffer copies.
+
+Runtime API v12 adds typed whole-image copies. `agcCmdCopyImage` accepts only
+distinct images with identical dimensions, format, samples, mip/layer shape,
+and computed allocation layout in explicit `copy-source`/`copy-destination`
+state on one queue. It preflights every split DMA packet and resource retain
+before emission; partial subresources and layout conversion fail closed. Host
+coverage locks incompatible-layout rejection, retention, and a three-packet
+four-megabyte copy. Exact artifact
+`29110963a218ac7e5de2fc5073c23d5373e7eaa1365ccb3e2b6cf26fe1f85046`
+passed twice on standard PS5 FW 5.50 with exact 256-word readback and complete
+teardown; see `analysis/runtime_image_copy_fw550_20260731.md`.
 
 Descriptor tables now fail closed before command emission unless their
 resources have an explicit compatible typed state on the recording queue.

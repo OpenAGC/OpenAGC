@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-#define AGC_RUNTIME_API_VERSION 11u
+#define AGC_RUNTIME_API_VERSION 12u
 #define AGC_RUNTIME_STRUCTURE_VERSION_1 1u
 #define AGC_RUNTIME_STRUCTURE_VERSION_2 2u
 #define AGC_RUNTIME_PROFILE_NAME_SIZE 48u
@@ -1149,6 +1149,12 @@ int32_t PS5_SYSV_ABI agcCmdTransitionResources(
 int32_t PS5_SYSV_ABI agcCmdCopyBuffer(AgcCommandBuffer command_buffer,
     AgcBuffer source, uint64_t source_offset, AgcBuffer destination,
     uint64_t destination_offset, uint64_t size);
+/* Copies the complete allocation between two distinct images with identical
+ * dimensions, format, sample count, mip/layer shape, and computed layout.
+ * Both images require explicit CopySource/CopyDestination state on the command
+ * queue. Partial subresources and layout conversion remain fail-closed. */
+int32_t PS5_SYSV_ABI agcCmdCopyImage(AgcCommandBuffer command_buffer,
+    AgcImage source, AgcImage destination);
 /* Descriptor resources must already have a compatible explicit typed state
  * on this command buffer's queue. Read-only descriptors require ShaderRead;
  * storage descriptors accept ShaderRead or ShaderWrite until reflection

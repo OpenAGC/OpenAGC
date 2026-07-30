@@ -372,6 +372,11 @@ shaders_runtime_image_consume: shaders/render_consume_native.comp
 agc_runtime_copy.elf: agc_runtime_copy.c gpu_credentials.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -o $@ agc_runtime_copy.c $(AGC_LDFLAGS)
 
+agc_runtime_image_copy.elf: agc_runtime_image_copy.c agc_runtime_copy.c \
+		gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_SELF_TERMINATE=1 -o $@ \
+		agc_runtime_image_copy.c $(AGC_LDFLAGS)
+
 # Bounded public-runtime completion diagnostic. It records no application
 # commands; agcQueueSubmit supplies the runtime-owned EOP fence packet.
 agc_runtime_eop.elf: agc_runtime_eop.c gpu_credentials.h $(OPENAGC_LIB)

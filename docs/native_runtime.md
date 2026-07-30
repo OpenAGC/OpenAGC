@@ -140,8 +140,20 @@ one reflected shader writes the transfer source, a typed copy produces the
 consumer input, and a second reflected shader reads that input before final
 host readback. It runs as one three-DCB batch with a bounded fence; see
 [`runtime_compute_copy_shader_fw550_20260731.md`](../analysis/runtime_compute_copy_shader_fw550_20260731.md).
-Large/multi-packet copies, images, graphics queues, cross-queue ownership,
+Large/multi-packet buffer copies, graphics queues, cross-queue ownership,
 partial ranges, and other firmware profiles remain unqualified.
+
+Runtime API v12 adds `agcCmdCopyImage(command, source, destination)`. It copies
+the complete allocation only when both images have identical dimensions,
+format, sample count, mip/layer shape, and computed layout and are in explicit
+`CopySource`/`CopyDestination` state on the command queue. The runtime
+preflights all split DMA packets and both image retains before emission.
+Partial subresources, self-copy, and layout conversion fail closed. A
+four-megabyte host fixture locks three-packet splitting; exact standard-PS5 FW
+5.50 artifact
+`29110963a218ac7e5de2fc5073c23d5373e7eaa1365ccb3e2b6cf26fe1f85046`
+passed twice with exact 256-word readback. See
+[`runtime_image_copy_fw550_20260731.md`](../analysis/runtime_image_copy_fw550_20260731.md).
 
 Descriptor binding is also state-gated before descriptor-table mutation:
 sampled, uniform, and input descriptors require `ShaderRead`; storage

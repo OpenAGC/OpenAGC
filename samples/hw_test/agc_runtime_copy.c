@@ -22,8 +22,14 @@
 #define AGC_SELF_TERMINATE 0
 #endif
 
+#ifndef AGC_IMAGE_COPY
+#define AGC_IMAGE_COPY 0
+#endif
+
 enum {
     kWordCount = 256u,
+    kImageWidth = 16u,
+    kImageHeight = 16u,
     kCompletionTimeoutNs = 200000000u,
 };
 
@@ -49,8 +55,13 @@ int main(void)
 {
     AgcDeviceDesc device_desc = AGC_DEVICE_DESC_INIT;
     AgcQueueDesc queue_desc = AGC_QUEUE_DESC_INIT;
+#if AGC_IMAGE_COPY
+    AgcImageDesc source_desc = AGC_IMAGE_DESC_INIT;
+    AgcImageDesc destination_desc = AGC_IMAGE_DESC_INIT;
+#else
     AgcBufferDesc source_desc = AGC_BUFFER_DESC_INIT;
     AgcBufferDesc destination_desc = AGC_BUFFER_DESC_INIT;
+#endif
     AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
     AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
     AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
@@ -59,8 +70,13 @@ int main(void)
     AgcFenceInfo fence_info = AGC_FENCE_INFO_INIT;
     AgcDevice device = NULL;
     AgcQueue queue = NULL;
+#if AGC_IMAGE_COPY
+    AgcImage source = NULL;
+    AgcImage destination = NULL;
+#else
     AgcBuffer source = NULL;
     AgcBuffer destination = NULL;
+#endif
     AgcCommandBuffer command_buffer = NULL;
     AgcFence fence = NULL;
     uint32_t source_words[kWordCount];
@@ -71,7 +87,9 @@ int main(void)
     int32_t result;
     uint32_t i;
 
-    puts("=== OpenAGC native-runtime typed buffer copy sample ===");
+    puts(AGC_IMAGE_COPY ?
+        "=== OpenAGC native-runtime typed image copy sample ===" :
+        "=== OpenAGC native-runtime typed buffer copy sample ===");
     if (set_gpu_credentials() != 0) {
         puts("GPU credentials: FAIL");
         goto cleanup;
@@ -97,22 +115,43 @@ int main(void)
     report_result("agcCreateQueue(compute)", result);
     if (result != AGC_OK)
         goto cleanup;
+#if AGC_IMAGE_COPY
+    source_desc.width = kImageWidth;
+    source_desc.height = kImageHeight;
+    source_desc.format = AGC_FORMAT_RGBA8_UNORM;
+    source_desc.usage = AGC_IMAGE_USAGE_TRANSFER_SRC_BIT |
+        AGC_IMAGE_USAGE_TRANSFER_DST_BIT;
+    result = agcCreateImage(device, &source_desc, &source);
+    report_result("agcCreateImage(source)", result);
+#else
     source_desc.size = sizeof(source_words);
     source_desc.usage = AGC_BUFFER_USAGE_TRANSFER_SRC_BIT;
     source_desc.flags = AGC_BUFFER_CREATE_UPLOAD_BIT;
     result = agcCreateBuffer(device, &source_desc, &source);
     report_result("agcCreateBuffer(source)", result);
+#endif
     if (result != AGC_OK)
         goto cleanup;
+#if AGC_IMAGE_COPY
+    destination_desc = source_desc;
+    result = agcCreateImage(device, &destination_desc, &destination);
+    report_result("agcCreateImage(destination)", result);
+#else
     destination_desc.size = sizeof(destination_words);
     destination_desc.usage = AGC_BUFFER_USAGE_TRANSFER_DST_BIT;
     destination_desc.flags = AGC_BUFFER_CREATE_READBACK_BIT;
     result = agcCreateBuffer(device, &destination_desc, &destination);
     report_result("agcCreateBuffer(destination)", result);
+#endif
     if (result != AGC_OK)
         goto cleanup;
+#if AGC_IMAGE_COPY
+    result = agcWriteImage(source, 0u, source_words, sizeof(source_words));
+    report_result("agcWriteImage(source)", result);
+#else
     result = agcWriteBuffer(source, 0u, source_words, sizeof(source_words));
     report_result("agcWriteBuffer(source)", result);
+#endif
     if (result != AGC_OK)
         goto cleanup;
 
@@ -131,9 +170,14 @@ int main(void)
     if (result != AGC_OK)
         goto cleanup;
 
+#if AGC_IMAGE_COPY
+    transition.resource_type = kAgcResourceTypeImage;
+    transition.image = source;
+#else
     transition.resource_type = kAgcResourceTypeBuffer;
     transition.buffer = source;
     transition.buffer_size = sizeof(source_words);
+#endif
     transition.before = kAgcResourceUsageUndefined;
     transition.after = kAgcResourceUsageHostWrite;
     transition.before_owner = kAgcResourceOwnerHost;
@@ -149,8 +193,12 @@ int main(void)
     report_result("agcCmdTransitionResources(source copy-source)", result);
     if (result != AGC_OK)
         goto cleanup;
+#if AGC_IMAGE_COPY
+    transition.image = destination;
+#else
     transition.buffer = destination;
     transition.buffer_size = sizeof(destination_words);
+#endif
     transition.before = kAgcResourceUsageUndefined;
     transition.after = kAgcResourceUsageCopyDestination;
     transition.before_owner = kAgcResourceOwnerHost;
@@ -160,9 +208,14 @@ int main(void)
         result);
     if (result != AGC_OK)
         goto cleanup;
+#if AGC_IMAGE_COPY
+    result = agcCmdCopyImage(command_buffer, source, destination);
+    report_result("agcCmdCopyImage", result);
+#else
     result = agcCmdCopyBuffer(command_buffer, source, 0u, destination, 0u,
         sizeof(source_words));
     report_result("agcCmdCopyBuffer", result);
+#endif
     if (result != AGC_OK)
         goto cleanup;
     transition.before = kAgcResourceUsageCopyDestination;
@@ -201,9 +254,15 @@ int main(void)
         (unsigned long long)fence_info.submission_id,
         (unsigned long long)fence_info.last_completed_submission_id,
         fence_info.profile_name);
+#if AGC_IMAGE_COPY
+    result = agcReadImage(destination, 0u, destination_words,
+        sizeof(destination_words));
+    report_result("agcReadImage(destination)", result);
+#else
     result = agcReadBuffer(destination, 0u, destination_words,
         sizeof(destination_words));
     report_result("agcReadBuffer(destination)", result);
+#endif
     if (result != AGC_OK)
         goto cleanup;
     for (i = 0u; i < kWordCount; ++i) {
@@ -239,14 +298,24 @@ cleanup:
             passed = false;
     }
     if (destination) {
+#if AGC_IMAGE_COPY
+        result = agcDestroyImage(destination);
+        report_result("agcDestroyImage(destination)", result);
+#else
         result = agcDestroyBuffer(destination);
         report_result("agcDestroyBuffer(destination)", result);
+#endif
         if (result != AGC_OK)
             passed = false;
     }
     if (source) {
+#if AGC_IMAGE_COPY
+        result = agcDestroyImage(source);
+        report_result("agcDestroyImage(source)", result);
+#else
         result = agcDestroyBuffer(source);
         report_result("agcDestroyBuffer(source)", result);
+#endif
         if (result != AGC_OK)
             passed = false;
     }
@@ -262,8 +331,8 @@ cleanup:
         if (result != AGC_OK)
             passed = false;
     }
-    printf("Native runtime typed buffer copy result: %s\n",
-        passed ? "PASS" : "FAIL");
+    printf("Native runtime typed %s copy result: %s\n",
+        AGC_IMAGE_COPY ? "image" : "buffer", passed ? "PASS" : "FAIL");
     fflush(stdout);
     fflush(stderr);
 #if AGC_SELF_TERMINATE

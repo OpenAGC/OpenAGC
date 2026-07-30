@@ -5587,6 +5587,99 @@ int32_t PS5_SYSV_ABI agcCmdCopyBuffer(AgcCommandBuffer command_buffer,
     return AGC_OK;
 }
 
+static int agcImageCopyLayoutsMatch(AgcImage source, AgcImage destination)
+{
+    return source->desc.width == destination->desc.width &&
+        source->desc.height == destination->desc.height &&
+        source->desc.depth == destination->desc.depth &&
+        source->desc.mip_levels == destination->desc.mip_levels &&
+        source->desc.array_layers == destination->desc.array_layers &&
+        source->desc.format == destination->desc.format &&
+        source->desc.sample_count == destination->desc.sample_count &&
+        source->layout.allocation_size == destination->layout.allocation_size &&
+        source->layout.alignment == destination->layout.alignment &&
+        source->layout.plane_count == destination->layout.plane_count &&
+        source->layout.subresource_count ==
+            destination->layout.subresource_count &&
+        source->layout.block_width == destination->layout.block_width &&
+        source->layout.block_height == destination->layout.block_height &&
+        source->layout.bytes_per_block == destination->layout.bytes_per_block &&
+        source->layout.first_mip_in_tail ==
+            destination->layout.first_mip_in_tail &&
+        source->layout.metadata_offset == destination->layout.metadata_offset &&
+        source->layout.metadata_size == destination->layout.metadata_size;
+}
+
+int32_t PS5_SYSV_ABI agcCmdCopyImage(AgcCommandBuffer command_buffer,
+    AgcImage source, AgcImage destination)
+{
+    const uint64_t maximum_packet_bytes = UINT64_C(0x1ffffc);
+    AgcResourceUsage source_usage;
+    AgcResourceUsage destination_usage;
+    AgcResourceOwner source_owner;
+    AgcResourceOwner destination_owner;
+    uint64_t size;
+    uint64_t packet_count;
+    uint64_t required_dwords;
+    uint32_t required_images;
+    uint32_t i;
+    int source_recorded = 0;
+    int destination_recorded = 0;
+    int32_t result;
+
+    if (!command_buffer || command_buffer->magic != AGC_MAGIC_COMMAND_BUFFER ||
+        !source || source->magic != AGC_MAGIC_IMAGE || !destination ||
+        destination->magic != AGC_MAGIC_IMAGE || source == destination ||
+        !agcDeviceValid(command_buffer->device) ||
+        source->device != command_buffer->device ||
+        destination->device != command_buffer->device || source->deferred ||
+        destination->deferred || command_buffer->state !=
+            AGC_COMMAND_BUFFER_STATE_RECORDING ||
+        !agcImageCopyLayoutsMatch(source, destination)) {
+        return AGC_ERROR_INVALID_ARGUMENT;
+    }
+    size = source->layout.allocation_size;
+    if (size == 0u || (size & 3u) != 0u)
+        return AGC_ERROR_NOT_SUPPORTED;
+    agcCommandTransitionState(command_buffer, kAgcResourceTypeImage, source,
+        &source_usage, &source_owner);
+    agcCommandTransitionState(command_buffer, kAgcResourceTypeImage,
+        destination, &destination_usage, &destination_owner);
+    if (source_usage != kAgcResourceUsageCopySource ||
+        destination_usage != kAgcResourceUsageCopyDestination ||
+        source_owner != agcRuntimeCommandOwner(command_buffer) ||
+        destination_owner != agcRuntimeCommandOwner(command_buffer)) {
+        return AGC_ERROR_INVALID_STATE;
+    }
+    packet_count = size / maximum_packet_bytes +
+        (size % maximum_packet_bytes != 0u);
+    if (packet_count > UINT32_MAX / 7u)
+        return AGC_ERROR_COMMAND_SPACE_EXHAUSTED;
+    required_dwords = packet_count * 7u;
+    if (required_dwords > agcCbRemainingDwords(&command_buffer->cursor))
+        return AGC_ERROR_COMMAND_SPACE_EXHAUSTED;
+    for (i = 0u; i < command_buffer->recorded_image_count; ++i) {
+        source_recorded |= command_buffer->recorded_images[i] == source;
+        destination_recorded |=
+            command_buffer->recorded_images[i] == destination;
+    }
+    required_images = (uint32_t)!source_recorded +
+        (uint32_t)!destination_recorded;
+    if (command_buffer->recorded_image_count >
+        AGC_RUNTIME_MAX_RECORDED_RESOURCES - required_images)
+        return AGC_ERROR_OUT_OF_MEMORY;
+    result = agcGfx1013CopyBuffer(&command_buffer->cursor,
+        agcAllocationGpuAddress(source->allocation),
+        agcAllocationGpuAddress(destination->allocation), size);
+    if (result != AGC_OK)
+        return result == AGC_ERROR_BUFFER_TOO_SMALL ?
+            AGC_ERROR_COMMAND_SPACE_EXHAUSTED : result;
+    if (!agcCommandRetainImage(command_buffer, source) ||
+        !agcCommandRetainImage(command_buffer, destination))
+        return AGC_ERROR_INTERNAL;
+    return AGC_OK;
+}
+
 static int agcCommandRetainView(AgcCommandBuffer command_buffer,
     AgcImageView view)
 {

@@ -146,6 +146,22 @@ static int runtime_has_opcode(const uint32_t *commands, uint32_t used,
     return 0;
 }
 
+static uint32_t runtime_count_opcode(const uint32_t *commands, uint32_t used,
+    uint32_t opcode)
+{
+    uint32_t cursor = 0u;
+    uint32_t count = 0u;
+
+    while (cursor < used) {
+        uint32_t length = agcPm4Length(commands[cursor]);
+        if (length < 2u || length > used - cursor)
+            return 0u;
+        count += agcPm4Opcode(commands[cursor]) == opcode;
+        cursor += length;
+    }
+    return count;
+}
+
 static int runtime_find_uconfig_register(const uint32_t *commands,
     uint32_t used, uint32_t offset, uint32_t *value)
 {
@@ -1951,6 +1967,119 @@ static void test_runtime_copy_buffer_submission(void)
         "copy source buffer destroys");
     TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK, "copy queue destroys");
     TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK, "copy device destroys");
+}
+
+static void test_runtime_copy_image_submission(void)
+{
+    AgcDevice device = create_device();
+    AgcQueue queue = create_queue(device, kAgcQueueCompute);
+    AgcImageDesc image_desc = AGC_IMAGE_DESC_INIT;
+    AgcImageDesc mismatch_desc = AGC_IMAGE_DESC_INIT;
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
+    AgcResourceTransition transitions[2] = {
+        AGC_RESOURCE_TRANSITION_INIT, AGC_RESOURCE_TRANSITION_INIT
+    };
+    AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    AgcImage source = NULL;
+    AgcImage destination = NULL;
+    AgcImage mismatch = NULL;
+    AgcCommandBuffer command = NULL;
+    AgcFence fence = NULL;
+    const AgcCommandBufferSubmit *captured;
+    const uint32_t *words;
+    uint32_t owner = UINT32_MAX;
+    uint32_t source_pixels[8u * 8u];
+
+    for (uint32_t i = 0u; i < 8u * 8u; ++i)
+        source_pixels[i] = UINT32_C(0xff000000) | i;
+    image_desc.width = 1024u;
+    image_desc.height = 1024u;
+    image_desc.format = AGC_FORMAT_RGBA8_UNORM;
+    image_desc.usage = AGC_IMAGE_USAGE_TRANSFER_SRC_BIT |
+        AGC_IMAGE_USAGE_TRANSFER_DST_BIT;
+    mismatch_desc = image_desc;
+    mismatch_desc.width = 512u;
+    command_desc.queue_type = kAgcQueueCompute;
+    command_desc.capacity_dwords = 128u;
+    TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &source), AGC_OK,
+        "image-copy source creates");
+    TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &destination), AGC_OK,
+        "image-copy destination creates");
+    TEST_ASSERT_EQ(agcCreateImage(device, &mismatch_desc, &mismatch), AGC_OK,
+        "image-copy mismatched destination creates");
+    TEST_ASSERT_EQ(agcWriteImage(source, 0u, source_pixels,
+        sizeof(source_pixels)), AGC_OK, "image-copy source upload succeeds");
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
+        AGC_OK, "image-copy command creates");
+    TEST_ASSERT_EQ(agcCreateFence(device, &fence_desc, &fence), AGC_OK,
+        "image-copy fence creates");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+        "image-copy command begins");
+    TEST_ASSERT_EQ(agcCmdCopyImage(command, source, destination),
+        AGC_ERROR_INVALID_STATE,
+        "image copy rejects before typed transitions");
+    TEST_ASSERT_EQ(agcCmdCopyImage(command, source, mismatch),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "image copy rejects incompatible complete layouts");
+    TEST_ASSERT_EQ(agcDestroyImage(mismatch), AGC_OK,
+        "rejected image copy retains no mismatched image");
+    mismatch = NULL;
+
+    transitions[0].resource_type = kAgcResourceTypeImage;
+    transitions[0].image = source;
+    transitions[0].before = kAgcResourceUsageUndefined;
+    transitions[0].after = kAgcResourceUsageCopySource;
+    transitions[0].before_owner = kAgcResourceOwnerHost;
+    transitions[0].after_owner = kAgcResourceOwnerCompute;
+    transitions[1] = transitions[0];
+    transitions[1].image = destination;
+    transitions[1].after = kAgcResourceUsageCopyDestination;
+    TEST_ASSERT_EQ(agcCmdTransitionResources(command, 2u, transitions),
+        AGC_OK, "image-copy source and destination states record");
+    TEST_ASSERT_EQ(agcCmdCopyImage(command, source, destination), AGC_OK,
+        "typed whole-image copy records DMA packets");
+    TEST_ASSERT_EQ(agcCmdCopyImage(command, source, source),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "overlapping whole-image copy rejects without command mutation");
+    transitions[1].before = kAgcResourceUsageCopyDestination;
+    transitions[1].after = kAgcResourceUsageHostRead;
+    transitions[1].before_owner = kAgcResourceOwnerCompute;
+    transitions[1].after_owner = kAgcResourceOwnerHost;
+    TEST_ASSERT_EQ(agcCmdTransitionResources(command, 1u, &transitions[1]),
+        AGC_OK, "image-copy destination host-read state records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+        "image-copy command ends");
+    submit.command_buffer_count = 1u;
+    submit.command_buffers = &command;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
+        "typed whole-image copy submits");
+    captured = agcDriverDebugLastAcbSubmit(&owner);
+    words = (const uint32_t *)(uintptr_t)captured->command_address;
+    TEST_ASSERT(captured != NULL && owner != UINT32_MAX &&
+        runtime_has_opcode(words, captured->dword_count, AGC_PM4_OP_DMA_DATA),
+        "typed image copy submit contains DMA_DATA");
+    TEST_ASSERT_EQ(runtime_count_opcode(words, captured->dword_count,
+        AGC_PM4_OP_DMA_DATA), 3u,
+        "four-megabyte image copy splits at the qualified packet limit");
+    TEST_ASSERT_EQ(agcDestroyImage(source), AGC_ERROR_BUSY,
+        "submitted image copy retains source until command reset");
+    TEST_ASSERT_EQ(agcDestroyImage(destination), AGC_ERROR_BUSY,
+        "submitted image copy retains destination until command reset");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+        "image-copy command resets");
+    TEST_ASSERT_EQ(agcDestroyFence(fence), AGC_OK,
+        "image-copy fence destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+        "image-copy command destroys");
+    TEST_ASSERT_EQ(agcDestroyImage(destination), AGC_OK,
+        "image-copy destination destroys");
+    TEST_ASSERT_EQ(agcDestroyImage(source), AGC_OK,
+        "image-copy source destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
+        "image-copy queue destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "image-copy device destroys");
 }
 
 static void test_runtime_compute_copy_shader_batch(void)
@@ -6018,6 +6147,7 @@ void test_suite_runtime(void)
     TEST_RUN(test_runtime_multi_compute_submission);
     TEST_RUN(test_runtime_batch_transition_chain);
     TEST_RUN(test_runtime_copy_buffer_submission);
+    TEST_RUN(test_runtime_copy_image_submission);
     TEST_RUN(test_runtime_compute_copy_shader_batch);
     TEST_RUN(test_runtime_gpu_labels);
     TEST_RUN(test_runtime_submit_label_lists);
