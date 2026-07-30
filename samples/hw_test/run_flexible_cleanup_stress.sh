@@ -38,6 +38,13 @@ fi
 
 fw_suffix=${EXPECTED_FW_ABI#0x}
 remote_base=/data/homebrew/openagc_fw${fw_suffix}_cleanup_stress
+expected_result_path=$remote_base/result.log
+if [ "$RESULT_LOG_PATH" != "$expected_result_path" ]; then
+    echo "cleanup-stress result path mismatch" >&2
+    echo "expected: $expected_result_path" >&2
+    echo "actual:   $RESULT_LOG_PATH" >&2
+    exit 2
+fi
 cleanup_path=/data/homebrew/openagc_process_cleanup/eboot.elf
 ftp_root=ftp://$PS5_HOST:2121
 http_root=http://$PS5_HOST:8080

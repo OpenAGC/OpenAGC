@@ -69,15 +69,24 @@ console down, so hardware proof of the teardown must start from a fresh boot:
 5. keep HTILE and MSAA blocked until that sequence passes.
 
 The committed runner invokes the process-cleanup ELF immediately before each
-payload and pins the current-source FW 5.50 artifact SHA-256 to
-`8bb77e4c2719e3f0f5b6ccfaada6de9aa546ee2e72aa281464e8be19bac21e28`.
+payload and pins the corrected current-source FW 5.50 artifact SHA-256 to
+`34c1bdd31fc7dc3bb795be0a8bfff761c0d3b1ed185253209b3b9880f7bff0b6`.
 Two forced local relinks reproduced those bytes exactly, dependency inspection
 found no AGC SPRX, and a hash-named copy was preserved in the host-only
-`OpenAGC-hw-artifacts` directory before its first launch. The earlier
-`141bac67...` artifact was superseded before FW 5.50 execution after the
-current-source Prospero archive was relinked; the runner did not permit the
-changed bytes to reach the console until the new artifact was audited and
-repinned.
+`OpenAGC-hw-artifacts` directory before its first launch.
+
+The first FW 5.50 stress attempt stopped at iteration 1 with no verdict. It did
+not reach AGC initialization: the launcher used
+`openagc_fw0550_cleanup_stress`, while the `8bb77e4c...` ELF tried to `freopen`
+its result under `openagc_fw550_cleanup_stress`. The absent parent made the ELF
+exit immediately after credential setup. Websrv, FTP, and ps5debug-NG stayed
+reachable; the process-cleanup ELF ran, and ps5debug-NG proved that no
+`eboot.bin` remained. The runner now requires its result path to equal the
+firmware-derived launch directory before any network access, with a host test
+that rejects the former mismatch. The corrected `34c1bdd...` ELF was uploaded
+as `openagc_fw0550_cleanup_stress/eboot.elf`, downloaded again, and verified
+byte-for-byte before retry. The original `141bac67...` artifact was superseded
+before FW 5.50 execution by the current-source relink.
 The matching FW 11.60 artifact is pinned to
 `55478106b4cdbef50c5d37d15e5a327b3b5dc0b6e2da9f6dc2b48953ea2b8d2e`.
 FW 11.60 is a useful runner and teardown safety check, but cannot replace the

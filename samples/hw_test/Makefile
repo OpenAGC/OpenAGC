@@ -710,7 +710,7 @@ agc_graphics_cleanup_fw1160_logged.elf: agc_graphics.c ps5_video_out.h gpu_crede
 agc_graphics_cleanup_fw550_logged.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_EXPECT_FIRMWARE_ABI_KEY=0x0550u \
 		-DAGC_GRAPHICS_HEADLESS=1 -DAGC_SELF_TERMINATE=1 \
-		-DAGC_RESULT_LOG_PATH='"/data/homebrew/openagc_fw550_cleanup_stress/result.log"' \
+		-DAGC_RESULT_LOG_PATH='"/data/homebrew/openagc_fw0550_cleanup_stress/result.log"' \
 		-o $@ agc_graphics.c $(AGC_LDFLAGS)
 
 .PHONY: cleanup_stress_fw1160 cleanup_stress_fw550
@@ -724,8 +724,8 @@ cleanup_stress_fw1160: agc_graphics_cleanup_fw1160_logged.elf run_flexible_clean
 cleanup_stress_fw550: agc_graphics_cleanup_fw550_logged.elf run_flexible_cleanup_stress.sh
 	PS5_HOST=$(PS5_HOST) STRESS_ARTIFACT=$(THIS_DIR)/$< \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) EXPECTED_FW_ABI=0x0550 \
-		EXPECTED_ARTIFACT_SHA256=8bb77e4c2719e3f0f5b6ccfaada6de9aa546ee2e72aa281464e8be19bac21e28 \
-		RESULT_LOG_PATH=/data/homebrew/openagc_fw550_cleanup_stress/result.log \
+		EXPECTED_ARTIFACT_SHA256=34c1bdd31fc7dc3bb795be0a8bfff761c0d3b1ed185253209b3b9880f7bff0b6 \
+		RESULT_LOG_PATH=/data/homebrew/openagc_fw0550_cleanup_stress/result.log \
 		STRESS_ITERATIONS=$(or $(STRESS_ITERATIONS),14) sh ./run_flexible_cleanup_stress.sh
 
 FW1160_GRAPHICS_FLAGS := -DAGC_EXPECT_FIRMWARE_ABI_KEY=0x1160u \

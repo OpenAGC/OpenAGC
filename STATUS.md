@@ -23,8 +23,13 @@ and HTILE/MSAA stay blocked. A committed 14-launch file-backed gate now pins
 separate FW 5.50 and FW 11.60 artifacts, invokes the cleanup ELF immediately
 before every payload, and requires zero-valued cleanup results. The audited
 current-source FW 5.50 artifact is pinned to
-`8bb77e4c2719e3f0f5b6ccfaada6de9aa546ee2e72aa281464e8be19bac21e28` and was
-preserved under that hash before first launch. FW 5.50
+`34c1bdd31fc7dc3bb795be0a8bfff761c0d3b1ed185253209b3b9880f7bff0b6` and was
+preserved under that hash before first launch. The first stress attempt never
+reached AGC initialization because the FW `0x0550` launch directory and the
+compiled verdict directory differed by one leading zero. The runner now
+rejects such divergence before console access, and a host regression fixture
+pins that behavior. Websrv, FTP, and ps5debug-NG remained healthy, cleanup ran,
+and no `eboot.bin` process remained after the stopped attempt. FW 5.50
 hardware is currently unavailable; an FW 11.60 pass is supporting evidence
 only and cannot close this regression. FW 11.60 passed a one-launch canary and
 then 14/14 stress launches with a GPU fence, driver shutdown, and all four
