@@ -93,9 +93,19 @@ plus matching headless FW `0x0550` mirrors. Their guarded recipes require the
 cleanup ELF immediately before launch, exact firmware selection, bounded fence
 completion, full-rectangle D32 distributions, positive HTILE mutation, driver
 shutdown, and final PASS. All four build without warnings and have no dynamic
-dependency on `libSceAgc.sprx` or `libSceAgcDriver.sprx`; none has been run on
-hardware. Preserve the execution order below: the FW 5.50 uncompressed-depth
-baseline and preceding D16 HTILE tier must pass before these D32 tuples launch.
+dependency on `libSceAgc.sprx` or `libSceAgcDriver.sprx`. Two relinks against
+the committed, hardware-qualified depth shader record reproduced these exact
+SHA-256 values: FW 11.60 ordinary
+`f67d8d2087cd463e60e118cd9aa6813b4b63162d8c88a61bb1882fc96d9a8a0d`, FW
+11.60 expclear
+`e91430172cba028cfa8379b9aa0e87876107b6fb6a81096d22038c59869448d9`, FW 5.50
+ordinary `599fd135cac34e6e94c63cee18171e80c3eefc321b6da47c095789bd8196ed13`,
+and FW 5.50 expclear
+`a10eb1985e99822210102fc3a5eec3039fe79f5bf10a67d2c737a2fadf77fce3`.
+Each artifact is preserved under its full hash and every deploy recipe rejects
+changed bytes before network access. None has been run on hardware. The D16
+prerequisites are complete, so the pinned FW 5.50 ordinary D32 HTILE mirror is
+the next permitted launch.
 
 The combined D32+S8 tier is likewise prepared without a hardware claim. Eight
 artifacts cover ordinary HTILE and expclear of depth-only, stencil-only, or

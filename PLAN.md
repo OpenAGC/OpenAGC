@@ -498,9 +498,12 @@ the runner and shared teardown on FW 11.60 only.
   with matching headless FW `0x0550` mirrors. All four build without warnings,
   carry no `libSceAgc.sprx` or `libSceAgcDriver.sprx` dependency, and use the
   cleanup-first depth runner with exact D32 distributions and HTILE mutation
-  checks. They remain hardware-unverified and must not run until the FW 5.50
-  cleanup stress, uncompressed-depth regression, and preceding D16 HTILE gates
-  pass. See `analysis/fw1160_fw550_parity_matrix_20260730.md`.
+  checks. Two committed-shader relinks reproduced all four exact hashes; the
+  artifacts are preserved under those hashes and their deploy recipes reject
+  byte drift before network access. The prerequisite sequence is complete.
+  Run the pinned FW 5.50 ordinary D32 HTILE mirror next, establish and freeze
+  its exact metadata count, and replay once before moving to FW 11.60. See
+  `analysis/fw1160_fw550_parity_matrix_20260730.md`.
 - Combined D32+S8 HTILE is now prepared offline in the same endpoint-paired
   form. Ordinary HTILE plus depth-only, stencil-only, and both-aspect expclear
   produce eight warning-free ELFs. The guarded runner pins exact D32 and S8

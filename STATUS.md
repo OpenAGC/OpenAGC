@@ -47,8 +47,10 @@ and expclear. Exact FW `0x1160` logged artifacts and matching headless FW
 `0x0550` mirrors build without warnings, use cleanup-first guarded recipes,
 and require exact D32 distributions plus positive HTILE mutation. Their only
 dynamic libraries are VideoOut, kernel, libc, and networking; neither AGC SPRX
-is required. These four artifacts are hardware-unverified and remain blocked
-behind the FW 5.50 teardown, uncompressed-depth, and D16 HTILE sequence.
+is required. Two relinks against the committed qualified shader record
+reproduced each artifact byte-for-byte. All four are preserved under their
+full hashes, and every deploy recipe enforces its hash before network access.
+They remain hardware-unverified; the pinned FW 5.50 ordinary mirror is next.
 
 Combined D32+S8 HTILE preparation now covers ordinary metadata and
 depth-only, stencil-only, and both-aspect expclear for both exact endpoint

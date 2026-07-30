@@ -2613,12 +2613,14 @@ deploy_agc_depth_d32_htile_fw1160_logged: agc_depth_d32_htile_fw1160_logged.elf
 	PS5_HOST=$(PS5_HOST) DEPTH_ARTIFACT=$(THIS_DIR)/$< \
 		RESULT_LOG_PATH=/data/homebrew/openagc_fw1160_depth/result.log \
 		EXPECTED_HTILE_INITIAL=fffc000f EXPECTED_D32_FULL_RECT=1 \
+		EXPECTED_ARTIFACT_SHA256=f67d8d2087cd463e60e118cd9aa6813b4b63162d8c88a61bb1882fc96d9a8a0d \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_depth.sh
 
 deploy_agc_depth_d32_expclear_fw1160_logged: agc_depth_d32_expclear_fw1160_logged.elf
 	PS5_HOST=$(PS5_HOST) DEPTH_ARTIFACT=$(THIS_DIR)/$< \
 		RESULT_LOG_PATH=/data/homebrew/openagc_fw1160_depth/result.log \
 		EXPECTED_HTILE_INITIAL=fffffff0 EXPECTED_D32_FULL_RECT=1 \
+		EXPECTED_ARTIFACT_SHA256=e91430172cba028cfa8379b9aa0e87876107b6fb6a81096d22038c59869448d9 \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_depth.sh
 
 deploy_agc_depth_stencil_htile_fw1160_logged: agc_depth_stencil_htile_fw1160_logged.elf
@@ -2707,12 +2709,14 @@ deploy_agc_depth_d16_expclear_fw550_headless: agc_depth_d16_expclear_fw550_headl
 deploy_agc_depth_d32_htile_fw550_headless: agc_depth_d32_htile_fw550_headless.elf
 	PS5_HOST=$(PS5_HOST) DEPTH_ARTIFACT=$(THIS_DIR)/$< \
 		EXPECTED_FW_ABI=0x0550 EXPECTED_HTILE_INITIAL=fffc000f \
+		EXPECTED_ARTIFACT_SHA256=599fd135cac34e6e94c63cee18171e80c3eefc321b6da47c095789bd8196ed13 \
 		EXPECTED_D32_FULL_RECT=1 PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) \
 		sh ./run_fw1160_depth.sh
 
 deploy_agc_depth_d32_expclear_fw550_headless: agc_depth_d32_expclear_fw550_headless.elf
 	PS5_HOST=$(PS5_HOST) DEPTH_ARTIFACT=$(THIS_DIR)/$< \
 		EXPECTED_FW_ABI=0x0550 EXPECTED_HTILE_INITIAL=fffffff0 \
+		EXPECTED_ARTIFACT_SHA256=a10eb1985e99822210102fc3a5eec3039fe79f5bf10a67d2c737a2fadf77fce3 \
 		EXPECTED_D32_FULL_RECT=1 PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) \
 		sh ./run_fw1160_depth.sh
 
