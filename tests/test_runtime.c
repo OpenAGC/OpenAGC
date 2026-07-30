@@ -1282,6 +1282,113 @@ static void test_runtime_color_target_binding(void)
         "color-target device destroys");
 }
 
+static void test_runtime_depth_stencil_target_binding(void)
+{
+    AgcDevice device = create_device();
+    AgcQueue queue = create_queue(device, kAgcQueueGraphics);
+    AgcShader vertex = create_shader(device, kAgcShaderStageVs);
+    AgcShader pixel = create_shader(device, kAgcShaderStagePs);
+    AgcGraphicsPipelineDesc pipeline_desc = AGC_GRAPHICS_PIPELINE_DESC_INIT;
+    AgcDepthStencilPipelineState depth_stencil =
+        AGC_DEPTH_STENCIL_PIPELINE_STATE_INIT;
+    AgcImageDesc image_desc = AGC_IMAGE_DESC_INIT;
+    AgcBufferDesc buffer_desc = AGC_BUFFER_DESC_INIT;
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcDepthStencilTargetBinding target =
+        AGC_DEPTH_STENCIL_TARGET_BINDING_INIT;
+    AgcGraphicsPipeline pipeline = NULL;
+    AgcImage image = NULL;
+    AgcImage incompatible_image = NULL;
+    AgcBuffer index_buffer = NULL;
+    AgcCommandBuffer command = NULL;
+    AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    const AgcCommandBufferSubmit *captured;
+    const uint32_t *words;
+    uint32_t value;
+
+    depth_stencil.format = AGC_FORMAT_D16_UNORM;
+    depth_stencil.depth_test_enable = 1u;
+    depth_stencil.depth_write_enable = 1u;
+    pipeline_desc.vertex_shader = vertex;
+    pipeline_desc.pixel_shader = pixel;
+    pipeline_desc.depth_stencil = &depth_stencil;
+    TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc, &pipeline),
+        AGC_OK, "depth-target graphics pipeline creates");
+    image_desc.width = 64u;
+    image_desc.height = 64u;
+    image_desc.format = AGC_FORMAT_D16_UNORM;
+    image_desc.usage = AGC_IMAGE_USAGE_DEPTH_STENCIL_BIT;
+    TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &image), AGC_OK,
+        "native D16 depth target creates");
+    image_desc.format = AGC_FORMAT_D32_FLOAT;
+    TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &incompatible_image),
+        AGC_OK, "incompatible depth target creates for validation");
+    buffer_desc.size = 64u;
+    buffer_desc.usage = AGC_BUFFER_USAGE_INDEX_BIT;
+    TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &index_buffer), AGC_OK,
+        "depth-target index buffer creates");
+    command_desc.capacity_dwords = 256u;
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
+        AGC_OK, "depth-target command buffer creates");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+        "depth-target command buffer begins");
+    TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(command, pipeline), AGC_OK,
+        "depth-target graphics pipeline binds");
+    TEST_ASSERT_EQ(agcCmdBindIndexBuffer(command, index_buffer, 0u,
+        kAgcIndexSize16), AGC_OK, "depth-target index buffer binds");
+    TEST_ASSERT_EQ(agcCmdDrawIndexed(command, 3u, 1u, 0u, 0, 0u),
+        AGC_ERROR_RESOURCE_NOT_BOUND,
+        "depth-enabled draw requires a depth/stencil target");
+    target.image = incompatible_image;
+    TEST_ASSERT_EQ(agcCmdBindDepthStencilTarget(command, &target),
+        AGC_ERROR_VALIDATION_FAILED,
+        "format-mismatched depth target fails before retention or emission");
+    TEST_ASSERT_EQ(agcDestroyImage(incompatible_image), AGC_OK,
+        "rejected depth target remains destroyable");
+    target.image = image;
+    TEST_ASSERT_EQ(agcCmdBindDepthStencilTarget(command, &target), AGC_OK,
+        "matching depth target emits native surface state");
+    TEST_ASSERT_EQ(agcDestroyImage(image), AGC_ERROR_BUSY,
+        "recorded depth target remains retained by the command buffer");
+    TEST_ASSERT_EQ(agcCmdBindDepthStencilTarget(command, &target),
+        AGC_ERROR_NOT_SUPPORTED,
+        "depth target cannot be replaced within one command buffer");
+    TEST_ASSERT_EQ(agcCmdDrawIndexed(command, 3u, 1u, 0u, 0, 0u), AGC_OK,
+        "depth-enabled draw records after its target binds");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+        "depth-target command buffer becomes executable");
+    submit.command_buffer_count = 1u;
+    submit.command_buffers = &command;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, NULL), AGC_OK,
+        "depth-target command buffer submits through the host carrier");
+    captured = agcDriverDebugLastDcbSubmit();
+    words = (const uint32_t *)(uintptr_t)captured->command_address;
+    TEST_ASSERT(runtime_find_context_register(words, captured->dword_count,
+        AGC_REG_DB_Z_READ_BASE, &value) && value != 0u,
+        "depth-target binding records DB_Z_READ_BASE");
+    TEST_ASSERT(runtime_find_context_register(words, captured->dword_count,
+        AGC_REG_DB_Z_INFO, &value),
+        "depth-target binding records DB_Z_INFO");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+        "reset releases the retained depth target");
+    TEST_ASSERT_EQ(agcDestroyImage(image), AGC_OK,
+        "released depth target destroys after reset");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+        "depth-target command buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyBuffer(index_buffer), AGC_OK,
+        "depth-target index buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(pipeline), AGC_OK,
+        "depth-target graphics pipeline destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(pixel), AGC_OK,
+        "depth-target pixel shader destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(vertex), AGC_OK,
+        "depth-target vertex shader destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
+        "depth-target graphics queue destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "depth-target device destroys");
+}
+
 static void test_runtime_command_space_atomic_failure(void)
 {
     AgcDevice device = create_device();
@@ -1343,13 +1450,17 @@ static void test_runtime_dynamic_graphics_state(void)
         AGC_DEPTH_STENCIL_PIPELINE_STATE_INIT;
     AgcRasterizationState rasterization = AGC_RASTERIZATION_STATE_INIT;
     AgcBufferDesc buffer_desc = AGC_BUFFER_DESC_INIT;
+    AgcImageDesc image_desc = AGC_IMAGE_DESC_INIT;
     AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
     AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
     AgcViewport viewport = AGC_VIEWPORT_INIT;
     AgcScissor scissor = AGC_SCISSOR_INIT;
     AgcDepthBias depth_bias = AGC_DEPTH_BIAS_INIT;
+    AgcDepthStencilTargetBinding depth_target =
+        AGC_DEPTH_STENCIL_TARGET_BINDING_INIT;
     AgcGraphicsPipeline pipeline = NULL;
     AgcBuffer index_buffer = NULL;
+    AgcImage depth_image = NULL;
     AgcCommandBuffer command = NULL;
     AgcFence fence = NULL;
     AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
@@ -1383,6 +1494,12 @@ static void test_runtime_dynamic_graphics_state(void)
     buffer_desc.usage = AGC_BUFFER_USAGE_INDEX_BIT;
     TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &index_buffer),
         AGC_OK, "dynamic-state index buffer creates");
+    image_desc.width = 1280u;
+    image_desc.height = 720u;
+    image_desc.format = AGC_FORMAT_D32_FLOAT_S8_UINT;
+    image_desc.usage = AGC_IMAGE_USAGE_DEPTH_STENCIL_BIT;
+    TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &depth_image), AGC_OK,
+        "dynamic-state depth/stencil image creates");
     TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
         AGC_OK, "dynamic-state command buffer creates");
     TEST_ASSERT_EQ(agcCreateFence(device, &fence_desc, &fence), AGC_OK,
@@ -1391,6 +1508,9 @@ static void test_runtime_dynamic_graphics_state(void)
         "dynamic-state command buffer begins");
     TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(command, pipeline), AGC_OK,
         "dynamic-state graphics pipeline binds");
+    depth_target.image = depth_image;
+    TEST_ASSERT_EQ(agcCmdBindDepthStencilTarget(command, &depth_target),
+        AGC_OK, "dynamic-state depth/stencil target binds");
     TEST_ASSERT_EQ(agcCmdBindIndexBuffer(command, index_buffer, 0u,
         kAgcIndexSize16), AGC_OK, "dynamic-state index buffer binds");
     TEST_ASSERT_EQ(agcCmdDrawIndexed(command, 3u, 1u, 0u, 0, 0u),
@@ -1460,6 +1580,8 @@ static void test_runtime_dynamic_graphics_state(void)
         "dynamic-state fence destroys");
     TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
         "dynamic-state command buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyImage(depth_image), AGC_OK,
+        "dynamic-state depth/stencil image destroys");
     TEST_ASSERT_EQ(agcDestroyBuffer(index_buffer), AGC_OK,
         "dynamic-state index buffer destroys");
     TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(pipeline), AGC_OK,
@@ -3490,6 +3612,7 @@ void test_suite_runtime(void)
     TEST_RUN(test_runtime_compiler_graphics_sidecar);
     TEST_RUN(test_runtime_indexed_graphics_submission);
     TEST_RUN(test_runtime_color_target_binding);
+    TEST_RUN(test_runtime_depth_stencil_target_binding);
     TEST_RUN(test_runtime_command_space_atomic_failure);
     TEST_RUN(test_runtime_dynamic_graphics_state);
     TEST_RUN(test_runtime_depth_stencil_pipeline_state);

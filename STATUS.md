@@ -169,7 +169,7 @@ state normalization, multisample minimums, and required dynamic-state gating.
 Line and point polygon modes fail pipeline creation with the other unqualified
 rasterization options. Graphics scratch remains unsupported and
 fails during pipeline creation; reflected gfx1013 LDS requirements are bounded
-before bind generation. The full generic suite now reports 14,136
+before bind generation. The full generic suite now reports 14,172
 passed and 0 failed; the compiler's
 library, varying/export, NGG, and tessellation suites pass. This slice is
 host-tested only. No PS5 hardware test was run or claimed. See
@@ -214,6 +214,14 @@ reflected graphics pipeline, an RGBA8 target, dynamic viewport/scissor state,
 and a bounded-fence submission without raw PM4 assembly. The artifact
 cross-builds, but has not been deployed; fence completion is not a pixel-output
 oracle and no hardware qualification is claimed.
+
+Runtime API v4 closes the depth/stencil attachment ownership gap for the
+qualified single-mip layouts. `agcCmdBindDepthStencilTarget` requires an exact
+pipeline/image format and sample match before a depth-enabled draw, emits the
+existing gfx1013 depth-surface state, and retains its image through command
+reset. Host coverage proves mismatch rejection, missing-target draw gating,
+captured depth registers, and release behavior. Packed depth mips,
+clears/load-store, transitions, and PS5 hardware qualification remain open.
 
 ## Native runtime C API contract complete (2026-07-30)
 

@@ -237,12 +237,15 @@ struct AgcCommandBufferImpl {
     AgcGraphicsPipeline graphics_pipeline;
     AgcComputePipeline compute_pipeline;
     AgcBuffer index_buffer;
+    AgcImage depth_stencil_target;
     uint64_t index_offset;
     AgcIndexSize index_size;
     uint32_t descriptors_bound;
     uint32_t vertex_binding_mask;
     uint32_t dynamic_state_set_mask;
     uint32_t color_target_count;
+    uint32_t color_target_width;
+    uint32_t color_target_height;
     uint32_t recorded_buffer_count;
     uint32_t recorded_image_count;
     uint32_t recorded_view_count;
@@ -3883,6 +3886,9 @@ static void agcReleaseCommandReferences(AgcCommandBuffer command_buffer)
     command_buffer->vertex_binding_mask = 0u;
     command_buffer->dynamic_state_set_mask = 0u;
     command_buffer->color_target_count = 0u;
+    command_buffer->color_target_width = 0u;
+    command_buffer->color_target_height = 0u;
+    command_buffer->depth_stencil_target = NULL;
     memset(command_buffer->push_constant_masks, 0,
         sizeof(command_buffer->push_constant_masks));
     if (command_buffer->resource_allocation) {
@@ -4200,6 +4206,120 @@ int32_t PS5_SYSV_ABI agcCmdBindColorTargets(
         image->recorded_refs++;
     }
     command_buffer->color_target_count = target_count;
+    command_buffer->color_target_width = width;
+    command_buffer->color_target_height = height;
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcCmdBindDepthStencilTarget(
+    AgcCommandBuffer command_buffer,
+    const AgcDepthStencilTargetBinding *target)
+{
+    AgcGfx1013DepthSurfaceState state = {0};
+    AgcImageSubresourceLayout layout = AGC_IMAGE_SUBRESOURCE_LAYOUT_INIT;
+    AgcGfx1013DepthSurfaceFormat format;
+    AgcImage image;
+    uint32_t words[AGC_GFX1013_DEPTH_SURFACE_DWORDS];
+    SceAgcCb scratch;
+    uint64_t address;
+    int has_depth;
+    int has_stencil;
+    int32_t result;
+
+    if (!command_buffer || command_buffer->magic != AGC_MAGIC_COMMAND_BUFFER ||
+        !agcDeviceValid(command_buffer->device) || !target ||
+        !agcHeaderValid(target->struct_size, sizeof(*target),
+            target->version) || target->flags != 0u ||
+        target->reserved0 != 0u || !agcReservedZero(target->reserved, 4u)) {
+        return AGC_ERROR_INVALID_ARGUMENT;
+    }
+    if (command_buffer->state != AGC_COMMAND_BUFFER_STATE_RECORDING ||
+        command_buffer->queue_type != kAgcQueueGraphics ||
+        !command_buffer->graphics_pipeline) {
+        return AGC_ERROR_INVALID_STATE;
+    }
+    if (command_buffer->depth_stencil_target)
+        return AGC_ERROR_NOT_SUPPORTED;
+    if (command_buffer->recorded_image_count ==
+        AGC_RUNTIME_MAX_RECORDED_RESOURCES) {
+        return AGC_ERROR_OUT_OF_MEMORY;
+    }
+    if (command_buffer->graphics_pipeline->depth_stencil.format ==
+        AGC_FORMAT_UNDEFINED) {
+        return AGC_ERROR_VALIDATION_FAILED;
+    }
+    image = target->image;
+    if (!image || image->magic != AGC_MAGIC_IMAGE ||
+        image->device != command_buffer->device || image->deferred ||
+        (image->desc.usage & AGC_IMAGE_USAGE_DEPTH_STENCIL_BIT) == 0u ||
+        image->desc.depth != 1u || image->desc.mip_levels != 1u ||
+        target->mip_level != 0u) {
+        return AGC_ERROR_INVALID_ARGUMENT;
+    }
+    if (image->desc.format != command_buffer->graphics_pipeline->
+            depth_stencil.format ||
+        image->desc.sample_count != command_buffer->graphics_pipeline->
+            multisample.rasterization_samples ||
+        !agcRuntimeDepthFormat(image->desc.format, &format)) {
+        return AGC_ERROR_VALIDATION_FAILED;
+    }
+    has_depth = image->desc.format != AGC_FORMAT_S8_UINT;
+    has_stencil = image->desc.format == AGC_FORMAT_S8_UINT ||
+        image->desc.format == AGC_FORMAT_D16_UNORM_S8_UINT ||
+        image->desc.format == AGC_FORMAT_D32_FLOAT_S8_UINT;
+    result = agcGetImageSubresourceLayout(command_buffer->device,
+        &image->desc, 0u, target->array_layer, 0u, &layout);
+    if (result != AGC_OK)
+        return result;
+    if (command_buffer->color_target_count != 0u &&
+        (layout.width != command_buffer->color_target_width ||
+         layout.height != command_buffer->color_target_height)) {
+        return AGC_ERROR_VALIDATION_FAILED;
+    }
+    address = agcAllocationGpuAddress(image->allocation);
+    state.width = layout.width;
+    state.height = layout.height;
+    state.format = format;
+    state.mip_level_count = 1u;
+    state.first_layer = target->array_layer;
+    state.last_layer = target->array_layer;
+    state.sample_count = image->desc.sample_count;
+    if (has_depth) {
+        state.depth_read_address = address;
+        state.depth_write_address = address;
+        state.depth_swizzle_mode = AGC_GFX1013_SWIZZLE_64KB_Z_X;
+    }
+    if (has_stencil) {
+        AgcImageSubresourceLayout stencil =
+            AGC_IMAGE_SUBRESOURCE_LAYOUT_INIT;
+        result = agcGetImageSubresourceLayout(command_buffer->device,
+            &image->desc, 0u, target->array_layer,
+            has_depth ? 1u : 0u, &stencil);
+        if (result != AGC_OK || stencil.offset > UINT64_MAX - address)
+            return result != AGC_OK ? result : AGC_ERROR_RESOURCE_INVALID;
+        state.stencil_read_address = address + stencil.offset -
+            stencil.slice_pitch * target->array_layer;
+        state.stencil_write_address = state.stencil_read_address;
+        state.stencil_swizzle_mode = AGC_GFX1013_SWIZZLE_64KB_Z_X;
+    }
+    if ((image->desc.usage & AGC_IMAGE_USAGE_HTILE_BIT) != 0u) {
+        if (image->layout.metadata_offset > UINT64_MAX - address)
+            return AGC_ERROR_RESOURCE_INVALID;
+        state.htile_address = address + image->layout.metadata_offset;
+        state.htile_enable = 1u;
+    }
+    agcCbInit(&scratch, words, sizeof(words));
+    result = agcGfx1013SetDepthSurface(&scratch, &state);
+    if (result != AGC_OK)
+        return result == AGC_ERROR_BUFFER_TOO_SMALL ?
+            AGC_ERROR_COMMAND_SPACE_EXHAUSTED : result;
+    result = agcCommandCommitScratch(command_buffer, &scratch, words);
+    if (result != AGC_OK)
+        return result;
+    command_buffer->recorded_images[command_buffer->recorded_image_count++] =
+        image;
+    image->recorded_refs++;
+    command_buffer->depth_stencil_target = image;
     return AGC_OK;
 }
 
@@ -5106,6 +5226,10 @@ int32_t PS5_SYSV_ABI agcCmdDrawIndexed(AgcCommandBuffer command_buffer,
     if (command_buffer->graphics_pipeline->color_attachment_count != 0u &&
         command_buffer->color_target_count !=
             command_buffer->graphics_pipeline->color_attachment_count) {
+        return AGC_ERROR_RESOURCE_NOT_BOUND;
+    }
+    if (command_buffer->graphics_pipeline->depth_stencil.format !=
+            AGC_FORMAT_UNDEFINED && !command_buffer->depth_stencil_target) {
         return AGC_ERROR_RESOURCE_NOT_BOUND;
     }
     if (command_buffer->graphics_pipeline->hull_shader &&

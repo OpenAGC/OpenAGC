@@ -99,8 +99,16 @@ sample count, dimensions, image usage, subresource layout, and target-base
 alignment, then retains the images through command-buffer reset. Rebinding
 targets in the same command buffer, incompatible MRT layouts, and a draw with
 an unbound declared attachment fail before work emission. This is attachment
-state only: clears, load/store operations, depth/stencil attachments, and
-transitions have not been folded into the runtime yet.
+state only: clears, load/store operations, and transitions have not been
+folded into the runtime yet.
+
+For a graphics pipeline with a declared depth/stencil format,
+`agcCmdBindDepthStencilTarget` is required before drawing. It validates the
+exact depth format and sample count against a
+`AGC_IMAGE_USAGE_DEPTH_STENCIL_BIT` image, records the qualified gfx1013 depth
+surface, and retains the image until reset. The current binding is intentionally
+single-mip; packed depth-mip policy, clears/load-store, and transitions remain
+fail-closed until their typed contracts are added.
 
 Pipelines declare dynamic state through `dynamic_state_mask`. Viewport,
 scissor, blend constants, stencil reference, and depth bias setters emit the

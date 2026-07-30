@@ -15,6 +15,8 @@ shader and pipeline descriptors with the shared reflection contract while
 preserving the accepted v1 shader prefix for legacy host-only fixtures.
 Runtime API v3 adds `AgcColorTargetBinding` and `agcCmdBindColorTargets` for
 typed graphics color attachments.
+Runtime API v4 adds `AgcDepthStencilTargetBinding` and
+`agcCmdBindDepthStencilTarget` for the qualified depth-surface path.
 OpenAGC rejects unknown versions, nonzero flags, or nonzero reserved fields
 without partial object or command creation.
 
@@ -147,9 +149,16 @@ subresource; the runtime validates device ownership, usage, exact attachment
 format, sample count, matching target dimensions, and the proven gfx1013 base
 alignment before emitting any packet. Bound targets cannot be replaced within a
 command buffer and remain retained until reset. Color target binds cover the
-qualified 1x linear and RGBA8 4x layouts; load/store operations, clears,
-depth/stencil target binding, and transitions remain explicit future runtime
-work rather than implicit command-side policy.
+qualified 1x linear and RGBA8 4x layouts.
+
+For a pipeline with a declared depth/stencil format, bind one matching
+`AgcDepthStencilTargetBinding` before drawing. The v4 path validates exact
+format/sample agreement, image usage, layer extent, and retained ownership,
+then emits the existing gfx1013 depth-surface packet. It supports the
+directly-queryable single-mip depth layouts and one array layer per command
+binding; other depth mip layouts fail closed. Load/store operations, clears,
+and transitions remain explicit future runtime work rather than implicit
+command-side policy.
 
 ## Current qualification boundary
 
