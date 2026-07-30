@@ -2574,14 +2574,17 @@ deploy_agc_tess_geometry_rgba8_fw550_headless: agc_tess_geometry_rgba8_fw550_hea
 	deploy_agc_depth_stencil_expclear_both_fw1160_logged
 deploy_agc_depth_d16_fw1160: agc_depth_d16_fw1160.elf
 	PS5_HOST=$(PS5_HOST) DEPTH_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_D16_FULL_RECT=1 \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_depth.sh
 
 deploy_agc_stencil_s8_fw1160: agc_stencil_s8_fw1160.elf
 	PS5_HOST=$(PS5_HOST) DEPTH_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_STENCIL_FULL_RECT=1 \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_depth.sh
 
 deploy_agc_depth_stencil_d16_s8_fw1160: agc_depth_stencil_d16_s8_fw1160.elf
 	PS5_HOST=$(PS5_HOST) DEPTH_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_D16_FULL_RECT=1 EXPECTED_STENCIL_FULL_RECT=1 \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_depth.sh
 
 deploy_agc_depth_d32_fw1160_logged: agc_depth_d32_fw1160_logged.elf
@@ -2656,17 +2659,20 @@ deploy_agc_depth_stencil_expclear_both_fw1160_logged: agc_depth_stencil_expclear
 	deploy_agc_depth_stencil_expclear_both_fw550_headless
 deploy_agc_depth_d16_fw550_headless: agc_depth_d16_fw550_headless.elf
 	PS5_HOST=$(PS5_HOST) DEPTH_ARTIFACT=$(THIS_DIR)/$< \
-		EXPECTED_FW_ABI=0x0550 PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) \
+		EXPECTED_FW_ABI=0x0550 EXPECTED_D16_FULL_RECT=1 \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) \
 		sh ./run_fw1160_depth.sh
 
 deploy_agc_stencil_s8_fw550_headless: agc_stencil_s8_fw550_headless.elf
 	PS5_HOST=$(PS5_HOST) DEPTH_ARTIFACT=$(THIS_DIR)/$< \
-		EXPECTED_FW_ABI=0x0550 PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) \
+		EXPECTED_FW_ABI=0x0550 EXPECTED_STENCIL_FULL_RECT=1 \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) \
 		sh ./run_fw1160_depth.sh
 
 deploy_agc_depth_stencil_d16_s8_fw550_headless: agc_depth_stencil_d16_s8_fw550_headless.elf
 	PS5_HOST=$(PS5_HOST) DEPTH_ARTIFACT=$(THIS_DIR)/$< \
-		EXPECTED_FW_ABI=0x0550 PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) \
+		EXPECTED_FW_ABI=0x0550 EXPECTED_D16_FULL_RECT=1 \
+		EXPECTED_STENCIL_FULL_RECT=1 PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) \
 		sh ./run_fw1160_depth.sh
 
 deploy_agc_depth_d32_fw550_headless: agc_depth_d32_fw550_headless.elf

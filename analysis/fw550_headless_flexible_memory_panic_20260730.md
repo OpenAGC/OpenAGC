@@ -90,12 +90,20 @@ before FW 5.50 execution by the current-source relink.
 The matching FW 11.60 artifact is pinned to
 `55478106b4cdbef50c5d37d15e5a327b3b5dc0b6e2da9f6dc2b48953ea2b8d2e`.
 FW 11.60 is a useful runner and teardown safety check, but cannot replace the
-FW 5.50 regression because the incident occurred on FW 5.50. That console is
-currently unavailable, so the FW 5.50 verdict remains pending.
+FW 5.50 regression because the incident occurred on FW 5.50.
 
 FW 11.60 hardware completed a one-launch canary and then the full 14/14 stress
 sequence with the pinned artifact. Every launch selected ABI key `0x1160`,
 reached the GPU fence, shut the driver down, returned zero for all four memory
 cleanup operations, and reported PASS. Websrv and ps5debug-NG remained
-reachable afterward. This confirms the runner and shared teardown on FW 11.60;
-it does not qualify the unavailable FW 5.50 console.
+reachable afterward. This confirms the runner and shared teardown on FW 11.60.
+
+FW 5.50 subsequently completed the corrected-path one-launch canary and the
+full 14/14 threshold sequence using the preserved `34c1bdd...` ELF. Every run
+selected ABI key `0x0550`, reached the graphics fence at the first poll, shut
+the driver down, and returned zero from pool release, command-buffer release,
+direct unmap, and direct-memory release. The cleanup ELF ran immediately before
+each payload, no `eboot.bin` remained after the canary, and ports 8080 and 744
+stayed reachable. This closes the accumulated flexible-memory regression and
+unblocks the current-source uncompressed D32/D16/S8/D16+S8 mirrors; compressed
+depth and MSAA still require those mirrors to pass first.

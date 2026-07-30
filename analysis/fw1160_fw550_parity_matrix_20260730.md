@@ -69,7 +69,7 @@ shader-record byte change was not a command-stream delta because the sample
 already derived and emitted the physical 11-entry CX block. Graphics and
 compute now release all sample-owned flexible mappings, and ordinary depth
 builds consume committed qualified shader records. Fresh-boot teardown stress
-qualification is required before the uncompressed-depth mirror resumes. See
+has now passed; the uncompressed-depth mirror is the active gate. See
 `analysis/fw550_headless_flexible_memory_panic_20260730.md`.
 
 The reproducible gate is `make cleanup_stress_fw550`: it runs 14 file-backed
@@ -77,9 +77,13 @@ baseline launches, calls the cleanup ELF immediately before every payload, and
 requires all four sample cleanup results plus driver shutdown to pass on every
 iteration. Its FW 11.60 twin can validate the runner and shared teardown, but
 does not close the FW 5.50 regression. FW 5.50 hardware is currently
-unavailable. The FW 11.60 twin passed a one-launch canary followed by all
-14/14 stress iterations on 2026-07-30, with a fence, driver shutdown, and four
-zero-valued cleanup results on every launch.
+available again. The FW 11.60 twin passed a one-launch canary followed by all
+14/14 stress iterations on 2026-07-30. FW 5.50 then passed the corrected-path
+one-launch canary and its full 14/14 threshold run with the pinned
+current-source ELF. Both endpoints reached their fence, shut the driver down,
+and reported all four cleanup results as zero on every accepted launch. The FW
+5.50 teardown regression is closed; current-source uncompressed depth is now
+the active hardware gate.
 
 The D32 compressed-depth tier now has four bounded source-built artifacts:
 ordinary/decompress/resummarize and expclear variants for exact FW `0x1160`,
@@ -88,9 +92,8 @@ cleanup ELF immediately before launch, exact firmware selection, bounded fence
 completion, full-rectangle D32 distributions, positive HTILE mutation, driver
 shutdown, and final PASS. All four build without warnings and have no dynamic
 dependency on `libSceAgc.sprx` or `libSceAgcDriver.sprx`; none has been run on
-hardware. Preserve the execution order below: the FW 5.50 teardown and
-uncompressed-depth baselines must pass before either compressed-depth tuple is
-launched.
+hardware. Preserve the execution order below: the FW 5.50 uncompressed-depth
+baseline and preceding D16 HTILE tier must pass before these D32 tuples launch.
 
 The combined D32+S8 tier is likewise prepared without a hardware claim. Eight
 artifacts cover ordinary HTILE and expclear of depth-only, stencil-only, or
@@ -101,8 +104,8 @@ aspect-specific RMW plan with zero selected mismatches, zero outside changes,
 preserved reserved bits, and its bounded fence. A host fixture proves that the
 runner accepts the intended aspect and rejects the wrong one. All eight ELFs
 build without warnings and avoid both AGC SPRX dependencies. They remain
-behind the same FW 5.50 cleanup, uncompressed-depth, D16 HTILE, and D32 HTILE
-qualification sequence.
+behind the FW 5.50 uncompressed-depth, D16 HTILE, and D32 HTILE qualification
+sequence.
 
 ## Higher-level consumers
 

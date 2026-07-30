@@ -461,6 +461,12 @@ the runner and shared teardown on FW 11.60 only.
   not advance to HTILE, expclear, compressed metadata, or MSAA until that
   regression passes.
   See `analysis/fw1160_uncompressed_depth_gate_audit_20260730.md`.
+- The FW 5.50 teardown prerequisite is now complete: the corrected-path pinned
+  artifact passed one canary and 14/14 threshold launches with immediate
+  fences, clean shutdown, and all four release results zero. Run the four
+  current-source uncompressed D32/D16/S8/D16+S8 mirrors next. Their guarded
+  recipes now require the exact full-rectangle depth and stencil distributions
+  rather than relying only on the sample's internal verdict.
 - The next isolated compressed-depth artifacts are prepared but hardware
   gated: ordinary D16/HTILE first, then D16 HTILE expclear. Exact logged
   `0x1160` artifacts and exact headless `0x0550` mirrors build without
