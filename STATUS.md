@@ -21,8 +21,10 @@ builds now retain committed qualified records; regeneration is explicit.
 The corrected FW 5.50 cleanup gate passed a one-launch canary and then 14/14
 threshold launches with immediate fences, clean driver shutdown, and all four
 memory-release results zero. The accumulated-leak regression is closed;
-current-source uncompressed-depth regression remains required, and HTILE/MSAA
-stay blocked. A committed 14-launch file-backed gate pins
+the pinned current-source uncompressed D32, D16, S8, and D16+S8 mirrors then
+passed with exact native distributions, clean teardown, and no residual
+process. The base depth/stencil tier is qualified on both available endpoints;
+HTILE and MSAA remain separately gated. A committed 14-launch file-backed gate pins
 separate FW 5.50 and FW 11.60 artifacts, invokes the cleanup ELF immediately
 before every payload, and requires zero-valued cleanup results. The audited
 current-source FW 5.50 artifact is pinned to

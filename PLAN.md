@@ -467,6 +467,11 @@ the runner and shared teardown on FW 11.60 only.
   current-source uncompressed D32/D16/S8/D16+S8 mirrors next. Their guarded
   recipes now require the exact full-rectangle depth and stencil distributions
   rather than relying only on the sample's internal verdict.
+- The pinned FW 5.50 uncompressed matrix has now passed D32, D16, S8, and
+  D16+S8 with the exact native distributions, clean teardown, and no residual
+  process. This closes the endpoint replay for the first depth/stencil tier.
+  Advance to ordinary D16 HTILE on FW 5.50; only after it passes may the
+  corresponding FW 11.60 ordinary and expclear artifacts run twice.
 - The next isolated compressed-depth artifacts are prepared but hardware
   gated: ordinary D16/HTILE first, then D16 HTILE expclear. Exact logged
   `0x1160` artifacts and exact headless `0x0550` mirrors build without

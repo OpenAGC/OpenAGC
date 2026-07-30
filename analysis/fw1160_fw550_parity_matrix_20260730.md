@@ -52,7 +52,7 @@ reached its completion fence, shut the driver down, and returned PASS.
 
 | Capability | FW 11.60 status | Remaining gap |
 |---|---|---|
-| Uncompressed D32, D16, S8, and D16+S8 | Qualified | Current-source FW 5.50 mirrors pending |
+| Uncompressed D32, D16, S8, and D16+S8 | Qualified | Qualified on both endpoints |
 | Ordinary D16 HTILE | Prepared | Hardware qualification missing |
 | D16 HTILE expclear | Prepared | Hardware qualification missing |
 | D32 HTILE ordinary/decompress/resummarize/expclear | Prepared | Hardware qualification missing |
@@ -82,8 +82,10 @@ available again. The FW 11.60 twin passed a one-launch canary followed by all
 one-launch canary and its full 14/14 threshold run with the pinned
 current-source ELF. Both endpoints reached their fence, shut the driver down,
 and reported all four cleanup results as zero on every accepted launch. The FW
-5.50 teardown regression is closed; current-source uncompressed depth is now
-the active hardware gate.
+5.50 teardown regression is closed. The current-source uncompressed D32, D16,
+S8, and D16+S8 mirrors then passed with exact native distributions, completion,
+shutdown, cleanup, and no residual process. Ordinary D16 HTILE is now the
+active hardware gate.
 
 The D32 compressed-depth tier now has four bounded source-built artifacts:
 ordinary/decompress/resummarize and expclear variants for exact FW `0x1160`,

@@ -149,3 +149,13 @@ logical pixel count rather than the full 2,621,440-byte swizzled allocation.
 That host-oracle bug is corrected and fixture-locked before D16+S8 proceeds;
 the rejected wrapper result is retained as hardware evidence but is not counted
 as the accepted S8 gate.
+
+The accepted FW 5.50 matrix subsequently passed in order: D32, D16, the
+identical S8 replay, and D16+S8. D32 and D16 each reproduced `1617408` clear,
+`228096` near, and `228096` far native values. Both stencil gates reproduced
+`456192` replacements, `2165248` allocation-aware zeros, and zero other bytes.
+Every accepted run selected ABI `0x0550`, reached its fence, shut the driver
+down, released all sample memory, returned final PASS, and left no residual
+`eboot.bin`; ports 8080 and 744 stayed reachable after the matrix. Together
+with the two prior FW 11.60 passes, all four uncompressed paths are now
+hardware-qualified on both available endpoints.
