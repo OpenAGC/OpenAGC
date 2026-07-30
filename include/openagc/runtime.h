@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-#define AGC_RUNTIME_API_VERSION 9u
+#define AGC_RUNTIME_API_VERSION 10u
 #define AGC_RUNTIME_STRUCTURE_VERSION_1 1u
 #define AGC_RUNTIME_STRUCTURE_VERSION_2 2u
 #define AGC_RUNTIME_PROFILE_NAME_SIZE 48u
@@ -255,10 +255,16 @@ typedef struct AgcImageSubresourceRange {
  * destination ownership must be explicit. v1 permits only same-owner and
  * GPU/host transitions. v2 adds a two-command ownership handoff: record a
  * RELEASE on the source queue, submit it, then record and submit the matching
- * ACQUIRE on the destination queue. Both sides name the same label/value. */
+ * ACQUIRE on the destination queue. Both sides name the same label/value. A
+ * v2 batch-dependency record instead consumes the prior state of the same
+ * resource from an earlier DCB in one ordered same-queue batch. */
 enum {
     AGC_RESOURCE_TRANSITION_RELEASE_BIT = 1u << 0,
-    AGC_RESOURCE_TRANSITION_ACQUIRE_BIT = 1u << 1
+    AGC_RESOURCE_TRANSITION_ACQUIRE_BIT = 1u << 1,
+    /* A v2 transition whose source state is produced by an earlier command
+     * buffer in the same ordered queue batch. It cannot be submitted alone
+     * and cannot be combined with ownership release/acquire. */
+    AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT = 1u << 2
 };
 
 #define AGC_RESOURCE_TRANSITION_V1_SIZE 128u

@@ -120,6 +120,12 @@ Artifact `b4d21c6673d74af2b997e695605018ff4499df4998782fc243f18523e7c7576e`
 then passed reflected compute dispatch in the first DCB, a verified EOP label
 in the second, one batch fence, readback, and teardown on exact FW 5.50; see
 `analysis/runtime_compute_batch_fw550_20260731.md`.
+Runtime API v10 adds an explicit v2 batch-dependency transition flag. Artifact
+`0748f67a4eabb156bbf66f2ee18e0a20d268309ba1e3645a15997a04f09df5f3` then
+passed a reflected dispatch in the first DCB and its dependent
+`shader-write -> host-read` transition in the second, followed by batch-fence
+completion and readback on exact FW 5.50; see
+`analysis/runtime_batch_transition_chain_fw550_20260731.md`.
 FW 11.60 remains hardware-unqualified.
 
 ## Native resource and memory management complete (2026-07-30)

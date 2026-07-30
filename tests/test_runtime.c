@@ -1641,6 +1641,153 @@ static void test_runtime_multi_compute_submission(void)
         "compute multi-submit device destroys");
 }
 
+static void test_runtime_batch_transition_chain(void)
+{
+    AgcDevice device = create_device();
+    AgcQueue queue = create_queue(device, kAgcQueueCompute);
+    AgcBufferDesc buffer_desc = AGC_BUFFER_DESC_INIT;
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
+    AgcGpuLabelDesc label_desc = AGC_GPU_LABEL_DESC_INIT;
+    AgcResourceTransition first_transition = AGC_RESOURCE_TRANSITION_INIT;
+    AgcResourceTransition second_transition = AGC_RESOURCE_TRANSITION_V2_INIT;
+    AgcResourceTransition final_transition = AGC_RESOURCE_TRANSITION_INIT;
+    AgcSubmitInfo batch_submit = AGC_SUBMIT_INFO_INIT;
+    AgcSubmitInfo single_submit = AGC_SUBMIT_INFO_INIT;
+    AgcBuffer buffer = NULL;
+    AgcCommandBuffer first = NULL;
+    AgcCommandBuffer second = NULL;
+    AgcCommandBuffer invalid = NULL;
+    AgcCommandBuffer commands[2] = { NULL, NULL };
+    AgcFence fence = NULL;
+    AgcGpuLabel body_label = NULL;
+
+    buffer_desc.size = 64u;
+    buffer_desc.usage = AGC_BUFFER_USAGE_STORAGE_BIT;
+    buffer_desc.flags = AGC_BUFFER_CREATE_READBACK_BIT;
+    command_desc.queue_type = kAgcQueueCompute;
+    command_desc.capacity_dwords = 128u;
+    TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &buffer), AGC_OK,
+        "batch transition buffer creates");
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &first), AGC_OK,
+        "batch transition first command creates");
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &second), AGC_OK,
+        "batch transition second command creates");
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &invalid), AGC_OK,
+        "batch transition invalid command creates");
+    TEST_ASSERT_EQ(agcCreateFence(device, &fence_desc, &fence), AGC_OK,
+        "batch transition fence creates");
+    TEST_ASSERT_EQ(agcCreateGpuLabel(device, &label_desc, &body_label), AGC_OK,
+        "batch transition body label creates");
+
+    first_transition.resource_type = kAgcResourceTypeBuffer;
+    first_transition.buffer = buffer;
+    first_transition.buffer_size = buffer_desc.size;
+    first_transition.before = kAgcResourceUsageUndefined;
+    first_transition.after = kAgcResourceUsageShaderWrite;
+    first_transition.before_owner = kAgcResourceOwnerHost;
+    first_transition.after_owner = kAgcResourceOwnerCompute;
+    second_transition.resource_type = kAgcResourceTypeBuffer;
+    second_transition.buffer = buffer;
+    second_transition.buffer_size = buffer_desc.size;
+    second_transition.before = kAgcResourceUsageShaderWrite;
+    second_transition.after = kAgcResourceUsageHostRead;
+    second_transition.before_owner = kAgcResourceOwnerCompute;
+    second_transition.after_owner = kAgcResourceOwnerHost;
+    second_transition.flags = AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(first), AGC_OK,
+        "batch transition first command begins");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(first, 1u, &first_transition),
+        AGC_OK, "batch transition first state records");
+    TEST_ASSERT_EQ(agcCmdSignalGpuLabel(first, body_label, 1u), AGC_OK,
+        "batch transition first body signal records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(first), AGC_OK,
+        "batch transition first command ends");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(second), AGC_OK,
+        "batch transition dependent command begins");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(second, 1u, &second_transition),
+        AGC_OK, "batch transition dependent state records explicitly");
+    TEST_ASSERT_EQ(agcCmdSignalGpuLabel(second, body_label, 2u), AGC_OK,
+        "batch transition dependent body signal records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(second), AGC_OK,
+        "batch transition dependent command ends");
+    commands[0] = second;
+    commands[1] = first;
+    batch_submit.command_buffer_count = 2u;
+    batch_submit.command_buffers = commands;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &batch_submit, fence),
+        AGC_ERROR_INVALID_STATE,
+        "reversed batch transition dependency rejects before driver mutation");
+    commands[0] = first;
+    commands[1] = second;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &batch_submit, fence), AGC_OK,
+        "ordered batch commits cross-command transition chain atomically");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(first), AGC_OK,
+        "ordered batch first command resets");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(second), AGC_OK,
+        "ordered batch dependent command resets");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "ordered batch fence resets");
+
+    final_transition.resource_type = kAgcResourceTypeBuffer;
+    final_transition.buffer = buffer;
+    final_transition.buffer_size = buffer_desc.size;
+    final_transition.before = kAgcResourceUsageHostRead;
+    final_transition.after = kAgcResourceUsageShaderWrite;
+    final_transition.before_owner = kAgcResourceOwnerHost;
+    final_transition.after_owner = kAgcResourceOwnerCompute;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(first), AGC_OK,
+        "batch transition final-state command begins");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(first, 1u, &final_transition),
+        AGC_OK, "ordered batch commits its final resource state");
+    TEST_ASSERT_EQ(agcCmdSignalGpuLabel(first, body_label, 3u), AGC_OK,
+        "post-batch state body signal records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(first), AGC_OK,
+        "batch transition final-state command ends");
+    single_submit.command_buffer_count = 1u;
+    single_submit.command_buffers = &first;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &single_submit, fence), AGC_OK,
+        "post-batch state transition submits");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(first), AGC_OK,
+        "post-batch state command resets");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "post-batch state fence resets");
+
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(invalid), AGC_OK,
+        "single dependency command begins");
+    second_transition.before = kAgcResourceUsageShaderWrite;
+    second_transition.after = kAgcResourceUsageHostRead;
+    second_transition.before_owner = kAgcResourceOwnerCompute;
+    second_transition.after_owner = kAgcResourceOwnerHost;
+    TEST_ASSERT_EQ(agcCmdTransitionResources(invalid, 1u, &second_transition),
+        AGC_OK, "explicit batch dependency records without global state mutation");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(invalid), AGC_OK,
+        "single dependency command ends");
+    single_submit.command_buffers = &invalid;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &single_submit, fence),
+        AGC_ERROR_INVALID_STATE,
+        "batch dependency rejects on a single command submission");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(invalid), AGC_OK,
+        "rejected single dependency command resets");
+
+    TEST_ASSERT_EQ(agcDestroyFence(fence), AGC_OK,
+        "batch transition fence destroys");
+    TEST_ASSERT_EQ(agcDestroyGpuLabel(body_label), AGC_OK,
+        "batch transition body label destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(invalid), AGC_OK,
+        "batch transition invalid command destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(second), AGC_OK,
+        "batch transition second command destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(first), AGC_OK,
+        "batch transition first command destroys");
+    TEST_ASSERT_EQ(agcDestroyBuffer(buffer), AGC_OK,
+        "batch transition buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
+        "batch transition queue destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "batch transition device destroys");
+}
+
 static void test_runtime_gpu_labels(void)
 {
     AgcDevice device = create_device();
@@ -5069,6 +5216,7 @@ void test_suite_runtime(void)
     TEST_RUN(test_runtime_indexed_graphics_submission);
     TEST_RUN(test_runtime_multi_graphics_submission);
     TEST_RUN(test_runtime_multi_compute_submission);
+    TEST_RUN(test_runtime_batch_transition_chain);
     TEST_RUN(test_runtime_gpu_labels);
     TEST_RUN(test_runtime_submit_label_lists);
     TEST_RUN(test_runtime_image_transfer);

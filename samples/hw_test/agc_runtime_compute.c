@@ -255,11 +255,13 @@ int main(void)
     transition.after = kAgcResourceUsageHostRead;
     transition.before_owner = kAgcResourceOwnerCompute;
     transition.after_owner = kAgcResourceOwnerHost;
+#if !AGC_COMPUTE_BATCH
     result = agcCmdTransitionResources(command_buffer, 1u, &transition);
     report_result("agcCmdTransitionResources(shader-write-to-host-read)",
         result);
     if (result != AGC_OK)
         goto cleanup;
+#endif
     result = agcEndCommandBuffer(command_buffer);
     report_result("agcEndCommandBuffer", result);
     if (result != AGC_OK)
@@ -267,6 +269,15 @@ int main(void)
 #if AGC_COMPUTE_BATCH
     result = agcBeginCommandBuffer(batch_tail_command_buffer);
     report_result("agcBeginCommandBuffer(batch tail)", result);
+    if (result != AGC_OK)
+        goto cleanup;
+    transition.struct_size = sizeof(transition);
+    transition.version = AGC_RUNTIME_STRUCTURE_VERSION_2;
+    transition.flags = AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT;
+    result = agcCmdTransitionResources(batch_tail_command_buffer, 1u,
+        &transition);
+    report_result("agcCmdTransitionResources(batch shader-write-to-host-read)",
+        result);
     if (result != AGC_OK)
         goto cleanup;
     result = agcCmdSignalGpuLabel(batch_tail_command_buffer, batch_label, 1u);

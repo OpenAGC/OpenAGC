@@ -114,6 +114,18 @@ the first DCB, a verified label tail in the second, a batch fence, and readback;
 see [`runtime_compute_batch_fw550_20260731.md`](../analysis/runtime_compute_batch_fw550_20260731.md).
 Other batch forms, larger batches, and FW 11.60 remain hardware-unqualified.
 
+Runtime API v10 adds `AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT`. A version-2
+transition with that flag names state produced by an earlier DCB in the same
+ordered, same-queue batch; it carries no label and cannot be combined with an
+ownership release or acquire. The runtime validates the complete ordered state
+chain before submit-time command or driver mutation. A reversed chain, a
+missing producer,
+or a single-command submit fails with `AGC_ERROR_INVALID_STATE`. The exact FW
+5.50 reflected compute batch passed a first-DCB `undefined -> shader-write`
+transition and second-DCB dependent `shader-write -> host-read` transition,
+then readback; see
+[`runtime_batch_transition_chain_fw550_20260731.md`](../analysis/runtime_batch_transition_chain_fw550_20260731.md).
+
 `AgcGpuLabel` provides the first GPU-side dependency primitive. A producer
 records `agcCmdSignalGpuLabel`; it emits the qualified EOP release write. A
 consumer records `agcCmdWaitGpuLabel`; it emits a 32-bit `WAIT_REG_MEM` exact

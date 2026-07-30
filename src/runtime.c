@@ -54,12 +54,22 @@ typedef struct AgcDeferredFree AgcDeferredFree;
 typedef struct AgcRuntimeRecordedTransition {
     AgcResourceType resource_type;
     void *resource;
+    AgcResourceUsage before;
+    AgcResourceOwner before_owner;
     AgcResourceUsage after;
     AgcResourceOwner after_owner;
     uint32_t flags;
     AgcGpuLabel dependency_label;
     uint32_t dependency_value;
 } AgcRuntimeRecordedTransition;
+
+typedef struct AgcRuntimeBatchTransitionState {
+    AgcResourceType resource_type;
+    void *resource;
+    AgcResourceUsage usage;
+    AgcResourceOwner owner;
+    uint32_t command_index;
+} AgcRuntimeBatchTransitionState;
 
 typedef struct AgcRuntimeRecordedLabelWait {
     AgcGpuLabel label;
@@ -4798,17 +4808,22 @@ static int32_t agcRuntimeValidateTransition(
     } else if (transition->version == AGC_RUNTIME_STRUCTURE_VERSION_2 &&
         transition->struct_size == sizeof(*transition)) {
         if (transition->flags != AGC_RESOURCE_TRANSITION_RELEASE_BIT &&
-            transition->flags != AGC_RESOURCE_TRANSITION_ACQUIRE_BIT)
+            transition->flags != AGC_RESOURCE_TRANSITION_ACQUIRE_BIT &&
+            transition->flags != AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT)
             return AGC_ERROR_INVALID_ARGUMENT;
-        if (!transition->dependency_label || transition->reserved_v2 != 0u ||
+        if (transition->reserved_v2 != 0u ||
             !agcReservedZero(transition->reserved2, 2u))
             return AGC_ERROR_INVALID_ARGUMENT;
         flags = transition->flags;
         label = transition->dependency_label;
         value = transition->dependency_value;
-        if (label->magic != AGC_MAGIC_GPU_LABEL ||
-            label->device != command_buffer->device || value == 0u)
+        if (flags == AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT) {
+            if (label || value != 0u)
+                return AGC_ERROR_INVALID_ARGUMENT;
+        } else if (!label || label->magic != AGC_MAGIC_GPU_LABEL ||
+            label->device != command_buffer->device || value == 0u) {
             return AGC_ERROR_INVALID_ARGUMENT;
+        }
     } else {
         return AGC_ERROR_INVALID_ARGUMENT;
     }
@@ -4858,8 +4873,9 @@ static int32_t agcRuntimeValidateTransition(
         return AGC_ERROR_NOT_SUPPORTED;
     agcCommandTransitionState(command_buffer, transition->resource_type,
         resource, &current_usage, &current_owner);
-    if (current_usage != transition->before ||
-        current_owner != transition->before_owner)
+    if ((current_usage != transition->before ||
+         current_owner != transition->before_owner) &&
+        flags != AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT)
         return AGC_ERROR_INVALID_STATE;
     if (flags != AGC_RESOURCE_TRANSITION_ACQUIRE_BIT &&
         ((transition->resource_type == kAgcResourceTypeBuffer &&
@@ -4964,6 +4980,87 @@ static int32_t agcRuntimeValidateTransition(
     *dependency_label = label;
     *dependency_value = value;
     return AGC_OK;
+}
+
+static int32_t agcValidateSubmissionTransitions(
+    AgcCommandBuffer const *command_buffers, uint32_t command_count)
+{
+    AgcRuntimeBatchTransitionState *states = NULL;
+    size_t state_capacity = 0u;
+    uint32_t state_count = 0u;
+    uint32_t i;
+    int32_t result = AGC_OK;
+
+    for (i = 0u; i < command_count; ++i) {
+        if (command_buffers[i]->recorded_transition_count >
+            SIZE_MAX - state_capacity) {
+            return AGC_ERROR_OUT_OF_MEMORY;
+        }
+        state_capacity += command_buffers[i]->recorded_transition_count;
+    }
+    if (state_capacity == 0u)
+        return AGC_OK;
+    if (state_capacity > SIZE_MAX / sizeof(*states))
+        return AGC_ERROR_OUT_OF_MEMORY;
+    states = agcAlloc(command_buffers[0]->device,
+        state_capacity * sizeof(*states), _Alignof(AgcRuntimeBatchTransitionState));
+    if (!states)
+        return AGC_ERROR_OUT_OF_MEMORY;
+    for (i = 0u; i < command_count && result == AGC_OK; ++i) {
+        AgcCommandBuffer command_buffer = command_buffers[i];
+        uint32_t transition_index;
+
+        for (transition_index = 0u;
+             transition_index < command_buffer->recorded_transition_count;
+             ++transition_index) {
+            const AgcRuntimeRecordedTransition *record =
+                &command_buffer->recorded_transitions[transition_index];
+            AgcResourceUsage usage;
+            AgcResourceOwner owner;
+            uint32_t j;
+
+            for (j = 0u; j < state_count; ++j) {
+                if (states[j].resource_type == record->resource_type &&
+                    states[j].resource == record->resource)
+                    break;
+            }
+            if (j == state_count) {
+                if (record->resource_type == kAgcResourceTypeBuffer) {
+                    const AgcBuffer buffer = (const AgcBuffer)record->resource;
+
+                    usage = buffer->usage_state;
+                    owner = buffer->owner_state;
+                } else {
+                    const AgcImage image = (const AgcImage)record->resource;
+
+                    usage = image->usage_state;
+                    owner = image->owner_state;
+                }
+            } else {
+                usage = states[j].usage;
+                owner = states[j].owner;
+            }
+            if (usage != record->before || owner != record->before_owner) {
+                result = AGC_ERROR_INVALID_STATE;
+                break;
+            }
+            if (record->flags == AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT &&
+                (j == state_count || states[j].command_index >= i)) {
+                result = AGC_ERROR_INVALID_STATE;
+                break;
+            }
+            if (j == state_count) {
+                states[state_count].resource_type = record->resource_type;
+                states[state_count].resource = record->resource;
+                ++state_count;
+            }
+            states[j].usage = record->after;
+            states[j].owner = record->after_owner;
+            states[j].command_index = i;
+        }
+    }
+    agcFree(command_buffers[0]->device, states);
+    return result;
 }
 
 static void agcCommitCommandTransitions(AgcCommandBuffer command_buffer)
@@ -5322,7 +5419,9 @@ int32_t PS5_SYSV_ABI agcCmdTransitionResources(
             &flags, &label, &value);
         if (result != AGC_OK)
             return AGC_ERROR_INTERNAL;
-        if (flags != 0u && !agcCommandRetainGpuLabel(command_buffer, label))
+        if ((flags == AGC_RESOURCE_TRANSITION_RELEASE_BIT ||
+             flags == AGC_RESOURCE_TRANSITION_ACQUIRE_BIT) &&
+            !agcCommandRetainGpuLabel(command_buffer, label))
             return AGC_ERROR_INTERNAL;
         if (flags == AGC_RESOURCE_TRANSITION_ACQUIRE_BIT &&
             !sceAgcDcbWaitRegMem(&command_buffer->cursor, 0u, 3u, 0u, 0u,
@@ -5341,8 +5440,9 @@ int32_t PS5_SYSV_ABI agcCmdTransitionResources(
         command_buffer->recorded_transitions[
             command_buffer->recorded_transition_count++] =
             (AgcRuntimeRecordedTransition){ transitions[i].resource_type,
-                resource, transitions[i].after, transitions[i].after_owner,
-                flags, label, value };
+                resource, transitions[i].before, transitions[i].before_owner,
+                transitions[i].after, transitions[i].after_owner, flags, label,
+                value };
         if (flags == AGC_RESOURCE_TRANSITION_RELEASE_BIT) {
             command_buffer->recorded_label_signals[
                 command_buffer->recorded_label_signal_count++] =
@@ -6802,6 +6902,9 @@ static int32_t agcQueueSubmitBatch(
     }
     first = command_buffers[0];
     last = command_buffers[count - 1u];
+    result = agcValidateSubmissionTransitions(command_buffers, count);
+    if (result != AGC_OK)
+        return result;
     result = agcValidateSubmitLabelLists(queue, last, submit_info);
     if (result != AGC_OK)
         return result;
@@ -7031,6 +7134,9 @@ int32_t PS5_SYSV_ABI agcQueueSubmit(
     if (command_buffer->state != AGC_COMMAND_BUFFER_STATE_EXECUTABLE)
         return AGC_ERROR_INVALID_STATE;
     result = agcValidateCommandLabelWaits(queue, command_buffer);
+    if (result != AGC_OK)
+        return result;
+    result = agcValidateSubmissionTransitions(&command_buffer, 1u);
     if (result != AGC_OK)
         return result;
     result = agcValidateSubmitLabelLists(queue, command_buffer, submit_info);

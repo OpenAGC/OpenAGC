@@ -495,6 +495,18 @@ also passed a reflected compute dispatch in the first DCB, a verified label in
 the second, one batch fence, and 64-word readback on exact FW 5.50. FW 11.60,
 larger batches, and non-compute workload batch forms remain open.
 
+Runtime API v10 adds `AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT` for an
+explicit same-queue, earlier-DCB state dependency. Submission simulates the
+recorded transition chain in descriptor order before any command storage or
+submit-time command or driver mutation; reversed, missing, and single-DCB
+dependencies fail closed,
+and state commits only after a successful batch submission. Artifact
+`0748f67a4eabb156bbf66f2ee18e0a20d268309ba1e3645a15997a04f09df5f3` passed
+the reflected compute `undefined -> shader-write` transition in the first DCB
+and dependent `shader-write -> host-read` transition in the second, then batch
+fence/readback on exact FW 5.50. Cross-queue dependencies and other firmware
+profiles remain open.
+
 Runtime API v8 adds the first typed queue-ownership handoff: a v2 transition
 releases a whole GPU-written resource on its source queue and writes the
 caller-provided monotonic label value, while the matching destination-side v2
