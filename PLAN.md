@@ -263,7 +263,7 @@ logical shader bundles. Reflection v2 adds compiler-derived front-stage
 interfaces and geometry topology/limit facts without changing its serialized
 size; v1/API-14 artifacts remain accepted. The runtime recomputes the
 compiler's FNV-1a stage-linkage hash over its four interface masks before
-accepting a reflected shader. The full generic suite reports 14,063 passed.
+accepting a reflected shader. The full generic suite reports 14,096 passed.
 The opt-in combined-tree contract test now compiles real `openagc-psbc`
 vertex/fragment/compute output and creates OpenAGC graphics/compute pipelines
 without sample-local register knowledge; its 256-byte code alignment and
@@ -277,6 +277,15 @@ by the generic runtime-contract test and the separate
 descriptor/push binding, a bounded fence wait, and readback verification.
 That probe has Prospero cross-build coverage only; the existing manually
 assembled `agc_compute.elf` remains the hardware-qualified baseline.
+Runtime API v3 now adds typed `AgcColorTargetBinding` command recording for
+reflected graphics exports. It validates exact image/attachment format and
+sample agreement, matching dimensions, qualified target-base alignment, and
+array/mip subresource layout before transactionally emitting the existing
+gfx1013 color-target packets; targets are retained until command reset. The
+same host test covers rejected format binding, required-target draw gating,
+packet capture, and lifetime release. This is not a render-pass abstraction:
+clear/load/store, depth attachment, transitions, and PS5 hardware execution
+remain open, and no hardware promotion is claimed.
 Compiler-fused VS-front/GS-back geometry pipelines are
 host-packaged for the already-qualified triangle and line inputs plus compiler
 invocation counts; redundant standalone VS handles, incomplete input

@@ -85,6 +85,16 @@ destruction; rejected bindings retain nothing. Push-constant coverage is
 tracked per stage, so draw or dispatch fails with
 `AGC_ERROR_RESOURCE_NOT_BOUND` until every reflected dword is initialized.
 
+A graphics pipeline whose reflected pixel shader exports color must bind one
+`AgcColorTargetBinding` per declared attachment with
+`agcCmdBindColorTargets` before drawing. The command validates exact format,
+sample count, dimensions, image usage, subresource layout, and target-base
+alignment, then retains the images through command-buffer reset. Rebinding
+targets in the same command buffer, incompatible MRT layouts, and a draw with
+an unbound declared attachment fail before work emission. This is attachment
+state only: clears, load/store operations, depth/stencil attachments, and
+transitions have not been folded into the runtime yet.
+
 Pipelines declare dynamic state through `dynamic_state_mask`. Viewport,
 scissor, blend constants, stencil reference, and depth bias setters emit the
 qualified command state and satisfy their corresponding bit. A draw fails with

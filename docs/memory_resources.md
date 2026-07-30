@@ -83,10 +83,11 @@ their subresource query returns `AGC_ERROR_NOT_SUPPORTED`; qualified HTILE,
 linear, and BC subresource queries remain available.
 
 The current native layout surface intentionally exposes only formats with a
-qualified low-level path: RGBA8, all BC1–BC7 encodings, D16, D32, S8, and the
-combined depth/stencil pairs. Tiled BC, color metadata (DCC/CMASK/FMASK), HDR,
-and other packed formats remain unavailable until their exact PS5 layouts are
-qualified. Unknown formats fail before allocation.
+qualified low-level path: RGBA8/BGRA8 UNORM, RGBA8 sRGB, RGBA16
+FLOAT/UINT/SINT, RGBA32 FLOAT/UINT/SINT, all BC1–BC7 encodings, D16, D32, S8,
+and the combined depth/stencil pairs. Tiled BC, color metadata
+(DCC/CMASK/FMASK), HDR, and other packed formats remain unavailable until their
+exact PS5 layouts are qualified. Unknown formats fail before allocation.
 
 The v1 resource/memory layer is currently host-qualified through the generic
 harness and warning-free in the Prospero cross-build. It has not yet completed

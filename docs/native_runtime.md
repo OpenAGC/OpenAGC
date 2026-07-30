@@ -13,6 +13,8 @@ Every input and output descriptor starts with `struct_size` and `version`.
 Initialize structures with their `AGC_*_INIT` macro. Runtime API v2 extends
 shader and pipeline descriptors with the shared reflection contract while
 preserving the accepted v1 shader prefix for legacy host-only fixtures.
+Runtime API v3 adds `AgcColorTargetBinding` and `agcCmdBindColorTargets` for
+typed graphics color attachments.
 OpenAGC rejects unknown versions, nonzero flags, or nonzero reserved fields
 without partial object or command creation.
 
@@ -34,8 +36,8 @@ Ownership dependencies are explicit:
 - a graphics pipeline retains its vertex and pixel shaders;
 - a compute pipeline retains its compute shader;
 - an executable command buffer retains every pipeline, index/vertex/descriptor
-  resource, and command-owned resource-table allocation it references until
-  reset or destruction;
+  resource, color-target image, and command-owned resource-table allocation it
+  references until reset or destruction;
 - a device retains all child objects.
 
 Destroying an object with a live dependent, recorded reference, or pending
@@ -138,14 +140,25 @@ complete binding before emitting work. Declared viewport, scissor, blend-
 constant, stencil-reference, and depth-bias state is recorded dynamically and
 must be set before a graphics draw.
 
+For a graphics pipeline with color exports, bind exactly one
+`AgcColorTargetBinding` per declared color attachment before drawing. Each
+binding names an `AGC_IMAGE_USAGE_COLOR_TARGET_BIT` image plus a mip/layer
+subresource; the runtime validates device ownership, usage, exact attachment
+format, sample count, matching target dimensions, and the proven gfx1013 base
+alignment before emitting any packet. Bound targets cannot be replaced within a
+command buffer and remain retained until reset. Color target binds cover the
+qualified 1x linear and RGBA8 4x layouts; load/store operations, clears,
+depth/stencil target binding, and transitions remain explicit future runtime
+work rather than implicit command-side policy.
+
 ## Current qualification boundary
 
 The complete object lifecycle, validation, finite fence, memory/resource,
-reflected pipeline validation, compute dispatch recording, and indexed-graphics
-recording path is host-qualified through the generic backend. The same public
-header and implementation compile for Prospero, and device creation owns exact
-backend selection, caller default version, internal memory, and default-state
-initialization.
+reflected pipeline validation, compute dispatch recording, indexed-graphics
+recording, and typed color-target binding path is host-qualified through the
+generic backend. The same public header and implementation compile for
+Prospero, and device creation owns exact backend selection, caller default
+version, internal memory, and default-state initialization.
 
 Prospero `agcQueueSubmit` submits the GPU-visible command allocation through
 the existing direct DCB/ACB carriers only when the caller supplies an unsignaled

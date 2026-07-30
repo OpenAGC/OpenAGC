@@ -997,6 +997,124 @@ static void test_runtime_indexed_graphics_submission(void)
     TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK, "graphics device destroys");
 }
 
+static void test_runtime_color_target_binding(void)
+{
+    AgcDevice device = create_device();
+    AgcQueue queue = create_queue(device, kAgcQueueGraphics);
+    AgcShaderReflection pixel_requirements = AGC_SHADER_REFLECTION_INIT;
+    AgcColorBlendAttachmentState attachment =
+        AGC_COLOR_BLEND_ATTACHMENT_STATE_INIT;
+    AgcGraphicsPipelineDesc pipeline_desc = AGC_GRAPHICS_PIPELINE_DESC_INIT;
+    AgcImageDesc image_desc = AGC_IMAGE_DESC_INIT;
+    AgcBufferDesc buffer_desc = AGC_BUFFER_DESC_INIT;
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcColorTargetBinding target = AGC_COLOR_TARGET_BINDING_INIT;
+    AgcGraphicsPipeline pipeline = NULL;
+    AgcShader vertex = create_shader(device, kAgcShaderStageVs);
+    AgcShader pixel;
+    AgcImage image = NULL;
+    AgcImage incompatible_image = NULL;
+    AgcBuffer index_buffer = NULL;
+    AgcCommandBuffer command = NULL;
+    AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    const AgcCommandBufferSubmit *captured;
+    const uint32_t *words;
+    uint32_t value;
+
+    pixel_requirements.color_export_count = 1u;
+    pixel_requirements.color_exports[0] = (AgcShaderColorExport){
+        0u, AGC_SHADER_COLOR_EXPORT_32_ABGR,
+        AGC_SHADER_COMPONENT_FLOAT_OR_NORMALIZED, 0xfu, 0u};
+    pixel = create_shader_with_reflection(
+        device, kAgcShaderStagePs, &pixel_requirements);
+    attachment.format = AGC_FORMAT_RGBA8_UNORM;
+    pipeline_desc.vertex_shader = vertex;
+    pipeline_desc.pixel_shader = pixel;
+    pipeline_desc.color_attachment_count = 1u;
+    pipeline_desc.color_attachments = &attachment;
+    TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc, &pipeline),
+        AGC_OK, "color-target graphics pipeline creates");
+
+    image_desc.width = 64u;
+    image_desc.height = 32u;
+    image_desc.mip_levels = 2u;
+    image_desc.array_layers = 2u;
+    image_desc.format = AGC_FORMAT_RGBA8_UNORM;
+    image_desc.usage = AGC_IMAGE_USAGE_COLOR_TARGET_BIT;
+    TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &image), AGC_OK,
+        "native RGBA8 color target creates");
+    image_desc.format = AGC_FORMAT_RGBA16_FLOAT;
+    TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &incompatible_image),
+        AGC_OK, "incompatible color target creates for validation");
+    buffer_desc.size = 64u;
+    buffer_desc.usage = AGC_BUFFER_USAGE_INDEX_BIT;
+    TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &index_buffer), AGC_OK,
+        "color-target index buffer creates");
+    command_desc.capacity_dwords = 256u;
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
+        AGC_OK, "color-target command buffer creates");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+        "color-target command buffer begins");
+    TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(command, pipeline), AGC_OK,
+        "color-target graphics pipeline binds");
+    TEST_ASSERT_EQ(agcCmdBindIndexBuffer(command, index_buffer, 0u,
+        kAgcIndexSize16), AGC_OK, "color-target index buffer binds");
+    TEST_ASSERT_EQ(agcCmdDrawIndexed(command, 3u, 1u, 0u, 0, 0u),
+        AGC_ERROR_RESOURCE_NOT_BOUND,
+        "draw with reflected color exports requires color targets");
+
+    target.image = incompatible_image;
+    target.mip_level = 0u;
+    target.array_layer = 1u;
+    TEST_ASSERT_EQ(agcCmdBindColorTargets(command, 1u, &target),
+        AGC_ERROR_VALIDATION_FAILED,
+        "format-mismatched target fails before retention or packet emission");
+    TEST_ASSERT_EQ(agcDestroyImage(incompatible_image), AGC_OK,
+        "rejected color target remains destroyable");
+    target.image = image;
+    TEST_ASSERT_EQ(agcCmdBindColorTargets(command, 1u, &target), AGC_OK,
+        "matching color target emits its native binding state");
+    TEST_ASSERT_EQ(agcDestroyImage(image), AGC_ERROR_BUSY,
+        "recorded color target remains retained by the command buffer");
+    TEST_ASSERT_EQ(agcCmdBindColorTargets(command, 1u, &target),
+        AGC_ERROR_NOT_SUPPORTED,
+        "color targets cannot be replaced within one command buffer");
+    TEST_ASSERT_EQ(agcCmdDrawIndexed(command, 3u, 1u, 0u, 0, 0u), AGC_OK,
+        "draw records after its reflected target binds");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+        "color-target command buffer becomes executable");
+    submit.command_buffer_count = 1u;
+    submit.command_buffers = &command;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, NULL), AGC_OK,
+        "color-target command buffer submits through the host carrier");
+    captured = agcDriverDebugLastDcbSubmit();
+    words = (const uint32_t *)(uintptr_t)captured->command_address;
+    TEST_ASSERT(runtime_find_context_register(words, captured->dword_count,
+        AGC_REG_CB_COLOR0_BASE, &value) && value != 0u,
+        "color-target binding records CB_COLOR0_BASE");
+    TEST_ASSERT(runtime_find_context_register(words, captured->dword_count,
+        AGC_REG_CB_COLOR0_INFO, &value),
+        "color-target binding records CB_COLOR0_INFO");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+        "reset releases the retained color target");
+    TEST_ASSERT_EQ(agcDestroyImage(image), AGC_OK,
+        "released color target destroys after reset");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+        "color-target command buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyBuffer(index_buffer), AGC_OK,
+        "color-target index buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(pipeline), AGC_OK,
+        "color-target graphics pipeline destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(pixel), AGC_OK,
+        "color-target pixel shader destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(vertex), AGC_OK,
+        "color-target vertex shader destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
+        "color-target graphics queue destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "color-target device destroys");
+}
+
 static void test_runtime_command_space_atomic_failure(void)
 {
     AgcDevice device = create_device();
@@ -3203,6 +3321,7 @@ void test_suite_runtime(void)
     TEST_RUN(test_runtime_compute_submission);
     TEST_RUN(test_runtime_compiler_reflection_sidecar);
     TEST_RUN(test_runtime_indexed_graphics_submission);
+    TEST_RUN(test_runtime_color_target_binding);
     TEST_RUN(test_runtime_command_space_atomic_failure);
     TEST_RUN(test_runtime_dynamic_graphics_state);
     TEST_RUN(test_runtime_depth_stencil_pipeline_state);

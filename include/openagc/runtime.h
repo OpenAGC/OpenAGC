@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-#define AGC_RUNTIME_API_VERSION 2u
+#define AGC_RUNTIME_API_VERSION 3u
 #define AGC_RUNTIME_STRUCTURE_VERSION_1 1u
 #define AGC_RUNTIME_STRUCTURE_VERSION_2 2u
 #define AGC_RUNTIME_PROFILE_NAME_SIZE 48u
@@ -217,6 +217,23 @@ typedef struct AgcImageViewDesc {
 #define AGC_IMAGE_VIEW_DESC_INIT \
     { sizeof(AgcImageViewDesc), AGC_RUNTIME_STRUCTURE_VERSION_1, NULL, 0u, \
       0u, 1u, 0u, 1u, {0u, 0u, 0u, 0u} }
+
+/* One color attachment for agcCmdBindColorTargets. The image subresource is
+ * retained by the command buffer until it is reset or destroyed. */
+typedef struct AgcColorTargetBinding {
+    uint32_t struct_size;
+    uint32_t version;
+    AgcImage image;
+    uint32_t mip_level;
+    uint32_t array_layer;
+    uint32_t flags;
+    uint32_t reserved0;
+    uint64_t reserved[4];
+} AgcColorTargetBinding;
+
+#define AGC_COLOR_TARGET_BINDING_INIT \
+    { sizeof(AgcColorTargetBinding), AGC_RUNTIME_STRUCTURE_VERSION_1, NULL, \
+      0u, 0u, 0u, 0u, {0u, 0u, 0u, 0u} }
 
 typedef enum AgcFilter {
     AGC_FILTER_NEAREST = 0,
@@ -774,6 +791,8 @@ _Static_assert(sizeof(AgcImageDesc) == 72u,
     "AgcImageDesc v1 size mismatch");
 _Static_assert(sizeof(AgcImageViewDesc) == 72u,
     "AgcImageViewDesc v1 size mismatch");
+_Static_assert(sizeof(AgcColorTargetBinding) == 64u,
+    "AgcColorTargetBinding v1 size mismatch");
 _Static_assert(sizeof(AgcSamplerDesc) == 64u,
     "AgcSamplerDesc v1 size mismatch");
 _Static_assert(sizeof(AgcShaderDesc) == 88u,
@@ -876,6 +895,9 @@ int32_t PS5_SYSV_ABI agcCmdBindGraphicsPipeline(
     AgcCommandBuffer command_buffer, AgcGraphicsPipeline pipeline);
 int32_t PS5_SYSV_ABI agcCmdBindComputePipeline(
     AgcCommandBuffer command_buffer, AgcComputePipeline pipeline);
+int32_t PS5_SYSV_ABI agcCmdBindColorTargets(
+    AgcCommandBuffer command_buffer, uint32_t target_count,
+    const AgcColorTargetBinding *targets);
 int32_t PS5_SYSV_ABI agcCmdBindDescriptors(AgcCommandBuffer command_buffer,
     uint32_t write_count, const AgcDescriptorWrite *writes);
 int32_t PS5_SYSV_ABI agcCmdBindVertexBuffers(AgcCommandBuffer command_buffer,

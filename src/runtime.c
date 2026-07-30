@@ -242,11 +242,14 @@ struct AgcCommandBufferImpl {
     uint32_t descriptors_bound;
     uint32_t vertex_binding_mask;
     uint32_t dynamic_state_set_mask;
+    uint32_t color_target_count;
     uint32_t recorded_buffer_count;
+    uint32_t recorded_image_count;
     uint32_t recorded_view_count;
     uint32_t recorded_sampler_count;
     uint64_t push_constant_masks[kAgcShaderStageCount];
     AgcBuffer recorded_buffers[AGC_RUNTIME_MAX_RECORDED_RESOURCES];
+    AgcImage recorded_images[AGC_RUNTIME_MAX_RECORDED_RESOURCES];
     AgcImageView recorded_views[AGC_RUNTIME_MAX_RECORDED_RESOURCES];
     AgcSampler recorded_samplers[AGC_RUNTIME_MAX_RECORDED_RESOURCES];
 };
@@ -923,7 +926,19 @@ static int agcGetRuntimeFormatInfo(uint32_t format, AgcRuntimeFormatInfo *info)
     info->plane_count = 1u;
     switch (format) {
     case AGC_FORMAT_RGBA8_UNORM:
+    case AGC_FORMAT_BGRA8_UNORM:
+    case AGC_FORMAT_RGBA8_SRGB:
         info->bytes[0] = 4u;
+        return 1;
+    case AGC_FORMAT_RGBA16_FLOAT:
+    case AGC_FORMAT_RGBA16_UINT:
+    case AGC_FORMAT_RGBA16_SINT:
+        info->bytes[0] = 8u;
+        return 1;
+    case AGC_FORMAT_RGBA32_FLOAT:
+    case AGC_FORMAT_RGBA32_UINT:
+    case AGC_FORMAT_RGBA32_SINT:
+        info->bytes[0] = 16u;
         return 1;
     case AGC_FORMAT_BC1_UNORM:
     case AGC_FORMAT_BC1_SRGB:
@@ -2724,6 +2739,44 @@ static int agcPipelineFormatInfo(
     }
 }
 
+static int agcRuntimeColorTargetFormat(uint32_t format,
+    AgcGfx1013ColorTargetFormat *target_format)
+{
+    if (!target_format)
+        return 0;
+    switch ((AgcFormat)format) {
+    case AGC_FORMAT_RGBA8_UNORM:
+        *target_format = AGC_GFX1013_RT_FORMAT_RGBA8_UNORM;
+        return 1;
+    case AGC_FORMAT_BGRA8_UNORM:
+        *target_format = AGC_GFX1013_RT_FORMAT_BGRA8_UNORM;
+        return 1;
+    case AGC_FORMAT_RGBA8_SRGB:
+        *target_format = AGC_GFX1013_RT_FORMAT_RGBA8_SRGB;
+        return 1;
+    case AGC_FORMAT_RGBA16_FLOAT:
+        *target_format = AGC_GFX1013_RT_FORMAT_RGBA16_FLOAT;
+        return 1;
+    case AGC_FORMAT_RGBA32_FLOAT:
+        *target_format = AGC_GFX1013_RT_FORMAT_RGBA32_FLOAT;
+        return 1;
+    case AGC_FORMAT_RGBA16_UINT:
+        *target_format = AGC_GFX1013_RT_FORMAT_RGBA16_UINT;
+        return 1;
+    case AGC_FORMAT_RGBA16_SINT:
+        *target_format = AGC_GFX1013_RT_FORMAT_RGBA16_SINT;
+        return 1;
+    case AGC_FORMAT_RGBA32_UINT:
+        *target_format = AGC_GFX1013_RT_FORMAT_RGBA32_UINT;
+        return 1;
+    case AGC_FORMAT_RGBA32_SINT:
+        *target_format = AGC_GFX1013_RT_FORMAT_RGBA32_SINT;
+        return 1;
+    default:
+        return 0;
+    }
+}
+
 static int agcPipelineColorExportCompatible(
     const AgcShaderColorExport *export_info,
     const AgcColorBlendAttachmentState *attachment)
@@ -3816,16 +3869,20 @@ static void agcReleaseCommandReferences(AgcCommandBuffer command_buffer)
     }
     for (i = 0u; i < command_buffer->recorded_buffer_count; ++i)
         command_buffer->recorded_buffers[i]->recorded_refs--;
+    for (i = 0u; i < command_buffer->recorded_image_count; ++i)
+        command_buffer->recorded_images[i]->recorded_refs--;
     for (i = 0u; i < command_buffer->recorded_view_count; ++i)
         command_buffer->recorded_views[i]->recorded_refs--;
     for (i = 0u; i < command_buffer->recorded_sampler_count; ++i)
         command_buffer->recorded_samplers[i]->recorded_refs--;
     command_buffer->recorded_buffer_count = 0u;
+    command_buffer->recorded_image_count = 0u;
     command_buffer->recorded_view_count = 0u;
     command_buffer->recorded_sampler_count = 0u;
     command_buffer->descriptors_bound = 0u;
     command_buffer->vertex_binding_mask = 0u;
     command_buffer->dynamic_state_set_mask = 0u;
+    command_buffer->color_target_count = 0u;
     memset(command_buffer->push_constant_masks, 0,
         sizeof(command_buffer->push_constant_masks));
     if (command_buffer->resource_allocation) {
@@ -3994,6 +4051,9 @@ int32_t PS5_SYSV_ABI agcGetCommandBufferState(
     return AGC_OK;
 }
 
+static int32_t agcCommandCommitScratch(AgcCommandBuffer command_buffer,
+    const SceAgcCb *scratch, const uint32_t *words);
+
 int32_t PS5_SYSV_ABI agcCmdBindGraphicsPipeline(
     AgcCommandBuffer command_buffer, AgcGraphicsPipeline pipeline)
 {
@@ -4029,6 +4089,117 @@ int32_t PS5_SYSV_ABI agcCmdBindGraphicsPipeline(
         command_buffer->graphics_pipeline = pipeline;
         pipeline->recorded_refs++;
     }
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcCmdBindColorTargets(
+    AgcCommandBuffer command_buffer, uint32_t target_count,
+    const AgcColorTargetBinding *targets)
+{
+    AgcGfx1013ColorTargetState states[AGC_GFX1013_MAX_COLOR_TARGETS];
+    uint32_t words[AGC_GFX1013_MAX_COLOR_TARGETS * 28u];
+    SceAgcCb scratch;
+    uint32_t width = 0u;
+    uint32_t height = 0u;
+    uint32_t i;
+    int32_t result;
+
+    if (!command_buffer || command_buffer->magic != AGC_MAGIC_COMMAND_BUFFER ||
+        !agcDeviceValid(command_buffer->device) || !targets) {
+        return AGC_ERROR_INVALID_ARGUMENT;
+    }
+    if (command_buffer->state != AGC_COMMAND_BUFFER_STATE_RECORDING ||
+        command_buffer->queue_type != kAgcQueueGraphics ||
+        !command_buffer->graphics_pipeline) {
+        return AGC_ERROR_INVALID_STATE;
+    }
+    if (target_count == 0u || target_count > AGC_GFX1013_MAX_COLOR_TARGETS ||
+        target_count != command_buffer->graphics_pipeline->
+            color_attachment_count) {
+        return AGC_ERROR_VALIDATION_FAILED;
+    }
+    if (command_buffer->color_target_count != 0u)
+        return AGC_ERROR_NOT_SUPPORTED;
+    if (command_buffer->recorded_image_count >
+        AGC_RUNTIME_MAX_RECORDED_RESOURCES - target_count) {
+        return AGC_ERROR_OUT_OF_MEMORY;
+    }
+    for (i = 0u; i < target_count; ++i) {
+        const AgcColorTargetBinding *binding = &targets[i];
+        AgcImage image;
+        AgcImageSubresourceLayout layout = AGC_IMAGE_SUBRESOURCE_LAYOUT_INIT;
+        AgcGfx1013ColorTargetFormat format;
+        uint64_t address;
+        uint32_t j;
+
+        if (!agcHeaderValid(binding->struct_size, sizeof(*binding),
+                binding->version) || binding->flags != 0u ||
+            binding->reserved0 != 0u ||
+            !agcReservedZero(binding->reserved, 4u)) {
+            return AGC_ERROR_INVALID_ARGUMENT;
+        }
+        image = binding->image;
+        if (!image || image->magic != AGC_MAGIC_IMAGE ||
+            image->device != command_buffer->device || image->deferred ||
+            (image->desc.usage & AGC_IMAGE_USAGE_COLOR_TARGET_BIT) == 0u ||
+            image->desc.depth != 1u) {
+            return AGC_ERROR_INVALID_ARGUMENT;
+        }
+        if (image->desc.format != command_buffer->graphics_pipeline->
+                color_attachments[i].format ||
+            image->desc.sample_count != command_buffer->graphics_pipeline->
+                multisample.rasterization_samples ||
+            !agcRuntimeColorTargetFormat(image->desc.format, &format)) {
+            return AGC_ERROR_VALIDATION_FAILED;
+        }
+        for (j = 0u; j < i; ++j) {
+            if (targets[j].image == image &&
+                targets[j].mip_level == binding->mip_level &&
+                targets[j].array_layer == binding->array_layer) {
+                return AGC_ERROR_VALIDATION_FAILED;
+            }
+        }
+        result = agcGetImageSubresourceLayout(command_buffer->device,
+            &image->desc, binding->mip_level, binding->array_layer, 0u,
+            &layout);
+        if (result != AGC_OK)
+            return result;
+        address = agcAllocationGpuAddress(image->allocation);
+        if (layout.depth != 1u || layout.offset > UINT64_MAX - address)
+            return AGC_ERROR_RESOURCE_INVALID;
+        result = agcGfx1013InitColorTarget(&states[i], address + layout.offset,
+            layout.width, layout.height, format);
+        if (result != AGC_OK)
+            return result;
+        if (image->desc.sample_count == 4u) {
+            states[i].sample_count = 4u;
+            states[i].fragment_count = 4u;
+            states[i].swizzle_mode = AGC_GFX1013_SWIZZLE_64KB_R_X;
+        }
+        if (i == 0u) {
+            width = layout.width;
+            height = layout.height;
+        } else if (layout.width != width || layout.height != height) {
+            return AGC_ERROR_VALIDATION_FAILED;
+        }
+    }
+    agcCbInit(&scratch, words, sizeof(words));
+    for (i = 0u; i < target_count; ++i) {
+        result = agcGfx1013SetColorTargetSlot(&scratch, i, &states[i]);
+        if (result != AGC_OK)
+            return result == AGC_ERROR_BUFFER_TOO_SMALL ?
+                AGC_ERROR_COMMAND_SPACE_EXHAUSTED : result;
+    }
+    result = agcCommandCommitScratch(command_buffer, &scratch, words);
+    if (result != AGC_OK)
+        return result;
+    for (i = 0u; i < target_count; ++i) {
+        AgcImage image = targets[i].image;
+        command_buffer->recorded_images[
+            command_buffer->recorded_image_count++] = image;
+        image->recorded_refs++;
+    }
+    command_buffer->color_target_count = target_count;
     return AGC_OK;
 }
 
@@ -4932,6 +5103,11 @@ int32_t PS5_SYSV_ABI agcCmdDrawIndexed(AgcCommandBuffer command_buffer,
         return AGC_ERROR_INVALID_STATE;
     if (index_count == 0u || instance_count == 0u)
         return AGC_ERROR_INVALID_ARGUMENT;
+    if (command_buffer->graphics_pipeline->color_attachment_count != 0u &&
+        command_buffer->color_target_count !=
+            command_buffer->graphics_pipeline->color_attachment_count) {
+        return AGC_ERROR_RESOURCE_NOT_BOUND;
+    }
     if (command_buffer->graphics_pipeline->hull_shader &&
         index_count % command_buffer->graphics_pipeline->
             tessellation_input_control_points != 0u)
