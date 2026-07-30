@@ -290,6 +290,15 @@ the runner and shared teardown on FW 11.60 only.
   differed, and packed FNV64 reproduced as `0xd3b5d7c030de5ed7`, with
   immediate fences and zero-valued teardown. FW 5.50 replay remains pending.
   See `analysis/fw1160_rg_rgba16_snorm_portable_qualification_20260730.md`.
+- `R16_UINT` is host-qualified as append-only value 20 with gfx1013 `16`,
+  UINT, standard swap, two bytes per pixel, and UINT16_ABGR export 7. Exact
+  PM4 (`CB_COLOR0_INFO=0x00070408`), every short-buffer boundary, all-profile
+  selection, invalid-enum behavior, and maximum 64-bit layout arithmetic pass.
+  The local Mesa/ACO evidence confirms the packed unsigned export contract.
+  Hardware tooling remains intentionally blocked until `openagc-psbc` can
+  select UINT16_ABGR instead of its current command-line FP16_ABGR default;
+  then build a dedicated integer-output gate. See
+  `analysis/gfx1013_integer_color_export_contract_20260730.md`.
 - Seven additional offscreen format gates now build under the same exact
   profile and bounded runner: R8, RG8, RGB10A2, R11G11B10, R32, RG32, and
   RGBA32. All seven passed twice on FW 11.60; logged RG32 reproduced FNV64
@@ -480,7 +489,8 @@ reproducible component hashes.
 
 After normalized formats pass, qualify:
 
-1. `R16_UINT`.
+1. `R16_UINT` — host-qualified; dedicated integer shader and hardware gate
+   pending.
 2. `RG16_UINT`.
 3. `RGBA16_UINT`.
 4. `R16_SINT`.
