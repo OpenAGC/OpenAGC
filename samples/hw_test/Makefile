@@ -329,6 +329,15 @@ shaders/triangle_frag.sb: shaders/triangle_frag.spv
 shaders/triangle_frag_sb.h: shaders/triangle_frag.sb
 	xxd -i -n triangle_frag_data $< $@
 
+shaders/bc1_sample_frag.spv: shaders/bc1_sample_frag.frag
+	$(GLSLANG) -V --target-env vulkan1.2 $< -o $@
+
+shaders/bc1_sample_frag.sb: shaders/bc1_sample_frag.spv
+	$(PSBC) -f $< -s fragment -o $@
+
+shaders/bc1_sample_frag_sb.h: shaders/bc1_sample_frag.sb
+	xxd -i -n bc1_sample_frag_data $< $@
+
 shaders/rgba16_unorm_frag.spv: shaders/rgba16_unorm_frag.frag
 	$(GLSLANG) -V --target-env vulkan1.2 $< -o $@
 
@@ -752,6 +761,18 @@ agc_graphics_rg32_sint_portable.elf: agc_graphics.c ps5_video_out.h gpu_credenti
 
 agc_graphics_rgba32_sint_portable.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/sint32_rgba_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) $(PORTABLE_GRAPHICS_FLAGS) -DAGC_VALIDATE_RGBA32_SINT=1 \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+	../../tools/verify_firmware_neutral_elf.sh $@ \
+		/data/homebrew/openagc_portable_graphics/result.log
+
+agc_graphics_bc1_unorm_portable.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/bc1_sample_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(PORTABLE_GRAPHICS_FLAGS) -DAGC_VALIDATE_BC1_UNORM=1 \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+	../../tools/verify_firmware_neutral_elf.sh $@ \
+		/data/homebrew/openagc_portable_graphics/result.log
+
+agc_graphics_bc1_srgb_portable.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/bc1_sample_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(PORTABLE_GRAPHICS_FLAGS) -DAGC_VALIDATE_BC1_SRGB=1 \
 		-o $@ agc_graphics.c $(AGC_LDFLAGS)
 	../../tools/verify_firmware_neutral_elf.sh $@ \
 		/data/homebrew/openagc_portable_graphics/result.log

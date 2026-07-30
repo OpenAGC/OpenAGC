@@ -376,6 +376,16 @@ fields while preserving the existing MSAA encoding. The BC1 descriptor fixture
 locks a 5x7, three-mip, two-layer array and atomic invalid-count rejection. The
 generic suite passes 12,240 assertions.
 
+Portable BC1 UNORM and SRGB sampling gates now build with a dedicated
+`sampler2DArray` pixel shader and no firmware or AGC SPRX dependency. Their
+direct-upload fixture is 5x7 with three mips and two layers, contains explicit
+RGB565 endpoints and 2-bit index patterns, and exercises partial edge blocks.
+The shader selects base mip, nonzero mip, and a second array layer; the bounded
+readback oracle independently decodes every covered BC1 texel, applies the SRGB
+transfer where required, demands zero mismatches and all selection regions,
+and records the native hash. Hardware execution and hash freezing remain
+pending a clean FW 11.60 reboot.
+
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability
 ELF, non-indexed and indexed 10-dword multi-draw, GPU count-buffer selection,

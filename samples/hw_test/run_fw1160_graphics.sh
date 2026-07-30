@@ -239,6 +239,18 @@ case "$EXPECTED_TARGET" in
         grep -Eq '^\[SINT32\] changed=[1-9][0-9]*/[1-9][0-9]* .* independence=PASS: PASS$' \
             "$output_file" || exit 1
         ;;
+    BC1_UNORM)
+        grep -Eq '^\[BC1 UNORM\] changed=[1-9][0-9]* regions=\{[1-9][0-9]*,[1-9][0-9]*,[1-9][0-9]*\} exact-mismatches=0 packed-fnv64=0x[0-9a-f]{16}: PASS$' \
+            "$output_file" || exit 1
+        grep -q '^\[BC1\] mip0/mip1/layer1 selection: PASS$' \
+            "$output_file" || exit 1
+        ;;
+    BC1_SRGB)
+        grep -Eq '^\[BC1 SRGB\] changed=[1-9][0-9]* regions=\{[1-9][0-9]*,[1-9][0-9]*,[1-9][0-9]*\} exact-mismatches=0 packed-fnv64=0x[0-9a-f]{16}: PASS$' \
+            "$output_file" || exit 1
+        grep -q '^\[BC1\] mip0/mip1/layer1 selection: PASS$' \
+            "$output_file" || exit 1
+        ;;
     'offscreen RGB10A2')
         grep -Eq '^\[RGB10A2\] Packed top2 histogram:.*: PASS$' \
             "$output_file" || exit 1

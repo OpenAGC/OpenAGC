@@ -764,6 +764,16 @@ Qualify the existing BC families in increasing decoding and oracle risk:
 6. BC7 UNORM and SRGB.
 7. BC6 unsigned and signed floating point.
 
+BC1 UNORM/SRGB now have firmware-neutral portable gates built from one
+dedicated `sampler2DArray` shader. Each artifact directly uploads a 5x7,
+three-mip, two-layer linear BC1 image with exact endpoint/index blocks. The
+shader uses point `texelFetch` to select mip 0, mip 1, layer 0, layer 1, and a
+partial edge block; the bounded CPU oracle independently decodes every covered
+texel, applies the SRGB transfer for the SRGB variant, requires zero mismatches,
+records a native FNV64, and fails unless all three selection regions execute.
+Both ELFs pass firmware-neutral dependency verification. Preserve and pin their
+final bytes before the first clean-boot FW 11.60 attempt.
+
 Use dedicated, deterministic source blocks containing endpoint, index,
 alpha, signed-range, and edge-block cases appropriate to each format. A
 hardware gate must sample the compressed texture into an already-qualified
