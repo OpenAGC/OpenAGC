@@ -56,7 +56,7 @@ reached its completion fence, shut the driver down, and returned PASS.
 | Ordinary D16 HTILE | Qualified | Qualified on both endpoints |
 | D16 HTILE expclear | Qualified | Qualified on both endpoints |
 | D32 HTILE ordinary/decompress/resummarize/expclear | Qualified | Qualified on both endpoints |
-| Combined D32+S8 HTILE and aspect masks | Ordinary qualified | Depth-only, stencil-only, and both-aspect expclear pending |
+| Combined D32+S8 HTILE and aspect masks | Ordinary and depth-only expclear qualified | Stencil-only and both-aspect expclear pending |
 | HTILE mip and array subresources | Missing | Prepare bounded mirrors |
 | 4x MSAA | Missing | Wait for the FW 5.50 baseline regression |
 | Sample-rate shading | Missing | Add an exact invocation-count gate |
@@ -237,6 +237,13 @@ The identical FW 11.60 depth-only replay reproduced the aspect-`0x1` RMW,
 immediate completion, clean shutdown, final PASS, and no residual process. The
 pinned FW 5.50 depth-only mirror now requires `49152` and is the next permitted
 launch.
+
+The pinned FW 5.50 depth-only mirror reproduced aspect `0x1`, zero RMW
+mismatches and outside changes, preserved reserved bits, `49152` changed
+words, exact allocation-aware D32 and S8 distributions, bounded completion,
+clean shutdown, final PASS, and no residual process. Depth-only combined
+expclear is hardware-qualified on both endpoints. Proceed to pinned FW 11.60
+stencil-only pass 1; both-aspect remains blocked.
 
 ## Higher-level consumers
 

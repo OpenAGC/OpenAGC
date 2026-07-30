@@ -577,6 +577,10 @@ the runner and shared teardown on FW 11.60 only.
 - The identical FW 11.60 depth-only replay reproduced every exact invariant.
   Run the pinned FW 5.50 depth-only mirror next with `49152` frozen; a pass
   promotes depth-only expclear and unlocks stencil-only FW 11.60 pass 1.
+- The pinned FW 5.50 depth-only mirror reproduced the exact aspect-`0x1` RMW,
+  metadata, allocation-aware D32, S8, fence, shutdown, and cleanup oracles.
+  Depth-only combined expclear is qualified on both endpoints. Run stencil-only
+  FW 11.60 pass 1 next; keep both-aspect blocked.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and

@@ -102,7 +102,10 @@ mismatches or outside changes, reserved bits preserved, `49152` changed words,
 exact allocation-aware D32 and S8 distributions, clean shutdown, and no
 residual process. Its recipe now freezes `49152`; the identical replay
 reproduced every invariant. The pinned FW 5.50 depth-only mirror now requires
-the same count. Stencil-only and both-aspect remain blocked behind that mirror.
+the same count and reproduced every aspect-RMW, metadata, allocation-aware
+D32, S8, fence, shutdown, and cleanup invariant. Depth-only combined expclear
+is hardware-qualified on both endpoints. Stencil-only FW 11.60 pass 1 is now
+active; both-aspect remains blocked.
 
 Ordinary D16 HTILE is now hardware-qualified twice on each endpoint. The
 pinned current-source artifacts reproduced exact D16 classes, clean teardown,
