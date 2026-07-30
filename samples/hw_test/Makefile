@@ -478,7 +478,7 @@ agc_runtime_partial_image_handoff.elf: agc_runtime_eop.c gpu_credentials.h $(OPE
 deploy_agc_runtime_partial_buffer_handoff: agc_runtime_partial_buffer_handoff.elf
 	PS5_HOST=$(PS5_HOST) RUNTIME_ARTIFACT=$(THIS_DIR)/$< \
 		EXPECTED_FW_ABI=0x0550 \
-		EXPECTED_ARTIFACT_SHA256=7b55c694eb8fabcfaf17a7141725a0ca9814ade8afab56213a32f5d8ea07c501 \
+		EXPECTED_ARTIFACT_SHA256=2b78f787d8ab15ee972382102d566afaab2e06742b27953936aea3530e33ba80 \
 		EXPECTED_VERDICT='Native runtime partial buffer handoff result: PASS' \
 		REMOTE_NAME=openagc_partial_buffer_handoff \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_runtime_guarded.sh
@@ -486,7 +486,7 @@ deploy_agc_runtime_partial_buffer_handoff: agc_runtime_partial_buffer_handoff.el
 deploy_agc_runtime_partial_image_handoff: agc_runtime_partial_image_handoff.elf
 	PS5_HOST=$(PS5_HOST) RUNTIME_ARTIFACT=$(THIS_DIR)/$< \
 		EXPECTED_FW_ABI=0x0550 \
-		EXPECTED_ARTIFACT_SHA256=07b17b74865d8c810655196ff6d02c6569b8561c4087f79033d765b16c745f1a \
+		EXPECTED_ARTIFACT_SHA256=249125fd245037c720f409c9830a105a872310498217f15835536403189a8e2c \
 		EXPECTED_VERDICT='Native runtime partial image handoff result: PASS' \
 		REMOTE_NAME=openagc_partial_image_handoff \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_runtime_guarded.sh

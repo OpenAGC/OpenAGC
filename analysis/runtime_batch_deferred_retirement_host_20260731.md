@@ -49,14 +49,16 @@ sequence and bounded waits.
 - Expected teardown: both labels, fence, both command buffers, queue, and
   device return `AGC_OK`.
 
-It has not been deployed because the FW 5.50 console services remained
-unreachable after the presentation incident. Hardware qualification is still
-open. A second preflight after the console was reported powered on still found
-no ARP response from `10.0.1.41` and neither TCP port 8080 nor 2121 accepted a
-connection; no artifact was uploaded or launched.
+Early preflights found the FW 5.50 console services unreachable and uploaded
+nothing. After websrv recovery, the guarded target passed all 32 cycles on raw
+system version `0x05500008`. Every cycle completed its batch fence, rejected
+premature collection, atomically recycled both command buffers, collected the
+retired buffer and image, and returned live/deferred statistics to baseline.
+Both labels, the fence, both command buffers, the queue, and the device then
+destroyed with `AGC_OK`. This hardware-qualifies the stress contract and API
+v22 command recycling on exact FW 5.50.
 
-After console recovery, deploy it only through the cleanup-first, hash-pinned
-target:
+Regression reruns must use the cleanup-first, hash-pinned target:
 
 ```sh
 make -C samples/hw_test deploy_agc_runtime_retirement_stress \

@@ -53,17 +53,14 @@ at most one final flip, and compiles five guarded stages:
 4. Stage 3: stage 2 plus scanout-to-color-target-to-scanout and bounded fence.
 5. Stage 4: stage 3 plus one final bounded flip.
 
-The post-failure staged artifact hashes are:
+The final API-v22 staged artifact hashes are:
 
-- Stage 0: `470061525c4641f2a4fdd0ad90c0b95399cb6f753cf9140380fe37b9e1888b7a`
-- Stage 1: `46cacd171c9d36b2a89a736ed8059607b5045401d2d9244a902f7ba84aa22c16`
-- Stage 2: `bf29944f8dea5625e8799693ee34a2b3ee2f5240eeaa99e16366790e7e45a3d9`
-- Stage 3: `653c3d33b61b39f4d5218bcefab4947bce0469b106b3678a9973233d75b87443`
-- Stage 4: `5d372715c2df1e675b566f1c3f6de3761e5ab7d3c114aa3aadaabcdf3c3d8ffd`
+- Stage 0: `70c9f44db94154a8105b4379ccb86f213736047001f6d09ba72a97688542c714`
+- Stage 1: `84e709cb15a18b3262e81b732d4258ae52e42913ad063fd9dfe332745c9e6643`
+- Stage 2: `d67bbade7d48a918cb2636ac1e42f0c176dca99848a3a00f244019f5686ece11`
+- Stage 3: `d5ee2434129f16d068110208671bba72d95637681db22d2226919d487a4452f6`
+- Stage 4: `108416ea85233ff5768062a8bc5b062376a2ee2ced909b5358e2a7e050e658bf`
 
-After the console is rebooted, run each stage once in order. Stop immediately
-on a timeout, missing verdict, teardown error, or service loss. Presentation
-remains host-tested and hardware-unqualified until every boundary passes.
 Use only the hash-pinned cleanup-first Make targets:
 
 ```sh
@@ -78,3 +75,18 @@ Each target verifies its exact SHA-256 before contacting the console, uploads
 and launches the process-cleanup ELF first, checks service recovery, requires
 the exact firmware line and stage verdict, rejects any AGC error/failure text,
 requires clean device teardown, and checks websrv again afterward.
+
+## Final staged result
+
+All five stages passed once in order on the exact standard-PS5 FW 5.50
+profile. Stage 0 registered two images and tore down. Stage 1 submitted the
+initial `Undefined -> HostWrite -> VideoOutScanout` lifecycle and completed its
+bounded fence. Stage 2 added the first bounded flip. Stage 3 completed
+`VideoOutScanout -> ColorTarget -> VideoOutScanout` and its bounded fence.
+Stage 4 performed the final bounded flip. Every public destroy operation
+returned `AGC_OK`, and the guarded runner verified HTTP/FTP recovery after
+each process.
+
+The staged carrier therefore hardware-qualifies the opaque presentation
+boundary on exact FW 5.50. The earlier combined artifact remains invalid and
+must not be rerun.

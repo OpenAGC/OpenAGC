@@ -79,8 +79,8 @@ expert use, but make the native API the recommended application surface.
    SHA-256 `e04004fee2254e6169805f153ce4812197726ed5f53a9295a4493f0d8ac9a9ce`
    passed twice as identical bytes on both FW 5.50 and FW 11.60 after their
    cleanup stress prerequisites. Preserve this exact artifact as regression
-   evidence. Milestones 1 through 3 are complete; Milestone 4 resource-state
-   transitions and synchronization is now the active product task.
+   evidence. Milestones 1 through 4 are complete; Milestone 5 validation,
+   diagnostics, capture, and documentation is now the active product task.
 2. **Do not reopen completed format work.** All R/RG/RGBA16
    UNORM/SNORM/UINT/SINT tuples, all six 32-bit UINT/SINT color tuples, all 14
    BC1-BC7 sampling encodings, the planned D16/D32/S8/HTILE progression, and
@@ -426,7 +426,7 @@ passed its reflected dispatch/readback lifecycle, and public graphics oracle
 its reflected NGG/MRT/depth draw/readback lifecycle, both on exact FW 5.50
 without application PM4 or firmware selection.
 
-### Milestone 4: command recording, resource states, and synchronization
+### Milestone 4: command recording, resource states, and synchronization — complete
 
 Give every buffer and image subresource an explicit usage state:
 
@@ -676,8 +676,8 @@ on one resource; each acquire must match one committed range and dependency
 point exactly. Overlap, stale recording, mixed diagnostic coverage, and batch
 conflicts fail before driver mutation, while reset and acquire affect only the
 selected transfer. Pending ranges own their label reference. The generic gate
-passes 16,851 assertions; exact-firmware execution remains a distinct
-qualification step. See
+passes 16,851 assertions. The corrected two-range buffer and image carriers
+both pass on exact FW 5.50 without CPU inter-submit waits. See
 `analysis/runtime_partial_ownership_transfers_host_20260731.md`.
 
 Runtime API v21 closes the GPU-side timeline gap. Command waits, submit-list
@@ -686,34 +686,48 @@ than equality, and submission accepts any already-submitted point at or beyond
 the requested value. This lets multiple disjoint transfers share one strictly
 increasing label without an earlier acquire becoming stale after a later
 release. Repeat, decreasing, future, and wrapping signals remain rejected.
-The generic gate passes 16,852 assertions; the strengthened partial-range and
-timeline artifacts are pinned pending endpoint execution. See
+The generic gate passes 16,852 assertions; the strengthened timeline and both
+partial-range artifacts pass on exact FW 5.50. See
 `analysis/runtime_gpu_timeline_waits_host_20260731.md`.
 
-The pending FW 5.50 presentation ladder, retirement stress, and timeline wait
-now have one shared fail-closed runner. All nine Make targets pin the current
-artifact hash,
+The FW 5.50 presentation ladder, retirement stress, timeline wait, and partial
+ownership probes share one fail-closed runner. All nine Make targets pin the
+current artifact hash,
 launch the process-cleanup ELF first, verify service recovery, require exact
 firmware/verdict/device-teardown lines, reject error text and transport
 timeouts, and recheck websrv afterward. Its host mock proves hash mismatch and
 missing verdict fail before success; CTest now passes 7/7 suites. Manual direct
-launch of these artifacts is no longer part of the qualification procedure.
+launch is not part of the qualification procedure. All nine guarded targets
+passed on exact FW 5.50; see
+`analysis/runtime_milestone4_fw550_20260731.md`.
 
 Exit criteria: exact host fixtures cover the supported transition matrix and
-atomic short-buffer failure; FW 5.50 and FW 11.60 gates cover render-to-shader,
-compute-to-copy, copy-to-shader, host-read, and present-to-render; repeated
-multi-command-buffer submission and deferred destruction complete without
-leaks, stale ownership, or unbounded waits.
+atomic short-buffer failure; exact FW 5.50 gates cover render-to-shader,
+compute-to-copy, copy-to-shader, host-read, timeline waits, partial ownership,
+retirement, and present-to-render; repeated multi-command-buffer submission
+and deferred destruction complete without leaks, stale ownership, or
+unbounded waits. The identical firmware-neutral baseline remains qualified on
+both FW 5.50 and FW 11.60; optional Milestone 4 extensions on FW 11.60 remain
+separately unqualified.
 
 The initial whole-buffer compute row is established on exact FW 5.50: public
 runtime artifact `ab8852e9161c0f6ed1c373bc6de047bb9831df0d7cc7bc3df6d247baf549af31`
 records `undefined -> shader-write -> host-read` around real shader execution,
-then passes bounded-fence readback and teardown. This is only one row of the
-exit matrix. Artifact
+then passes bounded-fence readback and teardown. Artifact
 `8cd97b0b26d568c92870047d65698bd71fe31b72c162c7ca1a62c59d159bf643` also
 passes the two-image `undefined -> color-target -> host-read` MRT row on exact
-FW 5.50. Depth/stencil, copy/scanout, FW 11.60, and multi-command
-synchronization remain open.
+FW 5.50. Later rows above close copy, scanout, partial ownership,
+multi-command synchronization, retirement, and presentation for the exact
+FW 5.50 scope. Unsupported combinations and optional FW 11.60 extensions stay
+fail-closed rather than weakening the qualified matrix.
+
+Completed on 2026-07-31. Clean generic verification passes 16,902 assertions
+and all seven CTest suites; Prospero compiles without new warnings. The nine
+cleanup-first runtime targets pass on exact standard PS5 FW 5.50, including
+32-cycle retirement/recycling, reached-or-passed timeline waits, two disjoint
+buffer and image ownership ranges, and the five-stage presentation ladder.
+The identical firmware-neutral baseline remains 2/2 PASS on FW 5.50 and FW
+11.60. See `analysis/runtime_milestone4_fw550_20260731.md`.
 
 ### Milestone 5: validation, diagnostics, capture, and documentation
 

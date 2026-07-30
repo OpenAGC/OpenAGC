@@ -25,10 +25,16 @@ runtime capability/qualification reporting are host-qualified. Public runtime
 compute and baseline graphics oracles now also passed on exact FW 5.50 through
 the direct DCB carrier, without application PM4 or firmware selection.
 
-1. **Own transitions and synchronization.** Track explicit resource usage and
-   derive qualified release/acquire/flush/invalidate actions internally. Add
-   bounded fences, multi-command-buffer submission, waits/signals, deferred
-   retirement, validation diagnostics, and capture/command-stream inspection.
+Milestone 4 typed command recording, resource states, and synchronization is
+complete for the documented support scope. Clean generic verification passes
+16,902 assertions and CTest 7/7. Nine cleanup-first runtime targets pass on
+exact standard PS5 FW 5.50, covering presentation, timeline waits, partial
+ownership, deferred retirement, and API-v22 command recycling. Optional
+extensions not qualified on FW 11.60 remain reported as unsupported; its
+identical firmware-neutral baseline remains 2/2 PASS.
+
+1. **Build validation, diagnostics, and capture.** Add the optional debug
+   layer and versioned command-stream capture/decoder described in Milestone 5.
 2. **Document and integrate.** Publish lifecycle, memory, shader, pipeline,
    synchronization, capability, error, and capture documentation. Qualify one
    long-running reference-game ELF unchanged on FW 5.50 and FW 11.60.
@@ -173,11 +179,11 @@ distinct default-mode scanout images, registers their dedicated direct-memory
 mappings without exposing pointers, retains them, and allows only a finite
 readiness-fence wait followed by a bounded flip from committed Graphics-owned
 `VideoOutScanout` state. Generic coverage passes the complete
-scanout-to-color-target-to-scanout lifecycle. Hardware qualification remains
-open: one-buffer FW 5.50 registration rejected safely, while the first
-two-buffer combined attempt stopped returning and left console services
-unreachable. That artifact must not be rerun; use only the staged replacement
-after reboot. See `analysis/runtime_present_attempt_fw550_20260731.md`.
+scanout-to-color-target-to-scanout lifecycle. The replacement five-stage
+cleanup-first ladder passes registration, initial transition, first flip,
+round-trip transition, final flip, and clean teardown on exact FW 5.50. The
+earlier combined artifact remains invalid and must not be rerun. See
+`analysis/runtime_present_attempt_fw550_20260731.md`.
 Runtime API v14 permits buffer/image retirement while submitted command or
 dependent-object references remain. Objects reject new use immediately, but
 the collector requires both the finite-wait fence and reference release before
@@ -187,8 +193,7 @@ recycling, and exact deferred/live-count/live-byte baselines; present-chain
 retention is also
 covered. Prospero builds the identical stress artifact with SHA-256
 `a3d04e6472c2cdd0ea09624cd3536dd5eb53345fa063aa5cee937636290852fb`,
-but it remains hardware-unqualified while the FW 5.50 websrv services are
-unreachable. See
+which passes all 32 cycles and clean teardown on exact FW 5.50. See
 `analysis/runtime_batch_deferred_retirement_host_20260731.md`.
 Runtime API v15 accepts `Undefined` as the documented discard destination.
 Discard is a zero-packet state change even after a writer; all other release,
@@ -237,32 +242,32 @@ reset clears only that reservation, pending ranges retain their dependency
 labels, and overlapping stale or independently recorded batch releases reject
 transactionally before driver mutation. Uniform range diagnostics expose one
 pending transfer while mixed coverage fails closed. Clean generic coverage
-passes 16,851 assertions; Prospero compilation is tracked separately from
-exact-firmware execution. See
+passes 16,851 assertions. Corrected two-range buffer and image carriers pass
+without a CPU inter-submit wait on exact FW 5.50. See
 `analysis/runtime_partial_ownership_transfers_host_20260731.md`.
-The first FW 5.50 attempt stopped before upload because the configured console
-accepted neither websrv port 8080 nor FTP port 2121; no hardware payload ran.
 Runtime API v21 gives GPU waits reached-or-passed timeline semantics. Command,
 submit-list, and ownership-acquire waits encode greater-or-equal comparison;
 submission accepts a requested point when the label has already advanced
 beyond it. Two disjoint buffer ranges and two disjoint image ranges now share
 one increasing label per resource in generic coverage. Clean generic coverage
-passes 16,852 assertions; exact-firmware qualification remains pending. See
+passes 16,852 assertions. The timeline wait and both corrected partial-range
+carriers pass with clean teardown on exact FW 5.50. See
 `analysis/runtime_gpu_timeline_waits_host_20260731.md`.
 Runtime API v22 adds atomic fence-driven command-buffer recycling. A bounded
 batch is fully validated before one fence poll; busy, duplicate, foreign, or
 invalid-state input changes no member. Once complete, every recorded reference
 is released and all storage returns to `Initial` together. The generic suite
-passes 16,902 assertions; see
+passes 16,902 assertions; the 32-cycle retirement artifact hardware-qualifies
+the operation on exact FW 5.50. See
 `analysis/runtime_command_recycling_host_20260731.md`.
-The pending FW 5.50 presentation stages, batch-retirement stress, timeline
-wait, and partial-range handoffs are exposed only through nine cleanup-first,
-SHA-256-pinned Make deployment targets.
+The FW 5.50 presentation stages, batch-retirement stress, timeline wait, and
+partial-range handoffs are exposed only through nine cleanup-first,
+SHA-256-pinned Make deployment targets; all nine pass.
 The shared runner verifies firmware, exact verdict, error-free device teardown,
 transport completion, and post-run service health. A host mock locks successful
 flow plus hash/verdict failure paths; CTest passes 7/7 suites. See
 `analysis/runtime_present_attempt_fw550_20260731.md` and
-`analysis/runtime_batch_deferred_retirement_host_20260731.md`.
+`analysis/runtime_milestone4_fw550_20260731.md`.
 Descriptor binds now fail closed without an explicit compatible typed state:
 read-only descriptors require `shader-read`; storage descriptors require
 `shader-read` or `shader-write` while reflection lacks per-binding access

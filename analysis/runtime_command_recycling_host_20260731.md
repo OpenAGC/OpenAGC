@@ -30,6 +30,9 @@ zero failures.
 
 ## Prospero qualification
 
-The guarded `agc_runtime_retirement_stress.elf` remains the exact-firmware
-oracle. Its rebuilt SHA-256 and FW 5.50 result are recorded after the guarded
-deployment in `runtime_batch_deferred_retirement_host_20260731.md`.
+The guarded `agc_runtime_retirement_stress.elf` passed all 32 cycles on exact
+standard PS5 FW 5.50 with SHA-256
+`a3d04e6472c2cdd0ea09624cd3536dd5eb53345fa063aa5cee937636290852fb`.
+Every cycle recycled two completed command buffers atomically before resource
+collection, and all final destroy calls returned `AGC_OK`. See
+`runtime_batch_deferred_retirement_host_20260731.md`.

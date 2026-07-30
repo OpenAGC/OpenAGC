@@ -186,12 +186,11 @@ finite ceiling. To render an image again, record a Graphics-owned
 `VideoOutScanout -> ColorTarget` transition; return it to
 `VideoOutScanout` before the next present.
 
-This contract is host-tested only. The first FW 5.50 one-buffer registration
-failed safely; a two-buffer combined registration/transition/flip attempt did
-not return and left console services unavailable. Do not rerun that combined
-artifact. The replacement carrier advances through registration-only,
-transition-only, first-flip, round-trip-transition, and final-flip stages after
-a console reboot. See
+The first FW 5.50 one-buffer registration failed safely; a two-buffer combined
+registration/transition/flip attempt did not return and remains invalid. Do
+not rerun that artifact. The replacement cleanup-first ladder passed
+registration-only, transition-only, first-flip, round-trip-transition, and
+final-flip stages with clean teardown on exact FW 5.50. See
 [`runtime_present_attempt_fw550_20260731.md`](../analysis/runtime_present_attempt_fw550_20260731.md).
 
 Runtime API v14 makes fence-keyed retirement usable for resources referenced
@@ -207,10 +206,11 @@ The generic stress fixture runs 32 two-command compute batches. Each batch
 transitions one buffer and one image through a v2 batch dependency, retires
 both objects against the batch fence while four command references remain,
 uses a 200 ms finite wait, proves pre-reset collection returns
-`AGC_ERROR_BUSY`, resets both commands, and returns deferred count, live
-allocation count, and live bytes to the exact baseline. It also proves a
-present-chain dependency delays image collection. The identical Prospero
-artifact is built but not yet deployed; see
+`AGC_ERROR_BUSY`, recycles both commands atomically, and returns deferred
+count, live allocation count, and live bytes to the exact baseline. It also
+proves a present-chain dependency delays image collection. The identical
+Prospero artifact passes all 32 cycles with clean teardown on exact FW 5.50;
+see
 [`runtime_batch_deferred_retirement_host_20260731.md`](../analysis/runtime_batch_deferred_retirement_host_20260731.md).
 
 Runtime API v15 makes `Undefined` a valid destination as well as an initial
@@ -486,6 +486,11 @@ until acquire submission. HTILE and other unqualified handoff forms remain
 fail-closed. Submit-list label dependencies remain available independently.
 Several disjoint releases may use increasing points from one label; a later
 submitted point cannot invalidate an earlier range's acquire.
+
+The reached-or-passed timeline carrier and corrected two-range buffer and
+image ownership carriers pass without CPU inter-submit waits on exact FW 5.50.
+See
+[`runtime_milestone4_fw550_20260731.md`](../analysis/runtime_milestone4_fw550_20260731.md).
 
 ## Current qualification boundary
 

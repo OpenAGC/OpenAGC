@@ -110,7 +110,7 @@ int main(void)
     if (result != AGC_OK)
         goto cleanup;
     command_desc.queue_type = kAgcQueueCompute;
-    command_desc.capacity_dwords = 32u;
+    command_desc.capacity_dwords = AGC_PARTIAL_HANDOFF ? 64u : 32u;
     result = agcCreateCommandBuffer(device, &command_desc,
         &signal_command_buffer);
     report_result("agcCreateCommandBuffer(signal)", result);

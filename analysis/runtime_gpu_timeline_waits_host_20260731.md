@@ -25,11 +25,9 @@ The generic suite verifies all three public paths:
 Packet checks lock compare function 5 for command, submit-list, and ownership
 waits. The complete generic executable passes 16,852 assertions.
 
-The partial buffer and image hardware probes now exercise two disjoint ranges
-with one shared label, and the timeline-wait probe advances the label to point
-2 before waiting for and acquiring point 1. These are Prospero build artifacts,
-not hardware evidence until their cleanup-first guarded targets complete on an
-exact endpoint.
+The partial buffer and image hardware probes exercise two disjoint ranges with
+one shared label, and the timeline-wait probe advances the label to point 2
+before waiting for and acquiring point 1.
 
 The three directly relevant artifacts reproduced across two consecutive
 builds and are pinned as:
@@ -37,10 +35,19 @@ builds and are pinned as:
 - timeline wait:
   `c30a07d6b8c55b495df9736476376e2e7d8869e17e90f1f7e98a60f85be6976f`
 - partial buffer handoff:
-  `7b55c694eb8fabcfaf17a7141725a0ca9814ade8afab56213a32f5d8ea07c501`
+  `2b78f787d8ab15ee972382102d566afaab2e06742b27953936aea3530e33ba80`
 - partial image handoff:
-  `07b17b74865d8c810655196ff6d02c6569b8561c4087f79033d765b16c745f1a`
+  `249125fd245037c720f409c9830a105a872310498217f15835536403189a8e2c`
 
 The API v21 FW 5.50 preflight stopped before upload because `10.0.1.41`
 accepted neither websrv port 8080 nor FTP port 2121. No payload ran and no
-hardware qualification claim changed.
+hardware qualification claim changed at that time.
+
+After websrv recovery, all three guarded targets passed on exact standard PS5
+FW 5.50. The timeline target observed point 2, successfully waited for and
+queried point 1, then submitted the cross-queue acquire without a CPU wait.
+The corrected 64-dword partial buffer/image variants each released and acquired
+two disjoint ranges at points 1 and 2. Every bounded fence and teardown
+operation completed with `AGC_OK`. Reached-or-passed waits and these two-range
+carriers are therefore hardware-qualified for exact FW 5.50; FW 11.60 remains
+unqualified for the extension.

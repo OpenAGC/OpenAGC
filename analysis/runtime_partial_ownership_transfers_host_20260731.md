@@ -41,26 +41,37 @@ queries, disjoint usability, overlap rejection, acquire reservation reset,
 exact range publication, dependency-label retention, and transactional batch
 overlap rejection. The complete generic executable passes 16,852 assertions.
 
-This is host-tested and Prospero-compiled behavior, not new hardware evidence.
-Exact FW 5.50 and FW 11.60 execution must use cleanup-first guarded artifacts
-and be recorded separately before the partial-range protocol is described as
-hardware-qualified.
+This behavior is host-tested and Prospero-compiled. The exact FW 5.50 result
+below additionally qualifies the two-disjoint-range carriers; FW 11.60 remains
+unqualified for this optional extension.
 
 Two reproducible cleanup-first FW 5.50 probes are pinned for that gate:
 
 - partial buffer handoff:
-  `7b55c694eb8fabcfaf17a7141725a0ca9814ade8afab56213a32f5d8ea07c501`
+  `2b78f787d8ab15ee972382102d566afaab2e06742b27953936aea3530e33ba80`
 - partial image mip/layer handoff:
-  `07b17b74865d8c810655196ff6d02c6569b8561c4087f79033d765b16c745f1a`
+  `249125fd245037c720f409c9830a105a872310498217f15835536403189a8e2c`
 
 Runtime API v21 strengthens each probe to release and acquire two disjoint
 ranges through one increasing label. The repinned guarded targets require FW
 ABI `0x0550`, exact PASS verdicts, cleanup-first launch, and post-run service
 recovery.
 
-## FW 5.50 attempt
+## FW 5.50 qualification
 
 The first gate attempt stopped before upload: the configured console at
 `10.0.1.41` accepted neither websrv TCP port 8080 nor FTP port 2121. No cleanup
-or test ELF was launched, so this records no GPU result and changes no hardware
-qualification label. Retry only after etaHEN/websrv exposes both services.
+or test ELF was launched.
+
+After service recovery, the first buffer artifact reached both release records
+but its 32-dword command capacity could not fit two acquire waits plus the
+runtime-owned EOP fence. Submission returned
+`AGC_ERROR_COMMAND_SPACE_EXHAUSTED` before driver mutation. The console and
+websrv stayed healthy. The partial variants now allocate 64 dwords; both
+corrected artifacts reproduced across two builds.
+
+The corrected buffer and image targets then passed on exact FW 5.50. Each
+submitted two disjoint compute releases at label points 1 and 2 followed by
+two graphics acquires without a CPU wait. Both bounded fences completed and
+all labels, resources, command buffers, queues, fences, and devices destroyed
+with `AGC_OK`.
