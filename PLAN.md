@@ -100,6 +100,10 @@ Execute in this order:
    hardware-qualified application-facing 5/7-dword path, select the sole FW
    3.20 initiator difference by exact runtime key, and lock modifier,
    count-address, GetSize, cursor, and short-buffer behavior with fixtures.
+   The exact fixed-count non-indexed 10-dword form passed twice on FW11.60
+   through a cleanup-first bounded gate. Keep the 5/7-dword application path
+   as the default until the same Sony form passes on FW5.50; indexed and
+   count-buffer multi-draw remain separate qualification gates.
 9. Resume higher-level parity work only with firmware-neutral artifacts so
    each new game-facing capability strengthens the one-binary contract.
 

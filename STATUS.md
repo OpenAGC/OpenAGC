@@ -726,11 +726,20 @@ initiator variant. FW 3.20 alone preserves modifier bits 5-7 in initiator bits
 also corrected: `1q1titRBL6o` is `sceAgcDcbDrawIndirect`, while
 `1rZSWUv1IRc` is `sceAgcDcbCopyData`.
 
-These Sony-compatible exports are SPRX-qualified and host-tested, not newly
-hardware-qualified. The earlier failed Mesa-style ten-dword experiment used a
-different layout. `agcGfx1013DrawBaselineIndirect` retains the hardware-proven
-5/7-dword application stream and its 45/55-dword exact fixtures. See
-`analysis/agc_indirect_draw_abi.md`.
+The fixed-count non-indexed Sony 10-dword form is now hardware-qualified on
+FW `0x11600005`. Two cleanup-first headless runs emitted and audited
+`{c0082c00,00000000,0000008f,00000090,00000280,00000001,00000000,`
+`00000000,00000010,00000002}`, reached the fence immediately, changed
+255,744 FP16 pixels with the exact `0x4a40c2eb4f12bc26` oracle, shut down
+cleanly, and left websrv and FTP responsive. The earlier failed Mesa-style
+ten-dword experiment used a different layout.
+
+This result does not yet promote the Sony packet to the application default.
+FW 5.50 still needs the same fixed-count gate, and indexed plus count-buffer
+multi-draw remain untested. `agcGfx1013DrawBaselineIndirect` therefore retains
+the hardware-proven 5/7-dword application stream and its 45/55-dword exact
+fixtures. See `analysis/agc_indirect_draw_abi.md` and
+`analysis/fw1160_sony_multi_indirect_qualification_20260730.md`.
 
 ## Application-facing indexed/indirect draw composition (2026-07-27)
 

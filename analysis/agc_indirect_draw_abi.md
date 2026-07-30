@@ -74,10 +74,16 @@ cursor or contents.
 
 ## Qualification boundary
 
-The Sony-compatible ten-dword exports are SPRX-qualified and host-tested, not
-hardware-qualified. The earlier FW 5.50 failure involved a different,
-Mesa-style ten-dword experiment and does not validate or invalidate these
-recovered Sony bytes. The application-facing
+The fixed-count non-indexed Sony-compatible ten-dword export is
+hardware-qualified on FW 11.60. Its isolated gate passed twice with exact
+packet auditing, an immediate completion fence, the complete FP16 render
+oracle, clean teardown, and responsive loader services afterward. Indexed and
+count-buffer forms remain SPRX-qualified and host-tested only.
+
+The earlier FW 5.50 failure involved a different, Mesa-style ten-dword
+experiment and does not validate or invalidate these recovered Sony bytes.
+Until the exact Sony form also passes on FW 5.50, the application-facing
 `agcGfx1013DrawBaselineIndirect` path deliberately retains its separately
 qualified fixed-count 5/7-dword packets. Existing exact 45/55-dword stream
-fixtures protect that separation from regression.
+fixtures protect that separation from regression. See
+`fw1160_sony_multi_indirect_qualification_20260730.md` for the hardware record.
