@@ -333,6 +333,8 @@ static void test_common_operation_carrier_profiles(void)
         AgcGfx1013ColorTargetState rgba16_uint_target;
         AgcGfx1013ColorTargetFormatInfo r16_sint_info;
         AgcGfx1013ColorTargetState r16_sint_target;
+        AgcGfx1013ColorTargetFormatInfo rg16_sint_info;
+        AgcGfx1013ColorTargetState rg16_sint_target;
         uint32_t raw = active_raw_versions[i];
         uint16_t key = (uint16_t)(raw >> 16);
         uint8_t major_bcd = (uint8_t)(key >> 8);
@@ -539,6 +541,27 @@ static void test_common_operation_carrier_profiles(void)
         TEST_ASSERT_EQ(r16_sint_target.number_type,
             AGC_GFX1013_SURFACE_NUMBER_SINT,
             "active profile receives the same typed R16 SINT state");
+        TEST_ASSERT_EQ(agcGfx1013GetColorTargetFormatInfo(
+            AGC_GFX1013_RT_FORMAT_RG16_SINT, &rg16_sint_info), AGC_OK,
+            "firmware-neutral RG16 SINT tuple resolves for active profile");
+        TEST_ASSERT_EQ(rg16_sint_info.color_format,
+            AGC_GFX1013_COLOR_FORMAT_16_16,
+            "active profile shares the gfx1013 signed 16+16 encoding");
+        TEST_ASSERT_EQ(rg16_sint_info.number_type,
+            AGC_GFX1013_SURFACE_NUMBER_SINT,
+            "active profile shares the two-channel SINT number encoding");
+        TEST_ASSERT_EQ(rg16_sint_info.bytes_per_pixel, 4u,
+            "active profile shares the four-byte RG16 SINT element size");
+        TEST_ASSERT_EQ(rg16_sint_info.spi_shader_export_format,
+            AGC_GFX1013_SPI_EXPORT_SINT16_ABGR,
+            "active profile shares the packed RG16 SINT export encoding");
+        TEST_ASSERT_EQ(agcGfx1013InitColorTarget(&rg16_sint_target,
+            UINT64_C(0x0000000201000000), 1536u, 1536u,
+            AGC_GFX1013_RT_FORMAT_RG16_SINT), AGC_OK,
+            "firmware-neutral RG16 SINT target initializes");
+        TEST_ASSERT_EQ(rg16_sint_target.number_type,
+            AGC_GFX1013_SURFACE_NUMBER_SINT,
+            "active profile receives the same typed RG16 SINT state");
         TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_TF_RING) != 0,
             "active profile exposes exact public TF-ring carrier");
         TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_MEMORY) != 0,
