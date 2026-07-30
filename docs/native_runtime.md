@@ -239,5 +239,7 @@ compiler-artifact contract and its Prospero cross-build pass. Both linear
 RGBA8 targets are prefilled through `agcWriteImage`, then read through
 `agcReadImage` after the bounded fence wait; the probe requires each MRT output
 to replace the sentinel over matching coverage and to differ from the other
-output. The probe has not been deployed
+output. Every native graphics bind also begins with the exact 2,184-dword FW
+5.50 V8 graphics-default prefix before shader and fixed-function state; the
+probe therefore reserves 4,096 dwords. The probe has not been deployed
 or hardware-qualified.

@@ -293,7 +293,9 @@ dynamic-state submission contract, and builds `agc_runtime_graphics.elf`.
 The standalone probe prefills its two linear RGBA8 targets through the native
 image-transfer API, then requires post-fence MRT readback to replace the
 sentinel over matching coverage with distinct outputs. It has not been
-deployed and is not yet a hardware qualification.
+deployed and is not yet a hardware qualification. Its runtime graphics bind
+starts with the exact 2,184-dword V8 default sequence before pipeline state;
+the host capture fixture locks that prefix and the probe reserves 4,096 dwords.
 `agcGetRuntimeInfo` keeps native runtime capabilities host-tested until a
 public runtime artifact passes its own exact-firmware oracle; hardware evidence
 for an underlying direct carrier does not promote an unrun runtime slice.

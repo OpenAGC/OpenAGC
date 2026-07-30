@@ -1042,6 +1042,8 @@ static void test_runtime_compiler_graphics_sidecar(void)
     AgcCommandBuffer command = NULL;
     const AgcCommandBufferSubmit *captured;
     const uint32_t *words;
+    uint32_t expected_defaults[2184] = {0};
+    SceAgcCb defaults_cb;
     uint32_t value;
 
     TEST_ASSERT_EQ(runtime_triangle_vert_reflection_bytes_size,
@@ -1111,7 +1113,7 @@ static void test_runtime_compiler_graphics_sidecar(void)
         "compiler-sidecar first color target creates");
     TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &second_image), AGC_OK,
         "compiler-sidecar second color target creates");
-    command_desc.capacity_dwords = 512u;
+    command_desc.capacity_dwords = 4096u;
     TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
         AGC_OK, "compiler-sidecar graphics command buffer creates");
     TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
@@ -1146,6 +1148,13 @@ static void test_runtime_compiler_graphics_sidecar(void)
         "compiler-sidecar graphics command buffer submits on host");
     captured = agcDriverDebugLastDcbSubmit();
     words = (const uint32_t *)(uintptr_t)captured->command_address;
+    agcCbInit(&defaults_cb, expected_defaults, sizeof(expected_defaults));
+    TEST_ASSERT_EQ(agcGfx1013ApplyGraphicsDefaultsV8(&defaults_cb, NULL),
+        AGC_OK, "native graphics default fixture emits");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&defaults_cb), 2184u,
+        "native graphics default fixture has qualified V8 size");
+    TEST_ASSERT(memcmp(words, expected_defaults, sizeof(expected_defaults)) == 0,
+        "native graphics submission begins with qualified V8 defaults");
     TEST_ASSERT(runtime_find_context_register(words, captured->dword_count,
         AGC_REG_CB_COLOR0_BASE, &value) && value != 0u,
         "compiler-sidecar submission includes its first color target");
@@ -1204,7 +1213,7 @@ static void test_runtime_indexed_graphics_submission(void)
     pipeline_desc.pixel_shader = ps;
     buffer_desc.size = 64u;
     buffer_desc.usage = AGC_BUFFER_USAGE_INDEX_BIT;
-    command_desc.capacity_dwords = 100u;
+    command_desc.capacity_dwords = 4096u;
     TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc, &pipeline),
         AGC_OK, "graphics pipeline creation succeeds");
     TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &index_buffer), AGC_OK,
@@ -1231,8 +1240,8 @@ static void test_runtime_indexed_graphics_submission(void)
     TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
         "indexed graphics command buffer submits");
     captured = agcDriverDebugLastDcbSubmit();
-    TEST_ASSERT_EQ(captured->dword_count, 100u,
-        "indexed graphics submission captures pipeline bind and draw");
+    TEST_ASSERT_EQ(captured->dword_count, 2284u,
+        "indexed graphics submission includes qualified defaults and draw");
     words = (const uint32_t *)(uintptr_t)captured->command_address;
     TEST_ASSERT_EQ(captured->command_address & 0xffu, 0u,
         "graphics submission command allocation is GPU-address aligned");
@@ -1360,7 +1369,7 @@ static void test_runtime_color_target_binding(void)
     buffer_desc.usage = AGC_BUFFER_USAGE_INDEX_BIT;
     TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &index_buffer), AGC_OK,
         "color-target index buffer creates");
-    command_desc.capacity_dwords = 256u;
+    command_desc.capacity_dwords = 4096u;
     TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
         AGC_OK, "color-target command buffer creates");
     TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
@@ -1486,7 +1495,7 @@ static void test_runtime_mrt_color_target_binding(void)
     buffer_desc.usage = AGC_BUFFER_USAGE_INDEX_BIT;
     TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &index_buffer), AGC_OK,
         "MRT index buffer creates");
-    command_desc.capacity_dwords = 512u;
+    command_desc.capacity_dwords = 4096u;
     TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
         AGC_OK, "MRT command buffer creates");
     TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
@@ -1609,7 +1618,7 @@ static void test_runtime_depth_stencil_target_binding(void)
     buffer_desc.usage = AGC_BUFFER_USAGE_INDEX_BIT;
     TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &index_buffer), AGC_OK,
         "depth-target index buffer creates");
-    command_desc.capacity_dwords = 256u;
+    command_desc.capacity_dwords = 4096u;
     TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
         AGC_OK, "depth-target command buffer creates");
     TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
@@ -1687,7 +1696,7 @@ static void test_runtime_command_space_atomic_failure(void)
     pipeline_desc.pixel_shader = ps;
     buffer_desc.size = 64u;
     buffer_desc.usage = AGC_BUFFER_USAGE_INDEX_BIT;
-    command_desc.capacity_dwords = 93u;
+    command_desc.capacity_dwords = 2277u;
     TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc, &pipeline),
         AGC_OK, "small-buffer graphics pipeline creation succeeds");
     TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &index_buffer), AGC_OK,
@@ -2744,7 +2753,7 @@ static void test_runtime_indirect_descriptor_set_table(void)
         "indirect descriptor-set reflection creates compute pipeline");
 
     command_desc.queue_type = kAgcQueueCompute;
-    command_desc.capacity_dwords = 512u;
+    command_desc.capacity_dwords = 4096u;
     TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
         AGC_OK, "indirect descriptor command buffer creates");
     TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
@@ -2882,7 +2891,7 @@ static void test_runtime_geometry_pipeline_bundle(void)
     buffer_desc.usage = AGC_BUFFER_USAGE_INDEX_BIT;
     TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &index_buffer),
         AGC_OK, "geometry index buffer creates");
-    command_desc.capacity_dwords = 256u;
+    command_desc.capacity_dwords = 4096u;
     TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
         AGC_OK, "geometry command buffer creates");
     TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
@@ -3261,7 +3270,7 @@ static void test_runtime_tessellation_pipeline_bundles(void)
     buffer_desc.usage = AGC_BUFFER_USAGE_INDEX_BIT;
     TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &index_buffer),
         AGC_OK, "tessellation index buffer creates");
-    command_desc.capacity_dwords = 512u;
+    command_desc.capacity_dwords = 4096u;
     TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
         AGC_OK, "tessellation command buffer creates");
     TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,

@@ -39,6 +39,7 @@
 #define AGC_FLEXIBLE_ALIGNMENT UINT64_C(0x100)
 #define AGC_GARLIC_ALIGNMENT UINT64_C(0x10000)
 #define AGC_RUNTIME_PIPELINE_BIND_MAX_DWORDS 2048u
+#define AGC_RUNTIME_GRAPHICS_DEFAULT_DWORDS 2184u
 #define AGC_RUNTIME_MAX_DESCRIPTOR_WRITES 256u
 #define AGC_RUNTIME_MAX_RECORDED_RESOURCES 512u
 #define AGC_RUNTIME_MAX_RESOURCE_ARENA_SIZE UINT64_C(0x100000)
@@ -4103,6 +4104,9 @@ static int32_t agcCommandCommitScratch(AgcCommandBuffer command_buffer,
 int32_t PS5_SYSV_ABI agcCmdBindGraphicsPipeline(
     AgcCommandBuffer command_buffer, AgcGraphicsPipeline pipeline)
 {
+    uint32_t defaults[AGC_RUNTIME_GRAPHICS_DEFAULT_DWORDS];
+    SceAgcCb defaults_cb;
+    uint32_t defaults_dword_count;
     int32_t result;
 
     if (!command_buffer || command_buffer->magic != AGC_MAGIC_COMMAND_BUFFER ||
@@ -4119,13 +4123,27 @@ int32_t PS5_SYSV_ABI agcCmdBindGraphicsPipeline(
         return AGC_ERROR_NOT_SUPPORTED;
     if (!command_buffer->graphics_pipeline) {
         uint32_t *commands;
+        agcCbInit(&defaults_cb, defaults, sizeof(defaults));
+        /* Mirror the qualified FW 5.50 graphics path: establish V8 register
+         * defaults before runtime-owned shader and fixed-function state.
+         * CLEAR_STATE remains excluded because it is not hardware-safe here. */
+        result = agcGfx1013ApplyGraphicsDefaultsV8(&defaults_cb, NULL);
+        if (result != AGC_OK)
+            return result == AGC_ERROR_BUFFER_TOO_SMALL ?
+                AGC_ERROR_COMMAND_SPACE_EXHAUSTED : result;
+        defaults_dword_count = (uint32_t)agcCbUsedDwords(&defaults_cb);
         if (agcCbRemainingDwords(&command_buffer->cursor) <
-            pipeline->bind_dword_count)
+            defaults_dword_count + pipeline->bind_dword_count)
             return AGC_ERROR_COMMAND_SPACE_EXHAUSTED;
         result = agcPrepareCommandResources(
             command_buffer, &pipeline->resource_layout);
         if (result != AGC_OK)
             return result;
+        commands = agcCbAllocDwords(&command_buffer->cursor,
+            defaults_dword_count);
+        if (!commands)
+            return AGC_ERROR_INTERNAL;
+        memcpy(commands, defaults, defaults_dword_count * sizeof(uint32_t));
         commands = agcCbAllocDwords(
             &command_buffer->cursor, pipeline->bind_dword_count);
         if (!commands)

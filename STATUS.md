@@ -255,7 +255,9 @@ dynamic viewport/scissor state, and a bounded-fence submission without raw PM4
 assembly. The native probe initializes both targets with `agcWriteImage` and
 requires `agcReadImage` to observe matching overwritten coverage and distinct
 MRT0/MRT1 outputs after the fence. The artifact cross-builds, but has not been
-deployed and no hardware qualification is claimed.
+deployed and no hardware qualification is claimed. Native graphics binds now
+emit the 2,184-dword V8 graphics-default prefix before their cached pipeline
+state; host capture locks this ordering and the probe reserves 4,096 dwords.
 `agcGetRuntimeInfo` therefore keeps the native runtime capabilities
 host-tested: separate hardware evidence for an underlying direct carrier does
 not promote an unrun public runtime slice.
