@@ -627,6 +627,10 @@ the runner and shared teardown on FW 11.60 only.
   The identical artifact's observed selected count is `7982`, with zero
   outside changes, so the guarded recipe now freezes `7982`. Run one
   enforcement replay before the FW 11.60 mip mirror.
+- The frozen FW 5.50 mip replay reproduced `7982`, zero outside change, exact
+  `56832/56832` color, clean shutdown, and no residual process. Current-source
+  mip isolation is qualified on FW 5.50. Run the pinned FW 11.60 mip artifact
+  next and freeze its selected count before replay.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and

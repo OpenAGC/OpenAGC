@@ -202,6 +202,12 @@ artifact had already exposed the exact selected count `7982`, the recipe now
 freezes `7982`. Run one enforcement replay before promoting the FW 5.50 mip
 tuple and moving to its exact FW 11.60 mirror.
 
+The frozen FW 5.50 mip replay reproduced `7982` selected words, zero outside
+change, exact `56832/56832` color, bounded completion, clean shutdown, final
+PASS, and no residual process. Current-source mip-1 HTILE isolation is
+hardware-qualified on FW 5.50. Run the pinned FW 11.60 mip artifact next,
+establish and freeze its selected count, and replay before array-layer work.
+
 That prerequisite sequence is now complete. Two relinks against the committed
 shader records reproduced all eight artifacts byte-for-byte, and dependency
 inspection found only VideoOut, kernel, libc, and networking. The exact FW

@@ -144,7 +144,10 @@ require that exact value. The same pinned FW 5.50 artifact must be rerun before
 the metadata count is frozen. The corrected-wrapper run then passed all
 bounded oracles and left no process; the recipe now freezes the identical
 artifact's observed `7982` selected words with zero outside change. One
-enforcement replay remains.
+enforcement replay reproduced `7982`, zero outside change, exact
+`56832/56832` color, clean shutdown, and no residual process. Current-source
+mip isolation is hardware-qualified on FW 5.50; its pinned FW 11.60 mirror is
+now active.
 
 Ordinary D16 HTILE is now hardware-qualified twice on each endpoint. The
 pinned current-source artifacts reproduced exact D16 classes, clean teardown,
