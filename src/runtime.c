@@ -5585,6 +5585,59 @@ static int agcCommandRetainGpuLabel(AgcCommandBuffer command_buffer,
     return 1;
 }
 
+static int agcRuntimeDescriptorUsageMatches(
+    AgcShaderDescriptorType descriptor_type, AgcResourceUsage usage)
+{
+    switch (descriptor_type) {
+    case AGC_SHADER_DESCRIPTOR_SAMPLED_IMAGE:
+    case AGC_SHADER_DESCRIPTOR_COMBINED_IMAGE_SAMPLER:
+    case AGC_SHADER_DESCRIPTOR_INPUT_ATTACHMENT:
+    case AGC_SHADER_DESCRIPTOR_UNIFORM_TEXEL_BUFFER:
+    case AGC_SHADER_DESCRIPTOR_UNIFORM_BUFFER:
+        return usage == kAgcResourceUsageShaderRead;
+    case AGC_SHADER_DESCRIPTOR_STORAGE_IMAGE:
+    case AGC_SHADER_DESCRIPTOR_STORAGE_TEXEL_BUFFER:
+    case AGC_SHADER_DESCRIPTOR_STORAGE_BUFFER:
+        /* Current reflection describes descriptor type but not per-binding
+         * access qualifiers. Require an explicit shader-readable or writable
+         * state; future read/write access metadata can narrow this safely. */
+        return usage == kAgcResourceUsageShaderRead ||
+            usage == kAgcResourceUsageShaderWrite;
+    default:
+        return 1;
+    }
+}
+
+static int32_t agcCommandValidateDescriptorBufferState(
+    AgcCommandBuffer command_buffer, const AgcBuffer buffer,
+    AgcShaderDescriptorType descriptor_type)
+{
+    AgcResourceUsage usage;
+    AgcResourceOwner owner;
+
+    agcCommandTransitionState(command_buffer, kAgcResourceTypeBuffer,
+        (void *)buffer, &usage, &owner);
+    if (owner != agcRuntimeCommandOwner(command_buffer) ||
+        !agcRuntimeDescriptorUsageMatches(descriptor_type, usage))
+        return AGC_ERROR_INVALID_STATE;
+    return AGC_OK;
+}
+
+static int32_t agcCommandValidateDescriptorImageState(
+    AgcCommandBuffer command_buffer, const AgcImage image,
+    AgcShaderDescriptorType descriptor_type)
+{
+    AgcResourceUsage usage;
+    AgcResourceOwner owner;
+
+    agcCommandTransitionState(command_buffer, kAgcResourceTypeImage,
+        (void *)image, &usage, &owner);
+    if (owner != agcRuntimeCommandOwner(command_buffer) ||
+        !agcRuntimeDescriptorUsageMatches(descriptor_type, usage))
+        return AGC_ERROR_INVALID_STATE;
+    return AGC_OK;
+}
+
 static int32_t agcCommandEncodeDescriptor(
     AgcCommandBuffer command_buffer, const AgcDescriptorWrite *write,
     const AgcShaderDescriptorMapping *mapping,
@@ -5622,9 +5675,13 @@ static int32_t agcCommandEncodeDescriptor(
              (write->image_view->image->desc.usage &
               AGC_IMAGE_USAGE_STORAGE_BIT) == 0u) ||
             (mapping->type != AGC_SHADER_DESCRIPTOR_STORAGE_IMAGE &&
-             (write->image_view->image->desc.usage &
-              AGC_IMAGE_USAGE_SAMPLED_BIT) == 0u))
+            (write->image_view->image->desc.usage &
+             AGC_IMAGE_USAGE_SAMPLED_BIT) == 0u))
             return AGC_ERROR_RESOURCE_INVALID;
+        result = agcCommandValidateDescriptorImageState(command_buffer,
+            write->image_view->image, mapping->type);
+        if (result != AGC_OK)
+            return result;
         memcpy(encoded->bytes,
             agcAllocationCpuAddress(write->image_view->allocation), size);
         encoded->view = write->image_view;
@@ -5638,6 +5695,10 @@ static int32_t agcCommandEncodeDescriptor(
             (write->image_view->image->desc.usage &
              AGC_IMAGE_USAGE_SAMPLED_BIT) == 0u)
             return AGC_ERROR_RESOURCE_INVALID;
+        result = agcCommandValidateDescriptorImageState(command_buffer,
+            write->image_view->image, mapping->type);
+        if (result != AGC_OK)
+            return result;
         memcpy(encoded->bytes,
             agcAllocationCpuAddress(write->image_view->allocation),
             sizeof(AgcGfx1013ImageDescriptor));
@@ -5669,7 +5730,11 @@ static int32_t agcCommandEncodeDescriptor(
         if (range == 0u || range >
             write->buffer->size - write->buffer_offset ||
             range > UINT32_MAX)
-            return AGC_ERROR_RESOURCE_INVALID;
+                return AGC_ERROR_RESOURCE_INVALID;
+        result = agcCommandValidateDescriptorBufferState(command_buffer,
+            write->buffer, mapping->type);
+        if (result != AGC_OK)
+            return result;
         address = agcAllocationGpuAddress(write->buffer->allocation) +
             write->buffer_offset;
         if (write->buffer_stride != 0u) {

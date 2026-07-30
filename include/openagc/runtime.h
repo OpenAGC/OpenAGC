@@ -1149,6 +1149,10 @@ int32_t PS5_SYSV_ABI agcCmdTransitionResources(
 int32_t PS5_SYSV_ABI agcCmdCopyBuffer(AgcCommandBuffer command_buffer,
     AgcBuffer source, uint64_t source_offset, AgcBuffer destination,
     uint64_t destination_offset, uint64_t size);
+/* Descriptor resources must already have a compatible explicit typed state
+ * on this command buffer's queue. Read-only descriptors require ShaderRead;
+ * storage descriptors accept ShaderRead or ShaderWrite until reflection
+ * carries per-binding read/write access qualifiers. */
 int32_t PS5_SYSV_ABI agcCmdBindDescriptors(AgcCommandBuffer command_buffer,
     uint32_t write_count, const AgcDescriptorWrite *writes);
 int32_t PS5_SYSV_ABI agcCmdBindVertexBuffers(AgcCommandBuffer command_buffer,

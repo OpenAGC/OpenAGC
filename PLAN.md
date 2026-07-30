@@ -523,6 +523,14 @@ final host readback in one three-DCB batch on exact standard PS5 FW 5.50.
 Images, graphics consumers, cross-queue ownership, partial ranges,
 multi-packet copies, and other firmware profiles remain open.
 
+Descriptor tables now fail closed before command emission unless their
+resources have an explicit compatible typed state on the recording queue.
+Read-only descriptor types require `shader-read`; storage descriptors accept
+`shader-read` or `shader-write` pending per-binding access metadata in the
+reflection contract. Generic negative coverage and the exact FW 5.50 reflected
+compute-copy-shader workload passed the gate; see
+`analysis/runtime_descriptor_state_gate_fw550_20260731.md`.
+
 Runtime API v8 adds the first typed queue-ownership handoff: a v2 transition
 releases a whole GPU-written resource on its source queue and writes the
 caller-provided monotonic label value, while the matching destination-side v2

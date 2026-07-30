@@ -141,6 +141,12 @@ bounded batch fence, and 64-word final readback on exact standard PS5 FW 5.50;
 see `analysis/runtime_compute_copy_shader_fw550_20260731.md`. Images,
 graphics consumers, cross-queue ownership, partial ranges, multi-packet
 copies, and FW 11.60 remain unqualified.
+Descriptor binds now fail closed without an explicit compatible typed state:
+read-only descriptors require `shader-read`; storage descriptors require
+`shader-read` or `shader-write` while reflection lacks per-binding access
+qualifiers. Generic negative coverage and the exact FW 5.50 reflected
+compute-copy-shader workload passed this gate; see
+`analysis/runtime_descriptor_state_gate_fw550_20260731.md`.
 
 ## Native resource and memory management complete (2026-07-30)
 

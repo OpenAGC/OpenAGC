@@ -963,6 +963,7 @@ static void test_runtime_compiler_reflection_sidecar(void)
     AgcBufferDesc buffer_desc = AGC_BUFFER_DESC_INIT;
     AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
     AgcDescriptorWrite write = AGC_DESCRIPTOR_WRITE_INIT;
+    AgcResourceTransition transition = AGC_RESOURCE_TRANSITION_INIT;
     AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
     AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
     AgcShader shader = NULL;
@@ -1024,6 +1025,18 @@ static void test_runtime_compiler_reflection_sidecar(void)
     write.type = reflection.descriptor_mappings[0].type;
     write.buffer = buffer;
     write.buffer_range = buffer_desc.size;
+    TEST_ASSERT_EQ(agcCmdBindDescriptors(command_buffer, 1u, &write),
+        AGC_ERROR_INVALID_STATE,
+        "native compute sidecar rejects untransitioned storage descriptor");
+    transition.resource_type = kAgcResourceTypeBuffer;
+    transition.buffer = buffer;
+    transition.buffer_size = buffer_desc.size;
+    transition.before = kAgcResourceUsageUndefined;
+    transition.after = kAgcResourceUsageShaderWrite;
+    transition.before_owner = kAgcResourceOwnerHost;
+    transition.after_owner = kAgcResourceOwnerCompute;
+    TEST_ASSERT_EQ(agcCmdTransitionResources(command_buffer, 1u, &transition),
+        AGC_OK, "native compute sidecar storage state records");
     TEST_ASSERT_EQ(agcCmdBindDescriptors(command_buffer, 1u, &write), AGC_OK,
         "native compute sidecar storage descriptor binds");
     TEST_ASSERT_EQ(agcCmdPushConstants(command_buffer,
@@ -4031,6 +4044,7 @@ static void test_runtime_pipeline_layout_and_stage_validation(void)
         AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
         AgcBufferDesc buffer_desc = AGC_BUFFER_DESC_INIT;
         AgcDescriptorWrite write = AGC_DESCRIPTOR_WRITE_INIT;
+        AgcResourceTransition transition = AGC_RESOURCE_TRANSITION_INIT;
         AgcComputePipeline compute = NULL;
         AgcCommandBuffer command = NULL;
         AgcBuffer storage = NULL;
@@ -4092,6 +4106,15 @@ static void test_runtime_pipeline_layout_and_stage_validation(void)
             AGC_OK, "replacement reflected storage buffer creates");
         write.type = AGC_SHADER_DESCRIPTOR_STORAGE_BUFFER;
         write.buffer = storage;
+        transition.resource_type = kAgcResourceTypeBuffer;
+        transition.buffer = storage;
+        transition.buffer_size = buffer_desc.size;
+        transition.before = kAgcResourceUsageUndefined;
+        transition.after = kAgcResourceUsageShaderWrite;
+        transition.before_owner = kAgcResourceOwnerHost;
+        transition.after_owner = kAgcResourceOwnerCompute;
+        TEST_ASSERT_EQ(agcCmdTransitionResources(command, 1u, &transition),
+            AGC_OK, "reflected storage write state records");
         TEST_ASSERT_EQ(agcCmdBindDescriptors(command, 1u, &write), AGC_OK,
             "matching reflected descriptor binds");
         TEST_ASSERT_EQ(agcCmdDispatch(command, 1u, 1u, 1u),
@@ -4154,6 +4177,7 @@ static void test_runtime_indirect_descriptor_set_table(void)
     AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
     AgcBufferDesc buffer_desc = AGC_BUFFER_DESC_INIT;
     AgcDescriptorWrite write = AGC_DESCRIPTOR_WRITE_INIT;
+    AgcResourceTransition transition = AGC_RESOURCE_TRANSITION_INIT;
     AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
     AgcComputePipeline pipeline = NULL;
     AgcCommandBuffer command = NULL;
@@ -4202,6 +4226,15 @@ static void test_runtime_indirect_descriptor_set_table(void)
     write.binding = 3u;
     write.type = AGC_SHADER_DESCRIPTOR_STORAGE_BUFFER;
     write.buffer = storage;
+    transition.resource_type = kAgcResourceTypeBuffer;
+    transition.buffer = storage;
+    transition.buffer_size = buffer_desc.size;
+    transition.before = kAgcResourceUsageUndefined;
+    transition.after = kAgcResourceUsageShaderWrite;
+    transition.before_owner = kAgcResourceOwnerHost;
+    transition.after_owner = kAgcResourceOwnerCompute;
+    TEST_ASSERT_EQ(agcCmdTransitionResources(command, 1u, &transition), AGC_OK,
+        "indirect descriptor storage write state records");
     TEST_ASSERT_EQ(agcCmdBindDescriptors(command, 1u, &write), AGC_OK,
         "indirect descriptor table receives reflected set");
     TEST_ASSERT_EQ(agcCmdDispatch(command, 1u, 1u, 1u), AGC_OK,

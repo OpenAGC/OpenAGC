@@ -143,6 +143,13 @@ host readback. It runs as one three-DCB batch with a bounded fence; see
 Large/multi-packet copies, images, graphics queues, cross-queue ownership,
 partial ranges, and other firmware profiles remain unqualified.
 
+Descriptor binding is also state-gated before descriptor-table mutation:
+sampled, uniform, and input descriptors require `ShaderRead`; storage
+descriptors require `ShaderRead` or `ShaderWrite`. The latter remains broad
+until reflection carries access qualifiers. The FW 5.50 compute/copy/consumer
+oracle passes this gate; see
+[`runtime_descriptor_state_gate_fw550_20260731.md`](../analysis/runtime_descriptor_state_gate_fw550_20260731.md).
+
 `AgcGpuLabel` provides the first GPU-side dependency primitive. A producer
 records `agcCmdSignalGpuLabel`; it emits the qualified EOP release write. A
 consumer records `agcCmdWaitGpuLabel`; it emits a 32-bit `WAIT_REG_MEM` exact
