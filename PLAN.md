@@ -124,7 +124,7 @@ and relaunch. The FW5.50 identical-byte run remains pending. See
 
 The offline endpoint audit is complete. Full nonzero-suffix raw versions now
 exercise normalization, exact selection, and common-V7 acceptance for all 39
-profiles; the clean host suite passes 5,901 assertions. All relevant SPRX
+profiles; the clean host suite passes 6,110 assertions. All relevant SPRX
 ledgers reproduce from `/Volumes/Untitled/unp`, and
 `tools/verify_fw550_fw1160_compatibility.py` locks every shared layout and
 classified endpoint difference. The FW5.50 target now uses only preserved
@@ -235,6 +235,17 @@ the runner and shared teardown on FW 11.60 only.
   Replay those exact bytes on FW 5.50 when available; all other active
   profiles remain SPRX-qualified/hardware-unverified. See
   `analysis/fw1160_r16_unorm_portable_qualification_20260730.md`.
+- `RG16_UNORM` is now the second firmware-neutral UNORM16 tuple. Its exact
+  SHA-256 `d004a33d1d1245964b08ee22b577948d36537c68d9d8c5241ba9e78e4a39f2fd`
+  passed twice on standard FW `0x11600005`. Both lanes independently
+  reproduced full `0x0000..0xffff` ranges, bounded coverage, eight-or-more
+  values, and distinct hashes; the packed native FNV64 was
+  `0xf0866450a3c42b45`. The exact R16, RG16, base portability, and three
+  10-dword indirect artifacts now live under hash-named local `pinned/` paths.
+  Their FW 5.50 replay targets have no build prerequisites, so later endpoint
+  qualification cannot silently recompile different bytes. The three neutral
+  indirect artifacts also passed twice each on FW 11.60. See
+  `analysis/fw1160_rg16_unorm_and_endpoint_replay_20260730.md`.
 - Seven additional offscreen format gates now build under the same exact
   profile and bounded runner: R8, RG8, RGB10A2, R11G11B10, R32, RG32, and
   RGBA32. All seven passed twice on FW 11.60; logged RG32 reproduced FNV64

@@ -103,7 +103,26 @@ firmware expectation. FW 5.50 identical-byte replay remains pending, and no
 other firmware receives a hardware-qualified label from this result. See
 `analysis/fw1160_r16_unorm_portable_qualification_20260730.md`.
 
-Offline portability closure is complete. The clean generic suite passes 5,901
+`AGC_GFX1013_RT_FORMAT_RG16_UNORM` extends that contract to two independent
+16-bit lanes with tuple `(format=0x05, number=UNORM, swap=standard)`. The
+firmware-neutral ELF SHA-256
+`d004a33d1d1245964b08ee22b577948d36537c68d9d8c5241ba9e78e4a39f2fd`
+passed twice on standard FW `0x11600005`. Each run reached the fence
+immediately and reproduced packed FNV64 `0xf0866450a3c42b45`; lane 0 covered
+255,217 samples with hash `0x4f17d5e6b1c0d45b`, while lane 1 covered 255,478
+with hash `0x7cb38a81e7d27391`. Both lanes spanned `0x0000..0xffff`, had at
+least eight values, and passed the distinct-channel oracle. Host fixtures lock
+the tuple and exact selection for all 39 active profiles.
+
+Endpoint replay no longer depends on mutable sample targets. Hash-named local
+pinned files and no-prerequisite FW 5.50 targets cover the base portability
+ELF, non-indexed and indexed 10-dword multi-draw, GPU count-buffer selection,
+R16_UNORM, and RG16_UNORM. All three newly neutral indirect artifacts passed
+twice on FW 11.60 before pinning. FW 5.50 execution remains pending; none of
+these FW 11.60 results is labeled cross-firmware hardware qualification. See
+`analysis/fw1160_rg16_unorm_and_endpoint_replay_20260730.md`.
+
+Offline portability closure is complete. The clean generic suite passes 6,110
 assertions, including full raw-version normalization, exact profile selection,
 and common-V7 acceptance across all 39 active profiles; the clean Prospero
 cross-build also passes. Submission, queue, memory, suspend, workload, TF/HS,
