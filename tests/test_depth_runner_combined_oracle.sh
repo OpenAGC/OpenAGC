@@ -14,6 +14,7 @@ Runtime profile FW ABI 0x1160: PASS
 GPU completion fence reached
 [Combined Expclear RMW] aspects=0x1 gate=ON offset=0x0 size=0x1000 selected=1024 expected=fffffff0 mismatch=0 outside-changed=0 reserved=PASS fence=48544c45: PASS
 [HTILE Readback] changed=1024 other=0 initial=fffff30f
+[HTILE Subresource Readback] selected-changed=1024 outside-changed=0
 [Depth Readback] green=228096 red=228096 left=ff00ff00 right=ffff0000
 [Depth Readback] raw D32: one=1755648 near=228096 far=228096
 [Stencil Readback] zero=2165248 replace-5a=456192 other=0
@@ -72,18 +73,34 @@ run_gate()
         EXPECTED_HTILE_INITIAL=fffff30f EXPECTED_D32_FULL_RECT=1 \
         EXPECTED_D32_ONE_COUNT="$2" \
         EXPECTED_HTILE_CHANGED=1024 \
+        REQUIRE_HTILE_SUBRESOURCE=1 \
+        EXPECTED_HTILE_SELECTED_CHANGED="$3" \
+        EXPECTED_HTILE_OUTSIDE_CHANGED="$4" \
+        EXPECTED_COLOR_GREEN_RED="$5" \
         EXPECTED_STENCIL_FULL_RECT=1 \
         EXPECTED_COMBINED_EXPCLEAR_ASPECTS="$1" \
         sh "$runner"
 }
 
-run_gate 1 1755648 > "$tmp/pass-output"
-if run_gate 1 1617408 > "$tmp/count-fail-output" 2>&1; then
+run_gate 1 1755648 1024 0 228096 > "$tmp/pass-output"
+if run_gate 1 1617408 1024 0 228096 > "$tmp/count-fail-output" 2>&1; then
     echo "depth runner accepted the wrong allocation-aware D32 count" >&2
     exit 1
 fi
-if run_gate 2 1755648 > "$tmp/fail-output" 2>&1; then
+if run_gate 2 1755648 1024 0 228096 > "$tmp/fail-output" 2>&1; then
     echo "depth runner accepted the wrong combined expclear aspect" >&2
+    exit 1
+fi
+if run_gate 1 1755648 1023 0 228096 > "$tmp/selected-fail-output" 2>&1; then
+    echo "depth runner accepted the wrong selected HTILE count" >&2
+    exit 1
+fi
+if run_gate 1 1755648 1024 1 228096 > "$tmp/outside-fail-output" 2>&1; then
+    echo "depth runner accepted the wrong outside HTILE count" >&2
+    exit 1
+fi
+if run_gate 1 1755648 1024 0 31968 > "$tmp/color-fail-output" 2>&1; then
+    echo "depth runner accepted the wrong depth color count" >&2
     exit 1
 fi
 

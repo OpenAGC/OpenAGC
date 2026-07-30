@@ -57,7 +57,7 @@ reached its completion fence, shut the driver down, and returned PASS.
 | D16 HTILE expclear | Qualified | Qualified on both endpoints |
 | D32 HTILE ordinary/decompress/resummarize/expclear | Qualified | Qualified on both endpoints |
 | Combined D32+S8 HTILE and aspect masks | Qualified | Qualified on both endpoints |
-| HTILE mip and array subresources | Historical FW 5.50 qualification only | Prepare current-source bounded endpoint mirrors |
+| HTILE mip and array subresources | Current-source endpoint artifacts build | Pin and hardware-qualify both mirrors |
 | 4x MSAA | Missing | Wait for the FW 5.50 baseline regression |
 | Sample-rate shading | Missing | Add an exact invocation-count gate |
 
@@ -163,6 +163,15 @@ runner accepts the intended aspect and rejects the wrong one. All eight ELFs
 build without warnings and avoid both AGC SPRX dependencies. They remain
 behind the FW 5.50 uncompressed-depth, D16 HTILE, and D32 HTILE qualification
 sequence.
+
+Current-source exact-key headless builds now exist for mip 1 and array layer 1
+on FW `0x1160` and FW `0x0550`. The guarded depth runner can require positive
+selected-subresource mutation, zero outside mutation, an exact frozen selected
+count, and exact green/red coverage. Its host fixture accepts the intended
+selected/outside/color tuple and rejects wrong selected, outside, and color
+values. All four ELFs build without warnings. They have no deploy target yet:
+relink twice, audit dependencies, preserve the exact bytes, and wire hashes
+before the first current-source subresource launch.
 
 That prerequisite sequence is now complete. Two relinks against the committed
 shader records reproduced all eight artifacts byte-for-byte, and dependency

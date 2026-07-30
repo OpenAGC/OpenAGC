@@ -124,6 +124,13 @@ hardware-qualified on both endpoints. Current-source HTILE mip/array endpoint
 mirrors are now the active depth tier; only historical FW 5.50 VideoOut
 fixtures exist today.
 
+Four current-source exact-key headless subresource artifacts now build without
+warnings: mip 1 and array layer 1 for FW `0x1160` and FW `0x0550`. The guarded
+runner supports positive selected mutation, zero outside mutation, frozen
+selected counts, and exact color coverage, with host accept/reject coverage.
+No new hardware claim is made and no deploy target exists until reproducible
+hashes and dependency audits are complete.
+
 Ordinary D16 HTILE is now hardware-qualified twice on each endpoint. The
 pinned current-source artifacts reproduced exact D16 classes, clean teardown,
 no residual process, and `7408` changed HTILE words from `0xfffc000f` on all

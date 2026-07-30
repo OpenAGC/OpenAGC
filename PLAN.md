@@ -605,6 +605,12 @@ the runner and shared teardown on FW 11.60 only.
   source firmware-keyed headless mip and array artifacts, guarded deploy
   targets, and exact selected-versus-outside metadata oracles next; do not
   reuse the historical FW 5.50 VideoOut ELFs as cross-firmware evidence.
+- Exact-key headless mip-1 and array-layer-1 artifacts now build for both
+  endpoints. The runner requires positive selected metadata mutation, zero
+  outside mutation, optional frozen selected counts, and exact color coverage;
+  the host fixture rejects wrong selected, outside, and color values. Relink
+  all four artifacts twice, audit dependencies, preserve and hash-pin them,
+  then add guarded deploy targets before hardware execution.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and

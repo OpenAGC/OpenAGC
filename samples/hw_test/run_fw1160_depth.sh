@@ -88,6 +88,31 @@ if [ -n "${EXPECTED_HTILE_CHANGED:-}" ]; then
     grep -Eq "^\[HTILE Readback\] changed=$EXPECTED_HTILE_CHANGED other=[0-9]+ initial=$EXPECTED_HTILE_INITIAL$" \
         "$output_file" || exit 1
 fi
+if [ "${REQUIRE_HTILE_SUBRESOURCE:-0}" -eq 1 ]; then
+    grep -Eq '^\[HTILE Subresource Readback\] selected-changed=[1-9][0-9]* outside-changed=0$' \
+        "$output_file" || exit 1
+fi
+if [ -n "${EXPECTED_HTILE_SELECTED_CHANGED:-}" ]; then
+    expected_htile_outside=${EXPECTED_HTILE_OUTSIDE_CHANGED:-0}
+    case "$EXPECTED_HTILE_SELECTED_CHANGED:$expected_htile_outside" in
+        *[!0-9:]*|:*|*:)
+            echo "invalid HTILE subresource count" >&2
+            exit 2
+            ;;
+    esac
+    grep -Fqx "[HTILE Subresource Readback] selected-changed=$EXPECTED_HTILE_SELECTED_CHANGED outside-changed=$expected_htile_outside" \
+        "$output_file" || exit 1
+fi
+if [ -n "${EXPECTED_COLOR_GREEN_RED:-}" ]; then
+    case "$EXPECTED_COLOR_GREEN_RED" in
+        ''|*[!0-9]*)
+            echo "invalid EXPECTED_COLOR_GREEN_RED" >&2
+            exit 2
+            ;;
+    esac
+    grep -Fq "[Depth Readback] green=$EXPECTED_COLOR_GREEN_RED red=$EXPECTED_COLOR_GREEN_RED " \
+        "$output_file" || exit 1
+fi
 if [ "${EXPECTED_D16_FULL_RECT:-0}" -eq 1 ]; then
     grep -q '^\[Depth Readback\] green=228096 red=228096 ' \
         "$output_file" || exit 1
