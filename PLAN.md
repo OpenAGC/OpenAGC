@@ -124,7 +124,7 @@ and relaunch. The FW5.50 identical-byte run remains pending. See
 
 The offline endpoint audit is complete. Full nonzero-suffix raw versions now
 exercise normalization, exact selection, and common-V7 acceptance for all 39
-profiles; the clean host suite passes 5,664 assertions. All relevant SPRX
+profiles; the clean host suite passes 5,901 assertions. All relevant SPRX
 ledgers reproduce from `/Volumes/Untitled/unp`, and
 `tools/verify_fw550_fw1160_compatibility.py` locks every shared layout and
 classified endpoint difference. The FW5.50 target now uses only preserved
@@ -216,7 +216,7 @@ the runner and shared teardown on FW 11.60 only.
 - Workload stages 11-17 are closed failed gates and remain independent of the
   now-qualified graphics and compute paths. Require new offline evidence before
   another workload payload.
-- The next advanced graphics gates are headless `R16_FLOAT`, then
+- The first advanced graphics gates were headless `R16_FLOAT`, then
   `RG16_FLOAT`. Both reuse the qualified baseline draw and differ only in the
   typed color-target tuple and native readback width. Exact FW 11.60 artifacts
   and target-specific guarded runner support are built. Both formats passed
@@ -224,6 +224,17 @@ the runner and shared teardown on FW 11.60 only.
   fences, clean shutdowns, and no residual process. Build and run matching
   modern headless FW 5.50 artifacts before promotion. See
   `analysis/fw1160_narrow_fp16_gate_audit_20260730.md`.
+- The next unqualified 16-bit tuple, `R16_UNORM`, is now implemented as an
+  appended public typed format and a single firmware-neutral headless ELF.
+  The exact SHA-256
+  `c0a5ad4732bf13c41f96560cb2dbfa3c39dffb9a47958ccbd2bef5754523220a`
+  passed twice on standard FW `0x11600005`, reproducing 255,217 validated
+  pixels, the full native `0x0000..0xffff` conversion range, and FNV64
+  `0x4f17d5e6b1c0d45b`. The guarded runner validates both local and uploaded
+  bytes and creates the neutral result directory before cleanup-first launch.
+  Replay those exact bytes on FW 5.50 when available; all other active
+  profiles remain SPRX-qualified/hardware-unverified. See
+  `analysis/fw1160_r16_unorm_portable_qualification_20260730.md`.
 - Seven additional offscreen format gates now build under the same exact
   profile and bounded runner: R8, RG8, RGB10A2, R11G11B10, R32, RG32, and
   RGBA32. All seven passed twice on FW 11.60; logged RG32 reproduced FNV64

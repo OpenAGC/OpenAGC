@@ -89,7 +89,21 @@ the GPU `0x504f5254` marker, two bounded flips, zero-valued teardown, and
 relaunch all passed. The same preserved bytes remain reserved for FW5.50.
 All other active exact profiles remain SPRX-qualified/hardware-unverified.
 
-Offline portability closure is complete. The clean generic suite passes 5,664
+The first additional 16-bit color tuple is now firmware-neutral rather than
+compiled for one console. `AGC_GFX1013_RT_FORMAT_R16_UNORM` maps to the
+gfx1013 tuple `(format=0x02, number=UNORM, swap=standard)`, two bytes per
+pixel, with the FP16_ABGR shader export. The same ELF, SHA-256
+`c0a5ad4732bf13c41f96560cb2dbfa3c39dffb9a47958ccbd2bef5754523220a`,
+passed twice on standard FW `0x11600005`: immediate completion, 255,217
+validated pixels in exact `768x665` bounds, native range `0x0000..0xffff`,
+FNV64 `0x4f17d5e6b1c0d45b`, clean shutdown, and no loss of websrv or debugger
+connectivity. Host coverage locks the tuple and atomic failure boundaries for
+all 39 active profiles. The artifact has no `libSceAgcDriver` dependency or
+firmware expectation. FW 5.50 identical-byte replay remains pending, and no
+other firmware receives a hardware-qualified label from this result. See
+`analysis/fw1160_r16_unorm_portable_qualification_20260730.md`.
+
+Offline portability closure is complete. The clean generic suite passes 5,901
 assertions, including full raw-version normalization, exact profile selection,
 and common-V7 acceptance across all 39 active profiles; the clean Prospero
 cross-build also passes. Submission, queue, memory, suspend, workload, TF/HS,
