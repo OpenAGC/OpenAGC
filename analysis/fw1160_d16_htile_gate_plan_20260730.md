@@ -125,3 +125,8 @@ for FW 11.60 and
 for FW 5.50. Both avoid AGC SPRX dependencies, are preserved by full hash, and
 are enforced by their guarded recipes. Neither has been launched in this
 progression.
+
+FW 11.60 D16 expclear pass 1 then succeeded with exact D16 classes, clean
+teardown, no residual process, and `49152` changed HTILE words from
+`0xfffffff0`. The guarded FW 11.60 recipe now freezes `49152`; one identical
+replay remains before the FW 5.50 endpoint mirror is permitted.
