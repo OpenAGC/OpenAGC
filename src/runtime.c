@@ -712,20 +712,14 @@ static void agcPopulateRuntimeInfo(AgcDevice device, uint32_t agc_version)
         AgcDriverRuntimeDiagnostics diagnostics;
         if (agcDriverDebugRuntimeProfile(&diagnostics) == AGC_OK) {
             uint16_t key = (uint16_t)(diagnostics.firmware_version >> 16);
-            uint8_t qualification = AGC_QUALIFICATION_PROFILE_QUALIFIED;
             info->firmware_version = diagnostics.firmware_version;
             info->firmware_abi_key = key;
             info->hardware_family = diagnostics.profile.is_trinity ?
                 AGC_HARDWARE_FAMILY_TRINITY_PS5 :
                 AGC_HARDWARE_FAMILY_STANDARD_PS5;
-            if (!diagnostics.profile.is_trinity &&
-                (key == 0x0550u || key == 0x1160u)) {
-                qualification = AGC_QUALIFICATION_HARDWARE_QUALIFIED;
-            }
-            info->qualification[AGC_RUNTIME_CAP_GRAPHICS_INDEX] = qualification;
-            info->qualification[AGC_RUNTIME_CAP_COMPUTE_INDEX] = qualification;
-            info->qualification[AGC_RUNTIME_CAP_ASYNC_COMPUTE_QUEUE_INDEX] =
-                qualification;
+            /* Direct-carrier qualification does not qualify an unrun native
+             * runtime slice. Keep its capability labels host-tested until a
+             * public runtime artifact passes its own exact-firmware oracle. */
             (void)snprintf(info->profile_name, sizeof(info->profile_name),
                 "%s-%s-%s", diagnostics.backend_name,
                 agcProsperoAbiFamilyName(diagnostics.profile.family),

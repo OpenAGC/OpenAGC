@@ -109,6 +109,12 @@ exact-firmware hardware qualification. Unknown profiles fail during device
 creation through the existing exact firmware registry. Applications branch on
 capabilities, never on `firmware_version` or `firmware_abi_key`.
 
+Qualification applies to the native runtime operation being reported, not to a
+lower-level driver carrier that happens to be available on the same profile.
+Until a public runtime artifact passes its own exact-firmware oracle, the
+runtime capability is reported as host-tested even when the selected direct
+carrier has separate hardware evidence.
+
 ## Shader and pipeline validation
 
 Runtime API v2 consumes pointer-free `AgcShaderReflection` records shared with

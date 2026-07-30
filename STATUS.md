@@ -228,6 +228,9 @@ dynamic viewport/scissor state, and a bounded-fence submission without raw PM4
 assembly. The artifact cross-builds, but has not been deployed; fence
 completion is not a pixel-output oracle and no hardware qualification is
 claimed.
+`agcGetRuntimeInfo` therefore keeps the native runtime capabilities
+host-tested: separate hardware evidence for an underlying direct carrier does
+not promote an unrun public runtime slice.
 
 Runtime API v4 closes the depth/stencil attachment ownership gap for the
 qualified single-mip layouts. `agcCmdBindDepthStencilTarget` requires an exact

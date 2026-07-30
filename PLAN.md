@@ -292,6 +292,9 @@ exact artifacts in a generic two-color-target/depth-target/vertex/index/
 dynamic-state submission contract, and builds `agc_runtime_graphics.elf`.
 The standalone probe waits on a bounded fence only; it has no pixel-output
 oracle, has not been deployed, and is not a hardware qualification.
+`agcGetRuntimeInfo` keeps native runtime capabilities host-tested until a
+public runtime artifact passes its own exact-firmware oracle; hardware evidence
+for an underlying direct carrier does not promote an unrun runtime slice.
 The immutable graphics bind writes `SPI_SHADER_COL_FORMAT` from the validated
 pixel-export reflection after the compiler register block. Exact host captures
 cover the compiler-derived two-RGBA8 value `0x44` and a synthetic two-RGBA16F
