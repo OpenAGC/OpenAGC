@@ -611,6 +611,12 @@ the runner and shared teardown on FW 11.60 only.
   the host fixture rejects wrong selected, outside, and color values. Relink
   all four artifacts twice, audit dependencies, preserve and hash-pin them,
   then add guarded deploy targets before hardware execution.
+- All four subresource artifacts reproduce across two relinks, avoid both AGC
+  SPRX dependencies, are preserved under full hashes, and have cleanup-first
+  hash-pinned deploy targets. Mip requires exact `31968/31968` color coverage;
+  array requires `228096/228096`; both require positive selected and zero
+  outside metadata mutation. Run FW 5.50 mip first and freeze its selected
+  count before replay.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and

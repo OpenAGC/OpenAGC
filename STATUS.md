@@ -131,6 +131,11 @@ selected counts, and exact color coverage, with host accept/reject coverage.
 No new hardware claim is made and no deploy target exists until reproducible
 hashes and dependency audits are complete.
 
+All four subresource artifacts now reproduce across two relinks, avoid AGC
+SPRX dependencies, are preserved under full hashes, and have cleanup-first
+hash-pinned deploy targets with exact color and selected/outside metadata
+oracles. The FW 5.50 mip artifact is the first permitted hardware gate.
+
 Ordinary D16 HTILE is now hardware-qualified twice on each endpoint. The
 pinned current-source artifacts reproduced exact D16 classes, clean teardown,
 no residual process, and `7408` changed HTILE words from `0xfffc000f` on all

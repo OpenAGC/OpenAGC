@@ -2588,6 +2588,8 @@ deploy_agc_tess_geometry_rgba8_fw550_headless: agc_tess_geometry_rgba8_fw550_hea
 	deploy_agc_depth_d16_expclear_fw1160_logged \
 	deploy_agc_depth_d32_htile_fw1160_logged \
 	deploy_agc_depth_d32_expclear_fw1160_logged \
+	deploy_agc_depth_htile_mip_fw1160_logged \
+	deploy_agc_depth_htile_array_fw1160_logged \
 	deploy_agc_depth_stencil_htile_fw1160_logged \
 	deploy_agc_depth_stencil_expclear_depth_fw1160_logged \
 	deploy_agc_depth_stencil_expclear_stencil_fw1160_logged \
@@ -2645,6 +2647,22 @@ deploy_agc_depth_d32_expclear_fw1160_logged: agc_depth_d32_expclear_fw1160_logge
 		EXPECTED_ARTIFACT_SHA256=e91430172cba028cfa8379b9aa0e87876107b6fb6a81096d22038c59869448d9 \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_depth.sh
 
+deploy_agc_depth_htile_mip_fw1160_logged: agc_depth_htile_mip_fw1160_logged.elf
+	PS5_HOST=$(PS5_HOST) DEPTH_ARTIFACT=$(THIS_DIR)/$< \
+		RESULT_LOG_PATH=/data/homebrew/openagc_fw1160_depth/result.log \
+		EXPECTED_HTILE_INITIAL=fffc000f REQUIRE_HTILE_SUBRESOURCE=1 \
+		EXPECTED_COLOR_GREEN_RED=31968 \
+		EXPECTED_ARTIFACT_SHA256=a266bc5c03554842a21a9c8bf5b34cbeb9d50ba5a646e7002353712167fd8d04 \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_depth.sh
+
+deploy_agc_depth_htile_array_fw1160_logged: agc_depth_htile_array_fw1160_logged.elf
+	PS5_HOST=$(PS5_HOST) DEPTH_ARTIFACT=$(THIS_DIR)/$< \
+		RESULT_LOG_PATH=/data/homebrew/openagc_fw1160_depth/result.log \
+		EXPECTED_HTILE_INITIAL=fffc000f REQUIRE_HTILE_SUBRESOURCE=1 \
+		EXPECTED_COLOR_GREEN_RED=228096 \
+		EXPECTED_ARTIFACT_SHA256=bbde10976bd64f2a56d81ac0fc0fb01f9000c7e0680835edd5f1ed85b4fa49cf \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_depth.sh
+
 deploy_agc_depth_stencil_htile_fw1160_logged: agc_depth_stencil_htile_fw1160_logged.elf
 	PS5_HOST=$(PS5_HOST) DEPTH_ARTIFACT=$(THIS_DIR)/$< \
 		RESULT_LOG_PATH=/data/homebrew/openagc_fw1160_depth/result.log \
@@ -2692,6 +2710,8 @@ deploy_agc_depth_stencil_expclear_both_fw1160_logged: agc_depth_stencil_expclear
 	deploy_agc_depth_d16_expclear_fw550_headless \
 	deploy_agc_depth_d32_htile_fw550_headless \
 	deploy_agc_depth_d32_expclear_fw550_headless \
+	deploy_agc_depth_htile_mip_fw550_headless \
+	deploy_agc_depth_htile_array_fw550_headless \
 	deploy_agc_depth_stencil_htile_fw550_headless \
 	deploy_agc_depth_stencil_expclear_depth_fw550_headless \
 	deploy_agc_depth_stencil_expclear_stencil_fw550_headless \
@@ -2754,6 +2774,20 @@ deploy_agc_depth_d32_expclear_fw550_headless: agc_depth_d32_expclear_fw550_headl
 		EXPECTED_HTILE_CHANGED=49152 EXPECTED_D32_FULL_RECT=1 \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) \
 		sh ./run_fw1160_depth.sh
+
+deploy_agc_depth_htile_mip_fw550_headless: agc_depth_htile_mip_fw550_headless.elf
+	PS5_HOST=$(PS5_HOST) DEPTH_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_FW_ABI=0x0550 EXPECTED_HTILE_INITIAL=fffc000f \
+		REQUIRE_HTILE_SUBRESOURCE=1 EXPECTED_COLOR_GREEN_RED=31968 \
+		EXPECTED_ARTIFACT_SHA256=b8e0c004b995ee4c670d54e7bdabf5f7ebae09f100bd6c6ed689b8683806d6dd \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_depth.sh
+
+deploy_agc_depth_htile_array_fw550_headless: agc_depth_htile_array_fw550_headless.elf
+	PS5_HOST=$(PS5_HOST) DEPTH_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_FW_ABI=0x0550 EXPECTED_HTILE_INITIAL=fffc000f \
+		REQUIRE_HTILE_SUBRESOURCE=1 EXPECTED_COLOR_GREEN_RED=228096 \
+		EXPECTED_ARTIFACT_SHA256=ef1936c6399e77261b5eacb68c02bd41c795113b88a45b3b3f4a7eedd584b2f8 \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_depth.sh
 
 deploy_agc_depth_stencil_htile_fw550_headless: agc_depth_stencil_htile_fw550_headless.elf
 	PS5_HOST=$(PS5_HOST) DEPTH_ARTIFACT=$(THIS_DIR)/$< \

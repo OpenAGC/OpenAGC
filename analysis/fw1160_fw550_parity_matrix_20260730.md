@@ -173,6 +173,19 @@ values. All four ELFs build without warnings. They have no deploy target yet:
 relink twice, audit dependencies, preserve the exact bytes, and wire hashes
 before the first current-source subresource launch.
 
+Two committed-shader relinks reproduced exact SHA-256 values: FW 11.60 mip
+`a266bc5c03554842a21a9c8bf5b34cbeb9d50ba5a646e7002353712167fd8d04`, FW
+11.60 array `bbde10976bd64f2a56d81ac0fc0fb01f9000c7e0680835edd5f1ed85b4fa49cf`,
+FW 5.50 mip `b8e0c004b995ee4c670d54e7bdabf5f7ebae09f100bd6c6ed689b8683806d6dd`,
+and FW 5.50 array
+`ef1936c6399e77261b5eacb68c02bd41c795113b88a45b3b3f4a7eedd584b2f8`.
+All four depend only on VideoOut, kernel, libc, and networking, are preserved
+under their full hashes, and now have cleanup-first deploy targets that reject
+byte drift before network access. Mip requires exact `31968/31968` color
+coverage; array requires `228096/228096`; both require positive selected and
+zero outside metadata mutation. Run the pinned FW 5.50 mip gate first and
+freeze its selected count before replay.
+
 That prerequisite sequence is now complete. Two relinks against the committed
 shader records reproduced all eight artifacts byte-for-byte, and dependency
 inspection found only VideoOut, kernel, libc, and networking. The exact FW
