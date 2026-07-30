@@ -89,10 +89,10 @@ Execute in this order:
 5. **Complete:** build one unpinned portability payload. It prints the detected full
    version and selected four-digit key, but it must not be compiled with
    `AGC_EXPECT_FIRMWARE_ABI_KEY` or link a firmware SPRX.
-6. **Pinned; hardware pending:** pin that ELF's SHA-256 before hardware execution. Run the exact same bytes
-   on FW 11.60 and, when available, FW 5.50, with the cleanup payload
-   immediately before every launch and file-backed bounded verdicts.
-7. Preserve the same artifact for future intermediate-firmware testing. Until
+6. **FW11.60 complete; FW5.50 pending:** the pinned ELF passed twice on
+   FW11.60. Run the exact same bytes on FW5.50 when available, with the cleanup
+   payload immediately before every launch and file-backed bounded verdicts.
+7. **Complete:** preserve the same artifact for future intermediate-firmware testing. Until
    matching hardware exists, run corpus verifiers and host fixtures for every
    exact profile and report those rows as SPRX-qualified/hardware-unverified.
 8. Resume higher-level parity work only with firmware-neutral artifacts so
@@ -107,7 +107,9 @@ endpoint consoles.
 The neutral target is now `samples/hw_test/agc_portability.elf`, pinned as
 SHA-256 `e04004fee2254e6169805f153ce4812197726ed5f53a9295a4493f0d8ac9a9ce`
 before hardware execution. It contains no expected-firmware macro or AGC SPRX
-dependency and uses the common V7 caller ABI. See
+dependency and uses the common V7 caller ABI. The exact bytes passed 2/2 on
+standard FW `0x11600005`, including live GPU execution, two flips, teardown,
+and relaunch. The FW5.50 identical-byte run remains pending. See
 `analysis/firmware_neutral_portability_elf_20260730.md`.
 
 ### Existing FW 11.60 versus FW 5.50 capability work

@@ -84,7 +84,9 @@ The first firmware-neutral portability ELF is built and pinned. Its SHA-256 is
 no `AGC_EXPECT_FIRMWARE_ABI_KEY` build definition and no dynamic dependency on
 either AGC SPRX. It exercises authorization, `/dev/gc`, V7 defaults, async,
 real GPU execution, bounded public VideoOut, full teardown, and relaunch. The
-FW11.60 run is pending; the same preserved bytes remain reserved for FW5.50.
+exact bytes passed twice on standard FW `0x11600005`: V7 defaults and async,
+the GPU `0x504f5254` marker, two bounded flips, zero-valued teardown, and
+relaunch all passed. The same preserved bytes remain reserved for FW5.50.
 All other active exact profiles remain SPRX-qualified/hardware-unverified.
 
 ## Reusable driver and flexible-memory teardown (2026-07-29)

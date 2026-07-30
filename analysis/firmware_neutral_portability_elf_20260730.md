@@ -47,9 +47,31 @@ pinned bytes.
 
 | Firmware | Artifact status | Hardware status |
 |---|---|---|
-| FW11.60 standard PS5 | pinned, pending launch | pending |
+| FW11.60 standard PS5 | exact pinned digest | 2/2 PASS |
 | FW5.50 standard PS5 | same pinned bytes preserved | hardware unavailable |
 | Other active exact profiles | same binary contract | SPRX-qualified, hardware-unverified |
 
 No intermediate firmware is promoted by this artifact until the identical
 digest passes on matching hardware.
+
+## FW11.60 execution evidence
+
+The runner downloaded the uploaded ELF and verified the pinned SHA-256 before
+launching it. On standard PS5 FW11.60, both iterations ran the cleanup ELF
+immediately before the portability payload and produced:
+
+- raw system version `0x11600005`, normalized key `0x1160`;
+- standard-PS5 exact runtime profile;
+- common V7 defaults: 127 primary groups (`0x40230` bytes) and 22 internal
+  groups (`0xb1f8` bytes);
+- defaults and async setup `PASS/PASS`;
+- exact-profile VideoOut registration patch and restoration `PASS`;
+- real GPU marker `0x504f5254` observed after 50 ms;
+- two bounded flips `PASS`;
+- driver shutdown, flexible-memory release, display unmap, and direct-memory
+  release all returned zero;
+- final file-backed `Portability result: PASS` and self-termination.
+
+The second launch independently repeated the same results, proving teardown
+and relaunch on FW11.60 with the same artifact. Port 8080 and the result-log FTP
+path remained responsive afterward.
