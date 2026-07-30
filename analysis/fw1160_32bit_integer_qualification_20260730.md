@@ -38,6 +38,13 @@ FW 11.60.
 
 One identical-byte replay remains.
 
+## RG32_SINT pass 2
+
+The identical pinned bytes reproduced both full-range lanes, zero mismatch
+counts, independent lane hashes, packed hash, fence, teardown,
+self-termination, and debugger absence. RG32_SINT is hardware-qualified on FW
+11.60.
+
 ## R32_SINT pass 2
 
 The identical pinned bytes reproduced the full signed range, exact sample and

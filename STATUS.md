@@ -593,6 +593,9 @@ Pinned RG32_SINT pass 1 succeeds with two 255,744-sample full-range lanes,
 zero mismatches, independent hashes, packed FNV64 `0x88da0ec4716fa113`, clean
 teardown, and no residual process. One replay remains.
 
+The identical replay reproduced every exact RG32_SINT oracle and clean
+lifecycle. RG32_SINT is hardware-qualified on FW 11.60; RGBA32_SINT is next.
+
 `AGC_GFX1013_RT_FORMAT_RGBA32_SINT` is appended at value 31 and maps to
 `(format=0x0e, number=SINT, swap=standard)`, 16 bytes per pixel, and
 `32_ABGR` export 9. Exact host coverage locks `CB_COLOR0_INFO=0x00070538`, full
