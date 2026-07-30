@@ -51,7 +51,7 @@ The prospero build compiles `driver_prospero.c` with native `/dev/gc` ioctl call
 It links against `kernel` and `SceVideoOut`; the direct backend does not depend
 on or preload `libSceAgcDriver.sprx`.
 
-Expected host test result: `12082 passed, 0 failed`. Any change that drops this
+Expected host test result: `12112 passed, 0 failed`. Any change that drops this
 count is a regression — fix it before declaring the task done.
 
 ## Verification Checklist

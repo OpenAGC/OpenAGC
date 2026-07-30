@@ -350,6 +350,15 @@ portable gate also build successfully. Its final bytes are pinned as SHA-256
 `126c9920f8ea85c2d149c62150f40bbed695ef9f102f8ef3ab430df8f09e8f18`;
 hardware execution remains gated on a clean FW 11.60 reboot.
 
+The first BC1-BC7 descriptor blocker is fixed. Gfx10.3 SQ image descriptors
+carry a 9-bit resource-format field, while OpenAGC previously rejected values
+above `0x3f`; that made every native BC encoding (`169..182`) unreachable even
+though the packing expression was correct. The public header now exposes all
+14 native BC1-BC7 UNORM/SNORM/SRGB/UFLOAT/SFLOAT encodings, exact host fixtures
+lock their descriptor dwords, and value `0x200` fails closed while preserving
+the destination. This is host descriptor coverage, not BC layout or hardware
+sampling qualification. The generic suite passes 12,112 assertions.
+
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability
 ELF, non-indexed and indexed 10-dword multi-draw, GPU count-buffer selection,

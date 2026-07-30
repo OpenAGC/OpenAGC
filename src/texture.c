@@ -418,7 +418,7 @@ int32_t PS5_SYSV_ABI agcGfx1013Image2DDescriptorEncode(
     if ((state->address & 0xffu) != 0u)
         return AGC_ERROR_INVALID_ALIGNMENT;
     if ((state->address >> 48u) != 0u || state->width > 16384u ||
-        state->height > 16384u || state->format > 0x3fu ||
+        state->height > 16384u || state->format > 0x1ffu ||
         state->image_type > 0xfu || state->dst_sel_x > 7u ||
         state->dst_sel_y > 7u || state->dst_sel_z > 7u ||
         state->dst_sel_w > 7u || state->base_array_layer > 0x1fffu ||

@@ -720,6 +720,13 @@ public texture enum, but register, enum, and descriptor coverage alone are not
 PS5 hardware qualification. Before advertising a BC format, implement and test
 a complete layout and sampling path with these independent properties:
 
+The descriptor blocker is resolved offline: gfx10.3's image format field is
+now validated as the hardware-defined 9-bit field instead of the previous
+incorrect 6-bit ceiling. Exact host fixtures lock all native BC1-BC7 resource
+encodings (`169..182`) and reject a tenth format bit without modifying the
+destination descriptor. This is descriptor qualification only; BC layout and
+sampling remain pending.
+
 - Block width and height.
 - Bytes per block.
 - Compatible number type, including UNORM, SNORM, SRGB, or the signed/unsigned

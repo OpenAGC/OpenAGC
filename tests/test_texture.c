@@ -919,6 +919,57 @@ static void test_gfx1013_hardware_descriptor_validation(void)
         "invalid image encoding preserves destination");
 }
 
+static void test_gfx1013_bc_image_formats(void)
+{
+    static const struct {
+        uint32_t format;
+        uint32_t expected_word1;
+    } cases[] = {
+        {AGC_GFX1013_IMAGE_FORMAT_BC1_UNORM, 0x4a900000u},
+        {AGC_GFX1013_IMAGE_FORMAT_BC1_SRGB, 0x4aa00000u},
+        {AGC_GFX1013_IMAGE_FORMAT_BC2_UNORM, 0x4ab00000u},
+        {AGC_GFX1013_IMAGE_FORMAT_BC2_SRGB, 0x4ac00000u},
+        {AGC_GFX1013_IMAGE_FORMAT_BC3_UNORM, 0x4ad00000u},
+        {AGC_GFX1013_IMAGE_FORMAT_BC3_SRGB, 0x4ae00000u},
+        {AGC_GFX1013_IMAGE_FORMAT_BC4_UNORM, 0x4af00000u},
+        {AGC_GFX1013_IMAGE_FORMAT_BC4_SNORM, 0x4b000000u},
+        {AGC_GFX1013_IMAGE_FORMAT_BC5_UNORM, 0x4b100000u},
+        {AGC_GFX1013_IMAGE_FORMAT_BC5_SNORM, 0x4b200000u},
+        {AGC_GFX1013_IMAGE_FORMAT_BC6_UFLOAT, 0x4b300000u},
+        {AGC_GFX1013_IMAGE_FORMAT_BC6_SFLOAT, 0x4b400000u},
+        {AGC_GFX1013_IMAGE_FORMAT_BC7_UNORM, 0x4b500000u},
+        {AGC_GFX1013_IMAGE_FORMAT_BC7_SRGB, 0x4b600000u},
+    };
+    AgcGfx1013ImageDescriptor image = {{0}};
+    AgcGfx1013Image2DState state = {
+        .address = 0x0000000202700000ull,
+        .width = 2u,
+        .height = 2u,
+        .image_type = AGC_GFX1013_IMAGE_TYPE_2D,
+        .dst_sel_x = 4u,
+        .dst_sel_y = 5u,
+        .dst_sel_z = 6u,
+        .dst_sel_w = 7u,
+    };
+    uint32_t i;
+
+    for (i = 0u; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+        state.format = cases[i].format;
+        TEST_ASSERT_EQ(agcGfx1013Image2DDescriptorEncode(&image, &state),
+            AGC_OK, "gfx1013 BC sampled-image format encodes");
+        TEST_ASSERT_EQ(image.words[1], cases[i].expected_word1,
+            "gfx1013 BC format occupies the exact 9-bit resource field");
+    }
+
+    state.format = 0x200u;
+    image.words[0] = 0xa5a5a5a5u;
+    TEST_ASSERT_EQ(agcGfx1013Image2DDescriptorEncode(&image, &state),
+        AGC_ERROR_VALIDATION_FAILED,
+        "gfx1013 image descriptor rejects a tenth format bit");
+    TEST_ASSERT_EQ(image.words[0], 0xa5a5a5a5u,
+        "rejected oversized image format preserves destination");
+}
+
 static void test_gfx1013_msaa_image_descriptor(void)
 {
     AgcGfx1013ImageDescriptor image = {{0}};
@@ -1078,6 +1129,7 @@ void test_suite_texture(void) {
     TEST_RUN(test_texture_format_roundtrip_all_number_types);
     TEST_RUN(test_gfx1013_hardware_descriptors);
     TEST_RUN(test_gfx1013_hardware_descriptor_validation);
+    TEST_RUN(test_gfx1013_bc_image_formats);
     TEST_RUN(test_gfx1013_msaa_image_descriptor);
     TEST_RUN(test_gfx1013_array_image_descriptors);
 }
