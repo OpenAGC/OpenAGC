@@ -148,6 +148,11 @@ compiler's invocation count, and requires indexed draws to contain complete
 three- or two-vertex input primitives. Point and adjacency inputs remain
 fail-closed before PM4 emission.
 
+The host fixtures also instantiate point input/output, line-adjacency input,
+triangle-adjacency input, and point output from triangle input. Each is rejected
+transactionally with `AGC_ERROR_NOT_SUPPORTED`; no pipeline handle or command
+stream is produced.
+
 Only fill polygon mode is qualified in this runtime slice. Line and point
 polygon modes, depth clamp, rasterizer discard, and non-unit line width fail
 pipeline creation before PM4 emission rather than selecting an unqualified

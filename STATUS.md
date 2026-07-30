@@ -170,7 +170,7 @@ lifetime release, and required dynamic-state gating. Line and point polygon
 modes fail pipeline creation with the other unqualified rasterization options.
 Graphics scratch remains unsupported and fails during pipeline creation;
 reflected gfx1013 LDS requirements are bounded before bind generation. The full
-generic suite now reports 14,346
+generic suite now reports 14,370
 passed and 0 failed; the compiler's
 library, varying/export, NGG, and tessellation suites pass. This slice is
 host-tested only. No PS5 hardware test was run or claimed. See
@@ -231,6 +231,11 @@ claimed.
 `agcGetRuntimeInfo` therefore keeps the native runtime capabilities
 host-tested: separate hardware evidence for an underlying direct carrier does
 not promote an unrun public runtime slice.
+
+Point input/output, line- and triangle-adjacency input, and point output from
+triangle input all have explicit host fixtures. Each fails transactionally with
+`AGC_ERROR_NOT_SUPPORTED`, without producing a native pipeline or command
+stream.
 
 Runtime API v4 closes the depth/stencil attachment ownership gap for the
 qualified single-mip layouts. `agcCmdBindDepthStencilTarget` requires an exact

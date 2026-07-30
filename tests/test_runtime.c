@@ -2815,6 +2815,60 @@ static void test_runtime_geometry_pipeline_bundle(void)
     TEST_ASSERT_EQ(agcDestroyShader(geometry), AGC_OK,
         "multi-invocation geometry bundle destroys");
 
+    {
+        static const struct {
+            AgcShaderPrimitiveTopology input;
+            AgcShaderPrimitiveTopology output;
+            uint32_t vertices_in;
+            uint32_t vertices_out;
+        } unqualified_topologies[] = {
+            {AGC_SHADER_PRIMITIVE_POINTS, AGC_SHADER_PRIMITIVE_POINTS,
+             1u, 1u},
+            {AGC_SHADER_PRIMITIVE_LINES_ADJACENCY,
+             AGC_SHADER_PRIMITIVE_LINE_STRIP, 4u, 4u},
+            {AGC_SHADER_PRIMITIVE_TRIANGLES_ADJACENCY,
+             AGC_SHADER_PRIMITIVE_TRIANGLE_STRIP, 6u, 6u},
+            {AGC_SHADER_PRIMITIVE_TRIANGLES, AGC_SHADER_PRIMITIVE_POINTS,
+             3u, 1u},
+        };
+        uint32_t i;
+
+        gs_requirements.geometry_invocations = 1u;
+        for (i = 0u; i < sizeof(unqualified_topologies) /
+             sizeof(unqualified_topologies[0]); ++i) {
+            gs_requirements.geometry_input_primitive =
+                unqualified_topologies[i].input;
+            gs_requirements.geometry_output_primitive =
+                unqualified_topologies[i].output;
+            gs_requirements.geometry_vertices_in =
+                unqualified_topologies[i].vertices_in;
+            gs_requirements.geometry_vertices_out =
+                unqualified_topologies[i].vertices_out;
+            geometry = create_ngg_shader_bundle(
+                device, kAgcShaderStageGs, &gs_requirements);
+            pixel = create_shader_with_reflection(
+                device, kAgcShaderStagePs, &ps_requirements);
+            pipeline_desc.geometry_shader = geometry;
+            pipeline_desc.pixel_shader = pixel;
+            pipeline = NULL;
+            TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc,
+                &pipeline), AGC_ERROR_NOT_SUPPORTED,
+                "unqualified geometry topology fails before PM4 emission");
+            TEST_ASSERT(pipeline == NULL,
+                "unqualified geometry topology leaves pipeline output null");
+            TEST_ASSERT_EQ(agcDestroyShader(pixel), AGC_OK,
+                "unqualified geometry pixel shader destroys");
+            TEST_ASSERT_EQ(agcDestroyShader(geometry), AGC_OK,
+                "unqualified geometry bundle destroys");
+        }
+    }
+
+    gs_requirements.geometry_input_primitive =
+        AGC_SHADER_PRIMITIVE_TRIANGLES;
+    gs_requirements.geometry_output_primitive =
+        AGC_SHADER_PRIMITIVE_TRIANGLE_STRIP;
+    gs_requirements.geometry_vertices_in = 3u;
+    gs_requirements.geometry_vertices_out = 3u;
     gs_requirements.scratch_bytes_per_wave = 256u;
     geometry = create_ngg_shader_bundle(
         device, kAgcShaderStageGs, &gs_requirements);
