@@ -693,6 +693,8 @@ the runner and shared teardown on FW 11.60 only.
 - FW 5.50 full-rate pass 1 produced exact samples
   `2529216,2530368,2529984,2529600` and total `10119168`, with intact guards,
   unchanged base oracles, and no residual process. Replay those frozen counts.
+- FW 5.50 full-rate pass 2 reproduced every frozen oracle and clean exit; that
+  mode is qualified on this endpoint. Run the pinned partial-2x artifact next.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and

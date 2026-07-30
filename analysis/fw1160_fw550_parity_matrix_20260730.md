@@ -332,6 +332,11 @@ debugger absence passed. Those counts are frozen for the identical-byte replay;
 all four sample-rate targets now also enforce the qualified `227610/227610`
 color and `6469632/912384/912384` D32 baseline.
 
+FW 5.50 full-rate pass 2 reproduced every exact counter, guard, base oracle,
+fence, teardown, self-termination, and debugger absence. OpenAGC full 4x
+sample-rate shading is hardware-qualified on FW 5.50. Proceed to the separately
+pinned partial-2x artifact before testing either mode on FW 11.60.
+
 That prerequisite sequence is now complete. Two relinks against the committed
 shader records reproduced all eight artifacts byte-for-byte, and dependency
 inspection found only VideoOut, kernel, libc, and networking. The exact FW

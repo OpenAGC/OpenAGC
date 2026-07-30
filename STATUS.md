@@ -175,6 +175,10 @@ FW 5.50 full-rate pass 1 observed all four sample IDs with exact counts
 color/D32 oracle, fence, teardown, self-termination, and debugger absence all
 passed. The exact counts are frozen for replay.
 
+FW 5.50 full-rate pass 2 reproduced every exact value and clean lifecycle.
+OpenAGC full 4x sample-rate shading is hardware-qualified on FW 5.50; partial
+2x remains next on that endpoint.
+
 All four subresource artifacts now reproduce across two relinks, avoid AGC
 SPRX dependencies, are preserved under full hashes, and have cleanup-first
 hash-pinned deploy targets with exact color and selected/outside metadata
