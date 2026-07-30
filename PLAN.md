@@ -772,7 +772,11 @@ partial edge block; the bounded CPU oracle independently decodes every covered
 texel, applies the SRGB transfer for the SRGB variant, requires zero mismatches,
 records a native FNV64, and fails unless all three selection regions execute.
 Both ELFs pass firmware-neutral dependency verification. Preserve and pin their
-final bytes before the first clean-boot FW 11.60 attempt.
+final bytes before the first clean-boot FW 11.60 attempt. The preserved SHA-256
+values are `22834911ea4c75eb0dfdf445cc38c7d5a79dd4ec273a574d5dc1ab6a462e5a62`
+for BC1 UNORM and
+`0fc555979b3657761fbace24586363bf186137d3acb454162f5e997af40fdab8` for
+BC1 SRGB. Their FW 11.60 and FW 5.50 targets have no build prerequisites.
 
 Use dedicated, deterministic source blocks containing endpoint, index,
 alpha, signed-range, and edge-block cases appropriate to each format. A

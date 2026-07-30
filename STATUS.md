@@ -384,7 +384,12 @@ The shader selects base mip, nonzero mip, and a second array layer; the bounded
 readback oracle independently decodes every covered BC1 texel, applies the SRGB
 transfer where required, demands zero mismatches and all selection regions,
 and records the native hash. Hardware execution and hash freezing remain
-pending a clean FW 11.60 reboot.
+pending a clean FW 11.60 reboot. Exact artifacts are pinned as SHA-256
+`22834911ea4c75eb0dfdf445cc38c7d5a79dd4ec273a574d5dc1ab6a462e5a62`
+(UNORM) and
+`0fc555979b3657761fbace24586363bf186137d3acb454162f5e997af40fdab8`
+(SRGB), with no-prerequisite guarded targets for FW 11.60 and identical-byte
+FW 5.50 replay.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability
