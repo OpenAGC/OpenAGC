@@ -689,6 +689,8 @@ floor and retain the exact format-specific oracle. Corrected execution remains
 pending. Corrected BC4 UNORM then passed twice with identical `224640` changed
 pixels, equal `74880` region counts, zero decode mismatches/error, and FNV64
 `0x5327e8ad53b3a455`. BC4 UNORM is hardware-qualified on exact FW 11.60.
+BC4 SNORM pass 1 also succeeded with equal coverage/region counts, zero decode
+mismatches/error, and FNV64 `0x16b22a8b52c7ce8d`; pass 2 remains required.
 The exact artifacts are pinned as SHA-256
 `f74c393112fc465eace431a3fe288095ae4b3bf5ee993e8147ed0e9a2f22f2a4`
 (UNORM) and
