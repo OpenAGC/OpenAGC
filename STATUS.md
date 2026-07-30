@@ -137,10 +137,15 @@ all command capacities from zero through the 28-dword requirement. Hardware
 qualification tooling now includes a reusable signed-output shader and an
 `int16_t` native oracle that checks bounded coverage, negative and positive
 near-endpoint ranges, diversity, sentinel collisions, per-lane hashes, and
-channel independence. The firmware-neutral ELF is pinned before execution as
+channel independence. The firmware-neutral ELF was pinned before execution as
 SHA-256 `e6aea5164b215d401244ebec13ace8e8ab95fe9e15a8e82d9a59310cfc09e1ef`
-and has no firmware expectation or AGC SPRX dependency. It still needs two
-FW 11.60 executions; no firmware has a hardware-qualified label yet.
+and has no firmware expectation or AGC SPRX dependency. The identical bytes
+passed twice on standard FW `0x11600005`, reproducing 255,744 pixels in exact
+`768x665` bounds, signed range `-32751..32719`, FNV64
+`0x3908f13005165ed7`, immediate fences, and zero-valued teardown. No residual
+renderer or kernel fault was observed. FW 5.50 replay remains pending; other
+profiles remain hardware-unverified. See
+`analysis/fw1160_r16_snorm_portable_qualification_20260730.md`.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability

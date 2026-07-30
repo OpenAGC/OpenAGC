@@ -255,16 +255,20 @@ the runner and shared teardown on FW 11.60 only.
   distinct lane hashes, packed FNV64 `0xbad47fbdb2e3991e`, immediate fences,
   and zero-valued teardown. Preserve those exact bytes for FW 5.50 replay.
   See `analysis/fw1160_rgba16_unorm_portable_qualification_20260730.md`.
-- `R16_SNORM` is now host-implemented as the next append-only tuple:
+- `R16_SNORM` is the first hardware-qualified SNORM tuple. It is append-only:
   gfx1013 `16`, SNORM, standard swap, two bytes per pixel, and FP16_ABGR
   export. Exact PM4, all-profile selection, 64-bit layout limits,
   invalid-enum behavior, and every 0-27-dword short-buffer boundary pass on
   the host. Its firmware-neutral hardware gate now uses a reusable signed
   four-lane fragment fixture and a sentinel-safe `int16_t` oracle with signed
   endpoint, diversity, coverage, independence, and raw-hash checks. The final
-  firmware-neutral ELF is pinned before execution as SHA-256
+  firmware-neutral ELF was pinned before execution as SHA-256
   `e6aea5164b215d401244ebec13ace8e8ab95fe9e15a8e82d9a59310cfc09e1ef`;
-  it is not yet hardware-qualified.
+  the identical bytes passed twice on standard FW `0x11600005`, reproducing
+  signed range `-32751..32719`, 255,744 pixels, FNV64
+  `0x3908f13005165ed7`, immediate fences, and zero-valued teardown. FW 5.50
+  replay remains pending. See
+  `analysis/fw1160_r16_snorm_portable_qualification_20260730.md`.
 - Seven additional offscreen format gates now build under the same exact
   profile and bounded runner: R8, RG8, RGB10A2, R11G11B10, R32, RG32, and
   RGBA32. All seven passed twice on FW 11.60; logged RG32 reproduced FNV64
@@ -416,8 +420,8 @@ These are the best next targets because they reuse the already-qualified
 1. `R16_UNORM` — complete on FW 11.60; exact FW 5.50 replay pending.
 2. `RG16_UNORM` — complete on FW 11.60; exact FW 5.50 replay pending.
 3. `RGBA16_UNORM` — complete on FW 11.60; exact FW 5.50 replay pending.
-4. `R16_SNORM` — next implementation and FW 11.60 qualification gate.
-5. `RG16_SNORM`.
+4. `R16_SNORM` — complete on FW 11.60; exact FW 5.50 replay pending.
+5. `RG16_SNORM` — next implementation and FW 11.60 qualification gate.
 6. `RGBA16_SNORM`.
 
 For every format, test:
@@ -631,8 +635,8 @@ Complete and qualify this first group:
 2. `RG16_UNORM` — FW 11.60 complete.
 3. `RGBA16_UNORM` — FW 11.60 complete.
 
-All three are now stable on FW 11.60, so the next implementation milestone is
-`R16_SNORM`, followed by `RG16_SNORM` and `RGBA16_SNORM`. This gives
+The UNORM group and R16_SNORM are stable on FW 11.60, so the next implementation
+milestone is `RG16_SNORM`, followed by `RGBA16_SNORM`. This gives
 OpenAGC the most useful missing 16-bit coverage while reusing the already-proven
 16-bit layouts and floating-point shader path. Exact FW 5.50 replay remains a
 separate endpoint gate for all three artifacts.
