@@ -3507,7 +3507,8 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
             return AGC_ERROR_INVALID_ARGUMENT;
         rasterization = *desc->rasterization;
     }
-    if (rasterization.depth_clamp_enable ||
+    if (rasterization.polygon_mode != AGC_POLYGON_MODE_FILL ||
+        rasterization.depth_clamp_enable ||
         rasterization.rasterizer_discard_enable ||
         rasterization.line_width != 1.0f)
         return AGC_ERROR_NOT_SUPPORTED;

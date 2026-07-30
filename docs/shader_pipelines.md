@@ -101,6 +101,11 @@ compiler's invocation count, and requires indexed draws to contain complete
 three- or two-vertex input primitives. Point and adjacency inputs remain
 fail-closed before PM4 emission.
 
+Only fill polygon mode is qualified in this runtime slice. Line and point
+polygon modes, depth clamp, rasterizer discard, and non-unit line width fail
+pipeline creation before PM4 emission rather than selecting an unqualified
+fixed register sequence.
+
 Tessellation uses compiler-owned fused bundles as well. Set
 `tessellation_control_shader` to an HsBack/HsFront bundle whose front program
 is the vertex stage, leave `vertex_shader` `NULL`, and supply exactly one

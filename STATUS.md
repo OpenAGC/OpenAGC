@@ -166,9 +166,10 @@ also exercises successful descriptor/push dispatch, vertex-table drawing,
 direct and indirect descriptor addressing, resource retention/reset, exact
 depth/stencil and fill/cull/front-face rasterization register state, legacy
 state normalization, multisample minimums, and required dynamic-state gating.
-Graphics scratch remains unsupported and
+Line and point polygon modes fail pipeline creation with the other unqualified
+rasterization options. Graphics scratch remains unsupported and
 fails during pipeline creation; reflected gfx1013 LDS requirements are bounded
-before bind generation. The full generic suite now reports 14,027
+before bind generation. The full generic suite now reports 14,033
 passed and 0 failed; the compiler's
 library, varying/export, NGG, and tessellation suites pass. This slice is
 host-tested only. No PS5 hardware test was run or claimed. See

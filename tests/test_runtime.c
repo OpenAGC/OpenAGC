@@ -1539,6 +1539,31 @@ static void test_runtime_graphics_pipeline_compatibility_matrix(void)
             "export-count pixel shader destroys");
     }
 
+    {
+        AgcGraphicsPipelineDesc desc = AGC_GRAPHICS_PIPELINE_DESC_INIT;
+        AgcRasterizationState rasterization = AGC_RASTERIZATION_STATE_INIT;
+        AgcShader ps = create_shader(device, kAgcShaderStagePs);
+        AgcGraphicsPipeline pipeline = NULL;
+
+        desc.vertex_shader = vs;
+        desc.pixel_shader = ps;
+        desc.rasterization = &rasterization;
+        rasterization.polygon_mode = AGC_POLYGON_MODE_LINE;
+        TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &pipeline),
+            AGC_ERROR_NOT_SUPPORTED,
+            "unqualified line polygon mode fails before pipeline creation");
+        TEST_ASSERT(pipeline == NULL,
+            "line polygon-mode rejection leaves pipeline output null");
+        rasterization.polygon_mode = AGC_POLYGON_MODE_POINT;
+        TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &pipeline),
+            AGC_ERROR_NOT_SUPPORTED,
+            "unqualified point polygon mode fails before pipeline creation");
+        TEST_ASSERT(pipeline == NULL,
+            "point polygon-mode rejection leaves pipeline output null");
+        TEST_ASSERT_EQ(agcDestroyShader(ps), AGC_OK,
+            "unqualified polygon-mode pixel shader destroys");
+    }
+
     TEST_ASSERT_EQ(agcDestroyShader(vs), AGC_OK,
         "matrix vertex shader destroys");
     TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
