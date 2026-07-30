@@ -281,15 +281,15 @@ static void test_all_register_defaults_layouts(void)
 
 static void test_common_operation_carrier_profiles(void)
 {
-    static const uint16_t active_keys[] = {
-        0x0320u, 0x0400u, 0x0403u, 0x0450u, 0x0451u,
-        0x0502u, 0x0510u, 0x0550u, 0x0600u, 0x0602u, 0x0650u,
-        0x0701u, 0x0720u, 0x0740u, 0x0760u, 0x0761u,
-        0x0800u, 0x0820u, 0x0840u, 0x0860u,
-        0x0900u, 0x0905u, 0x0920u, 0x0940u, 0x0960u,
-        0x1001u, 0x1020u, 0x1040u, 0x1060u,
-        0x1100u, 0x1120u, 0x1140u, 0x1160u,
-        0x1200u, 0x1202u, 0x1220u, 0x1240u, 0x1260u, 0x1270u,
+    static const uint32_t active_raw_versions[] = {
+        0x03200001u, 0x04000002u, 0x04030003u, 0x04500004u, 0x04510005u,
+        0x05020006u, 0x05100007u, 0x05500008u, 0x06000009u, 0x0602000au,
+        0x0650000bu, 0x0701000cu, 0x0720000du, 0x0740000eu, 0x0760000fu,
+        0x07610010u, 0x08000011u, 0x08200012u, 0x08400013u, 0x08600014u,
+        0x09000015u, 0x09050016u, 0x09200017u, 0x09400018u, 0x09600019u,
+        0x1001001au, 0x1020001bu, 0x1040001cu, 0x1060001du, 0x1100001eu,
+        0x1120001fu, 0x11400020u, 0x11600005u, 0x12000022u, 0x12020023u,
+        0x12200024u, 0x12400025u, 0x12600026u, 0x12700027u,
     };
     static const uint8_t defaults_max_versions[] = {
         7u, 8u, 8u, 8u, 8u,
@@ -302,16 +302,32 @@ static void test_common_operation_carrier_profiles(void)
         12u, 12u, 12u, 12u, 12u, 12u,
     };
 
-    _Static_assert(sizeof(active_keys) / sizeof(active_keys[0]) ==
+    _Static_assert(sizeof(active_raw_versions) /
+        sizeof(active_raw_versions[0]) ==
         sizeof(defaults_max_versions) / sizeof(defaults_max_versions[0]),
         "every active profile needs one defaults bound");
 
-    for (size_t i = 0; i < sizeof(active_keys) / sizeof(active_keys[0]); ++i) {
+    for (size_t i = 0; i < sizeof(active_raw_versions) /
+            sizeof(active_raw_versions[0]); ++i) {
+        AgcFirmwareVersion version =
+            agcFirmwareNormalize(active_raw_versions[i]);
         AgcProsperoDirectProfile profile;
-        uint32_t raw = (uint32_t)active_keys[i] << 16;
+        uint32_t raw = active_raw_versions[i];
+        uint16_t key = (uint16_t)(raw >> 16);
+        uint8_t major_bcd = (uint8_t)(key >> 8);
+        uint8_t minor_bcd = (uint8_t)key;
+
+        TEST_ASSERT_EQ(version.raw, raw,
+            "full firmware value survives normalization");
+        TEST_ASSERT_EQ(version.major,
+            ((major_bcd >> 4) & 0xfu) * 10u + (major_bcd & 0xfu),
+            "full firmware value selects its BCD major version");
+        TEST_ASSERT_EQ(version.minor,
+            ((minor_bcd >> 4) & 0xfu) * 10u + (minor_bcd & 0xfu),
+            "full firmware value selects its BCD minor version");
 
         TEST_ASSERT(agcProsperoBuildDirectProfile(raw, false, &profile),
-            "active carrier-qualified profile builds");
+            "full firmware value selects its exact direct profile");
         TEST_ASSERT(agcProsperoFirmwareSupported(raw),
             "every active exact profile is runtime-selectable");
         TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_TF_RING) != 0,
@@ -332,7 +348,7 @@ static void test_common_operation_carrier_profiles(void)
             "active profile retains HS-offchip command");
         TEST_ASSERT_EQ(profile.async_graphics_ioctl, AGC_GC_IOCTL_QUEUE_STATUS,
             "active profile retains async setup command");
-        if (active_keys[i] == 0x0320u) {
+        if (key == 0x0320u) {
             TEST_ASSERT(!profile.submit_uses_frame_close_trailer,
                 "legacy-v3 does not inherit the standard submit policy");
         } else {
@@ -350,12 +366,15 @@ static void test_common_operation_carrier_profiles(void)
         TEST_ASSERT(agcProsperoDirectProfileAcceptsDefaultsVersion(
             &profile, 0u),
             "profile accepts a caller-selected backward-compatible version");
+        TEST_ASSERT(agcProsperoDirectProfileAcceptsDefaultsVersion(
+            &profile, AGC_REGISTER_DEFAULTS_VERSION_7),
+            "every active profile accepts the portability ELF's common V7");
         TEST_ASSERT(!agcProsperoDirectProfileAcceptsDefaultsVersion(
             &profile, (uint32_t)defaults_max_versions[i] + 1u),
             "profile rejects a caller version above its exact SPRX bound");
-        if (active_keys[i] == 0x0550u || active_keys[i] == 0x1160u) {
+        if (key == 0x0550u || key == 0x1160u) {
             TEST_ASSERT_EQ((profile.capabilities & AGC_DIRECT_CAP_EOP_FLIP) != 0,
-                active_keys[i] == 0x0550u,
+                key == 0x0550u,
                 "EOP flip remains independently qualified");
         } else {
             TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_EOP_FLIP) == 0,
