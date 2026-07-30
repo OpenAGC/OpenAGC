@@ -521,6 +521,10 @@ the runner and shared teardown on FW 11.60 only.
   shutdown, and process-cleanup invariants. Ordinary D32 HTILE is qualified on
   both endpoints. Run pinned FW 11.60 D32 expclear pass 1 next, freeze its
   exact metadata count, replay once, then run the pinned FW 5.50 mirror.
+- FW 11.60 D32 expclear pass 1 reproduced exact D32 classes and changed
+  `49152` HTILE words from `0xfffffff0`, with immediate completion, clean
+  shutdown, and no residual process. Its recipe now freezes `49152`; run the
+  identical replay next, then permit the FW 5.50 expclear mirror.
 - Combined D32+S8 HTILE is now prepared offline in the same endpoint-paired
   form. Ordinary HTILE plus depth-only, stencil-only, and both-aspect expclear
   produce eight warning-free ELFs. The guarded runner pins exact D32 and S8

@@ -134,6 +134,12 @@ expclear artifact is now the active gate; its first pass must establish and
 freeze the exact changed-word count before replay, followed by the pinned FW
 5.50 expclear mirror.
 
+FW 11.60 D32 expclear pass 1 selected `0x1160`, changed exactly `49152`
+HTILE words from `0xfffffff0`, reproduced the exact D32 classes, reached its
+fence immediately, shut down cleanly, returned final PASS, and left no
+residual `eboot.bin`. The logged recipe now freezes `49152`; run its identical
+replay before permitting the FW 5.50 expclear mirror.
+
 The combined D32+S8 tier is likewise prepared without a hardware claim. Eight
 artifacts cover ordinary HTILE and expclear of depth-only, stencil-only, or
 both aspects for exact FW `0x1160` and matching headless FW `0x0550`. The
