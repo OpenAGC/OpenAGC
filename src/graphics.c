@@ -192,6 +192,27 @@ static bool agcGfx1013BindingHasOffset(
     return false;
 }
 
+static bool agcGfx1013BindingHasProgramAddress(
+    const AgcGfx1013ShaderBinding *binding, uint32_t program_lo,
+    uint64_t address)
+{
+    uint32_t expected_lo = (uint32_t)(address >> 8u);
+    uint32_t expected_hi = (uint32_t)(address >> 40u);
+    int found_lo = 0;
+    int found_hi = 0;
+    uint32_t i;
+
+    for (i = 0u; i < binding->num_sh_registers; ++i) {
+        if (binding->sh_registers[i].offset == program_lo &&
+            binding->sh_registers[i].value == expected_lo)
+            found_lo = 1;
+        else if (binding->sh_registers[i].offset == program_lo + 1u &&
+            binding->sh_registers[i].value == expected_hi)
+            found_hi = 1;
+    }
+    return found_lo && found_hi;
+}
+
 static bool agcGfx1013EmitShaderPatched(
     SceAgcCb *cb, const AgcGfx1013ShaderBinding *binding,
     uint32_t program_lo, const AgcGfx1013RuntimePatches *patches)
@@ -282,7 +303,12 @@ static int32_t agcGfx1013ValidateVsPsImpl(
     if (state->primitive.record->shader_type ==
             (uint8_t)kAgcShaderBinaryTypeGsBack &&
         !agcGfx1013BindingHasValue(
-            &state->primitive, OPENAGC_NEXT_STAGE_PC_PLACEHOLDER))
+            &state->primitive, OPENAGC_NEXT_STAGE_PC_PLACEHOLDER) &&
+        (!agcGfx1013AddressIsProgramCompatible(
+             state->primitive_back_code_address) ||
+         !agcGfx1013BindingHasProgramAddress(&state->primitive,
+             AGC_REG_SPI_SHADER_PGM_LO_ES,
+             state->primitive_back_code_address)))
         return AGC_ERROR_SHADER_INVALID;
     if (agcGfx1013BindingHasValue(
             &state->primitive, OPENAGC_NEXT_STAGE_PC_PLACEHOLDER) &&

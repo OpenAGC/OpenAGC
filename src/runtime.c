@@ -2993,6 +2993,32 @@ static uint32_t agcPipelineCopyStaticShRegisters(AgcShader shader,
     return count;
 }
 
+static int agcPipelineShaderHasShValue(AgcShader shader, uint32_t value)
+{
+    const AgcRegisterValue *registers =
+        (const AgcRegisterValue *)(uintptr_t)shader->record.sh_registers;
+    uint32_t i;
+
+    for (i = 0u; i < shader->record.num_sh_registers; ++i) {
+        if (registers[i].value == value)
+            return 1;
+    }
+    return 0;
+}
+
+static void agcPipelinePatchProgramAddress(AgcRegisterValue *registers,
+    uint32_t count, uint32_t program_lo, uint64_t address)
+{
+    uint32_t i;
+
+    for (i = 0u; i < count; ++i) {
+        if (registers[i].offset == program_lo)
+            registers[i].value = (uint32_t)(address >> 8u);
+        else if (registers[i].offset == program_lo + 1u)
+            registers[i].value = (uint32_t)(address >> 40u);
+    }
+}
+
 static void agcPipelineBuildShaderBinding(AgcShader shader,
     AgcShaderRecord *record, AgcRegisterValue *sh_registers,
     AgcGfx1013ShaderBinding *binding)
@@ -3036,6 +3062,14 @@ static int32_t agcBuildGraphicsPipelineBind(
         agcPipelineBuildShaderBinding(pipeline->primitive_shader,
             &primitive_record, primitive_sh,
             &tess_shader_state.primitive);
+        if (pipeline->primitive_shader->has_front_record &&
+            !agcPipelineShaderHasShValue(pipeline->primitive_shader,
+                OPENAGC_NEXT_STAGE_PC_PLACEHOLDER)) {
+            agcPipelinePatchProgramAddress(primitive_sh,
+                tess_shader_state.primitive.num_sh_registers,
+                AGC_REG_SPI_SHADER_PGM_LO_ES,
+                pipeline->primitive_shader->front_program_gpu_address);
+        }
         agcPipelineBuildShaderBinding(pipeline->pixel_shader,
             &pixel_record, pixel_sh, &tess_shader_state.pixel);
         tess_shader_state.hull_back_code_address =
@@ -3075,6 +3109,14 @@ static int32_t agcBuildGraphicsPipelineBind(
     } else {
         agcPipelineBuildShaderBinding(pipeline->primitive_shader,
             &primitive_record, primitive_sh, &shader_state.primitive);
+        if (pipeline->primitive_shader->has_front_record &&
+            !agcPipelineShaderHasShValue(pipeline->primitive_shader,
+                OPENAGC_NEXT_STAGE_PC_PLACEHOLDER)) {
+            agcPipelinePatchProgramAddress(primitive_sh,
+                shader_state.primitive.num_sh_registers,
+                AGC_REG_SPI_SHADER_PGM_LO_ES,
+                pipeline->primitive_shader->front_program_gpu_address);
+        }
         agcPipelineBuildShaderBinding(pipeline->pixel_shader,
             &pixel_record, pixel_sh, &shader_state.pixel);
         shader_state.primitive_back_code_address =

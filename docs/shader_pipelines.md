@@ -134,7 +134,22 @@ fused geometry continuation patching, resource lifetime, exact depth/stencil
 register encoding, v1 state normalization, multisample minimums, required
 dynamic-state gating, device-wide tessellation-ring reuse, reflected off-chip
 layout patching, whole-patch draw validation, TCS push binding, and isolated
-plus TES-to-geometry submission. These
-results are host-tested only. A future explicit PS5 promotion gate will qualify
+plus TES-to-geometry submission. An opt-in combined-tree test also compiles
+actual vertex, fragment, and compute SPIR-V through `openagc-psbc`, then
+creates reflected OpenAGC graphics and compute pipelines without application
+register assembly. It is deliberately outside the default libc-only build:
+
+```sh
+make -C ../openagc-psbc library
+cmake -B build-psbc-contract -DOPENAGC_PLATFORM=generic \
+  -DOPENAGC_BUILD_PSBC_INTEGRATION_TEST=ON \
+  -DOPENAGC_PSBC_LIBRARY=../openagc-psbc/libopenagc_psbc.a \
+  -DOPENAGC_PSBC_INCLUDE_DIR=../openagc-psbc/libopenagc_psbc
+cmake --build build-psbc-contract
+ctest --test-dir build-psbc-contract -R psbc_runtime_integration \
+  --output-on-failure
+```
+
+These results are host-tested only. A future explicit PS5 promotion gate will qualify
 exact firmware artifacts; no hardware qualification is implied by pipeline
 creation or a successful host command recording.

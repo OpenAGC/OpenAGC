@@ -173,6 +173,14 @@ library, varying/export, NGG, and tessellation suites pass. This slice is
 host-tested only. No PS5 hardware test was run or claimed. See
 `docs/shader_pipelines.md`.
 
+An opt-in combined-tree integration target compiles real `openagc-psbc`
+vertex, fragment, and compute artifacts, then creates OpenAGC graphics and
+compute pipelines from their shared reflection with no application-local
+register data. It caught and closes the PS5 program-address contract at two
+boundaries: compiler code is now 256-byte aligned for `SPI_SHADER_PGM_LO`, and
+the runtime patches the ES program pair for a no-GS NGG front record. This is
+host integration evidence only, not a hardware qualification.
+
 ## Native runtime C API contract complete (2026-07-30)
 
 The PS5-only, firmware-neutral `openagc/runtime.h` header introduces opaque

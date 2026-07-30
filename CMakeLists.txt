@@ -147,6 +147,39 @@ add_test(NAME firmware_neutral_elf_verifier
         ${CMAKE_CURRENT_SOURCE_DIR}/tools/verify_firmware_neutral_elf.sh)
 endif()
 
+# === Optional compiler/runtime integration test ===
+# The runtime never links the compiler.  This host-only target is opt-in so a
+# normal OpenAGC build remains libc-only while a combined checkout can verify
+# that the compiler's in-memory artifacts create native pipeline objects.
+option(OPENAGC_BUILD_PSBC_INTEGRATION_TEST
+    "Build the opt-in openagc-psbc/runtime integration test" OFF)
+set(OPENAGC_PSBC_LIBRARY "" CACHE FILEPATH
+    "Path to libopenagc_psbc.a for the optional integration test")
+set(OPENAGC_PSBC_INCLUDE_DIR "" CACHE PATH
+    "Path containing openagc_psbc.h for the optional integration test")
+if(OPENAGC_BUILD_PSBC_INTEGRATION_TEST)
+    if(NOT EXISTS "${OPENAGC_PSBC_LIBRARY}" OR
+       NOT EXISTS "${OPENAGC_PSBC_INCLUDE_DIR}/openagc_psbc.h")
+        message(FATAL_ERROR
+            "OPENAGC_BUILD_PSBC_INTEGRATION_TEST requires OPENAGC_PSBC_LIBRARY and OPENAGC_PSBC_INCLUDE_DIR")
+    endif()
+    enable_language(CXX)
+    add_executable(openagc_psbc_runtime_integration
+        tests/psbc_runtime_integration.c)
+    target_include_directories(openagc_psbc_runtime_integration PRIVATE
+        "${OPENAGC_PSBC_INCLUDE_DIR}")
+    target_link_libraries(openagc_psbc_runtime_integration PRIVATE openagc
+        "${OPENAGC_PSBC_LIBRARY}")
+    set_target_properties(openagc_psbc_runtime_integration PROPERTIES
+        LINKER_LANGUAGE CXX)
+    if(OPENAGC_BUILD_TESTS)
+        add_test(NAME psbc_runtime_integration
+            COMMAND sh
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_psbc_runtime_integration.sh
+                $<TARGET_FILE:openagc_psbc_runtime_integration>)
+    endif()
+endif()
+
 # === Host shader compiler packaging ===
 set(OPENAGC_PSBC_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../openagc-psbc"
     CACHE PATH "Path to the openagc-psbc source tree")
