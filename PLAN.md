@@ -559,6 +559,10 @@ the runner and shared teardown on FW 11.60 only.
   distributions, immediate completion, clean shutdown, and no residual
   process. Its guarded recipe now freezes `49152`; replay it once before
   beginning aspect-specific expclear.
+- The identical FW 11.60 ordinary combined replay reproduced every invariant.
+  Ordinary combined D32+S8 HTILE is qualified on both endpoints. Qualify
+  depth-only expclear next in FW 11.60 pass-1/freeze/replay then FW 5.50 mirror
+  order; only afterward proceed to stencil-only and both-aspect gates.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and

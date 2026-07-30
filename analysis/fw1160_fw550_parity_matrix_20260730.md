@@ -56,7 +56,7 @@ reached its completion fence, shut the driver down, and returned PASS.
 | Ordinary D16 HTILE | Qualified | Qualified on both endpoints |
 | D16 HTILE expclear | Qualified | Qualified on both endpoints |
 | D32 HTILE ordinary/decompress/resummarize/expclear | Qualified | Qualified on both endpoints |
-| Combined D32+S8 HTILE and aspect masks | Prepared | Hardware qualification missing |
+| Combined D32+S8 HTILE and aspect masks | Ordinary qualified | Depth-only, stencil-only, and both-aspect expclear pending |
 | HTILE mip and array subresources | Missing | Prepare bounded mirrors |
 | 4x MSAA | Missing | Wait for the FW 5.50 baseline regression |
 | Sample-rate shading | Missing | Add an exact invocation-count gate |
@@ -201,6 +201,13 @@ oracle exactly: `49152` changed HTILE words, the full D32 and allocation-aware
 S8 distributions, immediate fence completion, clean shutdown, final PASS, and
 no residual process. The logged recipe now freezes `49152`; one identical
 replay remains before combined ordinary promotion.
+
+The identical FW 11.60 replay reproduced `49152`, exact D32 and S8
+distributions, immediate completion, clean shutdown, final PASS, and no
+residual process. Ordinary combined D32+S8 HTILE is hardware-qualified on both
+endpoints. Run the pinned FW 11.60 depth-only expclear gate next; freeze and
+replay it before its FW 5.50 mirror, then repeat that sequence for stencil-only
+and both-aspect gates.
 
 ## Higher-level consumers
 

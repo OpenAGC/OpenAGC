@@ -89,7 +89,9 @@ D32+S8 HTILE is hardware-qualified on FW 5.50. Its pinned FW 11.60 mirror is
 the active gate. FW 11.60 pass 1 reproduced `49152`, exact D32 and S8
 distributions, immediate completion, clean shutdown, and no residual process;
 the recipe now freezes that count. Aspect-specific expclear remains behind one
-identical replay.
+identical replay, which reproduced every invariant. Ordinary combined D32+S8
+HTILE is now hardware-qualified on both endpoints. Depth-only expclear on FW
+11.60 is the active combined gate; stencil-only and both-aspect remain blocked.
 
 Ordinary D16 HTILE is now hardware-qualified twice on each endpoint. The
 pinned current-source artifacts reproduced exact D16 classes, clean teardown,
