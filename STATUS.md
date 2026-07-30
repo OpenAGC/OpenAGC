@@ -131,6 +131,11 @@ selected counts, and exact color coverage, with host accept/reject coverage.
 No new hardware claim is made and no deploy target exists until reproducible
 hashes and dependency audits are complete.
 
+Both 4x MSAA artifacts now reproduce across two relinks, avoid AGC SPRX
+dependencies, are preserved under full hashes, and have cleanup-first pinned
+deploy targets. FW 5.50 is the first permitted launch; exact resolved color
+and native D32 class counts must be frozen before replay.
+
 All four subresource artifacts now reproduce across two relinks, avoid AGC
 SPRX dependencies, are preserved under full hashes, and have cleanup-first
 hash-pinned deploy targets with exact color and selected/outside metadata

@@ -257,6 +257,16 @@ one-to-one clip space; both artifacts build without warnings. No deploy target
 exists until the artifacts reproduce, pass dependency inspection, and are
 preserved and hash-pinned.
 
+Two committed-shader relinks reproduced FW 11.60 SHA-256
+`ccc18d9cb6fcccfd1d38cb825d6c2d256af523ffc781dc322aad01f35460688e`
+and FW 5.50 SHA-256
+`83088ff7f33df17b89668b9d058b447212891585bf3455bd6ac7033bbf633ab7`.
+Both depend only on VideoOut, kernel, libc, and networking, are preserved under
+their full hashes, and now have cleanup-first deploy targets that reject byte
+drift before network access. The pinned FW 5.50 MSAA artifact is the first
+permitted launch; establish and freeze exact resolved green/red and D32
+one/near/far counts before replay.
+
 That prerequisite sequence is now complete. Two relinks against the committed
 shader records reproduced all eight artifacts byte-for-byte, and dependency
 inspection found only VideoOut, kernel, libc, and networking. The exact FW
