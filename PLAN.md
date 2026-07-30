@@ -1180,6 +1180,12 @@ BC4 UNORM on FW 5.50 used exact pinned SHA-256
 twice and reproduced `224640` changed pixels, regions `{74880,74880,74880}`,
 zero decode mismatches/error, and FNV64 `0x5327e8ad53b3a455` on both runs. BC4
 UNORM is hardware-qualified on both endpoints; qualify BC4 SNORM next.
+
+BC4 SNORM pass 1 on FW 5.50 used pinned SHA-256
+`022f159f0186aab25222bfd882f9b59b8ab40bdfcf6d9c59da389d057454b28d`
+and reproduced `224640` changed pixels, regions `{74880,74880,74880}`, zero
+decode mismatches/error, and FNV64 `0x16b22a8b52c7ce8d`. Repeat the identical
+artifact once.
 The final firmware-neutral bytes are pinned as SHA-256
 `f74c393112fc465eace431a3fe288095ae4b3bf5ee993e8147ed0e9a2f22f2a4`
 for BC4 UNORM and

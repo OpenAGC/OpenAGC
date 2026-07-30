@@ -70,3 +70,14 @@ check passed again.
 
 BC4 UNORM is hardware-qualified on exact FW 5.50 and FW 11.60. BC4 SNORM is
 next.
+
+## BC4 SNORM pass 1
+
+Artifact SHA-256:
+`022f159f0186aab25222bfd882f9b59b8ab40bdfcf6d9c59da389d057454b28d`
+
+The guarded run produced `224640` changed pixels, regions
+`{74880,74880,74880}`, zero decode mismatches/error, and FNV64
+`0x16b22a8b52c7ce8d`. The signed-range, fence, marker, shutdown, memory
+cleanup, verdict, self-termination, and residual-process checks passed. Repeat
+the identical artifact once.
