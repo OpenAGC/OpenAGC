@@ -30,6 +30,14 @@ reachable. See
 `analysis/fw550_headless_flexible_memory_panic_20260730.md` and
 `analysis/fw1160_fw550_parity_matrix_20260730.md`.
 
+Offline preparation now also covers D32 HTILE ordinary/decompress/resummarize
+and expclear. Exact FW `0x1160` logged artifacts and matching headless FW
+`0x0550` mirrors build without warnings, use cleanup-first guarded recipes,
+and require exact D32 distributions plus positive HTILE mutation. Their only
+dynamic libraries are VideoOut, kernel, libc, and networking; neither AGC SPRX
+is required. These four artifacts are hardware-unverified and remain blocked
+behind the FW 5.50 teardown, uncompressed-depth, and D16 HTILE sequence.
+
 ## Regression safety fixes (2026-07-29)
 
 Default context-state construction now bounds register offsets in dwords,

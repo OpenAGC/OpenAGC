@@ -55,7 +55,7 @@ reached its completion fence, shut the driver down, and returned PASS.
 | Uncompressed D32, D16, S8, and D16+S8 | Qualified | Current-source FW 5.50 mirrors pending |
 | Ordinary D16 HTILE | Prepared | Hardware qualification missing |
 | D16 HTILE expclear | Prepared | Hardware qualification missing |
-| D32 HTILE ordinary/decompress/resummarize/expclear | Missing | Prepare bounded mirrors |
+| D32 HTILE ordinary/decompress/resummarize/expclear | Prepared | Hardware qualification missing |
 | Combined D32+S8 HTILE and aspect masks | Missing | Prepare bounded mirrors |
 | HTILE mip and array subresources | Missing | Prepare bounded mirrors |
 | 4x MSAA | Missing | Wait for the FW 5.50 baseline regression |
@@ -80,6 +80,17 @@ does not close the FW 5.50 regression. FW 5.50 hardware is currently
 unavailable. The FW 11.60 twin passed a one-launch canary followed by all
 14/14 stress iterations on 2026-07-30, with a fence, driver shutdown, and four
 zero-valued cleanup results on every launch.
+
+The D32 compressed-depth tier now has four bounded source-built artifacts:
+ordinary/decompress/resummarize and expclear variants for exact FW `0x1160`,
+plus matching headless FW `0x0550` mirrors. Their guarded recipes require the
+cleanup ELF immediately before launch, exact firmware selection, bounded fence
+completion, full-rectangle D32 distributions, positive HTILE mutation, driver
+shutdown, and final PASS. All four build without warnings and have no dynamic
+dependency on `libSceAgc.sprx` or `libSceAgcDriver.sprx`; none has been run on
+hardware. Preserve the execution order below: the FW 5.50 teardown and
+uncompressed-depth baselines must pass before either compressed-depth tuple is
+launched.
 
 ## Higher-level consumers
 

@@ -468,6 +468,14 @@ the runner and shared teardown on FW 11.60 only.
   positive metadata mutation, bounded completion, shutdown, and final PASS.
   Do not launch them until the modern FW 5.50 uncompressed depth regressions
   pass. See `analysis/fw1160_d16_htile_gate_plan_20260730.md`.
+- The following D32 compressed-depth tier is also prepared offline: bounded
+  ordinary/decompress/resummarize and expclear artifacts for exact FW `0x1160`,
+  with matching headless FW `0x0550` mirrors. All four build without warnings,
+  carry no `libSceAgc.sprx` or `libSceAgcDriver.sprx` dependency, and use the
+  cleanup-first depth runner with exact D32 distributions and HTILE mutation
+  checks. They remain hardware-unverified and must not run until the FW 5.50
+  cleanup stress, uncompressed-depth regression, and preceding D16 HTILE gates
+  pass. See `analysis/fw1160_fw550_parity_matrix_20260730.md`.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and
