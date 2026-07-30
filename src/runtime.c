@@ -46,6 +46,8 @@
 #define AGC_RUNTIME_MAX_DESCRIPTOR_WRITES 256u
 #define AGC_RUNTIME_MAX_RECORDED_RESOURCES 512u
 #define AGC_RUNTIME_MAX_RECORDED_TRANSITIONS 512u
+#define AGC_RUNTIME_MAX_BUFFER_STATE_RANGES \
+    (AGC_RUNTIME_MAX_RECORDED_TRANSITIONS * 2u + 1u)
 #define AGC_RUNTIME_MAX_SUBMIT_COMMAND_BUFFERS 63u
 #define AGC_RUNTIME_MAX_RESOURCE_ARENA_SIZE UINT64_C(0x100000)
 
@@ -63,6 +65,8 @@ typedef struct AgcRuntimeRecordedTransition {
     uint32_t flags;
     AgcGpuLabel dependency_label;
     uint32_t dependency_value;
+    uint64_t buffer_offset;
+    uint64_t buffer_size;
 } AgcRuntimeRecordedTransition;
 
 typedef struct AgcRuntimeBatchTransitionState {
@@ -71,7 +75,17 @@ typedef struct AgcRuntimeBatchTransitionState {
     AgcResourceUsage usage;
     AgcResourceOwner owner;
     uint32_t command_index;
+    uint64_t buffer_offset;
+    uint64_t buffer_size;
 } AgcRuntimeBatchTransitionState;
+
+typedef struct AgcRuntimeBufferStateRange {
+    /* Sorted, contiguous half-open intervals. Start is the previous end (or
+     * zero); adjacent equal states are merged after every commit. */
+    uint64_t end;
+    AgcResourceUsage usage;
+    AgcResourceOwner owner;
+} AgcRuntimeBufferStateRange;
 
 typedef struct AgcRuntimeRecordedLabelWait {
     AgcGpuLabel label;
@@ -166,8 +180,6 @@ struct AgcBufferImpl {
     uint32_t create_flags;
     void *storage;
     AgcRuntimeAllocation *allocation;
-    AgcResourceUsage usage_state;
-    AgcResourceOwner owner_state;
     AgcResourceUsage transfer_usage;
     AgcResourceOwner transfer_owner;
     AgcGpuLabel transfer_label;
@@ -175,6 +187,10 @@ struct AgcBufferImpl {
     uint32_t transfer_value;
     uint32_t transfer_pending;
     uint32_t deferred;
+    uint32_t state_range_count;
+    uint32_t state_range_capacity;
+    AgcRuntimeBufferStateRange *state_ranges;
+    AgcRuntimeBufferStateRange inline_state_range;
 };
 
 struct AgcImageImpl {
@@ -1612,6 +1628,143 @@ int32_t PS5_SYSV_ABI agcGetImageSubresourceLayout(AgcDevice device,
         layout, NULL);
 }
 
+static int agcBufferCommittedRangeState(const AgcBuffer buffer,
+    uint64_t offset, uint64_t size, AgcResourceUsage *usage,
+    AgcResourceOwner *owner)
+{
+    const uint64_t end = offset + size;
+    uint64_t start = 0u;
+    uint32_t i;
+    int found = 0;
+
+    for (i = 0u; i < buffer->state_range_count; ++i) {
+        const AgcRuntimeBufferStateRange *range = &buffer->state_ranges[i];
+
+        if (range->end > offset && start < end) {
+            if (!found) {
+                *usage = range->usage;
+                *owner = range->owner;
+                found = 1;
+            } else if (*usage != range->usage || *owner != range->owner) {
+                return 0;
+            }
+        }
+        start = range->end;
+        if (start >= end)
+            break;
+    }
+    return found;
+}
+
+static void agcBufferCommittedStateAt(const AgcBuffer buffer, uint64_t offset,
+    AgcResourceUsage *usage, AgcResourceOwner *owner, uint64_t *next_boundary)
+{
+    uint32_t i;
+
+    for (i = 0u; i < buffer->state_range_count; ++i) {
+        if (offset < buffer->state_ranges[i].end) {
+            *usage = buffer->state_ranges[i].usage;
+            *owner = buffer->state_ranges[i].owner;
+            *next_boundary = buffer->state_ranges[i].end;
+            return;
+        }
+    }
+    *usage = kAgcResourceUsageUndefined;
+    *owner = kAgcResourceOwnerHost;
+    *next_boundary = buffer->size;
+}
+
+static int32_t agcBufferEnsureStateCapacity(
+    AgcBuffer buffer, uint32_t required)
+{
+    AgcRuntimeBufferStateRange *ranges;
+    uint32_t capacity;
+
+    if (required <= buffer->state_range_capacity)
+        return AGC_OK;
+    if (required > AGC_RUNTIME_MAX_BUFFER_STATE_RANGES)
+        return AGC_ERROR_OUT_OF_MEMORY;
+    capacity = buffer->state_range_capacity;
+    while (capacity < required) {
+        if (capacity > AGC_RUNTIME_MAX_BUFFER_STATE_RANGES / 2u) {
+            capacity = AGC_RUNTIME_MAX_BUFFER_STATE_RANGES;
+            break;
+        }
+        capacity *= 2u;
+    }
+    ranges = agcAlloc(buffer->device,
+        (size_t)capacity * sizeof(*ranges),
+        _Alignof(AgcRuntimeBufferStateRange));
+    if (!ranges)
+        return AGC_ERROR_OUT_OF_MEMORY;
+    memcpy(ranges, buffer->state_ranges,
+        (size_t)buffer->state_range_count * sizeof(*ranges));
+    if (buffer->state_ranges != &buffer->inline_state_range)
+        agcFree(buffer->device, buffer->state_ranges);
+    buffer->state_ranges = ranges;
+    buffer->state_range_capacity = capacity;
+    return AGC_OK;
+}
+
+static void agcBufferCommitRangeState(AgcBuffer buffer, uint64_t offset,
+    uint64_t size, AgcResourceUsage usage, AgcResourceOwner owner)
+{
+    const uint64_t end = offset + size;
+    AgcRuntimeBufferStateRange first_range;
+    AgcRuntimeBufferStateRange last_range;
+    uint64_t first_start;
+    uint32_t first = 0u;
+    uint32_t last;
+    uint32_t tail_count;
+    uint32_t destination;
+    uint32_t write;
+    uint32_t read;
+    int left;
+    int right;
+
+    while (buffer->state_ranges[first].end <= offset)
+        first++;
+    last = first;
+    while (buffer->state_ranges[last].end < end)
+        last++;
+    first_range = buffer->state_ranges[first];
+    last_range = buffer->state_ranges[last];
+    first_start = first == 0u ? 0u : buffer->state_ranges[first - 1u].end;
+    left = offset > first_start;
+    right = end < last_range.end;
+    tail_count = buffer->state_range_count - last - 1u;
+    destination = first + (uint32_t)left + 1u + (uint32_t)right;
+    memmove(&buffer->state_ranges[destination],
+        &buffer->state_ranges[last + 1u],
+        (size_t)tail_count * sizeof(*buffer->state_ranges));
+    write = first;
+    if (left) {
+        buffer->state_ranges[write] = first_range;
+        buffer->state_ranges[write++].end = offset;
+    }
+    buffer->state_ranges[write++] = (AgcRuntimeBufferStateRange){
+        end, usage, owner };
+    if (right) {
+        buffer->state_ranges[write++] = last_range;
+    }
+    buffer->state_range_count = destination + tail_count;
+
+    write = 0u;
+    for (read = 0u; read < buffer->state_range_count; ++read) {
+        if (write != 0u &&
+            buffer->state_ranges[write - 1u].usage ==
+                buffer->state_ranges[read].usage &&
+            buffer->state_ranges[write - 1u].owner ==
+                buffer->state_ranges[read].owner) {
+            buffer->state_ranges[write - 1u].end =
+                buffer->state_ranges[read].end;
+        } else {
+            buffer->state_ranges[write++] = buffer->state_ranges[read];
+        }
+    }
+    buffer->state_range_count = write;
+}
+
 int32_t PS5_SYSV_ABI agcCreateBuffer(
     AgcDevice device, const AgcBufferDesc *desc, AgcBuffer *buffer_out)
 {
@@ -1654,6 +1807,11 @@ int32_t PS5_SYSV_ABI agcCreateBuffer(
     buffer->size = desc->size;
     buffer->usage = desc->usage;
     buffer->create_flags = desc->flags;
+    buffer->state_range_count = 1u;
+    buffer->state_range_capacity = 1u;
+    buffer->state_ranges = &buffer->inline_state_range;
+    buffer->inline_state_range = (AgcRuntimeBufferStateRange){
+        buffer->size, kAgcResourceUsageUndefined, kAgcResourceOwnerHost };
     *buffer_out = buffer;
     return AGC_OK;
 }
@@ -1672,24 +1830,26 @@ int32_t PS5_SYSV_ABI agcDestroyBuffer(AgcBuffer buffer)
         return AGC_ERROR_INVALID_STATE;
     device = buffer->device;
     agcRuntimeFree(device, buffer->allocation);
+    if (buffer->state_ranges != &buffer->inline_state_range)
+        agcFree(device, buffer->state_ranges);
     buffer->magic = 0u;
     agcDestroyChild(device, buffer);
     return AGC_OK;
 }
 
-int32_t PS5_SYSV_ABI agcGetBufferStateInfo(
-    AgcBuffer buffer, AgcResourceStateInfo *info)
+static int32_t agcGetBufferRangeStateInfoImpl(AgcBuffer buffer,
+    uint64_t offset, uint64_t size, AgcResourceStateInfo *info)
 {
-    if (!buffer || buffer->magic != AGC_MAGIC_BUFFER ||
-        !agcDeviceValid(buffer->device) || !info ||
-        !agcHeaderValid(info->struct_size, sizeof(*info), info->version) ||
-        info->reserved0 != 0u || !agcReservedZero(info->reserved, 4u))
-        return AGC_ERROR_INVALID_ARGUMENT;
+    AgcResourceUsage usage;
+    AgcResourceOwner owner;
+
+    if (!agcBufferCommittedRangeState(buffer, offset, size, &usage, &owner))
+        return AGC_ERROR_NOT_SUPPORTED;
 
     *info = (AgcResourceStateInfo)AGC_RESOURCE_STATE_INFO_INIT;
     info->resource_type = kAgcResourceTypeBuffer;
-    info->usage = buffer->usage_state;
-    info->owner = buffer->owner_state;
+    info->usage = usage;
+    info->owner = owner;
     info->transfer_usage = buffer->transfer_usage;
     info->transfer_owner = buffer->transfer_owner;
     info->transfer_label = buffer->transfer_label;
@@ -1702,6 +1862,29 @@ int32_t PS5_SYSV_ABI agcGetBufferStateInfo(
     if (buffer->deferred)
         info->flags |= AGC_RESOURCE_STATE_DEFERRED_BIT;
     return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGetBufferRangeStateInfo(AgcBuffer buffer,
+    uint64_t offset, uint64_t size, AgcResourceStateInfo *info)
+{
+    if (!buffer || buffer->magic != AGC_MAGIC_BUFFER ||
+        !agcDeviceValid(buffer->device) || !info ||
+        !agcHeaderValid(info->struct_size, sizeof(*info), info->version) ||
+        info->reserved0 != 0u || !agcReservedZero(info->reserved, 4u) ||
+        size == 0u || offset > buffer->size || size > buffer->size - offset)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    return agcGetBufferRangeStateInfoImpl(buffer, offset, size, info);
+}
+
+int32_t PS5_SYSV_ABI agcGetBufferStateInfo(
+    AgcBuffer buffer, AgcResourceStateInfo *info)
+{
+    if (!buffer || buffer->magic != AGC_MAGIC_BUFFER ||
+        !agcDeviceValid(buffer->device) || !info ||
+        !agcHeaderValid(info->struct_size, sizeof(*info), info->version) ||
+        info->reserved0 != 0u || !agcReservedZero(info->reserved, 4u))
+        return AGC_ERROR_INVALID_ARGUMENT;
+    return agcGetBufferRangeStateInfoImpl(buffer, 0u, buffer->size, info);
 }
 
 int32_t PS5_SYSV_ABI agcCreateImage(
@@ -4413,6 +4596,9 @@ int32_t PS5_SYSV_ABI agcGetCommandBufferState(
 
 static int32_t agcCommandCommitScratch(AgcCommandBuffer command_buffer,
     const SceAgcCb *scratch, const uint32_t *words);
+static int agcCommandBufferRangeState(AgcCommandBuffer command_buffer,
+    AgcBuffer buffer, uint64_t offset, uint64_t size,
+    AgcResourceUsage *usage, AgcResourceOwner *owner);
 static void agcCommandTransitionState(AgcCommandBuffer command_buffer,
     AgcResourceType resource_type, void *resource, AgcResourceUsage *usage,
     AgcResourceOwner *owner);
@@ -4997,12 +5183,71 @@ static int32_t agcRuntimeMapLowUsage(AgcResourceUsage usage,
     }
 }
 
+static int agcCommandBufferRangeState(AgcCommandBuffer command_buffer,
+    AgcBuffer buffer, uint64_t offset, uint64_t size,
+    AgcResourceUsage *usage, AgcResourceOwner *owner)
+{
+    const uint64_t end = offset + size;
+    uint64_t position = offset;
+    int found = 0;
+
+    while (position < end) {
+        AgcResourceUsage segment_usage;
+        AgcResourceOwner segment_owner;
+        uint64_t next_boundary;
+        uint32_t i;
+
+        agcBufferCommittedStateAt(buffer, position, &segment_usage,
+            &segment_owner, &next_boundary);
+        if (next_boundary > end)
+            next_boundary = end;
+        for (i = 0u; i < command_buffer->recorded_transition_count; ++i) {
+            const AgcRuntimeRecordedTransition *record =
+                &command_buffer->recorded_transitions[i];
+            uint64_t record_end;
+
+            if (record->resource_type != kAgcResourceTypeBuffer ||
+                record->resource != buffer)
+                continue;
+            record_end = record->buffer_offset + record->buffer_size;
+            if (record->buffer_offset <= position && position < record_end &&
+                record->flags != AGC_RESOURCE_TRANSITION_RELEASE_BIT) {
+                segment_usage = record->after;
+                segment_owner = record->after_owner;
+            }
+            if (record->buffer_offset > position &&
+                record->buffer_offset < next_boundary)
+                next_boundary = record->buffer_offset;
+            if (record_end > position && record_end < next_boundary)
+                next_boundary = record_end;
+        }
+        if (!found) {
+            *usage = segment_usage;
+            *owner = segment_owner;
+            found = 1;
+        } else if (*usage != segment_usage || *owner != segment_owner) {
+            return 0;
+        }
+        position = next_boundary;
+    }
+    return found;
+}
+
 static void agcCommandTransitionState(AgcCommandBuffer command_buffer,
     AgcResourceType resource_type, void *resource, AgcResourceUsage *usage,
     AgcResourceOwner *owner)
 {
     uint32_t i;
 
+    if (resource_type == kAgcResourceTypeBuffer) {
+        const AgcBuffer buffer = (const AgcBuffer)resource;
+        if (!agcCommandBufferRangeState(command_buffer, (AgcBuffer)buffer,
+                0u, buffer->size, usage, owner)) {
+            *usage = kAgcResourceUsageCount;
+            *owner = kAgcResourceOwnerCount;
+        }
+        return;
+    }
     for (i = command_buffer->recorded_transition_count; i > 0u; --i) {
         const AgcRuntimeRecordedTransition *record =
             &command_buffer->recorded_transitions[i - 1u];
@@ -5013,11 +5258,7 @@ static void agcCommandTransitionState(AgcCommandBuffer command_buffer,
             return;
         }
     }
-    if (resource_type == kAgcResourceTypeBuffer) {
-        const AgcBuffer buffer = (const AgcBuffer)resource;
-        *usage = buffer->usage_state;
-        *owner = buffer->owner_state;
-    } else {
+    {
         const AgcImage image = (const AgcImage)resource;
         *usage = image->usage_state;
         *owner = image->owner_state;
@@ -5083,11 +5324,18 @@ static int32_t agcRuntimeValidateTransition(
         if (!buffer || transition->image ||
             buffer->magic != AGC_MAGIC_BUFFER ||
             buffer->device != command_buffer->device || buffer->deferred ||
-            transition->buffer_offset != 0u ||
-            transition->buffer_size != buffer->size ||
+            transition->buffer_size == 0u ||
+            transition->buffer_offset > buffer->size ||
+            transition->buffer_size >
+                buffer->size - transition->buffer_offset ||
             !agcRuntimeBufferUsageSupports(buffer, transition->before) ||
             !agcRuntimeBufferUsageSupports(buffer, transition->after))
             return AGC_ERROR_INVALID_ARGUMENT;
+        if ((flags == AGC_RESOURCE_TRANSITION_RELEASE_BIT ||
+             flags == AGC_RESOURCE_TRANSITION_ACQUIRE_BIT) &&
+            (transition->buffer_offset != 0u ||
+             transition->buffer_size != buffer->size))
+            return AGC_ERROR_NOT_SUPPORTED;
         resource = buffer;
     } else {
         AgcImage image = transition->image;
@@ -5122,8 +5370,15 @@ static int32_t agcRuntimeValidateTransition(
                     kAgcQueueGraphics : kAgcQueueCompute) :
                 command_buffer->queue_type))
         return AGC_ERROR_NOT_SUPPORTED;
-    agcCommandTransitionState(command_buffer, transition->resource_type,
-        resource, &current_usage, &current_owner);
+    if (transition->resource_type == kAgcResourceTypeBuffer) {
+        if (!agcCommandBufferRangeState(command_buffer, (AgcBuffer)resource,
+                transition->buffer_offset, transition->buffer_size,
+                &current_usage, &current_owner))
+            return AGC_ERROR_INVALID_STATE;
+    } else {
+        agcCommandTransitionState(command_buffer, transition->resource_type,
+            resource, &current_usage, &current_owner);
+    }
     if ((current_usage != transition->before ||
          current_owner != transition->before_owner) &&
         flags != AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT)
@@ -5233,6 +5488,105 @@ static int32_t agcRuntimeValidateTransition(
     return AGC_OK;
 }
 
+static int agcBatchBufferRangeState(AgcBuffer buffer,
+    const AgcRuntimeBatchTransitionState *states, uint32_t state_count,
+    uint64_t offset, uint64_t size, uint32_t command_index,
+    int require_prior_command, AgcResourceUsage *usage,
+    AgcResourceOwner *owner)
+{
+    const uint64_t end = offset + size;
+    uint64_t position = offset;
+    int found = 0;
+
+    while (position < end) {
+        AgcResourceUsage segment_usage;
+        AgcResourceOwner segment_owner;
+        uint64_t next_boundary;
+        uint32_t provenance = UINT32_MAX;
+        uint32_t i;
+
+        agcBufferCommittedStateAt(buffer, position, &segment_usage,
+            &segment_owner, &next_boundary);
+        if (next_boundary > end)
+            next_boundary = end;
+        for (i = 0u; i < state_count; ++i) {
+            uint64_t state_end;
+            if (states[i].resource_type != kAgcResourceTypeBuffer ||
+                states[i].resource != buffer)
+                continue;
+            state_end = states[i].buffer_offset + states[i].buffer_size;
+            if (states[i].buffer_offset <= position && position < state_end) {
+                segment_usage = states[i].usage;
+                segment_owner = states[i].owner;
+                provenance = states[i].command_index;
+            }
+            if (states[i].buffer_offset > position &&
+                states[i].buffer_offset < next_boundary)
+                next_boundary = states[i].buffer_offset;
+            if (state_end > position && state_end < next_boundary)
+                next_boundary = state_end;
+        }
+        if (!found) {
+            *usage = segment_usage;
+            *owner = segment_owner;
+            found = 1;
+        } else if (*usage != segment_usage || *owner != segment_owner) {
+            return 0;
+        }
+        if (require_prior_command &&
+            (provenance == UINT32_MAX || provenance >= command_index))
+            return 0;
+        position = next_boundary;
+    }
+    return found;
+}
+
+static int32_t agcReserveSubmissionBufferStates(
+    AgcCommandBuffer const *command_buffers, uint32_t command_count)
+{
+    uint32_t command_index;
+
+    for (command_index = 0u; command_index < command_count; ++command_index) {
+        uint32_t transition_index;
+
+        for (transition_index = 0u; transition_index <
+                command_buffers[command_index]->recorded_transition_count;
+             ++transition_index) {
+            const AgcRuntimeRecordedTransition *record =
+                &command_buffers[command_index]
+                    ->recorded_transitions[transition_index];
+            AgcBuffer buffer;
+            uint32_t count = 0u;
+            uint32_t i;
+
+            if (record->resource_type != kAgcResourceTypeBuffer)
+                continue;
+            buffer = (AgcBuffer)record->resource;
+            for (i = 0u; i < command_count; ++i) {
+                uint32_t j;
+                for (j = 0u; j <
+                        command_buffers[i]->recorded_transition_count; ++j) {
+                    const AgcRuntimeRecordedTransition *candidate =
+                        &command_buffers[i]->recorded_transitions[j];
+                    if (candidate->resource_type == kAgcResourceTypeBuffer &&
+                        candidate->resource == buffer)
+                        count++;
+                }
+            }
+            if (count > (AGC_RUNTIME_MAX_BUFFER_STATE_RANGES -
+                    buffer->state_range_count) / 2u)
+                return AGC_ERROR_OUT_OF_MEMORY;
+            {
+                int32_t result = agcBufferEnsureStateCapacity(buffer,
+                    buffer->state_range_count + 2u * count);
+                if (result != AGC_OK)
+                    return result;
+            }
+        }
+    }
+    return AGC_OK;
+}
+
 static int32_t agcValidateSubmissionTransitions(
     AgcCommandBuffer const *command_buffers, uint32_t command_count)
 {
@@ -5268,48 +5622,57 @@ static int32_t agcValidateSubmissionTransitions(
                 &command_buffer->recorded_transitions[transition_index];
             AgcResourceUsage usage;
             AgcResourceOwner owner;
+            uint32_t provenance = UINT32_MAX;
             uint32_t j;
 
-            for (j = 0u; j < state_count; ++j) {
-                if (states[j].resource_type == record->resource_type &&
-                    states[j].resource == record->resource)
-                    break;
-            }
-            if (j == state_count) {
-                if (record->resource_type == kAgcResourceTypeBuffer) {
-                    const AgcBuffer buffer = (const AgcBuffer)record->resource;
-
-                    usage = buffer->usage_state;
-                    owner = buffer->owner_state;
-                } else {
-                    const AgcImage image = (const AgcImage)record->resource;
-
-                    usage = image->usage_state;
-                    owner = image->owner_state;
-                }
+            if (record->resource_type == kAgcResourceTypeBuffer) {
+                if (!agcBatchBufferRangeState((AgcBuffer)record->resource,
+                        states, state_count, record->buffer_offset,
+                        record->buffer_size, i,
+                        record->flags ==
+                            AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT,
+                        &usage, &owner))
+                    result = AGC_ERROR_INVALID_STATE;
             } else {
-                usage = states[j].usage;
-                owner = states[j].owner;
+                const AgcImage image = (const AgcImage)record->resource;
+                usage = image->usage_state;
+                owner = image->owner_state;
+                for (j = 0u; j < state_count; ++j) {
+                    if (states[j].resource_type == kAgcResourceTypeImage &&
+                        states[j].resource == image) {
+                        usage = states[j].usage;
+                        owner = states[j].owner;
+                        provenance = states[j].command_index;
+                    }
+                }
+                if (record->flags ==
+                        AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT &&
+                    (provenance == UINT32_MAX || provenance >= i))
+                    result = AGC_ERROR_INVALID_STATE;
             }
+            if (result != AGC_OK)
+                break;
             if (usage != record->before || owner != record->before_owner) {
                 result = AGC_ERROR_INVALID_STATE;
                 break;
             }
-            if (record->flags == AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT &&
-                (j == state_count || states[j].command_index >= i)) {
-                result = AGC_ERROR_INVALID_STATE;
-                break;
-            }
-            if (j == state_count) {
-                states[state_count].resource_type = record->resource_type;
-                states[state_count].resource = record->resource;
-                ++state_count;
-            }
-            states[j].usage = record->after;
-            states[j].owner = record->after_owner;
-            states[j].command_index = i;
+            states[state_count].resource_type = record->resource_type;
+            states[state_count].resource = record->resource;
+            states[state_count].usage =
+                record->flags == AGC_RESOURCE_TRANSITION_RELEASE_BIT ?
+                    record->before : record->after;
+            states[state_count].owner =
+                record->flags == AGC_RESOURCE_TRANSITION_RELEASE_BIT ?
+                    record->before_owner : record->after_owner;
+            states[state_count].command_index = i;
+            states[state_count].buffer_offset = record->buffer_offset;
+            states[state_count].buffer_size = record->buffer_size;
+            state_count++;
         }
     }
+    if (result == AGC_OK)
+        result = agcReserveSubmissionBufferStates(
+            command_buffers, command_count);
     agcFree(command_buffers[0]->device, states);
     return result;
 }
@@ -5330,8 +5693,9 @@ static void agcCommitCommandTransitions(AgcCommandBuffer command_buffer)
                 buffer->transfer_value = record->dependency_value;
                 buffer->transfer_pending = 1u;
             } else {
-                buffer->usage_state = record->after;
-                buffer->owner_state = record->after_owner;
+                agcBufferCommitRangeState(buffer, record->buffer_offset,
+                    record->buffer_size, record->after,
+                    record->after_owner);
                 if (record->flags == AGC_RESOURCE_TRANSITION_ACQUIRE_BIT) {
                     buffer->transfer_label = NULL;
                     buffer->transfer_acquire_command = NULL;
@@ -5612,9 +5976,9 @@ int32_t PS5_SYSV_ABI agcCmdTransitionResources(
             &flags, &label, &value);
         if (result != AGC_OK)
             return result;
-        /* The v1 state record is whole-resource only.  Reject a duplicate
-         * rather than accepting a batch whose second source state would be
-         * ambiguous until the first record is committed at submit. */
+        /* Preflight does not mutate the command's tentative state. Reject a
+         * duplicate resource in one call; callers can issue ordered calls for
+         * disjoint or chained ranges while retaining per-call atomicity. */
         for (j = 0u; j < i; ++j) {
             if (transitions[j].resource_type == transitions[i].resource_type &&
                 ((transitions[i].resource_type == kAgcResourceTypeBuffer &&
@@ -5659,6 +6023,29 @@ int32_t PS5_SYSV_ABI agcCmdTransitionResources(
             command_buffer->recorded_label_wait_count)
         return AGC_ERROR_OUT_OF_MEMORY;
     for (i = 0u; i < transition_count; ++i) {
+        if (transitions[i].resource_type == kAgcResourceTypeBuffer) {
+            AgcBuffer buffer = transitions[i].buffer;
+            uint32_t prior = 0u;
+            uint32_t j;
+
+            for (j = 0u; j < command_buffer->recorded_transition_count; ++j) {
+                if (command_buffer->recorded_transitions[j].resource_type ==
+                        kAgcResourceTypeBuffer &&
+                    command_buffer->recorded_transitions[j].resource == buffer)
+                    prior++;
+            }
+            if (prior > (AGC_RUNTIME_MAX_BUFFER_STATE_RANGES -
+                    buffer->state_range_count) / 2u)
+                return AGC_ERROR_OUT_OF_MEMORY;
+            {
+                int32_t result = agcBufferEnsureStateCapacity(buffer,
+                    buffer->state_range_count + 2u * (prior + 1u));
+                if (result != AGC_OK)
+                    return result;
+            }
+        }
+    }
+    for (i = 0u; i < transition_count; ++i) {
         AgcGfx1013ResourceTransition low_transition;
         uint32_t emit_low_transition;
         uint32_t flags;
@@ -5693,7 +6080,8 @@ int32_t PS5_SYSV_ABI agcCmdTransitionResources(
             (AgcRuntimeRecordedTransition){ transitions[i].resource_type,
                 resource, transitions[i].before, transitions[i].before_owner,
                 transitions[i].after, transitions[i].after_owner, flags, label,
-                value };
+                value, transitions[i].buffer_offset,
+                transitions[i].buffer_size };
         if (flags == AGC_RESOURCE_TRANSITION_RELEASE_BIT) {
             command_buffer->recorded_label_signals[
                 command_buffer->recorded_label_signal_count++] =
@@ -5745,11 +6133,12 @@ int32_t PS5_SYSV_ABI agcCmdCopyBuffer(AgcCommandBuffer command_buffer,
           destination_offset < source_offset + size))) {
         return AGC_ERROR_INVALID_ARGUMENT;
     }
-    agcCommandTransitionState(command_buffer, kAgcResourceTypeBuffer, source,
-        &source_usage, &source_owner);
-    agcCommandTransitionState(command_buffer, kAgcResourceTypeBuffer,
-        destination, &destination_usage, &destination_owner);
-    if (source_usage != kAgcResourceUsageCopySource ||
+    if (!agcCommandBufferRangeState(command_buffer, source, source_offset,
+            size, &source_usage, &source_owner) ||
+        !agcCommandBufferRangeState(command_buffer, destination,
+            destination_offset, size, &destination_usage,
+            &destination_owner) ||
+        source_usage != kAgcResourceUsageCopySource ||
         destination_usage != kAgcResourceUsageCopyDestination ||
         source_owner != agcRuntimeCommandOwner(command_buffer) ||
         destination_owner != agcRuntimeCommandOwner(command_buffer)) {
@@ -5960,14 +6349,15 @@ static int agcRuntimeDescriptorUsageMatches(
 
 static int32_t agcCommandValidateDescriptorBufferState(
     AgcCommandBuffer command_buffer, const AgcBuffer buffer,
+    uint64_t offset, uint64_t size,
     const AgcShaderDescriptorMapping *mapping)
 {
     AgcResourceUsage usage;
     AgcResourceOwner owner;
 
-    agcCommandTransitionState(command_buffer, kAgcResourceTypeBuffer,
-        (void *)buffer, &usage, &owner);
-    if (owner != agcRuntimeCommandOwner(command_buffer) ||
+    if (!agcCommandBufferRangeState(command_buffer, (AgcBuffer)buffer,
+            offset, size, &usage, &owner) ||
+        owner != agcRuntimeCommandOwner(command_buffer) ||
         !agcRuntimeDescriptorUsageMatches(mapping, usage))
         return AGC_ERROR_INVALID_STATE;
     return AGC_OK;
@@ -6082,7 +6472,7 @@ static int32_t agcCommandEncodeDescriptor(
             range > UINT32_MAX)
                 return AGC_ERROR_RESOURCE_INVALID;
         result = agcCommandValidateDescriptorBufferState(command_buffer,
-            write->buffer, mapping);
+            write->buffer, write->buffer_offset, range, mapping);
         if (result != AGC_OK)
             return result;
         address = agcAllocationGpuAddress(write->buffer->allocation) +
@@ -6262,9 +6652,11 @@ int32_t PS5_SYSV_ABI agcCmdBindVertexBuffers(AgcCommandBuffer command_buffer,
         AgcResourceUsage usage;
         AgcResourceOwner owner;
 
-        agcCommandTransitionState(command_buffer, kAgcResourceTypeBuffer,
-            bindings[i].buffer, &usage, &owner);
-        if (usage != kAgcResourceUsageShaderRead ||
+        if (!agcCommandBufferRangeState(command_buffer, bindings[i].buffer,
+                bindings[i].offset,
+                bindings[i].buffer->size - bindings[i].offset,
+                &usage, &owner) ||
+            usage != kAgcResourceUsageShaderRead ||
             owner != kAgcResourceOwnerGraphics)
             return AGC_ERROR_INVALID_STATE;
     }
@@ -6754,9 +7146,9 @@ int32_t PS5_SYSV_ABI agcCmdBindIndexBuffer(AgcCommandBuffer command_buffer,
         AgcResourceUsage usage;
         AgcResourceOwner owner;
 
-        agcCommandTransitionState(command_buffer, kAgcResourceTypeBuffer,
-            buffer, &usage, &owner);
-        if (usage != kAgcResourceUsageShaderRead ||
+        if (!agcCommandBufferRangeState(command_buffer, buffer, offset,
+                buffer->size - offset, &usage, &owner) ||
+            usage != kAgcResourceUsageShaderRead ||
             owner != kAgcResourceOwnerGraphics)
             return AGC_ERROR_INVALID_STATE;
     }

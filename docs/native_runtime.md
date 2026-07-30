@@ -404,14 +404,19 @@ and explicit host/graphics/compute ownership. Applications never supply cache
 control words. The runtime maps supported requests to the qualified gfx1013
 release/flush and acquire/invalidate sequence.
 
-The initial v1 implementation deliberately has a narrow, deterministic scope:
-it accepts whole buffers and complete image mip/layer/aspect ranges only.
-HTILE images, partial ranges, v1 graphics-to-compute ownership transfers, and
-unqualified usage combinations fail closed. A resource may appear only once in
-one transition batch; applications record a later state change in a separate
-call. Command buffers retain transitioned resources, track their requested
-state while recording, and publish that state only after a successful submit.
-Resetting or rejecting a command therefore never changes cross-command state.
+The initial v1 implementation accepted whole buffers and complete image
+mip/layer/aspect ranges. Runtime API v17 extends buffer transitions to bounded
+byte ranges. Internally, sorted contiguous intervals split on submission and
+merge when adjacent usage/owner states become equal. Tentative command state
+can span several recorded ranges, but committed intervals change only after
+successful submit validation. Copies and buffer descriptors validate their
+exact byte ranges; vertex and index bindings validate from their binding
+offset through the represented tail. `agcGetBufferRangeStateInfo` queries a
+uniform range, while the whole-buffer query returns `AGC_ERROR_NOT_SUPPORTED`
+when the buffer is fragmented. HTILE images, partial image subresources,
+partial cross-queue ownership transfers, and unqualified usage combinations
+still fail closed. A resource may appear only once in one transition call;
+applications record disjoint or later state changes in ordered calls.
 
 The supported usages are undefined/discard, copy source/destination, shader
 read/write, color target, depth/stencil read/write, VideoOut scanout, and host
@@ -426,15 +431,17 @@ EOP. Only after source submission may the destination queue record the matching
 the qualified all-cache invalidate. The source state remains committed until
 release submit and destination state publishes only after acquire submit. A
 pending handoff accepts one acquire command; reset releases that reservation.
-The current v2 scope is whole resources whose source usage writes GPU memory;
-partial ranges, HTILE, submit lists, and other handoff forms fail closed.
+The current v2 handoff scope is whole resources whose source usage writes GPU
+memory; partial ownership transfers, HTILE, and other handoff forms fail
+closed. Submit-list label dependencies remain available independently.
 
 ## Current qualification boundary
 
 The complete object lifecycle, validation, finite fence, memory/resource,
 reflected pipeline validation, compute dispatch recording, indexed-graphics
-recording, typed color-target binding, and the initial explicit whole-resource
-transition matrix are host-qualified through the generic backend. The same
+recording, typed color-target binding, the explicit transition matrix, and
+same-queue buffer byte ranges are host-qualified through the generic backend.
+The same
 public header and implementation compile for Prospero, and device creation owns
 exact backend selection, caller default version, internal memory, and
 default-state initialization. The exact FW 5.50 compute row

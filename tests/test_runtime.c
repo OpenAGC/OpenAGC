@@ -609,8 +609,12 @@ static void test_runtime_allocation_callbacks(void)
     };
     AgcDeviceDesc desc = AGC_DEVICE_DESC_INIT;
     AgcBufferDesc buffer_desc = AGC_BUFFER_DESC_INIT;
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcResourceTransition transition = AGC_RESOURCE_TRANSITION_INIT;
+    AgcResourceStateInfo state_info = AGC_RESOURCE_STATE_INFO_INIT;
     AgcDevice device = NULL;
     AgcBuffer buffer = NULL;
+    AgcCommandBuffer command = NULL;
 
     desc.allocation_callbacks = &callbacks;
     buffer_desc.size = 64u;
@@ -619,6 +623,34 @@ static void test_runtime_allocation_callbacks(void)
         "device accepts paired allocation callbacks");
     TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &buffer), AGC_OK,
         "buffer uses application allocation callbacks");
+    command_desc.queue_type = kAgcQueueCompute;
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
+        AGC_OK, "range-state command uses allocation callbacks");
+    transition.resource_type = kAgcResourceTypeBuffer;
+    transition.buffer = buffer;
+    transition.buffer_offset = 16u;
+    transition.buffer_size = 32u;
+    transition.before = kAgcResourceUsageUndefined;
+    transition.after = kAgcResourceUsageShaderRead;
+    transition.before_owner = kAgcResourceOwnerHost;
+    transition.after_owner = kAgcResourceOwnerCompute;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+        "range-state allocation rollback command begins");
+    probe.fail_on_attempt = probe.attempts + 1u;
+    TEST_ASSERT_EQ(agcCmdTransitionResources(command, 1u, &transition),
+        AGC_ERROR_OUT_OF_MEMORY,
+        "range-state allocation failure propagates before packet mutation");
+    TEST_ASSERT_EQ(agcGetBufferStateInfo(buffer, &state_info), AGC_OK,
+        "failed range-state growth preserves whole committed state");
+    TEST_ASSERT_EQ(state_info.usage, kAgcResourceUsageUndefined,
+        "failed range-state growth preserves committed usage");
+    probe.fail_on_attempt = 0u;
+    TEST_ASSERT_EQ(agcCmdTransitionResources(command, 1u, &transition),
+        AGC_OK, "range-state transition retries after allocation failure");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+        "unsubmitted range-state transition resets without publication");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+        "range-state callback command destruction succeeds");
     TEST_ASSERT_EQ(agcDestroyBuffer(buffer), AGC_OK,
         "callback-owned buffer destruction succeeds");
     TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
@@ -1066,15 +1098,21 @@ static void test_runtime_compiler_reflection_sidecar(void)
         "native compute sidecar rejects untransitioned storage descriptor");
     transition.resource_type = kAgcResourceTypeBuffer;
     transition.buffer = buffer;
-    transition.buffer_size = buffer_desc.size;
+    transition.buffer_offset = 64u;
+    transition.buffer_size = 128u;
     transition.before = kAgcResourceUsageUndefined;
     transition.after = kAgcResourceUsageShaderWrite;
     transition.before_owner = kAgcResourceOwnerHost;
     transition.after_owner = kAgcResourceOwnerCompute;
     TEST_ASSERT_EQ(agcCmdTransitionResources(command_buffer, 1u, &transition),
         AGC_OK, "native compute sidecar storage state records");
+    TEST_ASSERT_EQ(agcCmdBindDescriptors(command_buffer, 1u, &write),
+        AGC_ERROR_INVALID_STATE,
+        "descriptor rejects a range wider than transitioned bytes");
+    write.buffer_offset = transition.buffer_offset;
+    write.buffer_range = transition.buffer_size;
     TEST_ASSERT_EQ(agcCmdBindDescriptors(command_buffer, 1u, &write), AGC_OK,
-        "native compute sidecar storage descriptor binds");
+        "descriptor accepts its exact transitioned byte range");
     TEST_ASSERT_EQ(agcCmdPushConstants(command_buffer,
         1u << kAgcShaderStageCs, 0u, sizeof(push_constants),
         push_constants), AGC_OK,
@@ -1132,6 +1170,7 @@ static void test_runtime_compiler_graphics_sidecar(void)
         AGC_RESOURCE_TRANSITION_INIT,
         AGC_RESOURCE_TRANSITION_INIT,
     };
+    AgcResourceTransition buffer_transition = AGC_RESOURCE_TRANSITION_INIT;
     AgcColorTargetBinding targets[2] = {
         AGC_COLOR_TARGET_BINDING_INIT,
         AGC_COLOR_TARGET_BINDING_INIT,
@@ -1201,18 +1240,18 @@ static void test_runtime_compiler_graphics_sidecar(void)
     TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc, &pipeline),
         AGC_OK, "compiler-sidecar graphics pipeline creates");
 
-    buffer_desc.size = sizeof(vertices);
+    buffer_desc.size = sizeof(vertices) + 24u;
     buffer_desc.usage = AGC_BUFFER_USAGE_VERTEX_BIT;
     buffer_desc.flags = AGC_BUFFER_CREATE_UPLOAD_BIT;
     TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &vertex_buffer), AGC_OK,
         "compiler-sidecar vertex buffer creates");
-    TEST_ASSERT_EQ(agcWriteBuffer(vertex_buffer, 0u, vertices,
+    TEST_ASSERT_EQ(agcWriteBuffer(vertex_buffer, 24u, vertices,
         sizeof(vertices)), AGC_OK, "compiler-sidecar vertex data uploads");
-    buffer_desc.size = sizeof(indices);
+    buffer_desc.size = sizeof(indices) + 2u;
     buffer_desc.usage = AGC_BUFFER_USAGE_INDEX_BIT;
     TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &index_buffer), AGC_OK,
         "compiler-sidecar index buffer creates");
-    TEST_ASSERT_EQ(agcWriteBuffer(index_buffer, 0u, indices, sizeof(indices)),
+    TEST_ASSERT_EQ(agcWriteBuffer(index_buffer, 2u, indices, sizeof(indices)),
         AGC_OK, "compiler-sidecar index data uploads");
     image_desc.width = 64u;
     image_desc.height = 64u;
@@ -1230,13 +1269,22 @@ static void test_runtime_compiler_graphics_sidecar(void)
     TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(command, pipeline), AGC_OK,
         "compiler-sidecar graphics pipeline binds");
     vertex_binding.buffer = vertex_buffer;
+    vertex_binding.offset = 24u;
     vertex_binding.stride = 24u;
     TEST_ASSERT_EQ(agcCmdBindVertexBuffers(command, 1u, &vertex_binding),
         AGC_ERROR_INVALID_STATE,
         "untransitioned vertex buffer cannot bind on graphics");
-    TEST_ASSERT_EQ(runtime_transition_buffer_to_graphics_read(command,
-        vertex_buffer, sizeof(vertices), kAgcResourceUsageUndefined, 0u),
-        AGC_OK, "compiler-sidecar vertex buffer transitions to graphics read");
+    buffer_transition.resource_type = kAgcResourceTypeBuffer;
+    buffer_transition.buffer = vertex_buffer;
+    buffer_transition.buffer_offset = 24u;
+    buffer_transition.buffer_size = sizeof(vertices);
+    buffer_transition.before = kAgcResourceUsageUndefined;
+    buffer_transition.after = kAgcResourceUsageShaderRead;
+    buffer_transition.before_owner = kAgcResourceOwnerHost;
+    buffer_transition.after_owner = kAgcResourceOwnerGraphics;
+    TEST_ASSERT_EQ(agcCmdTransitionResources(command, 1u,
+        &buffer_transition), AGC_OK,
+        "compiler-sidecar vertex byte range transitions to graphics read");
     TEST_ASSERT_EQ(agcCmdBindVertexBuffers(command, 1u, &vertex_binding),
         AGC_OK, "compiler-sidecar vertex table binds");
     targets[0].image = first_image;
@@ -1262,13 +1310,19 @@ static void test_runtime_compiler_graphics_sidecar(void)
         "compiler-sidecar viewport binds");
     TEST_ASSERT_EQ(agcCmdSetScissor(command, &scissor), AGC_OK,
         "compiler-sidecar scissor binds");
-    TEST_ASSERT_EQ(agcCmdBindIndexBuffer(command, index_buffer, 0u,
+    TEST_ASSERT_EQ(agcCmdBindIndexBuffer(command, index_buffer, 2u,
         kAgcIndexSize16), AGC_ERROR_INVALID_STATE,
         "untransitioned index buffer cannot bind on graphics");
-    TEST_ASSERT_EQ(runtime_transition_buffer_to_graphics_read(command,
-        index_buffer, sizeof(indices), kAgcResourceUsageUndefined, 0u),
-        AGC_OK, "compiler-sidecar index buffer transitions to graphics read");
+    buffer_transition.buffer = index_buffer;
+    buffer_transition.buffer_offset = 2u;
+    buffer_transition.buffer_size = sizeof(indices);
+    TEST_ASSERT_EQ(agcCmdTransitionResources(command, 1u,
+        &buffer_transition), AGC_OK,
+        "compiler-sidecar index byte range transitions to graphics read");
     TEST_ASSERT_EQ(agcCmdBindIndexBuffer(command, index_buffer, 0u,
+        kAgcIndexSize16), AGC_ERROR_INVALID_STATE,
+        "index bind rejects bytes outside the transitioned tail range");
+    TEST_ASSERT_EQ(agcCmdBindIndexBuffer(command, index_buffer, 2u,
         kAgcIndexSize16), AGC_OK, "compiler-sidecar index buffer binds");
     TEST_ASSERT_EQ(agcCmdDrawIndexed(command, 3u, 1u, 0u, 0, 0u), AGC_OK,
         "compiler-sidecar indexed draw records");
@@ -1770,14 +1824,16 @@ static void test_runtime_batch_transition_chain(void)
 
     first_transition.resource_type = kAgcResourceTypeBuffer;
     first_transition.buffer = buffer;
-    first_transition.buffer_size = buffer_desc.size;
+    first_transition.buffer_offset = 16u;
+    first_transition.buffer_size = 32u;
     first_transition.before = kAgcResourceUsageUndefined;
     first_transition.after = kAgcResourceUsageShaderWrite;
     first_transition.before_owner = kAgcResourceOwnerHost;
     first_transition.after_owner = kAgcResourceOwnerCompute;
     second_transition.resource_type = kAgcResourceTypeBuffer;
     second_transition.buffer = buffer;
-    second_transition.buffer_size = buffer_desc.size;
+    second_transition.buffer_offset = 16u;
+    second_transition.buffer_size = 32u;
     second_transition.before = kAgcResourceUsageShaderWrite;
     second_transition.after = kAgcResourceUsageHostRead;
     second_transition.before_owner = kAgcResourceOwnerCompute;
@@ -1819,7 +1875,8 @@ static void test_runtime_batch_transition_chain(void)
 
     final_transition.resource_type = kAgcResourceTypeBuffer;
     final_transition.buffer = buffer;
-    final_transition.buffer_size = buffer_desc.size;
+    final_transition.buffer_offset = 16u;
+    final_transition.buffer_size = 32u;
     final_transition.before = kAgcResourceUsageHostRead;
     final_transition.after = kAgcResourceUsageShaderWrite;
     final_transition.before_owner = kAgcResourceOwnerHost;
@@ -1918,22 +1975,27 @@ static void test_runtime_copy_buffer_submission(void)
         "copy rejects before typed transitions");
     transitions[0].resource_type = kAgcResourceTypeBuffer;
     transitions[0].buffer = source;
-    transitions[0].buffer_size = source_desc.size;
+    transitions[0].buffer_offset = 16u;
+    transitions[0].buffer_size = 32u;
     transitions[0].before = kAgcResourceUsageUndefined;
     transitions[0].after = kAgcResourceUsageCopySource;
     transitions[0].before_owner = kAgcResourceOwnerHost;
     transitions[0].after_owner = kAgcResourceOwnerCompute;
     transitions[1].resource_type = kAgcResourceTypeBuffer;
     transitions[1].buffer = destination;
-    transitions[1].buffer_size = destination_desc.size;
+    transitions[1].buffer_offset = 16u;
+    transitions[1].buffer_size = 32u;
     transitions[1].before = kAgcResourceUsageUndefined;
     transitions[1].after = kAgcResourceUsageCopyDestination;
     transitions[1].before_owner = kAgcResourceOwnerHost;
     transitions[1].after_owner = kAgcResourceOwnerCompute;
     TEST_ASSERT_EQ(agcCmdTransitionResources(command_buffer, 2u, transitions),
         AGC_OK, "copy source and destination transitions record");
+    TEST_ASSERT_EQ(agcCmdCopyBuffer(command_buffer, source, 16u, destination,
+        16u, 32u), AGC_OK, "typed partial-range copy records DMA packet");
     TEST_ASSERT_EQ(agcCmdCopyBuffer(command_buffer, source, 0u, destination,
-        0u, 64u), AGC_OK, "typed copy records DMA packet");
+        0u, 4u), AGC_ERROR_INVALID_STATE,
+        "copy rejects bytes outside transitioned ranges");
     TEST_ASSERT_EQ(agcCmdCopyBuffer(command_buffer, destination, 0u,
         destination, 4u, 32u), AGC_ERROR_INVALID_ARGUMENT,
         "overlapping copy rejects without command mutation");
@@ -1967,6 +2029,109 @@ static void test_runtime_copy_buffer_submission(void)
         "copy source buffer destroys");
     TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK, "copy queue destroys");
     TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK, "copy device destroys");
+}
+
+static void test_runtime_buffer_range_fragmentation(void)
+{
+    enum { kRangeCount = 32u, kRangeSize = 8u };
+    AgcDevice device = create_device();
+    AgcQueue queue = create_queue(device, kAgcQueueCompute);
+    AgcBufferDesc buffer_desc = AGC_BUFFER_DESC_INIT;
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
+    AgcResourceTransition transition = AGC_RESOURCE_TRANSITION_INIT;
+    AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    AgcResourceStateInfo info = AGC_RESOURCE_STATE_INFO_INIT;
+    AgcBuffer buffer = NULL;
+    AgcCommandBuffer command = NULL;
+    AgcFence fence = NULL;
+    uint32_t i;
+
+    buffer_desc.size = kRangeCount * kRangeSize;
+    buffer_desc.usage = AGC_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    command_desc.queue_type = kAgcQueueCompute;
+    command_desc.capacity_dwords = 512u;
+    TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &buffer), AGC_OK,
+        "fragmentation buffer creates");
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
+        AGC_OK, "fragmentation command creates");
+    TEST_ASSERT_EQ(agcCreateFence(device, &fence_desc, &fence), AGC_OK,
+        "fragmentation fence creates");
+
+    transition.resource_type = kAgcResourceTypeBuffer;
+    transition.buffer = buffer;
+    transition.buffer_size = kRangeSize;
+    transition.before = kAgcResourceUsageUndefined;
+    transition.after = kAgcResourceUsageCopySource;
+    transition.before_owner = kAgcResourceOwnerHost;
+    transition.after_owner = kAgcResourceOwnerCompute;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+        "fragmentation split command begins");
+    for (i = 0u; i < kRangeCount; i += 2u) {
+        transition.buffer_offset = (uint64_t)i * kRangeSize;
+        TEST_ASSERT_EQ(agcCmdTransitionResources(command, 1u, &transition),
+            AGC_OK, "alternating partial range records");
+    }
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+        "fragmentation split command ends");
+    submit.command_buffer_count = 1u;
+    submit.command_buffers = &command;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
+        "alternating partial ranges submit atomically");
+    TEST_ASSERT_EQ(agcGetBufferStateInfo(buffer, &info),
+        AGC_ERROR_NOT_SUPPORTED,
+        "alternating intervals reject ambiguous whole state");
+    for (i = 0u; i < kRangeCount; ++i) {
+        info = (AgcResourceStateInfo)AGC_RESOURCE_STATE_INFO_INIT;
+        TEST_ASSERT_EQ(agcGetBufferRangeStateInfo(buffer,
+            (uint64_t)i * kRangeSize, kRangeSize, &info), AGC_OK,
+            "alternating interval query succeeds");
+        TEST_ASSERT_EQ(info.usage, (i & 1u) != 0u ?
+            kAgcResourceUsageUndefined : kAgcResourceUsageCopySource,
+            "alternating interval preserves exact usage");
+        TEST_ASSERT_EQ(info.owner, (i & 1u) != 0u ?
+            kAgcResourceOwnerHost : kAgcResourceOwnerCompute,
+            "alternating interval preserves exact owner");
+    }
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+        "fragmentation split command resets");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "fragmentation split fence resets");
+
+    transition.before = kAgcResourceUsageCopySource;
+    transition.after = kAgcResourceUsageUndefined;
+    transition.before_owner = kAgcResourceOwnerCompute;
+    transition.after_owner = kAgcResourceOwnerHost;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+        "fragmentation merge command begins");
+    for (i = 0u; i < kRangeCount; i += 2u) {
+        transition.buffer_offset = (uint64_t)i * kRangeSize;
+        TEST_ASSERT_EQ(agcCmdTransitionResources(command, 1u, &transition),
+            AGC_OK, "alternating partial range discard records");
+    }
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+        "fragmentation merge command ends");
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
+        "alternating partial ranges merge on submit");
+    info = (AgcResourceStateInfo)AGC_RESOURCE_STATE_INFO_INIT;
+    TEST_ASSERT_EQ(agcGetBufferStateInfo(buffer, &info), AGC_OK,
+        "merged alternating intervals restore whole query");
+    TEST_ASSERT_EQ(info.usage, kAgcResourceUsageUndefined,
+        "merged alternating intervals restore undefined usage");
+    TEST_ASSERT_EQ(info.owner, kAgcResourceOwnerHost,
+        "merged alternating intervals restore host owner");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+        "fragmentation merge command resets");
+    TEST_ASSERT_EQ(agcDestroyFence(fence), AGC_OK,
+        "fragmentation fence destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+        "fragmentation command destroys");
+    TEST_ASSERT_EQ(agcDestroyBuffer(buffer), AGC_OK,
+        "fragmentation buffer destroys with dynamic state storage");
+    TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
+        "fragmentation queue destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "fragmentation device destroys");
 }
 
 static void test_runtime_copy_image_submission(void)
@@ -2800,6 +2965,17 @@ static void test_runtime_resource_transitions(void)
     handoff.flags = AGC_RESOURCE_TRANSITION_RELEASE_BIT;
     handoff.dependency_label = label;
     handoff.dependency_value = 1u;
+    handoff.buffer_offset = 16u;
+    handoff.buffer_size = 32u;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(compute_command), AGC_OK,
+        "partial handoff rejection command begins");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(compute_command, 1u, &handoff),
+        AGC_ERROR_NOT_SUPPORTED,
+        "partial cross-queue ownership transfer fails closed");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(compute_command), AGC_OK,
+        "partial handoff rejection command resets");
+    handoff.buffer_offset = 0u;
+    handoff.buffer_size = buffer_desc.size;
     TEST_ASSERT_EQ(agcBeginCommandBuffer(compute_command), AGC_OK,
         "handoff release command begins");
     TEST_ASSERT_EQ(agcCmdTransitionResources(compute_command, 1u, &handoff),
@@ -2923,12 +3099,83 @@ static void test_runtime_resource_transitions(void)
     TEST_ASSERT_EQ(agcResetCommandBuffer(compute_command), AGC_OK,
         "rejected duplicate transition command resets");
 
-    transition.buffer_size = buffer_desc.size - 1u;
+    transition.buffer_offset = 16u;
+    transition.buffer_size = 32u;
+    transition.before = kAgcResourceUsageHostRead;
+    transition.after = kAgcResourceUsageCopySource;
+    transition.before_owner = kAgcResourceOwnerHost;
+    transition.after_owner = kAgcResourceOwnerCompute;
     TEST_ASSERT_EQ(agcBeginCommandBuffer(compute_command), AGC_OK,
         "partial transition command begins");
     TEST_ASSERT_EQ(agcCmdTransitionResources(compute_command, 1u,
+        &transition), AGC_OK,
+        "partial buffer transition records");
+    state_info = (AgcResourceStateInfo)AGC_RESOURCE_STATE_INFO_INIT;
+    TEST_ASSERT_EQ(agcGetBufferStateInfo(buffer, &state_info), AGC_OK,
+        "recorded partial transition leaves committed whole state uniform");
+    TEST_ASSERT_EQ(state_info.usage, kAgcResourceUsageHostRead,
+        "recorded partial transition does not publish before submit");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(compute_command), AGC_OK,
+        "partial transition command ends");
+    submit.command_buffers = &compute_command;
+    TEST_ASSERT_EQ(agcQueueSubmit(compute_queue, &submit, fence), AGC_OK,
+        "partial buffer transition submits");
+    state_info = (AgcResourceStateInfo)AGC_RESOURCE_STATE_INFO_INIT;
+    TEST_ASSERT_EQ(agcGetBufferStateInfo(buffer, &state_info),
+        AGC_ERROR_NOT_SUPPORTED,
+        "fragmented buffer rejects an ambiguous whole-state snapshot");
+    TEST_ASSERT_EQ(agcGetBufferRangeStateInfo(buffer, 16u, 32u,
+        &state_info), AGC_OK, "partial destination range is queryable");
+    TEST_ASSERT_EQ(state_info.usage, kAgcResourceUsageCopySource,
+        "partial destination range publishes exact usage");
+    TEST_ASSERT_EQ(state_info.owner, kAgcResourceOwnerCompute,
+        "partial destination range publishes exact owner");
+    state_info = (AgcResourceStateInfo)AGC_RESOURCE_STATE_INFO_INIT;
+    TEST_ASSERT_EQ(agcGetBufferRangeStateInfo(buffer, 0u, 16u,
+        &state_info), AGC_OK, "left untouched range is queryable");
+    TEST_ASSERT_EQ(state_info.usage, kAgcResourceUsageHostRead,
+        "left untouched range preserves prior usage");
+    TEST_ASSERT_EQ(state_info.owner, kAgcResourceOwnerHost,
+        "left untouched range preserves prior owner");
+    state_info = (AgcResourceStateInfo)AGC_RESOURCE_STATE_INFO_INIT;
+    TEST_ASSERT_EQ(agcGetBufferRangeStateInfo(buffer, 8u, 16u,
+        &state_info), AGC_ERROR_NOT_SUPPORTED,
+        "mixed-state range query fails closed");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(compute_command), AGC_OK,
+        "partial transition command resets");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "partial transition fence resets");
+
+    transition.before = kAgcResourceUsageCopySource;
+    transition.after = kAgcResourceUsageHostRead;
+    transition.before_owner = kAgcResourceOwnerCompute;
+    transition.after_owner = kAgcResourceOwnerHost;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(compute_command), AGC_OK,
+        "partial merge command begins");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(compute_command, 1u,
+        &transition), AGC_OK, "partial range records its prior state");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(compute_command), AGC_OK,
+        "partial merge command ends");
+    TEST_ASSERT_EQ(agcQueueSubmit(compute_queue, &submit, fence), AGC_OK,
+        "partial merge transition submits");
+    state_info = (AgcResourceStateInfo)AGC_RESOURCE_STATE_INFO_INIT;
+    TEST_ASSERT_EQ(agcGetBufferStateInfo(buffer, &state_info), AGC_OK,
+        "adjacent identical states merge to a whole-buffer snapshot");
+    TEST_ASSERT_EQ(state_info.usage, kAgcResourceUsageHostRead,
+        "merged whole-buffer usage matches original state");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(compute_command), AGC_OK,
+        "partial merge command resets");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "partial merge fence resets");
+
+    transition.buffer_offset = buffer_desc.size;
+    transition.buffer_size = 1u;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(compute_command), AGC_OK,
+        "invalid partial transition command begins");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(compute_command, 1u,
         &transition), AGC_ERROR_INVALID_ARGUMENT,
-        "partial buffer transition fails closed");
+        "out-of-bounds partial transition fails closed");
+    transition.buffer_offset = 0u;
     transition.buffer_size = buffer_desc.size;
     transition.before_owner = kAgcResourceOwnerGraphics;
     TEST_ASSERT_EQ(agcCmdTransitionResources(compute_command, 1u,
@@ -2937,6 +3184,7 @@ static void test_runtime_resource_transitions(void)
     TEST_ASSERT_EQ(agcResetCommandBuffer(compute_command), AGC_OK,
         "failed transition command resets without state commit");
 
+    transition.buffer_offset = 0u;
     transition.buffer_size = buffer_desc.size;
     transition.before = kAgcResourceUsageHostRead;
     transition.after = kAgcResourceUsageUndefined;
@@ -6534,6 +6782,7 @@ void test_suite_runtime(void)
     TEST_RUN(test_runtime_multi_compute_submission);
     TEST_RUN(test_runtime_batch_transition_chain);
     TEST_RUN(test_runtime_copy_buffer_submission);
+    TEST_RUN(test_runtime_buffer_range_fragmentation);
     TEST_RUN(test_runtime_copy_image_submission);
     TEST_RUN(test_runtime_compute_copy_shader_batch);
     TEST_RUN(test_runtime_gpu_labels);

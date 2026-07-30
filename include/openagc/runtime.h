@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-#define AGC_RUNTIME_API_VERSION 16u
+#define AGC_RUNTIME_API_VERSION 17u
 #define AGC_RUNTIME_STRUCTURE_VERSION_1 1u
 #define AGC_RUNTIME_STRUCTURE_VERSION_2 2u
 #define AGC_RUNTIME_PROFILE_NAME_SIZE 48u
@@ -1138,6 +1138,10 @@ int32_t PS5_SYSV_ABI agcCreateBuffer(
 int32_t PS5_SYSV_ABI agcDestroyBuffer(AgcBuffer buffer);
 int32_t PS5_SYSV_ABI agcGetBufferStateInfo(
     AgcBuffer buffer, AgcResourceStateInfo *info);
+/* Queries one byte range. A whole-buffer query returns NOT_SUPPORTED when
+ * committed ranges differ; query each application-owned range explicitly. */
+int32_t PS5_SYSV_ABI agcGetBufferRangeStateInfo(AgcBuffer buffer,
+    uint64_t offset, uint64_t size, AgcResourceStateInfo *info);
 /* Queues retirement against a finite-wait fence. Existing command references
  * may remain, but allocation reuse waits for both fence completion and release
  * of those references by command reset/destruction. */

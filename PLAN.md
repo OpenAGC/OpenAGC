@@ -537,8 +537,8 @@ then passed the complete same-queue compute-to-copy-to-shader-read slice: a
 reflected producer dispatch, dependent `shader-write -> copy-source`, typed
 copy, `copy-destination -> shader-read`, reflected consumer dispatch, and
 final host readback in one three-DCB batch on exact standard PS5 FW 5.50.
-Graphics consumers, cross-queue ownership, partial ranges, and other firmware
-profiles remain open for buffer copies.
+Graphics consumers, cross-queue ownership, partial-range hardware
+qualification, and other firmware profiles remain open for buffer copies.
 
 Runtime API v12 adds typed whole-image copies. `agcCmdCopyImage` accepts only
 distinct images with identical dimensions, format, samples, mip/layer shape,
@@ -609,7 +609,7 @@ and command/dependency release. A 32-cycle generic stress test submits two
 typed DCBs per cycle, queues both referenced resources, verifies collection is
 busy before command reset, then proves deferred count, allocation count, and
 live bytes return exactly to baseline. The matching Prospero artifact
-`9c0de7db18c4b27b6286d2d3091c9281df702f63aae6308cd0a534870803d939`
+`012deac94e37a69a558643fb045d74d8fc3c9c1419515df4a51cae4882b63e1a`
 is ready but hardware qualification awaits console recovery. See
 `analysis/runtime_batch_deferred_retirement_host_20260731.md`.
 
@@ -630,6 +630,15 @@ GPU addresses. Generic fixtures prove recording does not publish state,
 successful submission does, release/acquire diagnostics track their exact
 transaction phases, and deferred objects remain inspectable until collection.
 See `analysis/runtime_resource_state_info_host_20260731.md`.
+
+Runtime API v17 adds same-queue buffer byte-range state tracking. Committed
+state is a bounded sorted interval set that splits on successful submit and
+merges adjacent equal usage/owner rows. Recording, single and ordered-batch
+submit validation, copy, descriptor, vertex, and index consumers all resolve
+the exact covered bytes; mixed or out-of-bounds ranges fail before packet or
+driver mutation. Whole-buffer handoffs remain qualified and partial ownership
+handoffs remain fail-closed. See
+`analysis/runtime_buffer_range_states_host_20260731.md`.
 
 The pending FW 5.50 presentation ladder and retirement stress now have one
 shared fail-closed runner. All six Make targets pin the current artifact hash,

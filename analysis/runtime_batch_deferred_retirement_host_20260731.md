@@ -43,7 +43,7 @@ and Prospero builds complete without warnings.
 `samples/hw_test/agc_runtime_retirement_stress.elf` carries the same 32-cycle
 sequence and bounded waits.
 
-- SHA-256: `9c0de7db18c4b27b6286d2d3091c9281df702f63aae6308cd0a534870803d939`
+- SHA-256: `012deac94e37a69a558643fb045d74d8fc3c9c1419515df4a51cae4882b63e1a`
 - Expected verdict: `BATCH_RETIREMENT_STRESS PASS`
 - Expected teardown: both labels, fence, both command buffers, queue, and
   device return `AGC_OK`.

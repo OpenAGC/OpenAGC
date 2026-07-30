@@ -44,11 +44,12 @@ metadata, HDR, and depth/MSAA combinations are demand-driven and retain the
 existing host/SPRX/exact-firmware qualification labels.
 
 The first Milestone 4 runtime slice is host-tested: versioned typed
-whole-resource transitions cover declared buffer/image usages and explicit
+transitions cover declared buffer/image usages and explicit
 host/graphics/compute ownership, derive the existing qualified gfx1013 barrier
 packets internally, retain resources while recorded, and commit state only on
-successful submit. Partial ranges, HTILE, duplicate resources in one batch,
-and unrecognized cross-queue ownership handoffs fail closed. The v2 explicit
+successful submit. Runtime API v17 adds same-queue buffer byte ranges; partial
+image subresources, partial ownership handoffs, HTILE, duplicate resources in
+one transition call, and unrecognized cross-queue ownership fail closed. The v2 explicit
 release/acquire handoff is host-qualified. The slice is host-qualified
 except for the exact FW 5.50 public compute row
 `undefined -> shader-write -> host-read`: artifact
@@ -181,7 +182,7 @@ recycling storage. Generic coverage passes 32 two-command batch cycles with
 buffer and image retirement, pre-reset busy collection, command reset, and
 exact deferred/live-count/live-byte baselines; present-chain retention is also
 covered. Prospero builds the identical stress artifact with SHA-256
-`9c0de7db18c4b27b6286d2d3091c9281df702f63aae6308cd0a534870803d939`,
+`012deac94e37a69a558643fb045d74d8fc3c9c1419515df4a51cae4882b63e1a`,
 but it remains hardware-unqualified while the FW 5.50 console is offline. See
 `analysis/runtime_batch_deferred_retirement_host_20260731.md`.
 Runtime API v15 accepts `Undefined` as the documented discard destination.
@@ -197,6 +198,13 @@ pending release destination/label diagnostics, acquire reservation, reference
 counts, final ownership, and deferred-retirement visibility. These are
 diagnostic snapshots only and expose no raw GPU address or backend state. See
 `analysis/runtime_resource_state_info_host_20260731.md`.
+Runtime API v17 adds transactional buffer byte-range states. Sorted intervals
+split and merge only after successful submission; exact ranges gate copies,
+descriptors, vertex input, and index input, and ordered batch dependencies
+simulate the same interval overlays before driver mutation. Mixed whole-buffer
+queries fail closed in favor of `agcGetBufferRangeStateInfo`. Host coverage
+passes 16,634 assertions; partial cross-queue transfer and image subresources
+remain fail-closed. See `analysis/runtime_buffer_range_states_host_20260731.md`.
 The pending FW 5.50 presentation stages and batch-retirement stress are now
 exposed only through six cleanup-first, SHA-256-pinned Make deployment targets.
 The shared runner verifies firmware, exact verdict, error-free device teardown,
