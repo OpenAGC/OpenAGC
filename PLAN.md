@@ -555,6 +555,10 @@ the runner and shared teardown on FW 11.60 only.
   depth, stencil, fence, shutdown, and cleanup invariants. Ordinary combined
   D32+S8 HTILE is qualified on FW 5.50. Run the pinned FW 11.60 ordinary
   mirror next and freeze its observed count before replay.
+- FW 11.60 ordinary combined pass 1 reproduced `49152`, the exact D32 and S8
+  distributions, immediate completion, clean shutdown, and no residual
+  process. Its guarded recipe now freezes `49152`; replay it once before
+  beginning aspect-specific expclear.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and

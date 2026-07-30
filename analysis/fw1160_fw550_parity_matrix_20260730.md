@@ -196,6 +196,12 @@ process. Ordinary combined D32+S8 HTILE is hardware-qualified on FW 5.50. Run
 the pinned FW 11.60 ordinary mirror next, establish and freeze its exact count,
 then replay before any aspect-specific expclear gate.
 
+FW 11.60 ordinary combined pass 1 selected `0x1160` and reproduced the FW 5.50
+oracle exactly: `49152` changed HTILE words, the full D32 and allocation-aware
+S8 distributions, immediate fence completion, clean shutdown, final PASS, and
+no residual process. The logged recipe now freezes `49152`; one identical
+replay remains before combined ordinary promotion.
+
 ## Higher-level consumers
 
 The following FW 5.50-qualified application-facing paths still need bounded
