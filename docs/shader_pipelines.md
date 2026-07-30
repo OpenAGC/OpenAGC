@@ -158,6 +158,10 @@ polygon modes, depth clamp, rasterizer discard, and non-unit line width fail
 pipeline creation before PM4 emission rather than selecting an unqualified
 fixed register sequence.
 
+Each unsupported rasterization field has a native-pipeline fixture that checks
+for `AGC_ERROR_NOT_SUPPORTED` and a `NULL` output handle, so these modes cannot
+silently enter a command stream.
+
 Tessellation uses compiler-owned fused bundles as well. Set
 `tessellation_control_shader` to an HsBack/HsFront bundle whose front program
 is the vertex stage, leave `vertex_shader` `NULL`, and supply exactly one

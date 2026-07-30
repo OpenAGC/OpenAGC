@@ -2273,6 +2273,27 @@ static void test_runtime_graphics_pipeline_compatibility_matrix(void)
             "unqualified point polygon mode fails before pipeline creation");
         TEST_ASSERT(pipeline == NULL,
             "point polygon-mode rejection leaves pipeline output null");
+        rasterization = (AgcRasterizationState)AGC_RASTERIZATION_STATE_INIT;
+        rasterization.depth_clamp_enable = 1u;
+        TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &pipeline),
+            AGC_ERROR_NOT_SUPPORTED,
+            "unqualified depth clamp fails before pipeline creation");
+        TEST_ASSERT(pipeline == NULL,
+            "depth-clamp rejection leaves pipeline output null");
+        rasterization = (AgcRasterizationState)AGC_RASTERIZATION_STATE_INIT;
+        rasterization.rasterizer_discard_enable = 1u;
+        TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &pipeline),
+            AGC_ERROR_NOT_SUPPORTED,
+            "unqualified rasterizer discard fails before pipeline creation");
+        TEST_ASSERT(pipeline == NULL,
+            "rasterizer-discard rejection leaves pipeline output null");
+        rasterization = (AgcRasterizationState)AGC_RASTERIZATION_STATE_INIT;
+        rasterization.line_width = 2.0f;
+        TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &pipeline),
+            AGC_ERROR_NOT_SUPPORTED,
+            "unqualified wide line fails before pipeline creation");
+        TEST_ASSERT(pipeline == NULL,
+            "wide-line rejection leaves pipeline output null");
         TEST_ASSERT_EQ(agcDestroyShader(ps), AGC_OK,
             "unqualified polygon-mode pixel shader destroys");
     }

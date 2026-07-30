@@ -263,7 +263,7 @@ logical shader bundles. Reflection v2 adds compiler-derived front-stage
 interfaces and geometry topology/limit facts without changing its serialized
 size; v1/API-14 artifacts remain accepted. The runtime recomputes the
 compiler's FNV-1a stage-linkage hash over its four interface masks before
-accepting a reflected shader. The full generic suite reports 14,370 passed.
+accepting a reflected shader. The full generic suite reports 14,376 passed.
 The opt-in combined-tree contract test now compiles real `openagc-psbc`
 vertex/fragment/compute output and creates OpenAGC graphics/compute pipelines
 without sample-local register knowledge; its 256-byte code alignment and
@@ -330,6 +330,9 @@ Prospero cross-build evidence; it is not a hardware promotion.
 Remaining unqualified geometry forms, remaining
 unqualified fixed options, and any explicit PS5 hardware promotion remain
 open; do not label this milestone complete yet.
+Every current unsupported rasterization option (line/point polygon mode, depth
+clamp, rasterizer discard, and non-unit line width) has a host fixture proving
+`AGC_ERROR_NOT_SUPPORTED` and no pipeline output before command emission.
 
 Version `AgcShaderRecord` metadata as a contract shared by `openagc-psbc` and
 the runtime. Extend reflection only from compiler- or firmware-backed facts;
