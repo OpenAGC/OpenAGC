@@ -301,6 +301,14 @@ passed the public probe; see
 Load/store operations and clears remain explicit rather than implicit
 command-side policy.
 
+Vertex and index buffers must likewise be transitioned to `shader-read` and
+owned by Graphics before `agcCmdBindVertexBuffers` or `agcCmdBindIndexBuffer`.
+That state accepts uniform, storage, vertex, and index buffer usage, keeping
+GPU-readable buffers in one typed state. Binding validates all buffer/layout
+arguments before testing state. The exact FW 5.50 reflected graphics probe
+passed the upload vertex/index row; see
+[`runtime_graphics_input_state_gate_fw550_20260731.md`](../analysis/runtime_graphics_input_state_gate_fw550_20260731.md).
+
 ## Explicit resource transitions
 
 `agcCmdTransitionResources` records versioned `AgcResourceTransition` entries;
@@ -353,8 +361,11 @@ resources in each transition batch, as recorded in
 The exact FW 5.50 standard-PS5 whole-buffer compute `shader-write` to graphics
 `shader-read` v2 handoff passed its no-CPU-wait release/acquire oracle, recorded
 in [`runtime_crossqueue_resource_handoff_fw550_20260731.md`](../analysis/runtime_crossqueue_resource_handoff_fw550_20260731.md).
-Depth/stencil, copy, scanout, remaining v2 handoff rows, non-batch submit-list
-rows, and timeline synchronization remain host-only.
+The same public graphics probe qualified upload vertex/index buffers in
+`shader-read`/Graphics state; see
+[`runtime_graphics_input_state_gate_fw550_20260731.md`](../analysis/runtime_graphics_input_state_gate_fw550_20260731.md).
+Other depth/stencil, copy, scanout, remaining v2 handoff rows, non-batch
+submit-list rows, and timeline synchronization remain host-only.
 
 Prospero `agcQueueSubmit` submits both current graphics and compute command
 buffers through the direct DCB carrier only when the caller supplies an

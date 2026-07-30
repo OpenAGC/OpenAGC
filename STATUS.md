@@ -395,6 +395,14 @@ the public D16 depth-write row on exact FW 5.50; see
 `analysis/runtime_depth_stencil_state_gate_fw550_20260731.md`. Packed depth
 mips and clears/load-store remain open.
 
+Native vertex and index bindings now also fail closed unless their buffers are
+in graphics-owned `shader-read` state. That state explicitly accepts uniform,
+storage, vertex, and index buffer usage; all binding arguments validate before
+the state test. Artifact
+`d99d0ca7a37f4020e27c8ef1117e9d94643b736136c895ae08660f7982d6f9a4` passed
+the public upload vertex/index row on exact FW 5.50; see
+`analysis/runtime_graphics_input_state_gate_fw550_20260731.md`.
+
 ## Native runtime C API contract complete (2026-07-30)
 
 The PS5-only, firmware-neutral `openagc/runtime.h` header introduces opaque

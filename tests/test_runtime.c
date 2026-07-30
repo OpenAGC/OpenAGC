@@ -34,6 +34,26 @@ static AgcDevice create_device(void)
     return device;
 }
 
+static int32_t runtime_transition_buffer_to_graphics_read(
+    AgcCommandBuffer command_buffer, AgcBuffer buffer, uint64_t size,
+    AgcResourceUsage before, uint32_t flags)
+{
+    AgcResourceTransition transition = flags == 0u ?
+        (AgcResourceTransition)AGC_RESOURCE_TRANSITION_INIT :
+        (AgcResourceTransition)AGC_RESOURCE_TRANSITION_V2_INIT;
+
+    transition.resource_type = kAgcResourceTypeBuffer;
+    transition.buffer = buffer;
+    transition.buffer_size = size;
+    transition.before = before;
+    transition.after = kAgcResourceUsageShaderRead;
+    transition.before_owner = before == kAgcResourceUsageUndefined ?
+        kAgcResourceOwnerHost : kAgcResourceOwnerGraphics;
+    transition.after_owner = kAgcResourceOwnerGraphics;
+    transition.flags = flags;
+    return agcCmdTransitionResources(command_buffer, 1u, &transition);
+}
+
 typedef struct RuntimeShaderFixture {
     AgcShaderRecord record;
     AgcShaderSpecials specials;
@@ -1196,6 +1216,12 @@ static void test_runtime_compiler_graphics_sidecar(void)
     vertex_binding.buffer = vertex_buffer;
     vertex_binding.stride = 24u;
     TEST_ASSERT_EQ(agcCmdBindVertexBuffers(command, 1u, &vertex_binding),
+        AGC_ERROR_INVALID_STATE,
+        "untransitioned vertex buffer cannot bind on graphics");
+    TEST_ASSERT_EQ(runtime_transition_buffer_to_graphics_read(command,
+        vertex_buffer, sizeof(vertices), kAgcResourceUsageUndefined, 0u),
+        AGC_OK, "compiler-sidecar vertex buffer transitions to graphics read");
+    TEST_ASSERT_EQ(agcCmdBindVertexBuffers(command, 1u, &vertex_binding),
         AGC_OK, "compiler-sidecar vertex table binds");
     targets[0].image = first_image;
     targets[1].image = second_image;
@@ -1220,6 +1246,12 @@ static void test_runtime_compiler_graphics_sidecar(void)
         "compiler-sidecar viewport binds");
     TEST_ASSERT_EQ(agcCmdSetScissor(command, &scissor), AGC_OK,
         "compiler-sidecar scissor binds");
+    TEST_ASSERT_EQ(agcCmdBindIndexBuffer(command, index_buffer, 0u,
+        kAgcIndexSize16), AGC_ERROR_INVALID_STATE,
+        "untransitioned index buffer cannot bind on graphics");
+    TEST_ASSERT_EQ(runtime_transition_buffer_to_graphics_read(command,
+        index_buffer, sizeof(indices), kAgcResourceUsageUndefined, 0u),
+        AGC_OK, "compiler-sidecar index buffer transitions to graphics read");
     TEST_ASSERT_EQ(agcCmdBindIndexBuffer(command, index_buffer, 0u,
         kAgcIndexSize16), AGC_OK, "compiler-sidecar index buffer binds");
     TEST_ASSERT_EQ(agcCmdDrawIndexed(command, 3u, 1u, 0u, 0, 0u), AGC_OK,
@@ -1310,6 +1342,9 @@ static void test_runtime_indexed_graphics_submission(void)
         "graphics command buffer begins");
     TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(command_buffer, pipeline), AGC_OK,
         "graphics pipeline bind succeeds");
+    TEST_ASSERT_EQ(runtime_transition_buffer_to_graphics_read(command_buffer,
+        index_buffer, buffer_desc.size, kAgcResourceUsageUndefined, 0u),
+        AGC_OK, "index buffer transitions to graphics read");
     TEST_ASSERT_EQ(agcCmdBindIndexBuffer(command_buffer, index_buffer, 0u,
         kAgcIndexSize16), AGC_OK, "index buffer bind succeeds");
     TEST_ASSERT_EQ(agcCmdDrawIndexed(command_buffer, 6u, 2u, 1u, 0, 0u),
@@ -1405,6 +1440,11 @@ static void test_runtime_multi_graphics_submission(void)
             "multi-submit command begins");
         TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(commands[i], pipeline), AGC_OK,
             "multi-submit graphics pipeline binds");
+        TEST_ASSERT_EQ(runtime_transition_buffer_to_graphics_read(commands[i],
+            index_buffer, buffer_desc.size, i == 0u ?
+            kAgcResourceUsageUndefined : kAgcResourceUsageShaderRead,
+            i == 0u ? 0u : AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT),
+            AGC_OK, "multi-submit index buffer transitions to graphics read");
         TEST_ASSERT_EQ(agcCmdBindIndexBuffer(commands[i], index_buffer, 0u,
             kAgcIndexSize16), AGC_OK, "multi-submit index buffer binds");
         TEST_ASSERT_EQ(agcCmdDrawIndexed(commands[i], 3u, 1u, 0u, 0, 0u),
@@ -1457,6 +1497,10 @@ static void test_runtime_multi_graphics_submission(void)
             "multi-submit list command begins");
         TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(commands[i], pipeline), AGC_OK,
             "multi-submit list graphics pipeline binds");
+        TEST_ASSERT_EQ(runtime_transition_buffer_to_graphics_read(commands[i],
+            index_buffer, buffer_desc.size, kAgcResourceUsageShaderRead, 0u),
+            AGC_OK,
+            "multi-submit list index buffer retains graphics-read state");
         TEST_ASSERT_EQ(agcCmdBindIndexBuffer(commands[i], index_buffer, 0u,
             kAgcIndexSize16), AGC_OK,
             "multi-submit list index buffer binds");
@@ -2836,6 +2880,9 @@ static void test_runtime_color_target_binding(void)
         "color-target command buffer begins");
     TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(command, pipeline), AGC_OK,
         "color-target graphics pipeline binds");
+    TEST_ASSERT_EQ(runtime_transition_buffer_to_graphics_read(command,
+        index_buffer, buffer_desc.size, kAgcResourceUsageUndefined, 0u),
+        AGC_OK, "color-target index buffer transitions to graphics read");
     TEST_ASSERT_EQ(agcCmdBindIndexBuffer(command, index_buffer, 0u,
         kAgcIndexSize16), AGC_OK, "color-target index buffer binds");
     TEST_ASSERT_EQ(agcCmdDrawIndexed(command, 3u, 1u, 0u, 0, 0u),
@@ -2980,6 +3027,9 @@ static void test_runtime_mrt_color_target_binding(void)
         "MRT command buffer begins");
     TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(command, pipeline), AGC_OK,
         "MRT graphics pipeline binds");
+    TEST_ASSERT_EQ(runtime_transition_buffer_to_graphics_read(command,
+        index_buffer, buffer_desc.size, kAgcResourceUsageUndefined, 0u),
+        AGC_OK, "MRT index buffer transitions to graphics read");
     TEST_ASSERT_EQ(agcCmdBindIndexBuffer(command, index_buffer, 0u,
         kAgcIndexSize16), AGC_OK, "MRT index buffer binds");
     targets[0].image = first_image;
@@ -3115,6 +3165,9 @@ static void test_runtime_depth_stencil_target_binding(void)
         "depth-target command buffer begins");
     TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(command, pipeline), AGC_OK,
         "depth-target graphics pipeline binds");
+    TEST_ASSERT_EQ(runtime_transition_buffer_to_graphics_read(command,
+        index_buffer, buffer_desc.size, kAgcResourceUsageUndefined, 0u),
+        AGC_OK, "depth-target index buffer transitions to graphics read");
     TEST_ASSERT_EQ(agcCmdBindIndexBuffer(command, index_buffer, 0u,
         kAgcIndexSize16), AGC_OK, "depth-target index buffer binds");
     TEST_ASSERT_EQ(agcCmdDrawIndexed(command, 3u, 1u, 0u, 0, 0u),
@@ -3211,6 +3264,9 @@ static void test_runtime_command_space_atomic_failure(void)
         "bind-plus-ten-dword command buffer begins");
     TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(command_buffer, pipeline), AGC_OK,
         "small-buffer graphics pipeline binds");
+    TEST_ASSERT_EQ(runtime_transition_buffer_to_graphics_read(command_buffer,
+        index_buffer, buffer_desc.size, kAgcResourceUsageUndefined, 0u),
+        AGC_OK, "small-buffer index transitions to graphics read");
     TEST_ASSERT_EQ(agcCmdBindIndexBuffer(command_buffer, index_buffer, 0u,
         kAgcIndexSize16), AGC_OK, "small-buffer index buffer binds");
     TEST_ASSERT_EQ(agcCmdDrawIndexed(command_buffer, 3u, 1u, 0u, 0, 0u),
@@ -3320,6 +3376,9 @@ static void test_runtime_dynamic_graphics_state(void)
         "read-only depth target transitions to graphics ownership");
     TEST_ASSERT_EQ(agcCmdBindDepthStencilTarget(command, &depth_target),
         AGC_OK, "dynamic-state depth/stencil target binds");
+    TEST_ASSERT_EQ(runtime_transition_buffer_to_graphics_read(command,
+        index_buffer, buffer_desc.size, kAgcResourceUsageUndefined, 0u),
+        AGC_OK, "dynamic-state index buffer transitions to graphics read");
     TEST_ASSERT_EQ(agcCmdBindIndexBuffer(command, index_buffer, 0u,
         kAgcIndexSize16), AGC_OK, "dynamic-state index buffer binds");
     TEST_ASSERT_EQ(agcCmdDrawIndexed(command, 3u, 1u, 0u, 0, 0u),
@@ -4067,6 +4126,9 @@ static void test_runtime_pipeline_layout_and_stage_validation(void)
             "reflected graphics command buffer begins");
         TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(command, graphics), AGC_OK,
             "reflected graphics pipeline binds");
+        TEST_ASSERT_EQ(runtime_transition_buffer_to_graphics_read(command,
+            index_buffer, buffer_desc.size, kAgcResourceUsageUndefined, 0u),
+            AGC_OK, "reflected index buffer transitions to graphics read");
         TEST_ASSERT_EQ(agcCmdBindIndexBuffer(command, index_buffer, 0u,
             kAgcIndexSize16), AGC_OK, "reflected index buffer binds");
         TEST_ASSERT_EQ(agcCmdDrawIndexed(command, 3u, 1u, 0u, 0, 0u),
@@ -4084,6 +4146,9 @@ static void test_runtime_pipeline_layout_and_stage_validation(void)
             AGC_OK, "replacement reflected vertex buffer creates");
         binding.buffer = vertex_buffer;
         binding.stride = 16u;
+        TEST_ASSERT_EQ(runtime_transition_buffer_to_graphics_read(command,
+            vertex_buffer, buffer_desc.size, kAgcResourceUsageUndefined, 0u),
+            AGC_OK, "reflected vertex buffer transitions to graphics read");
         TEST_ASSERT_EQ(agcCmdBindVertexBuffers(command, 1u, &binding), AGC_OK,
             "matching reflected vertex table binds");
         TEST_ASSERT_EQ(agcCmdDrawIndexed(command, 3u, 1u, 0u, 0, 0u),
@@ -4438,8 +4503,14 @@ static void test_runtime_geometry_pipeline_bundle(void)
         "geometry pipeline bind records cached state");
     vertex_binding.buffer = vertex_buffer;
     vertex_binding.stride = 16u;
+    TEST_ASSERT_EQ(runtime_transition_buffer_to_graphics_read(command,
+        vertex_buffer, buffer_desc.size, kAgcResourceUsageUndefined, 0u),
+        AGC_OK, "geometry vertex buffer transitions to graphics read");
     TEST_ASSERT_EQ(agcCmdBindVertexBuffers(command, 1u, &vertex_binding),
         AGC_OK, "geometry front-stage vertex table binds");
+    TEST_ASSERT_EQ(runtime_transition_buffer_to_graphics_read(command,
+        index_buffer, buffer_desc.size, kAgcResourceUsageUndefined, 0u),
+        AGC_OK, "geometry index buffer transitions to graphics read");
     TEST_ASSERT_EQ(agcCmdBindIndexBuffer(command, index_buffer, 0u,
         kAgcIndexSize16), AGC_OK, "geometry index buffer binds");
     TEST_ASSERT_EQ(agcCmdDrawIndexed(command, 3u, 1u, 0u, 0, 0u),
@@ -4504,8 +4575,14 @@ static void test_runtime_geometry_pipeline_bundle(void)
     TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(command, pipeline), AGC_OK,
         "line geometry pipeline binds");
     vertex_binding.buffer = vertex_buffer;
+    TEST_ASSERT_EQ(runtime_transition_buffer_to_graphics_read(command,
+        vertex_buffer, buffer_desc.size, kAgcResourceUsageUndefined, 0u),
+        AGC_OK, "line geometry vertex buffer transitions to graphics read");
     TEST_ASSERT_EQ(agcCmdBindVertexBuffers(command, 1u, &vertex_binding),
         AGC_OK, "line geometry vertex table binds");
+    TEST_ASSERT_EQ(runtime_transition_buffer_to_graphics_read(command,
+        index_buffer, buffer_desc.size, kAgcResourceUsageUndefined, 0u),
+        AGC_OK, "line geometry index buffer transitions to graphics read");
     TEST_ASSERT_EQ(agcCmdBindIndexBuffer(command, index_buffer, 0u,
         kAgcIndexSize16), AGC_OK, "line geometry index buffer binds");
     TEST_ASSERT_EQ(agcCmdDrawIndexed(command, 1u, 1u, 0u, 0, 0u),
@@ -4817,11 +4894,17 @@ static void test_runtime_tessellation_pipeline_bundles(void)
         "tessellation pipeline binds its cached ring and shader state");
     vertex_binding.buffer = vertex_buffer;
     vertex_binding.stride = 16u;
+    TEST_ASSERT_EQ(runtime_transition_buffer_to_graphics_read(command,
+        vertex_buffer, buffer_desc.size, kAgcResourceUsageUndefined, 0u),
+        AGC_OK, "tessellation vertex buffer transitions to graphics read");
     TEST_ASSERT_EQ(agcCmdBindVertexBuffers(command, 1u, &vertex_binding),
         AGC_OK, "tessellation VS-front vertex table binds");
     TEST_ASSERT_EQ(agcCmdPushConstants(command, 1u << kAgcShaderStageHs,
         0u, sizeof(push_value), &push_value), AGC_OK,
         "tessellation-control push constants bind");
+    TEST_ASSERT_EQ(runtime_transition_buffer_to_graphics_read(command,
+        index_buffer, buffer_desc.size, kAgcResourceUsageUndefined, 0u),
+        AGC_OK, "tessellation index buffer transitions to graphics read");
     TEST_ASSERT_EQ(agcCmdBindIndexBuffer(command, index_buffer, 0u,
         kAgcIndexSize16), AGC_OK, "tessellation index buffer binds");
     TEST_ASSERT_EQ(agcCmdDrawIndexed(command, 4u, 1u, 0u, 0, 0u),
@@ -4869,11 +4952,17 @@ static void test_runtime_tessellation_pipeline_bundles(void)
     TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(
         command, tess_geometry_pipeline), AGC_OK,
         "combined tessellation geometry pipeline binds");
+    TEST_ASSERT_EQ(runtime_transition_buffer_to_graphics_read(command,
+        vertex_buffer, buffer_desc.size, kAgcResourceUsageShaderRead, 0u),
+        AGC_OK, "combined tessellation vertex retains graphics-read state");
     TEST_ASSERT_EQ(agcCmdBindVertexBuffers(command, 1u, &vertex_binding),
         AGC_OK, "combined tessellation VS-front vertex table binds");
     TEST_ASSERT_EQ(agcCmdPushConstants(command, 1u << kAgcShaderStageHs,
         0u, sizeof(push_value), &push_value), AGC_OK,
         "combined tessellation-control push constants bind");
+    TEST_ASSERT_EQ(runtime_transition_buffer_to_graphics_read(command,
+        index_buffer, buffer_desc.size, kAgcResourceUsageShaderRead, 0u),
+        AGC_OK, "combined tessellation index retains graphics-read state");
     TEST_ASSERT_EQ(agcCmdBindIndexBuffer(command, index_buffer, 0u,
         kAgcIndexSize16), AGC_OK,
         "combined tessellation geometry index buffer binds");

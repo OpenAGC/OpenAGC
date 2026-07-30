@@ -335,6 +335,13 @@ Artifact `39605323b4a2b5e15596fd3dd034680b97782e683df6b717e88d409edcfa8cc9`
 passed the public D16 depth-write row on exact FW 5.50; see
 `analysis/runtime_depth_stencil_state_gate_fw550_20260731.md`. Clears/load-
 store and packed depth mips remain later work.
+Vertex and index binds now require their buffers in graphics-owned
+`shader-read` state; that typed state accepts uniform, storage, vertex, and
+index buffer usages. Argument and reflected-layout validation precedes the
+state check. Artifact
+`d99d0ca7a37f4020e27c8ef1117e9d94643b736136c895ae08660f7982d6f9a4` passed
+the public upload vertex/index row on exact FW 5.50; see
+`analysis/runtime_graphics_input_state_gate_fw550_20260731.md`.
 Compiler-fused VS-front/GS-back geometry pipelines are
 host-packaged for the already-qualified triangle and line inputs plus compiler
 invocation counts; redundant standalone VS handles, incomplete input

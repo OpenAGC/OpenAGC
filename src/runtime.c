@@ -4700,7 +4700,8 @@ static int agcRuntimeBufferUsageSupports(const AgcBuffer buffer,
         return (buffer->usage & AGC_BUFFER_USAGE_TRANSFER_DST_BIT) != 0u;
     case kAgcResourceUsageShaderRead:
         return (buffer->usage & (AGC_BUFFER_USAGE_UNIFORM_BIT |
-            AGC_BUFFER_USAGE_STORAGE_BIT)) != 0u;
+            AGC_BUFFER_USAGE_STORAGE_BIT | AGC_BUFFER_USAGE_VERTEX_BIT |
+            AGC_BUFFER_USAGE_INDEX_BIT)) != 0u;
     case kAgcResourceUsageShaderWrite:
         return (buffer->usage & AGC_BUFFER_USAGE_STORAGE_BIT) != 0u;
     case kAgcResourceUsageHostRead:
@@ -5968,6 +5969,16 @@ int32_t PS5_SYSV_ABI agcCmdBindVertexBuffers(AgcCommandBuffer command_buffer,
         seen |= 1u << bindings[i].binding;
     }
     for (i = 0u; i < binding_count; ++i) {
+        AgcResourceUsage usage;
+        AgcResourceOwner owner;
+
+        agcCommandTransitionState(command_buffer, kAgcResourceTypeBuffer,
+            bindings[i].buffer, &usage, &owner);
+        if (usage != kAgcResourceUsageShaderRead ||
+            owner != kAgcResourceOwnerGraphics)
+            return AGC_ERROR_INVALID_STATE;
+    }
+    for (i = 0u; i < binding_count; ++i) {
         memcpy((uint8_t *)agcAllocationCpuAddress(
                 command_buffer->resource_allocation) +
                 layout->vertex_table_offset +
@@ -6449,6 +6460,16 @@ int32_t PS5_SYSV_ABI agcCmdBindIndexBuffer(AgcCommandBuffer command_buffer,
         return AGC_ERROR_INVALID_STATE;
     if (command_buffer->index_buffer && command_buffer->index_buffer != buffer)
         return AGC_ERROR_NOT_SUPPORTED;
+    {
+        AgcResourceUsage usage;
+        AgcResourceOwner owner;
+
+        agcCommandTransitionState(command_buffer, kAgcResourceTypeBuffer,
+            buffer, &usage, &owner);
+        if (usage != kAgcResourceUsageShaderRead ||
+            owner != kAgcResourceOwnerGraphics)
+            return AGC_ERROR_INVALID_STATE;
+    }
     if (!command_buffer->index_buffer) {
         command_buffer->index_buffer = buffer;
         buffer->recorded_refs++;

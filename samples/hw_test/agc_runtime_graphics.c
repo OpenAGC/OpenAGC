@@ -79,7 +79,9 @@ int main(void)
     AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
     AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
     AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
-    AgcResourceTransition transitions[3] = {
+    AgcResourceTransition transitions[5] = {
+        AGC_RESOURCE_TRANSITION_INIT,
+        AGC_RESOURCE_TRANSITION_INIT,
         AGC_RESOURCE_TRANSITION_INIT,
         AGC_RESOURCE_TRANSITION_INIT,
         AGC_RESOURCE_TRANSITION_INIT,
@@ -280,7 +282,17 @@ int main(void)
     transitions[2].image = depth_image;
     transitions[2].after = kAgcResourceUsageDepthStencilWrite;
     transitions[2].image_range.aspect_mask = AGC_IMAGE_ASPECT_DEPTH_BIT;
-    result = agcCmdTransitionResources(command_buffer, 3u, transitions);
+    transitions[3].resource_type = kAgcResourceTypeBuffer;
+    transitions[3].buffer = vertex_buffer;
+    transitions[3].buffer_size = sizeof(kVertices);
+    transitions[3].before = kAgcResourceUsageUndefined;
+    transitions[3].after = kAgcResourceUsageShaderRead;
+    transitions[3].before_owner = kAgcResourceOwnerHost;
+    transitions[3].after_owner = kAgcResourceOwnerGraphics;
+    transitions[4] = transitions[3];
+    transitions[4].buffer = index_buffer;
+    transitions[4].buffer_size = sizeof(kIndices);
+    result = agcCmdTransitionResources(command_buffer, 5u, transitions);
     report_result("agcCmdTransitionResources(undefined-to-targets)", result);
     if (result != AGC_OK)
         goto cleanup;
