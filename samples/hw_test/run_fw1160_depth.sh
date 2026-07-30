@@ -92,7 +92,7 @@ if [ "${EXPECTED_D32_FULL_RECT:-0}" -eq 1 ]; then
         "$output_file" || exit 1
 fi
 if [ "${EXPECTED_STENCIL_FULL_RECT:-0}" -eq 1 ]; then
-    grep -q '^\[Stencil Readback\] zero=1617408 replace-5a=456192 other=0$' \
+    grep -q '^\[Stencil Readback\] zero=2165248 replace-5a=456192 other=0$' \
         "$output_file" || exit 1
 fi
 if [ -n "${EXPECTED_COMBINED_EXPCLEAR_ASPECTS:-}" ]; then

@@ -141,3 +141,11 @@ an `EXPECTED_FW_ABI` selector, and derives a firmware-specific remote path. The
 FW 5.50 deploy targets set exact hashes and ABI `0x0550`; the default remains
 exact `0x1160`. Run D32, D16, S8-only, and D16+S8 once each on the FW 5.50
 console. Any mismatch blocks promotion and requires stopping the matrix.
+
+The first current-source S8 launch completed its fence, exact app-side oracle,
+shutdown, and cleanup with `456192` replaced bytes, `2165248` zero bytes, and
+no other values. The outer runner rejected only because it had expected the
+logical pixel count rather than the full 2,621,440-byte swizzled allocation.
+That host-oracle bug is corrected and fixture-locked before D16+S8 proceeds;
+the rejected wrapper result is retained as hardware evidence but is not counted
+as the accepted S8 gate.

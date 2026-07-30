@@ -16,7 +16,7 @@ GPU completion fence reached
 [HTILE Readback] changed=1024 other=0 initial=fffff30f
 [Depth Readback] green=228096 red=228096 left=ff00ff00 right=ffff0000
 [Depth Readback] raw D32: one=1617408 near=228096 far=228096
-[Stencil Readback] zero=1617408 replace-5a=456192 other=0
+[Stencil Readback] zero=2165248 replace-5a=456192 other=0
 [Depth+Stencil Result] markers=PASS color=PASS raw-depth=PASS stencil=PASS
 Driver shutdown: PASS
 Graphics result: PASS

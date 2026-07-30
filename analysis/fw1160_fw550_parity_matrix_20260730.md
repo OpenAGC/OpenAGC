@@ -98,8 +98,9 @@ baseline and preceding D16 HTILE tier must pass before these D32 tuples launch.
 The combined D32+S8 tier is likewise prepared without a hardware claim. Eight
 artifacts cover ordinary HTILE and expclear of depth-only, stencil-only, or
 both aspects for exact FW `0x1160` and matching headless FW `0x0550`. The
-runner now additionally requires the exact full-rectangle stencil distribution
-(`456192` replaced and `1617408` zero bytes) and, for expclear, an enabled
+runner now additionally requires the exact allocation-aware stencil
+distribution (`456192` replaced and `2165248` zero bytes, including swizzle
+padding) and, for expclear, an enabled
 aspect-specific RMW plan with zero selected mismatches, zero outside changes,
 preserved reserved bits, and its bounded fence. A host fixture proves that the
 runner accepts the intended aspect and rejects the wrong one. All eight ELFs
