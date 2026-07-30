@@ -213,8 +213,12 @@ The first isolated difference is now fixed in `agcCmdDispatch`: it emits all
 174 qualified V8 compute SH-default registers before programming shader,
 resource, user-data, and dispatch state. This matches the ordering of the
 hardware-proven manual compute sample and is covered by a host assertion that
-the runtime stream contains the full default sequence plus the dispatch.
-The changed compute artifact awaits an exact-FW-5.50 rerun.
+the runtime stream contains the full default sequence plus the dispatch. The
+changed artifact (`52a1e82a75cafe5b7541f130e862ae6cf4813ecedd460dd7017408ef2a254775`)
+passed on exact FW 5.50: submission, bounded fence wait, readback verification,
+reset, and every object teardown returned `AGC_OK`. This hardware-qualifies the
+reflected native compute slice for this exact profile; it does not qualify the
+separate native graphics sample or unqualified pipeline options.
 
 `samples/hw_test/agc_runtime_eop.elf` is that bounded public-runtime
 diagnostic. It creates the same device, compute queue, command buffer, and

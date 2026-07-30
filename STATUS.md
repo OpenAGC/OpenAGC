@@ -212,8 +212,13 @@ next changed diagnostic must isolate compute state emitted before
 The first missing setup is now included in the runtime: every native compute
 dispatch emits the 174 V8 SH defaults before its shader state, matching the
 qualified manual path. Generic carrier coverage verifies the complete default
-prefix plus dispatch, and the changed Prospero artifact cross-builds cleanly;
-hardware rerun remains pending.
+prefix plus dispatch, and the changed Prospero artifact cross-builds cleanly.
+The exact artifact
+`52a1e82a75cafe5b7541f130e862ae6cf4813ecedd460dd7017408ef2a254775` then
+passed on FW 5.50: its reflected compute dispatch, 200 ms bounded fence wait,
+readback verification, command reset, and complete resource/device teardown
+all returned `AGC_OK`. This hardware-qualifies the native reflected compute
+slice for the tested profile, not the undeployed native graphics slice.
 
 An opt-in combined-tree integration target compiles real `openagc-psbc`
 vertex, fragment, and compute artifacts, then creates OpenAGC graphics and

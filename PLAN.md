@@ -338,10 +338,15 @@ compute workload state rather than the direct carrier, command allocation,
 EOP packet, fence allocation, or CPU visibility. It is not a reflected
 compute-pipeline promotion; the next changed diagnostic must isolate the
 state emitted before `DISPATCH_DIRECT`.
-The first missing state is resolved locally: `agcCmdDispatch` now emits the
-174 V8 compute SH defaults that precede the manually qualified compute
-dispatch, with expanded command-space coverage and a clean PS5 cross-build.
-The resulting workload artifact awaits an exact FW 5.50 rerun.
+The first missing state is resolved: `agcCmdDispatch` emits the 174 V8 compute
+SH defaults that precede the manually qualified compute dispatch, with
+expanded command-space coverage and a clean PS5 cross-build. The changed
+artifact `52a1e82a75cafe5b7541f130e862ae6cf4813ecedd460dd7017408ef2a254775`
+then passed its exact FW 5.50 public-runtime compute lifecycle: reflected
+pipeline dispatch, bounded fence wait, readback verification, reset, and full
+teardown. This promotes that compute slice only; the native graphics probe and
+remaining unqualified pipeline options are still open, so do not label this
+milestone complete yet.
 Remaining unqualified geometry forms, remaining
 unqualified fixed options, and any explicit PS5 hardware promotion remain
 open; do not label this milestone complete yet.
