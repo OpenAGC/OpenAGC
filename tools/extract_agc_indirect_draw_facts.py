@@ -152,6 +152,11 @@ def validate_user_data_immediate_packet(body: list[str]) -> None:
     require("user_data_immediate_packet", body, (r"xorl %eax, %eax", r"retq"))
 
 
+def has_legacy_initiator(body: list[str]) -> bool:
+    return (has(body, r"\$0xe0000020") or
+            (has(body, r"\$-0x20") and has(body, r"\$0x18")))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("firmware_root", type=Path)
@@ -188,6 +193,13 @@ def main() -> int:
         except ValueError as error:
             raise SystemExit(f"{key}: {error}") from error
 
+        legacy_flags = {
+            has_legacy_initiator(bodies[name])
+            for name in ("draw", "draw_index", "draw_multi", "draw_index_multi")
+        }
+        if len(legacy_flags) != 1:
+            raise SystemExit(f"{key}: indirect initiator families disagree")
+
         driver_exports = {
             "user_data_get_size": USER_DATA_GET_SIZE_NID,
             "user_data_immediate_packet": USER_DATA_IMMEDIATE_PACKET_NID,
@@ -214,7 +226,7 @@ def main() -> int:
             "cb,u32,u32,u32,ptr,u32,u64", "10", "64",
             "pre=tag:8/5,post=tag:0,driver-stub=0+0",
             "count_addr=align4,split32;stride=dword8",
-            ("legacy-bits5:7" if has(bodies["draw"], r"\$0xe0000020")
+            ("legacy-bits5:7" if legacy_flags == {True}
              else "standard"),
         ))
 

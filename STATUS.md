@@ -89,7 +89,7 @@ the GPU `0x504f5254` marker, two bounded flips, zero-valued teardown, and
 relaunch all passed. The same preserved bytes remain reserved for FW5.50.
 All other active exact profiles remain SPRX-qualified/hardware-unverified.
 
-Offline portability closure is complete. The clean generic suite passes 5,663
+Offline portability closure is complete. The clean generic suite passes 5,664
 assertions, including full raw-version normalization, exact profile selection,
 and common-V7 acceptance across all 39 active profiles; the clean Prospero
 cross-build also passes. Submission, queue, memory, suspend, workload, TF/HS,

@@ -856,10 +856,14 @@ static void test_sce_agc_dcb_draw_indirect(void) {
     cmd = sceAgcDcbDrawIndirect(&cb, 0, modifier | (UINT64_C(1) << 32u));
     TEST_ASSERT_EQ(cmd[4], 2u,
         "DcbDrawIndirect modifier bit 32 suppresses initiator controls");
-    TEST_ASSERT_EQ(agcIndirectDrawInitiator(modifier, true), 0xa0000022u,
+    TEST_ASSERT_EQ(agcIndirectDrawInitiatorForFirmware(
+        modifier, 0x0320u), 0xa0000022u,
         "FW 3.20 preserves modifier bits 5-7 in initiator");
-    TEST_ASSERT_EQ(agcIndirectDrawInitiator(
-        modifier | (UINT64_C(1) << 32u), true), 2u,
+    TEST_ASSERT_EQ(agcIndirectDrawInitiatorForFirmware(
+        modifier, 0x0400u), 0x22u,
+        "FW 4.00 selects the standard initiator form");
+    TEST_ASSERT_EQ(agcIndirectDrawInitiatorForFirmware(
+        modifier | (UINT64_C(1) << 32u), 0x0320u), 2u,
         "FW 3.20 bit 32 suppresses legacy initiator controls");
 }
 

@@ -879,13 +879,14 @@ static uint32_t agcIndirectRegisterOffset(
     return base + (uint32_t)((modifier >> field_shift) & 0x1fu);
 }
 
-uint32_t agcIndirectDrawInitiator(uint64_t modifier, bool legacy_fw320)
+uint32_t agcIndirectDrawInitiatorForFirmware(
+    uint64_t modifier, uint16_t firmware_abi_key)
 {
     uint32_t initiator = 2u;
 
     if ((modifier & (UINT64_C(1) << 32u)) == 0u) {
         initiator |= (uint32_t)((modifier >> 3u) & 0x20u);
-        if (legacy_fw320)
+        if (firmware_abi_key == 0x0320u)
             initiator |= (uint32_t)((modifier << 24u) & UINT64_C(0xe0000000));
     }
     return initiator;
@@ -904,11 +905,6 @@ static uint32_t agcIndirectControl(
     return control;
 }
 
-static bool agcIndirectUsesLegacyFw320Initiator(void)
-{
-    return agcDriverRuntimeFirmwareAbiKey() == 0x0320u;
-}
-
 /* sceAgcDcbDrawIndirect (NID 1q1titRBL6o) — IT_DRAW_INDIRECT (0x24).
  * The public ABI is (cb, data_offset, modifier); modifier fields select the
  * base-vertex and start-instance register locations encoded in dwords 2-3. */
@@ -923,8 +919,8 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndirect(
     cmd[1] = data_offset;
     cmd[2] = agcIndirectRegisterOffset(modifier, 0u, 9u);
     cmd[3] = agcIndirectRegisterOffset(modifier, 2u, 19u);
-    cmd[4] = agcIndirectDrawInitiator(
-        modifier, agcIndirectUsesLegacyFw320Initiator());
+    cmd[4] = agcIndirectDrawInitiatorForFirmware(
+        modifier, agcDriverRuntimeFirmwareAbiKey());
     return cmd;
 }
 
@@ -975,8 +971,8 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndexIndirect(
     cmd[1] = data_offset;
     cmd[2] = (uint32_t)locations;
     cmd[3] = (uint32_t)(locations >> 32u);
-    cmd[4] = agcIndirectDrawInitiator(
-        modifier, agcIndirectUsesLegacyFw320Initiator());
+    cmd[4] = agcIndirectDrawInitiatorForFirmware(
+        modifier, agcDriverRuntimeFirmwareAbiKey());
     return cmd;
 }
 
@@ -1008,8 +1004,8 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndirectMulti(
     cmd[6] = (uint32_t)count & ~3u;
     cmd[7] = (uint32_t)((uint64_t)count >> 32u);
     cmd[8] = stride;
-    cmd[9] = agcIndirectDrawInitiator(
-        modifier, agcIndirectUsesLegacyFw320Initiator());
+    cmd[9] = agcIndirectDrawInitiatorForFirmware(
+        modifier, agcDriverRuntimeFirmwareAbiKey());
     return cmd;
 }
 
@@ -1044,8 +1040,8 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbDrawIndexIndirectMulti(
     cmd[6] = (uint32_t)count & ~3u;
     cmd[7] = (uint32_t)((uint64_t)count >> 32u);
     cmd[8] = stride;
-    cmd[9] = agcIndirectDrawInitiator(
-        modifier, agcIndirectUsesLegacyFw320Initiator());
+    cmd[9] = agcIndirectDrawInitiatorForFirmware(
+        modifier, agcDriverRuntimeFirmwareAbiKey());
     return cmd;
 }
 

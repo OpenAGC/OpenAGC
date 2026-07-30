@@ -119,7 +119,7 @@ and relaunch. The FW5.50 identical-byte run remains pending. See
 
 The offline endpoint audit is complete. Full nonzero-suffix raw versions now
 exercise normalization, exact selection, and common-V7 acceptance for all 39
-profiles; the clean host suite passes 5,663 assertions. All relevant SPRX
+profiles; the clean host suite passes 5,664 assertions. All relevant SPRX
 ledgers reproduce from `/Volumes/Untitled/unp`, and
 `tools/verify_fw550_fw1160_compatibility.py` locks every shared layout and
 classified endpoint difference. The FW5.50 target now uses only preserved
