@@ -47,8 +47,10 @@ descriptor-array coverage, `agcCmdBindVertexBuffers` for every reflected vertex
 binding, and `agcCmdPushConstants` for declared stage ranges. The runtime owns
 the GPU-visible resource-table arena and derives descriptor bytes and user-SGPR
 addresses; applications never supply raw table addresses or user-data
-registers. Indirect descriptor-set tables remain unsupported and fail during
-pipeline creation.
+registers. A shader may reflect either one direct address SGPR per used set or
+one indirect-set SGPR. For the indirect form, the runtime builds and publishes
+an eight-entry table of 32-bit PS5 address-space pointers; mixed direct and
+indirect declarations in one shader fail pipeline creation.
 
 Each v1 descriptor write names one set, binding, and array element. A bind must
 cover every declared element exactly once. Buffer/image/sampler type, usage,
@@ -76,15 +78,17 @@ Wave32 pixel shader, supported fill/cull/front-face rasterization, supported
 color/depth/stencil formats, complete depth/stencil testing, the declared
 dynamic states above, and the qualified gfx1013 bind groups. Compute supports
 Wave32, at most 1,024 invocations per group, no scratch, and at most 64 KiB
-LDS. Alpha-to-coverage, alpha-to-one, tessellation and geometry pipeline
+LDS, including direct or indirect reflected descriptor-set addressing.
+Alpha-to-coverage, alpha-to-one, tessellation and geometry pipeline
 packaging, and Prospero submission remain fail-closed.
 
 ## Qualification
 
 The generic suite covers valid float/normalized, UINT, and SINT attachment
 pairs, negative compatibility/layout fixtures, successful descriptor/push and
-vertex-table execution paths, resource lifetime, exact depth/stencil register
-encoding, v1 state normalization, multisample minimums, and required dynamic-
-state gating. These results are host-tested only. A future explicit PS5 promotion
-gate will qualify exact firmware artifacts; no hardware qualification is
-implied by pipeline creation or a successful host command recording.
+vertex-table execution paths, direct and indirect set-address emission,
+resource lifetime, exact depth/stencil register encoding, v1 state
+normalization, multisample minimums, and required dynamic-state gating. These
+results are host-tested only. A future explicit PS5 promotion gate will qualify
+exact firmware artifacts; no hardware qualification is implied by pipeline
+creation or a successful host command recording.

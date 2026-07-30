@@ -76,6 +76,30 @@ static int runtime_find_context_register(const uint32_t *commands,
     return found;
 }
 
+static int runtime_find_shader_register(const uint32_t *commands,
+    uint32_t used, uint32_t offset, uint32_t *value)
+{
+    uint32_t cursor = 0u;
+    int found = 0;
+
+    while (cursor < used) {
+        uint32_t length = agcPm4Length(commands[cursor]);
+        if (length < 2u || length > used - cursor)
+            return 0;
+        if (agcPm4Opcode(commands[cursor]) == AGC_PM4_OP_SET_SH_REG &&
+            length >= 3u) {
+            uint32_t first = commands[cursor + 1u];
+            uint32_t count = length - 2u;
+            if (offset >= first && offset - first < count) {
+                *value = commands[cursor + 2u + offset - first];
+                found = 1;
+            }
+        }
+        cursor += length;
+    }
+    return found;
+}
+
 static uint64_t shader_fixture_hash(const void *data, size_t size)
 {
     const uint8_t *bytes = data;
@@ -1426,6 +1450,117 @@ static void test_runtime_pipeline_layout_and_stage_validation(void)
         "pipeline layout validation device destroys");
 }
 
+static void test_runtime_indirect_descriptor_set_table(void)
+{
+    AgcDevice device = create_device();
+    AgcQueue queue = create_queue(device, kAgcQueueCompute);
+    AgcShaderReflection requirements = AGC_SHADER_REFLECTION_INIT;
+    AgcShaderDescriptorMapping mapping = {
+        1u, 3u, AGC_SHADER_DESCRIPTOR_STORAGE_BUFFER, 1u, 0u, 16u};
+    AgcComputePipelineDesc pipeline_desc = AGC_COMPUTE_PIPELINE_DESC_INIT;
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcBufferDesc buffer_desc = AGC_BUFFER_DESC_INIT;
+    AgcDescriptorWrite write = AGC_DESCRIPTOR_WRITE_INIT;
+    AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    AgcComputePipeline pipeline = NULL;
+    AgcCommandBuffer command = NULL;
+    AgcBuffer storage = NULL;
+    AgcShader shader;
+    const AgcCommandBufferSubmit *captured;
+    const uint32_t *words;
+    uint32_t owner = UINT32_MAX;
+    uint32_t table_address = 0u;
+
+    requirements.local_size_x = 64u;
+    requirements.local_size_y = 1u;
+    requirements.local_size_z = 1u;
+    requirements.descriptor_mapping_count = 1u;
+    requirements.descriptor_mappings[0] = mapping;
+    requirements.user_sgpr_count = 1u;
+    requirements.user_sgprs[0] = (AgcShaderUserSgpr){
+        AGC_SHADER_USER_SGPR_INDIRECT_DESCRIPTOR_SETS, 0u,
+        AGC_REG_COMPUTE_USER_DATA_0, 1u};
+    shader = create_shader_with_reflection(
+        device, kAgcShaderStageCs, &requirements);
+    pipeline_desc.shader = shader;
+    pipeline_desc.local_size_x = 64u;
+    pipeline_desc.descriptor_mapping_count = 1u;
+    pipeline_desc.descriptor_mappings = &mapping;
+    TEST_ASSERT_EQ(agcCreateComputePipeline(device, &pipeline_desc,
+        &pipeline), AGC_OK,
+        "indirect descriptor-set reflection creates compute pipeline");
+
+    command_desc.queue_type = kAgcQueueCompute;
+    command_desc.capacity_dwords = 128u;
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
+        AGC_OK, "indirect descriptor command buffer creates");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+        "indirect descriptor command buffer begins");
+    TEST_ASSERT_EQ(agcCmdBindComputePipeline(command, pipeline), AGC_OK,
+        "indirect descriptor compute pipeline binds");
+    TEST_ASSERT_EQ(agcCmdDispatch(command, 1u, 1u, 1u),
+        AGC_ERROR_RESOURCE_NOT_BOUND,
+        "indirect descriptor dispatch requires its reflected set");
+    buffer_desc.size = 256u;
+    buffer_desc.usage = AGC_BUFFER_USAGE_STORAGE_BIT;
+    TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &storage), AGC_OK,
+        "indirect descriptor storage buffer creates");
+    write.set = 1u;
+    write.binding = 3u;
+    write.type = AGC_SHADER_DESCRIPTOR_STORAGE_BUFFER;
+    write.buffer = storage;
+    TEST_ASSERT_EQ(agcCmdBindDescriptors(command, 1u, &write), AGC_OK,
+        "indirect descriptor table receives reflected set");
+    TEST_ASSERT_EQ(agcCmdDispatch(command, 1u, 1u, 1u), AGC_OK,
+        "indirect descriptor dispatch records after binding");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+        "indirect descriptor command buffer becomes executable");
+    submit.command_buffer_count = 1u;
+    submit.command_buffers = &command;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, NULL), AGC_OK,
+        "indirect descriptor command buffer submits on host");
+    captured = agcDriverDebugLastAcbSubmit(&owner);
+    TEST_ASSERT(captured != NULL && owner != UINT32_MAX,
+        "indirect descriptor submission is captured");
+    words = (const uint32_t *)(uintptr_t)captured->command_address;
+    TEST_ASSERT(runtime_find_shader_register(words, captured->dword_count,
+        AGC_REG_COMPUTE_USER_DATA_0, &table_address),
+        "indirect descriptor table pointer is emitted");
+    TEST_ASSERT(table_address != 0u && (table_address & 0xffu) == 0u,
+        "indirect descriptor table pointer is nonzero and aligned");
+
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+        "indirect descriptor command buffer resets");
+    TEST_ASSERT_EQ(agcDestroyBuffer(storage), AGC_OK,
+        "indirect descriptor storage buffer destroys after reset");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+        "indirect descriptor command buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyComputePipeline(pipeline), AGC_OK,
+        "indirect descriptor pipeline destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(shader), AGC_OK,
+        "indirect descriptor shader destroys");
+
+    requirements.user_sgpr_count = 2u;
+    requirements.user_sgprs[1] = (AgcShaderUserSgpr){
+        AGC_SHADER_USER_SGPR_DESCRIPTOR_SET, 1u,
+        AGC_REG_COMPUTE_USER_DATA_0 + 1u, 1u};
+    shader = create_shader_with_reflection(
+        device, kAgcShaderStageCs, &requirements);
+    pipeline_desc.shader = shader;
+    pipeline = NULL;
+    TEST_ASSERT_EQ(agcCreateComputePipeline(device, &pipeline_desc,
+        &pipeline), AGC_ERROR_VALIDATION_FAILED,
+        "mixed direct and indirect descriptor-set ABI fails closed");
+    TEST_ASSERT(pipeline == NULL,
+        "mixed descriptor ABI leaves pipeline output null");
+    TEST_ASSERT_EQ(agcDestroyShader(shader), AGC_OK,
+        "mixed descriptor ABI shader destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
+        "indirect descriptor queue destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "indirect descriptor device destroys");
+}
+
 static void test_runtime_ps5_image_layouts(void)
 {
     AgcDevice device = create_device();
@@ -2091,6 +2226,7 @@ void test_suite_runtime(void)
     TEST_RUN(test_runtime_shader_reflection_contract);
     TEST_RUN(test_runtime_graphics_pipeline_compatibility_matrix);
     TEST_RUN(test_runtime_pipeline_layout_and_stage_validation);
+    TEST_RUN(test_runtime_indirect_descriptor_set_table);
     TEST_RUN(test_runtime_allocation_callbacks);
     TEST_RUN(test_runtime_allocation_failure_rollback);
     TEST_RUN(test_runtime_all_object_lifecycle);

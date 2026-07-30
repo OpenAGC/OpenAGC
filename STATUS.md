@@ -102,6 +102,11 @@ qualified gfx1013 bind/dispatch groups. Command buffers allocate one
 GPU-visible resource arena per bound pipeline and populate it through typed
 descriptor, vertex-table, and push-constant APIs. Reflected user-SGPR mappings
 receive only validated runtime-owned GPU addresses or declared built-ins.
+The arena also implements the compiler's merged-stage indirect descriptor ABI:
+one reflected SGPR addresses an eight-entry table of 32-bit PS5 address-space
+set pointers. The runtime owns, initializes, and flushes that table; direct and
+indirect declarations may coexist across stages, but an ambiguous mixture
+within one shader fails before command emission.
 
 Descriptor arrays require exact, duplicate-free coverage and validate resource
 class, usage, range, stride, and ownership before retention. Vertex tables
@@ -127,9 +132,10 @@ The compatibility matrix covers valid float, UINT, and SINT 16/32-bit pairs
 and rejects cross-class, missing/extra export, compressed attachment, blend,
 linkage, vertex-stride, descriptor, push-range, and unbound-resource cases. It
 also exercises successful descriptor/push dispatch, vertex-table drawing,
-resource retention/reset, exact depth/stencil register state, legacy state
-normalization, multisample minimums, and required dynamic-state gating. The
-full generic suite now reports 13,848 passed and 0 failed; the compiler's
+direct and indirect descriptor addressing, resource retention/reset, exact
+depth/stencil register state, legacy state normalization, multisample minimums,
+and required dynamic-state gating. The full generic suite now reports 13,876
+passed and 0 failed; the compiler's
 library, varying/export, NGG, and tessellation suites pass. This slice is
 host-tested only. No PS5 hardware test was run or claimed. See
 `docs/shader_pipelines.md`.

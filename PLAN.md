@@ -255,8 +255,10 @@ pipelines, cached qualified bind/dispatch groups, typed descriptor/vertex/push
 binding, command-owned resource tables, declared dynamic-state recording, and
 a compatibility matrix with transactional negative fixtures. Native depth,
 depth-bounds, independent front/back stencil, and dynamic reference/bias state
-now package the existing qualified gfx1013 register builders. The full generic
-suite reports 13,848 passed. Tessellation/geometry packaging, remaining
+now package the existing qualified gfx1013 register builders. Direct and
+compiler-emitted indirect descriptor-set SGPR layouts both use runtime-owned
+tables and fail closed if mixed ambiguously within a shader. The full generic
+suite reports 13,876 passed. Tessellation/geometry packaging, remaining
 unqualified fixed options, and any explicit PS5 hardware promotion remain
 open; do not label this milestone complete yet.
 

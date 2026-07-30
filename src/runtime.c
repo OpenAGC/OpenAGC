@@ -50,6 +50,7 @@ typedef struct AgcDeferredFree AgcDeferredFree;
 typedef struct AgcRuntimePipelineResourceLayout {
     uint64_t set_offsets[8];
     uint64_t set_sizes[8];
+    uint64_t indirect_set_table_offset;
     uint64_t vertex_table_offset;
     uint64_t push_constant_offset;
     uint64_t total_size;
@@ -57,6 +58,7 @@ typedef struct AgcRuntimePipelineResourceLayout {
     uint32_t descriptor_element_count;
     uint32_t vertex_binding_mask;
     uint32_t push_constant_size;
+    uint32_t uses_indirect_set_table;
 } AgcRuntimePipelineResourceLayout;
 
 struct AgcRuntimeAllocation {
@@ -2194,14 +2196,22 @@ static int32_t agcPipelineValidateShaderUserData(
     const AgcShaderReflection *reflection)
 {
     uint32_t descriptor_set_mask = 0u;
+    uint32_t direct_descriptor_set_mask = 0u;
     uint32_t user_data_base;
+    uint32_t occupied_register_mask = 0u;
+    uint32_t indirect_descriptor_set_count = 0u;
     uint64_t required_push_mask = 0u;
     uint64_t inline_mask = 0u;
     uint32_t i;
 
     switch (reflection->stage) {
     case kAgcShaderStageVs:
+    case kAgcShaderStageDs:
+    case kAgcShaderStageGs:
         user_data_base = AGC_REG_SPI_SHADER_USER_DATA_GS_0;
+        break;
+    case kAgcShaderStageHs:
+        user_data_base = AGC_REG_SPI_SHADER_USER_DATA_HS_0;
         break;
     case kAgcShaderStagePs:
         user_data_base = AGC_REG_SPI_SHADER_USER_DATA_PS_0;
@@ -2216,15 +2226,6 @@ static int32_t agcPipelineValidateShaderUserData(
 
     for (i = 0u; i < reflection->descriptor_mapping_count; ++i)
         descriptor_set_mask |= 1u << reflection->descriptor_mappings[i].set;
-    for (i = 0u; i < 8u; ++i) {
-        const AgcShaderUserSgpr *sgpr;
-        if ((descriptor_set_mask & (1u << i)) == 0u)
-            continue;
-        sgpr = agcPipelineFindUserSgpr(reflection,
-            AGC_SHADER_USER_SGPR_DESCRIPTOR_SET, i);
-        if (!sgpr || sgpr->dword_count != 1u)
-            return AGC_ERROR_VALIDATION_FAILED;
-    }
     for (i = 0u; i < reflection->push_constant_range_count; ++i) {
         const AgcShaderPushConstantRange *range =
             &reflection->push_constant_ranges[i];
@@ -2236,16 +2237,27 @@ static int32_t agcPipelineValidateShaderUserData(
     }
     for (i = 0u; i < reflection->user_sgpr_count; ++i) {
         const AgcShaderUserSgpr *sgpr = &reflection->user_sgprs[i];
+        uint32_t register_index;
+        uint32_t register_mask;
         if (sgpr->register_offset < user_data_base ||
             sgpr->register_offset >= user_data_base + 16u ||
+            sgpr->dword_count == 0u ||
             sgpr->dword_count >
                 user_data_base + 16u - sgpr->register_offset)
             return AGC_ERROR_NOT_SUPPORTED;
+        register_index = sgpr->register_offset - user_data_base;
+        register_mask = ((1u << sgpr->dword_count) - 1u) << register_index;
+        if ((occupied_register_mask & register_mask) != 0u)
+            return AGC_ERROR_VALIDATION_FAILED;
+        occupied_register_mask |= register_mask;
         switch (sgpr->kind) {
         case AGC_SHADER_USER_SGPR_DESCRIPTOR_SET:
             if (sgpr->index >= 8u || sgpr->dword_count != 1u ||
-                (descriptor_set_mask & (1u << sgpr->index)) == 0u)
+                (descriptor_set_mask & (1u << sgpr->index)) == 0u ||
+                (direct_descriptor_set_mask &
+                    (1u << sgpr->index)) != 0u)
                 return AGC_ERROR_VALIDATION_FAILED;
+            direct_descriptor_set_mask |= 1u << sgpr->index;
             break;
         case AGC_SHADER_USER_SGPR_PUSH_CONSTANT_POINTER:
             if (sgpr->index != 0u || sgpr->dword_count != 1u ||
@@ -2271,11 +2283,20 @@ static int32_t agcPipelineValidateShaderUserData(
                 return AGC_ERROR_VALIDATION_FAILED;
             break;
         case AGC_SHADER_USER_SGPR_INDIRECT_DESCRIPTOR_SETS:
-            return AGC_ERROR_NOT_SUPPORTED;
+            if (sgpr->index != 0u || sgpr->dword_count != 1u)
+                return AGC_ERROR_VALIDATION_FAILED;
+            indirect_descriptor_set_count++;
+            break;
         default:
             return AGC_ERROR_VALIDATION_FAILED;
         }
     }
+    if (indirect_descriptor_set_count > 1u ||
+        (indirect_descriptor_set_count != 0u &&
+         direct_descriptor_set_mask != 0u) ||
+        (indirect_descriptor_set_count == 0u &&
+         direct_descriptor_set_mask != descriptor_set_mask))
+        return AGC_ERROR_VALIDATION_FAILED;
     if (inline_mask != reflection->inline_push_constant_mask)
         return AGC_ERROR_VALIDATION_FAILED;
     if (reflection->vertex_input_count != 0u &&
@@ -2290,16 +2311,29 @@ static int32_t agcPipelineValidateShaderUserData(
     return AGC_OK;
 }
 
+static uint32_t agcPipelineUsesIndirectDescriptorSets(
+    const AgcShaderReflection *reflection)
+{
+    return agcPipelineFindUserSgpr(reflection,
+        AGC_SHADER_USER_SGPR_INDIRECT_DESCRIPTOR_SETS, 0u) != NULL;
+}
+
 static int32_t agcPipelineBuildResourceLayout(
     const AgcShaderDescriptorMapping *mappings, uint32_t mapping_count,
     const AgcShaderVertexInput *vertex_inputs, uint32_t vertex_input_count,
-    uint32_t push_constant_size,
+    uint32_t push_constant_size, uint32_t uses_indirect_set_table,
     AgcRuntimePipelineResourceLayout *layout)
 {
     uint64_t offset = 0u;
     uint32_t i;
 
     memset(layout, 0, sizeof(*layout));
+    if (uses_indirect_set_table) {
+        layout->indirect_set_table_offset = offset;
+        layout->uses_indirect_set_table = 1u;
+        if (!agcAddU64(offset, 8u * sizeof(uint32_t), &offset))
+            return AGC_ERROR_VALIDATION_FAILED;
+    }
     for (i = 0u; i < mapping_count; ++i) {
         const AgcShaderDescriptorMapping *mapping = &mappings[i];
         uint32_t descriptor_size = agcPipelineDescriptorSize(mapping->type);
@@ -3022,6 +3056,8 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
             ps->reflection.push_constant_size ?
             vs->reflection.push_constant_size :
             ps->reflection.push_constant_size,
+        agcPipelineUsesIndirectDescriptorSets(&vs->reflection) ||
+            agcPipelineUsesIndirectDescriptorSets(&ps->reflection),
         &resource_layout);
     if (result != AGC_OK)
         return result;
@@ -3176,7 +3212,9 @@ int32_t PS5_SYSV_ABI agcCreateComputePipeline(AgcDevice device,
         return AGC_ERROR_NOT_SUPPORTED;
     result = agcPipelineBuildResourceLayout(desc->descriptor_mappings,
         desc->descriptor_mapping_count, NULL, 0u,
-        shader->reflection.push_constant_size, &resource_layout);
+        shader->reflection.push_constant_size,
+        agcPipelineUsesIndirectDescriptorSets(&shader->reflection),
+        &resource_layout);
     if (result != AGC_OK)
         return result;
     pipeline = agcCreateChild(device, sizeof(*pipeline));
@@ -3264,6 +3302,8 @@ static int32_t agcPrepareCommandResources(AgcCommandBuffer command_buffer,
     const AgcRuntimePipelineResourceLayout *layout)
 {
     AgcRuntimeAllocation *allocation = NULL;
+    uint8_t *cpu_base;
+    uint64_t gpu_base;
     int32_t result;
 
     if (layout->total_size == 0u)
@@ -3275,7 +3315,26 @@ static int32_t agcPrepareCommandResources(AgcCommandBuffer command_buffer,
         AGC_OBJECT_TYPE_COMMAND_BUFFER, command_buffer, &allocation);
     if (result != AGC_OK)
         return result;
-    memset(agcAllocationCpuAddress(allocation), 0, (size_t)layout->total_size);
+    cpu_base = agcAllocationCpuAddress(allocation);
+    gpu_base = agcAllocationGpuAddress(allocation);
+    memset(cpu_base, 0, (size_t)layout->total_size);
+    if (layout->uses_indirect_set_table) {
+        uint32_t *set_addresses = (uint32_t *)(void *)(cpu_base +
+            layout->indirect_set_table_offset);
+        uint32_t i;
+        for (i = 0u; i < 8u; ++i) {
+            if ((layout->set_mask & (1u << i)) != 0u)
+                set_addresses[i] = (uint32_t)(gpu_base +
+                    layout->set_offsets[i]);
+        }
+        result = agcFlushRuntimeAllocation(allocation,
+            layout->indirect_set_table_offset,
+            8u * sizeof(*set_addresses));
+        if (result != AGC_OK) {
+            agcRuntimeFree(command_buffer->device, allocation);
+            return result;
+        }
+    }
     command_buffer->resource_allocation = allocation;
     return AGC_OK;
 }
@@ -3964,6 +4023,14 @@ static int32_t agcCommandUserSgprValue(AgcCommandBuffer command_buffer,
             (layout->set_mask & (1u << sgpr->index)) == 0u)
             return AGC_ERROR_RESOURCE_NOT_BOUND;
         *value = (uint32_t)(gpu_base + layout->set_offsets[sgpr->index]);
+        return AGC_OK;
+    case AGC_SHADER_USER_SGPR_INDIRECT_DESCRIPTOR_SETS:
+        if (!gpu_base || !layout->uses_indirect_set_table ||
+            (layout->set_mask != 0u &&
+             !command_buffer->descriptors_bound))
+            return AGC_ERROR_RESOURCE_NOT_BOUND;
+        *value = (uint32_t)(gpu_base +
+            layout->indirect_set_table_offset);
         return AGC_OK;
     case AGC_SHADER_USER_SGPR_PUSH_CONSTANT_POINTER:
         if (!gpu_base || layout->push_constant_size == 0u)
