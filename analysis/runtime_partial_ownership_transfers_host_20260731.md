@@ -12,8 +12,9 @@ transfers carry an exact aspect, mip-level, and array-layer range.
 - Pending ranges on one resource cannot overlap. Disjoint ranges remain
   available to ordinary transitions and additional releases.
 - An acquire must exactly match one committed range, destination usage/owner,
-  label, and value. One command may reserve each range; resetting that command
-  clears only its reservations.
+  label, and value. The label may already have advanced beyond that point. One
+  command may reserve each range; resetting that command clears only its
+  reservations.
 - Acquire submission commits only the selected range and removes only its
   pending record. Pending records retain dependency labels independently of
   the submitted release command's lifetime.
@@ -33,11 +34,12 @@ they do not claim range-scoped hardware cache operations.
 
 ## Host evidence
 
-The generic regression creates two pending buffer ranges and two pending image
-subresource ranges simultaneously. It verifies exact and ambiguous diagnostic
+The generic regression creates two pending buffer ranges on one label and two
+pending image subresource ranges on another shared label simultaneously. It
+verifies exact and ambiguous diagnostic
 queries, disjoint usability, overlap rejection, acquire reservation reset,
 exact range publication, dependency-label retention, and transactional batch
-overlap rejection. The complete generic executable passes 16,851 assertions.
+overlap rejection. The complete generic executable passes 16,852 assertions.
 
 This is host-tested and Prospero-compiled behavior, not new hardware evidence.
 Exact FW 5.50 and FW 11.60 execution must use cleanup-first guarded artifacts
@@ -47,13 +49,14 @@ hardware-qualified.
 Two reproducible cleanup-first FW 5.50 probes are pinned for that gate:
 
 - partial buffer handoff:
-  `02894e64e638c5632d4833c0790a7ed68a51a1d8bcd9d4ffb50bd79995acf371`
+  `f3d0c76eec898c63d22a9e5a1ddb86728e141f77709cd9ce8984eeb8071fbb0e`
 - partial image mip/layer handoff:
-  `238dfc0da0062587c63344293260e9880c3783067d6cdd365149584e7c282b55`
+  `6b3a56ac8d382b287ecd636be85ac59adc4585955530a9e3bfbb166debf285f4`
 
-Each artifact was rebuilt twice with identical SHA-256 output. Their guarded
-targets require FW ABI `0x0550`, exact PASS verdicts, cleanup-first launch, and
-post-run service recovery.
+Runtime API v21 strengthens each probe to release and acquire two disjoint
+ranges through one increasing label. The repinned guarded targets require FW
+ABI `0x0550`, exact PASS verdicts, cleanup-first launch, and post-run service
+recovery.
 
 ## FW 5.50 attempt
 

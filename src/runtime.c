@@ -46,6 +46,7 @@
 #define AGC_RUNTIME_MAX_DESCRIPTOR_WRITES 256u
 #define AGC_RUNTIME_MAX_RECORDED_RESOURCES 512u
 #define AGC_RUNTIME_MAX_RECORDED_TRANSITIONS 512u
+#define AGC_RUNTIME_WAIT_COMPARE_GREATER_EQUAL 5u
 #define AGC_RUNTIME_MAX_BUFFER_STATE_RANGES \
     (AGC_RUNTIME_MAX_RECORDED_TRANSITIONS * 2u + 1u)
 #define AGC_RUNTIME_MAX_SUBMIT_COMMAND_BUFFERS 63u
@@ -6054,7 +6055,7 @@ static int32_t agcRuntimeValidateTransition(
             pending_transfer->value != value ||
             pending_transfer->acquire_command ||
             label->last_signal_submission_id == 0u ||
-            label->last_signal_value != value)
+            label->last_signal_value < value)
             return AGC_ERROR_INVALID_STATE;
         /* PRESENT is a low-level acquire-only carrier: it emits no release,
          * while preserving the proven all-cache invalidate sequence. */
@@ -6347,7 +6348,7 @@ static int32_t agcValidateSubmissionTransitions(
                     transfer->value != record->dependency_value ||
                     transfer->acquire_command != command_buffer ||
                     transfer->label->last_signal_submission_id == 0u ||
-                    transfer->label->last_signal_value != transfer->value) {
+                    transfer->label->last_signal_value < transfer->value) {
                     result = AGC_ERROR_INVALID_STATE;
                     break;
                 }
@@ -6544,7 +6545,7 @@ static int32_t agcValidateCommandLabelWaits(const AgcQueue queue,
             return AGC_ERROR_INVALID_ARGUMENT;
         if (label->last_signal_submission_id == 0u)
             return AGC_ERROR_INVALID_STATE;
-        if (label->last_signal_value != wait->value)
+        if (label->last_signal_value < wait->value)
             return AGC_ERROR_INVALID_STATE;
     }
     return AGC_OK;
@@ -6632,7 +6633,7 @@ static int32_t agcValidateSubmitLabelLists(const AgcQueue queue,
             label->device != queue->device)
             return AGC_ERROR_INVALID_ARGUMENT;
         if (label->last_signal_submission_id == 0u ||
-            label->last_signal_value != point->value)
+            label->last_signal_value < point->value)
             return AGC_ERROR_INVALID_STATE;
     }
     for (i = 0u; i < submit_info->signal_count; ++i) {
@@ -6730,7 +6731,8 @@ static int32_t agcInjectSubmitLabelWaits(AgcCommandBuffer command_buffer,
     command_buffer->cursor.cursor_up = (uintptr_t)command_buffer->storage;
     for (i = 0u; i < submit_info->wait_count; ++i) {
         const AgcGpuLabelPoint *point = &submit_info->waits[i];
-        if (!sceAgcDcbWaitRegMem(&command_buffer->cursor, 0u, 3u, 0u, 0u,
+        if (!sceAgcDcbWaitRegMem(&command_buffer->cursor, 0u,
+                AGC_RUNTIME_WAIT_COMPARE_GREATER_EQUAL, 0u, 0u,
                 agcAllocationGpuAddress(point->label->allocation), point->value,
                 UINT32_MAX, UINT32_MAX))
             return AGC_ERROR_INTERNAL;
@@ -6896,7 +6898,8 @@ int32_t PS5_SYSV_ABI agcCmdTransitionResources(
             !agcCommandRetainGpuLabel(command_buffer, label))
             return AGC_ERROR_INTERNAL;
         if (flags == AGC_RESOURCE_TRANSITION_ACQUIRE_BIT &&
-            !sceAgcDcbWaitRegMem(&command_buffer->cursor, 0u, 3u, 0u, 0u,
+            !sceAgcDcbWaitRegMem(&command_buffer->cursor, 0u,
+                AGC_RUNTIME_WAIT_COMPARE_GREATER_EQUAL, 0u, 0u,
                 agcAllocationGpuAddress(label->allocation), value, UINT32_MAX,
                 UINT32_MAX))
             return AGC_ERROR_INTERNAL;
@@ -8395,7 +8398,8 @@ int32_t PS5_SYSV_ABI agcCmdWaitGpuLabel(
     if (!agcCommandRetainGpuLabel(command_buffer, label))
         return AGC_ERROR_OUT_OF_MEMORY;
     address = agcAllocationGpuAddress(label->allocation);
-    if (!sceAgcDcbWaitRegMem(&command_buffer->cursor, 0u, 3u, 0u, 0u,
+    if (!sceAgcDcbWaitRegMem(&command_buffer->cursor, 0u,
+            AGC_RUNTIME_WAIT_COMPARE_GREATER_EQUAL, 0u, 0u,
             address, value, UINT32_MAX, UINT32_MAX))
         return AGC_ERROR_INTERNAL;
     command_buffer->recorded_label_waits[
@@ -8418,8 +8422,8 @@ int32_t PS5_SYSV_ABI agcCmdSignalGpuLabel(
         return AGC_ERROR_INVALID_ARGUMENT;
     if (command_buffer->state != AGC_COMMAND_BUFFER_STATE_RECORDING)
         return AGC_ERROR_INVALID_STATE;
-    /* A wait compares an exact memory value. Strictly monotonic points avoid
-     * stale observations; UINT32_MAX is terminal rather than wrapping. */
+    /* Waits use reached-or-passed comparison. Strictly monotonic signals keep
+     * every earlier point satisfied; UINT32_MAX is terminal, not wrapping. */
     scheduled_value = agcCommandLatestLabelSignalValue(command_buffer, label);
     if (value <= scheduled_value)
         return AGC_ERROR_INVALID_STATE;

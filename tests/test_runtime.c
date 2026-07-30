@@ -2603,6 +2603,8 @@ static void test_runtime_gpu_labels(void)
     AgcFence consumer_fence = NULL;
     AgcGpuLabel label = NULL;
     AgcGpuLabel cross_label = NULL;
+    const AgcCommandBufferSubmit *captured;
+    const uint32_t *words;
 
     queue_desc.type = kAgcQueueCompute;
     command_desc.queue_type = kAgcQueueCompute;
@@ -2685,6 +2687,8 @@ static void test_runtime_gpu_labels(void)
         "cross-queue producer begins");
     TEST_ASSERT_EQ(agcCmdSignalGpuLabel(producer, cross_label, 7u), AGC_OK,
         "cross-queue producer signal records");
+    TEST_ASSERT_EQ(agcCmdSignalGpuLabel(producer, cross_label, 8u), AGC_OK,
+        "cross-queue producer advances beyond the consumer target");
     TEST_ASSERT_EQ(agcEndCommandBuffer(producer), AGC_OK,
         "cross-queue producer ends");
     TEST_ASSERT_EQ(agcResetFence(producer_fence), AGC_OK,
@@ -2708,7 +2712,11 @@ static void test_runtime_gpu_labels(void)
         "cross-queue consumer fence resets");
     submit.command_buffers = &cross_consumer;
     TEST_ASSERT_EQ(agcQueueSubmit(graphics_queue, &submit, consumer_fence),
-        AGC_OK, "cross-queue label consumer submits");
+        AGC_OK, "cross-queue wait accepts a reached-or-passed point");
+    captured = agcDriverDebugLastDcbSubmit();
+    words = (const uint32_t *)(uintptr_t)captured->command_address;
+    TEST_ASSERT_EQ(words[1] & 7u, 5u,
+        "GPU label wait encodes greater-or-equal timeline comparison");
     TEST_ASSERT_EQ(agcGetFenceStatus(consumer_fence), AGC_OK,
         "generic cross-queue label consumer completes");
     TEST_ASSERT_EQ(agcResetCommandBuffer(cross_consumer), AGC_OK,
@@ -2988,6 +2996,8 @@ static void test_runtime_submit_label_lists(void)
         "submit-list producer begins");
     TEST_ASSERT_EQ(agcCmdSignalGpuLabel(producer, source, 1u), AGC_OK,
         "submit-list producer signal records");
+    TEST_ASSERT_EQ(agcCmdSignalGpuLabel(producer, source, 2u), AGC_OK,
+        "submit-list producer advances beyond the waited point");
     TEST_ASSERT_EQ(agcEndCommandBuffer(producer), AGC_OK,
         "submit-list producer ends");
     submit.command_buffer_count = 1u;
@@ -3023,6 +3033,8 @@ static void test_runtime_submit_label_lists(void)
         "submit-list emits one wait and one EOP signal");
     TEST_ASSERT_EQ(agcPm4Opcode(words[0]), AGC_PM4_OP_WAIT_REG_MEM,
         "submit-list wait is inserted before command body");
+    TEST_ASSERT_EQ(words[1] & 7u, 5u,
+        "submit-list wait uses reached-or-passed timeline comparison");
     TEST_ASSERT_EQ(agcPm4Opcode(words[7]), AGC_PM4_OP_RELEASE_MEM,
         "submit-list signal is appended after command body");
     TEST_ASSERT_EQ(agcGetGpuLabelInfo(destination, &label_info), AGC_OK,
@@ -3054,7 +3066,7 @@ static void test_runtime_submit_label_lists(void)
 
     TEST_ASSERT_EQ(agcBeginCommandBuffer(producer), AGC_OK,
         "submit-list rollback producer begins");
-    TEST_ASSERT_EQ(agcCmdSignalGpuLabel(producer, source, 2u), AGC_OK,
+    TEST_ASSERT_EQ(agcCmdSignalGpuLabel(producer, source, 3u), AGC_OK,
         "submit-list rollback producer command records");
     TEST_ASSERT_EQ(agcEndCommandBuffer(producer), AGC_OK,
         "submit-list rollback producer ends");
@@ -3204,7 +3216,9 @@ static void test_runtime_partial_resource_handoffs(void)
     AgcCommandBuffer competing = NULL;
     AgcCommandBuffer batch_commands[2];
     AgcFence fence = NULL;
-    AgcGpuLabel labels[4] = { NULL, NULL, NULL, NULL };
+    AgcGpuLabel labels[2] = { NULL, NULL };
+    const AgcCommandBufferSubmit *captured;
+    const uint32_t *words;
     uint32_t i;
 
     buffer_desc.size = 256u;
@@ -3232,7 +3246,7 @@ static void test_runtime_partial_resource_handoffs(void)
         AGC_OK, "partial-handoff competing command creates");
     TEST_ASSERT_EQ(agcCreateFence(device, &fence_desc, &fence), AGC_OK,
         "partial-handoff fence creates");
-    for (i = 0u; i < 4u; ++i) {
+    for (i = 0u; i < 2u; ++i) {
         TEST_ASSERT_EQ(agcCreateGpuLabel(device, &label_desc, &labels[i]),
             AGC_OK, "partial-handoff dependency label creates");
     }
@@ -3274,22 +3288,27 @@ static void test_runtime_partial_resource_handoffs(void)
         releases[i].before_owner = kAgcResourceOwnerCompute;
         releases[i].after_owner = kAgcResourceOwnerGraphics;
         releases[i].flags = AGC_RESOURCE_TRANSITION_RELEASE_BIT;
-        releases[i].dependency_label = labels[i];
         releases[i].dependency_value = 1u;
     }
     releases[0].resource_type = kAgcResourceTypeBuffer;
     releases[0].buffer = buffer;
+    releases[0].dependency_label = labels[0];
     releases[0].buffer_offset = 0u;
     releases[0].buffer_size = 64u;
     releases[1].resource_type = kAgcResourceTypeBuffer;
     releases[1].buffer = buffer;
+    releases[1].dependency_label = labels[0];
+    releases[1].dependency_value = 2u;
     releases[1].buffer_offset = 128u;
     releases[1].buffer_size = 64u;
     releases[2].resource_type = kAgcResourceTypeImage;
     releases[2].image = image;
+    releases[2].dependency_label = labels[1];
     releases[2].image_range = image_ranges[0];
     releases[3].resource_type = kAgcResourceTypeImage;
     releases[3].image = image;
+    releases[3].dependency_label = labels[1];
+    releases[3].dependency_value = 2u;
     releases[3].image_range = image_ranges[1];
 
     acquires[0] = releases[0];
@@ -3367,13 +3386,13 @@ static void test_runtime_partial_resource_handoffs(void)
         "whole image query rejects mixed pending-transfer coverage");
     TEST_ASSERT_EQ(agcGetImageSubresourceStateInfo(image, &image_ranges[1],
         &info), AGC_OK, "second pending image range is queryable");
-    TEST_ASSERT(info.transfer_label == labels[3],
+    TEST_ASSERT(info.transfer_label == labels[1],
         "second pending image range reports the exact dependency");
 
     probe = releases[0];
     probe.buffer_offset = 32u;
     probe.buffer_size = 64u;
-    probe.dependency_value = 2u;
+    probe.dependency_value = 3u;
     TEST_ASSERT_EQ(agcBeginCommandBuffer(compute), AGC_OK,
         "overlapping pending-range probe begins");
     TEST_ASSERT_EQ(agcCmdTransitionResources(compute, 1u, &probe),
@@ -3423,6 +3442,10 @@ static void test_runtime_partial_resource_handoffs(void)
     submit.command_buffers = &graphics;
     TEST_ASSERT_EQ(agcQueueSubmit(graphics_queue, &submit, fence), AGC_OK,
         "all exact partial acquires submit");
+    captured = agcDriverDebugLastDcbSubmit();
+    words = (const uint32_t *)(uintptr_t)captured->command_address;
+    TEST_ASSERT_EQ(words[1] & 7u, 5u,
+        "older shared-label acquire uses reached-or-passed comparison");
     TEST_ASSERT_EQ(agcResetCommandBuffer(graphics), AGC_OK,
         "all exact partial acquire command resets");
     TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
@@ -3442,7 +3465,7 @@ static void test_runtime_partial_resource_handoffs(void)
     TEST_ASSERT_EQ(info.owner, kAgcResourceOwnerGraphics,
         "acquired image range publishes destination owner");
 
-    for (i = 0u; i < 4u; ++i) {
+    for (i = 0u; i < 2u; ++i) {
         TEST_ASSERT_EQ(agcDestroyGpuLabel(labels[i]), AGC_OK,
             "partial-handoff dependency label destroys");
     }

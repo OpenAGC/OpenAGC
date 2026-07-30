@@ -33,6 +33,8 @@ points and a v2 `AgcGpuLabelInfo` diagnostic tail while preserving its
 Runtime API v20 extends cross-queue ownership transfers to exact buffer byte
 ranges and image aspect/mip/layer ranges, with multiple disjoint transfers
 pending on one resource.
+Runtime API v21 makes GPU command, submit-list, and ownership-acquire waits
+timeline-aware: a submitted label value satisfies every earlier point.
 OpenAGC rejects unknown versions, nonzero flags, or nonzero reserved fields
 without partial object or command creation.
 
@@ -248,17 +250,18 @@ legacy artifacts retain the conservative storage fallback.
 
 `AgcGpuLabel` provides the first GPU-side dependency primitive. A producer
 records `agcCmdSignalGpuLabel`; it emits the qualified EOP release write. A
-consumer records `agcCmdWaitGpuLabel`; it emits a 32-bit `WAIT_REG_MEM` exact
-equality wait on that same runtime-owned word. The consumer submit is rejected
-unless a matching producer value has already submitted. The producer may be on
-the graphics or compute queue; queue ownership still requires the explicit
-resource handoff described below.
+consumer records `agcCmdWaitGpuLabel`; it emits a 32-bit `WAIT_REG_MEM`
+greater-or-equal wait on that same runtime-owned word. The consumer submit is
+rejected unless that point or a later point has already submitted. The producer
+may be on the graphics or compute queue; queue ownership still requires the
+explicit resource handoff described below.
 This avoids an unbounded wait from an unproved dependency. Signal values are
 strictly increasing 32-bit timeline points: `UINT32_MAX` is terminal and never
 wraps, while a repeated or lower value is rejected before PM4 mutation.
 Command-local tentative signals and ordered multi-DCB signals are revalidated
 against the latest submitted point, so stale recordings cannot publish a
-decreasing counter. This prevents a wait from passing on stale memory. The
+decreasing counter. This prevents a wait from passing on stale memory while a
+later timeline point still satisfies every earlier dependency. The
 exact graphics/compute label
 carrier and single-command submit lists are hardware-qualified on FW 5.50;
 event objects remain unsupported.
@@ -267,9 +270,8 @@ event objects remain unsupported.
 or beyond an already-scheduled point. `agcWaitGpuLabel` applies the same
 monotonic comparison with a mandatory finite nanosecond deadline; waiting for
 an unscheduled future point or passing `AGC_RUNTIME_INFINITE_TIMEOUT` fails
-immediately. On PS5, the bounded wait uses the latest scheduled exact 32-bit
-word and then rechecks the monotonic target, so it does not change the
-hardware-qualified GPU equality-wait packet.
+immediately. On PS5, the bounded wait uses the latest scheduled 32-bit word and
+then rechecks the monotonic target.
 
 `agcGetGpuLabelInfo` snapshots the most recently submitted timeline point, the
 CPU-observed label word, producer queue/submission identity, and selected
@@ -455,7 +457,8 @@ Version 2 adds a narrowly-scoped GPU-to-GPU handoff. The source queue records
 `AGC_RESOURCE_TRANSITION_RELEASE_BIT` with a strictly increasing
 `dependency_label`/`dependency_value`; its resource release writes that word at
 EOP. Only after source submission may the destination queue record the matching
-`AGC_RESOURCE_TRANSITION_ACQUIRE_BIT`; it emits an exact `WAIT_REG_MEM` then
+`AGC_RESOURCE_TRANSITION_ACQUIRE_BIT`; it emits a reached-or-passed
+`WAIT_REG_MEM` then
 the qualified all-cache invalidate. The source state remains committed until
 release submit and destination state publishes only after acquire submit. A
 pending range accepts one exact acquire command; reset releases only that
@@ -468,6 +471,8 @@ report one uniform pending transfer and reject mixed pending/nonpending or
 differently keyed coverage as ambiguous. Pending ranges retain their labels
 until acquire submission. HTILE and other unqualified handoff forms remain
 fail-closed. Submit-list label dependencies remain available independently.
+Several disjoint releases may use increasing points from one label; a later
+submitted point cannot invalidate an earlier range's acquire.
 
 ## Current qualification boundary
 

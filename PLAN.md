@@ -672,6 +672,16 @@ passes 16,851 assertions; exact-firmware execution remains a distinct
 qualification step. See
 `analysis/runtime_partial_ownership_transfers_host_20260731.md`.
 
+Runtime API v21 closes the GPU-side timeline gap. Command waits, submit-list
+waits, and ownership acquires encode `WAIT_REG_MEM` greater-or-equal rather
+than equality, and submission accepts any already-submitted point at or beyond
+the requested value. This lets multiple disjoint transfers share one strictly
+increasing label without an earlier acquire becoming stale after a later
+release. Repeat, decreasing, future, and wrapping signals remain rejected.
+The generic gate passes 16,852 assertions; the strengthened partial-range and
+timeline artifacts are pinned pending endpoint execution. See
+`analysis/runtime_gpu_timeline_waits_host_20260731.md`.
+
 The pending FW 5.50 presentation ladder, retirement stress, and timeline wait
 now have one shared fail-closed runner. All nine Make targets pin the current
 artifact hash,

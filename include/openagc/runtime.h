@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-#define AGC_RUNTIME_API_VERSION 20u
+#define AGC_RUNTIME_API_VERSION 21u
 #define AGC_RUNTIME_STRUCTURE_VERSION_1 1u
 #define AGC_RUNTIME_STRUCTURE_VERSION_2 2u
 #define AGC_RUNTIME_PROFILE_NAME_SIZE 48u
@@ -803,10 +803,10 @@ typedef struct AgcFenceDesc {
     uint64_t reserved[4];
 } AgcFenceDesc;
 
-/* A GPU-visible 32-bit synchronization word. The first qualified runtime
- * path permits a producer and consumer on the same queue only; a consumer
- * wait is rejected until a producer signal has been successfully submitted.
- * Values are strictly monotonic 32-bit timeline points. */
+/* A GPU-visible 32-bit synchronization word. Graphics and compute producers
+ * and consumers may synchronize through submitted signals. GPU and host waits
+ * use reached-or-passed semantics; values are strictly monotonic timeline
+ * points and UINT32_MAX is terminal. */
 typedef struct AgcGpuLabelDesc {
     uint32_t struct_size;
     uint32_t version;

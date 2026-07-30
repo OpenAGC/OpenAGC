@@ -240,6 +240,13 @@ exact-firmware execution. See
 `analysis/runtime_partial_ownership_transfers_host_20260731.md`.
 The first FW 5.50 attempt stopped before upload because the configured console
 accepted neither websrv port 8080 nor FTP port 2121; no hardware payload ran.
+Runtime API v21 gives GPU waits reached-or-passed timeline semantics. Command,
+submit-list, and ownership-acquire waits encode greater-or-equal comparison;
+submission accepts a requested point when the label has already advanced
+beyond it. Two disjoint buffer ranges and two disjoint image ranges now share
+one increasing label per resource in generic coverage. Clean generic coverage
+passes 16,852 assertions; exact-firmware qualification remains pending. See
+`analysis/runtime_gpu_timeline_waits_host_20260731.md`.
 The pending FW 5.50 presentation stages, batch-retirement stress, timeline
 wait, and partial-range handoffs are exposed only through nine cleanup-first,
 SHA-256-pinned Make deployment targets.

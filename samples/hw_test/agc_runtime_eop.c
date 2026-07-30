@@ -61,6 +61,9 @@ int main(void)
     AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
     AgcResourceTransition transition = AGC_RESOURCE_TRANSITION_INIT;
     AgcResourceTransition handoff = AGC_RESOURCE_TRANSITION_V2_INIT;
+#if AGC_PARTIAL_HANDOFF
+    AgcResourceTransition second_handoff = AGC_RESOURCE_TRANSITION_V2_INIT;
+#endif
     AgcRuntimeInfo runtime_info = AGC_RUNTIME_INFO_INIT;
 #if AGC_TIMELINE_WAIT
     AgcGpuLabelInfo label_info = AGC_GPU_LABEL_INFO_INIT;
@@ -201,9 +204,9 @@ int main(void)
     handoff.image_range.mip_level_count = image_desc.mip_levels;
     handoff.image_range.array_layer_count = image_desc.array_layers;
 #if AGC_PARTIAL_HANDOFF
-    handoff.image_range.base_mip_level = 1u;
+    handoff.image_range.base_mip_level = 0u;
     handoff.image_range.mip_level_count = 1u;
-    handoff.image_range.base_array_layer = 1u;
+    handoff.image_range.base_array_layer = 0u;
     handoff.image_range.array_layer_count = 1u;
 #endif
 #else
@@ -211,8 +214,8 @@ int main(void)
     handoff.buffer = buffer;
     handoff.buffer_size = buffer_desc.size;
 #if AGC_PARTIAL_HANDOFF
-    handoff.buffer_offset = 32u;
-    handoff.buffer_size = 64u;
+    handoff.buffer_offset = 0u;
+    handoff.buffer_size = 32u;
 #endif
 #endif
     handoff.before = kAgcResourceUsageShaderWrite;
@@ -222,6 +225,16 @@ int main(void)
     handoff.flags = AGC_RESOURCE_TRANSITION_RELEASE_BIT;
     handoff.dependency_label = label;
     handoff.dependency_value = 1u;
+#if AGC_PARTIAL_HANDOFF
+    second_handoff = handoff;
+    second_handoff.dependency_value = 2u;
+#if AGC_IMAGE_HANDOFF
+    second_handoff.image_range.base_mip_level = 1u;
+    second_handoff.image_range.base_array_layer = 1u;
+#else
+    second_handoff.buffer_offset = 64u;
+#endif
+#endif
     result = agcBeginCommandBuffer(signal_command_buffer);
     report_result("agcBeginCommandBuffer(release)", result);
     if (result != AGC_OK)
@@ -230,6 +243,19 @@ int main(void)
     report_result("agcCmdTransitionResources(release)", result);
     if (result != AGC_OK)
         goto cleanup;
+#if AGC_PARTIAL_HANDOFF
+    result = agcCmdTransitionResources(signal_command_buffer, 1u,
+        &second_handoff);
+    report_result("agcCmdTransitionResources(release second range)", result);
+    if (result != AGC_OK)
+        goto cleanup;
+#endif
+#if AGC_TIMELINE_WAIT
+    result = agcCmdSignalGpuLabel(signal_command_buffer, label, 2u);
+    report_result("agcCmdSignalGpuLabel(advance to 2)", result);
+    if (result != AGC_OK)
+        goto cleanup;
+#endif
     result = agcEndCommandBuffer(signal_command_buffer);
     report_result("agcEndCommandBuffer(release)", result);
     if (result != AGC_OK)
@@ -251,8 +277,8 @@ int main(void)
         goto cleanup;
     result = agcGetGpuLabelInfo(label, &label_info);
     report_result("agcGetGpuLabelInfo(timeline)", result);
-    if (result != AGC_OK || label_info.scheduled_value != 1u ||
-        label_info.observed_value < 1u || label_info.last_wait_value != 1u ||
+    if (result != AGC_OK || label_info.scheduled_value != 2u ||
+        label_info.observed_value < 2u || label_info.last_wait_value != 1u ||
         label_info.last_wait_result != AGC_OK) {
         puts("TIMELINE_WAIT FAIL");
         goto cleanup;
@@ -282,6 +308,13 @@ int main(void)
     report_result("agcCmdTransitionResources(acquire)", result);
     if (result != AGC_OK)
         goto cleanup;
+#if AGC_PARTIAL_HANDOFF
+    second_handoff.flags = AGC_RESOURCE_TRANSITION_ACQUIRE_BIT;
+    result = agcCmdTransitionResources(command_buffer, 1u, &second_handoff);
+    report_result("agcCmdTransitionResources(acquire second range)", result);
+    if (result != AGC_OK)
+        goto cleanup;
+#endif
     result = agcEndCommandBuffer(command_buffer);
     report_result("agcEndCommandBuffer(acquire)", result);
     if (result != AGC_OK)
