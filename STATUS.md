@@ -170,11 +170,17 @@ lifetime release, and required dynamic-state gating. Line and point polygon
 modes fail pipeline creation with the other unqualified rasterization options.
 Graphics scratch remains unsupported and fails during pipeline creation;
 reflected gfx1013 LDS requirements are bounded before bind generation. The full
-generic suite now reports 14,212
+generic suite now reports 14,214
 passed and 0 failed; the compiler's
 library, varying/export, NGG, and tessellation suites pass. This slice is
 host-tested only. No PS5 hardware test was run or claimed. See
 `docs/shader_pipelines.md`.
+
+The immutable graphics bind writes `SPI_SHADER_COL_FORMAT` from validated
+pixel-export reflection after the compiler register block. Exact host captures
+cover `0x44` for a compiler-derived two-RGBA8 pipeline and `0x99` for a
+synthetic two-RGBA16F fixture, preventing a stale compiler-record context
+value from changing the accepted runtime attachment contract.
 
 The Prospero native queue bridge submits the GPU-visible command allocation
 through the direct carrier only with an explicit runtime fence, appends an EOP

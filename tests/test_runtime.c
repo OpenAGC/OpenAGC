@@ -1072,6 +1072,9 @@ static void test_runtime_compiler_graphics_sidecar(void)
     TEST_ASSERT(runtime_find_context_register(words, captured->dword_count,
         AGC_REG_CB_COLOR0_BASE + 15u, &value) && value != 0u,
         "compiler-sidecar submission includes its second color target");
+    TEST_ASSERT(runtime_find_context_register(words, captured->dword_count,
+        AGC_REG_SPI_SHADER_COL_FORMAT, &value) && value == 0x44u,
+        "compiler-sidecar pipeline derives its two reflected color formats");
     TEST_ASSERT(runtime_find_shader_register(words, captured->dword_count,
         AGC_REG_SPI_SHADER_USER_DATA_GS_0, &value) && value != 0u,
         "compiler-sidecar submission publishes its vertex table address");
@@ -1121,7 +1124,7 @@ static void test_runtime_indexed_graphics_submission(void)
     pipeline_desc.pixel_shader = ps;
     buffer_desc.size = 64u;
     buffer_desc.usage = AGC_BUFFER_USAGE_INDEX_BIT;
-    command_desc.capacity_dwords = 97u;
+    command_desc.capacity_dwords = 100u;
     TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc, &pipeline),
         AGC_OK, "graphics pipeline creation succeeds");
     TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &index_buffer), AGC_OK,
@@ -1148,7 +1151,7 @@ static void test_runtime_indexed_graphics_submission(void)
     TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
         "indexed graphics command buffer submits");
     captured = agcDriverDebugLastDcbSubmit();
-    TEST_ASSERT_EQ(captured->dword_count, 97u,
+    TEST_ASSERT_EQ(captured->dword_count, 100u,
         "indexed graphics submission captures pipeline bind and draw");
     words = (const uint32_t *)(uintptr_t)captured->command_address;
     TEST_ASSERT_EQ(captured->command_address & 0xffu, 0u,
@@ -1411,6 +1414,9 @@ static void test_runtime_mrt_color_target_binding(void)
     TEST_ASSERT(runtime_find_context_register(words, captured->dword_count,
         AGC_REG_CB_COLOR0_BASE + 15u, &value) && value != 0u,
         "MRT binding records second color base");
+    TEST_ASSERT(runtime_find_context_register(words, captured->dword_count,
+        AGC_REG_SPI_SHADER_COL_FORMAT, &value) && value == 0x99u,
+        "MRT pipeline derives both shader color-format nibbles from reflection");
     TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
         "MRT reset releases recorded targets");
     TEST_ASSERT_EQ(agcDestroyImage(second_image), AGC_OK,

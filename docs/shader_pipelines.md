@@ -69,6 +69,11 @@ unsupported state returns an error and leaves the output handle `NULL`.
 Command binding preflights capacity and required resources; failure leaves the
 command cursor unchanged.
 
+The graphics bind sequence derives the packed `SPI_SHADER_COL_FORMAT` nibbles
+from the validated reflected pixel exports after applying the shader record.
+This makes the immutable runtime pipeline contract authoritative even when a
+compiler record contains a stale context-register value.
+
 Graphics scratch is not yet packaged and therefore fails pipeline creation.
 Compiler-reflected gfx1013 LDS sizes are bounded before bind generation;
 tessellation additionally uses the explicit reflected hull-LDS requirement.

@@ -3111,8 +3111,10 @@ static int32_t agcBuildGraphicsPipelineBind(
     AgcGfx1013ColorBlendState blend_state = {0};
     AgcGfx1013DepthStencilState depth_state = {0};
     AgcGfx1013SampleState sample_state;
+    AgcRegisterValue color_format_register;
     AgcRegisterValue raster_register;
     SceAgcCb cb;
+    uint32_t color_export_format = 0u;
     uint32_t i;
     int32_t result;
 
@@ -3187,6 +3189,14 @@ static int32_t agcBuildGraphicsPipelineBind(
     }
     if (result != AGC_OK)
         return result;
+    for (i = 0u; i < pipeline->color_attachment_count; ++i) {
+        color_export_format |= (uint32_t)pipeline->pixel_shader->reflection.
+            color_exports[i].format << (i * 4u);
+    }
+    color_format_register.offset = AGC_REG_SPI_SHADER_COL_FORMAT;
+    color_format_register.value = color_export_format;
+    if (!sceAgcCbSetCxRegistersDirect(&cb, &color_format_register, 1u))
+        return AGC_ERROR_INTERNAL;
     if (pipeline->color_attachment_count != 0u) {
         blend_state.target_count = pipeline->color_attachment_count;
         for (i = 0u; i < pipeline->color_attachment_count; ++i) {

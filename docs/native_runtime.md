@@ -126,7 +126,10 @@ depth/stencil requirements, sample count, and supported fixed-function state.
 Compute pipelines validate Wave32, threadgroup size, descriptor/push layout,
 scratch, and LDS limits. Rejected objects are returned as `NULL`; failed binds
 leave the command cursor unchanged. Immutable qualified register groups are
-cached in the pipeline. See [shader_pipelines.md](shader_pipelines.md).
+cached in the pipeline. The runtime derives `SPI_SHADER_COL_FORMAT` from the
+validated reflected pixel exports, so a compiler-record context write cannot
+contradict the accepted attachment contract. See
+[shader_pipelines.md](shader_pipelines.md).
 
 `AgcDepthStencilPipelineState` v2 adds explicit 0–1 depth bounds and complete
 front/back stencil face state. All compare and stencil operations, references,
