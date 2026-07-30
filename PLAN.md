@@ -346,10 +346,12 @@ the runner and shared teardown on FW 11.60 only.
   FW 5.50 mirrors for all nine color formats are built and recorded in
   `analysis/fw550_headless_color_regression_matrix_20260730.md`.
 
-### Render-target format expansion through the 128-bit ceiling
+### Render-target format expansion through the 128-bit-per-pixel ceiling
 
-Treat 128 bits per sample (`RGBA32`) as OpenAGC's fixed ceiling, then complete
-the useful format matrix in increasing hardware-risk order.
+Treat 128 bits per pixel (`RGBA32`, four 32-bit components) as OpenAGC's fixed
+product-scope ceiling, then complete the useful format matrix in increasing
+hardware-risk order. This is an intentional OpenAGC API boundary, not a claim
+that gfx1013 hardware has no wider or otherwise special-purpose encodings.
 
 #### 1. Establish the format contract
 
@@ -390,12 +392,22 @@ For every format, test:
 UNORM hardware readback must prove:
 
 - Expected triangle coverage.
-- Multiple distinct values.
-- Values approaching both `0x0000` and `0xffff`.
-- No untouched sentinel components.
-- A reproducible native-memory hash.
+- Multiple distinct values independently in every stored component.
+- Values approaching both `0x0000` and `0xffff` independently in every stored
+  component.
+- Per-component coverage within the expected bounded window and unchanged
+  sentinels outside it.
+- Reproducible per-component and packed native-memory hashes.
 
-SNORM must similarly demonstrate both negative and positive ranges.
+Do not require every covered component to differ from its initialization
+sentinel: every 16-bit bit pattern is a legal UNORM value, so interpolation can
+legitimately reproduce the sentinel. Qualification must instead combine the
+bounded coverage, range, diversity, hash, and, where applicable,
+component-independence oracles.
+
+SNORM must similarly demonstrate both negative and positive ranges in every
+stored component, with exact native signed interpretation and independently
+reproducible component hashes.
 
 #### 3. Add 16-bit integer formats
 
@@ -420,9 +432,9 @@ The float forms already reach the maximum widths. Add:
 - `R32_UINT`, `RG32_UINT`, and `RGBA32_UINT`.
 - `R32_SINT`, `RG32_SINT`, and `RGBA32_SINT`.
 
-`RGBA32_*` remains the maximum:
+`RGBA32_*` remains the OpenAGC maximum:
 
-| Format | Bits per sample |
+| Format | Bits per pixel |
 | --- | ---: |
 | `R32` | 32 |
 | `RG32` | 64 |
@@ -447,15 +459,18 @@ Do not add obscure hardware encodings merely to make the enum larger.
 Every new hardware gate must:
 
 - Contain no `AGC_EXPECT_FIRMWARE_ABI_KEY`.
-- Have no `libSceAgcDriver.sprx` dependency.
+- Have no dynamic dependency on either `libSceAgc.sprx` or
+  `libSceAgcDriver.sprx`.
 - Detect and normalize the full runtime version.
 - Use the selected `/dev/gc` profile.
 - Write a bounded, file-backed verdict.
 - Shut down and self-terminate.
-- Be hashed and preserved before its first run.
+- Be copied to an immutable hash-named local path before its first hardware
+  run, with the runner verifying both the local and uploaded hashes.
 
 Use the identical ELF twice on FW 11.60. Later, run those exact bytes on FW
-5.50; never rebuild between endpoint tests.
+5.50; never rebuild between endpoint tests. A source-equivalent rebuild does
+not satisfy the endpoint-portability gate.
 
 #### 7. Qualification labels
 
@@ -466,7 +481,9 @@ Track three states independently:
 - Hardware-qualified on an exact firmware.
 
 A format passing FW 11.60 must not automatically be advertised as
-hardware-qualified on FW 5.50 or the other 37 profiles.
+hardware-qualified on FW 5.50 or the other 37 profiles. Identical SPRX/profile
+findings strengthen ABI evidence but do not promote a profile to
+hardware-qualified status.
 
 #### 8. Guarded hardware sequence
 
