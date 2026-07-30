@@ -32,3 +32,9 @@ broader reflected compute-pipeline capability.
 Do not rerun either workload artifact unchanged. The next diagnostic must
 retain this proven completion path while isolating the compute state emitted
 before `DISPATCH_DIRECT`.
+
+The first corrected difference is the absent V8 compute-default prefix:
+`agcCmdDispatch` now emits all 174 SH defaults before the existing compute
+state and dispatch packets, matching the manually qualified sample's order.
+The rebuilt workload artifact has passed generic validation and a clean
+Prospero cross-build; it has not yet been deployed.

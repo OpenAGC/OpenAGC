@@ -5406,6 +5406,13 @@ int32_t PS5_SYSV_ABI agcCmdDispatch(AgcCommandBuffer command_buffer,
         AGC_GFX1013_COMPUTE_DISPATCH_WAVE32 :
         AGC_GFX1013_COMPUTE_DISPATCH_WAVE64;
     agcCbInit(&temporary_cb, temporary, sizeof(temporary));
+    /* FW 5.50's qualified compute path establishes the V8 SH defaults before
+     * programming a dispatch. Keep that policy inside the native runtime so
+     * applications never need to assemble default-state register packets. */
+    result = agcGfx1013ApplyComputeDefaultsV8(&temporary_cb, NULL);
+    if (result != AGC_OK)
+        return result == AGC_ERROR_BUFFER_TOO_SMALL ?
+            AGC_ERROR_COMMAND_SPACE_EXHAUSTED : result;
     result = agcGfx1013DispatchCompute(&temporary_cb, &state);
     if (result != AGC_OK)
         return result == AGC_ERROR_BUFFER_TOO_SMALL ?

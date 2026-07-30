@@ -209,6 +209,13 @@ pass, but neither artifact is hardware-qualified. The EOP-only oracle passed,
 so the next changed workload diagnostic must isolate the emitted compute state
 that precedes `DISPATCH_DIRECT`.
 
+The first isolated difference is now fixed in `agcCmdDispatch`: it emits all
+174 qualified V8 compute SH-default registers before programming shader,
+resource, user-data, and dispatch state. This matches the ordering of the
+hardware-proven manual compute sample and is covered by a host assertion that
+the runtime stream contains the full default sequence plus the dispatch.
+The changed compute artifact awaits an exact-FW-5.50 rerun.
+
 `samples/hw_test/agc_runtime_eop.elf` is that bounded public-runtime
 diagnostic. It creates the same device, compute queue, command buffer, and
 fence path, but records no application commands; `agcQueueSubmit` supplies the

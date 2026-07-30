@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "agc_cb.h"
 #include "agc_driver_debug.h"
 #include "agc_graphics.h"
 #include "agc_pm4.h"
@@ -771,12 +772,14 @@ static void test_runtime_compute_submission(void)
     AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
     const AgcCommandBufferSubmit *captured;
     const uint32_t *words;
+    uint32_t defaults[512] = {0};
+    SceAgcCb defaults_cb;
     uint32_t owner = UINT32_MAX;
 
     pipeline_desc.shader = shader;
     pipeline_desc.local_size_x = 64u;
     command_desc.queue_type = kAgcQueueCompute;
-    command_desc.capacity_dwords = 64u;
+    command_desc.capacity_dwords = 512u;
     TEST_ASSERT_EQ(agcCreateComputePipeline(device, &pipeline_desc, &pipeline),
         AGC_OK, "compute pipeline creation succeeds");
     TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc,
@@ -801,9 +804,18 @@ static void test_runtime_compute_submission(void)
     TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
         "compute command buffer submits");
     captured = agcDriverDebugLastAcbSubmit(&owner);
-    TEST_ASSERT_EQ(captured->dword_count, 36u,
-        "compute submission captures validated pipeline state and dispatch");
+    agcCbInit(&defaults_cb, defaults, sizeof(defaults));
+    TEST_ASSERT_EQ(agcGfx1013ApplyComputeDefaultsV8(&defaults_cb, NULL),
+        AGC_OK, "qualified compute defaults build for runtime comparison");
     words = (const uint32_t *)(uintptr_t)captured->command_address;
+    TEST_ASSERT_EQ(agcPm4Opcode(words[0]),
+        AGC_PM4_OP_SET_SH_REG,
+        "runtime compute submission begins with qualified SH defaults");
+    TEST_ASSERT(captured->dword_count > 36u,
+        "compute submission includes qualified defaults and dispatch state");
+    TEST_ASSERT_EQ(captured->dword_count,
+        agcCbUsedDwords(&defaults_cb) + 36u,
+        "runtime compute submission contains all defaults plus dispatch");
     TEST_ASSERT_EQ(captured->command_address & 0xffu, 0u,
         "compute submission command allocation is GPU-address aligned");
     words += captured->dword_count - 5u;
@@ -941,7 +953,7 @@ static void test_runtime_compiler_reflection_sidecar(void)
     TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &buffer), AGC_OK,
         "native compute output buffer creation succeeds");
     command_desc.queue_type = kAgcQueueCompute;
-    command_desc.capacity_dwords = 256u;
+    command_desc.capacity_dwords = 512u;
     TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc,
         &command_buffer), AGC_OK,
         "native compute sidecar command buffer creation succeeds");
@@ -2687,7 +2699,7 @@ static void test_runtime_indirect_descriptor_set_table(void)
         "indirect descriptor-set reflection creates compute pipeline");
 
     command_desc.queue_type = kAgcQueueCompute;
-    command_desc.capacity_dwords = 128u;
+    command_desc.capacity_dwords = 512u;
     TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
         AGC_OK, "indirect descriptor command buffer creates");
     TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
@@ -3509,7 +3521,7 @@ static void test_runtime_all_backing_categories(void)
         "GPU-visible image descriptor storage creation succeeds");
     TEST_ASSERT_EQ(agcCreateSampler(device, &sampler_desc, &sampler), AGC_OK,
         "GPU-visible sampler descriptor storage creation succeeds");
-    command_desc.capacity_dwords = 64u;
+    command_desc.capacity_dwords = 512u;
     TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc,
         &command_buffer), AGC_OK, "command storage creation succeeds");
 
@@ -3837,7 +3849,7 @@ static void test_runtime_fence_deferred_free(void)
     pipeline_desc.shader = shader;
     pipeline_desc.local_size_x = 64u;
     command_desc.queue_type = kAgcQueueCompute;
-    command_desc.capacity_dwords = 64u;
+    command_desc.capacity_dwords = 512u;
     buffer_desc.size = 1024u;
     buffer_desc.usage = AGC_BUFFER_USAGE_STORAGE_BIT;
     TEST_ASSERT_EQ(agcCreateComputePipeline(device, &pipeline_desc, &pipeline),

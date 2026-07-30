@@ -209,6 +209,11 @@ direct carrier, command allocation, EOP completion packet, fence memory, and
 CPU visibility path; it does not qualify a reflected compute workload. The
 next changed diagnostic must isolate compute state emitted before
 `DISPATCH_DIRECT`.
+The first missing setup is now included in the runtime: every native compute
+dispatch emits the 174 V8 SH defaults before its shader state, matching the
+qualified manual path. Generic carrier coverage verifies the complete default
+prefix plus dispatch, and the changed Prospero artifact cross-builds cleanly;
+hardware rerun remains pending.
 
 An opt-in combined-tree integration target compiles real `openagc-psbc`
 vertex, fragment, and compute artifacts, then creates OpenAGC graphics and

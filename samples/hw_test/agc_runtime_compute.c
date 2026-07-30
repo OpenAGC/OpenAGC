@@ -134,7 +134,7 @@ int main(void)
         goto cleanup;
 
     command_desc.queue_type = kAgcQueueCompute;
-    command_desc.capacity_dwords = 256u;
+    command_desc.capacity_dwords = 512u;
     result = agcCreateCommandBuffer(device, &command_desc, &command_buffer);
     report_result("agcCreateCommandBuffer", result);
     if (result != AGC_OK)
