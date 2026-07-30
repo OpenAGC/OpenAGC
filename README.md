@@ -1,506 +1,435 @@
-# openagc
+# OpenAGC
 
-## Reusable FW 5.50 Wave32 graphics
+OpenAGC is a clean-room, open-source implementation of the PlayStation 5 AGC
+(Advanced Graphics Controller) userspace interface. It provides recovered
+`sceAgc*` and `sceAgcDriver*` ABI compatibility, typed gfx1013 graphics and
+compute helpers, and a direct PS5 `/dev/gc` backend without proprietary SDK
+headers.
 
-Include `agc_graphics.h` to use the hardware-validated gfx1013 Wave32 VS+PS
-path. `agcGfx1013ValidateWave32VsPs` validates a fused NGG Gs(2) record and
-Wave32 pixel record; `agcGfx1013BindWave32VsPs` derives primitive/interpolant
-state, patches shader addresses, preflights command-buffer capacity, and emits
-the reusable SH/CX/UC binding sequence. The path is validated on standard PS5
-FW 5.50 through curl and etaHEN websrv.
+The project targets PS5's Oberon GPU (`gfx1013`, a custom RDNA2/GFX10 part).
+It is written in C, licensed under Apache 2.0, and keeps the generic host build
+dependent only on libc.
 
+> [!IMPORTANT]
+> OpenAGC is an experimental homebrew GPU stack, not a complete official-SDK
+> replacement. Support claims are capability- and exact-firmware-specific.
+> Consult [STATUS.md](STATUS.md) before relying on a path on hardware.
 
-openagc is a clean-rewrite PS5 AGC (Advanced Graphics Controller) library
-for homebrew and emulator-port work. It follows the recovered `sceAgc*` /
-`sceAgcDriver*` naming and command-buffer split used by the PS5 firmware, while
-keeping the implementation buildable without proprietary SDK headers.
+## At a Glance
 
-The current tree is a foundation layer, not a complete official-SDK drop-in.
-Host builds provide testable AGC packet, command-buffer, submit-descriptor,
-descriptor, and shader helpers. The PS5 `/dev/gc` backend is implemented and
-builds with ps5-payload-sdk. Its qualified graphics, compute, copy, format,
-depth/HTILE, MSAA, queue, submit, teardown, and presentation paths have run on
-real FW 5.50 and FW 11.60 hardware within the scopes recorded in `STATUS.md`.
+| Area | Current state |
+| --- | --- |
+| Low-level AGC compatibility | Implemented for the mapped `sceAgc*`, driver, cursor, packet, shader, queue, and submit surfaces |
+| Host backend | Generic software backend with `12240 passed, 0 failed` across six CTest suites |
+| PS5 backend | Native `/dev/gc` implementation built with ps5-payload-sdk |
+| Hardware evidence | Qualified subsets on standard PS5 FW 5.50 and FW 11.60 |
+| Firmware profiles | 39 exact active ABI keys from FW 3.20 through FW 12.70; untested profiles remain hardware-unverified |
+| Shader compiler | Packaged `openagc-psbc` workflow for SPIR-V → `AgcShaderRecord` |
+| Application example | Installed-package rotating cube in `examples/cube` |
+| License | Apache 2.0 |
 
-## Product Direction
+## What OpenAGC Provides
 
-OpenAGC keeps the recovered `sceAgc*` and `sceAgcDriver*` surface as its
-low-level compatibility and reverse-engineering foundation. The next product
-layer is a firmware-neutral native C API with opaque device, queue, buffer,
-image, sampler, shader, pipeline, command-buffer, and fence objects. Ordinary
-applications should not need to assemble PM4, choose cache-control bits,
-allocate one direct-memory block per resource, or branch on firmware.
+### Driver and firmware foundation
 
-The authoritative execution order is maintained in `PLAN.md`:
+- Native `/dev/gc` initialization, internal-memory management, queues,
+  submission, suspend points, default-state construction, and clean shutdown.
+- Exact runtime firmware selection. Unknown keys and unsupported optional
+  operations fail before mutating GPU or process state.
+- Firmware-keyed register defaults, memory-region configuration, submission
+  carriers, queue behavior, register-shadow policy, and VideoOut handling.
+- Recovered ABI structures protected by `_Static_assert` size and offset
+  checks.
+- NID and firmware-variant indexes for reverse-engineering and compatibility
+  work.
 
-1. Close the identical-byte FW 5.50/FW 11.60 portability gate.
-2. Define the native device/object lifecycle and `agcGetRuntimeInfo`
-   capability query.
-3. Add suballocated resource memory, shader reflection, and validated graphics
-   and compute pipeline objects.
-4. Add typed resource transitions, bounded synchronization, deferred
-   destruction, validation, capture/inspection, and complete API documentation.
-5. Qualify one long-running reference-game ELF unchanged on both endpoint
-   firmwares.
-6. Rehabilitate `../Vulkan-PS5` as a translation layer above the native API,
-   without a second firmware selector, allocator, PM4 backend, or synchronization
-   model.
+### Commands, shaders, and graphics
 
-The completed 16/32-bit integer render-target matrix, all 14 BC1-BC7 sampling
-encodings, the planned depth/HTILE progression, and the planned 4x MSAA matrix
-remain regression coverage. New formats and packet builders are demand-driven
-by the native runtime, the reference game, Vulkan, a homebrew port, or a safety
-fix.
+- Type-3 PM4 header helpers and cursor-based ACB/DCB command construction.
+- Typed draw, indexed draw, indirect draw, dispatch, copy, transition, event,
+  fence, query, blend, raster, depth/stencil, multisample, and presentation
+  helpers.
+- gfx1013 buffer and image descriptors for raw, structured, 2D, array, cube,
+  and multisample resources.
+- `AgcShaderRecord` parsing, relocation, fused shader records, Wave32/Wave64
+  selection, NGG geometry, and tessellation state.
+- Application-neutral gfx1013 capability queries and exact command-buffer
+  capacity validation.
+- Atomic failure behavior: invalid inputs and short command buffers are
+  rejected without partial packet emission.
 
-## Features
+### Memory, synchronization, and presentation
 
-- **AGC driver API surface** — `sceAgcDriver*` submission, SDMA, setup
-- **Prospero process preparation** — `sce_agc_initialize` privately prepares
-  the payload's GPU authorization before opening `/dev/gc`; on FW 5.50 it also
-  repairs a detached `td_ucred` using the hardware-proven kernel layout, so
-  higher-level APIs and ordinary applications need no launcher/sample header
-- **Reusable driver lifecycle** — `agcDriverShutdown` destroys owned queues,
-  releases all nine internal system-flexible regions, unmaps MMIO, closes
-  `/dev/gc`, and permits clean reinitialization. Flexible-memory frees use
-  `sceKernelReleaseFlexibleMemory`, with unmap retained only as an error
-  fallback, so repeated homebrew launches do not consume the global quota
-- **ACB command building** — `sceAgcAcb*` async compute buffer packets
-  (event write, atomic mem/GDS, cond exec, wait-reg-mem, write/copy/dma data,
-  mem semaphore, acquire mem, queue reset, rewind, set flip, workload
-  markers, prime UTC L2)
-- **DCB command building** — `sceAgcDcb*` draw command buffer packets
-  (clear state, atomic GDS, context state ops, reset queue, set flip, workload
-  markers, wait-safe, preemption stub)
-- **Context state management** — default state queries, primary/internal
-  register-defaults blob builder, and `CLEAR_STATE` submission path
-- **Gen5 AGC/PM4 packet encoding** — PS5 packet header helpers and decoded
-  opcode/subcommand constants (including kernel-side suspend-point marker)
-- **RE packet model** — HLE reference/RPCSX-compatible type-3 packet length and
-  AGC `IT_NOP` subcommand helpers
-- **Command-buffer cursor model** — recovered `SceAgcCb` cursor offsets and
-  host allocation helpers
-- **Sony-style CB builders** — recovered `sceAgcCb*` / `sceAgcDcb*` packet
-  builders for NOP, dispatch, SH registers, write-data, wait-reg-mem, DMA,
-  indirect dispatch/base args, index buffers, indexed draws, markers, wait-safe,
-  and flip
-- **Submit packet model** — recovered DCB/ACB submit descriptor layout with
-  generic validation/debug capture
-- **Suspend points** — RE'd `SUSPEND_16`/`SUSPEND_39` ioctl argument layout and
-  in-flight query placeholder
-- **Known NID index** — local Gen5 AGC NID constants for mapped exports
-- **Texture/buffer descriptors** — RDNA2 SQ_IMG_RSRC 2D, 2D-array, cube-array,
-  and 4x-MSAA image descriptors plus structured (including zero-record robust
-  bounds) and byte-bounded raw SQ_BUF_RSRC encoders
-- **Application-neutral capabilities** — `agcGfx1013GetCapabilities` reports
-  qualified gfx1013 dimensions, Wave32/compute limits, render/depth formats,
-  sample counts, and flexible/direct memory profiles without Vulkan coupling
-- **Application-neutral buffer copies** — `agcGfx1013CopyBuffer` records the
-  seven-dword gfx1013 `DMA_DATA` memory-copy packet with L2 source/destination
-  selection and CP synchronization, validates four-byte alignment and 48-bit
-  address ranges, splits transfers at the 21-bit byte-count limit, and rejects
-  insufficient command-buffer space atomically
-- **Application-neutral raster primitives** — typed topology translation and
-  primitive-size state own gfx1013 point-size, point-clamp, and line-width
-  encodings for higher-level APIs without exposing register values
-- **Application-neutral viewport arrays** — typed Vulkan-style float viewport
-  transforms and per-slot scissors program all 16 gfx1013 viewport slots,
-  validate atomically, and can be reapplied after shader binding by baseline
-  and tessellation draw wrappers
-- **Full-extent legacy viewport** — the compact width/height viewport helper
-  maps normalized device coordinates across the complete rectangular target;
-  applications that need aspect preservation own it in their projection or
-  explicit viewport dimensions
-- **Application-neutral color blending** — typed blend factors and operations
-  program both CB blend controls and conservative per-target SX optimization
-  state, including the gfx1013 SRC1 factors required by dual-source blending;
-  SRC1 use disables RB+ dual-quad mode and all SX blend optimizations
-- **GPU-visible flexible memory** — `agcGpuMemoryAllocateFlexible` provides a
-  unified CPU/GPU address on Prospero and an aligned host analogue for tests;
-  matching flush, invalidate, and deterministic free operations keep kernel
-  mapping details outside applications and higher-level drivers; bounded
-  32-bit label waits support EOP completion without platform polling code
-- **Compute resource tables** — `AgcGfx1013ComputeState` accepts compiler
-  descriptor-set placeholder bindings; dispatch validation rejects unbound or
-  malformed tables and patches the exact compute user-SGPR registers after
-  shader state emission and before `DISPATCH_DIRECT`
-- **Explicit compute wave mode** —
-  `AGC_GFX1013_COMPUTE_DISPATCH_WAVE32` and
-  `AGC_GFX1013_COMPUTE_DISPATCH_WAVE64` name the gfx1013 dispatch-initiator
-  contract so callers execute compiler-selected compute code at the matching
-  wave size instead of relying on an implicit packet default
-- **Write-combined direct memory** —
-  `agcGpuMemoryAllocateDirectWriteCombined` owns the 2 MiB-aligned kernel
-  physical allocation, CPU/GPU mapping, and paired unmap/release lifecycle used
-  for garlic resources and scanout-compatible storage
-- **Reusable VideoOut lifecycle** — `agc_videoout.h` registers caller-owned
-  linear scanout buffers, presents FIFO/VSYNC frames with bounded waits, and
-  tears down its flip event queue. The Prospero backend contains the FW 5.50
-  linear-registration patch, temporarily makes the execute-only page RWX
-  before verifying its original instruction bytes, and
-  restores both the bytes and the original execute-only protection immediately
-  after registration; the generic backend provides
-  deterministic host lifecycle coverage.
-  Teardown unregisters the flip event, closes the display handle, and only then
-  deletes the equeue, keeping the event's queue alive through both VideoOut
-  lifecycle operations.
-  A SystemService-only Vulkan-PS5 probe with no OpenAGC, GPU, VideoOut, equeue,
-  or custom-memory work reproduces the single `0x4000` warning at
-  `EndAppMount`; it is therefore classified as FW 5.50/raw-ELF container
-  bookkeeping rather than an OpenAGC VideoOut leak.
-- **Shader binary format** — RDNA2 ISA shader header parsing
-- **Two backend targets:**
-  - `generic` — pure software implementation for host testing
-  - `prospero` — native PS5 `/dev/gc` backend with ioctl submission, internal
-    memory allocation, exact runtime-profile selection, and fail-closed process
-    authorization setup; supported subsets are hardware-qualified on FW 5.50
-    and FW 11.60
-- **Binary-compatible struct layouts** — `_Static_assert` verified sizes
-- **Hardware validation samples** — `samples/hw_test/` builds ELF + fake-SELF
-  packages for VideoOut and AGC init smoke tests
-- **Standalone homebrew example** — `examples/cube/` consumes an installed
-  OpenAGC package and owns a FW 5.50 hardware-validated triple-buffered
-  rotating-cube render loop
+- GPU-visible flexible-memory allocation with explicit flush, invalidate, and
+  release operations.
+- Direct write-combined memory for scanout-compatible resources.
+- Typed resource transitions covering render, depth/stencil, compute, copy,
+  shader-read, host-read, and presentation use.
+- Bounded label/fence waits; hardware samples never depend on an unbounded
+  polling loop.
+- Reusable VideoOut buffer registration, FIFO/VSYNC presentation, event
+  handling, patch restoration, and teardown.
 
-## Architecture Differences from opengnm (PS4)
+### Tooling and distribution
 
-| Aspect | PS4 GNM (opengnm) | PS5 AGC (openagc) |
-|--------|-------------------|-------------------|
-| GPU | AMD GCN (Liverpool/Gladius) | AMD RDNA2 (Oberon) |
-| API prefix | `sceGnm*` | `sceAgc*` |
-| Command buffers | PM4 packets (DCB/CCB) | RDNA2 PM4 (DCB/ACB) |
-| Shader ISA | GCN (Southern Islands) | gfx1013 (Oberon, custom GFX10) |
-| Wave size | 64 only | 32 or 64 |
-| Shader stages | VS/PS/GS/HS/DS/CS | VS/PS/GS/HS/DS/CS + Mesh/Task |
-| Context state | PM4 SET_*_REG inline | Flat context state block |
-| Preemption | Limited | Full (suspend points) |
-| Tiling | GCN macro/micro tile | RDNA2 swizzle modes |
-| Memory | Garlic/Onion (GDDR5) | Unified (GDDR6) |
-| GPU microcode | Tonga CE/ME/PFP/MEC | Oberon CE/ME/PFP/MEC/SDMA |
+- `generic` and `prospero` CMake targets.
+- Make-based host build and test workflow.
+- Relocatable `OpenAGC::openagc` CMake package.
+- Optional packaged `OpenAGC::psbc` executable and
+  `openagc_compile_shader()` helper.
+- Deterministic host fixtures, guarded hardware runners, pinned ELF hashes,
+  packet decoders, firmware-corpus verifiers, and qualification reports.
 
-## Status
+## API Layers
 
-**Low-level compatibility foundation** — implemented, host-regression tested,
-and hardware-qualified for the exact capabilities listed below. The native
-application-facing runtime described in `PLAN.md` is the next product phase.
+OpenAGC deliberately separates compatibility from application ergonomics.
 
-Completed and tested:
-- Core type definitions and error codes
-- Driver API header for the currently mapped firmware-exported functions
-- Reverse-engineering headers for packet layout, NIDs, shader offsets, and
-  command-buffer offsets
-- Cursor-based command-buffer allocation using recovered `SceAgcCb` offsets
-- HLE-reference-confirmed `sceAgcCb*` and `sceAgcDcb*` packet builders for NOP,
-  dispatch, SH registers, release memory, indirect register sets, write-data,
-  wait-reg-mem, DMA, indirect dispatch/base args, index buffer setup, indexed
-  draw packets, FW 5.50-qualified application-facing 7-dword fixed-count
-  multi-indirect packets, SPRX-qualified Sony 10-dword count-address exports,
-  markers, wait-safe, flip, and LOD stats helpers
-- ACB packet builders for event write, atomic mem/GDS, cond exec, wait-reg-mem,
-  write/copy/dma data, mem semaphore, acquire mem, queue reset, rewind, set
-  flip, workload markers, and prime UTC L2
-- DCB/VSH packet builders for clear state, atomic GDS, context state ops, reset
-  queue, set flip, workload markers, wait-safe, and preemption (SPRX-confirmed
-  unimplemented VSH-only stub)
-- In-place patchers for DMA-data destination, wait-reg-mem address, and
-  end-of-pipe action addresses
-- Generic `sceAgcDriverSubmitDcb` and `sceAgcDriverSubmitAcb` validation for
-  recovered submit descriptors
-- FW 5.50 single-DCB framing with a GPU-visible NOP trailer so the caller DCB
-  executes immediately in the exploited-payload graphics-ring context
-  (qualified twice each by Vulkan compute and triangle EOP/readback workloads).
-  The 64-byte trailer is carved from unused `SceGnmDdid` space instead of
-  consuming a standalone 16 KB system-flexible allocation.
-- Generic backend with host-side validation/debug capture
-- ACB and DCB raw pointer helpers with basic packet emission
-- Texture/buffer descriptor helpers
-- AGC shader record parser (magic, pointer fields, semantics counts, shader type)
-- FW 5.50 register-defaults blob builder and parser with embedded primary/internal tables
-- Native prospero `/dev/gc` backend with ioctl submission, internal memory allocation,
-  default-state `CLEAR_STATE` submission, and suspend-point submit/query
-- Hardware validation samples (`samples/hw_test/`) built as ELF and fake-SELF
-- Build system (CMake + Makefile)
-- Test suite with 12240 passing assertions on the host generic backend
+### Available today: low-level compatibility and typed gfx1013 helpers
 
-Tessellation clients use the Oberon-wide ring profile in `agc_graphics.h`:
-four shader engines, two shader arrays per engine, five physical CUs per
-array, and four live HS offchip workgroups per CU. This provisions 160
-32-KiB offchip buffers instead of the former single-buffer sample profile.
-On gfx10.3 the buffering field encodes that global count (`159`); gfx11's
-per-shader-engine interpretation does not apply to Oberon. The public constants
-and regression test retain the explicit 40-per-engine/160-global distinction.
-Ring-state validation rejects an allocation smaller than the buffering and
-granularity encoded in `VGT_HS_OFFCHIP_PARAM`.
-Two independent bounded Vulkan FW 5.500.008 qualification runs passed exact
-hull, TES offchip-read, and 7200-pixel image oracles and left the console
-responsive (`20260728T043915Z-tessellation-run1.log` and
-`20260728T044035Z-tessellation-run1.log`). This repeated gate makes the
-Oberon-wide ring profile hardware-qualified at the tested scope.
+The current public headers expose:
 
-Hardware-validated on real PS5 gfx1013 hardware running FW 5.50:
-- Native `/dev/gc` initialization, queue setup, default states, and submission
-- Compute dispatch and no-GS NGG indexed graphics with GPU readback
-- Wave32 NGG and pixel execution, including compiler-record and final-PM4 checks
-- Typed 4x sample state with one, two, or four pixel-shader iterations;
-  baseline and tessellation draws apply it after shader binding so
-  `DB_EQAA` and `PA_SC_MODE_CNTL_1` reach launch unchanged
-- Pipeline-specific HS/TES tessellation offchip-layout packing and independent
-  runtime patching for unequal input/output patch sizes
-- Linear standard/alternate-swap RGBA8 UNORM/SRGB, RGB10A2,
-  `R11G11B10_FLOAT`, and `R16G16B16A16_FLOAT` render targets
+- `agcdriver.h` for recovered driver and initialization entry points.
+- `agc_cb.h`, `agc_pm4.h`, and `agc_context.h` for command and context
+  construction.
+- `agc_graphics.h` for typed gfx1013 state, draw, dispatch, copy, transition,
+  depth/stencil, MSAA, query, and synchronization helpers.
+- `agc_memory.h` and `agc_videoout.h` for reusable memory and presentation
+  lifecycles.
+- `agc_shader.h` and `agc_texture.h` for shader records and resource
+  descriptors.
+- `agc_capabilities.h` and `agc_runtime_diag.h` for capability and runtime
+  diagnostics.
 
-Host-verified and awaiting application-level hardware qualification:
-- Byte-sized hull LDS allocation rounded to gfx10.3's 1024-byte allocation
-  granularity and patched into the resource register's 512-byte encoding
+These APIs are used by the hardware samples, the standalone cube, and the
+current Vulkan-PS5 implementation.
 
-Firmware policy: every exact active profile from FW 3.20 through FW 12.70 is
-runtime-selectable for its SPRX-qualified operation subset. FW 5.50 and
-standard-PS5 FW 11.60 are hardware-qualified; the remaining exact profiles are
-hardware-unverified. Unknown keys and FW 1.00/2.x/3.00 archival aliases remain
-fail-closed, as do firmware-specific operations without matching evidence.
+### Planned: native application runtime
 
-### Deploy the Wave32 graphics test with etaHEN websrv
+The next product layer is a firmware-neutral C API with opaque:
 
-Use this websrv path for OpenAGC hardware validation. Do not use
-`prospero-deploy`; its direct-loader context did not foreground the VideoOut
-surface reliably during Wave32 validation.
+- `AgcDevice` and `AgcQueue`
+- `AgcBuffer`, `AgcImage`, `AgcImageView`, and `AgcSampler`
+- `AgcShader`, `AgcGraphicsPipeline`, and `AgcComputePipeline`
+- `AgcCommandBuffer` and `AgcFence`
 
-Build the Prospero library and hardware sample first, then upload the ELF and
-icon over websrv FTP. `--ftp-create-dirs` makes the homebrew directory on the
-first upload:
+That runtime will own heap suballocation, shader reflection, pipeline
+compatibility, resource states, cache transitions, bounded synchronization,
+deferred destruction, validation, capture, and presentation. Applications will
+query capabilities and qualification through `agcGetRuntimeInfo` rather than
+branching on firmware.
+
+This native API is a roadmap target, not an implemented interface. See
+[PLAN.md](PLAN.md) for its dependency order and acceptance gates.
+
+### Sibling projects
+
+- [openagc-psbc](../openagc-psbc/README.md) compiles SPIR-V and produces the
+  shader records and reflection consumed by OpenAGC pipelines.
+- [Vulkan-PS5](../Vulkan-PS5/README.md) is the Vulkan ICD. Its current direct
+  integration is the qualified baseline; it will migrate to the native runtime
+  after those contracts stabilize.
+
+Neither project should grow a second firmware selector, memory manager, PM4
+backend, resource-state model, or queue/fence implementation.
+
+## Qualification and Firmware Support
+
+OpenAGC tracks three evidence levels independently:
+
+1. **Host-tested** — deterministic generic-backend fixtures pass.
+2. **SPRX/profile-qualified, hardware-unverified** — the exact firmware ABI is
+   recovered and selected, but matching hardware has not run it.
+3. **Hardware-qualified on an exact firmware** — a bounded, deterministic
+   payload passed the documented hardware gate.
+
+An export, profile table entry, or successful ioctl return is not by itself a
+hardware-support claim.
+
+### Current hardware baseline
+
+FW 5.50 and standard-PS5 FW 11.60 have qualified subsets covering:
+
+- Driver initialization, defaults, async setup, queues, submission, cleanup,
+  and relaunch.
+- Wave32 compute and graphics with exact GPU readback.
+- Indexed, indirect, and indexed-indirect drawing.
+- Buffer copies and typed resource transitions.
+- NGG geometry and tessellation.
+- Regular color targets through the 128-bit `RGBA32` ceiling.
+- R/RG/RGBA16 UNORM, SNORM, UINT, and SINT.
+- R/RG/RGBA32 UINT and SINT.
+- All 14 declared BC1-BC7 direct-upload sampling encodings.
+- D16, D32, S8, combined depth/stencil, HTILE, expclear, and qualified
+  subresource cases.
+- The planned 4x MSAA resolve and sample-rate-shading matrix.
+
+The exact scope, exclusions, hashes, and per-firmware results are recorded in
+[STATUS.md](STATUS.md) and
+[analysis/format_depth_msaa_goal_completion_20260730.md](analysis/format_depth_msaa_goal_completion_20260730.md).
+
+### Portability gate
+
+Production code contains no compile-time expected-firmware selector. The
+pinned firmware-neutral portability ELF has passed twice on FW 11.60. Its
+hash-identical FW 5.50 replay remains the outstanding one-binary product gate.
+The FW 5.50 and FW 11.60 cleanup-stress prerequisites are complete.
+
+The FW 11.60 workload operation remains fail-closed: all known packet forms
+returned from submission but stalled before ordered GPU markers. Closed failed
+probes must not be rerun without new offline evidence.
+
+### Deliberate boundaries
+
+- FW 3.20 is the lowest active compatibility target.
+- FW 1.x, 2.x, and 3.00 profiles are archival reverse-engineering data only.
+- The other active exact profiles are not hardware-qualified merely because
+  their SPRX contracts are registered.
+- Tiled BC layout/copy/mips, additional packed formats, color metadata
+  (DCC/CMASK/FMASK), HDR presentation, and remaining depth/MSAA combinations
+  are demand-driven future work.
+- ASTC and other unproven format families are not advertised.
+
+## Build and Test
+
+### Generic host backend
+
+Requirements: a C compiler, CMake 3.15 or newer, and libc.
 
 ```sh
-export PS5_HOST=10.0.1.41
-export PS5_PAYLOAD_SDK=~/ps5-payload-sdk
-export LLVM_CONFIG=/opt/homebrew/opt/llvm@18/bin/llvm-config
-
-cmake -B build-prospero -DOPENAGC_PLATFORM=prospero \
-    -DOPENAGC_BUILD_TESTS=OFF \
-    -DCMAKE_TOOLCHAIN_FILE="$PS5_PAYLOAD_SDK/toolchain/prospero.cmake"
-cmake --build build-prospero
-make -C samples/hw_test agc_graphics.elf
-
-curl -sS --ftp-create-dirs \
-    -T samples/hw_test/agc_graphics.elf \
-    "ftp://$PS5_HOST:2121/data/homebrew/agc_wave32/eboot.elf"
-curl -sS --ftp-create-dirs \
-    -T samples/hw_test/sce_sys/icon0.png \
-    "ftp://$PS5_HOST:2121/data/homebrew/agc_wave32/sce_sys/icon0.png"
-curl -sS \
-    "http://$PS5_HOST:8080/hbldr?pipe=1&daemon=0&path=/data/homebrew/agc_wave32/eboot.elf"
-```
-
-For the complete ordered FW 5.50 matrix, use the deterministic runner instead
-of launching samples manually:
-
-```sh
-make -C samples/hw_test conformance_fw550_check
-make -C samples/hw_test conformance_fw550 PS5_HOST="$PS5_HOST"
-```
-
-`conformance_fw550_check` validates that every local ELF in the matrix exists.
-The hardware target uploads each ELF to a fresh per-run directory, launches it
-in the foreground, enforces a bounded timeout, verifies the numeric `0x0550`
-firmware profile and sample-specific output gates, and stops at the first
-failure so loader processes cannot overlap. Raw logs are retained under
-`samples/hw_test/conformance-logs/<run-id>/`. A timeout, disconnected curl,
-instant close, missing gate, `FAIL`, or `FATAL` marker fails the run.
-
-`pipe=1` streams the validation log to curl and `daemon=0` keeps the launch in
-the foreground. The expected display is a dark-gray background with a centered,
-blended-color triangle. The payload must report Wave32 record and PM4 passes,
-the `0xDEADCAFE` marker, FP16 validation, and 1,800 completed flips.
-
-### Firmware Reference
-
-Reference inputs used for the open implementation:
-- Local firmware dump: `/Users/bizkut/Downloads/PS5/FIRMWARE_FILES/5.50`
-- AGC modules: `libSceAgc.sprx`, `libSceAgcDriver.sprx`, `libSceAgcVsh.sprx`
-- GPU microcode names: `oberon_c0_{ce,me,mec,pfp,rlc,sdma0,sdma1}.bin`
-- Incomplete reference project: `/Users/bizkut/Downloads/PS5/homebrew/ps5-openagc`
-  — **NOT proven working.** Used for NID cross-reference only; contains known
-  ioctl errors. See `analysis/ps5_openagc_audit.md`.
-- Emulator reference: `/Users/bizkut/Downloads/PS5/homebrew/hle reference`
-- GPU/PM4 reference: `/Users/bizkut/Downloads/PS5/homebrew/rpcsx`
-
-Firmware modules and microcode are used only as reverse-engineering references;
-they are not embedded in this repository.
-
-## Building
-
-### Host (generic, for testing)
-
-```sh
-cmake -B build -DCMAKE_BUILD_TYPE=Debug -DOPENAGC_PLATFORM=generic
+cmake -S . -B build \
+  -DCMAKE_BUILD_TYPE=Debug \
+  -DOPENAGC_PLATFORM=generic \
+  -DOPENAGC_BUILD_TESTS=ON
 cmake --build build
-ctest --test-dir build
+ctest --test-dir build --output-on-failure
 ```
 
-Or with Make:
-
-```sh
-make
-make test
-```
-
-Current expected host result:
+Expected result:
 
 ```text
 12240 passed, 0 failed
 ```
 
-### PS5
+The Make workflow is equivalent:
+
+```sh
+make
+make test
+# Force a complete test rebuild:
+make -B test
+```
+
+### Prospero backend
+
+The PS5 build uses
+[ps5-payload-sdk](https://github.com/ps5-payload-dev/sdk). Set the installed
+SDK path explicitly:
 
 ```sh
 export PS5_PAYLOAD_SDK=~/ps5-payload-sdk
-cmake -B build-prospero -DOPENAGC_PLATFORM=prospero -DOPENAGC_BUILD_TESTS=OFF \
-    -DCMAKE_TOOLCHAIN_FILE=$PS5_PAYLOAD_SDK/toolchain/prospero.cmake
+
+cmake -S . -B build-prospero \
+  -DOPENAGC_PLATFORM=prospero \
+  -DOPENAGC_BUILD_TESTS=OFF \
+  -DCMAKE_TOOLCHAIN_FILE="$PS5_PAYLOAD_SDK/toolchain/prospero.cmake"
 cmake --build build-prospero
-# Output: build-prospero/libopenagc.a
 ```
 
-The `prospero` backend builds as a native PS5 `/dev/gc` driver backend. It
-implements ioctl submission, internal memory allocation, default-state
-submission, suspend-point submission, runtime firmware profiles, and the
-qualified graphics/compute lifecycle. Support remains capability- and exact-
-firmware-specific; consult `STATUS.md` rather than treating a successful build
-or registered profile as a blanket hardware-support claim.
+Output:
 
-## Installable SDK and CMake package
-
-Packaging is validated for both the generic host build and the Prospero
-cross-toolchain. Each install contains the public headers, `libopenagc.a`, the
-host-native `openagc-psbc` executable, relocatable CMake package metadata,
-license, and documentation. The `package` target generates a versioned TGZ for
-the selected platform.
-
-When consuming a Prospero install outside the toolchain sysroot, pass the
-package directory explicitly because the PS5 toolchain intentionally root-paths
-package searches:
-
-```sh
-cmake -S app -B build-app \
-    -DCMAKE_TOOLCHAIN_FILE=$PS5_PAYLOAD_SDK/toolchain/prospero.cmake \
-    -DOpenAGC_DIR=/path/to/openagc/lib/cmake/OpenAGC
+```text
+build-prospero/libopenagc.a
 ```
 
-OpenAGC installs the public headers, `libopenagc.a`, relocatable CMake package
-metadata, documentation, and the host `openagc-psbc` shader compiler through
-one workflow. When the sibling `../openagc-psbc/psbc` exists, compiler
-packaging is enabled automatically:
+The exported OpenAGC target links `kernel` and `SceVideoOut`. It does not
+link or preload `libSceAgcDriver.sprx`; the Prospero backend owns direct
+`/dev/gc` submission.
+
+## Install the SDK
+
+Install headers, `libopenagc.a`, CMake metadata, documentation, and optionally
+the host shader compiler:
 
 ```sh
+export PS5_PAYLOAD_SDK=~/ps5-payload-sdk
+
 cmake -S . -B build-sdk \
-    -DOPENAGC_PLATFORM=prospero \
-    -DOPENAGC_BUILD_TESTS=OFF \
-    -DCMAKE_TOOLCHAIN_FILE="$PS5_PAYLOAD_SDK/toolchain/prospero.cmake" \
-    -DCMAKE_INSTALL_PREFIX="$PWD/openagc-sdk"
+  -DOPENAGC_PLATFORM=prospero \
+  -DOPENAGC_BUILD_TESTS=OFF \
+  -DOPENAGC_BUILD_PSBC=ON \
+  -DCMAKE_TOOLCHAIN_FILE="$PS5_PAYLOAD_SDK/toolchain/prospero.cmake" \
+  -DCMAKE_INSTALL_PREFIX="$PWD/openagc-sdk"
 cmake --build build-sdk
 cmake --install build-sdk
 ```
 
-For a fresh compiler checkout without a built `psbc`, add
-`-DOPENAGC_BUILD_PSBC=ON`. To supply another host build, set
-`-DOPENAGC_PSBC_EXECUTABLE=/absolute/path/to/psbc`. The shader compiler is a
-host program even when `libopenagc.a` targets Prospero; it is never compiled by
-the PS5 cross-toolchain. `cmake --build build-sdk --target package` produces a
-TGZ archive from the same install rules.
+`OPENAGC_BUILD_PSBC=ON` builds the sibling source tree selected by
+`OPENAGC_PSBC_SOURCE_DIR` (default: `../openagc-psbc`). Alternatively,
+provide an existing host executable:
 
-Downstream homebrew CMake usage:
+```sh
+cmake -S . -B build-sdk \
+  -DOPENAGC_PLATFORM=prospero \
+  -DOPENAGC_PACKAGE_PSBC=ON \
+  -DOPENAGC_PSBC_EXECUTABLE=/absolute/path/to/psbc \
+  -DCMAKE_TOOLCHAIN_FILE="$PS5_PAYLOAD_SDK/toolchain/prospero.cmake"
+```
+
+Create a relocatable TGZ from the same configuration:
+
+```sh
+cmake --build build-sdk --target package
+```
+
+## Consume OpenAGC from CMake
 
 ```cmake
 find_package(OpenAGC 0.2 CONFIG REQUIRED)
 
+add_executable(my_homebrew main.c)
 target_link_libraries(my_homebrew PRIVATE OpenAGC::openagc)
+```
 
+Set `CMAKE_PREFIX_PATH` to the installation prefix, or pass:
+
+```sh
+-DOpenAGC_DIR=/path/to/openagc-sdk/lib/cmake/OpenAGC
+```
+
+When the package includes the shader compiler, it exports
+`OpenAGC::psbc`, `OpenAGC_PSBC_EXECUTABLE`, and
+`openagc_compile_shader()`:
+
+```cmake
 openagc_compile_shader(
-    OUTPUT shaders/fill.sb
-    SOURCE shaders/fill.spv
-    STAGE compute
-    RESULT FILL_SHADER)
+  OUTPUT shaders/fill.sb
+  SOURCE shaders/fill.spv
+  STAGE compute
+  RESULT FILL_SHADER
+)
+
 add_custom_target(my_homebrew_shaders DEPENDS "${FILL_SHADER}")
 add_dependencies(my_homebrew my_homebrew_shaders)
 ```
 
-On Prospero, `OpenAGC::openagc` exports the required `kernel` and `SceVideoOut`
-system libraries transitively. It does not link or preload `SceAgcDriver`;
-command submission uses OpenAGC's direct `/dev/gc` backend.
+The compiler is a host tool even when `libopenagc.a` targets Prospero.
 
-The installed package exports `OpenAGC::openagc`, `OpenAGC::psbc`,
-`OpenAGC_PSBC_EXECUTABLE`, and `openagc_compile_shader()`. Set
-`CMAKE_PREFIX_PATH` to the install prefix, or pass
-`-DOpenAGC_DIR=<prefix>/lib/cmake/OpenAGC`.
+## Shader Workflow
 
-The complete independent Prospero consumer is in `examples/cube`. Its README
-documents staged installation, shader regeneration, and foreground curl/websrv
-deployment. Unlike `samples/hw_test`, it contains an application-owned finite
-frame loop with per-frame resource updates and cleanup. Two FW `0x05500008`
-runs presented all 3,600 frames and exited cleanly; see
-`analysis/fw550_standalone_cube_qualification_20260727.md`.
+The supported shader path is:
 
-## Project Structure
-
-```
-openagc/
-├── include/
-│   ├── agc_types.h          # Core type definitions
-│   ├── agc_error.h          # Error codes
-│   ├── agc_cb.h             # SceAgcCb cursor helpers
-│   ├── agc_driver_debug.h   # Generic backend submit debug accessors
-│   ├── agc_pm4.h            # RDNA2 PM4 packet definitions
-│   ├── agc_nids.h           # Known Gen5 AGC NIDs
-│   ├── agc_re.h             # RE constants and offsets
-│   ├── agc_texture.h        # Texture/buffer descriptor types
-│   ├── agc_shader.h         # Shader binary format
-│   └── agcdriver.h          # Main AGC driver API (sceAgc* functions)
-├── analysis/
-│   ├── agc_packet_model.md  # Decoded packet header/subcommand model
-│   └── agc_known_nids.tsv   # Known AGC NID table
-├── src/
-│   ├── driver_generic.c     # Generic (host) backend
-│   ├── driver_prospero.c       # PS5 hardware backend
-│   ├── cb.c                 # SceAgcCb cursor allocation
-│   ├── cb_builders.c        # sceAgcCb*/sceAgcDcb* packet builders
-│   ├── context_state.c      # Context state management
-│   ├── acb.c                # ACB command building
-│   ├── dcb.c                # DCB command building
-│   ├── texture.c            # Texture descriptor helpers
-│   └── shader.c             # Shader binary utilities
-├── tests/
-│   ├── test.h               # Test framework
-│   ├── test_main.c          # Test runner
-│   ├── test_types.c         # Type/constant tests
-│   ├── test_acb.c           # ACB command tests
-│   ├── test_cb.c            # Cursor command-buffer tests
-│   ├── test_dcb.c           # DCB command tests
-│   ├── test_driver.c        # Submit descriptor tests
-│   ├── test_texture.c       # Texture descriptor tests
-│   └── test_shader.c        # Shader binary tests
-├── samples/
-│   └── hw_test/             # PS5 hardware validation payloads
-│       ├── videoout_linear.c # VideoOut display pipeline smoke test
-│       ├── agc_init.c       # AGC init + NOP submit test
-│       └── Makefile         # ELF + fake-SELF build targets
-├── CMakeLists.txt           # CMake build
-├── Makefile                 # Make build
-├── PLAN.md                  # Architecture and reverse-engineering roadmap
-├── STATUS.md                # Current milestone and roadmap
-├── REFERENCE_FINDINGS.md    # Detailed RE notes and conclusions
-├── AGENTS.md                # Agent guidance and conventions
-├── LICENSE                  # Apache 2.0 license
-└── README.md                # This file
+```text
+GLSL or another SPIR-V source language
+   ↓
+SPIR-V
+   ↓ openagc-psbc (Mesa NIR + ACO)
+AgcShaderRecord + gfx1013 executable + reflection
+   ↓ OpenAGC shader/pipeline binding
+PM4 command stream
 ```
 
-## Sources
+The current low-level path consumes `AgcShaderRecord` data directly. The
+planned native pipeline API will use the compiler's versioned reflection to
+reject descriptor, push-constant, user-SGPR, color-export, attachment,
+blend/sample, wave, tessellation, geometry/NGG, and stage-linkage mismatches
+before command emission.
 
-- Clean rewrite, based on local PS5 firmware ABI analysis
-- PS5 firmware 5.50 SPRX module references
-- AMD RDNA2 public documentation and Mesa packet/register references
-- Existing `ps5-openagc` notes for NID maps (ioctl tables and PM4 cataloging
-  from ps5-openagc are NOT trusted — contains known errors; see
-  `analysis/ps5_openagc_audit.md`)
-- `hle reference` as a PS5 HLE/runtime behavior reference
-- `rpcsx` as a GPU/PM4/GNM queue, packet, tiler, and shader reference
+See [openagc-psbc/README.md](../openagc-psbc/README.md) for compiler-library and
+CLI options.
+
+## Examples and Hardware Validation
+
+### Standalone rotating cube
+
+`examples/cube` is the application-facing example. It consumes an installed
+OpenAGC package, records public gfx1013 commands, presents a triple-buffered
+rotating cube, bounds every GPU wait, and tears down after 3,600 frames.
+
+See [examples/cube/README.md](examples/cube/README.md) for build, shader
+regeneration, and websrv deployment.
+
+### Focused hardware samples
+
+`samples/hw_test` contains guarded payloads for VideoOut, initialization,
+compute, graphics, formats, depth/stencil, HTILE, MSAA, queues, portability,
+teardown, and firmware-specific diagnostics. These programs are qualification
+fixtures, not templates for ordinary application structure.
+
+Build the full sample set with:
+
+```sh
+export PS5_PAYLOAD_SDK=~/ps5-payload-sdk
+export LLVM_CONFIG=/opt/homebrew/opt/llvm@18/bin/llvm-config
+make -C samples/hw_test all
+```
+
+Use guarded deployment targets and etaHEN websrv. Do not use
+`prospero-deploy`; its direct-loader context does not reliably foreground
+VideoOut for these graphics tests.
+
+The ordered FW 5.50 matrix is:
+
+```sh
+make -C samples/hw_test conformance_fw550_check
+make -C samples/hw_test conformance_fw550 PS5_HOST="<console-ip>"
+```
+
+Hardware runners verify firmware identity, pinned hashes, cleanup-first launch,
+bounded completion, sample-specific readback, teardown, residual processes, and
+kernel faults. They stop at the first failure.
+
+## Repository Layout
+
+```text
+include/          Public compatibility and typed gfx1013 headers
+src/              Generic and Prospero implementations
+tests/            Host ABI, packet, runtime, layout, and runner fixtures
+examples/cube/    Installed-package application example
+samples/hw_test/  Guarded PS5 hardware qualification payloads
+shaders/          Reusable clean-room shader sources and records
+tools/            Firmware, packet, capture, ELF, and corpus verification tools
+analysis/         Reverse-engineering evidence and hardware qualification logs
+cmake/            Relocatable package configuration
+```
+
+## Documentation
+
+- [PLAN.md](PLAN.md) — authoritative product roadmap and detailed evidence
+  ledger.
+- [STATUS.md](STATUS.md) — current qualification status and chronological
+  hardware results.
+- [AGENTS.md](AGENTS.md) — build, coding, ABI, safety, and hardware-validation
+  rules.
+- [REFERENCE_FINDINGS.md](REFERENCE_FINDINGS.md) — consolidated recovered AGC
+  behavior.
+- [analysis/](analysis/) — source-specific RE notes, audits, artifact hashes,
+  and bounded hardware reports.
+
+## Scope and Non-Goals
+
+- No firmware SPRX modules, proprietary microcode, or SDK headers are embedded
+  or redistributed.
+- No PS4 `sceGnm*` implementation; that belongs in the sibling `opengnm`
+  project.
+- No assumption that NIDs or private ABIs are stable across firmware.
+- No success stubs for unsupported operations.
+- No claim of full official SDK drop-in completeness or Vulkan conformance.
+- No support claim beyond exact host, SPRX/profile, and hardware evidence.
+
+## Reference Policy
+
+OpenAGC is a clean rewrite informed by independently inspected PS5 firmware
+interfaces, AMD/Mesa/Linux gfx10.3 information, and emulator or open-source GPU
+projects used for cross-checking. Reference code is not copied verbatim.
+
+The incomplete `ps5-openagc` project is used only for NID cross-reference; its
+ioctl layouts and memory facts are not trusted without independent firmware
+verification. See
+[analysis/ps5_openagc_audit.md](analysis/ps5_openagc_audit.md).
+
+Firmware binaries and microcode remain external reverse-engineering inputs and
+must never be committed to this repository.
 
 ## License
 
-Apache 2.0, see [LICENSE](LICENSE).
+Apache License 2.0. See [LICENSE](LICENSE).
