@@ -162,3 +162,12 @@ The identical artifact reproduced `224640` changed pixels,
 `{74880,74880,74880}` regions, zero decode mismatches/error, and FNV64
 `0x16b22a8b52c7ce8d`. All lifecycle gates passed again. BC4 UNORM and SNORM
 are hardware-qualified on exact FW 11.60.
+
+## BC2 corrected artifacts
+
+After the shared valid-mip and compressed-diversity corrections, both BC2
+variants were rebuilt, passed firmware-neutral dependency verification, and
+were preserved before execution:
+
+- UNORM: `e86a53fdb7b3c65cf13dcf66ca0588867d1cb37fab6bbf5b446c654948847b5b`
+- SRGB: `d182824d912f7473f25beeba80ffc58e3ceb31d8a5b7bff678d2237b24c9c5b8`

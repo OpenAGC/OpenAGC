@@ -705,9 +705,9 @@ SPRX dependency. They reuse the BC array/mip shader while uploading independent
 applies SRGB conversion only to RGB, requires exact RGBA8 agreement, demands
 both alpha endpoints and all three mip/layer regions, and records the native
 hash. Exact artifacts are pinned as SHA-256
-`497c8c79b43c49e9079d54167a50fce71b26b5235b4ecf2d2c1034a848513c7a`
+`e86a53fdb7b3c65cf13dcf66ca0588867d1cb37fab6bbf5b446c654948847b5b`
 (UNORM) and
-`ce34b39c3fdf32034e5755ce990b8bc1fc20e01faa6524b32142244cdc40f83c`
+`d182824d912f7473f25beeba80ffc58e3ceb31d8a5b7bff678d2237b24c9c5b8`
 (SRGB), with no-prerequisite FW 11.60 and FW 5.50 targets. Hardware execution
 remains pending a clean FW 11.60 boot.
 

@@ -1116,9 +1116,9 @@ alpha independently, applies SRGB conversion only to RGB, requires exact
 RGBA8 agreement, proves alpha endpoints 0 and 255, validates all mip/layer
 selection regions, and records a native hash. Preserve and pin the final
 firmware-neutral bytes before any hardware execution. The exact SHA-256 values
-are `497c8c79b43c49e9079d54167a50fce71b26b5235b4ecf2d2c1034a848513c7a`
+are `e86a53fdb7b3c65cf13dcf66ca0588867d1cb37fab6bbf5b446c654948847b5b`
 for BC2 UNORM and
-`ce34b39c3fdf32034e5755ce990b8bc1fc20e01faa6524b32142244cdc40f83c`
+`d182824d912f7473f25beeba80ffc58e3ceb31d8a5b7bff678d2237b24c9c5b8`
 for BC2 SRGB. Their guarded endpoint targets have no build prerequisites;
 FW 11.60 execution and identical-byte FW 5.50 replay remain pending.
 
