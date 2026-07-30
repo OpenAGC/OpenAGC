@@ -9,6 +9,7 @@ PROCESS_CLEANUP_ELF=${PROCESS_CLEANUP_ELF:?set PROCESS_CLEANUP_ELF}
 EXPECTED_TARGET=${EXPECTED_TARGET:-offscreen FP16}
 EXPECTED_DRAW_MODE=${EXPECTED_DRAW_MODE:-}
 EXPECTED_VARIANT=${EXPECTED_VARIANT:-}
+REQUIRE_TESS_RINGS=${REQUIRE_TESS_RINGS:-0}
 EXPECTED_FW_ABI=${EXPECTED_FW_ABI:-0x1160}
 REMOTE_BASE=/data/homebrew/openagc_fw${EXPECTED_FW_ABI#0x}_graphics
 
@@ -76,6 +77,12 @@ if [ -n "$EXPECTED_VARIANT" ]; then
 fi
 if [ -n "$EXPECTED_DRAW_MODE" ]; then
     grep -Fq "[Draw] $EXPECTED_DRAW_MODE: 0x00000000" \
+        "$output_file" || exit 1
+fi
+if [ "$REQUIRE_TESS_RINGS" -eq 1 ]; then
+    grep -Fq '[Tess] reusable gfx1013 HS+TES+PS bind: 0x00000000' \
+        "$output_file" || exit 1
+    grep -Eq '^\[Tess Rings\] offchip changed=[1-9][0-9]* factor changed=[1-9][0-9]*$' \
         "$output_file" || exit 1
 fi
 case "$EXPECTED_TARGET" in

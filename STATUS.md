@@ -502,6 +502,13 @@ complete single-white pixels with FNV64 `0xf27532f1c0414783`. Every fence was
 immediate, shutdown passed, and no residual process remained. See
 `analysis/fw1160_ngg_geometry_gate_plan_20260730.md`.
 
+The isolated Wave32 HS+TES+PS tier now has exact logged FW 11.60 and headless
+FW 5.50 artifacts. The runner requires explicit tessellation identity, the
+reusable binder returning `AGC_OK`, positive offchip- and factor-ring mutation,
+the exact FP16 oracle, bounded fence, clean shutdown, and final PASS. Both
+artifacts cross-build without warnings; hardware execution remains pending.
+See `analysis/fw1160_tessellation_gate_plan_20260730.md`.
+
 Exact next-tier ordinary D16/HTILE and D16 HTILE expclear artifacts now build
 for logged FW 11.60 and mirrored headless FW 5.50 profiles. The shared depth
 runner has detached cleanup, optional stale-proof file verdicts, gate-specific

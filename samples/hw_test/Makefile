@@ -610,6 +610,16 @@ agc_graphics_invocations_fw550_headless.elf: agc_graphics.c ps5_video_out.h gpu_
 		-DAGC_GRAPHICS_VARIANT_NAME='"ngg-invocations"' \
 		-o $@ agc_graphics.c $(AGC_LDFLAGS)
 
+agc_tessellation_fw1160_logged.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_tess_hs_front_sb.h shaders/triangle_tess_hs_back_sb.h shaders/triangle_tess_es_front_sb.h shaders/triangle_tess_es_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW1160_GRAPHICS_LOG_FLAGS) -DAGC_TESSELLATION=1 \
+		-DAGC_GRAPHICS_VARIANT_NAME='"tessellation"' \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_tessellation_fw550_headless.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_tess_hs_front_sb.h shaders/triangle_tess_hs_back_sb.h shaders/triangle_tess_es_front_sb.h shaders/triangle_tess_es_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW550_HEADLESS_GRAPHICS_FLAGS) -DAGC_TESSELLATION=1 \
+		-DAGC_GRAPHICS_VARIANT_NAME='"tessellation"' \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
 agc_graphics_indexed.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_DRAW_INDEXED=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
 
@@ -996,7 +1006,8 @@ deploy_agc_graphics: agc_graphics.elf
 	deploy_agc_graphics_indexed_indirect_fw1160_logged \
 	deploy_agc_graphics_amplify_fw1160_logged \
 	deploy_agc_graphics_lines_fw1160_logged \
-	deploy_agc_graphics_invocations_fw1160_logged
+	deploy_agc_graphics_invocations_fw1160_logged \
+	deploy_agc_tessellation_fw1160_logged
 deploy_agc_graphics_fw1160: agc_graphics_fw1160.elf
 	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
@@ -1138,6 +1149,12 @@ deploy_agc_graphics_invocations_fw1160_logged: agc_graphics_invocations_fw1160_l
 		RESULT_LOG_PATH=/data/homebrew/openagc_fw1160_graphics/result.log \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
 
+deploy_agc_tessellation_fw1160_logged: agc_tessellation_fw1160_logged.elf
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_VARIANT=tessellation REQUIRE_TESS_RINGS=1 \
+		RESULT_LOG_PATH=/data/homebrew/openagc_fw1160_graphics/result.log \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
+
 .PHONY: deploy_agc_graphics_rgba8_unorm_fw550_headless \
 	deploy_agc_graphics_bgra8_unorm_fw550_headless \
 	deploy_agc_graphics_rgba8_srgb_fw550_headless \
@@ -1147,7 +1164,8 @@ deploy_agc_graphics_invocations_fw1160_logged: agc_graphics_invocations_fw1160_l
 	deploy_agc_graphics_indexed_indirect_fw550_headless \
 	deploy_agc_graphics_amplify_fw550_headless \
 	deploy_agc_graphics_lines_fw550_headless \
-	deploy_agc_graphics_invocations_fw550_headless
+	deploy_agc_graphics_invocations_fw550_headless \
+	deploy_agc_tessellation_fw550_headless
 deploy_agc_graphics_rgba8_unorm_fw550_headless: agc_graphics_rgba8_unorm_fw550_headless.elf
 	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
 		EXPECTED_FW_ABI=0x0550 EXPECTED_TARGET=RGBA8_UNORM \
@@ -1200,6 +1218,12 @@ deploy_agc_graphics_invocations_fw550_headless: agc_graphics_invocations_fw550_h
 	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
 		EXPECTED_FW_ABI=0x0550 EXPECTED_VARIANT=ngg-invocations \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
+
+deploy_agc_tessellation_fw550_headless: agc_tessellation_fw550_headless.elf
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_FW_ABI=0x0550 EXPECTED_VARIANT=tessellation \
+		REQUIRE_TESS_RINGS=1 PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) \
+		sh ./run_fw1160_graphics.sh
 
 .PHONY: deploy_agc_depth_d16_fw1160 deploy_agc_stencil_s8_fw1160 \
 	deploy_agc_depth_stencil_d16_s8_fw1160 \
