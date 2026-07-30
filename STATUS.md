@@ -89,7 +89,7 @@ the GPU `0x504f5254` marker, two bounded flips, zero-valued teardown, and
 relaunch all passed. The same preserved bytes remain reserved for FW5.50.
 All other active exact profiles remain SPRX-qualified/hardware-unverified.
 
-Offline portability closure is complete. The clean generic suite passes 5,650
+Offline portability closure is complete. The clean generic suite passes 5,663
 assertions, including full raw-version normalization, exact profile selection,
 and common-V7 acceptance across all 39 active profiles; the clean Prospero
 cross-build also passes. Submission, queue, memory, suspend, workload, TF/HS,
@@ -707,6 +707,31 @@ Full evidence and artifact hashes are in
 `samples/hw_test/conformance-logs/formats-20260727/`. Further 16-bit tuples
 remain pending and are not advertised as hardware-qualified.
 
+## Sony indirect-draw ABI correction (2026-07-30)
+
+Primary `libSceAgc.sprx` evidence from all 39 active FW 3.20-12.70 profiles
+corrects four public exports without changing the separately qualified
+gfx1013 consumer path. `sceAgcDcbDrawIndirect` and
+`sceAgcDcbDrawIndexIndirect` use `(cb, data_offset, modifier)` and emit five
+dwords. The two multi exports take count-indirect, maximum-count, count-address,
+stride, and modifier arguments and emit ten-dword cores after atomically
+reserving their 64-byte GetSize maximum. Their zero-payload user-data wrapper
+calls return zero dwords on every active driver profile, so successful cursors
+advance by ten.
+
+Exact fixtures lock headers, every modifier-derived field, aligned 64-bit
+count addresses, cursor advance, 15-dword failure atomicity, and the FW 3.20
+initiator variant. FW 3.20 alone preserves modifier bits 5-7 in initiator bits
+29-31; FW 4.00 through FW 12.70 share the standard form. NID provenance is
+also corrected: `1q1titRBL6o` is `sceAgcDcbDrawIndirect`, while
+`1rZSWUv1IRc` is `sceAgcDcbCopyData`.
+
+These Sony-compatible exports are SPRX-qualified and host-tested, not newly
+hardware-qualified. The earlier failed Mesa-style ten-dword experiment used a
+different layout. `agcGfx1013DrawBaselineIndirect` retains the hardware-proven
+5/7-dword application stream and its 45/55-dword exact fixtures. See
+`analysis/agc_indirect_draw_abi.md`.
+
 ## Application-facing indexed/indirect draw composition (2026-07-27)
 
 The gfx1013 baseline graphics API now composes the existing hardware-oriented
@@ -735,17 +760,18 @@ using canonical control value zero passed, and an exact host assertion now
 locks that header. Full evidence is in
 `analysis/fw550_indexed_indirect_qualification_20260727.md`.
 
-The later Vulkan multi-draw audit compared the recovered 7-dword PS5 packet
-against Mesa's 10-dword gfx10+ definition. A bounded FW 5.50 run on 2026-07-28
-tested the 10-dword form and failed at submission: PID 156 received a fatal GPU
+The later Vulkan multi-draw audit compared the application-facing 7-dword PS5
+packet against Mesa's 10-dword gfx10+ definition. A bounded FW 5.50 run on
+2026-07-28 tested that Mesa-style form and failed at submission: PID 156 received a fatal GPU
 signal, the graphics queue remained active, and the kernel reset the GPU. The
-console recovered, but this disproved that cross-platform packet assumption.
-OpenAGC therefore retains the earlier 7-dword PS5 form, which had already
-passed multi-indirect readback on FW 5.50. The typed DrawIndex fields remain
+console recovered, but this disproved that cross-platform packet assumption;
+it did not test the separately recovered Sony 10-dword public export layout.
+OpenAGC retains the 7-dword application form, which had already passed
+multi-indirect readback on FW 5.50. The typed DrawIndex fields remain
 reserved and are rejected when nonzero; Vulkan consumers can implement
 DrawIndex by issuing single indirect packets with explicit user-SGPR values.
-Exact low-level and typed fixtures again lock the 7-dword/55-dword streams and
-reject unqualified DrawIndex controls.
+Exact typed fixtures lock the 7-dword/55-dword application streams and reject
+unqualified DrawIndex controls.
 
 ## Application-facing buffer-copy composition (2026-07-28)
 

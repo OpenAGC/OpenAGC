@@ -65,8 +65,9 @@ ps5debug-NG found no residual `eboot` between or after the runs; ports 744 and
 8080 remained reachable.
 
 This independently hardware-qualifies the three draw-composition variants on
-the tested FW 11.60 console. It does not qualify count-buffer multi-draw or the
-rejected Mesa-style 10-dword packet form.
+the tested FW 11.60 console. It does not qualify count-buffer multi-draw, the
+rejected Mesa-style 10-dword packet form, or the subsequently recovered and
+byte-distinct Sony 10-dword public export layout.
 
 ## Execution policy
 

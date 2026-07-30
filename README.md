@@ -156,7 +156,8 @@ Completed and tested:
 - HLE-reference-confirmed `sceAgcCb*` and `sceAgcDcb*` packet builders for NOP,
   dispatch, SH registers, release memory, indirect register sets, write-data,
   wait-reg-mem, DMA, indirect dispatch/base args, index buffer setup, indexed
-  draw packets, FW 5.50-qualified 7-dword fixed-count multi-indirect packets,
+  draw packets, FW 5.50-qualified application-facing 7-dword fixed-count
+  multi-indirect packets, SPRX-qualified Sony 10-dword count-address exports,
   markers, wait-safe, flip, and LOD stats helpers
 - ACB packet builders for event write, atomic mem/GDS, cond exec, wait-reg-mem,
   write/copy/dma data, mem semaphore, acquire mem, queue reset, rewind, set

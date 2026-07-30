@@ -588,7 +588,8 @@ identification only) at:
 | `wr23dPKyWc0` | AGC/VSH | `sceAgcCbReleaseMem` | String "isReleaseMemValid", opcode 0x49 |
 | `w1KFAHVqpaU` | AGC/VSH | `sceAgcDcbIndirectBuffer` | Opcode 0x3F, 14-dword IB |
 | `xSAR0LTcRKM` | AGC/VSH | `sceAgcDcbJump` | Opcode 0x3F, 4-dword IB |
-| `1rZSWUv1IRc` | AGC/VSH | `sceAgcDcbDrawIndirect` | Opcode 0x24, VGT_INDEX_TYPE ref |
+| `1rZSWUv1IRc` | AGC/VSH | `sceAgcDcbCopyData` | Corrected by NID computation and FW 5.50 export audit |
+| `1q1titRBL6o` | AGC/VSH | `sceAgcDcbDrawIndirect` | Opcode 0x24, modifier ABI |
 | `q88lQ+GP5Yk` | AGC/VSH | `sceAgcDcbDrawIndex2` | Opcode 0x27 |
 | `t1vNu082-jM` | AGC/VSH | `sceAgcDcbDrawIndexIndirect` | Opcode 0x25 |
 | `kUlvghKs-mA` | AGC/VSH | `sceAgcDcbDrawIndirectMulti` | Opcode 0x2C |

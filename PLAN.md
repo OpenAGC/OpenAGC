@@ -95,7 +95,12 @@ Execute in this order:
 7. **Complete:** preserve the same artifact for future intermediate-firmware testing. Until
    matching hardware exists, run corpus verifiers and host fixtures for every
    exact profile and report those rows as SPRX-qualified/hardware-unverified.
-8. Resume higher-level parity work only with firmware-neutral artifacts so
+8. **Complete:** recover the Sony indirect-draw public ABI across all 39
+   active profiles. Keep its 5/10-dword exports distinct from the
+   hardware-qualified application-facing 5/7-dword path, select the sole FW
+   3.20 initiator difference by exact runtime key, and lock modifier,
+   count-address, GetSize, cursor, and short-buffer behavior with fixtures.
+9. Resume higher-level parity work only with firmware-neutral artifacts so
    each new game-facing capability strengthens the one-binary contract.
 
 The FW 11.60 public VideoOut lifecycle and flexible-memory relaunch stress are
@@ -114,7 +119,7 @@ and relaunch. The FW5.50 identical-byte run remains pending. See
 
 The offline endpoint audit is complete. Full nonzero-suffix raw versions now
 exercise normalization, exact selection, and common-V7 acceptance for all 39
-profiles; the clean host suite passes 5,650 assertions. All relevant SPRX
+profiles; the clean host suite passes 5,663 assertions. All relevant SPRX
 ledgers reproduce from `/Volumes/Untitled/unp`, and
 `tools/verify_fw550_fw1160_compatibility.py` locks every shared layout and
 classified endpoint difference. The FW5.50 target now uses only preserved
@@ -2814,12 +2819,13 @@ Next execution order:
 5. **Host complete:** application-facing single/multi indirect composition now
    covers indexed and non-indexed arguments, argument-base and offset
    alignment, stride validation, register locations, and exact golden streams.
-   Count-buffer-driven draws remain a later extension because the recovered
-   FW 5.50 packet builders currently expose fixed draw counts only. A bounded
-   2026-07-28 test of the Mesa-style gfx10+ 10-dword form caused a GPU fault and
-   reset, so OpenAGC retains the hardware-proven PS5 7-dword form. DrawIndex
-   control stays reserved until a PS5-native encoding is recovered and
-   qualified.
+   The hardware-qualified consumer retains its PS5 7-dword fixed-count form.
+   The separately recovered Sony public exports now expose their native
+   ten-dword count-address layout across all 39 active profiles, but remain
+   SPRX-qualified/hardware-unverified and are not substituted into this path.
+   A bounded 2026-07-28 test of a different Mesa-style gfx10+ ten-dword form
+   caused a GPU fault and reset. DrawIndex control stays reserved in the typed
+   consumer until the Sony form is independently hardware-qualified.
 6. **Hardware complete:** direct u16 indexed, non-indexed indirect, and u16
    indexed-indirect each passed separately on FW `0x0550` through curl/websrv
    with exact FP16 coverage, completion fence, Wave32 audit, and 1,800 flips.
