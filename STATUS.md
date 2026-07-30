@@ -180,10 +180,13 @@ arithmetic. The generic suite passes 7,869 assertions and the clean Prospero
 cross-build passes. Sibling psbc commit `7706efb` adds a tested UINT16_ABGR
 selector, and the dedicated coordinate-derived integer shader plus exact
 `uint16_t` oracle build as a firmware-neutral ELF without AGC SPRX
-dependencies. The final unexecuted artifact is pinned as SHA-256
-`8136a9a22005e1f9087b9d24402bac47ee66463a13c351500652276e34fa34b4`;
+dependencies. The corrected unexecuted artifact is pinned as SHA-256
+`aabefd4d05f8d7ea7f56f917ae79c23f60eccf801627f06a053451e74ae8bf18`;
 FW 11.60 execution and exact FW 5.50 replay remain pending. See
 `analysis/gfx1013_integer_color_export_contract_20260730.md`.
+The retired first SHA executed its draw and fence once but exposed psbc's stale
+8-bit clamp; it must not be rerun. See
+`analysis/fw1160_r16_uint_first_attempt_20260730.md`.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability

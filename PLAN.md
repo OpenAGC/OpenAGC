@@ -299,9 +299,12 @@ the runner and shared teardown on FW 11.60 only.
   dedicated coordinate-derived unsigned shader and exact per-pixel native
   oracle build as a firmware-neutral R16_UINT ELF. The unexecuted final bytes
   are pinned as SHA-256
-  `8136a9a22005e1f9087b9d24402bac47ee66463a13c351500652276e34fa34b4`;
+  `aabefd4d05f8d7ea7f56f917ae79c23f60eccf801627f06a053451e74ae8bf18`;
   run that artifact twice through the guarded FW 11.60 target next. See
   `analysis/gfx1013_integer_color_export_contract_20260730.md`.
+  The retired first artifact proved GPU execution but exposed a stale psbc
+  8-bit clamp; sibling commit `c624c5c` fixes it. See
+  `analysis/fw1160_r16_uint_first_attempt_20260730.md`.
 - Seven additional offscreen format gates now build under the same exact
   profile and bounded runner: R8, RG8, RGB10A2, R11G11B10, R32, RG32, and
   RGBA32. All seven passed twice on FW 11.60; logged RG32 reproduced FNV64

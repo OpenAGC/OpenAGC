@@ -50,9 +50,13 @@ R16_UINT ELF builds successfully, passes the firmware-neutral verifier, and
 contains no AGC SPRX dependency. The final unexecuted bytes are preserved as:
 
 ```text
-samples/hw_test/pinned/agc_graphics_r16_uint-8136a9a22005e1f9087b9d24402bac47ee66463a13c351500652276e34fa34b4.elf
-SHA-256 8136a9a22005e1f9087b9d24402bac47ee66463a13c351500652276e34fa34b4
+samples/hw_test/pinned/agc_graphics_r16_uint-aabefd4d05f8d7ea7f56f917ae79c23f60eccf801627f06a053451e74ae8bf18.elf
+SHA-256 aabefd4d05f8d7ea7f56f917ae79c23f60eccf801627f06a053451e74ae8bf18
 ```
 
 The FW 11.60 and FW 5.50 guarded targets have no build prerequisites and
-authenticate the local and uploaded bytes. Hardware execution remains pending.
+authenticate the local and uploaded bytes. The previous SHA
+`8136a9a22005e1f9087b9d24402bac47ee66463a13c351500652276e34fa34b4`
+was retired after its single diagnostic run exposed psbc's stale 8-bit clamp.
+See `analysis/fw1160_r16_uint_first_attempt_20260730.md`. Hardware execution of
+the corrected bytes remains pending.
