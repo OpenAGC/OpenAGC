@@ -268,6 +268,9 @@ The opt-in combined-tree contract test now compiles real `openagc-psbc`
 vertex/fragment/compute output and creates OpenAGC graphics/compute pipelines
 without sample-local register knowledge; its 256-byte code alignment and
 no-GS NGG front-program patching are validated on the host.
+For file-based consumers, `openagc-psbc --reflection-header` now emits the
+matching pointer-free reflection sidecar, so a sample can use compiler facts
+without reconstructing metadata from its shader record.
 Compiler-fused VS-front/GS-back geometry pipelines are
 host-packaged for the already-qualified triangle and line inputs plus compiler
 invocation counts; redundant standalone VS handles, incomplete input

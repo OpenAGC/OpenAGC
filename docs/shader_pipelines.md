@@ -23,6 +23,14 @@ The compiler's FNV-1a stage-linkage hash covers the four interface masks; the
 runtime recomputes it and rejects altered linkage metadata before creating a
 shader handle.
 
+For file-based builds, `openagc-psbc --reflection-header <path>` emits the
+matching serialized reflection as a pointer-free C byte artifact. Pair that
+header with the `.sb` output from the same compiler invocation and copy its
+bytes into `AgcShaderReflection` before `agcCreateShader`; do not recreate
+metadata from the shader record or application conventions. Use
+`--reflection-symbol <identifier>` when a translation unit embeds more than
+one artifact.
+
 Create a reflected shader with `AGC_SHADER_DESC_INIT`, setting `code`,
 `code_size`, and `reflection`; fused records also set `front_code` and
 `front_code_size`. `agcCreateShader` validates the complete contract before the
