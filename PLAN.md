@@ -454,7 +454,67 @@ After the regular matrix is stable, evaluate evidence and homebrew demand for:
 
 Do not add obscure hardware encodings merely to make the enum larger.
 
-#### 6. Use firmware-neutral qualification artifacts
+#### 6. Qualify block-compressed textures separately
+
+The 128-bit-per-pixel ceiling applies only to regular uncompressed color
+surfaces and uncompressed texture texels. Block-compressed textures use a
+separate storage contract measured in bits per block. For the currently
+declared BC formats, OpenAGC's product-scope ceiling is 128 bits per compressed
+4x4 block, not 128 bits per pixel:
+
+| Format family | Bytes per 4x4 block | Nominal full-block storage |
+| --- | ---: | ---: |
+| BC1, BC4 | 8 | 4 bits per pixel |
+| BC2, BC3, BC5, BC6, BC7 | 16 | 8 bits per pixel |
+
+Keep block-compressed textures distinct from DCC, CMASK, FMASK, and HTILE.
+BC1-BC7 are application-visible sampled texture formats. DCC/CMASK/FMASK and
+HTILE are auxiliary GPU metadata for otherwise ordinary color or depth
+surfaces and do not change the surface's logical format or bits per pixel.
+
+`kAgcDataFormatBc1` through `kAgcDataFormatBc7` already exist in the public
+texture enum, but enum and descriptor coverage alone are not hardware
+qualification. Before advertising a BC format, implement and test a complete
+layout and sampling path with these independent properties:
+
+- Block width and height.
+- Bytes per block.
+- Compatible number type, including UNORM, SNORM, SRGB, or the signed/unsigned
+  BC6 floating-point interpretation where applicable.
+- Tile mode, row pitch, slice size, alignment, mip offsets, array layers, and
+  cube faces.
+- Component selection and exact texture-descriptor encoding.
+
+Every BC layout must use checked arithmetic and ceiling-divided block counts.
+Widths and heights below four texels still occupy at least one complete block.
+Tests must cover partial edge blocks, 1x1 through 4x4 mip levels, non-multiple-
+of-four dimensions, complete mip chains, arrays, cube faces, maximum accepted
+dimensions, and overflow rejection.
+
+Qualify the existing BC families in increasing decoding and oracle risk:
+
+1. BC1 UNORM and SRGB.
+2. BC4 UNORM and SNORM.
+3. BC2 UNORM and SRGB.
+4. BC3 UNORM and SRGB.
+5. BC5 UNORM and SNORM.
+6. BC7 UNORM and SRGB.
+7. BC6 unsigned and signed floating point.
+
+Use dedicated, deterministic source blocks containing endpoint, index,
+alpha, signed-range, and edge-block cases appropriate to each format. A
+hardware gate must sample the compressed texture into an already-qualified
+uncompressed render target, wait on a bounded fence, and validate exact or
+format-tolerant decoded texels as appropriate plus a reproducible native
+render-target hash. It must also prove mip and layer selection rather than
+qualifying only base level zero.
+
+BC formats are sampled-texture formats, not color-render-target formats; do
+not route them through the color-target tuple table or assign them a
+pixel-shader export format. Do not add ASTC or other compression families
+without primary firmware evidence and a concrete homebrew requirement.
+
+#### 7. Use firmware-neutral qualification artifacts
 
 Every new hardware gate must:
 
@@ -472,7 +532,7 @@ Use the identical ELF twice on FW 11.60. Later, run those exact bytes on FW
 5.50; never rebuild between endpoint tests. A source-equivalent rebuild does
 not satisfy the endpoint-portability gate.
 
-#### 7. Qualification labels
+#### 8. Qualification labels
 
 Track three states independently:
 
@@ -485,7 +545,7 @@ hardware-qualified on FW 5.50 or the other 37 profiles. Identical SPRX/profile
 findings strengthen ABI evidence but do not promote a profile to
 hardware-qualified status.
 
-#### 8. Guarded hardware sequence
+#### 9. Guarded hardware sequence
 
 For each new tuple:
 
