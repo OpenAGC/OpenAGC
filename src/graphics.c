@@ -1462,6 +1462,11 @@ static const AgcGfx1013ColorTargetFormatEntry
           AGC_GFX1013_SURFACE_NUMBER_UINT,
           AGC_GFX1013_SURFACE_SWAP_STD, 4u,
           AGC_GFX1013_SPI_EXPORT_UINT16_ABGR}},
+        {AGC_GFX1013_RT_FORMAT_RGBA16_UINT,
+         {AGC_GFX1013_COLOR_FORMAT_16_16_16_16,
+          AGC_GFX1013_SURFACE_NUMBER_UINT,
+          AGC_GFX1013_SURFACE_SWAP_STD, 8u,
+          AGC_GFX1013_SPI_EXPORT_UINT16_ABGR}},
 };
 
 _Static_assert(sizeof(kAgcGfx1013ColorTargetFormats) /

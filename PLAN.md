@@ -321,6 +321,11 @@ the runner and shared teardown on FW 11.60 only.
   FNV64 `0xb4bccb0f2909e483`, immediate fences, and clean teardown. Exact FW
   5.50 replay remains pending. See
   `analysis/fw1160_rg16_uint_portable_qualification_20260730.md`.
+- `RGBA16_UINT` is host-qualified as append-only value 22 with gfx1013
+  `16_16_16_16`, UINT, standard swap, eight bytes per pixel, and UINT16_ABGR
+  export 7. Exact PM4 (`CB_COLOR0_INFO=0x00070430`), all-profile selection,
+  every short-buffer boundary, invalid-enum behavior, and maximum 64-bit
+  layout arithmetic pass. The four-lane portable gate is next.
 - Seven additional offscreen format gates now build under the same exact
   profile and bounded runner: R8, RG8, RGB10A2, R11G11B10, R32, RG32, and
   RGBA32. All seven passed twice on FW 11.60; logged RG32 reproduced FNV64
@@ -513,7 +518,7 @@ After normalized formats pass, qualify:
 
 1. `R16_UINT` — complete on FW 11.60; exact FW 5.50 replay pending.
 2. `RG16_UINT` — complete on FW 11.60; exact FW 5.50 replay pending.
-3. `RGBA16_UINT`.
+3. `RGBA16_UINT` — host-qualified; portable four-lane gate pending.
 4. `R16_SINT`.
 5. `RG16_SINT`.
 6. `RGBA16_SINT`.

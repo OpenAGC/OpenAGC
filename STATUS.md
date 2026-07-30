@@ -207,6 +207,14 @@ FNV64 `0xb4bccb0f2909e483`, immediate fences, and zero-valued teardown. Exact FW
 5.50 replay remains pending. See
 `analysis/fw1160_rg16_uint_portable_qualification_20260730.md`.
 
+`AGC_GFX1013_RT_FORMAT_RGBA16_UINT` is appended at value 22 and maps to
+`(format=0x0c, number=UINT, swap=standard)`, eight bytes per pixel, and
+UINT16_ABGR export 7. Exact host coverage locks
+`CB_COLOR0_INFO=0x00070430`, the complete PM4 stream, all 39 profiles, every
+short command buffer, invalid enums, and maximum 64-bit layout arithmetic.
+The generic suite passes 8,635 assertions and the clean Prospero build passes.
+The four-lane portable hardware gate remains pending.
+
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability
 ELF, non-indexed and indexed 10-dword multi-draw, GPU count-buffer selection,
@@ -215,7 +223,7 @@ twice on FW 11.60 before pinning. FW 5.50 execution remains pending; none of
 these FW 11.60 results is labeled cross-firmware hardware qualification. See
 `analysis/fw1160_rg16_unorm_and_endpoint_replay_20260730.md`.
 
-Offline portability closure is complete. The generic suite passes 8,252
+Offline portability closure is complete. The generic suite passes 8,635
 assertions, including full raw-version normalization, exact profile selection,
 and common-V7 acceptance across all 39 active profiles; the clean Prospero
 cross-build also passes. Submission, queue, memory, suspend, workload, TF/HS,
