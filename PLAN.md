@@ -329,8 +329,11 @@ the runner and shared teardown on FW 11.60 only.
   with the integer fragment shader and passes firmware-neutral dependency
   verification. The final unexecuted ELF is pinned as SHA-256
   `22bd65d4b3f0aec4659685d01b100b4e83617710c6fb01c82f04cd13f0a89a84`.
-  Run those identical bytes twice on FW 11.60; exact FW 5.50 replay remains
-  pending.
+  Those identical bytes passed twice on FW `0x11600005`: all four lanes
+  reproduced exact `0x0000..0xffff` ranges with zero mismatches, independent
+  hashes, packed FNV64 `0x2aab55d32909e483`, immediate fences, and clean
+  teardown. Exact FW 5.50 replay remains pending. See
+  `analysis/fw1160_rgba16_uint_portable_qualification_20260730.md`.
 - Seven additional offscreen format gates now build under the same exact
   profile and bounded runner: R8, RG8, RGB10A2, R11G11B10, R32, RG32, and
   RGBA32. All seven passed twice on FW 11.60; logged RG32 reproduced FNV64
@@ -523,7 +526,7 @@ After normalized formats pass, qualify:
 
 1. `R16_UINT` — complete on FW 11.60; exact FW 5.50 replay pending.
 2. `RG16_UINT` — complete on FW 11.60; exact FW 5.50 replay pending.
-3. `RGBA16_UINT` — host-qualified; portable four-lane gate pending.
+3. `RGBA16_UINT` — complete on FW 11.60; exact FW 5.50 replay pending.
 4. `R16_SINT`.
 5. `RG16_SINT`.
 6. `RGBA16_SINT`.

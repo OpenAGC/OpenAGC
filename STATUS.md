@@ -217,7 +217,11 @@ The isolated four-lane portable gate builds with the UINT16_ABGR shader and
 passes firmware-neutral dependency verification. The final unexecuted ELF is
 pinned as SHA-256
 `22bd65d4b3f0aec4659685d01b100b4e83617710c6fb01c82f04cd13f0a89a84`.
-Two identical-byte FW 11.60 runs and exact FW 5.50 replay remain pending.
+The identical bytes passed twice on FW `0x11600005`: all four lanes covered
+255,744 samples, reached `0x0000..0xffff`, had zero exact mismatches and
+independent hashes, and reproduced packed FNV64 `0x2aab55d32909e483` with
+immediate fences and clean teardown. Exact FW 5.50 replay remains pending.
+See `analysis/fw1160_rgba16_uint_portable_qualification_20260730.md`.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability
