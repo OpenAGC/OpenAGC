@@ -378,6 +378,15 @@ shaders/uint32_rgba_frag.sb: shaders/uint32_frag.spv
 shaders/uint32_rgba_frag_sb.h: shaders/uint32_rgba_frag.sb
 	xxd -i -n uint32_rgba_frag_data $< $@
 
+shaders/sint32_frag.spv: shaders/sint32_frag.frag
+	$(GLSLANG) -V --target-env vulkan1.2 $< -o $@
+
+shaders/sint32_r_frag.sb: shaders/sint32_frag.spv
+	$(PSBC) -f $< -s fragment --color-export 32_r -o $@
+
+shaders/sint32_r_frag_sb.h: shaders/sint32_r_frag.sb
+	xxd -i -n sint32_r_frag_data $< $@
+
 shaders/triangle_line_frag.sb: shaders/triangle_line_frag.spv
 	$(PSBC) -f $< -s fragment -o $@
 
@@ -705,6 +714,12 @@ agc_graphics_rg32_uint_portable.elf: agc_graphics.c ps5_video_out.h gpu_credenti
 
 agc_graphics_rgba32_uint_portable.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/uint32_rgba_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) $(PORTABLE_GRAPHICS_FLAGS) -DAGC_VALIDATE_RGBA32_UINT=1 \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+	../../tools/verify_firmware_neutral_elf.sh $@ \
+		/data/homebrew/openagc_portable_graphics/result.log
+
+agc_graphics_r32_sint_portable.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/sint32_r_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(PORTABLE_GRAPHICS_FLAGS) -DAGC_VALIDATE_R32_SINT=1 \
 		-o $@ agc_graphics.c $(AGC_LDFLAGS)
 	../../tools/verify_firmware_neutral_elf.sh $@ \
 		/data/homebrew/openagc_portable_graphics/result.log
