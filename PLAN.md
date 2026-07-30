@@ -632,6 +632,12 @@ all six pinned artifacts for identical-byte FW 5.50 replay and proceed to the
   pinned as SHA-256
   `ef3871f19d6e706fe428eb5ac5df1af0b5796beb4fd47ff42c9e1a66a02327c4`.
 
+- `RGBA32_SINT` is host-qualified as append-only value 31 with gfx1013
+  `32_32_32_32`, SINT, standard swap, 16 bytes per pixel, and `32_ABGR`
+  export 9. Exact PM4 (`CB_COLOR0_INFO=0x00070538`), all-profile selection,
+  every short-buffer boundary, invalid-enum behavior, and maximum layout
+  arithmetic pass. Build and pin its four-lane signed gate offline.
+
 These formats need dedicated integer-output pixel shaders. Do not qualify them
 using a floating-point shader and assume the conversion is correct. Their
 oracles must validate exact integer values rather than approximate
