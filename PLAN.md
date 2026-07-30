@@ -628,7 +628,9 @@ all six pinned artifacts for identical-byte FW 5.50 replay and proceed to the
   (`CB_COLOR0_INFO=0x0007052c`), all-profile selection, every short-buffer
   boundary, invalid-enum behavior, and maximum layout arithmetic pass. Build
   and pin its two-lane signed gate offline. The firmware-neutral gate now
-  builds with `32_GR` and exact independent-lane checks.
+  builds with `32_GR` and exact independent-lane checks. Its final bytes are
+  pinned as SHA-256
+  `ef3871f19d6e706fe428eb5ac5df1af0b5796beb4fd47ff42c9e1a66a02327c4`.
 
 These formats need dedicated integer-output pixel shaders. Do not qualify them
 using a floating-point shader and assume the conversion is correct. Their

@@ -334,7 +334,9 @@ hardware execution remains ordered behind the clean-boot UINT gates.
 PM4, all 39 profiles, every short command-buffer boundary, invalid enums, and
 maximum 64-bit surface arithmetic. The generic suite passes 11,699 assertions;
 its dedicated `32_GR` shader and exact two-lane signed oracle build as a
-firmware-neutral portable gate. Final-byte pinning remains pending.
+firmware-neutral portable gate. Its final bytes are pinned as SHA-256
+`ef3871f19d6e706fe428eb5ac5df1af0b5796beb4fd47ff42c9e1a66a02327c4`;
+hardware execution remains ordered behind the clean-boot UINT gates.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability
