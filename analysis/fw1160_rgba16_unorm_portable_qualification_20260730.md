@@ -76,8 +76,11 @@ UNORM value. The oracle therefore combines bounded coverage, per-lane ranges,
 diversity, hashes, and channel independence instead of rejecting legal
 sentinel collisions.
 
-After the second run, the cleanup ELF was launched again. Websrv TCP 8080 and
-ps5debug-NG TCP 744 remained reachable.
+After the second run, the cleanup ELF was launched again. A direct ps5debug-NG
+process-list query enumerated 157 processes and found no `eboot.elf` or
+`eboot.bin`. Websrv TCP 8080, the debugger on TCP 744, and its kernel-log
+forwarder on TCP 3232 remained reachable; the bounded kernel-log check emitted
+no fault record.
 
 ## Qualification boundary
 

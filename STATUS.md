@@ -123,8 +123,10 @@ passed twice on standard FW `0x11600005`. Both runs reproduced 255,744 pixels
 in `768x665` bounds, packed native FNV64 `0xbad47fbdb2e3991e`, and four
 pairwise-distinct lane hashes; every lane had at least eight values and
 approached both UNORM endpoints. Submission fences were immediate and driver
-plus memory teardown passed. The exact file is preserved for a no-rebuild FW
-5.50 replay. Other profiles remain hardware-unverified. See
+plus memory teardown passed. A post-run ps5debug-NG query found no residual
+`eboot`, and the live kernel-log check emitted no fault record. The exact file
+is preserved for a no-rebuild FW 5.50 replay. Other profiles remain
+hardware-unverified. See
 `analysis/fw1160_rgba16_unorm_portable_qualification_20260730.md`.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
