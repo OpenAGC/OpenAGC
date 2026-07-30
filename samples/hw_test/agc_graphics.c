@@ -521,6 +521,9 @@ int sceKernelDeleteEqueue(SceKernelEqueue equeue);
 #ifndef AGC_VALIDATE_RG16_UNORM
 #define AGC_VALIDATE_RG16_UNORM 0
 #endif
+#ifndef AGC_VALIDATE_RGBA16_UNORM
+#define AGC_VALIDATE_RGBA16_UNORM 0
+#endif
 #ifndef AGC_VALIDATE_R8_UNORM
 #define AGC_VALIDATE_R8_UNORM 0
 #endif
@@ -547,6 +550,7 @@ int sceKernelDeleteEqueue(SceKernelEqueue equeue);
      AGC_VALIDATE_RGBA8_SRGB + AGC_VALIDATE_BGRA8_SRGB + \
      AGC_VALIDATE_R16_FLOAT + AGC_VALIDATE_RG16_FLOAT + \
      AGC_VALIDATE_R16_UNORM + AGC_VALIDATE_RG16_UNORM + \
+     AGC_VALIDATE_RGBA16_UNORM + \
      AGC_VALIDATE_R8_UNORM + AGC_VALIDATE_RG8_UNORM + \
      AGC_VALIDATE_R32_FLOAT + AGC_VALIDATE_RG32_FLOAT + \
      AGC_VALIDATE_RGBA32_FLOAT) > 1
@@ -1925,10 +1929,19 @@ static bool dispatch_graphics(GraphicsTest *test,
 #endif
     /* RGBA8 texels: red, green / blue, white. Bilinear sampling produces a
      * visibly distinct two-dimensional gradient inside the triangle. */
+#if AGC_VALIDATE_RGBA16_UNORM
+    /* Exercise all four stored lanes independently, including alpha's full
+     * UNORM range, while retaining the RGB endpoint/diversity oracle. */
+    static const uint32_t texture_pixels[4] = {
+        0x000000FFu, 0xFF00FF00u,
+        0x55FF0000u, 0xAAFFFFFFu,
+    };
+#else
     static const uint32_t texture_pixels[4] = {
         0xFF0000FFu, 0xFF00FF00u,
         0xFFFF0000u, 0xFFFFFFFFu,
     };
+#endif
     memcpy(gpu_texture, texture_pixels, sizeof(texture_pixels));
     int32_t resource_error = agcGfx1013BufferDescriptorEncode(
         (AgcGfx1013BufferDescriptor *)vertex_desc,
@@ -3017,8 +3030,11 @@ static bool dispatch_graphics(GraphicsTest *test,
                        (unsigned long long)lane_hash[lane],
                        lane_pass ? "PASS" : "FAIL");
             }
-            const bool independent = components < 2u ||
-                lane_hash[0] != lane_hash[1];
+            bool independent = true;
+            for (uint32_t lhs = 0u; lhs < components; ++lhs) {
+                for (uint32_t rhs = lhs + 1u; rhs < components; ++rhs)
+                    independent &= lane_hash[lhs] != lane_hash[rhs];
+            }
             lane_encoding_pass &= independent;
             printf("[UNORM16] Channel independence: %s\n",
                    independent ? "PASS" : "FAIL");
@@ -3243,7 +3259,8 @@ static void visualize_fp16(GraphicsTest *test, uint32_t components) {
            components, preview_width, preview_height);
 }
 
-#if AGC_VALIDATE_R16_UNORM || AGC_VALIDATE_RG16_UNORM
+#if AGC_VALIDATE_R16_UNORM || AGC_VALIDATE_RG16_UNORM || \
+    AGC_VALIDATE_RGBA16_UNORM
 static void visualize_unorm16(GraphicsTest *test, uint32_t components) {
     const uint16_t *source = (const uint16_t *)test->render_target;
     uint32_t *display = (uint32_t *)test->buffers[0];
@@ -3263,14 +3280,25 @@ static void visualize_unorm16(GraphicsTest *test, uint32_t components) {
             const uint16_t red16 = source[source_index];
             const uint16_t green16 = components > 1u ?
                 source[source_index + 1u] : 0u;
+            const uint16_t blue16 = components > 2u ?
+                source[source_index + 2u] : 0u;
+            const uint16_t alpha16 = components > 3u ?
+                source[source_index + 3u] : UINT16_MAX;
             if (red16 == (uint16_t)FP16_CLEAR_SENTINEL &&
-                (components == 1u ||
-                 green16 == (uint16_t)FP16_CLEAR_SENTINEL))
+                (components < 2u ||
+                 green16 == (uint16_t)FP16_CLEAR_SENTINEL) &&
+                (components < 3u ||
+                 blue16 == (uint16_t)FP16_CLEAR_SENTINEL) &&
+                (components < 4u ||
+                 alpha16 == (uint16_t)FP16_CLEAR_SENTINEL))
                 continue;
             const uint8_t red = (uint8_t)(red16 >> 8u);
             const uint8_t green = (uint8_t)(green16 >> 8u);
+            const uint8_t blue = (uint8_t)(blue16 >> 8u);
+            const uint8_t alpha = (uint8_t)(alpha16 >> 8u);
             display[(origin_y + y) * test->width + origin_x + x] =
-                UINT32_C(0xff000000) | ((uint32_t)green << 8u) | red;
+                ((uint32_t)alpha << 24u) | ((uint32_t)blue << 16u) |
+                ((uint32_t)green << 8u) | red;
         }
     }
     memcpy(test->buffers[1], test->buffers[0],
@@ -3749,22 +3777,28 @@ int main(void) {
     visualize_native(&test, components, 4u);
 #endif
 #elif AGC_VALIDATE_R16_FLOAT || AGC_VALIDATE_RG16_FLOAT || \
-      AGC_VALIDATE_R16_UNORM || AGC_VALIDATE_RG16_UNORM
+      AGC_VALIDATE_R16_UNORM || AGC_VALIDATE_RG16_UNORM || \
+      AGC_VALIDATE_RGBA16_UNORM
     const uint32_t components =
-        (AGC_VALIDATE_RG16_FLOAT || AGC_VALIDATE_RG16_UNORM) ? 2u : 1u;
+        AGC_VALIDATE_RGBA16_UNORM ? 4u :
+        ((AGC_VALIDATE_RG16_FLOAT || AGC_VALIDATE_RG16_UNORM) ? 2u : 1u);
     RenderTargetConfig narrow_16_target = {
         test.render_target, FP16_TARGET_WIDTH, FP16_TARGET_HEIGHT,
+        AGC_VALIDATE_RGBA16_UNORM ?
+            AGC_GFX1013_COLOR_FORMAT_16_16_16_16 :
         (AGC_VALIDATE_RG16_FLOAT || AGC_VALIDATE_RG16_UNORM) ?
             AGC_GFX1013_COLOR_FORMAT_16_16 :
             AGC_GFX1013_COLOR_FORMAT_16,
-        (AGC_VALIDATE_R16_UNORM || AGC_VALIDATE_RG16_UNORM) ?
+        (AGC_VALIDATE_R16_UNORM || AGC_VALIDATE_RG16_UNORM ||
+         AGC_VALIDATE_RGBA16_UNORM) ?
             AGC_GFX1013_SURFACE_NUMBER_UNORM :
             AGC_GFX1013_SURFACE_NUMBER_FLOAT,
         AGC_GFX1013_SURFACE_SWAP_STD,
         components, 2u, AGC_VALIDATE_RG16_FLOAT ?
             "RG16_FLOAT" : (AGC_VALIDATE_RG16_UNORM ?
-                "RG16_UNORM" : (AGC_VALIDATE_R16_UNORM ?
-                    "R16_UNORM" : "R16_FLOAT"))
+                "RG16_UNORM" : (AGC_VALIDATE_RGBA16_UNORM ?
+                    "RGBA16_UNORM" : (AGC_VALIDATE_R16_UNORM ?
+                        "R16_UNORM" : "R16_FLOAT")))
     };
     printf("\n--- Step 4: %s offscreen draw ---\n",
            narrow_16_target.name);
@@ -3775,7 +3809,8 @@ int main(void) {
         return 1;
     }
 #if !AGC_GRAPHICS_HEADLESS
-#if AGC_VALIDATE_R16_UNORM || AGC_VALIDATE_RG16_UNORM
+#if AGC_VALIDATE_R16_UNORM || AGC_VALIDATE_RG16_UNORM || \
+    AGC_VALIDATE_RGBA16_UNORM
     visualize_unorm16(&test, components);
 #else
     visualize_fp16(&test, components);

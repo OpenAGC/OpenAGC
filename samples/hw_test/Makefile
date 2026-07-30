@@ -63,6 +63,8 @@ PINNED_R16_UNORM_SHA256 := c0a5ad4732bf13c41f96560cb2dbfa3c39dffb9a47958ccbd2bef
 PINNED_R16_UNORM_ELF := $(THIS_DIR)/pinned/agc_graphics_r16_unorm-$(PINNED_R16_UNORM_SHA256).elf
 PINNED_RG16_UNORM_SHA256 := d004a33d1d1245964b08ee22b577948d36537c68d9d8c5241ba9e78e4a39f2fd
 PINNED_RG16_UNORM_ELF := $(THIS_DIR)/pinned/agc_graphics_rg16_unorm-$(PINNED_RG16_UNORM_SHA256).elf
+PINNED_RGBA16_UNORM_SHA256 := a27e0243663a87a42619f12a019cba4671216f770fd9cdcae8101fb153273588
+PINNED_RGBA16_UNORM_ELF := $(THIS_DIR)/pinned/agc_graphics_rgba16_unorm-$(PINNED_RGBA16_UNORM_SHA256).elf
 PINNED_MULTI_INDIRECT_SHA256 := 230809ee6ba03cc10cd136fc269d4c9e08f9ccfcec356f23d6d2b31b98df826c
 PINNED_MULTI_INDIRECT_ELF := $(THIS_DIR)/pinned/agc_graphics_multi_indirect-$(PINNED_MULTI_INDIRECT_SHA256).elf
 PINNED_MULTI_INDEXED_INDIRECT_SHA256 := afea810a97e36dfae517866acc21889202dbb9c63da04746801382442874f5a6
@@ -546,6 +548,12 @@ agc_graphics_r16_unorm_portable.elf: agc_graphics.c ps5_video_out.h gpu_credenti
 
 agc_graphics_rg16_unorm_portable.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) $(PORTABLE_GRAPHICS_FLAGS) -DAGC_VALIDATE_RG16_UNORM=1 \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+	../../tools/verify_firmware_neutral_elf.sh $@ \
+		/data/homebrew/openagc_portable_graphics/result.log
+
+agc_graphics_rgba16_unorm_portable.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(PORTABLE_GRAPHICS_FLAGS) -DAGC_VALIDATE_RGBA16_UNORM=1 \
 		-o $@ agc_graphics.c $(AGC_LDFLAGS)
 	../../tools/verify_firmware_neutral_elf.sh $@ \
 		/data/homebrew/openagc_portable_graphics/result.log
@@ -1216,6 +1224,8 @@ deploy_agc_graphics: agc_graphics.elf
 	deploy_agc_graphics_r16_unorm_portable_fw550 \
 	deploy_agc_graphics_rg16_unorm_portable_fw1160 \
 	deploy_agc_graphics_rg16_unorm_portable_fw550 \
+	deploy_agc_graphics_rgba16_unorm_portable_fw1160 \
+	deploy_agc_graphics_rgba16_unorm_portable_fw550 \
 	deploy_agc_graphics_multi_indirect_portable_fw1160 \
 	deploy_agc_graphics_multi_indexed_indirect_portable_fw1160 \
 	deploy_agc_graphics_count_indirect_portable_fw1160 \
@@ -1281,6 +1291,20 @@ deploy_agc_graphics_rg16_unorm_portable_fw550:
 	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(PINNED_RG16_UNORM_ELF) \
 		EXPECTED_FW_ABI=0x0550 EXPECTED_TARGET=RG16_UNORM \
 		EXPECTED_ARTIFACT_SHA256=$(PINNED_RG16_UNORM_SHA256) \
+		RESULT_LOG_PATH=/data/homebrew/openagc_portable_graphics/result.log \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
+
+deploy_agc_graphics_rgba16_unorm_portable_fw1160:
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(PINNED_RGBA16_UNORM_ELF) \
+		EXPECTED_FW_ABI=0x1160 EXPECTED_TARGET=RGBA16_UNORM \
+		EXPECTED_ARTIFACT_SHA256=$(PINNED_RGBA16_UNORM_SHA256) \
+		RESULT_LOG_PATH=/data/homebrew/openagc_portable_graphics/result.log \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
+
+deploy_agc_graphics_rgba16_unorm_portable_fw550:
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(PINNED_RGBA16_UNORM_ELF) \
+		EXPECTED_FW_ABI=0x0550 EXPECTED_TARGET=RGBA16_UNORM \
+		EXPECTED_ARTIFACT_SHA256=$(PINNED_RGBA16_UNORM_SHA256) \
 		RESULT_LOG_PATH=/data/homebrew/openagc_portable_graphics/result.log \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
 
