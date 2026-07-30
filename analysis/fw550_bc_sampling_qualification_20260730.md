@@ -81,3 +81,13 @@ The guarded run produced `224640` changed pixels, regions
 `0x16b22a8b52c7ce8d`. The signed-range, fence, marker, shutdown, memory
 cleanup, verdict, self-termination, and residual-process checks passed. Repeat
 the identical artifact once.
+
+## BC4 SNORM pass 2
+
+The identical artifact reproduced `224640` changed pixels, regions
+`{74880,74880,74880}`, zero decode mismatches/error, and FNV64
+`0x16b22a8b52c7ce8d`. Every lifecycle gate and the post-run residual-process
+check passed again.
+
+BC4 UNORM and SNORM are hardware-qualified on exact FW 5.50 and FW 11.60.
+Proceed to BC2 UNORM/SRGB.

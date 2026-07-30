@@ -801,9 +801,10 @@ reproduced `224640` changed pixels, equal regions, zero decode mismatches/error,
 and FNV64 `0x5327e8ad53b3a455` on both runs. All lifecycle gates passed. BC4
 UNORM is hardware-qualified on both endpoints; BC4 SNORM is next.
 
-BC4 SNORM pass 1 on FW 5.50 reproduced the exact FW 11.60-qualified coverage,
+BC4 SNORM on FW 5.50 twice reproduced the exact FW 11.60-qualified coverage,
 equal regions, zero decode mismatches/error, and FNV64
-`0x16b22a8b52c7ce8d`. All lifecycle gates passed; one identical replay remains.
+`0x16b22a8b52c7ce8d`. All lifecycle gates passed. Both BC4 variants are now
+hardware-qualified on exact FW 5.50 and FW 11.60.
 BC7 UNORM passed twice on FW 11.60 with identical `224640` changed pixels,
 mode counts `{4:205880,6:18760}`, alpha range `0..255`, zero exact mismatches,
 channel independence, and FNV64 `0xf46729633292d01b`. BC7 UNORM is
