@@ -197,6 +197,11 @@ case "$EXPECTED_TARGET" in
     R32_FLOAT|RG32_FLOAT|RGBA32_FLOAT)
         grep -Eq '^\[FLOAT32\].*: PASS$' "$output_file" || exit 1
         ;;
+    R32_UINT)
+        grep -Eq '^\[UINT32 Lane 0\].*: PASS$' "$output_file" || exit 1
+        grep -Eq '^\[UINT32\] changed=[1-9][0-9]*/[1-9][0-9]* .* independence=PASS: PASS$' \
+            "$output_file" || exit 1
+        ;;
     'offscreen RGB10A2')
         grep -Eq '^\[RGB10A2\] Packed top2 histogram:.*: PASS$' \
             "$output_file" || exit 1
