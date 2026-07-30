@@ -2731,6 +2731,7 @@ deploy_agc_depth_d32_expclear_fw550_headless: agc_depth_d32_expclear_fw550_headl
 deploy_agc_depth_stencil_htile_fw550_headless: agc_depth_stencil_htile_fw550_headless.elf
 	PS5_HOST=$(PS5_HOST) DEPTH_ARTIFACT=$(THIS_DIR)/$< \
 		EXPECTED_FW_ABI=0x0550 EXPECTED_HTILE_INITIAL=fffff30f \
+		EXPECTED_HTILE_CHANGED=49152 \
 		EXPECTED_D32_FULL_RECT=1 EXPECTED_STENCIL_FULL_RECT=1 \
 		EXPECTED_ARTIFACT_SHA256=8cdfdfe8073a6f567949e259081eb7ade0b5e2857ad8755d028b87da07e9ad5c \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_depth.sh

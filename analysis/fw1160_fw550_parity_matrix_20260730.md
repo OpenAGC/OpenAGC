@@ -183,6 +183,13 @@ Every artifact is preserved under its full hash and every deploy recipe checks
 that hash before network access. The pinned FW 5.50 ordinary combined gate is
 the next permitted launch.
 
+FW 5.50 ordinary combined pass 1 selected `0x0550`, changed exactly `49152`
+HTILE words from `0xfffff30f`, reproduced exact native D32 classes and the
+allocation-aware S8 distribution (`2165248` zero, `456192` replace-`0x5a`, no
+other values), reached its fence, shut down cleanly, returned final PASS, and
+left no residual process. The recipe now freezes `49152`; run the identical
+artifact once more before permitting its FW 11.60 mirror.
+
 ## Higher-level consumers
 
 The following FW 5.50-qualified application-facing paths still need bounded

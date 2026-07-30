@@ -547,6 +547,10 @@ the runner and shared teardown on FW 11.60 only.
   dependencies, are preserved under full hashes, and fail before network
   access on byte drift. Run the pinned FW 5.50 ordinary combined D32+S8 HTILE
   gate next and freeze its exact metadata count before replay.
+- FW 5.50 ordinary combined D32+S8 pass 1 reproduced exact D32 and S8
+  distributions and changed `49152` HTILE words from `0xfffff30f`, with
+  bounded completion, clean shutdown, and no residual process. Its guarded
+  recipe now freezes `49152`; replay the identical artifact before FW 11.60.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and

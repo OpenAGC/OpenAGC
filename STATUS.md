@@ -81,7 +81,11 @@ After D32 endpoint qualification, all eight combined artifacts were relinked
 twice against committed shader records with identical hashes, dependency-
 audited, preserved under their full hashes, and pinned in every guarded deploy
 recipe. The pinned FW 5.50 ordinary combined D32+S8 HTILE artifact is now the
-next permitted launch; aspect-specific expclear remains behind that baseline.
+next permitted launch; its first pass reproduced exact D32 and S8
+distributions and `49152` changed HTILE words from `0xfffff30f`, with bounded
+completion, clean shutdown, and no residual process. Its recipe now freezes
+that count; aspect-specific expclear remains behind the ordinary endpoint
+sequence.
 
 Ordinary D16 HTILE is now hardware-qualified twice on each endpoint. The
 pinned current-source artifacts reproduced exact D16 classes, clean teardown,
