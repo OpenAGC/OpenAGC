@@ -46,6 +46,10 @@ heap allocator described in [memory_resources.md](memory_resources.md).
 Fence-keyed buffer/image retirement extends these ownership rules without
 returning pending GPU storage to a heap early.
 
+Image layout queries take the owning `AgcDevice`; profile-dependent layout
+policy is selected inside the runtime and is never supplied as a firmware
+choice by the application.
+
 ## Command-buffer states
 
 Command buffers have four public states:

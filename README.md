@@ -215,7 +215,7 @@ ctest --test-dir build --output-on-failure
 Expected result:
 
 ```text
-12752 passed, 0 failed
+13614 passed, 0 failed
 ```
 
 The Make workflow is equivalent:

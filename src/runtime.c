@@ -12,8 +12,10 @@
 
 #include "agc_cb.h"
 #include "agc_driver_debug.h"
+#include "agc_graphics.h"
 #include "agc_memory.h"
 #include "agc_runtime_diag.h"
+#include "agc_texture.h"
 #include "agcdriver.h"
 
 #define AGC_MAGIC_DEVICE UINT32_C(0x44475641)
@@ -30,6 +32,8 @@
 
 #define AGC_FLEXIBLE_HEAP_BLOCK_SIZE UINT64_C(0x01000000)
 #define AGC_GARLIC_HEAP_BLOCK_SIZE UINT64_C(0x02000000)
+#define AGC_FLEXIBLE_BLOCK_ALIGNMENT UINT64_C(0x4000)
+#define AGC_GARLIC_BLOCK_ALIGNMENT UINT64_C(0x200000)
 #define AGC_FLEXIBLE_ALIGNMENT UINT64_C(0x100)
 #define AGC_GARLIC_ALIGNMENT UINT64_C(0x10000)
 
@@ -44,6 +48,7 @@ struct AgcRuntimeAllocation {
     uint64_t size;
     uint64_t requested_size;
     uint32_t owner_type;
+    void *owner;
     char debug_name[AGC_RUNTIME_DEBUG_NAME_SIZE];
 };
 
@@ -115,6 +120,7 @@ struct AgcImageViewImpl {
     AgcDevice device;
     AgcImage image;
     AgcImageViewDesc desc;
+    AgcRuntimeAllocation *allocation;
 };
 
 struct AgcSamplerImpl {
@@ -122,6 +128,7 @@ struct AgcSamplerImpl {
     uint32_t recorded_refs;
     AgcDevice device;
     AgcSamplerDesc desc;
+    AgcRuntimeAllocation *allocation;
 };
 
 struct AgcShaderImpl {
@@ -264,23 +271,39 @@ static uint64_t agcAllocationGpuAddress(const AgcRuntimeAllocation *allocation)
     return allocation->block->memory.gpu_address + allocation->offset;
 }
 
+static int32_t agcFlushRuntimeAllocation(
+    const AgcRuntimeAllocation *allocation, uint64_t offset, uint64_t size)
+{
+    uint64_t absolute_offset;
+
+    if (!allocation || size == 0u || offset > allocation->requested_size ||
+        size > allocation->requested_size - offset ||
+        size > SIZE_MAX ||
+        !agcAddU64(allocation->offset, offset, &absolute_offset) ||
+        absolute_offset > SIZE_MAX)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    return agcGpuMemoryFlush(&allocation->block->memory,
+        (size_t)absolute_offset, (size_t)size);
+}
+
 static int32_t agcCreateMemoryBlock(AgcDevice device, uint32_t heap,
-    uint64_t size, uint32_t dedicated, AgcRuntimeBlock **block_out)
+    uint64_t size, uint64_t alignment, uint32_t dedicated,
+    AgcRuntimeBlock **block_out)
 {
     AgcRuntimeBlock *block;
     int32_t result;
 
-    if (size > SIZE_MAX)
+    if (size > SIZE_MAX || alignment > SIZE_MAX)
         return AGC_ERROR_OUT_OF_MEMORY;
     block = agcAlloc(device, sizeof(*block), sizeof(void *));
     if (!block)
         return AGC_ERROR_OUT_OF_MEMORY;
     if (heap == AGC_MEMORY_HEAP_FLEXIBLE) {
         result = agcGpuMemoryAllocateFlexible(&block->memory, (size_t)size,
-            0x4000u, "openagc-runtime-flexible");
+            (size_t)alignment, "openagc-runtime-flexible");
     } else {
         result = agcGpuMemoryAllocateDirectWriteCombined(&block->memory,
-            (size_t)size, 0x200000u);
+            (size_t)size, (size_t)alignment);
     }
     if (result != AGC_OK) {
         agcFree(device, block);
@@ -319,9 +342,24 @@ static int agcFindBlockOffset(AgcRuntimeBlock *block, uint64_t size,
     return 1;
 }
 
+static void agcDestroyMemoryBlock(AgcDevice device, AgcRuntimeBlock *block)
+{
+    AgcRuntimeBlock **link = &device->heaps[block->heap];
+
+    while (*link != block)
+        link = &(*link)->next;
+    *link = block->next;
+    if (block->heap == AGC_MEMORY_HEAP_FLEXIBLE)
+        agcGpuMemoryFreeFlexible(&block->memory);
+    else
+        agcGpuMemoryFreeDirect(&block->memory);
+    agcFree(device, block);
+}
+
 static int32_t agcRuntimeAllocate(AgcDevice device, uint32_t heap,
     uint64_t requested_size, uint64_t alignment, uint32_t dedicated,
-    uint32_t owner_type, AgcRuntimeAllocation **allocation_out)
+    uint32_t owner_type, void *owner,
+    AgcRuntimeAllocation **allocation_out)
 {
     AgcRuntimeBlock *block;
     AgcRuntimeAllocation *allocation;
@@ -329,12 +367,23 @@ static int32_t agcRuntimeAllocate(AgcDevice device, uint32_t heap,
     uint64_t size;
     uint64_t offset = 0u;
     uint64_t default_size;
+    uint64_t block_alignment;
+    uint32_t created_block = 0u;
     int32_t result;
 
     if (!agcAlignU64(requested_size, alignment, &size))
         return AGC_ERROR_INVALID_ARGUMENT;
     default_size = heap == AGC_MEMORY_HEAP_FLEXIBLE ?
         AGC_FLEXIBLE_HEAP_BLOCK_SIZE : AGC_GARLIC_HEAP_BLOCK_SIZE;
+    block_alignment = heap == AGC_MEMORY_HEAP_FLEXIBLE ?
+        AGC_FLEXIBLE_BLOCK_ALIGNMENT : AGC_GARLIC_BLOCK_ALIGNMENT;
+    if (heap == AGC_MEMORY_HEAP_FLEXIBLE &&
+        alignment > AGC_FLEXIBLE_BLOCK_ALIGNMENT)
+        return AGC_ERROR_INVALID_ALIGNMENT;
+    if (alignment > block_alignment) {
+        dedicated = 1u;
+        block_alignment = alignment;
+    }
     if (size > default_size / 2u)
         dedicated = 1u;
     block = NULL;
@@ -347,23 +396,34 @@ static int32_t agcRuntimeAllocate(AgcDevice device, uint32_t heap,
     }
     if (!block) {
         uint64_t block_size = dedicated ? size : default_size;
-        result = agcCreateMemoryBlock(device, heap, block_size, dedicated, &block);
+        result = agcCreateMemoryBlock(device, heap, block_size,
+            block_alignment, dedicated, &block);
         if (result != AGC_OK)
             return result;
-        if (!agcFindBlockOffset(block, size, alignment, &offset))
+        created_block = 1u;
+        if (!agcFindBlockOffset(block, size, alignment, &offset)) {
+            agcDestroyMemoryBlock(device, block);
             return AGC_ERROR_OUT_OF_MEMORY;
+        }
     }
     if (device->live_allocation_count == UINT64_MAX ||
-        UINT64_MAX - device->live_bytes < size)
+        UINT64_MAX - device->live_bytes < size) {
+        if (created_block)
+            agcDestroyMemoryBlock(device, block);
         return AGC_ERROR_OUT_OF_MEMORY;
+    }
     allocation = agcAlloc(device, sizeof(*allocation), sizeof(void *));
-    if (!allocation)
+    if (!allocation) {
+        if (created_block)
+            agcDestroyMemoryBlock(device, block);
         return AGC_ERROR_OUT_OF_MEMORY;
+    }
     allocation->block = block;
     allocation->offset = offset;
     allocation->size = size;
     allocation->requested_size = requested_size;
     allocation->owner_type = owner_type;
+    allocation->owner = owner;
     link = &block->allocations;
     while (*link && (*link)->offset < offset)
         link = &(*link)->next;
@@ -390,17 +450,8 @@ static void agcRuntimeFree(AgcDevice device, AgcRuntimeAllocation *allocation)
     device->live_allocation_count--;
     device->live_bytes -= allocation->size;
     agcFree(device, allocation);
-    if (block->dedicated && !block->allocations) {
-        AgcRuntimeBlock **block_link = &device->heaps[block->heap];
-        while (*block_link != block)
-            block_link = &(*block_link)->next;
-        *block_link = block->next;
-        if (block->heap == AGC_MEMORY_HEAP_FLEXIBLE)
-            (void)agcGpuMemoryFreeFlexible(&block->memory);
-        else
-            (void)agcGpuMemoryFreeDirect(&block->memory);
-        agcFree(device, block);
-    }
+    if (block->dedicated && !block->allocations)
+        agcDestroyMemoryBlock(device, block);
 }
 
 static void agcDestroyMemoryBlocks(AgcDevice device)
@@ -739,9 +790,14 @@ static int agcImageDescBasicValid(const AgcImageDesc *desc)
         AGC_IMAGE_USAGE_TRANSFER_DST_BIT | AGC_IMAGE_USAGE_SCANOUT_BIT |
         AGC_IMAGE_USAGE_CUBE_COMPATIBLE_BIT | AGC_IMAGE_USAGE_HTILE_BIT;
 
-    if (!desc || !agcHeaderValid(desc->struct_size, sizeof(*desc), desc->version) ||
+    if (!desc)
+        return 0;
+    if (!agcHeaderValid(desc->struct_size, sizeof(*desc), desc->version) ||
         desc->width == 0u || desc->height == 0u || desc->depth == 0u ||
+        desc->width > 0x4000u || desc->height > 0x4000u ||
+        desc->depth > 0x2000u ||
         desc->mip_levels == 0u || desc->array_layers == 0u ||
+        desc->mip_levels > 15u || desc->array_layers > 0x2000u ||
         (desc->sample_count != 1u && desc->sample_count != 4u) ||
         desc->usage == 0u || (desc->usage & ~known_usage) != 0u ||
         !agcReservedZero(desc->reserved, 4u) ||
@@ -749,6 +805,15 @@ static int agcImageDescBasicValid(const AgcImageDesc *desc)
         return 0;
     if ((desc->sample_count > 1u && (desc->mip_levels > 1u ||
             desc->depth > 1u)) ||
+        (format.block_width > 1u &&
+            (desc->sample_count != 1u || desc->depth != 1u)) ||
+        (format.block_width > 1u &&
+            (desc->usage & (AGC_IMAGE_USAGE_STORAGE_BIT |
+                AGC_IMAGE_USAGE_COLOR_TARGET_BIT)) != 0u) ||
+        (format.depth_stencil && desc->depth != 1u) ||
+        (desc->sample_count > 1u &&
+            ((desc->usage & AGC_IMAGE_USAGE_CUBE_COMPATIBLE_BIT) != 0u ||
+             desc->array_layers != 1u)) ||
         ((desc->usage & AGC_IMAGE_USAGE_COLOR_TARGET_BIT) != 0u &&
             format.depth_stencil) ||
         ((desc->usage & AGC_IMAGE_USAGE_SCANOUT_BIT) != 0u &&
@@ -779,7 +844,7 @@ static int agcImageDescBasicValid(const AgcImageDesc *desc)
     return desc->mip_levels <= max_mips;
 }
 
-static int32_t agcComputeSubresource(const AgcImageDesc *desc,
+static int32_t agcComputeLinearSubresource(const AgcImageDesc *desc,
     uint32_t target_mip, uint32_t target_layer, uint32_t target_plane,
     AgcImageSubresourceLayout *target, AgcImageLayout *aggregate)
 {
@@ -791,7 +856,7 @@ static int32_t agcComputeSubresource(const AgcImageDesc *desc,
     uint32_t mip;
     uint64_t cursor = 0u;
 
-    if (!agcImageDescBasicValid(desc) ||
+    if (!desc || !agcImageDescBasicValid(desc) ||
         !agcGetRuntimeFormatInfo(desc->format, &format))
         return AGC_ERROR_INVALID_ARGUMENT;
     data_planes = format.plane_count;
@@ -874,27 +939,353 @@ static int32_t agcComputeSubresource(const AgcImageDesc *desc,
     return AGC_OK;
 }
 
-int32_t PS5_SYSV_ABI agcGetImageLayout(
-    const AgcImageDesc *desc, AgcImageLayout *layout)
+static int agcRuntimeDepthFormat(uint32_t format,
+    AgcGfx1013DepthSurfaceFormat *depth_format)
 {
-    if (!layout || !agcHeaderValid(layout->struct_size, sizeof(*layout),
+    switch (format) {
+    case AGC_FORMAT_D16_UNORM:
+        *depth_format = AGC_GFX1013_DEPTH_FORMAT_D16_UNORM;
+        return 1;
+    case AGC_FORMAT_D32_FLOAT:
+        *depth_format = AGC_GFX1013_DEPTH_FORMAT_D32_FLOAT;
+        return 1;
+    case AGC_FORMAT_S8_UINT:
+        *depth_format = AGC_GFX1013_DEPTH_FORMAT_S8_UINT;
+        return 1;
+    case AGC_FORMAT_D16_UNORM_S8_UINT:
+        *depth_format = AGC_GFX1013_DEPTH_FORMAT_D16_UNORM_S8_UINT;
+        return 1;
+    case AGC_FORMAT_D32_FLOAT_S8_UINT:
+        *depth_format = AGC_GFX1013_DEPTH_FORMAT_D32_FLOAT_S8_UINT;
+        return 1;
+    default:
+        return 0;
+    }
+}
+
+static int agcRuntimeIsBcFormat(uint32_t format)
+{
+    AgcRuntimeFormatInfo info;
+    return agcGetRuntimeFormatInfo(format, &info) && info.block_width == 4u;
+}
+
+static int32_t agcComputeBcLayout(const AgcImageDesc *desc,
+    uint32_t target_mip, uint32_t target_layer,
+    AgcImageSubresourceLayout *target, AgcImageLayout *aggregate)
+{
+    AgcGfx1013LinearBcSurfaceLayoutInput input;
+    int32_t result;
+
+    if (!desc || !agcImageDescBasicValid(desc))
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (desc->depth != 1u || desc->sample_count != 1u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    input.width = desc->width;
+    input.height = desc->height;
+    input.layer_count = desc->array_layers;
+    input.mip_level_count = desc->mip_levels;
+    input.resource_format = desc->format;
+    if (aggregate) {
+        AgcGfx1013LinearBcSurfaceLayout low = {0};
+        uint64_t subresources;
+        result = agcGfx1013GetLinearBcSurfaceLayout(&input, &low);
+        if (result != AGC_OK)
+            return result;
+        if (!agcMulU64(desc->mip_levels, desc->array_layers, &subresources) ||
+            subresources > UINT32_MAX)
+            return AGC_ERROR_INVALID_ARGUMENT;
+        aggregate->allocation_size = low.allocation_size;
+        aggregate->alignment = low.alignment;
+        aggregate->plane_count = 1u;
+        aggregate->subresource_count = (uint32_t)subresources;
+        aggregate->block_width = low.block_width;
+        aggregate->block_height = low.block_height;
+        aggregate->bytes_per_block = low.bytes_per_block;
+        aggregate->first_mip_in_tail = desc->mip_levels;
+    }
+    if (target) {
+        AgcGfx1013LinearBcSubresourceLayout low = {0};
+        result = agcGfx1013GetLinearBcSubresourceLayout(&input, target_mip,
+            target_layer, &low);
+        if (result != AGC_OK)
+            return result;
+        target->mip_level = target_mip;
+        target->array_layer = target_layer;
+        target->plane = 0u;
+        target->width = low.width;
+        target->height = low.height;
+        target->depth = 1u;
+        target->offset = low.offset;
+        target->size = low.size;
+        target->row_pitch = low.row_pitch;
+        target->slice_pitch = low.size;
+    }
+    return AGC_OK;
+}
+
+static int32_t agcGetDepthLayouts(AgcDevice device, const AgcImageDesc *desc,
+    AgcGfx1013DepthSurfaceLayout *depth, AgcGfx1013HtileLayout *htile,
+    uint64_t *stencil_offset, uint64_t *metadata_offset)
+{
+    AgcGfx1013DepthSurfaceFormat format;
+    AgcGfx1013DepthSurfaceLayoutInput input;
+    uint64_t cursor = 0u;
+    int32_t result;
+
+    if (!agcRuntimeDepthFormat(desc->format, &format) || desc->depth != 1u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    input.width = desc->width;
+    input.height = desc->height;
+    input.layer_count = desc->array_layers;
+    input.mip_level_count = desc->mip_levels;
+    input.sample_count = desc->sample_count;
+    input.format = format;
+    input.depth_swizzle_mode = AGC_GFX1013_SWIZZLE_64KB_Z_X;
+    input.stencil_swizzle_mode = AGC_GFX1013_SWIZZLE_64KB_Z_X;
+    result = agcGfx1013GetDepthSurfaceLayout(&input, depth);
+    if (result != AGC_OK)
+        return result;
+    if (depth->depth.allocation_size != 0u) {
+        if (!agcAddU64(cursor, depth->depth.allocation_size, &cursor))
+            return AGC_ERROR_INVALID_ARGUMENT;
+    }
+    if (depth->stencil.allocation_size != 0u) {
+        if (!agcAlignU64(cursor, depth->stencil.alignment, &cursor))
+            return AGC_ERROR_INVALID_ARGUMENT;
+        *stencil_offset = cursor;
+        if (!agcAddU64(cursor, depth->stencil.allocation_size, &cursor))
+            return AGC_ERROR_INVALID_ARGUMENT;
+    }
+    if ((desc->usage & AGC_IMAGE_USAGE_HTILE_BIT) != 0u) {
+        AgcGfx1013HtileLayoutInput htile_input;
+        uint32_t first_mip = depth->depth.allocation_size != 0u ?
+            depth->depth.first_mip_in_tail : depth->stencil.first_mip_in_tail;
+
+        if (device->runtime_info.hardware_family ==
+                AGC_HARDWARE_FAMILY_TRINITY_PS5 ||
+            (device->runtime_info.firmware_abi_key != 0u &&
+             device->runtime_info.firmware_abi_key != 0x0550u &&
+             device->runtime_info.firmware_abi_key != 0x1160u))
+            return AGC_ERROR_NOT_SUPPORTED;
+        htile_input.width = desc->width;
+        htile_input.height = desc->height;
+        htile_input.layer_count = desc->array_layers;
+        htile_input.mip_level_count = desc->mip_levels;
+        htile_input.first_mip_in_tail = first_mip;
+        htile_input.pipe_count = 8u;
+        htile_input.swizzle_mode = AGC_GFX1013_SWIZZLE_64KB_Z_X;
+        result = agcGfx1013GetHtileLayout(&htile_input, htile);
+        if (result != AGC_OK)
+            return result;
+        if (!agcAlignU64(cursor, htile->alignment, &cursor))
+            return AGC_ERROR_INVALID_ARGUMENT;
+        *metadata_offset = cursor;
+    }
+    return AGC_OK;
+}
+
+static int32_t agcComputeDepthLayout(AgcDevice device,
+    const AgcImageDesc *desc, uint32_t target_mip, uint32_t target_layer,
+    uint32_t target_plane, AgcImageSubresourceLayout *target,
+    AgcImageLayout *aggregate)
+{
+    AgcGfx1013DepthSurfaceLayout depth = {0};
+    AgcGfx1013HtileLayout htile = {0};
+    const AgcGfx1013DepthPlaneLayout *planes[2];
+    uint32_t bytes[2];
+    uint32_t data_plane_count = 0u;
+    uint32_t total_plane_count;
+    uint64_t plane_offsets[2] = {0u, 0u};
+    uint64_t metadata_offset = 0u;
+    uint64_t total_size = 0u;
+    uint64_t subresources;
+    int32_t result;
+
+    if (!desc || !agcImageDescBasicValid(desc))
+        return AGC_ERROR_INVALID_ARGUMENT;
+    result = agcGetDepthLayouts(device, desc, &depth, &htile,
+        &plane_offsets[1], &metadata_offset);
+    if (result != AGC_OK)
+        return result;
+    if (depth.depth.allocation_size != 0u) {
+        planes[data_plane_count] = &depth.depth;
+        bytes[data_plane_count++] = desc->format == AGC_FORMAT_D16_UNORM ||
+            desc->format == AGC_FORMAT_D16_UNORM_S8_UINT ? 2u : 4u;
+    }
+    if (depth.stencil.allocation_size != 0u) {
+        if (data_plane_count == 0u)
+            plane_offsets[0] = plane_offsets[1];
+        planes[data_plane_count] = &depth.stencil;
+        bytes[data_plane_count++] = 1u;
+    }
+    if (data_plane_count == 0u)
+        return AGC_ERROR_INTERNAL;
+    total_plane_count = data_plane_count + (htile.allocation_size != 0u);
+    if (!agcMulU64(desc->mip_levels, desc->array_layers, &subresources) ||
+        !agcMulU64(subresources, total_plane_count, &subresources) ||
+        subresources > UINT32_MAX)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (htile.allocation_size != 0u) {
+        if (!agcAddU64(metadata_offset, htile.allocation_size, &total_size))
+            return AGC_ERROR_INVALID_ARGUMENT;
+    } else {
+        const AgcGfx1013DepthPlaneLayout *last = planes[data_plane_count - 1u];
+        if (!agcAddU64(plane_offsets[data_plane_count - 1u],
+                last->allocation_size, &total_size))
+            return AGC_ERROR_INVALID_ARGUMENT;
+    }
+    if (!agcAlignU64(total_size, AGC_GARLIC_ALIGNMENT, &total_size))
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (aggregate) {
+        aggregate->allocation_size = total_size;
+        aggregate->alignment = AGC_GARLIC_ALIGNMENT;
+        aggregate->plane_count = total_plane_count;
+        aggregate->subresource_count = (uint32_t)subresources;
+        aggregate->block_width = planes[0]->block_width;
+        aggregate->block_height = planes[0]->block_height;
+        aggregate->bytes_per_block = bytes[0];
+        aggregate->first_mip_in_tail = planes[0]->first_mip_in_tail;
+        aggregate->metadata_offset = metadata_offset;
+        aggregate->metadata_size = htile.allocation_size;
+    }
+    if (!target)
+        return AGC_OK;
+    if (target_mip >= desc->mip_levels || target_layer >= desc->array_layers ||
+        target_plane >= total_plane_count)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (target_plane < data_plane_count) {
+        const AgcGfx1013DepthPlaneLayout *plane = planes[target_plane];
+        uint64_t row_pitch;
+        if (desc->mip_levels != 1u)
+            return AGC_ERROR_NOT_SUPPORTED;
+        if (!agcMulU64(plane->pitch, bytes[target_plane], &row_pitch) ||
+            !agcMulU64(row_pitch, desc->sample_count, &row_pitch))
+            return AGC_ERROR_INVALID_ARGUMENT;
+        target->offset = plane_offsets[target_plane] +
+            plane->slice_size * target_layer;
+        target->size = plane->slice_size;
+        target->row_pitch = row_pitch;
+        target->slice_pitch = plane->slice_size;
+    } else {
+        AgcGfx1013HtileLayoutInput input;
+        AgcGfx1013HtileSubresourceLayout low = {0};
+        input.width = desc->width;
+        input.height = desc->height;
+        input.layer_count = desc->array_layers;
+        input.mip_level_count = desc->mip_levels;
+        input.first_mip_in_tail = planes[0]->first_mip_in_tail;
+        input.pipe_count = 8u;
+        input.swizzle_mode = AGC_GFX1013_SWIZZLE_64KB_Z_X;
+        result = agcGfx1013GetHtileSubresourceLayout(&input, target_mip,
+            target_layer, &low);
+        if (result != AGC_OK)
+            return result;
+        target->offset = metadata_offset + low.offset;
+        target->size = low.size;
+        target->slice_pitch = low.size;
+    }
+    target->mip_level = target_mip;
+    target->array_layer = target_layer;
+    target->plane = target_plane;
+    target->width = desc->width >> target_mip;
+    target->height = desc->height >> target_mip;
+    if (target->width == 0u) target->width = 1u;
+    if (target->height == 0u) target->height = 1u;
+    target->depth = 1u;
+    return AGC_OK;
+}
+
+static int32_t agcComputeMsaaColorLayout(const AgcImageDesc *desc,
+    uint32_t target_layer, AgcImageSubresourceLayout *target,
+    AgcImageLayout *aggregate)
+{
+    AgcGfx1013ColorSurfaceLayoutInput input;
+    AgcGfx1013ColorSurfaceLayout low = {0};
+    int32_t result;
+
+    if (!desc || !agcImageDescBasicValid(desc) ||
+        desc->format != AGC_FORMAT_RGBA8_UNORM || desc->depth != 1u ||
+        desc->mip_levels != 1u || desc->sample_count != 4u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    input.width = desc->width;
+    input.height = desc->height;
+    input.layer_count = desc->array_layers;
+    input.mip_level_count = 1u;
+    input.sample_count = 4u;
+    input.format = AGC_GFX1013_RT_FORMAT_RGBA8_UNORM;
+    input.swizzle_mode = AGC_GFX1013_SWIZZLE_64KB_R_X;
+    result = agcGfx1013GetColorSurfaceLayout(&input, &low);
+    if (result != AGC_OK)
+        return result;
+    if (aggregate) {
+        aggregate->allocation_size = low.allocation_size;
+        aggregate->alignment = low.alignment;
+        aggregate->plane_count = 1u;
+        aggregate->subresource_count = desc->array_layers;
+        aggregate->block_width = low.block_width;
+        aggregate->block_height = low.block_height;
+        aggregate->bytes_per_block = 4u;
+        aggregate->first_mip_in_tail = 1u;
+    }
+    if (target) {
+        if (target_layer >= desc->array_layers)
+            return AGC_ERROR_INVALID_ARGUMENT;
+        target->mip_level = 0u;
+        target->array_layer = target_layer;
+        target->plane = 0u;
+        target->width = desc->width;
+        target->height = desc->height;
+        target->depth = 1u;
+        target->offset = low.slice_size * target_layer;
+        target->size = low.slice_size;
+        target->row_pitch = (uint64_t)low.pitch * 4u * desc->sample_count;
+        target->slice_pitch = low.slice_size;
+    }
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGetImageLayout(
+    AgcDevice device, const AgcImageDesc *desc, AgcImageLayout *layout)
+{
+    if (!agcDeviceValid(device) || !layout ||
+        !agcHeaderValid(layout->struct_size, sizeof(*layout),
         layout->version) || !agcReservedZero(layout->reserved, 4u))
         return AGC_ERROR_INVALID_ARGUMENT;
     memset((uint8_t *)layout + offsetof(AgcImageLayout, allocation_size), 0,
         sizeof(*layout) - offsetof(AgcImageLayout, allocation_size));
-    return agcComputeSubresource(desc, 0u, 0u, 0u, NULL, layout);
+    if (agcRuntimeIsBcFormat(desc ? desc->format : AGC_FORMAT_UNDEFINED))
+        return agcComputeBcLayout(desc, 0u, 0u, NULL, layout);
+    if (desc && (desc->usage & AGC_IMAGE_USAGE_DEPTH_STENCIL_BIT) != 0u)
+        return agcComputeDepthLayout(device, desc, 0u, 0u, 0u, NULL, layout);
+    if (desc && desc->sample_count == 4u)
+        return agcComputeMsaaColorLayout(desc, 0u, NULL, layout);
+    return agcComputeLinearSubresource(desc, 0u, 0u, 0u, NULL, layout);
 }
 
-int32_t PS5_SYSV_ABI agcGetImageSubresourceLayout(const AgcImageDesc *desc,
-    uint32_t mip_level, uint32_t array_layer, uint32_t plane,
-    AgcImageSubresourceLayout *layout)
+int32_t PS5_SYSV_ABI agcGetImageSubresourceLayout(AgcDevice device,
+    const AgcImageDesc *desc, uint32_t mip_level, uint32_t array_layer,
+    uint32_t plane, AgcImageSubresourceLayout *layout)
 {
-    if (!layout || !agcHeaderValid(layout->struct_size, sizeof(*layout),
+    if (!agcDeviceValid(device) || !layout ||
+        !agcHeaderValid(layout->struct_size, sizeof(*layout),
         layout->version) || !agcReservedZero(layout->reserved, 4u))
         return AGC_ERROR_INVALID_ARGUMENT;
     memset((uint8_t *)layout + offsetof(AgcImageSubresourceLayout, mip_level),
         0, sizeof(*layout) - offsetof(AgcImageSubresourceLayout, mip_level));
-    return agcComputeSubresource(desc, mip_level, array_layer, plane,
+    if (agcRuntimeIsBcFormat(desc ? desc->format : AGC_FORMAT_UNDEFINED)) {
+        if (plane != 0u)
+            return AGC_ERROR_INVALID_ARGUMENT;
+        return agcComputeBcLayout(desc, mip_level, array_layer, layout, NULL);
+    }
+    if (desc && (desc->usage & AGC_IMAGE_USAGE_DEPTH_STENCIL_BIT) != 0u)
+        return agcComputeDepthLayout(device, desc, mip_level, array_layer,
+            plane, layout, NULL);
+    if (desc && desc->sample_count == 4u) {
+        if (mip_level != 0u || plane != 0u)
+            return AGC_ERROR_INVALID_ARGUMENT;
+        return agcComputeMsaaColorLayout(desc, array_layer, layout, NULL);
+    }
+    return agcComputeLinearSubresource(desc, mip_level, array_layer, plane,
         layout, NULL);
 }
 
@@ -929,7 +1320,7 @@ int32_t PS5_SYSV_ABI agcCreateBuffer(
         heap == AGC_MEMORY_HEAP_FLEXIBLE ? AGC_FLEXIBLE_ALIGNMENT :
             AGC_GARLIC_ALIGNMENT,
         (desc->flags & AGC_BUFFER_CREATE_DEDICATED_BIT) != 0u,
-        AGC_OBJECT_TYPE_BUFFER, &buffer->allocation);
+        AGC_OBJECT_TYPE_BUFFER, buffer, &buffer->allocation);
     if (result != AGC_OK) {
         agcDestroyChild(device, buffer);
         return result;
@@ -976,7 +1367,7 @@ int32_t PS5_SYSV_ABI agcCreateImage(
     if (!agcDeviceValid(device) || !agcImageDescBasicValid(desc)) {
         return AGC_ERROR_INVALID_ARGUMENT;
     }
-    result = agcGetImageLayout(desc, &layout);
+    result = agcGetImageLayout(device, desc, &layout);
     if (result != AGC_OK)
         return result;
     image = agcCreateChild(device, sizeof(*image));
@@ -985,7 +1376,7 @@ int32_t PS5_SYSV_ABI agcCreateImage(
     result = agcRuntimeAllocate(device, AGC_MEMORY_HEAP_GARLIC,
         layout.allocation_size, layout.alignment,
         (desc->usage & AGC_IMAGE_USAGE_SCANOUT_BIT) != 0u,
-        AGC_OBJECT_TYPE_IMAGE, &image->allocation);
+        AGC_OBJECT_TYPE_IMAGE, image, &image->allocation);
     if (result != AGC_OK) {
         agcDestroyChild(device, image);
         return result;
@@ -1022,6 +1413,7 @@ int32_t PS5_SYSV_ABI agcCreateImageView(
 {
     AgcImageView view;
     AgcImage image;
+    int32_t result;
 
     if (!view_out)
         return AGC_ERROR_INVALID_ARGUMENT;
@@ -1033,6 +1425,7 @@ int32_t PS5_SYSV_ABI agcCreateImageView(
     }
     image = desc->image;
     if (!image || image->magic != AGC_MAGIC_IMAGE || image->device != device ||
+        image->deferred || desc->format != image->desc.format ||
         desc->mip_level_count == 0u || desc->array_layer_count == 0u ||
         desc->base_mip_level >= image->desc.mip_levels ||
         desc->mip_level_count > image->desc.mip_levels - desc->base_mip_level ||
@@ -1044,6 +1437,22 @@ int32_t PS5_SYSV_ABI agcCreateImageView(
     view = agcCreateChild(device, sizeof(*view));
     if (!view)
         return AGC_ERROR_OUT_OF_MEMORY;
+    result = agcRuntimeAllocate(device, AGC_MEMORY_HEAP_FLEXIBLE,
+        sizeof(AgcGfx1013ImageDescriptor), 32u, 0u,
+        AGC_OBJECT_TYPE_IMAGE_VIEW, view, &view->allocation);
+    if (result != AGC_OK) {
+        agcDestroyChild(device, view);
+        return result;
+    }
+    memset(agcAllocationCpuAddress(view->allocation), 0,
+        sizeof(AgcGfx1013ImageDescriptor));
+    result = agcFlushRuntimeAllocation(view->allocation, 0u,
+        sizeof(AgcGfx1013ImageDescriptor));
+    if (result != AGC_OK) {
+        agcRuntimeFree(device, view->allocation);
+        agcDestroyChild(device, view);
+        return result;
+    }
     view->magic = AGC_MAGIC_IMAGE_VIEW;
     view->device = device;
     view->image = image;
@@ -1065,6 +1474,7 @@ int32_t PS5_SYSV_ABI agcDestroyImageView(AgcImageView view)
         return AGC_ERROR_BUSY;
     device = view->device;
     view->image->dependency_refs--;
+    agcRuntimeFree(device, view->allocation);
     view->magic = 0u;
     agcDestroyChild(device, view);
     return AGC_OK;
@@ -1074,6 +1484,7 @@ int32_t PS5_SYSV_ABI agcCreateSampler(
     AgcDevice device, const AgcSamplerDesc *desc, AgcSampler *sampler_out)
 {
     AgcSampler sampler;
+    int32_t result;
 
     if (!sampler_out)
         return AGC_ERROR_INVALID_ARGUMENT;
@@ -1091,6 +1502,22 @@ int32_t PS5_SYSV_ABI agcCreateSampler(
     sampler = agcCreateChild(device, sizeof(*sampler));
     if (!sampler)
         return AGC_ERROR_OUT_OF_MEMORY;
+    result = agcRuntimeAllocate(device, AGC_MEMORY_HEAP_FLEXIBLE,
+        sizeof(AgcSamplerDescriptor), 16u, 0u,
+        AGC_OBJECT_TYPE_SAMPLER, sampler, &sampler->allocation);
+    if (result != AGC_OK) {
+        agcDestroyChild(device, sampler);
+        return result;
+    }
+    memset(agcAllocationCpuAddress(sampler->allocation), 0,
+        sizeof(AgcSamplerDescriptor));
+    result = agcFlushRuntimeAllocation(sampler->allocation, 0u,
+        sizeof(AgcSamplerDescriptor));
+    if (result != AGC_OK) {
+        agcRuntimeFree(device, sampler->allocation);
+        agcDestroyChild(device, sampler);
+        return result;
+    }
     sampler->magic = AGC_MAGIC_SAMPLER;
     sampler->device = device;
     sampler->desc = *desc;
@@ -1109,6 +1536,7 @@ int32_t PS5_SYSV_ABI agcDestroySampler(AgcSampler sampler)
     if (sampler->recorded_refs != 0u)
         return AGC_ERROR_BUSY;
     device = sampler->device;
+    agcRuntimeFree(device, sampler->allocation);
     sampler->magic = 0u;
     agcDestroyChild(device, sampler);
     return AGC_OK;
@@ -1135,13 +1563,20 @@ int32_t PS5_SYSV_ABI agcCreateShader(
         return AGC_ERROR_OUT_OF_MEMORY;
     result = agcRuntimeAllocate(device, AGC_MEMORY_HEAP_FLEXIBLE,
         desc->code_size, 256u, 0u, AGC_OBJECT_TYPE_SHADER,
-        &shader->allocation);
+        shader, &shader->allocation);
     if (result != AGC_OK) {
         agcDestroyChild(device, shader);
         return result;
     }
     shader->code = agcAllocationCpuAddress(shader->allocation);
     memcpy(shader->code, desc->code, (size_t)desc->code_size);
+    result = agcFlushRuntimeAllocation(shader->allocation, 0u,
+        desc->code_size);
+    if (result != AGC_OK) {
+        agcRuntimeFree(device, shader->allocation);
+        agcDestroyChild(device, shader);
+        return result;
+    }
     shader->magic = AGC_MAGIC_SHADER;
     shader->device = device;
     shader->stage = desc->stage;
@@ -1321,7 +1756,7 @@ int32_t PS5_SYSV_ABI agcCreateCommandBuffer(AgcDevice device,
         return AGC_ERROR_OUT_OF_MEMORY;
     result = agcRuntimeAllocate(device, AGC_MEMORY_HEAP_FLEXIBLE,
         storage_size, 256u, 0u, AGC_OBJECT_TYPE_COMMAND_BUFFER,
-        &command_buffer->allocation);
+        command_buffer, &command_buffer->allocation);
     if (result != AGC_OK) {
         agcDestroyChild(device, command_buffer);
         return result;
@@ -1463,7 +1898,7 @@ int32_t PS5_SYSV_ABI agcCmdBindIndexBuffer(AgcCommandBuffer command_buffer,
     if (!command_buffer || command_buffer->magic != AGC_MAGIC_COMMAND_BUFFER ||
         !buffer || buffer->magic != AGC_MAGIC_BUFFER ||
         !agcDeviceValid(command_buffer->device) ||
-        buffer->device != command_buffer->device ||
+        buffer->device != command_buffer->device || buffer->deferred ||
         (buffer->usage & AGC_BUFFER_USAGE_INDEX_BIT) == 0u ||
         (index_size != kAgcIndexSize16 && index_size != kAgcIndexSize32) ||
         offset >= buffer->size) {
@@ -1645,6 +2080,14 @@ int32_t PS5_SYSV_ABI agcQueueSubmit(
         return AGC_ERROR_INVALID_ARGUMENT;
     if (command_buffer->state != AGC_COMMAND_BUFFER_STATE_EXECUTABLE)
         return AGC_ERROR_INVALID_STATE;
+    {
+        uint64_t command_size = (uint64_t)
+            agcCbUsedDwords(&command_buffer->cursor) * sizeof(uint32_t);
+        int32_t flush_result = agcFlushRuntimeAllocation(
+            command_buffer->allocation, 0u, command_size);
+        if (flush_result != AGC_OK)
+            return flush_result;
+    }
 
 #ifdef OPENAGC_PROSPERO
     /* Milestone 1 qualifies the object contract on the generic backend. Until
@@ -1707,6 +2150,16 @@ static AgcRuntimeAllocation *agcObjectAllocation(AgcDevice device,
         return command_buffer->magic == AGC_MAGIC_COMMAND_BUFFER &&
             command_buffer->device == device ? command_buffer->allocation : NULL;
     }
+    case AGC_OBJECT_TYPE_IMAGE_VIEW: {
+        const AgcImageView view = (AgcImageView)object;
+        return view->magic == AGC_MAGIC_IMAGE_VIEW && view->device == device ?
+            view->allocation : NULL;
+    }
+    case AGC_OBJECT_TYPE_SAMPLER: {
+        const AgcSampler sampler = (AgcSampler)object;
+        return sampler->magic == AGC_MAGIC_SAMPLER && sampler->device == device ?
+            sampler->allocation : NULL;
+    }
     default:
         return NULL;
     }
@@ -1719,7 +2172,7 @@ int32_t PS5_SYSV_ABI agcGetObjectAllocationInfo(AgcDevice device,
 
     if (!agcDeviceValid(device) || !info ||
         !agcHeaderValid(info->struct_size, sizeof(*info), info->version) ||
-        !agcReservedZero(info->reserved, 4u))
+        !agcReservedZero(info->reserved, 3u))
         return AGC_ERROR_INVALID_ARGUMENT;
     allocation = agcObjectAllocation(device, type, object);
     if (!allocation)
@@ -1735,6 +2188,7 @@ int32_t PS5_SYSV_ABI agcGetObjectAllocationInfo(AgcDevice device,
     info->cpu_address = agcAllocationCpuAddress(allocation);
     info->resident = 1u;
     info->owner_type = allocation->owner_type;
+    info->owner = allocation->owner;
     (void)snprintf(info->debug_name, sizeof(info->debug_name), "%s",
         allocation->debug_name);
     return AGC_OK;
@@ -1879,21 +2333,30 @@ int32_t PS5_SYSV_ABI agcCollectDeferredFrees(AgcDevice device)
     link = &device->deferred;
     while (*link) {
         AgcDeferredFree *entry = *link;
+        int32_t result;
         if (!entry->fence->signaled) {
             link = &entry->next;
             continue;
         }
-        *link = entry->next;
-        entry->fence->pending_refs--;
         if (entry->type == AGC_OBJECT_TYPE_BUFFER) {
             AgcBuffer buffer = entry->object;
             buffer->deferred = 0u;
-            (void)agcDestroyBuffer(buffer);
+            result = agcDestroyBuffer(buffer);
+            if (result != AGC_OK) {
+                buffer->deferred = 1u;
+                return result;
+            }
         } else {
             AgcImage image = entry->object;
             image->deferred = 0u;
-            (void)agcDestroyImage(image);
+            result = agcDestroyImage(image);
+            if (result != AGC_OK) {
+                image->deferred = 1u;
+                return result;
+            }
         }
+        *link = entry->next;
+        entry->fence->pending_refs--;
         device->deferred_free_count--;
         agcFree(device, entry);
     }

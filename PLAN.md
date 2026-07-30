@@ -232,12 +232,20 @@ Completed with reusable flexible/onion and garlic/direct blocks,
 alignment-aware gap reuse, automatic and explicit dedicated allocations,
 persistently mapped upload/readback buffers, allocation ownership/debug
 queries, leak/high-water statistics, and fence-keyed buffer/image retirement.
-The centralized checked layout API covers mip chains, arrays, cube faces, 3D
-depth, BC blocks, 1x/4x samples, split depth/stencil, and HTILE metadata. Stress
-coverage places 128 simultaneous GPU buffers in one garlic block, exercises
-repeated staging reloads, rejects overflowing 3D layouts, and returns live and
-deferred counts to baseline after fence completion. The complete generic suite
-passes 12,752 assertions. See `docs/memory_resources.md`.
+Image-view and sampler objects reserve aligned, zero-initialized GPU-visible
+descriptor slots; shader, descriptor, upload, and command writes follow
+explicit publication rules. Device-scoped layout queries reuse the qualified
+gfx1013 BC, tiled depth/HTILE, and 4x color calculators and fail unsupported
+profile-specific metadata policy closed.
+
+Stress coverage places 128 buffers plus 16 images in one garlic block, then
+creates, streams, destroys, and reloads an identical 32-buffer/eight-image
+asset set eight times while proving stable range reuse and one direct-memory
+block. It also covers scanout/oversized dedicated allocations, allocation-
+record rollback, staging bounds, arithmetic overflow rejection, and both
+buffer and image ranges remaining unavailable until their fences complete.
+Live allocation and byte counts return to baseline. The complete generic suite
+passes 13,614 assertions. See `docs/memory_resources.md`.
 
 ### Milestone 3: reflection and validated pipeline objects
 

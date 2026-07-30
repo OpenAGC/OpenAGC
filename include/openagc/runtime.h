@@ -350,7 +350,10 @@ typedef enum AgcObjectType {
     AGC_OBJECT_TYPE_BUFFER = 0,
     AGC_OBJECT_TYPE_IMAGE = 1,
     AGC_OBJECT_TYPE_SHADER = 2,
-    AGC_OBJECT_TYPE_COMMAND_BUFFER = 3
+    AGC_OBJECT_TYPE_COMMAND_BUFFER = 3,
+    AGC_OBJECT_TYPE_IMAGE_VIEW = 4,
+    AGC_OBJECT_TYPE_SAMPLER = 5,
+    AGC_OBJECT_TYPE_COUNT = 6
 } AgcObjectType;
 
 #define AGC_RUNTIME_DEBUG_NAME_SIZE 64u
@@ -368,12 +371,13 @@ typedef struct AgcAllocationInfo {
     uint32_t resident;
     uint32_t owner_type;
     char debug_name[AGC_RUNTIME_DEBUG_NAME_SIZE];
-    uint64_t reserved[4];
+    const void *owner;
+    uint64_t reserved[3];
 } AgcAllocationInfo;
 
 #define AGC_ALLOCATION_INFO_INIT \
     { sizeof(AgcAllocationInfo), AGC_RUNTIME_STRUCTURE_VERSION_1, 0u, 0u, \
-      0u, 0u, 0u, 0u, NULL, 0u, 0u, {0}, {0u, 0u, 0u, 0u} }
+      0u, 0u, 0u, 0u, NULL, 0u, 0u, {0}, NULL, {0u, 0u, 0u} }
 
 typedef struct AgcMemoryStats {
     uint32_t struct_size;
@@ -515,10 +519,10 @@ int32_t PS5_SYSV_ABI agcDestroyImage(AgcImage image);
 int32_t PS5_SYSV_ABI agcDestroyImageDeferred(
     AgcImage image, AgcFence fence);
 int32_t PS5_SYSV_ABI agcGetImageLayout(
-    const AgcImageDesc *desc, AgcImageLayout *layout);
-int32_t PS5_SYSV_ABI agcGetImageSubresourceLayout(const AgcImageDesc *desc,
-    uint32_t mip_level, uint32_t array_layer, uint32_t plane,
-    AgcImageSubresourceLayout *layout);
+    AgcDevice device, const AgcImageDesc *desc, AgcImageLayout *layout);
+int32_t PS5_SYSV_ABI agcGetImageSubresourceLayout(AgcDevice device,
+    const AgcImageDesc *desc, uint32_t mip_level, uint32_t array_layer,
+    uint32_t plane, AgcImageSubresourceLayout *layout);
 int32_t PS5_SYSV_ABI agcCreateImageView(
     AgcDevice device, const AgcImageViewDesc *desc, AgcImageView *view_out);
 int32_t PS5_SYSV_ABI agcDestroyImageView(AgcImageView view);

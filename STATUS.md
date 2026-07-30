@@ -47,29 +47,36 @@ existing host/SPRX/exact-firmware qualification labels.
 
 ## Native resource and memory management complete (2026-07-30)
 
-The PS5-only native runtime now suballocates buffers, images, shader code, and
-command storage from reusable flexible/onion and garlic/direct blocks. Small
-resources reuse aligned gaps, scanout and oversized resources become dedicated,
-and applications can explicitly request dedicated buffers. Upload/readback
-buffers remain mapped and use bounded range checks plus exact flush/invalidate
-operations.
+The PS5-only native runtime now suballocates buffers, images, shader code,
+image/sampler descriptor slots, and command storage from reusable
+flexible/onion and garlic/direct blocks. Small resources reuse aligned gaps,
+scanout and oversized resources become dedicated, and applications can
+explicitly request dedicated buffers. Upload/readback buffers remain mapped
+and use bounded range checks plus exact flush/invalidate operations. Shader,
+descriptor, and submission-time command writes are explicitly published.
 
-Versioned layout queries cover mips, arrays, cube faces, 3D depth, BC block
-geometry, 1x/4x samples, depth/stencil planes, and HTILE metadata with checked
-arithmetic. Allocation queries report heap, padded/requested sizes, offset, GPU
+Versioned, device-scoped layout queries cover mips, arrays, cube faces, 3D
+depth, BC block geometry, 1x/4x samples, depth/stencil planes, and HTILE
+metadata with checked arithmetic. BC, tiled depth/HTILE, and 4x color paths
+reuse the qualified gfx1013 calculators rather than maintaining a parallel
+formula. Allocation queries report heap, padded/requested sizes, offset, GPU
 VA, CPU mapping, residency, owner, dedicated state, and debug name. Statistics
 report blocks, live counts/bytes, high-water marks, and pending retirements.
 Fence-keyed buffer/image frees retain storage until the fence signals and the
-collector runs.
+collector runs; tests prove the pending ranges cannot be reused early.
 
 This milestone is host-qualified. The same implementation compiles without
 warnings for Prospero, but the new native heap layer has not yet been promoted
 through an on-console smoke test and is not labeled hardware-qualified.
 
-Stress coverage creates 128 simultaneous buffers in one garlic block, cycles
-upload/readback resources, detects layout overflow, and returns live/deferred
-allocation counts to baseline. The full generic result is 12,752 passed and 0
-failed across all six CTest suites. See `docs/memory_resources.md`.
+Stress coverage creates 128 simultaneous buffers plus 16 images in one garlic
+block and reloads the same 32-buffer/eight-image asset set eight times with
+stable offsets and bounded block counts. It also covers descriptor/shader/
+command backing, upload/readback bounds, scanout and oversized dedicated
+blocks, allocation-failure rollback, overflow rejection, and fence-delayed
+buffer/image reuse. Live allocation and byte counts return to baseline. The
+full generic result is 13,614 passed and 0 failed across all six CTest suites.
+See `docs/memory_resources.md`.
 
 ## Native runtime C API contract complete (2026-07-30)
 
@@ -103,7 +110,7 @@ notification. Unknown profiles remain fail-closed through the exact registry.
 The generic tests create and destroy every object, reject descriptor,
 ownership, lifecycle, and capacity violations, submit one five-dword compute
 ACB, and submit one eleven-dword indexed graphics DCB. The clean result is
-12,752 passed and 0 failed across all six CTest suites; ASan/UBSan passes too.
+13,614 passed and 0 failed across all six CTest suites; ASan/UBSan passes too.
 The generic and Prospero builds compile without warnings from the same public
 header. Installation includes the header and lifecycle guide, and a separate
 CMake package consumer compiles and runs. A before/after global-symbol audit
