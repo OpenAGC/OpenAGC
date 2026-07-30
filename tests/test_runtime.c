@@ -174,7 +174,7 @@ static void test_runtime_all_object_lifecycle(void)
 
     buffer_desc.size = 256u;
     buffer_desc.usage = AGC_BUFFER_USAGE_STORAGE_BIT;
-    image_desc.format = 1u;
+    image_desc.format = AGC_FORMAT_RGBA8_UNORM;
     image_desc.usage = AGC_IMAGE_USAGE_SAMPLED_BIT;
     sampler_desc.min_filter = AGC_FILTER_LINEAR;
     TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &buffer), AGC_OK,
@@ -477,6 +477,224 @@ static void test_runtime_command_space_atomic_failure(void)
         "small-buffer device destroys");
 }
 
+static void test_runtime_ps5_image_layouts(void)
+{
+    AgcImageDesc desc = AGC_IMAGE_DESC_INIT;
+    AgcImageLayout layout = AGC_IMAGE_LAYOUT_INIT;
+    AgcImageSubresourceLayout subresource = AGC_IMAGE_SUBRESOURCE_LAYOUT_INIT;
+
+    desc.width = 17u;
+    desc.height = 9u;
+    desc.mip_levels = 5u;
+    desc.array_layers = 6u;
+    desc.format = AGC_FORMAT_BC7_UNORM;
+    desc.usage = AGC_IMAGE_USAGE_SAMPLED_BIT |
+        AGC_IMAGE_USAGE_CUBE_COMPATIBLE_BIT;
+    TEST_ASSERT_EQ(agcGetImageLayout(&desc, &layout), AGC_OK,
+        "BC cube-array layout succeeds");
+    TEST_ASSERT_EQ(layout.block_width, 4u, "BC layout exposes block width");
+    TEST_ASSERT_EQ(layout.bytes_per_block, 16u,
+        "BC7 layout exposes 16-byte blocks");
+    TEST_ASSERT_EQ(layout.plane_count, 1u, "BC layout has one plane");
+    TEST_ASSERT_EQ(layout.subresource_count, 30u,
+        "cube faces participate in subresource count");
+    TEST_ASSERT_EQ(layout.allocation_size & 0xffffu, 0u,
+        "image allocation is 64-KiB aligned");
+    TEST_ASSERT_EQ(agcGetImageSubresourceLayout(&desc, 4u, 5u, 0u,
+        &subresource), AGC_OK, "last BC cube subresource is queryable");
+    TEST_ASSERT_EQ(subresource.width, 1u, "last BC mip clamps width to one");
+    TEST_ASSERT_EQ(subresource.row_pitch, 256u,
+        "BC row pitch retains PS5 transfer alignment");
+
+    desc = (AgcImageDesc)AGC_IMAGE_DESC_INIT;
+    layout = (AgcImageLayout)AGC_IMAGE_LAYOUT_INIT;
+    desc.width = 1920u;
+    desc.height = 1080u;
+    desc.format = AGC_FORMAT_D32_FLOAT_S8_UINT;
+    desc.usage = AGC_IMAGE_USAGE_DEPTH_STENCIL_BIT | AGC_IMAGE_USAGE_HTILE_BIT;
+    TEST_ASSERT_EQ(agcGetImageLayout(&desc, &layout), AGC_OK,
+        "depth-stencil layout with HTILE succeeds");
+    TEST_ASSERT_EQ(layout.plane_count, 3u,
+        "depth, stencil, and HTILE are separate planes");
+    TEST_ASSERT(layout.metadata_size != 0u, "HTILE metadata has storage");
+
+    desc.width = UINT32_MAX;
+    desc.height = UINT32_MAX;
+    desc.depth = UINT32_MAX;
+    desc.format = AGC_FORMAT_RGBA8_UNORM;
+    desc.usage = AGC_IMAGE_USAGE_SAMPLED_BIT;
+    TEST_ASSERT_EQ(agcGetImageLayout(&desc, &layout),
+        AGC_ERROR_INVALID_ARGUMENT, "overflowing 3D layout fails closed");
+}
+
+static void test_runtime_heap_staging_and_stats(void)
+{
+    enum { BUFFER_COUNT = 128 };
+    AgcDevice device = create_device();
+    AgcBuffer buffers[BUFFER_COUNT] = {0};
+    AgcImage images[16] = {0};
+    AgcBufferDesc desc = AGC_BUFFER_DESC_INIT;
+    AgcImageDesc image_desc = AGC_IMAGE_DESC_INIT;
+    AgcMemoryStats stats = AGC_MEMORY_STATS_INIT;
+    AgcAllocationInfo info = AGC_ALLOCATION_INFO_INIT;
+    uint32_t upload_data[4] = {1u, 2u, 3u, 4u};
+    uint32_t read_data[4] = {0u};
+    uint32_t i;
+
+    desc.size = 4096u;
+    desc.usage = AGC_BUFFER_USAGE_STORAGE_BIT;
+    for (i = 0u; i < BUFFER_COUNT; ++i) {
+        TEST_ASSERT_EQ(agcCreateBuffer(device, &desc, &buffers[i]), AGC_OK,
+            "pooled garlic buffer creation succeeds");
+    }
+    image_desc.width = 64u;
+    image_desc.height = 64u;
+    image_desc.format = AGC_FORMAT_RGBA8_UNORM;
+    image_desc.usage = AGC_IMAGE_USAGE_SAMPLED_BIT |
+        AGC_IMAGE_USAGE_TRANSFER_DST_BIT;
+    for (i = 0u; i < 16u; ++i) {
+        TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &images[i]), AGC_OK,
+            "pooled garlic image creation succeeds");
+    }
+    TEST_ASSERT_EQ(agcGetMemoryStats(device, &stats), AGC_OK,
+        "memory statistics query succeeds");
+    TEST_ASSERT_EQ(stats.live_allocation_count, BUFFER_COUNT + 16u,
+        "statistics count live resource allocations");
+    TEST_ASSERT_EQ(stats.block_count[AGC_MEMORY_HEAP_GARLIC], 1u,
+        "many small buffers share one garlic block");
+    TEST_ASSERT_EQ(agcSetObjectDebugName(device, AGC_OBJECT_TYPE_BUFFER,
+        buffers[0], "streaming-vertices"), AGC_OK,
+        "allocation debug name is accepted");
+    TEST_ASSERT_EQ(agcGetObjectAllocationInfo(device, AGC_OBJECT_TYPE_BUFFER,
+        buffers[0], &info), AGC_OK, "buffer allocation info is queryable");
+    TEST_ASSERT_EQ(info.heap, AGC_MEMORY_HEAP_GARLIC,
+        "default GPU buffer resides in garlic");
+    TEST_ASSERT(strcmp(info.debug_name, "streaming-vertices") == 0,
+        "allocation info preserves debug name");
+    for (i = 0u; i < BUFFER_COUNT; ++i)
+        TEST_ASSERT_EQ(agcDestroyBuffer(buffers[i]), AGC_OK,
+            "pooled garlic buffer destruction succeeds");
+    for (i = 0u; i < 16u; ++i)
+        TEST_ASSERT_EQ(agcDestroyImage(images[i]), AGC_OK,
+            "pooled garlic image destruction succeeds");
+
+    desc.flags = AGC_BUFFER_CREATE_DEDICATED_BIT;
+    TEST_ASSERT_EQ(agcCreateBuffer(device, &desc, &buffers[0]), AGC_OK,
+        "explicit dedicated buffer creation succeeds");
+    info = (AgcAllocationInfo)AGC_ALLOCATION_INFO_INIT;
+    TEST_ASSERT_EQ(agcGetObjectAllocationInfo(device, AGC_OBJECT_TYPE_BUFFER,
+        buffers[0], &info), AGC_OK, "dedicated allocation info succeeds");
+    TEST_ASSERT_EQ(info.dedicated, 1u,
+        "explicit dedicated buffer owns its block");
+    TEST_ASSERT_EQ(agcDestroyBuffer(buffers[0]), AGC_OK,
+        "dedicated block is released with its buffer");
+
+    desc.flags = AGC_BUFFER_CREATE_UPLOAD_BIT;
+    TEST_ASSERT_EQ(agcCreateBuffer(device, &desc, &buffers[0]), AGC_OK,
+        "persistently mapped upload buffer creation succeeds");
+    TEST_ASSERT_EQ(agcWriteBuffer(buffers[0], 8u, upload_data,
+        sizeof(upload_data)), AGC_OK, "bounded upload flush succeeds");
+    info = (AgcAllocationInfo)AGC_ALLOCATION_INFO_INIT;
+    TEST_ASSERT_EQ(agcGetObjectAllocationInfo(device, AGC_OBJECT_TYPE_BUFFER,
+        buffers[0], &info), AGC_OK, "upload allocation info succeeds");
+    TEST_ASSERT_EQ(info.heap, AGC_MEMORY_HEAP_FLEXIBLE,
+        "upload buffer resides in flexible memory");
+    TEST_ASSERT(memcmp((uint8_t *)info.cpu_address + 8u, upload_data,
+        sizeof(upload_data)) == 0, "upload writes persistent CPU mapping");
+    TEST_ASSERT_EQ(agcDestroyBuffer(buffers[0]), AGC_OK,
+        "upload buffer destroys");
+
+    desc.flags = AGC_BUFFER_CREATE_READBACK_BIT;
+    TEST_ASSERT_EQ(agcCreateBuffer(device, &desc, &buffers[0]), AGC_OK,
+        "persistently mapped readback buffer creation succeeds");
+    info = (AgcAllocationInfo)AGC_ALLOCATION_INFO_INIT;
+    TEST_ASSERT_EQ(agcGetObjectAllocationInfo(device, AGC_OBJECT_TYPE_BUFFER,
+        buffers[0], &info), AGC_OK, "readback allocation info succeeds");
+    memcpy((uint8_t *)info.cpu_address + 16u, upload_data, sizeof(upload_data));
+    TEST_ASSERT_EQ(agcReadBuffer(buffers[0], 16u, read_data,
+        sizeof(read_data)), AGC_OK, "bounded readback invalidate succeeds");
+    TEST_ASSERT(memcmp(read_data, upload_data, sizeof(read_data)) == 0,
+        "readback copies from persistent CPU mapping");
+    TEST_ASSERT_EQ(agcDestroyBuffer(buffers[0]), AGC_OK,
+        "readback buffer destroys");
+
+    stats = (AgcMemoryStats)AGC_MEMORY_STATS_INIT;
+    TEST_ASSERT_EQ(agcGetMemoryStats(device, &stats), AGC_OK,
+        "post-reload memory statistics query succeeds");
+    TEST_ASSERT_EQ(stats.live_allocation_count, 0u,
+        "repeated resource reloads return allocation count to baseline");
+    TEST_ASSERT(stats.high_water_allocation_count >= BUFFER_COUNT,
+        "statistics retain allocation high-water mark");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "heap test device destruction succeeds");
+}
+
+static void test_runtime_fence_deferred_free(void)
+{
+    AgcDevice device = create_device();
+    AgcQueue queue = create_queue(device, kAgcQueueCompute);
+    AgcShader shader = create_shader(device, kAgcShaderStageCs);
+    AgcComputePipelineDesc pipeline_desc = AGC_COMPUTE_PIPELINE_DESC_INIT;
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
+    AgcBufferDesc buffer_desc = AGC_BUFFER_DESC_INIT;
+    AgcComputePipeline pipeline = NULL;
+    AgcCommandBuffer command_buffer = NULL;
+    AgcFence fence = NULL;
+    AgcBuffer buffer = NULL;
+    AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    AgcMemoryStats stats = AGC_MEMORY_STATS_INIT;
+
+    pipeline_desc.shader = shader;
+    command_desc.queue_type = kAgcQueueCompute;
+    command_desc.capacity_dwords = 32u;
+    buffer_desc.size = 1024u;
+    buffer_desc.usage = AGC_BUFFER_USAGE_STORAGE_BIT;
+    TEST_ASSERT_EQ(agcCreateComputePipeline(device, &pipeline_desc, &pipeline),
+        AGC_OK, "deferred-free compute pipeline creation succeeds");
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc,
+        &command_buffer), AGC_OK, "deferred-free command buffer creation succeeds");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command_buffer), AGC_OK,
+        "deferred-free command buffer begins");
+    TEST_ASSERT_EQ(agcCmdBindComputePipeline(command_buffer, pipeline), AGC_OK,
+        "deferred-free compute pipeline binds");
+    TEST_ASSERT_EQ(agcCmdDispatch(command_buffer, 1u, 1u, 1u), AGC_OK,
+        "deferred-free dispatch records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command_buffer), AGC_OK,
+        "deferred-free command buffer ends");
+    TEST_ASSERT_EQ(agcCreateFence(device, &fence_desc, &fence), AGC_OK,
+        "deferred-free fence creation succeeds");
+    TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &buffer), AGC_OK,
+        "deferred resource creation succeeds");
+    TEST_ASSERT_EQ(agcDestroyBufferDeferred(buffer, fence), AGC_OK,
+        "resource retirement queues against unsignaled fence");
+    TEST_ASSERT_EQ(agcGetMemoryStats(device, &stats), AGC_OK,
+        "deferred memory stats query succeeds");
+    TEST_ASSERT_EQ(stats.deferred_free_count, 1u,
+        "deferred resource remains resident before fence");
+    submit.command_buffer_count = 1u;
+    submit.command_buffers = &command_buffer;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
+        "submission signals deferred retirement fence");
+    TEST_ASSERT_EQ(agcCollectDeferredFrees(device), AGC_OK,
+        "signaled deferred resources are collected");
+    stats = (AgcMemoryStats)AGC_MEMORY_STATS_INIT;
+    TEST_ASSERT_EQ(agcGetMemoryStats(device, &stats), AGC_OK,
+        "collected memory stats query succeeds");
+    TEST_ASSERT_EQ(stats.deferred_free_count, 0u,
+        "deferred queue returns to baseline after fence");
+
+    TEST_ASSERT_EQ(agcDestroyFence(fence), AGC_OK, "deferred fence destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(command_buffer), AGC_OK,
+        "deferred command buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyComputePipeline(pipeline), AGC_OK,
+        "deferred pipeline destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(shader), AGC_OK, "deferred shader destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK, "deferred queue destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "deferred-free device destruction succeeds");
+}
+
 void test_suite_runtime(void)
 {
     TEST_SUITE("Firmware-neutral Native Runtime");
@@ -487,4 +705,7 @@ void test_suite_runtime(void)
     TEST_RUN(test_runtime_compute_submission);
     TEST_RUN(test_runtime_indexed_graphics_submission);
     TEST_RUN(test_runtime_command_space_atomic_failure);
+    TEST_RUN(test_runtime_ps5_image_layouts);
+    TEST_RUN(test_runtime_heap_staging_and_stats);
+    TEST_RUN(test_runtime_fence_deferred_free);
 }

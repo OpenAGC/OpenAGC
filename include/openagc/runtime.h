@@ -150,6 +150,12 @@ typedef enum AgcBufferUsageFlagBits {
 } AgcBufferUsageFlagBits;
 typedef uint32_t AgcBufferUsageFlags;
 
+typedef enum AgcBufferCreateFlagBits {
+    AGC_BUFFER_CREATE_UPLOAD_BIT = 1u << 0,
+    AGC_BUFFER_CREATE_READBACK_BIT = 1u << 1,
+    AGC_BUFFER_CREATE_DEDICATED_BIT = 1u << 2
+} AgcBufferCreateFlagBits;
+
 typedef struct AgcBufferDesc {
     uint32_t struct_size;
     uint32_t version;
@@ -170,7 +176,9 @@ typedef enum AgcImageUsageFlagBits {
     AGC_IMAGE_USAGE_DEPTH_STENCIL_BIT = 1u << 3,
     AGC_IMAGE_USAGE_TRANSFER_SRC_BIT = 1u << 4,
     AGC_IMAGE_USAGE_TRANSFER_DST_BIT = 1u << 5,
-    AGC_IMAGE_USAGE_SCANOUT_BIT = 1u << 6
+    AGC_IMAGE_USAGE_SCANOUT_BIT = 1u << 6,
+    AGC_IMAGE_USAGE_CUBE_COMPATIBLE_BIT = 1u << 7,
+    AGC_IMAGE_USAGE_HTILE_BIT = 1u << 8
 } AgcImageUsageFlagBits;
 typedef uint32_t AgcImageUsageFlags;
 
@@ -306,6 +314,125 @@ typedef struct AgcFenceDesc {
     uint64_t reserved[4];
 } AgcFenceDesc;
 
+/* Native PS5 resource formats. Values shared with gfx1013 image descriptors
+ * deliberately retain their hardware encoding. */
+typedef enum AgcFormat {
+    AGC_FORMAT_UNDEFINED = 0,
+    AGC_FORMAT_RGBA8_UNORM = 56,
+    AGC_FORMAT_BC1_UNORM = 169,
+    AGC_FORMAT_BC1_SRGB = 170,
+    AGC_FORMAT_BC2_UNORM = 171,
+    AGC_FORMAT_BC2_SRGB = 172,
+    AGC_FORMAT_BC3_UNORM = 173,
+    AGC_FORMAT_BC3_SRGB = 174,
+    AGC_FORMAT_BC4_UNORM = 175,
+    AGC_FORMAT_BC4_SNORM = 176,
+    AGC_FORMAT_BC5_UNORM = 177,
+    AGC_FORMAT_BC5_SNORM = 178,
+    AGC_FORMAT_BC6_UFLOAT = 179,
+    AGC_FORMAT_BC6_SFLOAT = 180,
+    AGC_FORMAT_BC7_UNORM = 181,
+    AGC_FORMAT_BC7_SRGB = 182,
+    AGC_FORMAT_D16_UNORM = 256,
+    AGC_FORMAT_D32_FLOAT = 257,
+    AGC_FORMAT_S8_UINT = 258,
+    AGC_FORMAT_D16_UNORM_S8_UINT = 259,
+    AGC_FORMAT_D32_FLOAT_S8_UINT = 260
+} AgcFormat;
+
+typedef enum AgcMemoryHeap {
+    AGC_MEMORY_HEAP_FLEXIBLE = 0,
+    AGC_MEMORY_HEAP_GARLIC = 1,
+    AGC_MEMORY_HEAP_COUNT = 2
+} AgcMemoryHeap;
+
+typedef enum AgcObjectType {
+    AGC_OBJECT_TYPE_BUFFER = 0,
+    AGC_OBJECT_TYPE_IMAGE = 1,
+    AGC_OBJECT_TYPE_SHADER = 2,
+    AGC_OBJECT_TYPE_COMMAND_BUFFER = 3
+} AgcObjectType;
+
+#define AGC_RUNTIME_DEBUG_NAME_SIZE 64u
+
+typedef struct AgcAllocationInfo {
+    uint32_t struct_size;
+    uint32_t version;
+    uint32_t heap;
+    uint32_t dedicated;
+    uint64_t allocation_size;
+    uint64_t requested_size;
+    uint64_t heap_offset;
+    uint64_t gpu_address;
+    void *cpu_address;
+    uint32_t resident;
+    uint32_t owner_type;
+    char debug_name[AGC_RUNTIME_DEBUG_NAME_SIZE];
+    uint64_t reserved[4];
+} AgcAllocationInfo;
+
+#define AGC_ALLOCATION_INFO_INIT \
+    { sizeof(AgcAllocationInfo), AGC_RUNTIME_STRUCTURE_VERSION_1, 0u, 0u, \
+      0u, 0u, 0u, 0u, NULL, 0u, 0u, {0}, {0u, 0u, 0u, 0u} }
+
+typedef struct AgcMemoryStats {
+    uint32_t struct_size;
+    uint32_t version;
+    uint32_t block_count[AGC_MEMORY_HEAP_COUNT];
+    uint32_t dedicated_block_count;
+    uint64_t live_allocation_count;
+    uint64_t live_bytes;
+    uint64_t high_water_allocation_count;
+    uint64_t high_water_bytes;
+    uint64_t deferred_free_count;
+    uint64_t reserved[4];
+} AgcMemoryStats;
+
+#define AGC_MEMORY_STATS_INIT \
+    { sizeof(AgcMemoryStats), AGC_RUNTIME_STRUCTURE_VERSION_1, {0u, 0u}, 0u, \
+      0u, 0u, 0u, 0u, 0u, {0u, 0u, 0u, 0u} }
+
+typedef struct AgcImageLayout {
+    uint32_t struct_size;
+    uint32_t version;
+    uint64_t allocation_size;
+    uint64_t alignment;
+    uint32_t plane_count;
+    uint32_t subresource_count;
+    uint32_t block_width;
+    uint32_t block_height;
+    uint32_t bytes_per_block;
+    uint32_t first_mip_in_tail;
+    uint64_t metadata_offset;
+    uint64_t metadata_size;
+    uint64_t reserved[4];
+} AgcImageLayout;
+
+#define AGC_IMAGE_LAYOUT_INIT \
+    { sizeof(AgcImageLayout), AGC_RUNTIME_STRUCTURE_VERSION_1, 0u, 0u, 0u, \
+      0u, 0u, 0u, 0u, 0u, 0u, 0u, {0u, 0u, 0u, 0u} }
+
+typedef struct AgcImageSubresourceLayout {
+    uint32_t struct_size;
+    uint32_t version;
+    uint32_t mip_level;
+    uint32_t array_layer;
+    uint32_t plane;
+    uint32_t width;
+    uint32_t height;
+    uint32_t depth;
+    uint64_t offset;
+    uint64_t size;
+    uint64_t row_pitch;
+    uint64_t slice_pitch;
+    uint64_t reserved[4];
+} AgcImageSubresourceLayout;
+
+#define AGC_IMAGE_SUBRESOURCE_LAYOUT_INIT \
+    { sizeof(AgcImageSubresourceLayout), AGC_RUNTIME_STRUCTURE_VERSION_1, \
+      0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, \
+      {0u, 0u, 0u, 0u} }
+
 #define AGC_FENCE_DESC_INIT \
     { sizeof(AgcFenceDesc), AGC_RUNTIME_STRUCTURE_VERSION_1, 0u, 0u, \
       {0u, 0u, 0u, 0u} }
@@ -354,6 +481,14 @@ _Static_assert(sizeof(AgcFenceDesc) == 48u,
     "AgcFenceDesc v1 size mismatch");
 _Static_assert(sizeof(AgcSubmitInfo) == 56u,
     "AgcSubmitInfo v1 size mismatch");
+_Static_assert(sizeof(AgcAllocationInfo) == 160u,
+    "AgcAllocationInfo v1 size mismatch");
+_Static_assert(sizeof(AgcMemoryStats) == 96u,
+    "AgcMemoryStats v1 size mismatch");
+_Static_assert(sizeof(AgcImageLayout) == 96u,
+    "AgcImageLayout v1 size mismatch");
+_Static_assert(sizeof(AgcImageSubresourceLayout) == 96u,
+    "AgcImageSubresourceLayout v1 size mismatch");
 
 int32_t PS5_SYSV_ABI agcCreateDevice(
     const AgcDeviceDesc *desc, AgcDevice *device_out);
@@ -368,9 +503,22 @@ int32_t PS5_SYSV_ABI agcDestroyQueue(AgcQueue queue);
 int32_t PS5_SYSV_ABI agcCreateBuffer(
     AgcDevice device, const AgcBufferDesc *desc, AgcBuffer *buffer_out);
 int32_t PS5_SYSV_ABI agcDestroyBuffer(AgcBuffer buffer);
+int32_t PS5_SYSV_ABI agcDestroyBufferDeferred(
+    AgcBuffer buffer, AgcFence fence);
+int32_t PS5_SYSV_ABI agcWriteBuffer(
+    AgcBuffer buffer, uint64_t offset, const void *data, uint64_t size);
+int32_t PS5_SYSV_ABI agcReadBuffer(
+    AgcBuffer buffer, uint64_t offset, void *data, uint64_t size);
 int32_t PS5_SYSV_ABI agcCreateImage(
     AgcDevice device, const AgcImageDesc *desc, AgcImage *image_out);
 int32_t PS5_SYSV_ABI agcDestroyImage(AgcImage image);
+int32_t PS5_SYSV_ABI agcDestroyImageDeferred(
+    AgcImage image, AgcFence fence);
+int32_t PS5_SYSV_ABI agcGetImageLayout(
+    const AgcImageDesc *desc, AgcImageLayout *layout);
+int32_t PS5_SYSV_ABI agcGetImageSubresourceLayout(const AgcImageDesc *desc,
+    uint32_t mip_level, uint32_t array_layer, uint32_t plane,
+    AgcImageSubresourceLayout *layout);
 int32_t PS5_SYSV_ABI agcCreateImageView(
     AgcDevice device, const AgcImageViewDesc *desc, AgcImageView *view_out);
 int32_t PS5_SYSV_ABI agcDestroyImageView(AgcImageView view);
@@ -415,6 +563,14 @@ int32_t PS5_SYSV_ABI agcResetFence(AgcFence fence);
 int32_t PS5_SYSV_ABI agcWaitFence(AgcFence fence, uint64_t timeout_ns);
 int32_t PS5_SYSV_ABI agcQueueSubmit(
     AgcQueue queue, const AgcSubmitInfo *submit_info, AgcFence fence);
+
+int32_t PS5_SYSV_ABI agcGetObjectAllocationInfo(AgcDevice device,
+    AgcObjectType type, const void *object, AgcAllocationInfo *info);
+int32_t PS5_SYSV_ABI agcSetObjectDebugName(AgcDevice device,
+    AgcObjectType type, void *object, const char *name);
+int32_t PS5_SYSV_ABI agcGetMemoryStats(
+    AgcDevice device, AgcMemoryStats *stats);
+int32_t PS5_SYSV_ABI agcCollectDeferredFrees(AgcDevice device);
 
 #ifdef __cplusplus
 }

@@ -79,8 +79,8 @@ expert use, but make the native API the recommended application surface.
    SHA-256 `e04004fee2254e6169805f153ce4812197726ed5f53a9295a4493f0d8ac9a9ce`
    passed twice as identical bytes on both FW 5.50 and FW 11.60 after their
    cleanup stress prerequisites. Preserve this exact artifact as regression
-   evidence. Milestone 1 is complete; Milestone 2 resource creation and memory
-   management is now the active product task.
+   evidence. Milestones 1 and 2 are complete; Milestone 3 reflection and
+   validated pipeline objects are now the active product task.
 2. **Do not reopen completed format work.** All R/RG/RGBA16
    UNORM/SNORM/UINT/SINT tuples, all six 32-bit UINT/SINT color tuples, all 14
    BC1-BC7 sampling encodings, the planned D16/D32/S8/HTILE progression, and
@@ -201,7 +201,7 @@ fail-closed until Milestone 3 reflection can emit a complete validated hardware
 pipeline bind; that hardware promotion is not part of this host-qualified
 contract exit criterion. See `docs/native_runtime.md`.
 
-### Milestone 2: resource creation and memory management
+### Milestone 2: resource creation and memory management — complete
 
 Build reusable allocators above flexible/onion and garlic/direct memory while
 retaining explicit heap properties. Do not expose raw allocation policy as a
@@ -227,6 +227,17 @@ Exit criteria: a stress test creates, streams, reuses, and destroys many
 buffers and images from a bounded number of direct-memory blocks, reloads the
 same asset set repeatedly, detects arithmetic overflow, and returns to the
 original allocation count after all fences complete.
+
+Completed with reusable flexible/onion and garlic/direct blocks,
+alignment-aware gap reuse, automatic and explicit dedicated allocations,
+persistently mapped upload/readback buffers, allocation ownership/debug
+queries, leak/high-water statistics, and fence-keyed buffer/image retirement.
+The centralized checked layout API covers mip chains, arrays, cube faces, 3D
+depth, BC blocks, 1x/4x samples, split depth/stencil, and HTILE metadata. Stress
+coverage places 128 simultaneous GPU buffers in one garlic block, exercises
+repeated staging reloads, rejects overflowing 3D layouts, and returns live and
+deferred counts to baseline after fence completion. The complete generic suite
+passes 12,752 assertions. See `docs/memory_resources.md`.
 
 ### Milestone 3: reflection and validated pipeline objects
 

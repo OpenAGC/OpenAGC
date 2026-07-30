@@ -41,6 +41,11 @@ submission returns `AGC_ERROR_BUSY` and changes nothing. Destroy children in
 reverse creation/dependency order. Destroying the device shuts down its
 selected backend only after all children are gone.
 
+Buffers, images, shader code, and command storage are backed by the native PS5
+heap allocator described in [memory_resources.md](memory_resources.md).
+Fence-keyed buffer/image retirement extends these ownership rules without
+returning pending GPU storage to a heap early.
+
 ## Command-buffer states
 
 Command buffers have four public states:

@@ -18,14 +18,13 @@ passed twice as identical bytes on both endpoint consoles. The FW 11.60
 workload operation remains fail-closed after all known packet forms stalled
 and is not part of the baseline contract.
 
-The native C runtime contract is also complete. Its opaque objects, versioned
-descriptors, ownership/state validation, finite fences, stable errors, and
-runtime capability/qualification reporting are host-qualified. Prospero builds
-the same API but native queue submission remains fail-closed until reflected
-hardware pipeline binding is implemented.
+The native C runtime contract and resource/memory milestone are complete. Its
+opaque objects, versioned descriptors, ownership/state validation, finite
+fences, stable errors, and runtime capability/qualification reporting are
+host-qualified. Prospero builds the same API but native queue submission
+remains fail-closed until reflected hardware pipeline binding is implemented.
 
-1. **Add resource and pipeline safety.** Implement heap suballocation,
-   overflow-safe layouts, staging, reflection from `openagc-psbc`, and graphics
+1. **Add pipeline safety.** Implement reflection from `openagc-psbc`, and graphics
    and compute pipelines that reject shader/export, attachment, blend,
    descriptor, sample-count, and stage-linkage mismatches before PM4 emission.
 2. **Own transitions and synchronization.** Track explicit resource usage and
@@ -45,6 +44,32 @@ and the planned 4x MSAA matrix are regression coverage, not current
 implementation priorities. Remaining tiled BC, packed/alternate-swap, color-
 metadata, HDR, and depth/MSAA combinations are demand-driven and retain the
 existing host/SPRX/exact-firmware qualification labels.
+
+## Native resource and memory management complete (2026-07-30)
+
+The PS5-only native runtime now suballocates buffers, images, shader code, and
+command storage from reusable flexible/onion and garlic/direct blocks. Small
+resources reuse aligned gaps, scanout and oversized resources become dedicated,
+and applications can explicitly request dedicated buffers. Upload/readback
+buffers remain mapped and use bounded range checks plus exact flush/invalidate
+operations.
+
+Versioned layout queries cover mips, arrays, cube faces, 3D depth, BC block
+geometry, 1x/4x samples, depth/stencil planes, and HTILE metadata with checked
+arithmetic. Allocation queries report heap, padded/requested sizes, offset, GPU
+VA, CPU mapping, residency, owner, dedicated state, and debug name. Statistics
+report blocks, live counts/bytes, high-water marks, and pending retirements.
+Fence-keyed buffer/image frees retain storage until the fence signals and the
+collector runs.
+
+This milestone is host-qualified. The same implementation compiles without
+warnings for Prospero, but the new native heap layer has not yet been promoted
+through an on-console smoke test and is not labeled hardware-qualified.
+
+Stress coverage creates 128 simultaneous buffers in one garlic block, cycles
+upload/readback resources, detects layout overflow, and returns live/deferred
+allocation counts to baseline. The full generic result is 12,752 passed and 0
+failed across all six CTest suites. See `docs/memory_resources.md`.
 
 ## Native runtime C API contract complete (2026-07-30)
 
@@ -78,7 +103,7 @@ notification. Unknown profiles remain fail-closed through the exact registry.
 The generic tests create and destroy every object, reject descriptor,
 ownership, lifecycle, and capacity violations, submit one five-dword compute
 ACB, and submit one eleven-dword indexed graphics DCB. The clean result is
-12,398 passed and 0 failed across all six CTest suites; ASan/UBSan passes too.
+12,752 passed and 0 failed across all six CTest suites; ASan/UBSan passes too.
 The generic and Prospero builds compile without warnings from the same public
 header. Installation includes the header and lifecycle guide, and a separate
 CMake package consumer compiles and runs. A before/after global-symbol audit

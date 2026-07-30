@@ -200,7 +200,7 @@ if(OPENAGC_PACKAGE_PSBC)
         DESTINATION ${CMAKE_INSTALL_BINDIR}
         RENAME openagc-psbc)
 endif()
-install(FILES LICENSE README.md docs/native_runtime.md
+install(FILES LICENSE README.md docs/native_runtime.md docs/memory_resources.md
     DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/doc/OpenAGC)
 
 set(OPENAGC_CMAKE_INSTALL_DIR
