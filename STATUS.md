@@ -141,7 +141,10 @@ zero outside), shut down cleanly, and left no process, but the wrapper rejected
 the historical VideoOut `31968/31968` color count. The current headless full-
 rectangle mip viewport produces `56832/56832`; both endpoint recipes now
 require that exact value. The same pinned FW 5.50 artifact must be rerun before
-the metadata count is frozen.
+the metadata count is frozen. The corrected-wrapper run then passed all
+bounded oracles and left no process; the recipe now freezes the identical
+artifact's observed `7982` selected words with zero outside change. One
+enforcement replay remains.
 
 Ordinary D16 HTILE is now hardware-qualified twice on each endpoint. The
 pinned current-source artifacts reproduced exact D16 classes, clean teardown,

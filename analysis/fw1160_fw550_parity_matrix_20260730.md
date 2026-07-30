@@ -195,6 +195,13 @@ viewport produces `56832/56832`, not the historical retained-VideoOut
 attempt is not promoted because its pre-launch wrapper contract was wrong;
 rerun the same pinned FW 5.50 artifact before freezing the selected count.
 
+The corrected-wrapper FW 5.50 mip run passed exact `56832/56832` color,
+positive selected metadata with zero outside, bounded completion, application
+PASS, clean shutdown, and no residual process. Because the identical pinned
+artifact had already exposed the exact selected count `7982`, the recipe now
+freezes `7982`. Run one enforcement replay before promoting the FW 5.50 mip
+tuple and moving to its exact FW 11.60 mirror.
+
 That prerequisite sequence is now complete. Two relinks against the committed
 shader records reproduced all eight artifacts byte-for-byte, and dependency
 inspection found only VideoOut, kernel, libc, and networking. The exact FW

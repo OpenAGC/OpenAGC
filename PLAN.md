@@ -623,6 +623,10 @@ the runner and shared teardown on FW 11.60 only.
   full-rectangle coverage is exactly `56832/56832`. Both endpoint recipes now
   require that value. Rerun the same pinned FW 5.50 artifact before freezing
   its selected count.
+- The corrected FW 5.50 mip run passed all bounded oracles and left no process.
+  The identical artifact's observed selected count is `7982`, with zero
+  outside changes, so the guarded recipe now freezes `7982`. Run one
+  enforcement replay before the FW 11.60 mip mirror.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and
