@@ -170,7 +170,7 @@ lifetime release, and required dynamic-state gating. Line and point polygon
 modes fail pipeline creation with the other unqualified rasterization options.
 Graphics scratch remains unsupported and fails during pipeline creation;
 reflected gfx1013 LDS requirements are bounded before bind generation. The full
-generic suite now reports 14,209
+generic suite now reports 14,212
 passed and 0 failed; the compiler's
 library, varying/export, NGG, and tessellation suites pass. This slice is
 host-tested only. No PS5 hardware test was run or claimed. See
@@ -210,9 +210,10 @@ remain future native runtime work.
 
 The generated `runtime_triangle` NGG vertex main/front pair and fragment
 sidecar now drive a generic native graphics contract and the separate
-`agc_runtime_graphics.elf` probe. It creates upload vertex/index buffers, a
-reflected graphics pipeline, RGBA8 color and D16 depth targets, dynamic
-viewport/scissor state, and a bounded-fence submission without raw PM4
+`agc_runtime_graphics.elf` probe. Its two color exports compile with matching
+MRT0/MRT1 epilogue formats, and it creates upload vertex/index buffers, a
+reflected graphics pipeline, two RGBA8 color targets and a D16 depth target,
+dynamic viewport/scissor state, and a bounded-fence submission without raw PM4
 assembly. The artifact cross-builds, but has not been deployed; fence
 completion is not a pixel-output oracle and no hardware qualification is
 claimed.

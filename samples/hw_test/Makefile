@@ -346,6 +346,7 @@ shaders_runtime_graphics: shaders/runtime_triangle.vert shaders/runtime_triangle
 		-o shaders/runtime_triangle_frag.spv
 	$(PSBC) -f shaders/runtime_triangle_frag.spv -s fragment \
 		-o shaders/runtime_triangle_frag.sb \
+		--color-export fp16_abgr --color-export fp16_abgr \
 		--reflection-header shaders/runtime_triangle_frag_reflection.h \
 		--reflection-symbol runtime_triangle_frag_reflection
 	xxd -i -n runtime_triangle_frag_data shaders/runtime_triangle_frag.sb \

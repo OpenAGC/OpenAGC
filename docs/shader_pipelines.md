@@ -37,9 +37,10 @@ for the corresponding native pipeline descriptor.
 `samples/hw_test/shaders/runtime_triangle.*` is the small graphics artifact
 pair used by the native-runtime host contract and `agc_runtime_graphics.elf`:
 the vertex invocation emits an NGG GS-back record plus an ES-front executable
-record and reflection sidecar; the fragment invocation emits its color-export
-record and sidecar. The probe consumes each record and sidecar exactly as
-produced, with no application-local register metadata.
+record and reflection sidecar; the fragment invocation emits two color exports,
+a matching MRT0/MRT1 epilogue, and its reflection sidecar. The probe consumes
+each record and sidecar exactly as produced, with no application-local register
+metadata.
 
 Create a reflected shader with `AGC_SHADER_DESC_INIT`, setting `code`,
 `code_size`, and `reflection`; fused records also set `front_code` and

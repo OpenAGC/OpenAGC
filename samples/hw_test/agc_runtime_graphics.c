@@ -64,8 +64,10 @@ int main(void)
     AgcShaderDesc vertex_desc = AGC_SHADER_DESC_INIT;
     AgcShaderDesc pixel_desc = AGC_SHADER_DESC_INIT;
     AgcGraphicsPipelineDesc pipeline_desc = AGC_GRAPHICS_PIPELINE_DESC_INIT;
-    AgcColorBlendAttachmentState attachment =
-        AGC_COLOR_BLEND_ATTACHMENT_STATE_INIT;
+    AgcColorBlendAttachmentState attachments[2] = {
+        AGC_COLOR_BLEND_ATTACHMENT_STATE_INIT,
+        AGC_COLOR_BLEND_ATTACHMENT_STATE_INIT,
+    };
     AgcDepthStencilPipelineState depth_stencil =
         AGC_DEPTH_STENCIL_PIPELINE_STATE_INIT;
     AgcBufferDesc buffer_desc = AGC_BUFFER_DESC_INIT;
@@ -74,7 +76,10 @@ int main(void)
     AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
     AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
     AgcVertexBufferBinding vertex_binding = AGC_VERTEX_BUFFER_BINDING_INIT;
-    AgcColorTargetBinding target = AGC_COLOR_TARGET_BINDING_INIT;
+    AgcColorTargetBinding targets[2] = {
+        AGC_COLOR_TARGET_BINDING_INIT,
+        AGC_COLOR_TARGET_BINDING_INIT,
+    };
     AgcDepthStencilTargetBinding depth_target =
         AGC_DEPTH_STENCIL_TARGET_BINDING_INIT;
     AgcViewport viewport = AGC_VIEWPORT_INIT;
@@ -89,7 +94,8 @@ int main(void)
     AgcGraphicsPipeline pipeline = NULL;
     AgcBuffer vertex_buffer = NULL;
     AgcBuffer index_buffer = NULL;
-    AgcImage target_image = NULL;
+    AgcImage first_target_image = NULL;
+    AgcImage second_target_image = NULL;
     AgcImage depth_image = NULL;
     AgcCommandBuffer command_buffer = NULL;
     AgcFence fence = NULL;
@@ -117,7 +123,7 @@ int main(void)
     if (vertex_reflection.stage != kAgcShaderStageVs ||
         vertex_reflection.vertex_input_count != 2u ||
         pixel_reflection.stage != kAgcShaderStagePs ||
-        pixel_reflection.color_export_count != 1u) {
+        pixel_reflection.color_export_count != 2u) {
         puts("Reflection artifact: unexpected graphics contract");
         goto cleanup;
     }
@@ -157,13 +163,14 @@ int main(void)
     report_result("agcCreateShader(fragment)", result);
     if (result != AGC_OK)
         goto cleanup;
-    attachment.format = AGC_FORMAT_RGBA8_UNORM;
+    attachments[0].format = AGC_FORMAT_RGBA8_UNORM;
+    attachments[1].format = AGC_FORMAT_RGBA8_UNORM;
     pipeline_desc.vertex_shader = vertex;
     pipeline_desc.pixel_shader = pixel;
     pipeline_desc.vertex_inputs = vertex_reflection.vertex_inputs;
     pipeline_desc.vertex_input_count = vertex_reflection.vertex_input_count;
-    pipeline_desc.color_attachments = &attachment;
-    pipeline_desc.color_attachment_count = 1u;
+    pipeline_desc.color_attachments = attachments;
+    pipeline_desc.color_attachment_count = 2u;
     depth_stencil.format = AGC_FORMAT_D16_UNORM;
     pipeline_desc.depth_stencil = &depth_stencil;
     pipeline_desc.dynamic_state_mask = AGC_DYNAMIC_STATE_VIEWPORT_BIT |
@@ -198,8 +205,12 @@ int main(void)
     image_desc.height = kTargetHeight;
     image_desc.format = AGC_FORMAT_RGBA8_UNORM;
     image_desc.usage = AGC_IMAGE_USAGE_COLOR_TARGET_BIT;
-    result = agcCreateImage(device, &image_desc, &target_image);
-    report_result("agcCreateImage(color target)", result);
+    result = agcCreateImage(device, &image_desc, &first_target_image);
+    report_result("agcCreateImage(color target 0)", result);
+    if (result != AGC_OK)
+        goto cleanup;
+    result = agcCreateImage(device, &image_desc, &second_target_image);
+    report_result("agcCreateImage(color target 1)", result);
     if (result != AGC_OK)
         goto cleanup;
     image_desc.format = AGC_FORMAT_D16_UNORM;
@@ -233,8 +244,9 @@ int main(void)
     report_result("agcCmdBindVertexBuffers", result);
     if (result != AGC_OK)
         goto cleanup;
-    target.image = target_image;
-    result = agcCmdBindColorTargets(command_buffer, 1u, &target);
+    targets[0].image = first_target_image;
+    targets[1].image = second_target_image;
+    result = agcCmdBindColorTargets(command_buffer, 2u, targets);
     report_result("agcCmdBindColorTargets", result);
     if (result != AGC_OK)
         goto cleanup;
@@ -302,9 +314,15 @@ cleanup:
         if (result != AGC_OK)
             passed = false;
     }
-    if (target_image) {
-        result = agcDestroyImage(target_image);
-        report_result("agcDestroyImage", result);
+    if (second_target_image) {
+        result = agcDestroyImage(second_target_image);
+        report_result("agcDestroyImage(color target 1)", result);
+        if (result != AGC_OK)
+            passed = false;
+    }
+    if (first_target_image) {
+        result = agcDestroyImage(first_target_image);
+        report_result("agcDestroyImage(color target 0)", result);
         if (result != AGC_OK)
             passed = false;
     }

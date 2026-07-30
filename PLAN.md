@@ -263,7 +263,7 @@ logical shader bundles. Reflection v2 adds compiler-derived front-stage
 interfaces and geometry topology/limit facts without changing its serialized
 size; v1/API-14 artifacts remain accepted. The runtime recomputes the
 compiler's FNV-1a stage-linkage hash over its four interface masks before
-accepting a reflected shader. The full generic suite reports 14,209 passed.
+accepting a reflected shader. The full generic suite reports 14,212 passed.
 The opt-in combined-tree contract test now compiles real `openagc-psbc`
 vertex/fragment/compute output and creates OpenAGC graphics/compute pipelines
 without sample-local register knowledge; its 256-byte code alignment and
@@ -287,11 +287,11 @@ image, then locks both MRT base-register packets and lifetime release. This is
 not a render-pass abstraction: clear/load/store, transitions, and PS5 hardware
 execution remain open, and no hardware promotion is claimed.
 The native graphics counterpart now compiles a position/color triangle into a
-real NGG main/front pair and fragment sidecar, consumes those exact artifacts
-in a generic pipeline/color-target/depth-target/vertex/index/dynamic-state
-submission contract, and builds `agc_runtime_graphics.elf`. The standalone
-probe waits on a bounded fence only; it has no pixel-output oracle, has not
-been deployed, and is not a hardware qualification.
+real NGG main/front pair and a two-export fragment sidecar, consumes those
+exact artifacts in a generic two-color-target/depth-target/vertex/index/
+dynamic-state submission contract, and builds `agc_runtime_graphics.elf`.
+The standalone probe waits on a bounded fence only; it has no pixel-output
+oracle, has not been deployed, and is not a hardware qualification.
 Runtime API v4 adds the equivalent typed depth/stencil binding. A graphics draw
 with declared depth/stencil state now fails before emission until a matching
 single-mip `AGC_IMAGE_USAGE_DEPTH_STENCIL_BIT` image binds; the runtime derives
