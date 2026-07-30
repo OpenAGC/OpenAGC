@@ -391,6 +391,9 @@
       (defined(AGC_VALIDATE_RGBA16_UINT) && AGC_VALIDATE_RGBA16_UINT)
 #include "shaders/uint16_frag_sb.h"
 #define FRAGMENT_DATA uint16_frag_data
+#elif defined(AGC_VALIDATE_R16_SINT) && AGC_VALIDATE_R16_SINT
+#include "shaders/sint16_frag_sb.h"
+#define FRAGMENT_DATA sint16_frag_data
 #elif AGC_NGG_INPUT_LINES || AGC_TESS_GEOMETRY_LINES
 #include "shaders/triangle_line_frag_sb.h"
 #define FRAGMENT_DATA triangle_line_frag_data
@@ -555,6 +558,9 @@ int sceKernelDeleteEqueue(SceKernelEqueue equeue);
 #ifndef AGC_VALIDATE_RGBA16_UINT
 #define AGC_VALIDATE_RGBA16_UINT 0
 #endif
+#ifndef AGC_VALIDATE_R16_SINT
+#define AGC_VALIDATE_R16_SINT 0
+#endif
 #ifndef AGC_VALIDATE_R8_UNORM
 #define AGC_VALIDATE_R8_UNORM 0
 #endif
@@ -585,6 +591,7 @@ int sceKernelDeleteEqueue(SceKernelEqueue equeue);
      AGC_VALIDATE_RG16_SNORM + AGC_VALIDATE_RGBA16_SNORM + \
      AGC_VALIDATE_R16_UINT + AGC_VALIDATE_RG16_UINT + \
      AGC_VALIDATE_RGBA16_UINT + \
+     AGC_VALIDATE_R16_SINT + \
      AGC_VALIDATE_R8_UNORM + AGC_VALIDATE_RG8_UNORM + \
      AGC_VALIDATE_R32_FLOAT + AGC_VALIDATE_RG32_FLOAT + \
      AGC_VALIDATE_RGBA32_FLOAT) > 1
@@ -2971,7 +2978,9 @@ static bool dispatch_graphics(GraphicsTest *test,
                     lane_hash[lane] = (lane_hash[lane] ^ component) *
                         UINT64_C(1099511628211);
                     if (target->number_type ==
-                        AGC_GFX1013_SURFACE_NUMBER_UINT) {
+                            AGC_GFX1013_SURFACE_NUMBER_UINT ||
+                        target->number_type ==
+                            AGC_GFX1013_SURFACE_NUMBER_SINT) {
                         uint32_t expected_index;
                         switch (lane) {
                         case 0u: expected_index = pixel_x; break;
@@ -2981,8 +2990,11 @@ static bool dispatch_graphics(GraphicsTest *test,
                             expected_index = pixel_x * 17u + pixel_y * 31u;
                             break;
                         }
-                        const uint16_t expected = (uint16_t)
+                        uint16_t expected = (uint16_t)
                             ((expected_index & 255u) * 257u);
+                        if (target->number_type ==
+                            AGC_GFX1013_SURFACE_NUMBER_SINT)
+                            expected = (uint16_t)(expected - 32768u);
                         lane_exact_mismatches[lane] +=
                             component != expected;
                     }
@@ -3043,9 +3055,12 @@ static bool dispatch_graphics(GraphicsTest *test,
             AGC_GFX1013_SURFACE_NUMBER_SNORM;
         const bool uint16 = target->number_type ==
             AGC_GFX1013_SURFACE_NUMBER_UINT;
+        const bool sint16 = target->number_type ==
+            AGC_GFX1013_SURFACE_NUMBER_SINT;
         const bool normalized16 = unorm16 || snorm16;
         const char *normalized_label = unorm16 ? "UNORM16" :
-            (snorm16 ? "SNORM16" : (uint16 ? "UINT16" : "FP16"));
+            (snorm16 ? "SNORM16" : (uint16 ? "UINT16" :
+                (sint16 ? "SINT16" : "FP16")));
         printf("[%s] Changed pixels: %u / %u (expected about %u)\n",
                normalized_label, changed, target_pixels,
                expected_changed);
@@ -3076,7 +3091,7 @@ static bool dispatch_graphics(GraphicsTest *test,
                normalized_label,
                (unsigned long long)packed_hash);
         bool lane_encoding_pass = true;
-        if (normalized16 || uint16) {
+        if (normalized16 || uint16 || sint16) {
             for (uint32_t lane = 0u; lane < components; ++lane) {
                 const bool coverage_pass =
                     lane_changed[lane] + coverage_tolerance >=
@@ -3090,7 +3105,8 @@ static bool dispatch_graphics(GraphicsTest *test,
                     (lane_signed_min[lane] <= -0x7000 &&
                      lane_signed_max[lane] >= 0x7000);
                 const bool lane_pass = coverage_pass && range_pass &&
-                    (!uint16 || lane_exact_mismatches[lane] == 0u);
+                    (!(uint16 || sint16) ||
+                     lane_exact_mismatches[lane] == 0u);
                 lane_encoding_pass &= lane_pass;
                 if (snorm16) {
                     printf("[SNORM16 Lane %u] changed=%u range=%d..%d "
@@ -3104,7 +3120,8 @@ static bool dispatch_graphics(GraphicsTest *test,
                            "range=0x%04x..0x%04x "
                            "distinct=%u exact-mismatches=%u "
                            "fnv64=0x%016llx: %s\n",
-                           uint16 ? "UINT16" : "UNORM16", lane,
+                           uint16 ? "UINT16" :
+                           (sint16 ? "SINT16" : "UNORM16"), lane,
                            lane_changed[lane],
                            lane_min[lane], lane_max[lane],
                            lane_unique_count[lane],
@@ -3128,7 +3145,7 @@ static bool dispatch_graphics(GraphicsTest *test,
 #else
         const bool color_pass = unique_color_count >= 8u;
 #endif
-        const bool encoding_pass = !(normalized16 || uint16) ||
+        const bool encoding_pass = !(normalized16 || uint16 || sint16) ||
             lane_encoding_pass;
 #if AGC_INDIRECT_DRAW_COUNT > 1
         const bool multi_draw_pass =
@@ -3347,7 +3364,7 @@ static void visualize_fp16(GraphicsTest *test, uint32_t components) {
     AGC_VALIDATE_RGBA16_UNORM || AGC_VALIDATE_R16_SNORM || \
     AGC_VALIDATE_RG16_SNORM || AGC_VALIDATE_RGBA16_SNORM || \
     AGC_VALIDATE_R16_UINT || AGC_VALIDATE_RG16_UINT || \
-    AGC_VALIDATE_RGBA16_UINT
+    AGC_VALIDATE_RGBA16_UINT || AGC_VALIDATE_R16_SINT
 static void visualize_integer16(GraphicsTest *test, uint32_t components,
         bool signed_normalized, bool unsigned_integer) {
     const uint16_t *source = (const uint16_t *)test->render_target;
@@ -3880,7 +3897,7 @@ int main(void) {
       AGC_VALIDATE_RGBA16_UNORM || AGC_VALIDATE_R16_SNORM || \
       AGC_VALIDATE_RG16_SNORM || AGC_VALIDATE_RGBA16_SNORM || \
       AGC_VALIDATE_R16_UINT || AGC_VALIDATE_RG16_UINT || \
-      AGC_VALIDATE_RGBA16_UINT
+      AGC_VALIDATE_RGBA16_UINT || AGC_VALIDATE_R16_SINT
     const uint32_t components =
         (AGC_VALIDATE_RGBA16_UNORM || AGC_VALIDATE_RGBA16_SNORM ||
          AGC_VALIDATE_RGBA16_UINT) ? 4u :
@@ -3901,6 +3918,7 @@ int main(void) {
         (AGC_VALIDATE_R16_UINT || AGC_VALIDATE_RG16_UINT ||
          AGC_VALIDATE_RGBA16_UINT) ?
             AGC_GFX1013_SURFACE_NUMBER_UINT :
+        AGC_VALIDATE_R16_SINT ? AGC_GFX1013_SURFACE_NUMBER_SINT :
         (AGC_VALIDATE_R16_UNORM || AGC_VALIDATE_RG16_UNORM ||
          AGC_VALIDATE_RGBA16_UNORM) ?
             AGC_GFX1013_SURFACE_NUMBER_UNORM :
@@ -3916,7 +3934,8 @@ int main(void) {
                                     "R16_UNORM" : (AGC_VALIDATE_RGBA16_UINT ?
                                         "RGBA16_UINT" : (AGC_VALIDATE_RG16_UINT ?
                                             "RG16_UINT" : (AGC_VALIDATE_R16_UINT ?
-                                                "R16_UINT" : "R16_FLOAT")))))))))
+                                                "R16_UINT" : (AGC_VALIDATE_R16_SINT ?
+                                                    "R16_SINT" : "R16_FLOAT"))))))))))
     };
     printf("\n--- Step 4: %s offscreen draw ---\n",
            narrow_16_target.name);
@@ -3931,10 +3950,10 @@ int main(void) {
     AGC_VALIDATE_RGBA16_UNORM || AGC_VALIDATE_R16_SNORM || \
     AGC_VALIDATE_RG16_SNORM || AGC_VALIDATE_RGBA16_SNORM || \
     AGC_VALIDATE_R16_UINT || AGC_VALIDATE_RG16_UINT || \
-    AGC_VALIDATE_RGBA16_UINT
+    AGC_VALIDATE_RGBA16_UINT || AGC_VALIDATE_R16_SINT
     visualize_integer16(&test, components,
         (AGC_VALIDATE_R16_SNORM || AGC_VALIDATE_RG16_SNORM ||
-         AGC_VALIDATE_RGBA16_SNORM) != 0,
+         AGC_VALIDATE_RGBA16_SNORM || AGC_VALIDATE_R16_SINT) != 0,
         (AGC_VALIDATE_R16_UINT || AGC_VALIDATE_RG16_UINT ||
          AGC_VALIDATE_RGBA16_UINT) != 0);
 #else

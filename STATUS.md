@@ -228,7 +228,10 @@ See `analysis/fw1160_rgba16_uint_portable_qualification_20260730.md`.
 SINT16_ABGR export 8. Exact host coverage locks
 `CB_COLOR0_INFO=0x00070508`, the complete PM4 stream, all 39 profiles, every
 short command buffer, invalid enums, and maximum 64-bit layout arithmetic.
-The dedicated signed-integer portable hardware gate remains pending.
+The dedicated `ivec4` shader uses SINT16_ABGR export 8 and exact
+coordinate-derived values spanning `-32768..32767`. Its isolated portable
+gate builds and passes firmware-neutral dependency verification. Final-byte
+pinning and hardware execution remain pending.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability

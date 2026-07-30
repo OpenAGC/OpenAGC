@@ -338,7 +338,10 @@ the runner and shared teardown on FW 11.60 only.
   SINT, standard swap, two bytes per pixel, and SINT16_ABGR export 8. Exact
   PM4 (`CB_COLOR0_INFO=0x00070508`), all-profile selection, every
   short-buffer boundary, invalid-enum behavior, and maximum 64-bit layout
-  arithmetic pass. Its dedicated signed-integer portable shader gate is next.
+  arithmetic pass. Its dedicated `ivec4` shader uses SINT16_ABGR export 8 and
+  produces exact coordinate-derived values spanning `-32768..32767`. The
+  isolated portable gate builds and passes firmware-neutral dependency
+  verification. Pin its final bytes before execution.
 - Seven additional offscreen format gates now build under the same exact
   profile and bounded runner: R8, RG8, RGB10A2, R11G11B10, R32, RG32, and
   RGBA32. All seven passed twice on FW 11.60; logged RG32 reproduced FNV64
