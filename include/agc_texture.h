@@ -530,6 +530,7 @@ typedef struct AgcGfx1013Image2DState {
     uint32_t swizzle_mode;
     uint32_t base_array_layer;
     uint32_t last_array_layer;
+    uint32_t mip_level_count;
 } AgcGfx1013Image2DState;
 
 typedef struct AgcGfx1013BcFormatInfo {
@@ -579,6 +580,8 @@ _Static_assert(sizeof(AgcGfx1013BufferDescriptor) == 16,
     "gfx1013 buffer descriptor must be 16 bytes");
 _Static_assert(sizeof(AgcGfx1013ImageDescriptor) == 32,
     "gfx1013 image descriptor must be 32 bytes");
+_Static_assert(sizeof(AgcGfx1013Image2DState) == 64,
+    "gfx1013 image state must retain its append-only 64-byte layout");
 _Static_assert(sizeof(AgcGfx1013BcFormatInfo) == 16,
     "gfx1013 BC format info must be 16 bytes");
 _Static_assert(sizeof(AgcGfx1013LinearBcSurfaceLayout) == 40,

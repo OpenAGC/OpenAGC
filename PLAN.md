@@ -733,6 +733,13 @@ arrays, six cube faces, maximum dimensions/layers, and invalid inputs. Tiled BC
 layout and GPU sampling remain pending and must not be inferred from this
 linear host qualification.
 
+The sampled-image descriptor now has an append-only `mip_level_count` field.
+For ordinary images it emits exact gfx10.3 `LAST_LEVEL` and `MAX_MIP` values;
+MSAA retains its sample-log2 interpretation. A BC1 5x7, three-mip, two-layer
+fixture locks all six populated descriptor dwords and rejects impossible mip
+counts atomically. This removes the descriptor-side blocker for explicit-LOD
+and array-layer sampling.
+
 - Block width and height.
 - Bytes per block.
 - Compatible number type, including UNORM, SNORM, SRGB, or the signed/unsigned

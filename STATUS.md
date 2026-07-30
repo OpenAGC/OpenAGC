@@ -367,7 +367,14 @@ arithmetic. Aggregate and subresource queries cover odd dimensions, partial
 edge blocks, mip tails, arrays, six cube faces, and the maximum accepted
 16,384x16,384 by 8,192-layer allocation. Public layout structs have exact size
 assertions and rejected calls preserve outputs. Tiled layout and GPU sampling
-are still unqualified. The generic suite passes 12,230 assertions.
+are still unqualified.
+
+Gfx1013 sampled-image descriptors now expose mip chains through an append-only
+`mip_level_count` field in `AgcGfx1013Image2DState`. The encoder validates the
+count against the image dimensions and emits exact `LAST_LEVEL` and `MAX_MIP`
+fields while preserving the existing MSAA encoding. The BC1 descriptor fixture
+locks a 5x7, three-mip, two-layer array and atomic invalid-count rejection. The
+generic suite passes 12,240 assertions.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability

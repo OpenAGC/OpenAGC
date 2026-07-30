@@ -613,6 +613,9 @@ int32_t PS5_SYSV_ABI agcGfx1013Image2DDescriptorEncode(
     uint32_t width_minus_one;
     uint32_t sample_count;
     uint32_t sample_log2;
+    uint32_t mip_level_count;
+    uint32_t max_mip_levels = 1u;
+    uint32_t max_dimension;
 
     if (!descriptor || !state || state->address == 0u ||
         state->width == 0u || state->height == 0u)
@@ -631,6 +634,16 @@ int32_t PS5_SYSV_ABI agcGfx1013Image2DDescriptorEncode(
     sample_count = state->sample_count == 0u ? 1u : state->sample_count;
     if (sample_count == 1u) {
         sample_log2 = 0u;
+        mip_level_count = state->mip_level_count == 0u ?
+            1u : state->mip_level_count;
+        max_dimension = state->width > state->height ?
+            state->width : state->height;
+        while (max_dimension > 1u) {
+            max_dimension >>= 1u;
+            ++max_mip_levels;
+        }
+        if (mip_level_count > max_mip_levels || mip_level_count > 15u)
+            return AGC_ERROR_VALIDATION_FAILED;
         if (state->swizzle_mode != 0u)
             return AGC_ERROR_NOT_SUPPORTED;
         if (state->image_type == AGC_GFX1013_IMAGE_TYPE_2D) {
@@ -647,6 +660,9 @@ int32_t PS5_SYSV_ABI agcGfx1013Image2DDescriptorEncode(
         }
     } else if (sample_count == 4u) {
         sample_log2 = 2u;
+        mip_level_count = 1u;
+        if (state->mip_level_count > 1u)
+            return AGC_ERROR_NOT_SUPPORTED;
         if (state->image_type != AGC_GFX1013_IMAGE_TYPE_2D_MSAA ||
             state->swizzle_mode != AGC_GFX1013_IMAGE_SWIZZLE_64KB_R_X ||
             state->base_array_layer != 0u ||
@@ -667,11 +683,13 @@ int32_t PS5_SYSV_ABI agcGfx1013Image2DDescriptorEncode(
         ((state->height - 1u) << 14u) | (1u << 31u);
     encoded.words[3] = state->dst_sel_x | (state->dst_sel_y << 3u) |
         (state->dst_sel_z << 6u) | (state->dst_sel_w << 9u) |
-        (sample_log2 << 16u) | (state->swizzle_mode << 20u) |
+        ((sample_count > 1u ? sample_log2 : mip_level_count - 1u) << 16u) |
+        (state->swizzle_mode << 20u) |
         (state->image_type << 28u);
     encoded.words[4] = state->last_array_layer |
         (state->base_array_layer << 16u);
-    encoded.words[5] = sample_log2 << 4u;
+    encoded.words[5] = (sample_count > 1u ? sample_log2 :
+        mip_level_count - 1u) << 4u;
     *descriptor = encoded;
     return AGC_OK;
 }

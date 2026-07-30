@@ -988,6 +988,50 @@ static void test_gfx1013_bc_image_formats(void)
         "rejected BC format lookup preserves destination");
 }
 
+static void test_gfx1013_bc_mip_array_descriptor(void)
+{
+    AgcGfx1013ImageDescriptor image = {{0}};
+    AgcGfx1013Image2DState state = {
+        .address = 0x0000000202700000ull,
+        .width = 5u,
+        .height = 7u,
+        .format = AGC_GFX1013_IMAGE_FORMAT_BC1_UNORM,
+        .image_type = AGC_GFX1013_IMAGE_TYPE_2D_ARRAY,
+        .dst_sel_x = 4u,
+        .dst_sel_y = 5u,
+        .dst_sel_z = 6u,
+        .dst_sel_w = 7u,
+        .base_array_layer = 0u,
+        .last_array_layer = 1u,
+        .mip_level_count = 3u,
+    };
+
+    TEST_ASSERT_EQ(sizeof(AgcGfx1013Image2DState), 64u,
+        "gfx1013 image state append-only layout");
+    TEST_ASSERT_EQ(agcGfx1013Image2DDescriptorEncode(&image, &state),
+        AGC_OK, "gfx1013 BC1 mip-array descriptor encodes");
+    TEST_ASSERT_EQ(image.words[0], 0x02027000u,
+        "BC1 mip-array descriptor address");
+    TEST_ASSERT_EQ(image.words[1], 0x0a900000u,
+        "BC1 mip-array descriptor format and width low");
+    TEST_ASSERT_EQ(image.words[2], 0x80018001u,
+        "BC1 mip-array descriptor dimensions");
+    TEST_ASSERT_EQ(image.words[3], 0xd0020facu,
+        "BC1 mip-array descriptor last level and array type");
+    TEST_ASSERT_EQ(image.words[4], 1u,
+        "BC1 mip-array descriptor exposes two layers");
+    TEST_ASSERT_EQ(image.words[5], 0x00000020u,
+        "BC1 mip-array descriptor maximum mip");
+
+    state.mip_level_count = 4u;
+    image.words[0] = 0xa5a5a5a5u;
+    TEST_ASSERT_EQ(agcGfx1013Image2DDescriptorEncode(&image, &state),
+        AGC_ERROR_VALIDATION_FAILED,
+        "BC1 descriptor rejects mip count beyond dimensions");
+    TEST_ASSERT_EQ(image.words[0], 0xa5a5a5a5u,
+        "rejected BC1 mip descriptor preserves destination");
+}
+
 static void test_gfx1013_linear_bc_layout(void)
 {
     AgcGfx1013LinearBcSurfaceLayoutInput input = {
@@ -1302,6 +1346,7 @@ void test_suite_texture(void) {
     TEST_RUN(test_gfx1013_hardware_descriptors);
     TEST_RUN(test_gfx1013_hardware_descriptor_validation);
     TEST_RUN(test_gfx1013_bc_image_formats);
+    TEST_RUN(test_gfx1013_bc_mip_array_descriptor);
     TEST_RUN(test_gfx1013_linear_bc_layout);
     TEST_RUN(test_gfx1013_linear_bc_layout_validation);
     TEST_RUN(test_gfx1013_msaa_image_descriptor);
