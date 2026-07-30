@@ -104,3 +104,12 @@ was rebooted. The runner now accepts status 28 only for the daemon request,
 then still requires the post-cleanup websrv health check before artifact upload.
 A host fixture reproduces the timeout and proves that the fresh file-backed
 verdict path continues. This attempt carries no GPU qualification evidence.
+
+Both D16 expclear endpoint artifacts are also staged but remain launch-blocked
+behind the two FW 11.60 ordinary passes. Forced relinks reproduced exact hashes
+`740b5645214ccd13dc6e8099f7b35d98600dde0a89f9f97f3b8c04df3c9bc55f`
+for FW 11.60 and
+`41904f868ef6171ec854e80f79e281b8c681b009caf4d7dbc0979edfba498c32`
+for FW 5.50. Both avoid AGC SPRX dependencies, are preserved by full hash, and
+are enforced by their guarded recipes. Neither has been launched in this
+progression.
