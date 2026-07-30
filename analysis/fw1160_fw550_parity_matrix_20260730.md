@@ -363,6 +363,12 @@ FW 11.60 partial-rate pass 1 exactly matched FW 5.50: sample counters stayed
 file-backed verdict, fence, teardown, self-termination, and debugger absence
 also passed. Freeze the exact tuple for one identical-byte replay.
 
+FW 11.60 partial-rate pass 2 reproduced the exact tuple, guards, base oracle,
+fence, file-backed verdict, teardown, self-termination, and debugger absence.
+OpenAGC full-4x and partial-2x sample-rate shading, together with isolated
+D32+4x RGBA8 shader resolve, are hardware-qualified on both FW 5.50 and FW
+11.60. This closes the planned MSAA endpoint-parity tier.
+
 That prerequisite sequence is now complete. Two relinks against the committed
 shader records reproduced all eight artifacts byte-for-byte, and dependency
 inspection found only VideoOut, kernel, libc, and networking. The exact FW

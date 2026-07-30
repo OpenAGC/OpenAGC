@@ -705,6 +705,9 @@ the runner and shared teardown on FW 11.60 only.
   qualified on both endpoints. Run FW 11.60 partial-2x next.
 - FW 11.60 partial-rate pass 1 exactly matched FW 5.50's zero counters and
   total `5061792`, with all lifecycle checks passing. Replay the frozen tuple.
+- FW 11.60 partial-rate pass 2 reproduced every exact oracle. Isolated 4x
+  resolve plus full-4x and partial-2x sample-rate shading are qualified on both
+  endpoints; the planned MSAA parity tier is complete.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and
