@@ -918,6 +918,10 @@ all six pinned artifacts for identical-byte FW 5.50 replay and proceed to the
   four exact full-range lanes, zero mismatches, independent hashes, packed
   FNV64 `0x7bd3db10d1b3e617`, and a clean lifecycle. Replay once.
 
+  The identical replay reproduced every exact oracle. `RGBA32_SINT` and the
+  complete six-tuple 32-bit UINT/SINT matrix are hardware-qualified on FW
+  11.60. Preserve endpoint replay separately and begin BC1 sampling.
+
 These formats need dedicated integer-output pixel shaders. Do not qualify them
 using a floating-point shader and assume the conversion is correct. Their
 oracles must validate exact integer values rather than approximate
@@ -931,9 +935,9 @@ The float forms already reach the maximum widths. Add:
 - `R32_UINT`, `RG32_UINT`, and `RGBA32_UINT`.
 - `R32_SINT`, `RG32_SINT`, and `RGBA32_SINT`.
 
-`R32_UINT` is hardware-qualified on FW 11.60; all remaining UINT/SINT gates are
-pinned and await a clean boot. Preserve tuple order on hardware and use an
-independent exact-value oracle for every stored lane.
+All six 32-bit UINT/SINT gates are hardware-qualified on FW 11.60 with two
+identical-byte passes and independent exact-value oracles for every stored
+lane. Exact FW 5.50 replay remains a separate endpoint qualification task.
 
 `RGBA32_*` remains the regular color-buffer maximum:
 

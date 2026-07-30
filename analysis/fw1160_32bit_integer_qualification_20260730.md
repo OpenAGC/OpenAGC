@@ -38,6 +38,18 @@ FW 11.60.
 
 One identical-byte replay remains.
 
+## RGBA32_SINT pass 2
+
+The identical pinned bytes reproduced all four full-range lanes, zero mismatch
+counts, independent lane hashes, packed hash, fence, teardown,
+self-termination, and debugger absence. RGBA32_SINT is hardware-qualified on
+FW 11.60.
+
+With the earlier two-pass R32_UINT evidence, all six regular 32-bit UINT/SINT
+render-target tuples are now hardware-qualified on FW 11.60 using dedicated
+integer-output shaders and exact native-value oracles. Identical-byte FW 5.50
+replay remains a separate endpoint qualification task.
+
 ## RG32_SINT pass 2
 
 The identical pinned bytes reproduced both full-range lanes, zero mismatch

@@ -612,6 +612,11 @@ succeeds with four 255,744-sample full-range lanes, zero mismatches,
 independent hashes, packed FNV64 `0x7bd3db10d1b3e617`, clean teardown, and no
 residual process. One replay remains.
 
+The identical replay reproduced every exact RGBA32_SINT oracle and clean
+lifecycle. Together with the earlier R32_UINT evidence, all six regular
+32-bit UINT/SINT tuples are hardware-qualified on FW 11.60 with dedicated
+integer shaders. Exact FW 5.50 replay remains separate.
+
 The first BC1-BC7 descriptor blocker is fixed. Gfx10.3 SQ image descriptors
 carry a 9-bit resource-format field, while OpenAGC previously rejected values
 above `0x3f`; that made every native BC encoding (`169..182`) unreachable even
