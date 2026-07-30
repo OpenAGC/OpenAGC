@@ -27,7 +27,11 @@ cat > "$tmp/bin/curl" <<'MOCK_CURL'
 #!/bin/sh
 set -eu
 output=
+cleanup_http=0
 while [ "$#" -gt 0 ]; do
+    case "$1" in
+        http://*/process_cleanup/eboot.elf*) cleanup_http=1 ;;
+    esac
     if [ "$1" = "-o" ]; then
         output=$2
         shift 2
@@ -35,6 +39,9 @@ while [ "$#" -gt 0 ]; do
         shift
     fi
 done
+if [ "${MOCK_CLEANUP_TIMEOUT:-0}" -eq 1 ] && [ "$cleanup_http" -eq 1 ]; then
+    exit 28
+fi
 if [ -n "$output" ]; then
     cp "$MOCK_RESULT" "$output"
 fi
@@ -57,7 +64,8 @@ grep -q '^depth artifact SHA-256 mismatch$' "$tmp/hash-output"
 
 run_gate()
 {
-    PATH="$tmp/bin:$PATH" MOCK_RESULT="$tmp/result.log" PS5_HOST=mock \
+    PATH="$tmp/bin:$PATH" MOCK_RESULT="$tmp/result.log" \
+        MOCK_CLEANUP_TIMEOUT=1 PS5_HOST=mock \
         DEPTH_ARTIFACT="$tmp/depth.elf" \
         PROCESS_CLEANUP_ELF="$tmp/cleanup.elf" \
         RESULT_LOG_PATH=/data/homebrew/openagc_fw1160_depth/result.log \

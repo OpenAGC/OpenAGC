@@ -95,3 +95,12 @@ The exact FW 11.60 ordinary mirror was rebuilt twice with identical SHA-256
 dependency-audited, and preserved under its full hash before execution. Its
 guarded recipe now enforces those bytes. FW 11.60 websrv, FTP, and ps5debug-NG
 are reachable; the first logged ordinary pass may proceed cleanup-first.
+
+The first FW 11.60 attempt did not launch the D16 artifact. The preceding
+cleanup-daemon HTTP request timed out, and the runner treated curl status 28 as
+fatal before uploading or launching the gate. A manual cleanup request also
+timed out and ps5debug process enumeration stopped responding, so the console
+was rebooted. The runner now accepts status 28 only for the daemon request,
+then still requires the post-cleanup websrv health check before artifact upload.
+A host fixture reproduces the timeout and proves that the fresh file-backed
+verdict path continues. This attempt carries no GPU qualification evidence.
