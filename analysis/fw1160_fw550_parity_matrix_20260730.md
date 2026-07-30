@@ -348,6 +348,11 @@ guards, base oracle, fence, teardown, self-termination, and debugger absence.
 Both full-4x and partial-2x OpenAGC sample-rate modes are hardware-qualified on
 FW 5.50. Proceed to FW 11.60 full first using its distinct pinned artifact.
 
+FW 11.60 full-rate pass 1 produced the exact same
+`2529216,2530368,2529984,2529600,10119168` tuple as FW 5.50, with intact guards
+and unchanged color/D32 evidence. The file-backed verdict, fence, teardown,
+self-termination, and debugger absence passed. Freeze those counts for replay.
+
 That prerequisite sequence is now complete. Two relinks against the committed
 shader records reproduced all eight artifacts byte-for-byte, and dependency
 inspection found only VideoOut, kernel, libc, and networking. The exact FW

@@ -187,6 +187,10 @@ FW 5.50 partial-rate pass 2 reproduced every exact value and clean lifecycle.
 Both full-4x and partial-2x OpenAGC sample-rate modes are hardware-qualified on
 FW 5.50; FW 11.60 endpoint parity remains.
 
+FW 11.60 full-rate pass 1 exactly matched FW 5.50's four sample counts and
+total, with intact guards, unchanged base oracles, and a clean file-backed
+lifecycle. Its exact tuple is frozen for replay.
+
 All four subresource artifacts now reproduce across two relinks, avoid AGC
 SPRX dependencies, are preserved under full hashes, and have cleanup-first
 hash-pinned deploy targets with exact color and selected/outside metadata
