@@ -95,9 +95,16 @@ if [ "${EXPECTED_D16_FULL_RECT:-0}" -eq 1 ]; then
         "$output_file" || exit 1
 fi
 if [ "${EXPECTED_D32_FULL_RECT:-0}" -eq 1 ]; then
+    expected_d32_one=${EXPECTED_D32_ONE_COUNT:-1617408}
+    case "$expected_d32_one" in
+        ''|*[!0-9]*)
+            echo "invalid EXPECTED_D32_ONE_COUNT" >&2
+            exit 2
+            ;;
+    esac
     grep -q '^\[Depth Readback\] green=228096 red=228096 ' \
         "$output_file" || exit 1
-    grep -q '^\[Depth Readback\] raw D32: one=1617408 near=228096 far=228096$' \
+    grep -Fqx "[Depth Readback] raw D32: one=$expected_d32_one near=228096 far=228096" \
         "$output_file" || exit 1
 fi
 if [ "${EXPECTED_STENCIL_FULL_RECT:-0}" -eq 1 ]; then

@@ -209,6 +209,21 @@ endpoints. Run the pinned FW 11.60 depth-only expclear gate next; freeze and
 replay it before its FW 5.50 mirror, then repeat that sequence for stencil-only
 and both-aspect gates.
 
+The first FW 11.60 depth-only expclear attempt reached both fences, passed the
+aspect-`0x1` masked-RMW oracle, reproduced exact logical color, near, far, and
+stencil values, shut down cleanly, and left no residual process, but the host
+wrapper rejected its D32 clear-one count. Investigation showed the sample
+intentionally pre-fills the entire 2,211,840-element swizzled D32 allocation to
+`1.0` for combined expclear, including 138,240 padding elements; after the two
+triangles its exact allocation-aware distribution is therefore `1755648`
+clear-one, `228096` near, and `228096` far. The wrapper previously hard-coded
+the ordinary logical-surface clear count `1617408`. It now accepts an explicit,
+numeric `EXPECTED_D32_ONE_COUNT`, defaults to the ordinary value, and all six
+combined expclear recipes require `1755648`. The host fixture accepts the
+allocation-aware count and rejects the ordinary count. This attempt is not
+promoted because the pre-launch wrapper contract was wrong; rerun the identical
+pinned artifact with the corrected fail-closed oracle.
+
 ## Higher-level consumers
 
 The following FW 5.50-qualified application-facing paths still need bounded

@@ -91,7 +91,13 @@ distributions, immediate completion, clean shutdown, and no residual process;
 the recipe now freezes that count. Aspect-specific expclear remains behind one
 identical replay, which reproduced every invariant. Ordinary combined D32+S8
 HTILE is now hardware-qualified on both endpoints. Depth-only expclear on FW
-11.60 is the active combined gate; stencil-only and both-aspect remain blocked.
+11.60 is the active combined gate. Its first attempt passed the GPU, RMW,
+shutdown, and cleanup checks but was rejected by a host wrapper that assumed
+the ordinary logical D32 clear count. Combined expclear pre-fills the entire
+swizzled allocation, so its exact count is `1755648`, including padding. The
+runner and all six recipes now encode that allocation-aware value, with host
+accept/reject coverage. The same pinned depth-only artifact must be rerun;
+stencil-only and both-aspect remain blocked.
 
 Ordinary D16 HTILE is now hardware-qualified twice on each endpoint. The
 pinned current-source artifacts reproduced exact D16 classes, clean teardown,

@@ -15,7 +15,7 @@ GPU completion fence reached
 [Combined Expclear RMW] aspects=0x1 gate=ON offset=0x0 size=0x1000 selected=1024 expected=fffffff0 mismatch=0 outside-changed=0 reserved=PASS fence=48544c45: PASS
 [HTILE Readback] changed=1024 other=0 initial=fffff30f
 [Depth Readback] green=228096 red=228096 left=ff00ff00 right=ffff0000
-[Depth Readback] raw D32: one=1617408 near=228096 far=228096
+[Depth Readback] raw D32: one=1755648 near=228096 far=228096
 [Stencil Readback] zero=2165248 replace-5a=456192 other=0
 [Depth+Stencil Result] markers=PASS color=PASS raw-depth=PASS stencil=PASS
 Driver shutdown: PASS
@@ -70,14 +70,19 @@ run_gate()
         PROCESS_CLEANUP_ELF="$tmp/cleanup.elf" \
         RESULT_LOG_PATH=/data/homebrew/openagc_fw1160_depth/result.log \
         EXPECTED_HTILE_INITIAL=fffff30f EXPECTED_D32_FULL_RECT=1 \
+        EXPECTED_D32_ONE_COUNT="$2" \
         EXPECTED_HTILE_CHANGED=1024 \
         EXPECTED_STENCIL_FULL_RECT=1 \
         EXPECTED_COMBINED_EXPCLEAR_ASPECTS="$1" \
         sh "$runner"
 }
 
-run_gate 1 > "$tmp/pass-output"
-if run_gate 2 > "$tmp/fail-output" 2>&1; then
+run_gate 1 1755648 > "$tmp/pass-output"
+if run_gate 1 1617408 > "$tmp/count-fail-output" 2>&1; then
+    echo "depth runner accepted the wrong allocation-aware D32 count" >&2
+    exit 1
+fi
+if run_gate 2 1755648 > "$tmp/fail-output" 2>&1; then
     echo "depth runner accepted the wrong combined expclear aspect" >&2
     exit 1
 fi

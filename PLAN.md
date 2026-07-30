@@ -563,6 +563,13 @@ the runner and shared teardown on FW 11.60 only.
   Ordinary combined D32+S8 HTILE is qualified on both endpoints. Qualify
   depth-only expclear next in FW 11.60 pass-1/freeze/replay then FW 5.50 mirror
   order; only afterward proceed to stencil-only and both-aspect gates.
+- The first depth-only attempt exposed a host-oracle bug rather than a GPU
+  mismatch: combined expclear intentionally initializes all swizzled D32
+  allocation elements, so the exact clear-one count is `1755648`, including
+  padding, not the ordinary logical-surface `1617408`. The runner now supports
+  a validated explicit D32 count; every combined expclear recipe requires the
+  allocation-aware value, and the host fixture accepts it while rejecting the
+  ordinary count. Rerun the identical pinned FW 11.60 depth-only artifact.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and
