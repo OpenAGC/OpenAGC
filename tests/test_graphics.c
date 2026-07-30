@@ -1551,6 +1551,8 @@ static void test_gfx1013_fixed_function_packets(void)
          0x00028008u},
         {AGC_GFX1013_RT_FORMAT_RG16_UNORM, 0x05u, 0u, 0u, 4u, 4u,
          0x00028014u},
+        {AGC_GFX1013_RT_FORMAT_RGBA16_UNORM, 0x0cu, 0u, 0u, 8u, 4u,
+         0x00028030u},
     };
     uint32_t buffer[64] = {0};
     uint32_t expected_format[28];
@@ -1644,6 +1646,8 @@ static void test_gfx1013_fixed_function_packets(void)
         14u, "gfx1013 R16 UNORM enum is appended");
     TEST_ASSERT_EQ((uint32_t)AGC_GFX1013_RT_FORMAT_RG16_UNORM,
         15u, "gfx1013 RG16 UNORM enum is appended");
+    TEST_ASSERT_EQ((uint32_t)AGC_GFX1013_RT_FORMAT_RGBA16_UNORM,
+        16u, "gfx1013 RGBA16 UNORM enum is appended");
 
     agcCbInit(&cb, buffer, sizeof(buffer));
     TEST_ASSERT_EQ(agcGfx1013SetColorTarget(&cb, &color), AGC_OK,
@@ -1719,6 +1723,26 @@ static void test_gfx1013_fixed_function_packets(void)
         "gfx1013 RG16 UNORM rejects a one-dword-short buffer");
     TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
         "gfx1013 short RG16 UNORM emission is atomic");
+
+    TEST_ASSERT_EQ(agcGfx1013InitColorTarget(&typed_color, color.address,
+        2048u, color.height, AGC_GFX1013_RT_FORMAT_RGBA16_UNORM), AGC_OK,
+        "gfx1013 RGBA16 UNORM boundary target initializes");
+    for (i = 0u; i < 28u; ++i) {
+        memset(buffer, 0xa5, sizeof(buffer));
+        agcCbReset(&cb, buffer, i * sizeof(uint32_t));
+        TEST_ASSERT_EQ(agcGfx1013SetColorTarget(&cb, &typed_color),
+            AGC_ERROR_BUFFER_TOO_SMALL,
+            "gfx1013 RGBA16 UNORM rejects every short-buffer boundary");
+        TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+            "gfx1013 short RGBA16 UNORM emission preserves cursor");
+        TEST_ASSERT_EQ(buffer[0], 0xa5a5a5a5u,
+            "gfx1013 short RGBA16 UNORM emission preserves command memory");
+    }
+    agcCbReset(&cb, buffer, 28u * sizeof(uint32_t));
+    TEST_ASSERT_EQ(agcGfx1013SetColorTarget(&cb, &typed_color), AGC_OK,
+        "gfx1013 RGBA16 UNORM emits at exact required capacity");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 28u,
+        "gfx1013 RGBA16 UNORM exact capacity advances cursor");
 
     agcCbReset(&cb, buffer, sizeof(buffer));
     TEST_ASSERT_EQ(agcGfx1013SetViewport(&cb, &viewport), AGC_OK,
@@ -3613,6 +3637,39 @@ static void test_gfx1013_msaa_state_and_layout(void)
         "gfx1013 4x color block height");
     TEST_ASSERT_EQ(layout.allocation_size, UINT64_C(33423360),
         "gfx1013 4x color allocation size");
+
+    input.format = AGC_GFX1013_RT_FORMAT_RGBA16_UNORM;
+    TEST_ASSERT_EQ(agcGfx1013GetColorSurfaceLayout(&input, &layout),
+        AGC_OK, "gfx1013 4x RGBA16 UNORM layout computes");
+    TEST_ASSERT_EQ(layout.pitch, 1920u,
+        "gfx1013 RGBA16 UNORM layout pitch");
+    TEST_ASSERT_EQ(layout.padded_height, 1088u,
+        "gfx1013 RGBA16 UNORM padded height");
+    TEST_ASSERT_EQ(layout.block_width, 64u,
+        "gfx1013 RGBA16 UNORM block width");
+    TEST_ASSERT_EQ(layout.block_height, 32u,
+        "gfx1013 RGBA16 UNORM block height");
+    TEST_ASSERT_EQ(layout.slice_size, UINT64_C(66846720),
+        "gfx1013 RGBA16 UNORM exact 64-bit slice size");
+    TEST_ASSERT_EQ(layout.allocation_size, UINT64_C(66846720),
+        "gfx1013 RGBA16 UNORM exact allocation size");
+
+    input.width = 0x4000u;
+    input.height = 0x4000u;
+    input.layer_count = 0x2000u;
+    TEST_ASSERT_EQ(agcGfx1013GetColorSurfaceLayout(&input, &layout),
+        AGC_OK, "gfx1013 maximum RGBA16 UNORM layout computes");
+    TEST_ASSERT_EQ(layout.slice_size, UINT64_C(8589934592),
+        "gfx1013 maximum RGBA16 UNORM slice does not truncate");
+    TEST_ASSERT_EQ(layout.allocation_size, UINT64_C(70368744177664),
+        "gfx1013 maximum RGBA16 UNORM allocation does not overflow");
+    input.width++;
+    memset(&layout, 0xa5, sizeof(layout));
+    TEST_ASSERT_EQ(agcGfx1013GetColorSurfaceLayout(&input, &layout),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "gfx1013 oversized RGBA16 UNORM layout rejects before arithmetic");
+    TEST_ASSERT_EQ(layout.allocation_size, UINT64_C(0xa5a5a5a5a5a5a5a5),
+        "gfx1013 rejected RGBA16 UNORM layout preserves output");
 
     TEST_ASSERT_EQ(agcGfx1013InitColorTarget(&target,
         0x0000000203000000ull, 1920u, 1080u,
