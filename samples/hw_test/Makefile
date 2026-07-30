@@ -2660,12 +2660,14 @@ deploy_agc_depth_stencil_expclear_both_fw1160_logged: agc_depth_stencil_expclear
 deploy_agc_depth_d16_fw550_headless: agc_depth_d16_fw550_headless.elf
 	PS5_HOST=$(PS5_HOST) DEPTH_ARTIFACT=$(THIS_DIR)/$< \
 		EXPECTED_FW_ABI=0x0550 EXPECTED_D16_FULL_RECT=1 \
+		EXPECTED_ARTIFACT_SHA256=05ade7b1499255aa507020afe7ad0d16f4f369310cc4528d81753eca4eda24f6 \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) \
 		sh ./run_fw1160_depth.sh
 
 deploy_agc_stencil_s8_fw550_headless: agc_stencil_s8_fw550_headless.elf
 	PS5_HOST=$(PS5_HOST) DEPTH_ARTIFACT=$(THIS_DIR)/$< \
 		EXPECTED_FW_ABI=0x0550 EXPECTED_STENCIL_FULL_RECT=1 \
+		EXPECTED_ARTIFACT_SHA256=6ee520aaef59ad3ce19c6783ac4838fb3939e6784780d7966e6aebdeba8cd94b \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) \
 		sh ./run_fw1160_depth.sh
 
@@ -2673,11 +2675,13 @@ deploy_agc_depth_stencil_d16_s8_fw550_headless: agc_depth_stencil_d16_s8_fw550_h
 	PS5_HOST=$(PS5_HOST) DEPTH_ARTIFACT=$(THIS_DIR)/$< \
 		EXPECTED_FW_ABI=0x0550 EXPECTED_D16_FULL_RECT=1 \
 		EXPECTED_STENCIL_FULL_RECT=1 PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) \
+		EXPECTED_ARTIFACT_SHA256=ebf6d8dd450c5453764446c2cf06f10eed0bed7eb9abc4368aa1c261d59a4c80 \
 		sh ./run_fw1160_depth.sh
 
 deploy_agc_depth_d32_fw550_headless: agc_depth_d32_fw550_headless.elf
 	PS5_HOST=$(PS5_HOST) DEPTH_ARTIFACT=$(THIS_DIR)/$< \
 		EXPECTED_FW_ABI=0x0550 EXPECTED_D32_FULL_RECT=1 \
+		EXPECTED_ARTIFACT_SHA256=0a12e6132cb730fc0d5f7cd3a61d47ab8fe822c5661f421776b71d6325e8364d \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_depth.sh
 
 deploy_agc_depth_d16_htile_fw550_headless: agc_depth_d16_htile_fw550_headless.elf

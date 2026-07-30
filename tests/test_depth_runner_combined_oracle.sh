@@ -45,6 +45,16 @@ exit 0
 MOCK_SLEEP
 chmod +x "$tmp/bin/curl" "$tmp/bin/sleep"
 
+if PATH="$tmp/bin:$PATH" PS5_HOST=mock \
+    DEPTH_ARTIFACT="$tmp/depth.elf" \
+    PROCESS_CLEANUP_ELF="$tmp/cleanup.elf" \
+    EXPECTED_ARTIFACT_SHA256=0000000000000000000000000000000000000000000000000000000000000000 \
+    sh "$runner" > "$tmp/hash-output" 2>&1; then
+    echo "depth runner accepted changed artifact bytes" >&2
+    exit 1
+fi
+grep -q '^depth artifact SHA-256 mismatch$' "$tmp/hash-output"
+
 run_gate()
 {
     PATH="$tmp/bin:$PATH" MOCK_RESULT="$tmp/result.log" PS5_HOST=mock \

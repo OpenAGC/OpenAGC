@@ -13,6 +13,15 @@ if [ ! -s "$DEPTH_ARTIFACT" ] || [ ! -s "$PROCESS_CLEANUP_ELF" ]; then
     echo "missing depth-test or process-cleanup ELF" >&2
     exit 2
 fi
+if [ -n "${EXPECTED_ARTIFACT_SHA256:-}" ]; then
+    actual_sha=$(shasum -a 256 "$DEPTH_ARTIFACT" | awk '{print $1}') || exit 2
+    if [ "$actual_sha" != "$EXPECTED_ARTIFACT_SHA256" ]; then
+        echo "depth artifact SHA-256 mismatch" >&2
+        echo "expected: $EXPECTED_ARTIFACT_SHA256" >&2
+        echo "actual:   $actual_sha" >&2
+        exit 2
+    fi
+fi
 
 curl -sS --fail --ftp-create-dirs -T "$PROCESS_CLEANUP_ELF" \
     "ftp://$PS5_HOST:2121/data/homebrew/process_cleanup/eboot.elf" || exit 1

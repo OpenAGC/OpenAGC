@@ -128,13 +128,16 @@ shutdown, and self-termination paths as the FW 11.60 gates:
 
 | Artifact | SHA-256 |
 | --- | --- |
-| `agc_depth_d32_fw550_headless.elf` | `54ca186bc6aac7e3c335b03bd62cf07084f7a0f15ea48631524df1d25566e9de` |
-| `agc_depth_d16_fw550_headless.elf` | `e3ac54d0edcd003246a9517f03879ed37f22cdf573b1202ade2c699b6881ebf0` |
-| `agc_stencil_s8_fw550_headless.elf` | `8059abd5a68c44f8ea1d05215f374550063ba552b500f6f9a3050e565553eef3` |
-| `agc_depth_stencil_d16_s8_fw550_headless.elf` | `3866dd4dcf82e1a5425e23c401e7794702dac8b359009f70852cb0583fd6b001` |
+| `agc_depth_d32_fw550_headless.elf` | `0a12e6132cb730fc0d5f7cd3a61d47ab8fe822c5661f421776b71d6325e8364d` |
+| `agc_depth_d16_fw550_headless.elf` | `05ade7b1499255aa507020afe7ad0d16f4f369310cc4528d81753eca4eda24f6` |
+| `agc_stencil_s8_fw550_headless.elf` | `6ee520aaef59ad3ce19c6783ac4838fb3939e6784780d7966e6aebdeba8cd94b` |
+| `agc_depth_stencil_d16_s8_fw550_headless.elf` | `ebf6d8dd450c5453764446c2cf06f10eed0bed7eb9abc4368aa1c261d59a4c80` |
 
-`run_fw1160_depth.sh` now accepts an `EXPECTED_FW_ABI` selector and derives a
-firmware-specific remote path. The FW 5.50 deploy targets set it to `0x0550`;
-the default remains exact `0x1160`. Run D32, D16, S8-only, and D16+S8 once each on
-the FW 5.50 console. Any mismatch blocks promotion and requires stopping the
-matrix.
+Two forced relinks reproduced each current-source hash exactly. The four ELFs
+have no dynamic AGC SPRX dependency and were preserved under their full hash
+names in the host-only `OpenAGC-hw-artifacts` directory before execution.
+`run_fw1160_depth.sh` now rejects changed bytes before console access, accepts
+an `EXPECTED_FW_ABI` selector, and derives a firmware-specific remote path. The
+FW 5.50 deploy targets set exact hashes and ABI `0x0550`; the default remains
+exact `0x1160`. Run D32, D16, S8-only, and D16+S8 once each on the FW 5.50
+console. Any mismatch blocks promotion and requires stopping the matrix.
