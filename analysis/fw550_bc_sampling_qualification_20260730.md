@@ -70,6 +70,17 @@ post-run residual-process check passed again.
 BC7 UNORM and SRGB are hardware-qualified on exact FW 5.50 and FW 11.60.
 Proceed to BC6 UFLOAT/SFLOAT.
 
+## BC6 UFLOAT pass 1
+
+Artifact SHA-256:
+`37c1159701d9615fc015c3f5b887f88f00fe12e694df7ff92f442fb7165c072c`
+
+The guarded run produced `224640` changed pixels, fixture counts
+`{74880,74880,18760,56120}`, decoded range `0..220`, zero decode
+mismatches/error, channel independence, and FNV64 `0x6d3c92b92851ab4a`.
+All fixture, format, lifecycle, and residual-process gates passed. Repeat the
+identical artifact once.
+
 ## BC7 UNORM pass 2
 
 The identical artifact reproduced `224640` changed pixels, mode counts

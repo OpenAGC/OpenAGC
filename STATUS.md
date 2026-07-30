@@ -796,6 +796,11 @@ coverage, regions, zero-mismatch oracle, and FNV64 `0x7ed831bc232c8da1`.
 All lifecycle and residual-process gates passed. Both BC1 variants are now
 hardware-qualified on exact FW 5.50 and FW 11.60.
 
+BC6 UFLOAT pass 1 on FW 5.50 used the exact FW 11.60-qualified bytes and
+reproduced `224640` changed pixels, fixture counts
+`{74880,74880,18760,56120}`, range `0..220`, zero decode mismatches/error,
+channel independence, and FNV64 `0x6d3c92b92851ab4a`. One replay remains.
+
 BC5 UNORM on FW 5.50 used the exact FW 11.60-qualified bytes twice and
 reproduced `224640` changed pixels, equal regions, full R/G ranges, zero decode
 mismatches/error, channel independence, and FNV64 `0x3bc37aa96460e455` on both

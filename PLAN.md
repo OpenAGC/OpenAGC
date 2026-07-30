@@ -1242,6 +1242,12 @@ twice and reproduced `224640` changed pixels, mode counts
 `{4:205880,6:18760}`, alpha range `0..255`, zero exact mismatches, channel
 independence, and FNV64 `0x74a3526f9a3eef65` on both runs. Both BC7 variants
 are hardware-qualified on both endpoints; qualify BC6 next.
+
+BC6 UFLOAT pass 1 on FW 5.50 used pinned SHA-256
+`37c1159701d9615fc015c3f5b887f88f00fe12e694df7ff92f442fb7165c072c`
+and reproduced `224640` changed pixels, fixture counts
+`{74880,74880,18760,56120}`, range `0..220`, zero decode mismatches/error,
+channel independence, and FNV64 `0x6d3c92b92851ab4a`. Repeat once.
 The final firmware-neutral bytes are pinned as SHA-256
 `f74c393112fc465eace431a3fe288095ae4b3bf5ee993e8147ed0e9a2f22f2a4`
 for BC4 UNORM and
