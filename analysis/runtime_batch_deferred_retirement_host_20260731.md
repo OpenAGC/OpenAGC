@@ -51,7 +51,9 @@ sequence and bounded waits.
 
 It has not been deployed because the FW 5.50 console services remained
 unreachable after the presentation incident. Hardware qualification is still
-open.
+open. A second preflight after the console was reported powered on still found
+no ARP response from `10.0.1.41` and neither TCP port 8080 nor 2121 accepted a
+connection; no artifact was uploaded or launched.
 
 After console recovery, deploy it only through the cleanup-first, hash-pinned
 target:

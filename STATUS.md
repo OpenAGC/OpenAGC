@@ -182,11 +182,13 @@ Runtime API v14 permits buffer/image retirement while submitted command or
 dependent-object references remain. Objects reject new use immediately, but
 the collector requires both the finite-wait fence and reference release before
 recycling storage. Generic coverage passes 32 two-command batch cycles with
-buffer and image retirement, pre-reset busy collection, command reset, and
-exact deferred/live-count/live-byte baselines; present-chain retention is also
+buffer and image retirement, pre-recycle busy collection, atomic command-batch
+recycling, and exact deferred/live-count/live-byte baselines; present-chain
+retention is also
 covered. Prospero builds the identical stress artifact with SHA-256
-`012deac94e37a69a558643fb045d74d8fc3c9c1419515df4a51cae4882b63e1a`,
-but it remains hardware-unqualified while the FW 5.50 console is offline. See
+`a3d04e6472c2cdd0ea09624cd3536dd5eb53345fa063aa5cee937636290852fb`,
+but it remains hardware-unqualified while the FW 5.50 websrv services are
+unreachable. See
 `analysis/runtime_batch_deferred_retirement_host_20260731.md`.
 Runtime API v15 accepts `Undefined` as the documented discard destination.
 Discard is a zero-packet state change even after a writer; all other release,

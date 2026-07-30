@@ -615,10 +615,11 @@ exit audit. Submitted buffer/image references may now enter fence-keyed
 retirement, while actual allocation reuse still waits for both fence completion
 and command/dependency release. A 32-cycle generic stress test submits two
 typed DCBs per cycle, queues both referenced resources, verifies collection is
-busy before command reset, then proves deferred count, allocation count, and
-live bytes return exactly to baseline. The matching Prospero artifact
-`012deac94e37a69a558643fb045d74d8fc3c9c1419515df4a51cae4882b63e1a`
-is ready but hardware qualification awaits console recovery. See
+busy before atomic command-batch recycling, then proves deferred count,
+allocation count, and live bytes return exactly to baseline. The matching
+Prospero artifact
+`a3d04e6472c2cdd0ea09624cd3536dd5eb53345fa063aa5cee937636290852fb`
+is ready but hardware qualification awaits reachable websrv services. See
 `analysis/runtime_batch_deferred_retirement_host_20260731.md`.
 
 Runtime API v15 completes the exact low-level host transition matrix and fixes
