@@ -328,6 +328,13 @@ checks build as a firmware-neutral portable gate. The final bytes are pinned as
 SHA-256 `048b903713ce1a0b82e0d3dc5c01b37f2ea068da5e2ce6164bc5ae938c02f32f`;
 hardware execution remains ordered behind the clean-boot UINT gates.
 
+`AGC_GFX1013_RT_FORMAT_RG32_SINT` is appended at value 30 and maps to
+`(format=0x0b, number=SINT, swap=standard)`, eight bytes per pixel, and
+`32_GR` export 2. Exact host coverage locks `CB_COLOR0_INFO=0x0007052c`, full
+PM4, all 39 profiles, every short command-buffer boundary, invalid enums, and
+maximum 64-bit surface arithmetic. The generic suite passes 11,699 assertions;
+portable-gate construction is next.
+
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability
 ELF, non-indexed and indexed 10-dword multi-draw, GPU count-buffer selection,
@@ -336,7 +343,7 @@ twice on FW 11.60 before pinning. FW 5.50 execution remains pending; none of
 these FW 11.60 results is labeled cross-firmware hardware qualification. See
 `analysis/fw1160_rg16_unorm_and_endpoint_replay_20260730.md`.
 
-Offline portability closure is complete. The generic suite passes 11,316
+Offline portability closure is complete. The generic suite passes 11,699
 assertions, including full raw-version normalization, exact profile selection,
 and common-V7 acceptance across all 39 active profiles; the clean Prospero
 cross-build also passes. Submission, queue, memory, suspend, workload, TF/HS,

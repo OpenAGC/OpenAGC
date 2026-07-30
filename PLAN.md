@@ -623,6 +623,12 @@ all six pinned artifacts for identical-byte FW 5.50 replay and proceed to the
   `048b903713ce1a0b82e0d3dc5c01b37f2ea068da5e2ce6164bc5ae938c02f32f`.
   Keep execution behind the required clean reboot and UINT qualification order.
 
+- `RG32_SINT` is host-qualified as append-only value 30 with gfx1013 `32_32`,
+  SINT, standard swap, eight bytes per pixel, and `32_GR` export 2. Exact PM4
+  (`CB_COLOR0_INFO=0x0007052c`), all-profile selection, every short-buffer
+  boundary, invalid-enum behavior, and maximum layout arithmetic pass. Build
+  and pin its two-lane signed gate offline.
+
 These formats need dedicated integer-output pixel shaders. Do not qualify them
 using a floating-point shader and assume the conversion is correct. Their
 oracles must validate exact integer values rather than approximate
