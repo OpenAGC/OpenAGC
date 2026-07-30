@@ -2092,29 +2092,61 @@ static void test_runtime_shader_reflection_contract(void)
 typedef struct PipelineCompatibilityCase {
     AgcShaderColorExportFormat export_format;
     AgcShaderComponentClass component_class;
-    AgcFormat attachment_format;
+    uint32_t compatible_attachment_mask;
 } PipelineCompatibilityCase;
 
 static void test_runtime_graphics_pipeline_compatibility_matrix(void)
 {
+    enum {
+        kRuntimeFormatRgba8Unorm = 0,
+        kRuntimeFormatBgra8Unorm,
+        kRuntimeFormatRgba8Srgb,
+        kRuntimeFormatRgba16Float,
+        kRuntimeFormatRgba32Float,
+        kRuntimeFormatRgba16Uint,
+        kRuntimeFormatRgba32Uint,
+        kRuntimeFormatRgba16Sint,
+        kRuntimeFormatRgba32Sint,
+    };
+    static const AgcFormat attachment_formats[] = {
+        AGC_FORMAT_RGBA8_UNORM,
+        AGC_FORMAT_BGRA8_UNORM,
+        AGC_FORMAT_RGBA8_SRGB,
+        AGC_FORMAT_RGBA16_FLOAT,
+        AGC_FORMAT_RGBA32_FLOAT,
+        AGC_FORMAT_RGBA16_UINT,
+        AGC_FORMAT_RGBA32_UINT,
+        AGC_FORMAT_RGBA16_SINT,
+        AGC_FORMAT_RGBA32_SINT,
+    };
     static const PipelineCompatibilityCase cases[] = {
         {AGC_SHADER_COLOR_EXPORT_FP16_ABGR,
-         AGC_SHADER_COMPONENT_FLOAT_OR_NORMALIZED, AGC_FORMAT_RGBA8_UNORM},
+         AGC_SHADER_COMPONENT_FLOAT_OR_NORMALIZED,
+         (1u << kRuntimeFormatRgba8Unorm) |
+         (1u << kRuntimeFormatBgra8Unorm) |
+         (1u << kRuntimeFormatRgba8Srgb) |
+         (1u << kRuntimeFormatRgba16Float)},
         {AGC_SHADER_COLOR_EXPORT_32_ABGR,
-         AGC_SHADER_COMPONENT_FLOAT_OR_NORMALIZED, AGC_FORMAT_RGBA32_FLOAT},
+         AGC_SHADER_COMPONENT_FLOAT_OR_NORMALIZED,
+         (1u << kRuntimeFormatRgba8Unorm) |
+         (1u << kRuntimeFormatBgra8Unorm) |
+         (1u << kRuntimeFormatRgba8Srgb) |
+         (1u << kRuntimeFormatRgba16Float) |
+         (1u << kRuntimeFormatRgba32Float)},
         {AGC_SHADER_COLOR_EXPORT_UINT16_ABGR,
-         AGC_SHADER_COMPONENT_UINT, AGC_FORMAT_RGBA16_UINT},
+         AGC_SHADER_COMPONENT_UINT, 1u << kRuntimeFormatRgba16Uint},
         {AGC_SHADER_COLOR_EXPORT_32_ABGR,
-         AGC_SHADER_COMPONENT_UINT, AGC_FORMAT_RGBA32_UINT},
+         AGC_SHADER_COMPONENT_UINT, 1u << kRuntimeFormatRgba32Uint},
         {AGC_SHADER_COLOR_EXPORT_SINT16_ABGR,
-         AGC_SHADER_COMPONENT_SINT, AGC_FORMAT_RGBA16_SINT},
+         AGC_SHADER_COMPONENT_SINT, 1u << kRuntimeFormatRgba16Sint},
         {AGC_SHADER_COLOR_EXPORT_32_ABGR,
-         AGC_SHADER_COMPONENT_SINT, AGC_FORMAT_RGBA32_SINT},
-    };
-    static const AgcFormat mismatched_formats[] = {
-        AGC_FORMAT_RGBA8_UNORM,
-        AGC_FORMAT_RGBA16_UINT,
-        AGC_FORMAT_RGBA16_SINT,
+         AGC_SHADER_COMPONENT_SINT, 1u << kRuntimeFormatRgba32Sint},
+        {AGC_SHADER_COLOR_EXPORT_DEFAULT,
+         AGC_SHADER_COMPONENT_FLOAT_OR_NORMALIZED, 0u},
+        {AGC_SHADER_COLOR_EXPORT_32_R,
+         AGC_SHADER_COMPONENT_FLOAT_OR_NORMALIZED, 0u},
+        {AGC_SHADER_COLOR_EXPORT_32_GR,
+         AGC_SHADER_COMPONENT_FLOAT_OR_NORMALIZED, 0u},
     };
     AgcDevice device = create_device();
     AgcShader vs = create_shader(device, kAgcShaderStageVs);
@@ -2137,36 +2169,39 @@ static void test_runtime_graphics_pipeline_compatibility_matrix(void)
         requirements.color_exports[0].write_mask = 0xfu;
         ps = create_shader_with_reflection(
             device, kAgcShaderStagePs, &requirements);
-        attachment.format = cases[i].attachment_format;
         desc.vertex_shader = vs;
         desc.pixel_shader = ps;
         desc.color_attachment_count = 1u;
         desc.color_attachments = &attachment;
-        TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &pipeline),
-            AGC_OK, "matching export and attachment class creates pipeline");
-        TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(pipeline), AGC_OK,
-            "compatible graphics pipeline destroys");
-
-        for (j = 0u; j < sizeof(mismatched_formats) /
-             sizeof(mismatched_formats[0]); ++j) {
-            AgcShaderComponentClass attachment_class =
-                j == 0u ? AGC_SHADER_COMPONENT_FLOAT_OR_NORMALIZED :
-                j == 1u ? AGC_SHADER_COMPONENT_UINT :
-                    AGC_SHADER_COMPONENT_SINT;
-            if (attachment_class == cases[i].component_class)
-                continue;
-            attachment.format = mismatched_formats[j];
+        for (j = 0u; j < sizeof(attachment_formats) /
+             sizeof(attachment_formats[0]); ++j) {
+            attachment.format = attachment_formats[j];
             pipeline = NULL;
-            TEST_ASSERT_EQ(agcCreateGraphicsPipeline(
-                device, &desc, &pipeline), AGC_ERROR_VALIDATION_FAILED,
-                "integer and non-integer attachment mismatch fails closed");
-            TEST_ASSERT(pipeline == NULL,
-                "rejected attachment mismatch leaves pipeline output null");
+            if ((cases[i].compatible_attachment_mask & (1u << j)) != 0u) {
+                TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc,
+                    &pipeline), AGC_OK,
+                    "listed export/attachment pair creates pipeline");
+                TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(pipeline), AGC_OK,
+                    "compatible graphics pipeline destroys");
+            } else {
+                TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc,
+                    &pipeline), AGC_ERROR_VALIDATION_FAILED,
+                    "unsupported export/attachment pair fails closed");
+                TEST_ASSERT(pipeline == NULL,
+                    "rejected attachment pair leaves pipeline output null");
+            }
         }
 
-        attachment.format = cases[i].attachment_format;
         if (cases[i].component_class !=
-            AGC_SHADER_COMPONENT_FLOAT_OR_NORMALIZED) {
+            AGC_SHADER_COMPONENT_FLOAT_OR_NORMALIZED &&
+            cases[i].compatible_attachment_mask != 0u) {
+            for (j = 0u; j < sizeof(attachment_formats) /
+                 sizeof(attachment_formats[0]); ++j) {
+                if ((cases[i].compatible_attachment_mask & (1u << j)) != 0u) {
+                    attachment.format = attachment_formats[j];
+                    break;
+                }
+            }
             attachment.blend_enable = 1u;
             pipeline = NULL;
             TEST_ASSERT_EQ(agcCreateGraphicsPipeline(

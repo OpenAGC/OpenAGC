@@ -69,6 +69,11 @@ unsupported state returns an error and leaves the output handle `NULL`.
 Command binding preflights capacity and required resources; failure leaves the
 command cursor unchanged.
 
+The host compatibility matrix crosses every currently exposed color attachment
+format with each supported reflected export class and width. `DEFAULT`, `32_R`,
+and `32_GR` exports remain fail-closed because this runtime API does not expose
+matching native R/RG color targets.
+
 The graphics bind sequence derives the packed `SPI_SHADER_COL_FORMAT` nibbles
 from the validated reflected pixel exports after applying the shader record.
 This makes the immutable runtime pipeline contract authoritative even when a
