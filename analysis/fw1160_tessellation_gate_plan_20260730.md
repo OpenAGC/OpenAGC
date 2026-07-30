@@ -34,10 +34,24 @@ from indices 0-3 on the second run. First-word sampling is therefore not a
 stable oracle. Those exploratory runs do not count toward the strengthened
 two-pass result.
 
-Run the exact FW 11.60 artifact twice, with the process-cleanup ELF immediately
-before each launch and a ps5debug-NG residual-process check afterward. Stop on
-the first timeout, ring/readback mismatch, residual process, or console loss.
-Only after two passes should combined TES-to-NGG geometry gates be prepared.
+## FW 11.60 hardware result
+
+The strengthened artifact passed twice on the standard PS5 reporting raw
+firmware `0x11600005`. Both runs produced:
+
+- 2,545-dword DCB and an immediate completion fence;
+- offchip mutation count `24`;
+- exactly four nonzero factor-ring words, all `0x40800000`, with zero invalid
+  values, regardless of the rotating active ring slot;
+- 255,744 complete FP16 pixels in exact bounds `768x665`, eight colors, zero
+  invalid components, and FNV64 `0x1754baabb2b216ca`;
+- passing Wave32/tessellation PM4 audit, marker, driver shutdown, and final
+  graphics verdict.
+
+ps5debug-NG found no residual `eboot` after either run; ports 744 and 8080
+remained reachable. This hardware-qualifies isolated HS+TES+PS and real
+factor/offchip-ring execution on the tested FW 11.60 console. Combined
+TES-to-NGG geometry remains separately gated.
 
 The current-source FW 5.50 mirror remains a separate regression requirement
 when that console becomes reachable.

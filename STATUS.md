@@ -508,8 +508,12 @@ reusable binder returning `AGC_OK`, positive offchip mutation, exactly four
 whole-ring `4.0f` factor values, the exact FP16 oracle, bounded fence, clean
 shutdown, and final PASS. Two exploratory FW 11.60 runs passed graphics but
 showed the factor-ring slot rotates; the validator now scans the entire ring
-instead of sampling indices 0-3. Strengthened two-pass hardware execution is
-pending. Both exact artifacts cross-build without warnings.
+instead of sampling indices 0-3. The strengthened FW 11.60 artifact then
+passed twice: 2,545-dword DCB, immediate fence, offchip mutation `24`, exactly
+four valid `4.0f` factors, 255,744 complete FP16 pixels, FNV64
+`0x1754baabb2b216ca`, clean shutdown, and no residual process. This qualifies
+isolated HS+TES+PS on the tested console. The exact FW 5.50 mirror remains
+pending and cross-builds without warnings.
 See `analysis/fw1160_tessellation_gate_plan_20260730.md`.
 
 Exact next-tier ordinary D16/HTILE and D16 HTILE expclear artifacts now build

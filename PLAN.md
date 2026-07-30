@@ -134,7 +134,11 @@ AMD PM4 packet ancestry overlap in useful ways.
   four whole-ring `4.0f` factor values, the ordinary exact FP16 oracle,
   bounded fence, and clean shutdown. An exploratory pair proved that the
   factor-ring slot rotates, so first-word sampling was replaced by a complete
-  ring scan; rerun the strengthened artifact twice.
+  ring scan. The strengthened artifact then passed twice on FW `0x11600005`:
+  immediate fences, offchip mutation `24`, four valid factors, 255,744
+  complete pixels, exact hash `0x1754baabb2b216ca`, clean shutdowns, and no
+  residual process. Prepare combined TES-to-NGG geometry next; keep the
+  current-source FW 5.50 mirror pending.
   Run it twice before preparing combined TES-to-NGG geometry. See
   `analysis/fw1160_tessellation_gate_plan_20260730.md`.
 - The first uncompressed depth/stencil tier is also built for exact FW 11.60:
