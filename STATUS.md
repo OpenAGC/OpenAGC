@@ -201,7 +201,11 @@ The two-lane portable hardware gate now builds with exact per-pixel integer
 checks, per-lane independence and hashes, and firmware-neutral verification;
 the final unexecuted ELF is pinned as SHA-256
 `4195cc77045496d589aa846ec256116477fefb0d7b4cc5cd890155951cca596b`.
-Hardware execution remains pending.
+The identical bytes passed twice on exact FW `0x11600005`: both lanes covered
+`0x0000..0xffff` with zero exact mismatches, distinct lane hashes, packed
+FNV64 `0xb4bccb0f2909e483`, immediate fences, and zero-valued teardown. Exact FW
+5.50 replay remains pending. See
+`analysis/fw1160_rg16_uint_portable_qualification_20260730.md`.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability
