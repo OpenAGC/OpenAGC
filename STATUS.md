@@ -725,9 +725,9 @@ storage. The independent oracle decodes both fields, uses nearest rounding for
 alpha interpolation, converts only RGB for SRGB, and requires exact RGBA8
 agreement plus alpha endpoints 0 and 255. Artifact pinning and hardware
 execution remain pending. Exact artifacts are now pinned as SHA-256
-`7a9e27cf713c3d333f7174183109df9ea5ef33b551743d210ca17cf3ec4470fb`
+`54807cec76c1b1e0d6669d4e72110e1dec55933b76a4f40a5da79098bea0b1af`
 (UNORM) and
-`86f94112a0764d37038b59f0f264a4973cfb0e863c4bf90fe3999ef5494acf6f`
+`7a5587e843d43217389b39b86129fa28de83da91d81648b37f4fa13b3fdb2b61`
 (SRGB), with no-prerequisite FW 11.60 and FW 5.50 guarded targets. Hardware
 execution remains pending a clean FW 11.60 boot.
 

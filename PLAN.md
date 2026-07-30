@@ -1141,9 +1141,9 @@ the qualified BC4 rounding rule for interpolated alpha, applies SRGB only to
 RGB, demands exact RGBA8 agreement and the full 0..255 alpha range, validates
 all selection regions, and records a native hash. Pin the final neutral bytes
 before any hardware attempt. The pinned SHA-256 values are
-`7a9e27cf713c3d333f7174183109df9ea5ef33b551743d210ca17cf3ec4470fb`
+`54807cec76c1b1e0d6669d4e72110e1dec55933b76a4f40a5da79098bea0b1af`
 for BC3 UNORM and
-`86f94112a0764d37038b59f0f264a4973cfb0e863c4bf90fe3999ef5494acf6f`
+`7a5587e843d43217389b39b86129fa28de83da91d81648b37f4fa13b3fdb2b61`
 for BC3 SRGB. Their FW 11.60 and identical-byte FW 5.50 guarded targets have
 no build prerequisites.
 
