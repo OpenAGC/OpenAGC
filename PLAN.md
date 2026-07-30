@@ -669,7 +669,9 @@ the runner and shared teardown on FW 11.60 only.
 - The first FW 5.50 workload completed successfully but revealed that the host
   runner rejected a standalone `Depth+4xMSAA` label before its MSAA-specific
   checks. The fixed runner has host regression coverage; repeat the pinned FW
-  5.50 artifact to establish the first qualification pass.
+  5.50 artifact with its observed exact color `227610/227610` and D32
+  `6469632/912384/912384` counts frozen to establish the first qualification
+  pass.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and

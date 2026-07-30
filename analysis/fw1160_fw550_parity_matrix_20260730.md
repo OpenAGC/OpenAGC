@@ -273,6 +273,10 @@ generic precheck accepted only ordinary depth or depth+stencil result labels
 before reaching the dedicated 4x MSAA oracle. The runner now selects the
 dedicated MSAA verdict path when requested, with a standalone-result regression
 fixture. This wrapper failure is not counted as either qualified hardware pass.
+Its valid readback establishes the FW 5.50 exact-oracle candidates: resolved
+green=`227610`, red=`227610`, D32 one=`6469632`, near=`912384`, and
+far=`912384`. These values are frozen in the corrected gate for both credited
+replays.
 
 That prerequisite sequence is now complete. Two relinks against the committed
 shader records reproduced all eight artifacts byte-for-byte, and dependency

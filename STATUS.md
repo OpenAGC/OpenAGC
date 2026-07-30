@@ -139,8 +139,9 @@ and native D32 class counts must be frozen before replay.
 The initial FW 5.50 MSAA workload reached its fence, produced valid color and
 D32 readbacks, shut down, and self-terminated. A host-runner ordering defect
 then rejected its standalone `Depth+4xMSAA` result label. The runner is fixed
-and covered by a standalone-label fixture; no hardware pass is credited until
-the pinned artifact passes the corrected gate.
+and covered by a standalone-label fixture. Its exact color `227610/227610` and
+D32 `6469632/912384/912384` counts are frozen for the corrected replays; no
+hardware pass is credited until the pinned artifact passes that gate.
 
 All four subresource artifacts now reproduce across two relinks, avoid AGC
 SPRX dependencies, are preserved under full hashes, and have cleanup-first
