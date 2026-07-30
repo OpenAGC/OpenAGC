@@ -27,9 +27,9 @@ pipelines. Prospero builds the same API, but native queue submission remains
 fail-closed pending an explicit hardware-promotion gate.
 
 1. **Complete pipeline safety.** Extend the host-tested reflection/pipeline
-   slice with complete stencil/depth and remaining fixed state plus the
-   required tessellation/geometry paths while preserving transactional failure
-   for every unsupported combination.
+   slice with the required tessellation/geometry paths and any still-needed
+   qualified fixed options while preserving transactional failure for every
+   unsupported combination.
 2. **Own transitions and synchronization.** Track explicit resource usage and
    derive qualified release/acquire/flush/invalidate actions internally. Add
    bounded fences, multi-command-buffer submission, waits/signals, deferred
@@ -112,12 +112,24 @@ dynamic state and are required before a draw when declared by the pipeline.
 Failed resource/dynamic validation does not advance the command cursor or
 retain application objects; reset releases successful bindings.
 
+The native depth/stencil v2 descriptor exposes depth compare/write, bounded
+depth testing, all eight stencil operations, independent front/back compare,
+reference, compare mask, and write mask. Pipeline creation maps these fields to
+the already-qualified gfx1013 register builder; dynamic stencil references
+preserve the pipeline's static masks, and dynamic D16/D32 depth bias selects the
+qualified format control. The former 64-byte v1 depth-only state is normalized
+without overreading; its previously unsupported stencil bit still fails closed
+rather than inventing missing operations. Alpha-to-coverage and alpha-to-one
+remain unqualified and now return `AGC_ERROR_NOT_SUPPORTED` instead of being
+silently ignored.
+
 The compatibility matrix covers valid float, UINT, and SINT 16/32-bit pairs
 and rejects cross-class, missing/extra export, compressed attachment, blend,
 linkage, vertex-stride, descriptor, push-range, and unbound-resource cases. It
 also exercises successful descriptor/push dispatch, vertex-table drawing,
-resource retention/reset, and required dynamic-state gating. The full generic
-suite now reports 13,779 passed and 0 failed; the compiler's
+resource retention/reset, exact depth/stencil register state, legacy state
+normalization, multisample minimums, and required dynamic-state gating. The
+full generic suite now reports 13,848 passed and 0 failed; the compiler's
 library, varying/export, NGG, and tessellation suites pass. This slice is
 host-tested only. No PS5 hardware test was run or claimed. See
 `docs/shader_pipelines.md`.

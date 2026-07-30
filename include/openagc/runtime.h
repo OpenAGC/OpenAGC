@@ -368,6 +368,35 @@ typedef enum AgcCompareOperation {
     AGC_COMPARE_OPERATION_COUNT
 } AgcCompareOperation;
 
+typedef enum AgcStencilOperation {
+    AGC_STENCIL_OPERATION_KEEP = 0,
+    AGC_STENCIL_OPERATION_ZERO,
+    AGC_STENCIL_OPERATION_REPLACE,
+    AGC_STENCIL_OPERATION_INCREMENT_AND_CLAMP,
+    AGC_STENCIL_OPERATION_DECREMENT_AND_CLAMP,
+    AGC_STENCIL_OPERATION_INVERT,
+    AGC_STENCIL_OPERATION_INCREMENT_AND_WRAP,
+    AGC_STENCIL_OPERATION_DECREMENT_AND_WRAP,
+    AGC_STENCIL_OPERATION_COUNT
+} AgcStencilOperation;
+
+typedef struct AgcStencilFaceState {
+    AgcCompareOperation compare_operation;
+    AgcStencilOperation fail_operation;
+    AgcStencilOperation depth_fail_operation;
+    AgcStencilOperation pass_operation;
+    uint32_t compare_mask;
+    uint32_t write_mask;
+    uint32_t reference;
+    uint32_t flags;
+    uint64_t reserved[2];
+} AgcStencilFaceState;
+
+#define AGC_STENCIL_FACE_STATE_INIT \
+    { AGC_COMPARE_OPERATION_ALWAYS, AGC_STENCIL_OPERATION_KEEP, \
+      AGC_STENCIL_OPERATION_KEEP, AGC_STENCIL_OPERATION_KEEP, \
+      0xffu, 0xffu, 0u, 0u, {0u, 0u} }
+
 typedef struct AgcDepthStencilPipelineState {
     uint32_t struct_size;
     uint32_t version;
@@ -377,15 +406,20 @@ typedef struct AgcDepthStencilPipelineState {
     AgcCompareOperation depth_compare_operation;
     uint32_t depth_bounds_enable;
     uint32_t stencil_test_enable;
+    float min_depth_bounds;
+    float max_depth_bounds;
+    uint32_t back_face_enable;
     uint32_t flags;
-    uint32_t reserved0;
-    uint64_t reserved[3];
+    AgcStencilFaceState front;
+    AgcStencilFaceState back;
+    uint64_t reserved[2];
 } AgcDepthStencilPipelineState;
 
 #define AGC_DEPTH_STENCIL_PIPELINE_STATE_INIT \
     { sizeof(AgcDepthStencilPipelineState), \
-      AGC_RUNTIME_STRUCTURE_VERSION_1, 0u, 0u, 0u, \
-      AGC_COMPARE_OPERATION_ALWAYS, 0u, 0u, 0u, 0u, {0u, 0u, 0u} }
+      AGC_RUNTIME_STRUCTURE_VERSION_2, 0u, 0u, 0u, \
+      AGC_COMPARE_OPERATION_ALWAYS, 0u, 0u, 0.0f, 1.0f, 0u, 0u, \
+      AGC_STENCIL_FACE_STATE_INIT, AGC_STENCIL_FACE_STATE_INIT, {0u, 0u} }
 
 typedef struct AgcMultisampleState {
     uint32_t struct_size;
@@ -723,7 +757,7 @@ typedef struct AgcSubmitInfo {
     { sizeof(AgcSubmitInfo), AGC_RUNTIME_STRUCTURE_VERSION_1, 0u, 0u, NULL, \
       {0u, 0u, 0u, 0u} }
 
-/* The v1 application ABI targets the 64-bit PS5 process model. Structure-size
+/* The application ABI targets the 64-bit PS5 process model. Structure-size
  * assertions make an accidental field, enum, or alignment change fail at
  * compile time; future layouts use a new version and initializer. */
 _Static_assert(sizeof(AgcAllocationCallbacks) == 24u,
@@ -748,8 +782,10 @@ _Static_assert(sizeof(AgcColorBlendAttachmentState) == 64u,
     "AgcColorBlendAttachmentState v1 size mismatch");
 _Static_assert(sizeof(AgcRasterizationState) == 64u,
     "AgcRasterizationState v1 size mismatch");
-_Static_assert(sizeof(AgcDepthStencilPipelineState) == 64u,
-    "AgcDepthStencilPipelineState v1 size mismatch");
+_Static_assert(sizeof(AgcStencilFaceState) == 48u,
+    "AgcStencilFaceState v1 size mismatch");
+_Static_assert(sizeof(AgcDepthStencilPipelineState) == 160u,
+    "AgcDepthStencilPipelineState v2 size mismatch");
 _Static_assert(sizeof(AgcMultisampleState) == 48u,
     "AgcMultisampleState v1 size mismatch");
 _Static_assert(sizeof(AgcGraphicsPipelineDesc) == 200u,

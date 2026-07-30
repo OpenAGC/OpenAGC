@@ -128,9 +128,11 @@ Reflected Wave32 VS/PS and compute pipelines cache qualified gfx1013 bind and
 dispatch groups on the generic backend. Typed descriptor arrays, reflected
 vertex tables, push constants, and declared viewport/scissor/blend/stencil-
 reference/depth-bias dynamic state are recorded through the command buffer;
-draw and dispatch fail until every reflected requirement is bound. Broader
-graphics stages and fixed state, transitions, capture, presentation, and
-Prospero queue submission remain ordered follow-on work. See
+draw and dispatch fail until every reflected requirement is bound. Versioned
+depth/stencil state covers depth bounds and independent front/back stencil
+operations/masks; unqualified alpha-to-coverage and alpha-to-one fail closed.
+Broader graphics stages, transitions, capture, presentation, and Prospero queue
+submission remain ordered follow-on work. See
 [docs/native_runtime.md](docs/native_runtime.md) for lifecycle rules,
 [docs/shader_pipelines.md](docs/shader_pipelines.md) for the reflection and
 pipeline contract, and [PLAN.md](PLAN.md) for the remaining dependency order.

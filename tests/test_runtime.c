@@ -33,8 +33,48 @@ typedef struct RuntimeShaderFixture {
     uint32_t code[4];
 } RuntimeShaderFixture;
 
+typedef struct RuntimeDepthStencilStateV1Fixture {
+    uint32_t struct_size;
+    uint32_t version;
+    uint32_t format;
+    uint32_t depth_test_enable;
+    uint32_t depth_write_enable;
+    AgcCompareOperation depth_compare_operation;
+    uint32_t depth_bounds_enable;
+    uint32_t stencil_test_enable;
+    uint32_t flags;
+    uint32_t reserved0;
+    uint64_t reserved[3];
+} RuntimeDepthStencilStateV1Fixture;
+
 _Static_assert(offsetof(RuntimeShaderFixture, code) == 256u,
     "runtime shader fixture code must be program-aligned");
+_Static_assert(sizeof(RuntimeDepthStencilStateV1Fixture) == 64u,
+    "runtime legacy depth-stencil fixture size mismatch");
+
+static int runtime_find_context_register(const uint32_t *commands,
+    uint32_t used, uint32_t offset, uint32_t *value)
+{
+    uint32_t cursor = 0u;
+    int found = 0;
+
+    while (cursor < used) {
+        uint32_t length = agcPm4Length(commands[cursor]);
+        if (length < 2u || length > used - cursor)
+            return 0;
+        if (agcPm4Opcode(commands[cursor]) ==
+                AGC_PM4_OP_SET_CONTEXT_REG && length >= 3u) {
+            uint32_t first = commands[cursor + 1u];
+            uint32_t count = length - 2u;
+            if (offset >= first && offset - first < count) {
+                *value = commands[cursor + 2u + offset - first];
+                found = 1;
+            }
+        }
+        cursor += length;
+    }
+    return found;
+}
 
 static uint64_t shader_fixture_hash(const void *data, size_t size)
 {
@@ -637,24 +677,46 @@ static void test_runtime_command_space_atomic_failure(void)
 static void test_runtime_dynamic_graphics_state(void)
 {
     AgcDevice device = create_device();
+    AgcQueue queue = create_queue(device, kAgcQueueGraphics);
     AgcShader vs = create_shader(device, kAgcShaderStageVs);
     AgcShader ps = create_shader(device, kAgcShaderStagePs);
     AgcGraphicsPipelineDesc pipeline_desc = AGC_GRAPHICS_PIPELINE_DESC_INIT;
+    AgcDepthStencilPipelineState depth_stencil =
+        AGC_DEPTH_STENCIL_PIPELINE_STATE_INIT;
+    AgcRasterizationState rasterization = AGC_RASTERIZATION_STATE_INIT;
     AgcBufferDesc buffer_desc = AGC_BUFFER_DESC_INIT;
     AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
     AgcViewport viewport = AGC_VIEWPORT_INIT;
     AgcScissor scissor = AGC_SCISSOR_INIT;
+    AgcDepthBias depth_bias = AGC_DEPTH_BIAS_INIT;
     AgcGraphicsPipeline pipeline = NULL;
     AgcBuffer index_buffer = NULL;
     AgcCommandBuffer command = NULL;
+    AgcFence fence = NULL;
+    AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    const AgcCommandBufferSubmit *captured;
+    const uint32_t *words;
+    uint32_t value = 0u;
     const float blend_constants[4] = {0.25f, 0.5f, 0.75f, 1.0f};
 
     pipeline_desc.vertex_shader = vs;
     pipeline_desc.pixel_shader = ps;
+    depth_stencil.format = AGC_FORMAT_D32_FLOAT_S8_UINT;
+    depth_stencil.stencil_test_enable = 1u;
+    depth_stencil.back_face_enable = 1u;
+    depth_stencil.front.compare_mask = 0x3fu;
+    depth_stencil.front.write_mask = 0x5au;
+    depth_stencil.back.compare_mask = 0xc3u;
+    depth_stencil.back.write_mask = 0xa5u;
+    pipeline_desc.depth_stencil = &depth_stencil;
+    rasterization.depth_bias_enable = 1u;
+    pipeline_desc.rasterization = &rasterization;
     pipeline_desc.dynamic_state_mask = AGC_DYNAMIC_STATE_VIEWPORT_BIT |
         AGC_DYNAMIC_STATE_SCISSOR_BIT |
         AGC_DYNAMIC_STATE_BLEND_CONSTANTS_BIT |
-        AGC_DYNAMIC_STATE_STENCIL_REFERENCE_BIT;
+        AGC_DYNAMIC_STATE_STENCIL_REFERENCE_BIT |
+        AGC_DYNAMIC_STATE_DEPTH_BIAS_BIT;
     TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc,
         &pipeline), AGC_OK, "dynamic-state graphics pipeline creates");
     buffer_desc.size = 64u;
@@ -663,6 +725,8 @@ static void test_runtime_dynamic_graphics_state(void)
         AGC_OK, "dynamic-state index buffer creates");
     TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
         AGC_OK, "dynamic-state command buffer creates");
+    TEST_ASSERT_EQ(agcCreateFence(device, &fence_desc, &fence), AGC_OK,
+        "dynamic-state fence creates");
     TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
         "dynamic-state command buffer begins");
     TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(command, pipeline), AGC_OK,
@@ -689,14 +753,42 @@ static void test_runtime_dynamic_graphics_state(void)
     TEST_ASSERT_EQ(agcCmdSetStencilReference(command, 3u, 7u), AGC_OK,
         "valid stencil references record");
     TEST_ASSERT_EQ(agcCmdSetDepthBias(command, NULL),
-        AGC_ERROR_VALIDATION_FAILED,
-        "undeclared dynamic depth bias fails before argument access");
+        AGC_ERROR_INVALID_ARGUMENT,
+        "declared dynamic depth bias validates its descriptor");
+    depth_bias.constant_factor = 2.0f;
+    depth_bias.clamp = 0.25f;
+    depth_bias.slope_factor = -1.5f;
+    TEST_ASSERT_EQ(agcCmdSetDepthBias(command, &depth_bias), AGC_OK,
+        "valid dynamic depth bias records");
     TEST_ASSERT_EQ(agcCmdDrawIndexed(command, 3u, 1u, 0u, 0, 0u), AGC_OK,
         "draw records after all required dynamic state");
     TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
         "dynamic-state command buffer becomes executable");
+    submit.command_buffer_count = 1u;
+    submit.command_buffers = &command;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
+        "dynamic-state command buffer submits");
+    captured = agcDriverDebugLastDcbSubmit();
+    words = (const uint32_t *)(uintptr_t)captured->command_address;
+    TEST_ASSERT(runtime_find_context_register(words, captured->dword_count,
+        AGC_REG_DB_STENCILREFMASK, &value),
+        "dynamic front stencil reference is emitted");
+    TEST_ASSERT_EQ(value, 0x035a3f03u,
+        "dynamic front reference preserves static compare/write masks");
+    TEST_ASSERT(runtime_find_context_register(words, captured->dword_count,
+        AGC_REG_DB_STENCILREFMASK_BF, &value),
+        "dynamic back stencil reference is emitted");
+    TEST_ASSERT_EQ(value, 0x07a5c307u,
+        "dynamic back reference preserves static compare/write masks");
+    TEST_ASSERT(runtime_find_context_register(words, captured->dword_count,
+        AGC_REG_PA_SU_POLY_OFFSET_DB_FMT_CNTL, &value),
+        "dynamic depth bias emits its depth-format control");
+    TEST_ASSERT_EQ(value, 0x000001e9u,
+        "dynamic D32 depth-bias format control is exact");
     TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
         "dynamic-state command buffer resets");
+    TEST_ASSERT_EQ(agcDestroyFence(fence), AGC_OK,
+        "dynamic-state fence destroys");
     TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
         "dynamic-state command buffer destroys");
     TEST_ASSERT_EQ(agcDestroyBuffer(index_buffer), AGC_OK,
@@ -707,8 +799,231 @@ static void test_runtime_dynamic_graphics_state(void)
         "dynamic-state pixel shader destroys");
     TEST_ASSERT_EQ(agcDestroyShader(vs), AGC_OK,
         "dynamic-state vertex shader destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
+        "dynamic-state queue destroys");
     TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
         "dynamic-state device destroys");
+}
+
+static void test_runtime_depth_stencil_pipeline_state(void)
+{
+    AgcDevice device = create_device();
+    AgcQueue queue = create_queue(device, kAgcQueueGraphics);
+    AgcShader vs = create_shader(device, kAgcShaderStageVs);
+    AgcShader ps = create_shader(device, kAgcShaderStagePs);
+    AgcGraphicsPipelineDesc desc = AGC_GRAPHICS_PIPELINE_DESC_INIT;
+    AgcDepthStencilPipelineState state =
+        AGC_DEPTH_STENCIL_PIPELINE_STATE_INIT;
+    AgcDepthStencilPipelineState invalid;
+    RuntimeDepthStencilStateV1Fixture legacy = {
+        sizeof(RuntimeDepthStencilStateV1Fixture),
+        AGC_RUNTIME_STRUCTURE_VERSION_1,
+        AGC_FORMAT_D32_FLOAT, 1u, 1u, AGC_COMPARE_OPERATION_LESS,
+        0u, 0u, 0u, 0u, {0u, 0u, 0u}};
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
+    AgcGraphicsPipeline pipeline = NULL;
+    AgcGraphicsPipeline rejected = NULL;
+    AgcCommandBuffer command = NULL;
+    AgcFence fence = NULL;
+    AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    const AgcCommandBufferSubmit *captured;
+    const uint32_t *words;
+    uint32_t value = 0u;
+
+    state.format = AGC_FORMAT_D32_FLOAT_S8_UINT;
+    state.depth_test_enable = 1u;
+    state.depth_write_enable = 1u;
+    state.depth_compare_operation = AGC_COMPARE_OPERATION_LESS_OR_EQUAL;
+    state.depth_bounds_enable = 1u;
+    state.min_depth_bounds = 0.25f;
+    state.max_depth_bounds = 0.75f;
+    state.stencil_test_enable = 1u;
+    state.back_face_enable = 1u;
+    state.front.compare_operation = AGC_COMPARE_OPERATION_ALWAYS;
+    state.front.fail_operation = AGC_STENCIL_OPERATION_KEEP;
+    state.front.depth_fail_operation =
+        AGC_STENCIL_OPERATION_INCREMENT_AND_CLAMP;
+    state.front.pass_operation = AGC_STENCIL_OPERATION_REPLACE;
+    state.front.reference = 0x12u;
+    state.front.compare_mask = 0xabu;
+    state.front.write_mask = 0xcdu;
+    state.back.compare_operation = AGC_COMPARE_OPERATION_LESS;
+    state.back.fail_operation = AGC_STENCIL_OPERATION_ZERO;
+    state.back.depth_fail_operation =
+        AGC_STENCIL_OPERATION_DECREMENT_AND_WRAP;
+    state.back.pass_operation = AGC_STENCIL_OPERATION_INVERT;
+    state.back.reference = 0x34u;
+    state.back.compare_mask = 0x56u;
+    state.back.write_mask = 0x78u;
+    desc.vertex_shader = vs;
+    desc.pixel_shader = ps;
+    desc.depth_stencil = &state;
+
+    desc.depth_stencil = (const AgcDepthStencilPipelineState *)
+        (const void *)&legacy;
+    TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &rejected),
+        AGC_OK, "legacy v1 depth-only state normalizes into v2");
+    TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(rejected), AGC_OK,
+        "normalized legacy depth pipeline destroys");
+    rejected = NULL;
+    legacy.stencil_test_enable = 1u;
+    TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &rejected),
+        AGC_ERROR_NOT_SUPPORTED,
+        "legacy stencil request fails without invented operations");
+    TEST_ASSERT(rejected == NULL,
+        "legacy stencil rejection leaves pipeline output null");
+    legacy.stencil_test_enable = 0u;
+
+    invalid = state;
+    invalid.format = AGC_FORMAT_D32_FLOAT;
+    desc.depth_stencil = &invalid;
+    TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &rejected),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "stencil test rejects a depth-only attachment format");
+    TEST_ASSERT(rejected == NULL,
+        "invalid stencil format leaves pipeline output null");
+    invalid = state;
+    invalid.min_depth_bounds = -0.25f;
+    desc.depth_stencil = &invalid;
+    TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &rejected),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "out-of-range depth bounds reject pipeline creation");
+    invalid = state;
+    invalid.stencil_test_enable = 0u;
+    desc.depth_stencil = &invalid;
+    TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &rejected),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "back-face stencil state requires stencil testing");
+
+    desc.depth_stencil = &state;
+    TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &pipeline),
+        AGC_OK, "full front/back depth-stencil pipeline creates");
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
+        AGC_OK, "depth-stencil command buffer creates");
+    TEST_ASSERT_EQ(agcCreateFence(device, &fence_desc, &fence), AGC_OK,
+        "depth-stencil fence creates");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+        "depth-stencil command buffer begins");
+    TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(command, pipeline), AGC_OK,
+        "depth-stencil pipeline bind records immutable state");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+        "depth-stencil bind command buffer becomes executable");
+    submit.command_buffer_count = 1u;
+    submit.command_buffers = &command;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
+        "depth-stencil bind submits on the host backend");
+    captured = agcDriverDebugLastDcbSubmit();
+    words = (const uint32_t *)(uintptr_t)captured->command_address;
+    TEST_ASSERT(runtime_find_context_register(words, captured->dword_count,
+        AGC_REG_DB_DEPTH_CONTROL, &value),
+        "depth-stencil bind emits DB_DEPTH_CONTROL");
+    TEST_ASSERT_EQ(value, 0x001007bfu,
+        "native depth-stencil state preserves exact depth control");
+    TEST_ASSERT(runtime_find_context_register(words, captured->dword_count,
+        AGC_REG_DB_STENCIL_CONTROL, &value),
+        "depth-stencil bind emits DB_STENCIL_CONTROL");
+    TEST_ASSERT_EQ(value, 0x00971530u,
+        "native stencil operations preserve exact front/back encoding");
+    TEST_ASSERT(runtime_find_context_register(words, captured->dword_count,
+        AGC_REG_DB_STENCILREFMASK, &value),
+        "depth-stencil bind emits front stencil masks");
+    TEST_ASSERT_EQ(value, 0x12cdab12u,
+        "native front stencil reference and masks are exact");
+    TEST_ASSERT(runtime_find_context_register(words, captured->dword_count,
+        AGC_REG_DB_STENCILREFMASK_BF, &value),
+        "depth-stencil bind emits back stencil masks");
+    TEST_ASSERT_EQ(value, 0x34785634u,
+        "native back stencil reference and masks are exact");
+    TEST_ASSERT(runtime_find_context_register(words, captured->dword_count,
+        AGC_REG_DB_DEPTH_BOUNDS_MIN, &value),
+        "depth-stencil bind emits minimum depth bound");
+    TEST_ASSERT_EQ(value, 0x3e800000u,
+        "native minimum depth bound is exact");
+    TEST_ASSERT(runtime_find_context_register(words, captured->dword_count,
+        AGC_REG_DB_DEPTH_BOUNDS_MAX, &value),
+        "depth-stencil bind emits maximum depth bound");
+    TEST_ASSERT_EQ(value, 0x3f400000u,
+        "native maximum depth bound is exact");
+
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+        "depth-stencil command buffer resets");
+    TEST_ASSERT_EQ(agcDestroyFence(fence), AGC_OK,
+        "depth-stencil fence destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+        "depth-stencil command buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(pipeline), AGC_OK,
+        "depth-stencil pipeline destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(ps), AGC_OK,
+        "depth-stencil pixel shader destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(vs), AGC_OK,
+        "depth-stencil vertex shader destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
+        "depth-stencil queue destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "depth-stencil device destroys");
+}
+
+static void test_runtime_multisample_pipeline_state(void)
+{
+    AgcDevice device = create_device();
+    AgcShader vs = create_shader(device, kAgcShaderStageVs);
+    AgcShaderReflection ps_requirements = AGC_SHADER_REFLECTION_INIT;
+    AgcShader ps;
+    AgcGraphicsPipelineDesc desc = AGC_GRAPHICS_PIPELINE_DESC_INIT;
+    AgcMultisampleState multisample = AGC_MULTISAMPLE_STATE_INIT;
+    AgcGraphicsPipeline pipeline = NULL;
+
+    ps_requirements.flags = AGC_SHADER_REFLECTION_USES_SAMPLE_SHADING_BIT;
+    ps_requirements.pixel_shader_sample_count = 1u;
+    ps = create_shader_with_reflection(
+        device, kAgcShaderStagePs, &ps_requirements);
+    desc.vertex_shader = vs;
+    desc.pixel_shader = ps;
+    desc.multisample = &multisample;
+    multisample.rasterization_samples = 4u;
+    multisample.sample_shading_enable = 1u;
+    multisample.minimum_sample_shading = 0.5f;
+    TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &pipeline),
+        AGC_ERROR_VALIDATION_FAILED,
+        "minimum sample shading rejects insufficient shader iterations");
+    TEST_ASSERT(pipeline == NULL,
+        "sample-shading mismatch leaves pipeline output null");
+
+    multisample.minimum_sample_shading = 0.25f;
+    TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &pipeline),
+        AGC_OK, "qualified one-of-four sample shading creates pipeline");
+    TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(pipeline), AGC_OK,
+        "sample-shading pipeline destroys");
+    pipeline = NULL;
+
+    multisample.alpha_to_coverage_enable = 1u;
+    TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &pipeline),
+        AGC_ERROR_NOT_SUPPORTED,
+        "unqualified alpha-to-coverage fails closed");
+    TEST_ASSERT(pipeline == NULL,
+        "alpha-to-coverage rejection leaves pipeline output null");
+    multisample.alpha_to_coverage_enable = 0u;
+    multisample.alpha_to_one_enable = 1u;
+    TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &pipeline),
+        AGC_ERROR_NOT_SUPPORTED,
+        "unqualified alpha-to-one fails closed");
+    TEST_ASSERT(pipeline == NULL,
+        "alpha-to-one rejection leaves pipeline output null");
+    multisample.alpha_to_one_enable = 0u;
+    multisample.sample_shading_enable = 0u;
+    TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &pipeline),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "nonzero minimum shading requires sample shading enable");
+    TEST_ASSERT(pipeline == NULL,
+        "invalid minimum shading leaves pipeline output null");
+
+    TEST_ASSERT_EQ(agcDestroyShader(ps), AGC_OK,
+        "sample-shading pixel shader destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(vs), AGC_OK,
+        "sample-shading vertex shader destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "sample-shading device destroys");
 }
 
 static void test_runtime_shader_reflection_contract(void)
@@ -1784,6 +2099,8 @@ void test_suite_runtime(void)
     TEST_RUN(test_runtime_indexed_graphics_submission);
     TEST_RUN(test_runtime_command_space_atomic_failure);
     TEST_RUN(test_runtime_dynamic_graphics_state);
+    TEST_RUN(test_runtime_depth_stencil_pipeline_state);
+    TEST_RUN(test_runtime_multisample_pipeline_state);
     TEST_RUN(test_runtime_ps5_image_layouts);
     TEST_RUN(test_runtime_all_backing_categories);
     TEST_RUN(test_runtime_heap_staging_and_stats);

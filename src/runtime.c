@@ -2465,6 +2465,23 @@ static int agcPipelineRasterizationStateValid(
         state->flags == 0u && agcReservedZero(state->reserved, 3u);
 }
 
+typedef struct AgcDepthStencilPipelineStateV1 {
+    uint32_t struct_size;
+    uint32_t version;
+    uint32_t format;
+    uint32_t depth_test_enable;
+    uint32_t depth_write_enable;
+    AgcCompareOperation depth_compare_operation;
+    uint32_t depth_bounds_enable;
+    uint32_t stencil_test_enable;
+    uint32_t flags;
+    uint32_t reserved0;
+    uint64_t reserved[3];
+} AgcDepthStencilPipelineStateV1;
+
+_Static_assert(sizeof(AgcDepthStencilPipelineStateV1) == 64u,
+    "legacy depth-stencil pipeline state size mismatch");
+
 static int agcPipelineDepthStateValid(
     const AgcDepthStencilPipelineState *state)
 {
@@ -2473,15 +2490,37 @@ static int agcPipelineDepthStateValid(
     uint32_t depth;
     uint32_t stencil;
 
-    if (!state ||
-        !agcHeaderValid(state->struct_size, sizeof(*state), state->version) ||
+    if (!state || state->struct_size != sizeof(*state) ||
+        state->version != AGC_RUNTIME_STRUCTURE_VERSION_2 ||
         state->depth_test_enable > 1u || state->depth_write_enable > 1u ||
         state->depth_compare_operation >= AGC_COMPARE_OPERATION_COUNT ||
         state->depth_bounds_enable > 1u || state->stencil_test_enable > 1u ||
-        state->flags != 0u || state->reserved0 != 0u ||
-        !agcReservedZero(state->reserved, 3u) ||
-        (state->depth_write_enable && !state->depth_test_enable)) {
+        state->back_face_enable > 1u || state->flags != 0u ||
+        !agcReservedZero(state->reserved, 2u) ||
+        !agcRuntimeFloatFinite(state->min_depth_bounds) ||
+        !agcRuntimeFloatFinite(state->max_depth_bounds) ||
+        state->min_depth_bounds < 0.0f ||
+        state->max_depth_bounds > 1.0f ||
+        state->min_depth_bounds > state->max_depth_bounds ||
+        (state->depth_write_enable && !state->depth_test_enable) ||
+        (state->depth_bounds_enable && !state->depth_test_enable) ||
+        (state->back_face_enable && !state->stencil_test_enable)) {
         return 0;
+    }
+    {
+        const AgcStencilFaceState *faces[2] = {&state->front, &state->back};
+        uint32_t i;
+        for (i = 0u; i < 2u; ++i) {
+            const AgcStencilFaceState *face = faces[i];
+            if (face->compare_operation >= AGC_COMPARE_OPERATION_COUNT ||
+                face->fail_operation >= AGC_STENCIL_OPERATION_COUNT ||
+                face->depth_fail_operation >= AGC_STENCIL_OPERATION_COUNT ||
+                face->pass_operation >= AGC_STENCIL_OPERATION_COUNT ||
+                face->compare_mask > 0xffu || face->write_mask > 0xffu ||
+                face->reference > 0xffu || face->flags != 0u ||
+                !agcReservedZero(face->reserved, 2u))
+                return 0;
+        }
     }
     if (state->format == AGC_FORMAT_UNDEFINED)
         return !state->depth_test_enable && !state->depth_write_enable &&
@@ -2493,6 +2532,72 @@ static int agcPipelineDepthStateValid(
         (!state->stencil_test_enable || stencil);
 }
 
+static int32_t agcPipelineNormalizeDepthState(const void *source,
+    AgcDepthStencilPipelineState *target)
+{
+    uint32_t header[2];
+
+    if (!source || !target)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    memcpy(header, source, sizeof(header));
+    if (header[0] == sizeof(AgcDepthStencilPipelineStateV1) &&
+        header[1] == AGC_RUNTIME_STRUCTURE_VERSION_1) {
+        AgcDepthStencilPipelineStateV1 legacy;
+        memcpy(&legacy, source, sizeof(legacy));
+        if (legacy.stencil_test_enable)
+            return AGC_ERROR_NOT_SUPPORTED;
+        if (legacy.flags != 0u || legacy.reserved0 != 0u ||
+            !agcReservedZero(legacy.reserved, 3u))
+            return AGC_ERROR_INVALID_ARGUMENT;
+        *target = (AgcDepthStencilPipelineState)
+            AGC_DEPTH_STENCIL_PIPELINE_STATE_INIT;
+        target->format = legacy.format;
+        target->depth_test_enable = legacy.depth_test_enable;
+        target->depth_write_enable = legacy.depth_write_enable;
+        target->depth_compare_operation = legacy.depth_compare_operation;
+        target->depth_bounds_enable = legacy.depth_bounds_enable;
+    } else if (header[0] == sizeof(AgcDepthStencilPipelineState) &&
+        header[1] == AGC_RUNTIME_STRUCTURE_VERSION_2) {
+        *target = *(const AgcDepthStencilPipelineState *)source;
+    } else {
+        return AGC_ERROR_INVALID_ARGUMENT;
+    }
+    return agcPipelineDepthStateValid(target) ?
+        AGC_OK : AGC_ERROR_INVALID_ARGUMENT;
+}
+
+static AgcGfx1013StencilOp agcPipelineStencilOperation(
+    AgcStencilOperation operation)
+{
+    static const AgcGfx1013StencilOp table[AGC_STENCIL_OPERATION_COUNT] = {
+        AGC_GFX1013_STENCIL_KEEP,
+        AGC_GFX1013_STENCIL_ZERO,
+        AGC_GFX1013_STENCIL_REPLACE,
+        AGC_GFX1013_STENCIL_INCREMENT_CLAMP,
+        AGC_GFX1013_STENCIL_DECREMENT_CLAMP,
+        AGC_GFX1013_STENCIL_INVERT,
+        AGC_GFX1013_STENCIL_INCREMENT_WRAP,
+        AGC_GFX1013_STENCIL_DECREMENT_WRAP,
+    };
+    return table[operation];
+}
+
+static void agcPipelineStencilFace(
+    const AgcStencilFaceState *source, AgcGfx1013StencilFaceState *target)
+{
+    target->compare_operation =
+        (AgcGfx1013CompareOp)source->compare_operation;
+    target->fail_operation =
+        agcPipelineStencilOperation(source->fail_operation);
+    target->depth_fail_operation =
+        agcPipelineStencilOperation(source->depth_fail_operation);
+    target->pass_operation =
+        agcPipelineStencilOperation(source->pass_operation);
+    target->reference = source->reference;
+    target->compare_mask = source->compare_mask;
+    target->write_mask = source->write_mask;
+}
+
 static int agcPipelineMultisampleStateValid(
     const AgcMultisampleState *state)
 {
@@ -2501,8 +2606,11 @@ static int agcPipelineMultisampleStateValid(
         (state->rasterization_samples == 1u ||
          state->rasterization_samples == 4u) &&
         state->sample_shading_enable <= 1u &&
+        agcRuntimeFloatFinite(state->minimum_sample_shading) &&
         state->minimum_sample_shading >= 0.0f &&
         state->minimum_sample_shading <= 1.0f &&
+        (state->sample_shading_enable ||
+         state->minimum_sample_shading == 0.0f) &&
         state->alpha_to_coverage_enable <= 1u &&
         state->alpha_to_one_enable <= 1u && state->flags == 0u &&
         agcReservedZero(state->reserved, 2u);
@@ -2663,8 +2771,18 @@ static int32_t agcBuildGraphicsPipelineBind(
                 pipeline->depth_stencil.depth_compare_operation;
         depth_state.depth_bounds_enable =
             pipeline->depth_stencil.depth_bounds_enable;
-        depth_state.min_depth_bounds = 0.0f;
-        depth_state.max_depth_bounds = 1.0f;
+        depth_state.min_depth_bounds =
+            pipeline->depth_stencil.min_depth_bounds;
+        depth_state.max_depth_bounds =
+            pipeline->depth_stencil.max_depth_bounds;
+        depth_state.stencil_test_enable =
+            pipeline->depth_stencil.stencil_test_enable;
+        depth_state.back_face_enable =
+            pipeline->depth_stencil.back_face_enable;
+        agcPipelineStencilFace(
+            &pipeline->depth_stencil.front, &depth_state.front);
+        agcPipelineStencilFace(
+            &pipeline->depth_stencil.back, &depth_state.back);
         result = agcGfx1013SetDepthStencilState(&cb, &depth_state);
     } else {
         result = agcGfx1013SetDepthDisabled(&cb);
@@ -2859,12 +2977,11 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
         ((desc->dynamic_state_mask & AGC_DYNAMIC_STATE_DEPTH_BIAS_BIT) != 0u))
         return AGC_ERROR_VALIDATION_FAILED;
     if (desc->depth_stencil) {
-        if (!agcPipelineDepthStateValid(desc->depth_stencil))
-            return AGC_ERROR_INVALID_ARGUMENT;
-        depth_stencil = *desc->depth_stencil;
+        result = agcPipelineNormalizeDepthState(
+            desc->depth_stencil, &depth_stencil);
+        if (result != AGC_OK)
+            return result;
     }
-    if (depth_stencil.stencil_test_enable)
-        return AGC_ERROR_NOT_SUPPORTED;
     if ((ps->reflection.flags & AGC_SHADER_REFLECTION_WRITES_DEPTH_BIT) != 0u &&
         depth_stencil.format == AGC_FORMAT_UNDEFINED)
         return AGC_ERROR_VALIDATION_FAILED;
@@ -2882,6 +2999,9 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
             return AGC_ERROR_INVALID_ARGUMENT;
         multisample = *desc->multisample;
     }
+    if (multisample.alpha_to_coverage_enable ||
+        multisample.alpha_to_one_enable)
+        return AGC_ERROR_NOT_SUPPORTED;
     if (ps->reflection.pixel_shader_sample_count != 0u &&
         ps->reflection.pixel_shader_sample_count >
             multisample.rasterization_samples)
@@ -2889,6 +3009,11 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
     if (((ps->reflection.flags &
           AGC_SHADER_REFLECTION_USES_SAMPLE_SHADING_BIT) != 0u) !=
         (multisample.sample_shading_enable != 0u))
+        return AGC_ERROR_VALIDATION_FAILED;
+    if (multisample.sample_shading_enable &&
+        (float)ps->reflection.pixel_shader_sample_count <
+            multisample.minimum_sample_shading *
+                (float)multisample.rasterization_samples)
         return AGC_ERROR_VALIDATION_FAILED;
     result = agcPipelineBuildResourceLayout(desc->descriptor_mappings,
         desc->descriptor_mapping_count, desc->vertex_inputs,
@@ -4072,6 +4197,8 @@ int32_t PS5_SYSV_ABI agcCmdSetBlendConstants(
 int32_t PS5_SYSV_ABI agcCmdSetStencilReference(
     AgcCommandBuffer command_buffer, uint32_t front, uint32_t back)
 {
+    const AgcDepthStencilPipelineState *state;
+    const AgcStencilFaceState *back_state;
     uint32_t words[4];
     uint32_t *packet;
     SceAgcCb scratch;
@@ -4082,12 +4209,20 @@ int32_t PS5_SYSV_ABI agcCmdSetStencilReference(
         return result;
     if (front > 0xffu || back > 0xffu)
         return AGC_ERROR_INVALID_ARGUMENT;
+    state = &command_buffer->graphics_pipeline->depth_stencil;
+    if (!state->stencil_test_enable)
+        return AGC_ERROR_VALIDATION_FAILED;
+    back_state = state->back_face_enable ? &state->back : &state->front;
+    if (!state->back_face_enable)
+        back = front;
     agcCbInit(&scratch, words, sizeof(words));
     packet = agcCbAllocDwords(&scratch, 4u);
     packet[0] = agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 4u);
     packet[1] = AGC_REG_DB_STENCILREFMASK;
-    packet[2] = front | (0xffu << 8u) | (0xffu << 16u) | (front << 24u);
-    packet[3] = back | (0xffu << 8u) | (0xffu << 16u) | (back << 24u);
+    packet[2] = front | (state->front.compare_mask << 8u) |
+        (state->front.write_mask << 16u) | (front << 24u);
+    packet[3] = back | (back_state->compare_mask << 8u) |
+        (back_state->write_mask << 16u) | (back << 24u);
     result = agcCommandCommitScratch(command_buffer, &scratch, words);
     if (result == AGC_OK)
         command_buffer->dynamic_state_set_mask |=

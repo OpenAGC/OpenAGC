@@ -124,6 +124,14 @@ scratch, and LDS limits. Rejected objects are returned as `NULL`; failed binds
 leave the command cursor unchanged. Immutable qualified register groups are
 cached in the pipeline. See [shader_pipelines.md](shader_pipelines.md).
 
+`AgcDepthStencilPipelineState` v2 adds explicit 0–1 depth bounds and complete
+front/back stencil face state. All compare and stencil operations, references,
+compare masks, and write masks are immutable pipeline state unless stencil
+reference is declared dynamic. The runtime accepts the former 64-byte v1
+depth-only layout and normalizes its implicit bounds to 0–1; v1 stencil remains
+unsupported because that layout did not carry the operations or masks needed
+to reproduce a safe pipeline.
+
 Command recording binds exact reflected descriptor arrays, vertex tables, and
 push ranges into a runtime-owned GPU-visible arena. Draw and dispatch validate
 complete binding before emitting work. Declared viewport, scissor, blend-
@@ -140,7 +148,7 @@ backend selection, caller default version, internal memory, and default-state
 initialization.
 
 Prospero `agcQueueSubmit` currently returns `AGC_ERROR_NOT_SUPPORTED` before
-GPU mutation. Complete stencil/depth state, broader graphics stages, and
-remaining fixed state remain fail-closed. The reflected pipeline/resource path
-is host-tested and is not hardware-qualified; hardware testing is a separate,
-explicit promotion gate.
+GPU mutation. Broader graphics stages and unqualified fixed options such as
+alpha-to-coverage and alpha-to-one remain fail-closed. The reflected pipeline/
+resource path is host-tested and is not hardware-qualified; hardware testing
+is a separate, explicit promotion gate.

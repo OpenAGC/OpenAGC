@@ -64,19 +64,27 @@ qualified command state and satisfy their corresponding bit. A draw fails with
 `AGC_ERROR_INVALID_STATE` while any declared bit is unset. Dynamic values and
 resource bindings are command-buffer state and are cleared by reset.
 
+`AgcDepthStencilPipelineState` v2 supplies depth compare/write, optional 0–1
+depth bounds, and complete independent front/back stencil faces. Each face has
+its compare and fail/depth-fail/pass operations, reference, compare mask, and
+write mask. A dynamic stencil-reference update changes only the references and
+preserves both static masks. The runtime normalizes the former 64-byte v1
+depth-only layout with implicit 0–1 bounds; v1 stencil requests fail closed.
+
 The currently host-tested graphics subset is an NGG vertex shader plus a
 Wave32 pixel shader, supported fill/cull/front-face rasterization, supported
-color/depth formats, no stencil test, the declared dynamic states above, and
-the qualified gfx1013 bind groups. Compute supports Wave32, at most 1,024
-invocations per group, no scratch, and at most 64 KiB LDS. Complete stencil
-state, tessellation and geometry pipeline packaging, additional fixed state,
-and Prospero submission remain fail-closed.
+color/depth/stencil formats, complete depth/stencil testing, the declared
+dynamic states above, and the qualified gfx1013 bind groups. Compute supports
+Wave32, at most 1,024 invocations per group, no scratch, and at most 64 KiB
+LDS. Alpha-to-coverage, alpha-to-one, tessellation and geometry pipeline
+packaging, and Prospero submission remain fail-closed.
 
 ## Qualification
 
 The generic suite covers valid float/normalized, UINT, and SINT attachment
 pairs, negative compatibility/layout fixtures, successful descriptor/push and
-vertex-table execution paths, resource lifetime, and required dynamic-state
-gating. These results are host-tested only. A future explicit PS5 promotion
+vertex-table execution paths, resource lifetime, exact depth/stencil register
+encoding, v1 state normalization, multisample minimums, and required dynamic-
+state gating. These results are host-tested only. A future explicit PS5 promotion
 gate will qualify exact firmware artifacts; no hardware qualification is
 implied by pipeline creation or a successful host command recording.
