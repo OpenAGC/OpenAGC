@@ -103,4 +103,12 @@ passed its first guarded FW 11.60 run:
 - completion fence, marker, shutdown, cleanup, verdict, and self-termination:
   PASS
 
-Repeat the identical bytes once before qualifying BC1 SRGB.
+## BC1 SRGB corrected pass 2
+
+The identical artifact reproduced pass 1 exactly, including `224640` changed
+pixels, `{74880,74880,74880}` regions, zero mismatches, and FNV64
+`0x7ed831bc232c8da1`. Fence, marker, shutdown, cleanup, verdict, and
+self-termination passed again.
+
+BC1 SRGB and BC1 UNORM are hardware-qualified on exact FW 11.60. Proceed to
+BC4 UNORM and SNORM; FW 5.50 replay remains separate.
