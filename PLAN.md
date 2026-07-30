@@ -468,11 +468,13 @@ EOP release write through `agcCmdSignalGpuLabel`; a consumer records an exact
 32-bit `WAIT_REG_MEM` through `agcCmdWaitGpuLabel`. Submission accepts the
 consumer only after the matching producer value has submitted on the same
 queue; labels retain their backing word until both command buffers reset.
-Artifact `acca740f817c032081012ec95c09dd8f66b81288f0d3a68b5eaab8d757f55991`
+Artifact `ffcddb444a677b15b0f2313bf3ed76e05f104400ae21767e342ff1b1cd12db9f`
 passed a producer-then-consumer public compute oracle without a CPU wait
 between submissions, followed by bounded-fence readback and full teardown on
-exact FW 5.50. Submit wait/signal lists, timeline counters, cross-queue labels,
-and ownership transfers remain intentionally rejected.
+exact FW 5.50. Labels now enforce strictly increasing 32-bit timeline points
+and reject repeat, decreasing, or wraparound values before PM4 mutation. Submit
+wait/signal lists, cross-queue labels, and ownership transfers remain
+intentionally rejected.
 
 Exit criteria: exact host fixtures cover the supported transition matrix and
 atomic short-buffer failure; FW 5.50 and FW 11.60 gates cover render-to-shader,

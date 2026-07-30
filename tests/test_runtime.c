@@ -1487,6 +1487,9 @@ static void test_runtime_gpu_labels(void)
     TEST_ASSERT_EQ(agcCmdSignalGpuLabel(producer, label, UINT32_C(0x1234)),
         AGC_ERROR_INVALID_STATE,
         "label rejects a signal value that could satisfy a stale wait");
+    TEST_ASSERT_EQ(agcCmdSignalGpuLabel(producer, label, UINT32_C(0x1233)),
+        AGC_ERROR_INVALID_STATE,
+        "label rejects a decreasing timeline point");
     TEST_ASSERT_EQ(agcResetCommandBuffer(producer), AGC_OK,
         "stale-value producer resets");
     submit.command_buffers = &consumer;

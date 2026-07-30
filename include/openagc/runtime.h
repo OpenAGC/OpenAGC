@@ -724,7 +724,7 @@ typedef struct AgcFenceDesc {
 /* A GPU-visible 32-bit synchronization word. The first qualified runtime
  * path permits a producer and consumer on the same queue only; a consumer
  * wait is rejected until a producer signal has been successfully submitted.
- * Values are exact equality points, not timeline semantics. */
+ * Values are strictly monotonic 32-bit timeline points. */
 typedef struct AgcGpuLabelDesc {
     uint32_t struct_size;
     uint32_t version;

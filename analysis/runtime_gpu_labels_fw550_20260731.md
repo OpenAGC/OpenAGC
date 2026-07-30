@@ -7,7 +7,7 @@ raw system software `0x05500008` (FW ABI key `0x0550`). The exact
 `agc_runtime_compute.elf` artifact SHA-256 was:
 
 ```
-acca740f817c032081012ec95c09dd8f66b81288f0d3a68b5eaab8d757f55991
+ffcddb444a677b15b0f2313bf3ed76e05f104400ae21767e342ff1b1cd12db9f
 ```
 
 The first public command buffer only records `agcCmdSignalGpuLabel`, which
@@ -30,6 +30,6 @@ destroyed, the label destroyed, and all remaining objects/device tore down with
 This hardware-qualifies same-compute-queue exact-value GPU labels on FW 5.50:
 the EOP release signal, `WAIT_REG_MEM` consumer dependency, lifetime retention,
 and post-completion teardown. It does not qualify submit wait/signal lists,
-timeline counters, cross-queue labels/ownership, graphics labels, FW 11.60,
-or an application wait whose producer has not first submitted. Those paths
-remain fail-closed or unqualified.
+multi-point timeline sequencing, cross-queue labels/ownership, graphics labels,
+FW 11.60, or an application wait whose producer has not first submitted.
+Those paths remain fail-closed or unqualified.

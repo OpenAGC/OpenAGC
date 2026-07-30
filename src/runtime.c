@@ -6056,10 +6056,9 @@ int32_t PS5_SYSV_ABI agcCmdSignalGpuLabel(
         return AGC_ERROR_INVALID_ARGUMENT;
     if (command_buffer->state != AGC_COMMAND_BUFFER_STATE_RECORDING)
         return AGC_ERROR_INVALID_STATE;
-    /* A wait compares an exact memory value. Reusing the current value could
-     * let a later consumer observe an older completed signal, so require each
-     * newly recorded point to differ until timeline semantics are qualified. */
-    if (value == label->last_signal_value)
+    /* A wait compares an exact memory value. Strictly monotonic points avoid
+     * stale observations; UINT32_MAX is terminal rather than wrapping. */
+    if (value <= label->last_signal_value)
         return AGC_ERROR_INVALID_STATE;
     if (command_buffer->recorded_label_signal_count >=
             AGC_RUNTIME_MAX_RECORDED_TRANSITIONS ||
