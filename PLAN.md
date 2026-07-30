@@ -611,8 +611,10 @@ all six pinned artifacts for identical-byte FW 5.50 replay and proceed to the
   every short-buffer boundary, invalid-enum behavior, and maximum 64-bit
   layout arithmetic pass. Its dedicated `32_ABGR` shader and four-lane exact
   oracle build as a firmware-neutral portable gate. The gate expands its
-  render-target allocation to the required 16 bytes per pixel. Do not pin or
-  execute it until the FW 11.60 console has rebooted and RG32_UINT passes.
+  render-target allocation to the required 16 bytes per pixel. Its final bytes
+  are pinned as SHA-256
+  `81eaf3d07304cd4d1be7ccca8a332f3f40dac8e605be14fcc6ae87c0bcdd1de8`.
+  Do not execute it until the FW 11.60 console has rebooted and RG32_UINT passes.
 
 - `R32_SINT` is host-qualified as append-only value 29 with gfx1013 `32`,
   SINT, standard swap, four bytes per pixel, and `32_R` export 1. Exact PM4
@@ -637,8 +639,10 @@ all six pinned artifacts for identical-byte FW 5.50 replay and proceed to the
   export 9. Exact PM4 (`CB_COLOR0_INFO=0x00070538`), all-profile selection,
   every short-buffer boundary, invalid-enum behavior, and maximum layout
   arithmetic pass. Its firmware-neutral four-lane signed gate now builds with
-  a dedicated `32_ABGR` integer export and fail-closed per-lane oracle. Pin the
-  final bytes offline before any endpoint execution.
+  a dedicated `32_ABGR` integer export and fail-closed per-lane oracle. Its
+  final bytes are pinned as SHA-256
+  `126c9920f8ea85c2d149c62150f40bbed695ef9f102f8ef3ab430df8f09e8f18`.
+  Keep endpoint execution behind the clean-boot UINT qualification order.
 
 These formats need dedicated integer-output pixel shaders. Do not qualify them
 using a floating-point shader and assume the conversion is correct. Their
@@ -653,9 +657,9 @@ The float forms already reach the maximum widths. Add:
 - `R32_UINT`, `RG32_UINT`, and `RGBA32_UINT`.
 - `R32_SINT`, `RG32_SINT`, and `RGBA32_SINT`.
 
-`R32_UINT` is hardware-qualified on FW 11.60; `RG32_UINT` has a pinned gate
-awaiting a clean boot; and `RGBA32_UINT` is host-qualified. Preserve that order
-on hardware and use an independent exact-value oracle for every stored lane.
+`R32_UINT` is hardware-qualified on FW 11.60; all remaining UINT/SINT gates are
+pinned and await a clean boot. Preserve tuple order on hardware and use an
+independent exact-value oracle for every stored lane.
 
 `RGBA32_*` remains the regular color-buffer maximum:
 

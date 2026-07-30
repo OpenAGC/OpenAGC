@@ -315,8 +315,9 @@ all 39 profiles, every short command-buffer boundary, invalid enums, and
 maximum 64-bit surface arithmetic. The generic suite passes 10,933 assertions.
 Its dedicated `32_ABGR` shader, four-lane exact oracle, 16-byte-per-pixel pool
 sizing, and fail-closed runner checks build as a firmware-neutral portable
-gate. Pinning and execution remain ordered behind the clean-boot RG32_UINT
-qualification.
+gate. Its final bytes are pinned as SHA-256
+`81eaf3d07304cd4d1be7ccca8a332f3f40dac8e605be14fcc6ae87c0bcdd1de8`;
+execution remains ordered behind the clean-boot RG32_UINT qualification.
 
 `AGC_GFX1013_RT_FORMAT_R32_SINT` is appended at value 29 and maps to
 `(format=0x04, number=SINT, swap=standard)`, four bytes per pixel, and `32_R`
@@ -345,8 +346,9 @@ PM4, all 39 profiles, every short command-buffer boundary, invalid enums, and
 maximum 64-bit surface arithmetic. The complete 32-bit UINT/SINT tuple matrix
 is now host-qualified; the generic suite passes 12,082 assertions. A dedicated
 four-lane signed-coordinate shader, exact SINT32 oracle, and firmware-neutral
-portable gate also build successfully; hardware execution remains gated on a
-clean FW 11.60 reboot.
+portable gate also build successfully. Its final bytes are pinned as SHA-256
+`126c9920f8ea85c2d149c62150f40bbed695ef9f102f8ef3ab430df8f09e8f18`;
+hardware execution remains gated on a clean FW 11.60 reboot.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability

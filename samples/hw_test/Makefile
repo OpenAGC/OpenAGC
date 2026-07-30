@@ -87,10 +87,14 @@ PINNED_R32_UINT_SHA256 := d2eb57d8e6f5f664a72b1ddfa7452ceae2b72328e0bd49445e18fc
 PINNED_R32_UINT_ELF := $(THIS_DIR)/pinned/agc_graphics_r32_uint-$(PINNED_R32_UINT_SHA256).elf
 PINNED_RG32_UINT_SHA256 := da7c0203a288d994986ff37100e3eac5f8cb962fca00a4821c53f54fc9cb9511
 PINNED_RG32_UINT_ELF := $(THIS_DIR)/pinned/agc_graphics_rg32_uint-$(PINNED_RG32_UINT_SHA256).elf
+PINNED_RGBA32_UINT_SHA256 := 81eaf3d07304cd4d1be7ccca8a332f3f40dac8e605be14fcc6ae87c0bcdd1de8
+PINNED_RGBA32_UINT_ELF := $(THIS_DIR)/pinned/agc_graphics_rgba32_uint-$(PINNED_RGBA32_UINT_SHA256).elf
 PINNED_R32_SINT_SHA256 := 048b903713ce1a0b82e0d3dc5c01b37f2ea068da5e2ce6164bc5ae938c02f32f
 PINNED_R32_SINT_ELF := $(THIS_DIR)/pinned/agc_graphics_r32_sint-$(PINNED_R32_SINT_SHA256).elf
 PINNED_RG32_SINT_SHA256 := ef3871f19d6e706fe428eb5ac5df1af0b5796beb4fd47ff42c9e1a66a02327c4
 PINNED_RG32_SINT_ELF := $(THIS_DIR)/pinned/agc_graphics_rg32_sint-$(PINNED_RG32_SINT_SHA256).elf
+PINNED_RGBA32_SINT_SHA256 := 126c9920f8ea85c2d149c62150f40bbed695ef9f102f8ef3ab430df8f09e8f18
+PINNED_RGBA32_SINT_ELF := $(THIS_DIR)/pinned/agc_graphics_rgba32_sint-$(PINNED_RGBA32_SINT_SHA256).elf
 PINNED_MULTI_INDIRECT_SHA256 := 230809ee6ba03cc10cd136fc269d4c9e08f9ccfcec356f23d6d2b31b98df826c
 PINNED_MULTI_INDIRECT_ELF := $(THIS_DIR)/pinned/agc_graphics_multi_indirect-$(PINNED_MULTI_INDIRECT_SHA256).elf
 PINNED_MULTI_INDEXED_INDIRECT_SHA256 := afea810a97e36dfae517866acc21889202dbb9c63da04746801382442874f5a6
@@ -1430,6 +1434,18 @@ deploy_agc_graphics: agc_graphics.elf
 	deploy_agc_graphics_r16_uint_portable_fw550 \
 	deploy_agc_graphics_rg16_uint_portable_fw1160 \
 	deploy_agc_graphics_rg16_uint_portable_fw550 \
+	deploy_agc_graphics_r32_uint_portable_fw1160 \
+	deploy_agc_graphics_r32_uint_portable_fw550 \
+	deploy_agc_graphics_rg32_uint_portable_fw1160 \
+	deploy_agc_graphics_rg32_uint_portable_fw550 \
+	deploy_agc_graphics_rgba32_uint_portable_fw1160 \
+	deploy_agc_graphics_rgba32_uint_portable_fw550 \
+	deploy_agc_graphics_r32_sint_portable_fw1160 \
+	deploy_agc_graphics_r32_sint_portable_fw550 \
+	deploy_agc_graphics_rg32_sint_portable_fw1160 \
+	deploy_agc_graphics_rg32_sint_portable_fw550 \
+	deploy_agc_graphics_rgba32_sint_portable_fw1160 \
+	deploy_agc_graphics_rgba32_sint_portable_fw550 \
 	deploy_agc_graphics_multi_indirect_portable_fw1160 \
 	deploy_agc_graphics_multi_indexed_indirect_portable_fw1160 \
 	deploy_agc_graphics_count_indirect_portable_fw1160 \
@@ -1666,6 +1682,20 @@ deploy_agc_graphics_rg32_uint_portable_fw550:
 		RESULT_LOG_PATH=/data/homebrew/openagc_portable_graphics/result.log \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
 
+deploy_agc_graphics_rgba32_uint_portable_fw1160:
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(PINNED_RGBA32_UINT_ELF) \
+		EXPECTED_FW_ABI=0x1160 EXPECTED_TARGET=RGBA32_UINT \
+		EXPECTED_ARTIFACT_SHA256=$(PINNED_RGBA32_UINT_SHA256) \
+		RESULT_LOG_PATH=/data/homebrew/openagc_portable_graphics/result.log \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
+
+deploy_agc_graphics_rgba32_uint_portable_fw550:
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(PINNED_RGBA32_UINT_ELF) \
+		EXPECTED_FW_ABI=0x0550 EXPECTED_TARGET=RGBA32_UINT \
+		EXPECTED_ARTIFACT_SHA256=$(PINNED_RGBA32_UINT_SHA256) \
+		RESULT_LOG_PATH=/data/homebrew/openagc_portable_graphics/result.log \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
+
 deploy_agc_graphics_r32_sint_portable_fw1160:
 	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(PINNED_R32_SINT_ELF) \
 		EXPECTED_FW_ABI=0x1160 EXPECTED_TARGET=R32_SINT \
@@ -1691,6 +1721,20 @@ deploy_agc_graphics_rg32_sint_portable_fw550:
 	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(PINNED_RG32_SINT_ELF) \
 		EXPECTED_FW_ABI=0x0550 EXPECTED_TARGET=RG32_SINT \
 		EXPECTED_ARTIFACT_SHA256=$(PINNED_RG32_SINT_SHA256) \
+		RESULT_LOG_PATH=/data/homebrew/openagc_portable_graphics/result.log \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
+
+deploy_agc_graphics_rgba32_sint_portable_fw1160:
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(PINNED_RGBA32_SINT_ELF) \
+		EXPECTED_FW_ABI=0x1160 EXPECTED_TARGET=RGBA32_SINT \
+		EXPECTED_ARTIFACT_SHA256=$(PINNED_RGBA32_SINT_SHA256) \
+		RESULT_LOG_PATH=/data/homebrew/openagc_portable_graphics/result.log \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
+
+deploy_agc_graphics_rgba32_sint_portable_fw550:
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(PINNED_RGBA32_SINT_ELF) \
+		EXPECTED_FW_ABI=0x0550 EXPECTED_TARGET=RGBA32_SINT \
+		EXPECTED_ARTIFACT_SHA256=$(PINNED_RGBA32_SINT_SHA256) \
 		RESULT_LOG_PATH=/data/homebrew/openagc_portable_graphics/result.log \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
 
