@@ -729,9 +729,9 @@ execution remain pending. Exact artifacts are now pinned as SHA-256
 (UNORM) and
 `7a5587e843d43217389b39b86129fa28de83da91d81648b37f4fa13b3fdb2b61`
 (SRGB), with no-prerequisite FW 11.60 and FW 5.50 guarded targets. BC3 UNORM
-pass 1 succeeded on FW 11.60 with `224640` changed pixels, equal region counts,
-alpha range `0..255`, zero exact mismatches, and FNV64
-`0xae513a67c9bb483d`; pass 2 remains required.
+then passed twice on FW 11.60 with identical `224640` changed pixels, equal
+region counts, alpha range `0..255`, zero exact mismatches, and FNV64
+`0xae513a67c9bb483d`. BC3 UNORM is hardware-qualified on exact FW 11.60.
 
 BC5 UNORM and SNORM firmware-neutral gates now build with dedicated RG
 sampling shaders and no AGC SPRX dependency. Their 16-byte fixtures contain
