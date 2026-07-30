@@ -190,6 +190,12 @@ other values), reached its fence, shut down cleanly, returned final PASS, and
 left no residual process. The recipe now freezes `49152`; run the identical
 artifact once more before permitting its FW 11.60 mirror.
 
+The identical FW 5.50 replay reproduced `49152`, the exact D32 and S8
+distributions, bounded completion, clean shutdown, final PASS, and no residual
+process. Ordinary combined D32+S8 HTILE is hardware-qualified on FW 5.50. Run
+the pinned FW 11.60 ordinary mirror next, establish and freeze its exact count,
+then replay before any aspect-specific expclear gate.
+
 ## Higher-level consumers
 
 The following FW 5.50-qualified application-facing paths still need bounded

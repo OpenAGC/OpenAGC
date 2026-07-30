@@ -551,6 +551,10 @@ the runner and shared teardown on FW 11.60 only.
   distributions and changed `49152` HTILE words from `0xfffff30f`, with
   bounded completion, clean shutdown, and no residual process. Its guarded
   recipe now freezes `49152`; replay the identical artifact before FW 11.60.
+- The identical FW 5.50 combined replay reproduced `49152` and all exact
+  depth, stencil, fence, shutdown, and cleanup invariants. Ordinary combined
+  D32+S8 HTILE is qualified on FW 5.50. Run the pinned FW 11.60 ordinary
+  mirror next and freeze its observed count before replay.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and

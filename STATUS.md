@@ -84,8 +84,9 @@ recipe. The pinned FW 5.50 ordinary combined D32+S8 HTILE artifact is now the
 next permitted launch; its first pass reproduced exact D32 and S8
 distributions and `49152` changed HTILE words from `0xfffff30f`, with bounded
 completion, clean shutdown, and no residual process. Its recipe now freezes
-that count; aspect-specific expclear remains behind the ordinary endpoint
-sequence.
+that count; the identical replay reproduced every invariant. Ordinary combined
+D32+S8 HTILE is hardware-qualified on FW 5.50. Its pinned FW 11.60 mirror is
+the active gate; aspect-specific expclear remains behind that endpoint replay.
 
 Ordinary D16 HTILE is now hardware-qualified twice on each endpoint. The
 pinned current-source artifacts reproduced exact D16 classes, clean teardown,
