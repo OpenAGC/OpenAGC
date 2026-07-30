@@ -635,6 +635,9 @@ the runner and shared teardown on FW 11.60 only.
   `56832/56832` color, immediate completion, clean shutdown, and no residual
   process. Its guarded recipe now freezes `7982`; replay once before array
   isolation.
+- The identical FW 11.60 mip replay reproduced every exact invariant. Mip-1
+  HTILE isolation is qualified on both endpoints. Run the pinned FW 5.50
+  array-layer-1 artifact next and freeze its selected count before replay.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and

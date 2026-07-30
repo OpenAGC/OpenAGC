@@ -213,6 +213,12 @@ exact `56832/56832` color, immediate completion, clean shutdown, final PASS,
 and no residual process. Its logged recipe now freezes `7982`; one identical
 replay remains before mip isolation can be promoted across endpoints.
 
+The identical FW 11.60 mip replay reproduced `7982` selected words, zero
+outside change, exact `56832/56832` color, immediate completion, clean
+shutdown, final PASS, and no residual process. Current-source mip-1 HTILE
+isolation is hardware-qualified on both endpoints. Run the pinned FW 5.50
+array-layer-1 gate next and freeze its selected count before replay.
+
 That prerequisite sequence is now complete. Two relinks against the committed
 shader records reproduced all eight artifacts byte-for-byte, and dependency
 inspection found only VideoOut, kernel, libc, and networking. The exact FW
