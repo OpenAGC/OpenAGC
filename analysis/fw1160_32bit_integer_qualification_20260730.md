@@ -37,3 +37,9 @@ FW 11.60.
 - Fence, teardown, self-termination, and debugger absence passed.
 
 One identical-byte replay remains.
+
+## R32_SINT pass 2
+
+The identical pinned bytes reproduced the full signed range, exact sample and
+mismatch counts, lane and packed hashes, fence, teardown, self-termination,
+and debugger absence. R32_SINT is hardware-qualified on FW 11.60.

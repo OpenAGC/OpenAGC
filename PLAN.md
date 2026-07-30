@@ -885,6 +885,9 @@ all six pinned artifacts for identical-byte FW 5.50 replay and proceed to the
   255,744 exact samples spanning the full signed range, zero mismatches, packed
   FNV64 `0x7e0438a1fbf7bf83`, and a clean lifecycle. Replay once.
 
+  The identical replay reproduced every exact oracle. `R32_SINT` is
+  hardware-qualified on FW 11.60; proceed to `RG32_SINT`.
+
 - `RG32_SINT` is host-qualified as append-only value 30 with gfx1013 `32_32`,
   SINT, standard swap, eight bytes per pixel, and `32_GR` export 2. Exact PM4
   (`CB_COLOR0_INFO=0x0007052c`), all-profile selection, every short-buffer

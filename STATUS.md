@@ -576,6 +576,9 @@ The UINT prerequisites are complete and pinned R32_SINT pass 1 succeeds with
 FNV64 `0x7e0438a1fbf7bf83`, clean teardown, and no residual process. One replay
 remains.
 
+The identical replay reproduced every exact R32_SINT oracle and clean
+lifecycle. R32_SINT is hardware-qualified on FW 11.60; RG32_SINT is next.
+
 `AGC_GFX1013_RT_FORMAT_RG32_SINT` is appended at value 30 and maps to
 `(format=0x0b, number=SINT, swap=standard)`, eight bytes per pixel, and
 `32_GR` export 2. Exact host coverage locks `CB_COLOR0_INFO=0x0007052c`, full
