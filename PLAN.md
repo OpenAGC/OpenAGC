@@ -454,6 +454,13 @@ compute-to-copy, copy-to-shader, host-read, and present-to-render; repeated
 multi-command-buffer submission and deferred destruction complete without
 leaks, stale ownership, or unbounded waits.
 
+The initial whole-buffer compute row is established on exact FW 5.50: public
+runtime artifact `ab8852e9161c0f6ed1c373bc6de047bb9831df0d7cc7bc3df6d247baf549af31`
+records `undefined -> shader-write -> host-read` around real shader execution,
+then passes bounded-fence readback and teardown. This is only one row of the
+exit matrix; image/graphics/copy/scanout, FW 11.60, and multi-command
+synchronization remain open.
+
 ### Milestone 5: validation, diagnostics, capture, and documentation
 
 Validation begins with Milestone 1 and becomes a separately selectable debug

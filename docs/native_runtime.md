@@ -202,7 +202,12 @@ recording, typed color-target binding, and the initial explicit whole-resource
 transition matrix are host-qualified through the generic backend. The same
 public header and implementation compile for Prospero, and device creation owns
 exact backend selection, caller default version, internal memory, and
-default-state initialization. The transition API is not hardware-qualified yet.
+default-state initialization. The exact FW 5.50 compute row
+`undefined -> shader-write -> host-read` is hardware-qualified by the
+public-runtime artifact recorded in
+[`runtime_transitions_fw550_20260731.md`](../analysis/runtime_transitions_fw550_20260731.md).
+Image, graphics, copy, scanout, cross-queue, and multi-command synchronization
+rows remain host-only.
 
 Prospero `agcQueueSubmit` submits both current graphics and compute command
 buffers through the direct DCB carrier only when the caller supplies an

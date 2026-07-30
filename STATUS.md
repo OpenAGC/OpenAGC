@@ -48,9 +48,13 @@ whole-resource transitions cover declared buffer/image usages and explicit
 host/graphics/compute ownership, derive the existing qualified gfx1013 barrier
 packets internally, retain resources while recorded, and commit state only on
 successful submit. Partial ranges, HTILE, duplicate resources in one batch,
-and cross-queue ownership handoffs fail closed. This is not PS5 hardware
-qualification; multi-command-buffer waits/signals and timeline semantics remain
-pending.
+and cross-queue ownership handoffs fail closed. The slice is host-qualified
+except for the exact FW 5.50 public compute row
+`undefined -> shader-write -> host-read`: artifact
+`ab8852e9161c0f6ed1c373bc6de047bb9831df0d7cc7bc3df6d247baf549af31` passed
+the real 64-word dispatch, derived flush, bounded fence, readback, reset, and
+teardown. Image/graphics/copy/scanout, cross-queue, multi-command-buffer
+waits/signals, and timeline semantics remain pending.
 
 ## Native resource and memory management complete (2026-07-30)
 
