@@ -718,6 +718,30 @@ the runner and shared teardown on FW 11.60 only.
 
 ### Render-target format expansion through the 128-bit regular-color ceiling
 
+Completion audit on 2026-07-30 closes the planned milestone through BC
+sampling, compressed depth/HTILE progression, and MSAA endpoint parity:
+
+- R16/RG16/RGBA16 SNORM passed twice on exact FW 11.60.
+- All six 16-bit UINT/SINT tuples passed twice on exact FW 11.60 using
+  dedicated integer-output shaders.
+- All six 32-bit UINT/SINT tuples passed twice on exact FW 11.60 using
+  dedicated integer-output shaders.
+- All 14 BC1-BC7 encodings have host-qualified linear layout and exact
+  descriptor coverage, and the same hash-pinned direct-upload sampling ELFs
+  passed twice on exact FW 5.50 and FW 11.60.
+- D16 and D32 HTILE ordinary/decompress/resummarize and expclear, combined
+  D32+S8 ordinary plus all three expclear aspect masks, and mip/array HTILE
+  isolation are hardware-qualified on both endpoints. The D16 expclear mirror
+  was replayed again so every endpoint now has two accepted passes.
+- D32+4x RGBA8 resolve and full-4x/partial-2x sample-rate shading passed twice
+  on both endpoints.
+
+The clean generic suite reports `12240 passed, 0 failed`; all six CTest suites
+pass. Keep tiled BC layout, BC copy/mip-copy, intermediate-firmware hardware
+qualification, and unrelated graphics features as separately gated future
+work rather than silently widening this completed milestone. See
+`analysis/format_depth_msaa_goal_completion_20260730.md`.
+
 Treat 128 bits per uncompressed format element (`RGBA32`, four 32-bit
 components) as OpenAGC's regular color-buffer ceiling, then complete the useful
 format matrix in increasing hardware-risk order. For a texture this element is

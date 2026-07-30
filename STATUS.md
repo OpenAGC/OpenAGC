@@ -1,5 +1,22 @@
 # openagc Status
 
+## Format, compressed-depth, and MSAA milestone complete (2026-07-30)
+
+The planned progression from R16/RG16/RGBA16 SNORM through dedicated 16-bit
+and 32-bit integer render targets, BC1-BC7 linear layout/direct-upload
+sampling, compressed depth/HTILE, and 4x MSAA parity is complete within its
+recorded qualification scope. The format and integer gates passed twice on FW
+11.60; all 14 BC sampling artifacts passed twice as identical bytes on FW 5.50
+and FW 11.60. Compressed-depth ordinary, expclear, combined-aspect, and
+subresource gates plus resolve and full/partial sample-rate shading are
+qualified on both endpoints. The final D16 expclear replay closes the only
+endpoint two-pass asymmetry. The generic binary reports `12240 passed, 0
+failed`, and all six CTest suites pass. Exact evidence and exclusions are in
+`analysis/format_depth_msaa_goal_completion_20260730.md`.
+
+This does not claim hardware qualification for the 37 intermediate active
+profiles, tiled BC layout, or BC image-copy/mip-copy behavior.
+
 ## FW 5.50 current-source mirror regression (2026-07-30)
 
 The audited headless FW 5.50 mirrors passed for the standalone 8,294,400-byte
