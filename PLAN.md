@@ -1235,6 +1235,12 @@ twice and reproduced `224640` changed pixels, mode counts
 `{4:205880,6:18760}`, alpha range `0..255`, zero exact mismatches, channel
 independence, and FNV64 `0xf46729633292d01b` on both runs. BC7 UNORM is
 hardware-qualified on both endpoints; qualify BC7 SRGB next.
+
+BC7 SRGB pass 1 on FW 5.50 used pinned SHA-256
+`f6a97569f854ddad7080247c44bec6dd1edccc0b7c248a8b1f8701b276c8eb27`
+and reproduced `224640` changed pixels, mode counts `{4:205880,6:18760}`, alpha
+range `0..255`, zero exact mismatches, channel independence, and FNV64
+`0x74a3526f9a3eef65`. Repeat the identical artifact once.
 The final firmware-neutral bytes are pinned as SHA-256
 `f74c393112fc465eace431a3fe288095ae4b3bf5ee993e8147ed0e9a2f22f2a4`
 for BC4 UNORM and

@@ -70,6 +70,16 @@ post-run residual-process check passed again.
 BC7 UNORM is hardware-qualified on exact FW 5.50 and FW 11.60. BC7 SRGB is
 next.
 
+## BC7 SRGB pass 1
+
+Artifact SHA-256:
+`f6a97569f854ddad7080247c44bec6dd1edccc0b7c248a8b1f8701b276c8eb27`
+
+The guarded run produced `224640` changed pixels, mode counts
+`{4:205880,6:18760}`, alpha range `0..255`, zero exact mismatches, channel
+independence, and FNV64 `0x74a3526f9a3eef65`. All mode, format, lifecycle,
+and residual-process gates passed. Repeat the identical artifact once.
+
 ## BC5 SNORM pass 2
 
 The identical artifact reproduced `224640` changed pixels, regions
