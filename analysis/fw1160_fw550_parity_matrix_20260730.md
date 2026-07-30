@@ -56,7 +56,7 @@ reached its completion fence, shut the driver down, and returned PASS.
 | Ordinary D16 HTILE | Qualified | Qualified on both endpoints |
 | D16 HTILE expclear | Qualified | Qualified on both endpoints |
 | D32 HTILE ordinary/decompress/resummarize/expclear | Qualified | Qualified on both endpoints |
-| Combined D32+S8 HTILE and aspect masks | Ordinary and depth-only expclear qualified | Stencil-only and both-aspect expclear pending |
+| Combined D32+S8 HTILE and aspect masks | Ordinary, depth-only, and stencil-only qualified | Both-aspect expclear pending |
 | HTILE mip and array subresources | Missing | Prepare bounded mirrors |
 | 4x MSAA | Missing | Wait for the FW 5.50 baseline regression |
 | Sample-rate shading | Missing | Add an exact invocation-count gate |
@@ -257,6 +257,13 @@ metadata `0xfffff0ff`, `49152` changed words, the exact allocation-aware D32
 and S8 distributions, immediate completion, clean shutdown, final PASS, and no
 residual process. The pinned FW 5.50 stencil-only mirror now freezes `49152`
 and is the next permitted launch.
+
+The pinned FW 5.50 stencil-only mirror reproduced aspect `0x2`, expected
+metadata `0xfffff0ff`, zero RMW mismatch or outside change, preserved reserved
+bits, `49152` changed words, exact allocation-aware D32 and S8 distributions,
+bounded completion, clean shutdown, final PASS, and no residual process.
+Stencil-only combined expclear is hardware-qualified on both endpoints. The
+pinned FW 11.60 both-aspect gate is now active.
 
 ## Higher-level consumers
 

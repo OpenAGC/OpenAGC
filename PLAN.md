@@ -588,6 +588,10 @@ the runner and shared teardown on FW 11.60 only.
 - The identical FW 11.60 stencil-only replay reproduced every exact invariant.
   Run the pinned FW 5.50 stencil-only mirror next with `49152` frozen; keep
   both-aspect expclear blocked until that endpoint replay passes.
+- The pinned FW 5.50 stencil-only mirror reproduced every aspect-`0x2`,
+  metadata, allocation-aware D32, S8, fence, shutdown, and cleanup invariant.
+  Stencil-only combined expclear is qualified on both endpoints. Run pinned FW
+  11.60 both-aspect pass 1 next, then freeze/replay and mirror it on FW 5.50.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and
