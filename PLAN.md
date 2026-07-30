@@ -596,8 +596,8 @@ all six pinned artifacts for identical-byte FW 5.50 replay and proceed to the
   UINT, standard swap, eight bytes per pixel, and `32_GR` export 2. Exact PM4
   (`CB_COLOR0_INFO=0x0007042c`), all-profile selection, every short-buffer
   boundary, invalid-enum behavior, and maximum 64-bit layout arithmetic pass.
-  Build its dedicated two-lane portable hardware gate next; do not execute
-  mutable bytes.
+  Its dedicated `32_GR` shader and two-lane exact-value oracle build as a
+  firmware-neutral portable gate. Pin its final bytes before execution.
 
 These formats need dedicated integer-output pixel shaders. Do not qualify them
 using a floating-point shader and assume the conversion is correct. Their

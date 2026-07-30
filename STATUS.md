@@ -297,7 +297,9 @@ identical-byte FW 5.50 replay remains pending. See
 `32_GR` export 2. Host coverage locks `CB_COLOR0_INFO=0x0007042c`, the exact
 PM4 stream, all 39 profiles, every short command-buffer boundary, invalid
 enums, and maximum 64-bit surface arithmetic. The generic suite now passes
-10,550 assertions. Its portable hardware artifact is not yet pinned or run.
+10,550 assertions. Its dedicated `32_GR` shader, two-lane exact oracle, and
+fail-closed runner checks build as a firmware-neutral portable gate; final-byte
+pinning and hardware execution remain pending.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability
