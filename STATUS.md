@@ -262,8 +262,10 @@ SINT16_ABGR export 8. Exact host coverage locks
 short command buffer, invalid enums, and maximum 64-bit layout arithmetic.
 The portable gate now exercises four exact signed lanes, signed range and
 diversity, all six pairwise independence checks, and the packed hash, and
-passes firmware-neutral dependency verification. Final-byte pinning and
-hardware execution remain pending.
+passes firmware-neutral dependency verification. The final unexecuted ELF is
+pinned as SHA-256
+`b9bdb9641c22bfedfb9367fe60ba97baaef84af191d0326001c2e8285afbef34`.
+Two identical-byte FW 11.60 runs and exact FW 5.50 replay remain pending.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability
