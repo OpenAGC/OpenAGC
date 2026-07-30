@@ -36,16 +36,29 @@ cleanup as a ready verdict, avoiding the misleading timeout report.
 Corrected firmware-neutral artifacts were preserved before execution:
 
 - BC1 UNORM:
-  `b8ec09a3e15b33b20897e0526e93c6a0828931e358563cf3539d5b964e3a991c`
+  `db3965f2c8da26273b9683794595612c5b2c216b06a6b05ab05bb579a4842aa5`
 - BC1 SRGB:
-  `acf8b12e84ebf7fc07ffd502ff97b399583f4bdeddca0c477e903342504f0ff2`
+  `1206fa93091cc0f12043617d9e3f83b4951ef5f727a3aca9a94af73c61d7353f`
 - BC2 UNORM:
-  `0aa0a688aa337624847f054fc4d9e5a31e0eae67bf391a83c789a88aa885cfcf`
+  `497c8c79b43c49e9079d54167a50fce71b26b5235b4ecf2d2c1034a848513c7a`
 - BC2 SRGB:
-  `2abdedf25437b2e8907aafef78ec7c45857abf390735ce790c34ef843762cf90`
+  `ce34b39c3fdf32034e5755ce990b8bc1fc20e01faa6524b32142244cdc40f83c`
 - BC3 UNORM:
-  `f6b99e4db1e3a7342db0132a8466362aab8deb41365b7460439b7a145fbc69bf`
+  `7a9e27cf713c3d333f7174183109df9ea5ef33b551743d210ca17cf3ec4470fb`
 - BC3 SRGB:
-  `c5019c536c32877595c10cc6eadab05774d6b41d671b672dd7edc6fc0ac3cc30`
+  `86f94112a0764d37038b59f0f264a4973cfb0e863c4bf90fe3999ef5494acf6f`
 
-Retry corrected BC1 UNORM twice before advancing.
+## BC1 UNORM valid-mip diagnosis
+
+The corrected-weight artifact
+`b8ec09a3e15b33b20897e0526e93c6a0828931e358563cf3539d5b964e3a991c`
+then reduced the mismatch count from `121659` to `46779`. That residual count
+corresponded to the undefined mip-1 fetches: a 5x7 base mip has a 2x3 mip 1,
+but the shader requested `x=2` and `y=3`. The GPU was not required to match the
+CPU decoder for those out-of-range `texelFetch` coordinates.
+
+All shared and dedicated BC sampling shaders now clamp mip 1 to `x=0..1` and
+`y=0..2`, and every CPU oracle applies the identical valid coordinate mapping.
+All 14 affected firmware-neutral ELFs were rebuilt, dependency-checked,
+hash-named, and preserved before any further execution. Retry the newly pinned
+BC1 UNORM artifact twice before advancing.

@@ -1051,9 +1051,9 @@ texel, applies the SRGB transfer for the SRGB variant, requires zero mismatches,
 records a native FNV64, and fails unless all three selection regions execute.
 Both ELFs pass firmware-neutral dependency verification. Preserve and pin their
 final bytes before the first clean-boot FW 11.60 attempt. The preserved SHA-256
-values are `b8ec09a3e15b33b20897e0526e93c6a0828931e358563cf3539d5b964e3a991c`
+values are `db3965f2c8da26273b9683794595612c5b2c216b06a6b05ab05bb579a4842aa5`
 for BC1 UNORM and
-`acf8b12e84ebf7fc07ffd502ff97b399583f4bdeddca0c477e903342504f0ff2` for
+`1206fa93091cc0f12043617d9e3f83b4951ef5f727a3aca9a94af73c61d7353f` for
 BC1 SRGB. Their FW 11.60 and FW 5.50 targets have no build prerequisites.
 
 The first BC1 UNORM launch on the post-integer-test boot produced no fresh
@@ -1061,8 +1061,11 @@ file-backed verdict. After a clean reboot, the identical old artifact executed
 and safely failed its CPU oracle: the GPU produced the fixed-point BC colors
 171/84 while the oracle expected ideal thirds 170/85. The oracle now uses the
 standard 43/21 six-bit BC weights for BC1, BC2, and BC3, and the runner surfaces
-a completed fatal log instead of waiting for `Graphics result:`. Retry the new
-pinned BC1 UNORM bytes twice before advancing.
+a completed fatal log instead of waiting for `Graphics result:`. A corrected
+weight run then isolated a second fixture error: mip 1 is 2x3, while every BC
+shader fetched coordinates through 2x3 inclusive. All mip-1 shader fetches and
+CPU expectations are now clamped to the valid `x=0..1`, `y=0..2` extent.
+Retry the newly pinned BC1 UNORM bytes twice before advancing.
 
 BC4 UNORM/SNORM portable gates now build with dedicated scalar sampling
 shaders. They reuse the 5x7, three-mip, two-layer direct-upload geometry but
@@ -1074,9 +1077,9 @@ decodes the block independently, requires exact UNORM output and at most one
 stored-byte rounding unit for SNORM, validates all mip/layer regions, and emits
 a native hash. Pin final bytes before hardware execution.
 The final firmware-neutral bytes are pinned as SHA-256
-`32f37917fe28c139c4c63749277a36c5e007099538b63f1973044816f248f4e0`
+`ea212723ae5ff994d5d2e2cc8292fa114793c89bb9808cdd3ba673c5578a4fa9`
 for BC4 UNORM and
-`ade37660a18fc1e28481afd543f326e684d02297527cd13f5077234d049b705e`
+`19d1f2fbc304c887aa27431384f8b43e07f2a7b08c63b878658962f37d3bf190`
 for BC4 SNORM. Both endpoint targets are no-build guarded replays.
 
 BC2 UNORM/SRGB portable gates now build by reusing the qualified
@@ -1087,9 +1090,9 @@ alpha independently, applies SRGB conversion only to RGB, requires exact
 RGBA8 agreement, proves alpha endpoints 0 and 255, validates all mip/layer
 selection regions, and records a native hash. Preserve and pin the final
 firmware-neutral bytes before any hardware execution. The exact SHA-256 values
-are `0aa0a688aa337624847f054fc4d9e5a31e0eae67bf391a83c789a88aa885cfcf`
+are `497c8c79b43c49e9079d54167a50fce71b26b5235b4ecf2d2c1034a848513c7a`
 for BC2 UNORM and
-`2abdedf25437b2e8907aafef78ec7c45857abf390735ce790c34ef843762cf90`
+`ce34b39c3fdf32034e5755ce990b8bc1fc20e01faa6524b32142244cdc40f83c`
 for BC2 SRGB. Their guarded endpoint targets have no build prerequisites;
 FW 11.60 execution and identical-byte FW 5.50 replay remain pending.
 
@@ -1102,9 +1105,9 @@ the qualified BC4 rounding rule for interpolated alpha, applies SRGB only to
 RGB, demands exact RGBA8 agreement and the full 0..255 alpha range, validates
 all selection regions, and records a native hash. Pin the final neutral bytes
 before any hardware attempt. The pinned SHA-256 values are
-`f6b99e4db1e3a7342db0132a8466362aab8deb41365b7460439b7a145fbc69bf`
+`7a9e27cf713c3d333f7174183109df9ea5ef33b551743d210ca17cf3ec4470fb`
 for BC3 UNORM and
-`c5019c536c32877595c10cc6eadab05774d6b41d671b672dd7edc6fc0ac3cc30`
+`86f94112a0764d37038b59f0f264a4973cfb0e863c4bf90fe3999ef5494acf6f`
 for BC3 SRGB. Their FW 11.60 and identical-byte FW 5.50 guarded targets have
 no build prerequisites.
 
@@ -1116,9 +1119,9 @@ stream, covers both interpolation modes and terminal values, requires the full
 0..255 range in both channels, proves channel independence and all mip/layer
 regions, allows only the established one-byte SNORM rounding tolerance, and
 records a native hash. The pinned SHA-256 values are
-`313dfca6a5e088f0cb9eca2c8e12133ed66fbb211150a9b0dd7a0de21f05bbbd`
+`65304aac7b4e49a180dbf8aeb0a81abe240d8579157184a673b2079b29528a8c`
 for BC5 UNORM and
-`3e001fab86e7e7371bd58716e4560431c4ac84be7c3b674ca9c76dacf685d759`
+`5b385bd503a69ea763681e66eb9627c5a74c60dd482d5e9dc02d4dbfd52e80b0`
 for BC5 SNORM. Their FW 11.60 and identical-byte FW 5.50 guarded targets have
 no build prerequisites.
 
@@ -1132,9 +1135,9 @@ agreement, full alpha range, channel independence, and all mip/layer regions,
 and records a native hash. Other BC7 modes remain separate coverage expansion,
 not a prerequisite for proving the native BC7 resource path. The pinned
 SHA-256 values are
-`f25e212385ba34487c713fd842ab90a18049cb1cf462ddfb91a0e6df4aff7881`
+`a57288aca33e8111fe0d6c624b65d90324b64c08486a5b9bccdeded85e724028`
 for BC7 UNORM and
-`8fd9d8e06587123a63cbdde5aa49b32f2ba77799827a0c637669bdbd8ec7c63e`
+`bf55e34fa8c26e1396fa942ace79bddaa97b87d8dbdef5597bc076de3fce1b0c`
 for BC7 SRGB. Their FW 11.60 and identical-byte FW 5.50 guarded targets have
 no build prerequisites.
 
@@ -1147,9 +1150,9 @@ Mesa dependency. UFLOAT clamps positive RGB directly, while SFLOAT remaps
 partial-edge selection, broad range, channel independence, alpha one, a native
 hash, and no RGB error above two stored-byte units. The pinned SHA-256 values
 are
-`941c75f87619718878ac10ed1039aeb879f97a0a77a73262ce45b86deaf567ff`
+`d41928cfa512c15983818eb3a9c5f55b13a2e0efa4994cee9fe3163539363eb0`
 for BC6 UFLOAT and
-`25feb569d98eab0ff8d1d51c2a450b68dbaf55843e0cb0b860c7115b2a7c7544`
+`00e230842a850a01f964e2a003d9e8f5ce5f76f612778195769bed7f6b14c2d0`
 for BC6 SFLOAT. Their FW 11.60 and identical-byte FW 5.50 guarded targets have
 no build prerequisites. See
 `analysis/bc6_fixture_generation_20260730.md`.

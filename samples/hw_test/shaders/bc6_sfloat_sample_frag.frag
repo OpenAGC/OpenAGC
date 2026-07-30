@@ -16,7 +16,7 @@ void main()
         value = texelFetch(bc_texture, ivec3(lane, row, 0), 0).rgb;
     } else if (region == 1) {
         value = texelFetch(
-            bc_texture, ivec3(min(lane, 2), row, 0), 1).rgb;
+            bc_texture, ivec3(min(lane, 1), min(row, 2), 0), 1).rgb;
     } else {
         value = texelFetch(
             bc_texture, ivec3(4, min(row + 3, 6), 1), 0).rgb;

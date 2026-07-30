@@ -652,9 +652,9 @@ readback oracle independently decodes every covered BC1 texel, applies the SRGB
 transfer where required, demands zero mismatches and all selection regions,
 and records the native hash. Hardware execution and hash freezing remain
 pending a clean FW 11.60 reboot. Exact artifacts are pinned as SHA-256
-`b8ec09a3e15b33b20897e0526e93c6a0828931e358563cf3539d5b964e3a991c`
+`db3965f2c8da26273b9683794595612c5b2c216b06a6b05ab05bb579a4842aa5`
 (UNORM) and
-`acf8b12e84ebf7fc07ffd502ff97b399583f4bdeddca0c477e903342504f0ff2`
+`1206fa93091cc0f12043617d9e3f83b4951ef5f727a3aca9a94af73c61d7353f`
 (SRGB), with no-prerequisite guarded targets for FW 11.60 and identical-byte
 FW 5.50 replay.
 
@@ -665,7 +665,11 @@ an oracle defect: GFX10.3 decoded the two intermediate colors with fixed-point
 The BC1/BC2/BC3 color decoders and SRGB expectations now model the observed
 hardware rule. The guarded runner also recognizes a completed fatal log after
 cleanup, so it cannot mislabel this class of failure as a transport timeout.
-Hardware qualification of the corrected artifacts remains pending.
+The next corrected run reduced mismatches to `46779`, exactly exposing invalid
+mip-1 `texelFetch` coordinates: the 5x7 base mip shrinks to 2x3, but the fixture
+requested `x=2` and `y=3`. Every BC shader and CPU oracle now clamps mip 1 to
+its valid extent. Hardware qualification of the newly pinned artifacts remains
+pending.
 
 BC4 UNORM and SNORM firmware-neutral sampling gates also build. Dedicated
 shaders sample the red channel from exact endpoint/index blocks across mip 0,
@@ -676,9 +680,9 @@ terminal entries; the runner requires zero decoded mismatches, exact UNORM,
 SNORM within one stored-byte rounding unit, all selection regions, and a native
 hash. Hardware execution remains pending.
 The exact artifacts are pinned as SHA-256
-`32f37917fe28c139c4c63749277a36c5e007099538b63f1973044816f248f4e0`
+`ea212723ae5ff994d5d2e2cc8292fa114793c89bb9808cdd3ba673c5578a4fa9`
 (UNORM) and
-`ade37660a18fc1e28481afd543f326e684d02297527cd13f5077234d049b705e`
+`19d1f2fbc304c887aa27431384f8b43e07f2a7b08c63b878658962f37d3bf190`
 (SNORM), with no-prerequisite FW 11.60 and FW 5.50 targets.
 
 BC2 UNORM and SRGB firmware-neutral sampling gates now build without an AGC
@@ -688,9 +692,9 @@ SPRX dependency. They reuse the BC array/mip shader while uploading independent
 applies SRGB conversion only to RGB, requires exact RGBA8 agreement, demands
 both alpha endpoints and all three mip/layer regions, and records the native
 hash. Exact artifacts are pinned as SHA-256
-`0aa0a688aa337624847f054fc4d9e5a31e0eae67bf391a83c789a88aa885cfcf`
+`497c8c79b43c49e9079d54167a50fce71b26b5235b4ecf2d2c1034a848513c7a`
 (UNORM) and
-`2abdedf25437b2e8907aafef78ec7c45857abf390735ce790c34ef843762cf90`
+`ce34b39c3fdf32034e5755ce990b8bc1fc20e01faa6524b32142244cdc40f83c`
 (SRGB), with no-prerequisite FW 11.60 and FW 5.50 targets. Hardware execution
 remains pending a clean FW 11.60 boot.
 
@@ -702,9 +706,9 @@ storage. The independent oracle decodes both fields, uses nearest rounding for
 alpha interpolation, converts only RGB for SRGB, and requires exact RGBA8
 agreement plus alpha endpoints 0 and 255. Artifact pinning and hardware
 execution remain pending. Exact artifacts are now pinned as SHA-256
-`f6b99e4db1e3a7342db0132a8466362aab8deb41365b7460439b7a145fbc69bf`
+`7a9e27cf713c3d333f7174183109df9ea5ef33b551743d210ca17cf3ec4470fb`
 (UNORM) and
-`c5019c536c32877595c10cc6eadab05774d6b41d671b672dd7edc6fc0ac3cc30`
+`86f94112a0764d37038b59f0f264a4973cfb0e863c4bf90fe3999ef5494acf6f`
 (SRGB), with no-prerequisite FW 11.60 and FW 5.50 guarded targets. Hardware
 execution remains pending a clean FW 11.60 boot.
 
@@ -715,9 +719,9 @@ separately, covers both endpoint-order interpolation modes and terminal
 values, demands full ranges and channel independence, validates every
 mip/layer region, and permits only the established one-byte SNORM rounding
 tolerance. Exact artifacts are now pinned as SHA-256
-`313dfca6a5e088f0cb9eca2c8e12133ed66fbb211150a9b0dd7a0de21f05bbbd`
+`65304aac7b4e49a180dbf8aeb0a81abe240d8579157184a673b2079b29528a8c`
 (UNORM) and
-`3e001fab86e7e7371bd58716e4560431c4ac84be7c3b674ca9c76dacf685d759`
+`5b385bd503a69ea763681e66eb9627c5a74c60dd482d5e9dc02d4dbfd52e80b0`
 (SNORM), with no-prerequisite FW 11.60 and FW 5.50 guarded targets. Hardware
 execution remains pending a clean FW 11.60 boot.
 
@@ -729,9 +733,9 @@ endpoint and interpolation results. The bounded oracle recognizes both modes,
 requires exact decoded RGBA8 values, full alpha range, channel independence,
 and every mip/layer region, and records a native hash. Exact artifacts are
 now pinned as SHA-256
-`f25e212385ba34487c713fd842ab90a18049cb1cf462ddfb91a0e6df4aff7881`
+`a57288aca33e8111fe0d6c624b65d90324b64c08486a5b9bccdeded85e724028`
 (UNORM) and
-`8fd9d8e06587123a63cbdde5aa49b32f2ba77799827a0c637669bdbd8ec7c63e`
+`bf55e34fa8c26e1396fa942ace79bddaa97b87d8dbdef5597bc076de3fce1b0c`
 (SRGB), with no-prerequisite FW 11.60 and FW 5.50 guarded targets. Hardware
 execution remains pending a clean FW 11.60 boot.
 
@@ -743,9 +747,9 @@ second layer, partial-edge storage, positive and signed remapping, broad range,
 channel independence, alpha one, and a native hash, with at most two
 stored-byte units of RGB conversion tolerance. Exact artifacts are now pinned
 as SHA-256
-`941c75f87619718878ac10ed1039aeb879f97a0a77a73262ce45b86deaf567ff`
+`d41928cfa512c15983818eb3a9c5f55b13a2e0efa4994cee9fe3163539363eb0`
 (UFLOAT) and
-`25feb569d98eab0ff8d1d51c2a450b68dbaf55843e0cb0b860c7115b2a7c7544`
+`00e230842a850a01f964e2a003d9e8f5ce5f76f612778195769bed7f6b14c2d0`
 (SFLOAT), with no-prerequisite FW 11.60 and FW 5.50 guarded targets. Hardware
 execution remains pending a clean FW 11.60 boot. See
 `analysis/bc6_fixture_generation_20260730.md`.

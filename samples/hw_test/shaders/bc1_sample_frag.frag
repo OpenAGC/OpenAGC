@@ -15,7 +15,7 @@ void main()
         frag_color = texelFetch(bc_texture, ivec3(lane, row, 0), 0);
     } else if (region == 1) {
         frag_color = texelFetch(
-            bc_texture, ivec3(min(lane, 2), row, 0), 1);
+            bc_texture, ivec3(min(lane, 1), min(row, 2), 0), 1);
     } else {
         frag_color = texelFetch(
             bc_texture, ivec3(4, min(row + 3, 6), 1), 0);

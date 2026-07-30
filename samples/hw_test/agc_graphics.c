@@ -892,7 +892,7 @@ static uint32_t bc1_expected_pixel(const uint8_t *texture,
         color = bc1_decode_texel(texture, layer0_mip0, lane, row);
     } else if (local_x < 8u) {
         color = bc1_decode_texel(texture, layer0_mip1,
-            lane > 2u ? 2u : lane, row);
+            lane > 1u ? 1u : lane, row > 2u ? 2u : row);
     } else {
         color = bc1_decode_texel(texture, layer1_mip0, 4u,
             row + 3u > 6u ? 6u : row + 3u);
@@ -1009,7 +1009,7 @@ static uint32_t bc4_expected_pixel(const uint8_t *texture,
             texture, layer0_mip0, lane, row, snorm);
     } else if (local_x < 8u) {
         value = bc4_decode_to_unorm(texture, layer0_mip1,
-            lane > 2u ? 2u : lane, row, snorm);
+            lane > 1u ? 1u : lane, row > 2u ? 2u : row, snorm);
     } else {
         value = bc4_decode_to_unorm(texture, layer1_mip0, 4u,
             row + 3u > 6u ? 6u : row + 3u, snorm);
@@ -1125,7 +1125,7 @@ static uint32_t bc2_expected_pixel(const uint8_t *texture,
         return bc2_decode_texel(texture, layer0_mip0, lane, row, srgb);
     if (local_x < 8u)
         return bc2_decode_texel(texture, layer0_mip1,
-            lane > 2u ? 2u : lane, row, srgb);
+            lane > 1u ? 1u : lane, row > 2u ? 2u : row, srgb);
     return bc2_decode_texel(texture, layer1_mip0, 4u,
         row + 3u > 6u ? 6u : row + 3u, srgb);
 }
@@ -1251,7 +1251,7 @@ static uint32_t bc3_expected_pixel(const uint8_t *texture,
         return bc3_decode_texel(texture, layer0_mip0, lane, row, srgb);
     if (local_x < 8u)
         return bc3_decode_texel(texture, layer0_mip1,
-            lane > 2u ? 2u : lane, row, srgb);
+            lane > 1u ? 1u : lane, row > 2u ? 2u : row, srgb);
     return bc3_decode_texel(texture, layer1_mip0, 4u,
         row + 3u > 6u ? 6u : row + 3u, srgb);
 }
@@ -1367,7 +1367,7 @@ static uint32_t bc5_expected_pixel(const uint8_t *texture,
         return bc5_decode_texel(texture, layer0_mip0, lane, row, snorm);
     if (local_x < 8u)
         return bc5_decode_texel(texture, layer0_mip1,
-            lane > 2u ? 2u : lane, row, snorm);
+            lane > 1u ? 1u : lane, row > 2u ? 2u : row, snorm);
     return bc5_decode_texel(texture, layer1_mip0, 4u,
         row + 3u > 6u ? 6u : row + 3u, snorm);
 }
@@ -1613,7 +1613,8 @@ static uint32_t bc7_expected_pixel(const uint8_t *texture,
             lane, row, srgb, decoded_mode);
     if (local_x < 8u)
         return bc7_decode_texel(texture, layer0_mip1,
-            lane > 2u ? 2u : lane, row, srgb, decoded_mode);
+            lane > 1u ? 1u : lane, row > 2u ? 2u : row,
+            srgb, decoded_mode);
     return bc7_decode_texel(texture, layer1_mip0, 4u,
         row + 3u > 6u ? 6u : row + 3u, srgb, decoded_mode);
 }
@@ -1708,8 +1709,9 @@ static uint32_t bc6_expected_pixel(uint32_t pixel_x, uint32_t pixel_y,
     }
     if (local_x < 8u) {
         *fixture = 1u;
-        return bc6_expected1[signed_index][row * 3u +
-            (lane > 2u ? 2u : lane)];
+        return bc6_expected1[signed_index][
+            (row > 2u ? 2u : row) * 3u +
+            (lane > 1u ? 1u : lane)];
     }
     if (row == 0u) {
         *fixture = 2u;
