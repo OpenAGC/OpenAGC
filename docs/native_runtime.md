@@ -187,8 +187,9 @@ Prospero cross-build pass; it has not been deployed or hardware-qualified.
 
 `samples/hw_test/agc_runtime_graphics.elf` is the corresponding native graphics
 submission probe. It creates upload vertex/index buffers, a reflected NGG
-vertex/fragment pipeline, an RGBA8 color-target image, a command buffer, and a
-fence; it binds the typed target plus dynamic viewport/scissor state before its
-indexed triangle draw. The generic compiler-artifact contract and its Prospero
-cross-build pass. Its fence completion is not a pixel-output oracle, and the
-probe has not been deployed or hardware-qualified.
+vertex/fragment pipeline, RGBA8 color-target and D16 depth-target images, a
+command buffer, and a fence; it binds both typed attachments plus dynamic
+viewport/scissor state before its indexed triangle draw. The generic
+compiler-artifact contract and its Prospero cross-build pass. Its fence
+completion is not a pixel-output oracle, and the probe has not been deployed
+or hardware-qualified.

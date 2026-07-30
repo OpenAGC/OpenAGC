@@ -210,10 +210,11 @@ runtime work.
 The generated `runtime_triangle` NGG vertex main/front pair and fragment
 sidecar now drive a generic native graphics contract and the separate
 `agc_runtime_graphics.elf` probe. It creates upload vertex/index buffers, a
-reflected graphics pipeline, an RGBA8 target, dynamic viewport/scissor state,
-and a bounded-fence submission without raw PM4 assembly. The artifact
-cross-builds, but has not been deployed; fence completion is not a pixel-output
-oracle and no hardware qualification is claimed.
+reflected graphics pipeline, RGBA8 color and D16 depth targets, dynamic
+viewport/scissor state, and a bounded-fence submission without raw PM4
+assembly. The artifact cross-builds, but has not been deployed; fence
+completion is not a pixel-output oracle and no hardware qualification is
+claimed.
 
 Runtime API v4 closes the depth/stencil attachment ownership gap for the
 qualified single-mip layouts. `agcCmdBindDepthStencilTarget` requires an exact

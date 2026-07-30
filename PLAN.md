@@ -284,14 +284,14 @@ array/mip subresource layout before transactionally emitting the existing
 gfx1013 color-target packets; targets are retained until command reset. The
 same host test covers rejected format binding, required-target draw gating,
 packet capture, and lifetime release. This is not a render-pass abstraction:
-clear/load/store, depth attachment, transitions, and PS5 hardware execution
-remain open, and no hardware promotion is claimed.
+clear/load/store, transitions, and PS5 hardware execution remain open, and no
+hardware promotion is claimed.
 The native graphics counterpart now compiles a position/color triangle into a
 real NGG main/front pair and fragment sidecar, consumes those exact artifacts
-in a generic pipeline/target/vertex/index/dynamic-state submission contract,
-and builds `agc_runtime_graphics.elf`. The standalone probe waits on a bounded
-fence only; it has no pixel-output oracle, has not been deployed, and is not a
-hardware qualification.
+in a generic pipeline/color-target/depth-target/vertex/index/dynamic-state
+submission contract, and builds `agc_runtime_graphics.elf`. The standalone
+probe waits on a bounded fence only; it has no pixel-output oracle, has not
+been deployed, and is not a hardware qualification.
 Runtime API v4 adds the equivalent typed depth/stencil binding. A graphics draw
 with declared depth/stencil state now fails before emission until a matching
 single-mip `AGC_IMAGE_USAGE_DEPTH_STENCIL_BIT` image binds; the runtime derives
