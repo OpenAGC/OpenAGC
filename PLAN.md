@@ -295,9 +295,10 @@ the runner and shared teardown on FW 11.60 only.
   PM4 (`CB_COLOR0_INFO=0x00070408`), every short-buffer boundary, all-profile
   selection, invalid-enum behavior, and maximum 64-bit layout arithmetic pass.
   The local Mesa/ACO evidence confirms the packed unsigned export contract.
-  Hardware tooling remains intentionally blocked until `openagc-psbc` can
-  select UINT16_ABGR instead of its current command-line FP16_ABGR default;
-  then build a dedicated integer-output gate. See
+  Sibling psbc commit `7706efb` now selects and verifies UINT16_ABGR. A
+  dedicated coordinate-derived unsigned shader and exact per-pixel native
+  oracle build as a firmware-neutral R16_UINT ELF. Preserve one hash-named
+  final artifact before its first guarded FW 11.60 run. See
   `analysis/gfx1013_integer_color_export_contract_20260730.md`.
 - Seven additional offscreen format gates now build under the same exact
   profile and bounded runner: R8, RG8, RGB10A2, R11G11B10, R32, RG32, and
@@ -489,8 +490,8 @@ reproducible component hashes.
 
 After normalized formats pass, qualify:
 
-1. `R16_UINT` — host-qualified; dedicated integer shader and hardware gate
-   pending.
+1. `R16_UINT` — host-qualified; dedicated integer shader and portable native
+   oracle complete; pinning and FW 11.60 execution pending.
 2. `RG16_UINT`.
 3. `RGBA16_UINT`.
 4. `R16_SINT`.

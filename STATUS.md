@@ -177,9 +177,10 @@ gfx10.3 UINT16_ABGR export value 7. Exact host coverage locks
 `CB_COLOR0_INFO=0x00070408`, the full PM4 stream, all 39 active profiles,
 every short command buffer, invalid enums, and maximum 64-bit surface
 arithmetic. The generic suite passes 7,869 assertions and the clean Prospero
-cross-build passes. Hardware qualification is pending a psbc command-line
-export selector and a dedicated unsigned-integer fragment fixture; the current
-psbc CLI hardcodes FP16_ABGR and must not be used for this gate. See
+cross-build passes. Sibling psbc commit `7706efb` adds a tested UINT16_ABGR
+selector, and the dedicated coordinate-derived integer shader plus exact
+`uint16_t` oracle build as a firmware-neutral ELF without AGC SPRX
+dependencies. The final artifact has not yet been pinned or executed. See
 `analysis/gfx1013_integer_color_export_contract_20260730.md`.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local

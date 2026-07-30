@@ -36,11 +36,16 @@ warnings.
 
 ## Hardware-gate prerequisite
 
-The current sibling `openagc-psbc` command-line compiler initializes every
-fragment color export as FP16_ABGR. Therefore it cannot yet produce a valid
-R16_UINT qualification shader even when the SPIR-V fragment output is an
-integer vector. Before building the immutable hardware artifact, psbc needs an
-explicit, validated pixel-export selection that reaches its RADV/ACO epilog
-state. The R16_UINT gate must then use a dedicated unsigned-integer fragment
-shader and exact native `uint16_t` values; it must not reuse a floating-point
-fixture.
+Sibling `openagc-psbc` commit `7706efb` adds API-v13 per-attachment export
+selection and the CLI option `--color-export uint16_abgr`. Its library test
+locks `SPI_SHADER_COL_FORMAT=7` in the emitted shader record and rejects an
+invalid export value. The previous command-line FP16_ABGR default remains
+unchanged for existing callers.
+
+OpenAGC now has a dedicated unsigned-integer fragment fixture. Each lane is an
+exact function of integer `gl_FragCoord` and cycles through values `n*257`, so
+the native oracle can compute the expected `uint16_t` for every covered pixel,
+prove full-range diversity, and detect duplicated channels. The portable
+R16_UINT ELF builds successfully, passes the firmware-neutral verifier, and
+contains no AGC SPRX dependency. It remains mutable and unexecuted: pin and
+hash one final artifact before its first hardware run.
