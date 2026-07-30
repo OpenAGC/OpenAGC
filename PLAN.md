@@ -800,8 +800,12 @@ endpoints, and 2-bit color indices. The bounded CPU oracle decodes color and
 alpha independently, applies SRGB conversion only to RGB, requires exact
 RGBA8 agreement, proves alpha endpoints 0 and 255, validates all mip/layer
 selection regions, and records a native hash. Preserve and pin the final
-firmware-neutral bytes before any hardware execution; FW 11.60 execution and
-identical-byte FW 5.50 replay remain pending.
+firmware-neutral bytes before any hardware execution. The exact SHA-256 values
+are `2e35d86e76362a87cb48c34f14a9f03757d50129fb1fb114711da0253b4e5aad`
+for BC2 UNORM and
+`03391282ce0be28fea69991dfa3ab0a986bbc37423324790d6a5fc72c0407753`
+for BC2 SRGB. Their guarded endpoint targets have no build prerequisites;
+FW 11.60 execution and identical-byte FW 5.50 replay remain pending.
 
 Use dedicated, deterministic source blocks containing endpoint, index,
 alpha, signed-range, and edge-block cases appropriate to each format. A

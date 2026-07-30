@@ -411,8 +411,12 @@ SPRX dependency. They reuse the BC array/mip shader while uploading independent
 2-bit color indices. The CPU oracle separately decodes every selected texel,
 applies SRGB conversion only to RGB, requires exact RGBA8 agreement, demands
 both alpha endpoints and all three mip/layer regions, and records the native
-hash. Hardware execution remains pending a clean FW 11.60 boot; artifact
-pinning is the next required step before execution.
+hash. Exact artifacts are pinned as SHA-256
+`2e35d86e76362a87cb48c34f14a9f03757d50129fb1fb114711da0253b4e5aad`
+(UNORM) and
+`03391282ce0be28fea69991dfa3ab0a986bbc37423324790d6a5fc72c0407753`
+(SRGB), with no-prerequisite FW 11.60 and FW 5.50 targets. Hardware execution
+remains pending a clean FW 11.60 boot.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability
