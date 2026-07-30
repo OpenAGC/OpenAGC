@@ -1230,7 +1230,7 @@ deploy_agc_graphics_r16_unorm_portable_fw550: agc_graphics_r16_unorm_portable.el
 deploy_agc_graphics_rg16_unorm_portable_fw1160: agc_graphics_rg16_unorm_portable.elf
 	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
 		EXPECTED_FW_ABI=0x1160 EXPECTED_TARGET=RG16_UNORM \
-		EXPECTED_ARTIFACT_SHA256=e2d53bcb2392314ee0992bf888ff13e297ff939e223ee9a3e787982c4bfe351c \
+		EXPECTED_ARTIFACT_SHA256=d004a33d1d1245964b08ee22b577948d36537c68d9d8c5241ba9e78e4a39f2fd \
 		RESULT_LOG_PATH=/data/homebrew/openagc_portable_graphics/result.log \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
 

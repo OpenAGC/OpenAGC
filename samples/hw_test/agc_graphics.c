@@ -2874,6 +2874,7 @@ static bool dispatch_graphics(GraphicsTest *test,
         uint16_t lane_max[4] = {0u, 0u, 0u, 0u};
         uint16_t lane_unique[4][8] = {{0}};
         uint32_t lane_unique_count[4] = {0u, 0u, 0u, 0u};
+        uint32_t lane_changed[4] = {0u, 0u, 0u, 0u};
         uint64_t lane_hash[4] = {
             UINT64_C(1469598103934665603),
             UINT64_C(1469598103934665603),
@@ -2911,11 +2912,17 @@ static bool dispatch_graphics(GraphicsTest *test,
                     out_of_range_components++;
                 if (component < min_component) min_component = component;
                 if (component > max_component) max_component = component;
-                if (component < lane_min[lane]) lane_min[lane] = component;
-                if (component > lane_max[lane]) lane_max[lane] = component;
-                lane_hash[lane] = (lane_hash[lane] ^ component) *
-                    UINT64_C(1099511628211);
-                if (lane_unique_count[lane] < 8u) {
+                if (component != (uint16_t)FP16_CLEAR_SENTINEL) {
+                    ++lane_changed[lane];
+                    if (component < lane_min[lane])
+                        lane_min[lane] = component;
+                    if (component > lane_max[lane])
+                        lane_max[lane] = component;
+                    lane_hash[lane] = (lane_hash[lane] ^ component) *
+                        UINT64_C(1099511628211);
+                }
+                if (component != (uint16_t)FP16_CLEAR_SENTINEL &&
+                    lane_unique_count[lane] < 8u) {
                     bool seen = false;
                     for (uint32_t j = 0u; j < lane_unique_count[lane]; ++j)
                         seen |= lane_unique[lane][j] == component;
@@ -2992,13 +2999,20 @@ static bool dispatch_graphics(GraphicsTest *test,
         bool lane_encoding_pass = true;
         if (unorm16) {
             for (uint32_t lane = 0u; lane < components; ++lane) {
-                const bool lane_pass = lane_min[lane] <= 0x1000u &&
+                const bool lane_pass =
+                    lane_changed[lane] + coverage_tolerance >=
+                        expected_changed &&
+                    lane_changed[lane] <=
+                        expected_changed + coverage_tolerance &&
+                    lane_min[lane] <= 0x1000u &&
                     lane_max[lane] >= 0xefffu &&
                     lane_unique_count[lane] >= 8u;
                 lane_encoding_pass &= lane_pass;
-                printf("[UNORM16 Lane %u] range=0x%04x..0x%04x "
+                printf("[UNORM16 Lane %u] changed=%u "
+                       "range=0x%04x..0x%04x "
                        "distinct=%u fnv64=0x%016llx: %s\n",
-                       lane, lane_min[lane], lane_max[lane],
+                       lane, lane_changed[lane],
+                       lane_min[lane], lane_max[lane],
                        lane_unique_count[lane],
                        (unsigned long long)lane_hash[lane],
                        lane_pass ? "PASS" : "FAIL");
@@ -3037,7 +3051,7 @@ static bool dispatch_graphics(GraphicsTest *test,
 #endif
                                color_pass &&
                                encoding_pass &&
-                               complete_samples == changed &&
+                               (unorm16 || complete_samples == changed) &&
                                out_of_range_components == 0u;
         printf("[%s] GFX1013 %s target: %s\n",
                unorm16 ? "UNORM16" : "FP16",
