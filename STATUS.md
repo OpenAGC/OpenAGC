@@ -308,6 +308,14 @@ no residual `eboot.elf`; reboot and reinjection are required before retrying.
 Two FW 11.60 passes and the identical-byte FW 5.50 replay remain pending. See
 `analysis/fw1160_rg32_uint_first_attempt_20260730.md`.
 
+`AGC_GFX1013_RT_FORMAT_RGBA32_UINT` is appended at value 28 and maps to
+`(format=0x0e, number=UINT, swap=standard)`, 16 bytes per pixel, and
+`32_ABGR` export 9. Host coverage locks `CB_COLOR0_INFO=0x00070438`, exact PM4,
+all 39 profiles, every short command-buffer boundary, invalid enums, and
+maximum 64-bit surface arithmetic. The generic suite passes 10,933 assertions.
+Hardware-gate construction is next, but execution must remain ordered behind
+the clean-boot RG32_UINT qualification.
+
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability
 ELF, non-indexed and indexed 10-dword multi-draw, GPU count-buffer selection,
@@ -316,7 +324,7 @@ twice on FW 11.60 before pinning. FW 5.50 execution remains pending; none of
 these FW 11.60 results is labeled cross-firmware hardware qualification. See
 `analysis/fw1160_rg16_unorm_and_endpoint_replay_20260730.md`.
 
-Offline portability closure is complete. The generic suite passes 10,550
+Offline portability closure is complete. The generic suite passes 10,933
 assertions, including full raw-version normalization, exact profile selection,
 and common-V7 acceptance across all 39 active profiles; the clean Prospero
 cross-build also passes. Submission, queue, memory, suspend, workload, TF/HS,

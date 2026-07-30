@@ -605,6 +605,13 @@ all six pinned artifacts for identical-byte FW 5.50 replay and proceed to the
   twice. Preserve FW 5.50 replay as pending. See
   `analysis/fw1160_rg32_uint_first_attempt_20260730.md`.
 
+- `RGBA32_UINT` is host-qualified as append-only value 28 with gfx1013
+  `32_32_32_32`, UINT, standard swap, 16 bytes per pixel, and `32_ABGR`
+  export 9. Exact PM4 (`CB_COLOR0_INFO=0x00070438`), all-profile selection,
+  every short-buffer boundary, invalid-enum behavior, and maximum 64-bit
+  layout arithmetic pass. Build its four-lane portable gate offline, but do
+  not execute it until the FW 11.60 console has rebooted and RG32_UINT passes.
+
 These formats need dedicated integer-output pixel shaders. Do not qualify them
 using a floating-point shader and assume the conversion is correct. Their
 oracles must validate exact integer values rather than approximate
@@ -618,10 +625,9 @@ The float forms already reach the maximum widths. Add:
 - `R32_UINT`, `RG32_UINT`, and `RGBA32_UINT`.
 - `R32_SINT`, `RG32_SINT`, and `RGBA32_SINT`.
 
-`R32_UINT` is hardware-qualified on FW 11.60 and `RG32_UINT` is host-qualified.
-Build and pin the `RG32_UINT` portable hardware gate, then continue with
-`RGBA32_UINT`, using a dedicated export and independent exact-value oracle for
-every stored lane.
+`R32_UINT` is hardware-qualified on FW 11.60; `RG32_UINT` has a pinned gate
+awaiting a clean boot; and `RGBA32_UINT` is host-qualified. Preserve that order
+on hardware and use an independent exact-value oracle for every stored lane.
 
 `RGBA32_*` remains the regular color-buffer maximum:
 
