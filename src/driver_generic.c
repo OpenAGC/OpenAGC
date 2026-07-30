@@ -44,6 +44,7 @@ typedef struct {
 static AgcGenericQueue g_queues[AGC_GENERIC_MAX_QUEUES];
 static bool g_async_setup_done = false;
 static uint32_t g_async_pipe_id = 0;
+static int32_t g_debug_next_submit_result = AGC_OK;
 
 /* Workload tracking state — mirrors the SPRX's workload begin/end logic.
  * The generic backend tracks the current active workload ID so that
@@ -58,6 +59,7 @@ int32_t PS5_SYSV_ABI agcGenericInitialize(void)
     memset(g_queues, 0, sizeof(g_queues));
     g_async_setup_done  = false;
     g_async_pipe_id     = 0;
+    g_debug_next_submit_result = AGC_OK;
     g_last_acb_owner    = 0;
     memset(&g_last_dcb_submit, 0, sizeof(g_last_dcb_submit));
     memset(&g_last_acb_submit, 0, sizeof(g_last_acb_submit));
@@ -79,6 +81,7 @@ int32_t PS5_SYSV_ABI agcGenericShutdown(void)
     memset(g_queues, 0, sizeof(g_queues));
     g_async_setup_done = false;
     g_async_pipe_id = 0;
+    g_debug_next_submit_result = AGC_OK;
     g_last_acb_owner = 0;
     memset(&g_last_dcb_submit, 0, sizeof(g_last_dcb_submit));
     memset(&g_last_acb_submit, 0, sizeof(g_last_acb_submit));
@@ -113,6 +116,11 @@ int32_t PS5_SYSV_ABI agcGenericSubmitDcb(const AgcCommandBufferSubmit *packet)
         return AGC_ERROR_NOT_INITIALIZED;
     if (!packet || packet->command_address == 0 || packet->dword_count == 0)
         return AGC_ERROR_INVALID_ARGUMENT;
+    if (g_debug_next_submit_result != AGC_OK) {
+        const int32_t result = g_debug_next_submit_result;
+        g_debug_next_submit_result = AGC_OK;
+        return result;
+    }
 
     g_last_dcb_submit = *packet;
     return AGC_OK;
@@ -127,6 +135,11 @@ int32_t PS5_SYSV_ABI agcGenericSubmitAcb(
         return AGC_ERROR_INVALID_ARGUMENT;
     if (owner_handle >= AGC_GENERIC_MAX_QUEUES || !g_queues[owner_handle].in_use)
         return AGC_ERROR_CB_INVALID_QUEUE;
+    if (g_debug_next_submit_result != AGC_OK) {
+        const int32_t result = g_debug_next_submit_result;
+        g_debug_next_submit_result = AGC_OK;
+        return result;
+    }
 
     g_last_acb_owner = owner_handle;
     g_last_acb_submit = *packet;
@@ -362,6 +375,11 @@ uint32_t agcDriverDebugGetQueueCount(void)
 bool agcDriverDebugIsAsyncSetup(void)
 {
     return g_async_setup_done;
+}
+
+void agcDriverDebugFailNextSubmit(int32_t result)
+{
+    g_debug_next_submit_result = result;
 }
 
 const AgcDriverOps agcGenericDriverOps = {

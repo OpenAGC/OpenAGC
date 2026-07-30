@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-#define AGC_RUNTIME_API_VERSION 8u
+#define AGC_RUNTIME_API_VERSION 9u
 #define AGC_RUNTIME_STRUCTURE_VERSION_1 1u
 #define AGC_RUNTIME_STRUCTURE_VERSION_2 2u
 #define AGC_RUNTIME_PROFILE_NAME_SIZE 48u
@@ -948,6 +948,16 @@ typedef struct AgcImageSubresourceLayout {
     { sizeof(AgcGpuLabelInfo), AGC_RUNTIME_STRUCTURE_VERSION_1, 0u, 0u, \
       UINT32_MAX, 0u, 0u, 0u, 0u, {0}, {0u, 0u} }
 
+typedef struct AgcGpuLabelPoint {
+    AgcGpuLabel label;
+    uint32_t value;
+    uint32_t reserved;
+} AgcGpuLabelPoint;
+
+#define AGC_GPU_LABEL_POINT_INIT { NULL, 0u, 0u }
+
+#define AGC_SUBMIT_INFO_V1_SIZE 56u
+
 typedef struct AgcSubmitInfo {
     uint32_t struct_size;
     uint32_t version;
@@ -955,11 +965,22 @@ typedef struct AgcSubmitInfo {
     uint32_t flags;
     const AgcCommandBuffer *command_buffers;
     uint64_t reserved[4];
+    /* v2 tail: transient submission dependencies. The runtime retains every
+     * referenced label until the submitted command buffer is reset. */
+    const AgcGpuLabelPoint *waits;
+    const AgcGpuLabelPoint *signals;
+    uint32_t wait_count;
+    uint32_t signal_count;
+    uint64_t reserved_v2[2];
 } AgcSubmitInfo;
 
 #define AGC_SUBMIT_INFO_INIT \
-    { sizeof(AgcSubmitInfo), AGC_RUNTIME_STRUCTURE_VERSION_1, 0u, 0u, NULL, \
-      {0u, 0u, 0u, 0u} }
+    { AGC_SUBMIT_INFO_V1_SIZE, AGC_RUNTIME_STRUCTURE_VERSION_1, 0u, 0u, NULL, \
+      {0u, 0u, 0u, 0u}, NULL, NULL, 0u, 0u, {0u, 0u} }
+
+#define AGC_SUBMIT_INFO_V2_INIT \
+    { sizeof(AgcSubmitInfo), AGC_RUNTIME_STRUCTURE_VERSION_2, 0u, 0u, NULL, \
+      {0u, 0u, 0u, 0u}, NULL, NULL, 0u, 0u, {0u, 0u} }
 
 /* The application ABI targets the 64-bit PS5 process model. Structure-size
  * assertions make an accidental field, enum, or alignment change fail at
@@ -1023,8 +1044,12 @@ _Static_assert(sizeof(AgcFenceDesc) == 48u,
     "AgcFenceDesc v1 size mismatch");
 _Static_assert(sizeof(AgcGpuLabelDesc) == 48u,
     "AgcGpuLabelDesc v1 size mismatch");
-_Static_assert(sizeof(AgcSubmitInfo) == 56u,
-    "AgcSubmitInfo v1 size mismatch");
+_Static_assert(sizeof(AgcGpuLabelPoint) == 16u,
+    "AgcGpuLabelPoint v1 size mismatch");
+_Static_assert(offsetof(AgcSubmitInfo, waits) == AGC_SUBMIT_INFO_V1_SIZE,
+    "AgcSubmitInfo v1 prefix size mismatch");
+_Static_assert(sizeof(AgcSubmitInfo) == 96u,
+    "AgcSubmitInfo v2 size mismatch");
 _Static_assert(sizeof(AgcAllocationInfo) == 160u,
     "AgcAllocationInfo v1 size mismatch");
 _Static_assert(sizeof(AgcMemoryStats) == 96u,

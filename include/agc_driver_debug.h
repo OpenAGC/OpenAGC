@@ -27,6 +27,9 @@ extern "C" {
 
 const AgcCommandBufferSubmit *agcDriverDebugLastDcbSubmit(void);
 const AgcCommandBufferSubmit *agcDriverDebugLastAcbSubmit(uint32_t *owner_handle);
+/* Generic-backend test hook. The selected error is consumed by the next valid
+ * DCB or ACB submission before it changes the captured-submit state. */
+void agcDriverDebugFailNextSubmit(int32_t result);
 
 #ifdef __cplusplus
 }

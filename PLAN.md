@@ -473,7 +473,15 @@ passed a producer-then-consumer public compute oracle without a CPU wait
 between submissions, followed by bounded-fence readback and full teardown on
 exact FW 5.50. Labels now enforce strictly increasing 32-bit timeline points
 and reject repeat, decreasing, or wraparound values before PM4 mutation. Submit
-wait/signal lists remain intentionally rejected.
+wait/signal lists were initially rejected.
+
+Runtime API v9 adds a transactional submit-list path for one command buffer:
+typed label waits are inserted before its command body and signals at its tail,
+with a full command-storage snapshot restoring bytes/cursor on every rejected
+path. The exact FW 5.50 standard-PS5 producer → wait/signal bridge → consumer
+chain passed without CPU waits, artifact
+`4e3f0e5996e9912a24ac476862c15901c3e4512b3e2fa19ec78df2bebef9d4e2`.
+Graphics multi-command submit lists and FW 11.60 qualification remain open.
 
 Runtime API v8 adds the first typed queue-ownership handoff: a v2 transition
 releases a whole GPU-written resource on its source queue and writes the

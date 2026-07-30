@@ -88,16 +88,26 @@ Other resource-handoff rows remain host-qualified only. Artifact
 `1af09900242e5e0af40c12dfb68bd8ea4fb059bdb85654d969cfff88cb15d016` passed
 the producer/consumer no-CPU-wait compute oracle, bounded completion, readback,
 and full teardown on exact FW 5.50. Labels enforce strictly increasing 32-bit
-timeline points and reject repeat, decreasing, or wrapping values; submit
-wait/signal lists and cross-queue resource ownership remain unqualified.
+timeline points and reject repeat, decreasing, or wrapping values; cross-queue
+resource ownership beyond the qualified v2 row remains unqualified.
 
 The first multi-command submission path is now active for graphics: a 2–63
 member batch is validated as one queue-owned frame and receives one bounded
 fence, with every member retained until that fence completes. Artifact
 `30564bfdd87de4c89e575a03b7456aad57a2ca72af174aa41d1598a20322142b` passed
 the two-DCB MRT/readback/reset/teardown oracle on exact FW 5.50. Compute
-batches, empty members, submit wait/signal lists, timelines, and broader
-cross-queue transfer rows remain fail-closed or unqualified.
+batches, empty members, graphics-batch submit wait/signal lists, timelines,
+and broader cross-queue transfer rows remain fail-closed or unqualified.
+
+Runtime API v9 adds a v2 `AgcSubmitInfo` list of typed `AgcGpuLabelPoint`
+waits/signals. The runtime transactionally inserts exact `WAIT_REG_MEM` points
+before a single command body and EOP signals after it, snapshots command
+storage for exact rollback on rejected paths, retains labels through reset, and
+commits signal diagnostics only after driver submit succeeds. Artifact
+`4e3f0e5996e9912a24ac476862c15901c3e4512b3e2fa19ec78df2bebef9d4e2` passed a
+producer → submit-list bridge → submit-list consumer chain without CPU waits on
+exact FW 5.50; see `analysis/runtime_submit_label_lists_fw550_20260731.md`.
+Graphics batches and FW 11.60 remain unqualified.
 
 ## Native resource and memory management complete (2026-07-30)
 

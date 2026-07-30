@@ -5057,6 +5057,161 @@ static int32_t agcValidateCommandLabelWaits(const AgcQueue queue,
     return AGC_OK;
 }
 
+static int agcSubmitInfoValid(const AgcSubmitInfo *submit_info)
+{
+    if (!submit_info || submit_info->flags != 0u ||
+        !agcReservedZero(submit_info->reserved, 4u))
+        return 0;
+    if (submit_info->version == AGC_RUNTIME_STRUCTURE_VERSION_1 &&
+        submit_info->struct_size == AGC_SUBMIT_INFO_V1_SIZE)
+        return 1;
+    return submit_info->version == AGC_RUNTIME_STRUCTURE_VERSION_2 &&
+        submit_info->struct_size == sizeof(*submit_info) &&
+        agcReservedZero(submit_info->reserved_v2, 2u) &&
+        ((submit_info->wait_count == 0u && !submit_info->waits) ||
+         (submit_info->wait_count != 0u && submit_info->waits)) &&
+        ((submit_info->signal_count == 0u && !submit_info->signals) ||
+         (submit_info->signal_count != 0u && submit_info->signals)) &&
+        submit_info->wait_count <= AGC_RUNTIME_MAX_RECORDED_TRANSITIONS &&
+        submit_info->signal_count <= AGC_RUNTIME_MAX_RECORDED_TRANSITIONS;
+}
+
+static int32_t agcValidateSubmitLabelLists(const AgcQueue queue,
+    const AgcCommandBuffer command_buffer, const AgcSubmitInfo *submit_info)
+{
+    uint32_t i;
+
+    if (submit_info->version == AGC_RUNTIME_STRUCTURE_VERSION_1)
+        return AGC_OK;
+    for (i = 0u; i < submit_info->wait_count; ++i) {
+        const AgcGpuLabelPoint *point = &submit_info->waits[i];
+        const AgcGpuLabel label = point->label;
+
+        if (!label || point->reserved != 0u ||
+            label->magic != AGC_MAGIC_GPU_LABEL ||
+            label->device != queue->device)
+            return AGC_ERROR_INVALID_ARGUMENT;
+        if (label->last_signal_submission_id == 0u ||
+            label->last_signal_value != point->value)
+            return AGC_ERROR_INVALID_STATE;
+    }
+    for (i = 0u; i < submit_info->signal_count; ++i) {
+        const AgcGpuLabelPoint *point = &submit_info->signals[i];
+        const AgcGpuLabel label = point->label;
+        uint32_t j;
+
+        if (!label || point->reserved != 0u ||
+            label->magic != AGC_MAGIC_GPU_LABEL ||
+            label->device != queue->device || point->value == 0u ||
+            point->value <= label->last_signal_value)
+            return AGC_ERROR_INVALID_ARGUMENT;
+        for (j = 0u; j < i; ++j) {
+            if (submit_info->signals[j].label == label &&
+                point->value <= submit_info->signals[j].value)
+                return AGC_ERROR_INVALID_ARGUMENT;
+        }
+        for (j = 0u; j < command_buffer->recorded_label_signal_count; ++j) {
+            const AgcRuntimeRecordedLabelSignal *signal =
+                &command_buffer->recorded_label_signals[j];
+            if (signal->label == label)
+                return AGC_ERROR_INVALID_STATE;
+        }
+    }
+    return AGC_OK;
+}
+
+static void agcCommitSubmitLabelSignals(AgcQueue queue,
+    const AgcGpuLabelPoint *signals, uint32_t signal_count,
+    uint64_t submission_id)
+{
+    uint32_t i;
+
+    for (i = 0u; i < signal_count; ++i) {
+        AgcGpuLabel label = signals[i].label;
+
+        if (label->last_signal_queue != queue) {
+            if (label->last_signal_queue)
+                label->last_signal_queue->label_refs--;
+            label->last_signal_queue = queue;
+            queue->label_refs++;
+        }
+        label->last_signal_value = signals[i].value;
+        label->last_signal_queue_type = (uint32_t)queue->type;
+        label->last_signal_submission_id = submission_id;
+#ifndef OPENAGC_PROSPERO
+        *(uint32_t *)agcAllocationCpuAddress(label->allocation) =
+            signals[i].value;
+#endif
+    }
+}
+
+static int32_t agcRetainSubmitLabels(AgcCommandBuffer command_buffer,
+    const AgcSubmitInfo *submit_info)
+{
+    uint32_t i;
+
+    if (submit_info->version == AGC_RUNTIME_STRUCTURE_VERSION_1)
+        return AGC_OK;
+    for (i = 0u; i < submit_info->wait_count; ++i) {
+        if (!agcCommandRetainGpuLabel(command_buffer,
+                submit_info->waits[i].label))
+            return AGC_ERROR_OUT_OF_MEMORY;
+    }
+    for (i = 0u; i < submit_info->signal_count; ++i) {
+        if (!agcCommandRetainGpuLabel(command_buffer,
+                submit_info->signals[i].label))
+            return AGC_ERROR_OUT_OF_MEMORY;
+    }
+    return AGC_OK;
+}
+
+static void agcReleaseSubmitLabels(AgcCommandBuffer command_buffer,
+    uint32_t original_label_count)
+{
+    while (command_buffer->recorded_label_count > original_label_count) {
+        command_buffer->recorded_label_count--;
+        command_buffer->recorded_labels[command_buffer->recorded_label_count]
+            ->recorded_refs--;
+    }
+}
+
+static int32_t agcInjectSubmitLabelLists(AgcCommandBuffer command_buffer,
+    const AgcSubmitInfo *submit_info)
+{
+    uint32_t original_dwords = agcCbUsedDwords(&command_buffer->cursor);
+    uint32_t wait_dwords = submit_info->wait_count * 7u;
+    uint32_t i;
+
+    if (submit_info->version == AGC_RUNTIME_STRUCTURE_VERSION_1 ||
+        (submit_info->wait_count == 0u && submit_info->signal_count == 0u))
+        return AGC_OK;
+    memmove(command_buffer->storage + wait_dwords, command_buffer->storage,
+        (size_t)original_dwords * sizeof(uint32_t));
+    command_buffer->cursor.cursor_up = (uintptr_t)command_buffer->storage;
+    for (i = 0u; i < submit_info->wait_count; ++i) {
+        const AgcGpuLabelPoint *point = &submit_info->waits[i];
+        if (!sceAgcDcbWaitRegMem(&command_buffer->cursor, 0u, 3u, 0u, 0u,
+                agcAllocationGpuAddress(point->label->allocation), point->value,
+                UINT32_MAX, UINT32_MAX))
+            return AGC_ERROR_INTERNAL;
+    }
+    command_buffer->cursor.cursor_up = (uintptr_t)(command_buffer->storage +
+        wait_dwords + original_dwords);
+    for (i = 0u; i < submit_info->signal_count; ++i) {
+        AgcGfx1013EopFenceState state;
+        const AgcGpuLabelPoint *point = &submit_info->signals[i];
+        int32_t result;
+
+        state.address = agcAllocationGpuAddress(point->label->allocation);
+        state.value = point->value;
+        result = agcGfx1013SignalEopFence(&command_buffer->cursor, &state);
+        if (result != AGC_OK)
+            return result == AGC_ERROR_BUFFER_TOO_SMALL ?
+                AGC_ERROR_COMMAND_SPACE_EXHAUSTED : result;
+    }
+    return AGC_OK;
+}
+
 int32_t PS5_SYSV_ABI agcCmdTransitionResources(
     AgcCommandBuffer command_buffer, uint32_t transition_count,
     const AgcResourceTransition *transitions)
@@ -6706,16 +6861,16 @@ int32_t PS5_SYSV_ABI agcQueueSubmit(
     AgcCommandBuffer command_buffer;
     AgcCommandBufferSubmit packet;
     int32_t result;
+    uint32_t original_label_count = 0u;
+    uintptr_t original_cursor = 0u;
+    uint32_t *snapshot = NULL;
+    size_t snapshot_size = 0u;
 #ifdef OPENAGC_PROSPERO
     AgcGfx1013EopFenceState completion;
-    uintptr_t original_cursor;
 #endif
 
     if (!queue || queue->magic != AGC_MAGIC_QUEUE ||
-        !agcDeviceValid(queue->device) || !submit_info ||
-        !agcHeaderValid(submit_info->struct_size, sizeof(*submit_info),
-            submit_info->version) || submit_info->flags != 0u ||
-        !agcReservedZero(submit_info->reserved, 4u) ||
+        !agcDeviceValid(queue->device) || !agcSubmitInfoValid(submit_info) ||
         submit_info->command_buffer_count == 0u ||
         submit_info->command_buffer_count >
             AGC_RUNTIME_MAX_SUBMIT_COMMAND_BUFFERS ||
@@ -6729,8 +6884,12 @@ int32_t PS5_SYSV_ABI agcQueueSubmit(
         return AGC_ERROR_INVALID_STATE;
     if (queue->next_submission_id == UINT64_MAX)
         return AGC_ERROR_NOT_SUPPORTED;
-    if (submit_info->command_buffer_count > 1u)
+    if (submit_info->command_buffer_count > 1u) {
+        if (submit_info->version == AGC_RUNTIME_STRUCTURE_VERSION_2 &&
+            (submit_info->wait_count != 0u || submit_info->signal_count != 0u))
+            return AGC_ERROR_NOT_SUPPORTED;
         return agcQueueSubmitGraphicsBatch(queue, submit_info, fence);
+    }
     command_buffer = submit_info->command_buffers[0];
     if (!command_buffer || command_buffer->magic != AGC_MAGIC_COMMAND_BUFFER ||
         command_buffer->device != queue->device ||
@@ -6741,6 +6900,37 @@ int32_t PS5_SYSV_ABI agcQueueSubmit(
     result = agcValidateCommandLabelWaits(queue, command_buffer);
     if (result != AGC_OK)
         return result;
+    result = agcValidateSubmitLabelLists(queue, command_buffer, submit_info);
+    if (result != AGC_OK)
+        return result;
+    if (submit_info->version == AGC_RUNTIME_STRUCTURE_VERSION_2 &&
+        (submit_info->wait_count != 0u || submit_info->signal_count != 0u)) {
+        uint64_t required_dwords = (uint64_t)submit_info->wait_count * 7u +
+            (uint64_t)submit_info->signal_count * AGC_GFX1013_EOP_FENCE_DWORDS;
+
+#ifdef OPENAGC_PROSPERO
+        required_dwords += AGC_GFX1013_EOP_FENCE_DWORDS;
+#endif
+        if (required_dwords > UINT32_MAX -
+                agcCbUsedDwords(&command_buffer->cursor) ||
+            required_dwords + agcCbUsedDwords(&command_buffer->cursor) >
+                command_buffer->capacity_dwords)
+            return AGC_ERROR_COMMAND_SPACE_EXHAUSTED;
+        snapshot_size = (size_t)command_buffer->capacity_dwords *
+            sizeof(*snapshot);
+        snapshot = agcAlloc(queue->device, snapshot_size, sizeof(uint32_t));
+        if (!snapshot)
+            return AGC_ERROR_OUT_OF_MEMORY;
+        memcpy(snapshot, command_buffer->storage, snapshot_size);
+        original_cursor = command_buffer->cursor.cursor_up;
+        original_label_count = command_buffer->recorded_label_count;
+        result = agcRetainSubmitLabels(command_buffer, submit_info);
+        if (result != AGC_OK)
+            goto rollback_submit_lists;
+        result = agcInjectSubmitLabelLists(command_buffer, submit_info);
+        if (result != AGC_OK)
+            goto rollback_submit_lists;
+    }
 #ifndef OPENAGC_PROSPERO
     /* The generic carrier rejects a zero-dword packet. Preserve the native
      * fence-only submission contract with a runtime-owned no-op carrier. */
@@ -6765,11 +6955,11 @@ int32_t PS5_SYSV_ABI agcQueueSubmit(
         return result;
     completion.address = agcAllocationGpuAddress(fence->allocation);
     completion.value = fence->completion_value;
-    original_cursor = command_buffer->cursor.cursor_up;
+    if (!snapshot)
+        original_cursor = command_buffer->cursor.cursor_up;
     result = agcGfx1013SignalEopFence(&command_buffer->cursor, &completion);
     if (result != AGC_OK)
-        return result == AGC_ERROR_BUFFER_TOO_SMALL ?
-            AGC_ERROR_COMMAND_SPACE_EXHAUSTED : result;
+        goto rollback_submit_lists;
     command_buffer->completion_fence = fence;
 #endif
     {
@@ -6778,10 +6968,15 @@ int32_t PS5_SYSV_ABI agcQueueSubmit(
         int32_t flush_result = agcFlushRuntimeAllocation(
             command_buffer->allocation, 0u, command_size);
         if (flush_result != AGC_OK) {
-#ifdef OPENAGC_PROSPERO
+            if (snapshot) {
+                memcpy(command_buffer->storage, snapshot, snapshot_size);
+                agcReleaseSubmitLabels(command_buffer, original_label_count);
+            }
             command_buffer->cursor.cursor_up = original_cursor;
+#ifdef OPENAGC_PROSPERO
             command_buffer->completion_fence = NULL;
 #endif
+            agcFree(queue->device, snapshot);
             return flush_result;
         }
     }
@@ -6813,6 +7008,9 @@ int32_t PS5_SYSV_ABI agcQueueSubmit(
 
         agcCommitCommandTransitions(command_buffer);
         agcCommitCommandLabelSignals(queue, command_buffer, submission_id);
+        if (submit_info->version == AGC_RUNTIME_STRUCTURE_VERSION_2)
+            agcCommitSubmitLabelSignals(queue, submit_info->signals,
+                submit_info->signal_count, submission_id);
         if (fence) {
             fence->submission_id = submission_id;
             fence->last_queue_type = (uint32_t)queue->type;
@@ -6827,10 +7025,22 @@ int32_t PS5_SYSV_ABI agcQueueSubmit(
         fence->pending_command_buffer_count = 1u;
         fence->pending_command_buffers[0] = command_buffer;
         fence->queue = queue;
+        agcFree(queue->device, snapshot);
         return AGC_OK;
+    }
+    if (snapshot) {
+        memcpy(command_buffer->storage, snapshot, snapshot_size);
+        agcReleaseSubmitLabels(command_buffer, original_label_count);
     }
     command_buffer->cursor.cursor_up = original_cursor;
     command_buffer->completion_fence = NULL;
+#endif
+#ifndef OPENAGC_PROSPERO
+    if (result != AGC_OK && snapshot) {
+        memcpy(command_buffer->storage, snapshot, snapshot_size);
+        command_buffer->cursor.cursor_up = original_cursor;
+        agcReleaseSubmitLabels(command_buffer, original_label_count);
+    }
 #endif
     command_buffer->pending_refs--;
     command_buffer->state = AGC_COMMAND_BUFFER_STATE_EXECUTABLE;
@@ -6847,7 +7057,21 @@ int32_t PS5_SYSV_ABI agcQueueSubmit(
     }
     if (result == AGC_OK)
         queue->last_completed_submission_id = queue->next_submission_id;
+    agcFree(queue->device, snapshot);
     return result;
+
+rollback_submit_lists:
+    if (snapshot) {
+        memcpy(command_buffer->storage, snapshot, snapshot_size);
+        command_buffer->cursor.cursor_up = original_cursor;
+        agcReleaseSubmitLabels(command_buffer, original_label_count);
+    }
+#ifdef OPENAGC_PROSPERO
+    command_buffer->completion_fence = NULL;
+#endif
+    agcFree(queue->device, snapshot);
+    return result == AGC_ERROR_BUFFER_TOO_SMALL ?
+        AGC_ERROR_COMMAND_SPACE_EXHAUSTED : result;
 }
 
 static AgcRuntimeAllocation *agcObjectAllocation(AgcDevice device,

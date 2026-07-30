@@ -327,6 +327,9 @@ agc_runtime_compute.elf: shaders_runtime_compute agc_runtime_compute.c \
 agc_runtime_eop.elf: agc_runtime_eop.c gpu_credentials.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -o $@ agc_runtime_eop.c $(AGC_LDFLAGS)
 
+agc_runtime_submit_lists.elf: agc_runtime_submit_lists.c gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -o $@ agc_runtime_submit_lists.c $(AGC_LDFLAGS)
+
 # Public native-runtime graphics probe. It intentionally builds an isolated
 # compiler/runtime artifact pair rather than changing the qualified manual
 # agc_graphics.elf baseline.

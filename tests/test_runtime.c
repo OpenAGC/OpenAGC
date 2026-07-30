@@ -1572,6 +1572,191 @@ static void test_runtime_gpu_labels(void)
         "label device destroys");
 }
 
+static void test_runtime_submit_label_lists(void)
+{
+    AgcDevice device = create_device();
+    AgcQueue queue = create_queue(device, kAgcQueueCompute);
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
+    AgcGpuLabelDesc label_desc = AGC_GPU_LABEL_DESC_INIT;
+    AgcGpuLabelInfo label_info = AGC_GPU_LABEL_INFO_INIT;
+    AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    AgcSubmitInfo list_submit = AGC_SUBMIT_INFO_V2_INIT;
+    AgcGpuLabelPoint waits[1] = { AGC_GPU_LABEL_POINT_INIT };
+    AgcGpuLabelPoint signals[1] = { AGC_GPU_LABEL_POINT_INIT };
+    AgcGpuLabelPoint rollback_waits[1] = { AGC_GPU_LABEL_POINT_INIT };
+    AgcCommandBuffer producer = NULL;
+    AgcCommandBuffer command = NULL;
+    AgcCommandBuffer consumer = NULL;
+    AgcCommandBuffer small = NULL;
+    AgcFence fence = NULL;
+    AgcGpuLabel source = NULL;
+    AgcGpuLabel destination = NULL;
+    const AgcCommandBufferSubmit *captured;
+    const uint32_t *words;
+    uint32_t owner = UINT32_MAX;
+
+    command_desc.queue_type = kAgcQueueCompute;
+    command_desc.capacity_dwords = 32u;
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &producer),
+        AGC_OK, "submit-list producer command creates");
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
+        AGC_OK, "submit-list command creates");
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &consumer),
+        AGC_OK, "submit-list consumer command creates");
+    TEST_ASSERT_EQ(agcCreateFence(device, &fence_desc, &fence), AGC_OK,
+        "submit-list fence creates");
+    TEST_ASSERT_EQ(agcCreateGpuLabel(device, &label_desc, &source), AGC_OK,
+        "submit-list source label creates");
+    TEST_ASSERT_EQ(agcCreateGpuLabel(device, &label_desc, &destination), AGC_OK,
+        "submit-list destination label creates");
+
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(producer), AGC_OK,
+        "submit-list producer begins");
+    TEST_ASSERT_EQ(agcCmdSignalGpuLabel(producer, source, 1u), AGC_OK,
+        "submit-list producer signal records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(producer), AGC_OK,
+        "submit-list producer ends");
+    submit.command_buffer_count = 1u;
+    submit.command_buffers = &producer;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
+        "submit-list source producer submits");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(producer), AGC_OK,
+        "submit-list source producer resets");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "submit-list source producer fence resets");
+
+    waits[0].label = source;
+    waits[0].value = 1u;
+    signals[0].label = destination;
+    signals[0].value = 2u;
+    list_submit.command_buffer_count = 1u;
+    list_submit.command_buffers = &command;
+    list_submit.wait_count = 1u;
+    list_submit.waits = waits;
+    list_submit.signal_count = 1u;
+    list_submit.signals = signals;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+        "submit-list command begins");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+        "submit-list command ends");
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &list_submit, fence), AGC_OK,
+        "submit-level wait and signal submit atomically");
+    captured = agcDriverDebugLastAcbSubmit(&owner);
+    TEST_ASSERT(captured != NULL && owner != UINT32_MAX,
+        "submit-list uses generic compute carrier");
+    words = (const uint32_t *)(uintptr_t)captured->command_address;
+    TEST_ASSERT_EQ(captured->dword_count, 17u,
+        "submit-list emits one wait and one EOP signal");
+    TEST_ASSERT_EQ(agcPm4Opcode(words[0]), AGC_PM4_OP_WAIT_REG_MEM,
+        "submit-list wait is inserted before command body");
+    TEST_ASSERT_EQ(agcPm4Opcode(words[7]), AGC_PM4_OP_RELEASE_MEM,
+        "submit-list signal is appended after command body");
+    TEST_ASSERT_EQ(agcGetGpuLabelInfo(destination, &label_info), AGC_OK,
+        "submit-list destination label diagnostics query succeeds");
+    TEST_ASSERT_EQ(label_info.scheduled_value, 2u,
+        "submit-list signal commits its timeline value");
+    TEST_ASSERT_EQ(agcDestroyGpuLabel(destination), AGC_ERROR_BUSY,
+        "submit-list retains its signal label through command reset");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+        "submit-list command resets after completion");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "submit-list fence resets after completion");
+
+    list_submit.command_buffers = &consumer;
+    list_submit.wait_count = 1u;
+    list_submit.waits = signals;
+    list_submit.signal_count = 0u;
+    list_submit.signals = NULL;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(consumer), AGC_OK,
+        "submit-list consumer begins");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(consumer), AGC_OK,
+        "submit-list consumer ends");
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &list_submit, fence), AGC_OK,
+        "submit-list signal becomes a later submit dependency");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(consumer), AGC_OK,
+        "submit-list consumer resets");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "submit-list consumer fence resets");
+
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(producer), AGC_OK,
+        "submit-list rollback producer begins");
+    TEST_ASSERT_EQ(agcCmdSignalGpuLabel(producer, source, 2u), AGC_OK,
+        "submit-list rollback producer command records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(producer), AGC_OK,
+        "submit-list rollback producer ends");
+    list_submit.command_buffers = &producer;
+    list_submit.wait_count = 1u;
+    rollback_waits[0].label = destination;
+    rollback_waits[0].value = 2u;
+    list_submit.waits = rollback_waits;
+    signals[0].value = 3u;
+    list_submit.signal_count = 1u;
+    list_submit.signals = signals;
+    agcDriverDebugFailNextSubmit(AGC_ERROR_SUBMIT_FAILED);
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &list_submit, fence),
+        AGC_ERROR_SUBMIT_FAILED,
+        "submit-list driver failure rolls injected packets and label retains back");
+    TEST_ASSERT_EQ(agcGetGpuLabelInfo(destination, &label_info), AGC_OK,
+        "submit-list rollback destination diagnostics query succeeds");
+    TEST_ASSERT_EQ(label_info.scheduled_value, 2u,
+        "failed submit-list signal does not publish a new timeline point");
+    submit.command_buffers = &producer;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
+        "submit-list rollback restores the original command stream");
+    captured = agcDriverDebugLastAcbSubmit(&owner);
+    TEST_ASSERT_EQ(captured->dword_count, AGC_GFX1013_EOP_FENCE_DWORDS,
+        "restored command has no submit-list prefix or tail");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(producer), AGC_OK,
+        "submit-list rollback producer resets");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "submit-list rollback fence resets");
+
+    command_desc.capacity_dwords = 8u;
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &small),
+        AGC_OK, "short submit-list command creates");
+    list_submit.command_buffers = &small;
+    list_submit.wait_count = 1u;
+    list_submit.waits = waits;
+    list_submit.signal_count = 1u;
+    list_submit.signals = signals;
+    waits[0].value = 2u;
+    signals[0].value = 3u;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(small), AGC_OK,
+        "short submit-list command begins");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(small), AGC_OK,
+        "short submit-list command ends");
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &list_submit, fence),
+        AGC_ERROR_COMMAND_SPACE_EXHAUSTED,
+        "short submit-list rejects before command mutation");
+    submit.command_buffers = &small;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
+        "v1 submit still succeeds after rejected submit list");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(small), AGC_OK,
+        "short submit-list command resets after v1 submit");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "short submit-list fence resets after v1 submit");
+
+    TEST_ASSERT_EQ(agcDestroyGpuLabel(destination), AGC_OK,
+        "submit-list destination label destroys");
+    TEST_ASSERT_EQ(agcDestroyGpuLabel(source), AGC_OK,
+        "submit-list source label destroys");
+    TEST_ASSERT_EQ(agcDestroyFence(fence), AGC_OK,
+        "submit-list fence destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(small), AGC_OK,
+        "short submit-list command destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(consumer), AGC_OK,
+        "submit-list consumer command destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+        "submit-list command destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(producer), AGC_OK,
+        "submit-list producer command destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
+        "submit-list queue destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "submit-list device destroys");
+}
+
 static void test_runtime_image_transfer(void)
 {
     const uint32_t input[] = {0x11223344u, 0x55667788u, 0x99aabbccu};
@@ -4665,6 +4850,7 @@ void test_suite_runtime(void)
     TEST_RUN(test_runtime_indexed_graphics_submission);
     TEST_RUN(test_runtime_multi_graphics_submission);
     TEST_RUN(test_runtime_gpu_labels);
+    TEST_RUN(test_runtime_submit_label_lists);
     TEST_RUN(test_runtime_image_transfer);
     TEST_RUN(test_runtime_resource_transitions);
     TEST_RUN(test_runtime_color_target_binding);

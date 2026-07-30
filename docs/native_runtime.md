@@ -25,6 +25,8 @@ diagnostics without exposing a GPU address.
 Runtime API v8 adds the version-2 `AgcResourceTransition` release/acquire
 handoff protocol, carrying an explicit GPU-label dependency without exposing
 raw synchronization addresses or cache-control bits.
+Runtime API v9 adds version-2 `AgcSubmitInfo` wait/signal lists through typed
+`AgcGpuLabelPoint` entries while preserving the accepted 56-byte v1 prefix.
 OpenAGC rejects unknown versions, nonzero flags, or nonzero reserved fields
 without partial object or command creation.
 
@@ -50,6 +52,8 @@ Ownership dependencies are explicit:
   references until reset or destruction;
 - an executable command buffer retains every GPU label it waits on or signals
   until reset or destruction;
+- a v2 submit retains its transient wait/signal labels on the submitted command
+  buffer until that command resets;
 - a device retains all child objects.
 
 Destroying an object with a live dependent, recorded reference, or pending
@@ -91,6 +95,14 @@ owned by the same queue; one fence tracks the complete batch and releases all
 members after completion. The current compute route, empty batch members,
 wait/signal lists, and cross-queue submission remain fail-closed.
 
+For one command buffer, v2 `AgcSubmitInfo` can name bounded lists of
+`AgcGpuLabelPoint` waits and signals. The runtime validates every exact prior
+producer point before mutation, inserts waits before the command body and EOP
+signals after it, and snapshots full command storage. Validation, capacity,
+flush, or driver-submit failure restores bytes and cursor exactly and releases
+temporary label retains. Signal points publish only after successful submit.
+Lists on graphics multi-command batches remain fail-closed.
+
 `AgcGpuLabel` provides the first GPU-side dependency primitive. A producer
 records `agcCmdSignalGpuLabel`; it emits the qualified EOP release write. A
 consumer records `agcCmdWaitGpuLabel`; it emits a 32-bit `WAIT_REG_MEM` exact
@@ -102,8 +114,8 @@ This avoids an unbounded wait from an unproved dependency. Signal values are
 strictly increasing 32-bit timeline points: `UINT32_MAX` is terminal and never
 wraps, while a repeated or lower value is rejected before PM4 mutation. This
 prevents a wait from passing on stale memory. The exact graphics/compute label
-carrier is hardware-qualified on FW 5.50; submit wait/signal lists and event
-objects remain unsupported.
+carrier and single-command submit lists are hardware-qualified on FW 5.50;
+event objects remain unsupported.
 
 `agcGetGpuLabelInfo` snapshots its most recently submitted timeline point,
 the CPU-observed label word, producer queue/submission identity, and the
