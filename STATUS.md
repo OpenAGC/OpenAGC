@@ -324,7 +324,9 @@ export 1. Exact host coverage locks `CB_COLOR0_INFO=0x00070510`, complete PM4,
 all 39 profiles, every short command-buffer boundary, invalid enums, and
 maximum 64-bit surface arithmetic. The generic suite passes 11,316 assertions;
 its dedicated signed-coordinate shader, exact oracle, and fail-closed runner
-checks build as a firmware-neutral portable gate. Pinning remains pending.
+checks build as a firmware-neutral portable gate. The final bytes are pinned as
+SHA-256 `048b903713ce1a0b82e0d3dc5c01b37f2ea068da5e2ce6164bc5ae938c02f32f`;
+hardware execution remains ordered behind the clean-boot UINT gates.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability
