@@ -23,7 +23,10 @@ and HTILE/MSAA stay blocked. A committed 14-launch file-backed gate now pins
 separate FW 5.50 and FW 11.60 artifacts, invokes the cleanup ELF immediately
 before every payload, and requires zero-valued cleanup results. FW 5.50
 hardware is currently unavailable; an FW 11.60 pass is supporting evidence
-only and cannot close this regression. See
+only and cannot close this regression. FW 11.60 passed a one-launch canary and
+then 14/14 stress launches with a GPU fence, driver shutdown, and all four
+cleanup results zero on every iteration; websrv and ps5debug-NG remained
+reachable. See
 `analysis/fw550_headless_flexible_memory_panic_20260730.md` and
 `analysis/fw1160_fw550_parity_matrix_20260730.md`.
 

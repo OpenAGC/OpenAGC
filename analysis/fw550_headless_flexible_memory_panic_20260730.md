@@ -76,3 +76,10 @@ The matching FW 11.60 artifact is pinned to
 FW 11.60 is a useful runner and teardown safety check, but cannot replace the
 FW 5.50 regression because the incident occurred on FW 5.50. That console is
 currently unavailable, so the FW 5.50 verdict remains pending.
+
+FW 11.60 hardware completed a one-launch canary and then the full 14/14 stress
+sequence with the pinned artifact. Every launch selected ABI key `0x1160`,
+reached the GPU fence, shut the driver down, returned zero for all four memory
+cleanup operations, and reported PASS. Websrv and ps5debug-NG remained
+reachable afterward. This confirms the runner and shared teardown on FW 11.60;
+it does not qualify the unavailable FW 5.50 console.

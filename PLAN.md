@@ -34,7 +34,8 @@ implicit build side effect. Start with the fresh-boot cleanup stress gate in
 HTILE, or MSAA until it passes. The committed `cleanup_stress_fw550` target
 runs 14 file-backed launches and checks every release result; FW 5.50 hardware
 is currently unavailable, so this gate and all dependent work remain pending.
-The `cleanup_stress_fw1160` twin is only a runner/shared-teardown safety check.
+The `cleanup_stress_fw1160` twin passed 14/14 launches after its canary, proving
+the runner and shared teardown on FW 11.60 only.
 
 ### FW 11.60 workload parity gate
 

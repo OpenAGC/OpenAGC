@@ -76,7 +76,9 @@ baseline launches, calls the cleanup ELF immediately before every payload, and
 requires all four sample cleanup results plus driver shutdown to pass on every
 iteration. Its FW 11.60 twin can validate the runner and shared teardown, but
 does not close the FW 5.50 regression. FW 5.50 hardware is currently
-unavailable.
+unavailable. The FW 11.60 twin passed a one-launch canary followed by all
+14/14 stress iterations on 2026-07-30, with a fence, driver shutdown, and four
+zero-valued cleanup results on every launch.
 
 ## Higher-level consumers
 
