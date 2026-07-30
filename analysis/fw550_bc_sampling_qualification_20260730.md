@@ -40,6 +40,16 @@ The guarded run produced `224640` changed pixels, regions
 cleanup, final verdict, self-termination, and residual-process check passed.
 Repeat the identical artifact once.
 
+## BC3 UNORM pass 2
+
+The identical artifact reproduced `224640` changed pixels, regions
+`{74880,74880,74880}`, alpha range `0..255`, zero exact mismatches, and FNV64
+`0xae513a67c9bb483d`. Every lifecycle gate and the post-run residual-process
+check passed again.
+
+BC3 UNORM is hardware-qualified on exact FW 5.50 and FW 11.60. BC3 SRGB is
+next.
+
 ## BC1 SRGB pass 2
 
 The identical artifact reproduced `224640` changed pixels, regions
