@@ -47,5 +47,12 @@ exact function of integer `gl_FragCoord` and cycles through values `n*257`, so
 the native oracle can compute the expected `uint16_t` for every covered pixel,
 prove full-range diversity, and detect duplicated channels. The portable
 R16_UINT ELF builds successfully, passes the firmware-neutral verifier, and
-contains no AGC SPRX dependency. It remains mutable and unexecuted: pin and
-hash one final artifact before its first hardware run.
+contains no AGC SPRX dependency. The final unexecuted bytes are preserved as:
+
+```text
+samples/hw_test/pinned/agc_graphics_r16_uint-8136a9a22005e1f9087b9d24402bac47ee66463a13c351500652276e34fa34b4.elf
+SHA-256 8136a9a22005e1f9087b9d24402bac47ee66463a13c351500652276e34fa34b4
+```
+
+The FW 11.60 and FW 5.50 guarded targets have no build prerequisites and
+authenticate the local and uploaded bytes. Hardware execution remains pending.

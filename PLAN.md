@@ -297,8 +297,10 @@ the runner and shared teardown on FW 11.60 only.
   The local Mesa/ACO evidence confirms the packed unsigned export contract.
   Sibling psbc commit `7706efb` now selects and verifies UINT16_ABGR. A
   dedicated coordinate-derived unsigned shader and exact per-pixel native
-  oracle build as a firmware-neutral R16_UINT ELF. Preserve one hash-named
-  final artifact before its first guarded FW 11.60 run. See
+  oracle build as a firmware-neutral R16_UINT ELF. The unexecuted final bytes
+  are pinned as SHA-256
+  `8136a9a22005e1f9087b9d24402bac47ee66463a13c351500652276e34fa34b4`;
+  run that artifact twice through the guarded FW 11.60 target next. See
   `analysis/gfx1013_integer_color_export_contract_20260730.md`.
 - Seven additional offscreen format gates now build under the same exact
   profile and bounded runner: R8, RG8, RGB10A2, R11G11B10, R32, RG32, and
@@ -490,8 +492,8 @@ reproducible component hashes.
 
 After normalized formats pass, qualify:
 
-1. `R16_UINT` — host-qualified; dedicated integer shader and portable native
-   oracle complete; pinning and FW 11.60 execution pending.
+1. `R16_UINT` — host-qualified; dedicated integer shader, portable native
+   oracle, and pinned neutral ELF complete; FW 11.60 execution pending.
 2. `RG16_UINT`.
 3. `RGBA16_UINT`.
 4. `R16_SINT`.
