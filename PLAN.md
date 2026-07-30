@@ -666,6 +666,10 @@ the runner and shared teardown on FW 11.60 only.
   first hash-pinned deploy targets. Run FW 5.50 first, capture exact resolved
   green/red and native D32 one/near/far counts, freeze them, and replay before
   FW 11.60.
+- The first FW 5.50 workload completed successfully but revealed that the host
+  runner rejected a standalone `Depth+4xMSAA` label before its MSAA-specific
+  checks. The fixed runner has host regression coverage; repeat the pinned FW
+  5.50 artifact to establish the first qualification pass.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and

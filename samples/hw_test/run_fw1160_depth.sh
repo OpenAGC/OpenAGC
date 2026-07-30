@@ -78,8 +78,10 @@ cat "$output_file"
 
 grep -q "Runtime profile FW ABI $EXPECTED_FW_ABI: PASS" "$output_file" || exit 1
 grep -q "GPU completion fence reached" "$output_file" || exit 1
-grep -Eq "\[Depth(\+Stencil)? Result\] markers=PASS color=PASS .*stencil=PASS" \
-    "$output_file" || exit 1
+if [ "${REQUIRE_MSAA_RESOLVE:-0}" -ne 1 ]; then
+    grep -Eq "\[Depth(\+Stencil)? Result\] markers=PASS color=PASS .*stencil=PASS" \
+        "$output_file" || exit 1
+fi
 if [ -n "${EXPECTED_HTILE_INITIAL:-}" ]; then
     grep -Eq "^\[HTILE Readback\] changed=[1-9][0-9]* other=[0-9]+ initial=$EXPECTED_HTILE_INITIAL$" \
         "$output_file" || exit 1

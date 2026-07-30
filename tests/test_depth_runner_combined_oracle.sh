@@ -88,6 +88,18 @@ run_gate()
         sh "$runner"
 }
 
+run_msaa_gate()
+{
+    PATH="$tmp/bin:$PATH" \
+        MOCK_CLEANUP_TIMEOUT=1 PS5_HOST=mock \
+        DEPTH_ARTIFACT="$tmp/depth.elf" \
+        PROCESS_CLEANUP_ELF="$tmp/cleanup.elf" \
+        RESULT_LOG_PATH=/data/homebrew/openagc_fw1160_depth/result.log \
+        REQUIRE_MSAA_RESOLVE=1 \
+        MOCK_RESULT="$1" \
+        sh "$runner"
+}
+
 run_gate 1 1755648 1024 0 228096 228096 228096 "$tmp/result.log" > "$tmp/pass-output"
 if run_gate 1 1617408 1024 0 228096 228096 228096 "$tmp/result.log" > "$tmp/count-fail-output" 2>&1; then
     echo "depth runner accepted the wrong allocation-aware D32 count" >&2
@@ -118,5 +130,8 @@ if run_gate 1 1755648 1024 0 228096 228096 228096 "$tmp/no-msaa.log" > "$tmp/msa
     echo "depth runner accepted a missing MSAA resolve verdict" >&2
     exit 1
 fi
+
+grep -v '^\[Depth+Stencil Result\]' "$tmp/result.log" > "$tmp/msaa-only.log"
+run_msaa_gate "$tmp/msaa-only.log" > "$tmp/msaa-only-output"
 
 echo "PASS: depth runner enforces exact combined depth/stencil verdicts"

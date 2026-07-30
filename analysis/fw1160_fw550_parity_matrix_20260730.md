@@ -267,6 +267,13 @@ drift before network access. The pinned FW 5.50 MSAA artifact is the first
 permitted launch; establish and freeze exact resolved green/red and D32
 one/near/far counts before replay.
 
+The first FW 5.50 launch completed the workload, fence, readbacks, teardown,
+and self-termination successfully, but exposed a host-runner defect: the
+generic precheck accepted only ordinary depth or depth+stencil result labels
+before reaching the dedicated 4x MSAA oracle. The runner now selects the
+dedicated MSAA verdict path when requested, with a standalone-result regression
+fixture. This wrapper failure is not counted as either qualified hardware pass.
+
 That prerequisite sequence is now complete. Two relinks against the committed
 shader records reproduced all eight artifacts byte-for-byte, and dependency
 inspection found only VideoOut, kernel, libc, and networking. The exact FW

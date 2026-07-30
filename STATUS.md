@@ -136,6 +136,12 @@ dependencies, are preserved under full hashes, and have cleanup-first pinned
 deploy targets. FW 5.50 is the first permitted launch; exact resolved color
 and native D32 class counts must be frozen before replay.
 
+The initial FW 5.50 MSAA workload reached its fence, produced valid color and
+D32 readbacks, shut down, and self-terminated. A host-runner ordering defect
+then rejected its standalone `Depth+4xMSAA` result label. The runner is fixed
+and covered by a standalone-label fixture; no hardware pass is credited until
+the pinned artifact passes the corrected gate.
+
 All four subresource artifacts now reproduce across two relinks, avoid AGC
 SPRX dependencies, are preserved under full hashes, and have cleanup-first
 hash-pinned deploy targets with exact color and selected/outside metadata
