@@ -346,12 +346,25 @@ the runner and shared teardown on FW 11.60 only.
   FW 5.50 mirrors for all nine color formats are built and recorded in
   `analysis/fw550_headless_color_regression_matrix_20260730.md`.
 
-### Render-target format expansion through the 128-bit-per-pixel ceiling
+### Render-target format expansion through the 128-bit regular-color ceiling
 
-Treat 128 bits per pixel (`RGBA32`, four 32-bit components) as OpenAGC's fixed
-product-scope ceiling, then complete the useful format matrix in increasing
-hardware-risk order. This is an intentional OpenAGC API boundary, not a claim
-that gfx1013 hardware has no wider or otherwise special-purpose encodings.
+Treat 128 bits per uncompressed format element (`RGBA32`, four 32-bit
+components) as OpenAGC's regular color-buffer ceiling, then complete the useful
+format matrix in increasing hardware-risk order. For a texture this element is
+one texel; for a render target it is one color sample. MSAA multiplies the
+per-pixel-location storage separately.
+
+This boundary is supported independently by Mesa revision `44e18d3d` and Linux
+revision `0ce37745d`: the largest regular-width gfx10.3 `ColorFormat` entry is
+`COLOR_32_32_32_32=0x0e`, Mesa maps no wider ordinary color-buffer layout, and
+RADV excludes 64-bit-component formats from color attachments. The evidence is
+in `../mesa/src/amd/registers/gfx103.json`,
+`../mesa/src/amd/common/ac_formats.c`,
+`../mesa/src/amd/vulkan/radv_formats.c`, and
+`../linux/drivers/gpu/drm/amd/include/navi10_enum.h`. This remains an OpenAGC
+API boundary rather than a blanket claim about every special-purpose gfx1013
+encoding, and each PS5 tuple still requires firmware evidence and hardware
+qualification.
 
 #### 1. Establish the format contract
 
@@ -365,6 +378,16 @@ Keep formats represented by four independent properties:
 Public enum values must only be appended so existing binaries retain their
 ABI. Add a compile-time assertion ensuring every public format has exactly one
 format-table entry.
+
+Preserve the gfx10.3 usage boundaries recovered from Mesa and Linux:
+
+- Plain three-channel `RGB8`, `RGB16`, and `RGB32` are not color-target
+  layouts. In particular, Mesa exposes `32_32_32` as buffer-only.
+- No format with a 64-bit component is a color attachment.
+- Scaled number types are not regular color-buffer formats.
+- UINT and SINT color attachments are valid but not blendable.
+- Packed formats and component swaps remain distinct tuples even when their
+  total element size matches a plain format.
 
 #### 2. Complete 16-bit normalized formats
 
@@ -423,7 +446,8 @@ After normalized formats pass, qualify:
 These formats need dedicated integer-output pixel shaders. Do not qualify them
 using a floating-point shader and assume the conversion is correct. Their
 oracles must validate exact integer values rather than approximate
-interpolation.
+interpolation. Integer color targets must be qualified with blending disabled;
+attempting to enable blending must fail validation without emitting commands.
 
 #### 4. Complete 32-bit integer formats
 
@@ -432,16 +456,24 @@ The float forms already reach the maximum widths. Add:
 - `R32_UINT`, `RG32_UINT`, and `RGBA32_UINT`.
 - `R32_SINT`, `RG32_SINT`, and `RGBA32_SINT`.
 
-`RGBA32_*` remains the OpenAGC maximum:
+`RGBA32_*` remains the regular color-buffer maximum:
 
-| Format | Bits per pixel |
+| Format | Bits per element/sample |
 | --- | ---: |
 | `R32` | 32 |
 | `RG32` | 64 |
 | `RGBA32` | 128 |
 
-Surface-layout arithmetic must safely handle 16 bytes per pixel and MSAA
-multiplication without overflow.
+Surface-layout arithmetic must safely handle 16 bytes per element/color sample
+and MSAA multiplication without overflow. Do not add `RGB32_*` render-target tuples:
+Mesa marks the 96-bit layout buffer-only. Do not infer `R64_*` color-target
+support from its 64-bit element size; RADV explicitly excludes 64-bit-component
+formats from color attachments.
+
+Treat fast-clear and auxiliary-compression support as separate capabilities.
+Mesa disables CMASK fast clear above 64 bits per element, so an `RGBA32_*`
+color-target PASS must not imply CMASK fast-clear qualification. DCC, CMASK,
+FMASK, and MSAA combinations require their own bounded gates.
 
 #### 5. Consider packed formats separately
 
@@ -449,6 +481,8 @@ After the regular matrix is stable, evaluate evidence and homebrew demand for:
 
 - `RGB10A2_UINT`.
 - Additional packed 16-bit formats such as `RGB565` or `RGBA5551`.
+- gfx10.3 `R9G9B9E5_FLOAT`, which Mesa exposes as a regular color-buffer tuple
+  only from gfx10.3 onward.
 - Alternate component swaps.
 - Any firmware-observed special-purpose formats.
 
@@ -456,11 +490,11 @@ Do not add obscure hardware encodings merely to make the enum larger.
 
 #### 6. Qualify block-compressed textures separately
 
-The 128-bit-per-pixel ceiling applies only to regular uncompressed color
-surfaces and uncompressed texture texels. Block-compressed textures use a
-separate storage contract measured in bits per block. For the currently
-declared BC formats, OpenAGC's product-scope ceiling is 128 bits per compressed
-4x4 block, not 128 bits per pixel:
+The 128-bit regular-color ceiling applies only to uncompressed color surfaces
+and uncompressed texture texels. Block-compressed textures use a separate
+storage contract measured in bits per block. For the currently declared BC
+formats, OpenAGC's product-scope ceiling is 128 bits per compressed 4x4 block,
+not 128 bits per texel:
 
 | Format family | Bytes per 4x4 block | Nominal full-block storage |
 | --- | ---: | ---: |
@@ -472,10 +506,14 @@ BC1-BC7 are application-visible sampled texture formats. DCC/CMASK/FMASK and
 HTILE are auxiliary GPU metadata for otherwise ordinary color or depth
 surfaces and do not change the surface's logical format or bits per pixel.
 
-`kAgcDataFormatBc1` through `kAgcDataFormatBc7` already exist in the public
-texture enum, but enum and descriptor coverage alone are not hardware
-qualification. Before advertising a BC format, implement and test a complete
-layout and sampling path with these independent properties:
+The Mesa gfx10 resource table
+(`../mesa/src/amd/registers/gfx10-rsrc.json`) explicitly contains native image
+encodings for BC1 UNORM/SRGB, BC2 UNORM/SRGB, BC3 UNORM/SRGB, BC4 UNORM/SNORM,
+BC5 UNORM/SNORM, BC6 UFLOAT/SFLOAT, and BC7 UNORM/SRGB. OpenAGC's corresponding
+`kAgcDataFormatBc1` through `kAgcDataFormatBc7` values already exist in the
+public texture enum, but register, enum, and descriptor coverage alone are not
+PS5 hardware qualification. Before advertising a BC format, implement and test
+a complete layout and sampling path with these independent properties:
 
 - Block width and height.
 - Bytes per block.
@@ -509,10 +547,18 @@ format-tolerant decoded texels as appropriate plus a reproducible native
 render-target hash. It must also prove mip and layer selection rather than
 qualifying only base level zero.
 
+Mesa records a GFX9-through-GFX11.5 limitation for indirect image copies of
+BC mip chains. Therefore the first BC gates must use a direct, deterministic
+upload followed by shader sampling. Direct image-copy qualification comes
+after sampling; indirect BC image-copy and mip-copy behavior is an independent
+late gate and must not be inferred from a successful sampling result.
+
 BC formats are sampled-texture formats, not color-render-target formats; do
 not route them through the color-target tuple table or assign them a
-pixel-shader export format. Do not add ASTC or other compression families
-without primary firmware evidence and a concrete homebrew requirement.
+pixel-shader export format. Mesa's gfx10 native resource-format table contains
+BC1-BC7 but no native ASTC entries. Do not add ASTC or another compression
+family without primary PS5 firmware evidence and a concrete homebrew
+requirement.
 
 #### 7. Use firmware-neutral qualification artifacts
 
