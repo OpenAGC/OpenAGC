@@ -836,6 +836,17 @@ for BC5 UNORM and
 for BC5 SNORM. Their FW 11.60 and identical-byte FW 5.50 guarded targets have
 no build prerequisites.
 
+BC7 UNORM/SRGB portable gates now build with deterministic mode-4 and mode-6
+blocks. Mode 4 covers separate two-bit color and three-bit alpha streams;
+mode 6 covers endpoint p-bits and a shared four-bit RGBA stream. Their bit
+placement, anchor-index shortening, endpoint expansion, and interpolation
+weights were independently checked against Mesa's BPTC decompressor. The CPU
+oracle recognizes both modes, applies SRGB only to RGB, requires exact RGBA8
+agreement, full alpha range, channel independence, and all mip/layer regions,
+and records a native hash. Other BC7 modes remain separate coverage expansion,
+not a prerequisite for proving the native BC7 resource path. Pin final neutral
+bytes before hardware execution.
+
 Use dedicated, deterministic source blocks containing endpoint, index,
 alpha, signed-range, and edge-block cases appropriate to each format. A
 hardware gate must sample the compressed texture into an already-qualified

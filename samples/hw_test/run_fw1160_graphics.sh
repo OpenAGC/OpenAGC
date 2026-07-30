@@ -299,6 +299,18 @@ case "$EXPECTED_TARGET" in
         grep -q '^\[BC5\] mip0/mip1/layer1 dual-channel selection: PASS$' \
             "$output_file" || exit 1
         ;;
+    BC7_UNORM)
+        grep -Eq '^\[BC7 UNORM\] changed=[1-9][0-9]* regions=\{[1-9][0-9]*,[1-9][0-9]*,[1-9][0-9]*\} modes=\{4:[1-9][0-9]*,6:[1-9][0-9]*\} alpha-range=0\.\.255 exact-mismatches=0 independence=PASS packed-fnv64=0x[0-9a-f]{16}: PASS$' \
+            "$output_file" || exit 1
+        grep -q '^\[BC7\] mode4/mode6 mip0/mip1/layer1 selection: PASS$' \
+            "$output_file" || exit 1
+        ;;
+    BC7_SRGB)
+        grep -Eq '^\[BC7 SRGB\] changed=[1-9][0-9]* regions=\{[1-9][0-9]*,[1-9][0-9]*,[1-9][0-9]*\} modes=\{4:[1-9][0-9]*,6:[1-9][0-9]*\} alpha-range=0\.\.255 exact-mismatches=0 independence=PASS packed-fnv64=0x[0-9a-f]{16}: PASS$' \
+            "$output_file" || exit 1
+        grep -q '^\[BC7\] mode4/mode6 mip0/mip1/layer1 selection: PASS$' \
+            "$output_file" || exit 1
+        ;;
     'offscreen RGB10A2')
         grep -Eq '^\[RGB10A2\] Packed top2 histogram:.*: PASS$' \
             "$output_file" || exit 1

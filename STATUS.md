@@ -445,6 +445,15 @@ tolerance. Exact artifacts are now pinned as SHA-256
 (SNORM), with no-prerequisite FW 11.60 and FW 5.50 guarded targets. Hardware
 execution remains pending a clean FW 11.60 boot.
 
+BC7 UNORM and SRGB firmware-neutral gates now build using exact mode-4 and
+mode-6 fixtures. The former independently exercises color and alpha index
+streams; the latter exercises endpoint p-bits and shared four-bit RGBA
+indices. Mesa's BPTC decompressor independently reproduced the generated
+endpoint and interpolation results. The bounded oracle recognizes both modes,
+requires exact decoded RGBA8 values, full alpha range, channel independence,
+and every mip/layer region, and records a native hash. Artifact pinning and
+hardware execution remain pending.
+
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability
 ELF, non-indexed and indexed 10-dword multi-draw, GPU count-buffer selection,

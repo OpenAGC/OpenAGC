@@ -419,7 +419,9 @@
       (defined(AGC_VALIDATE_BC2_UNORM) && AGC_VALIDATE_BC2_UNORM) || \
       (defined(AGC_VALIDATE_BC2_SRGB) && AGC_VALIDATE_BC2_SRGB) || \
       (defined(AGC_VALIDATE_BC3_UNORM) && AGC_VALIDATE_BC3_UNORM) || \
-      (defined(AGC_VALIDATE_BC3_SRGB) && AGC_VALIDATE_BC3_SRGB)
+      (defined(AGC_VALIDATE_BC3_SRGB) && AGC_VALIDATE_BC3_SRGB) || \
+      (defined(AGC_VALIDATE_BC7_UNORM) && AGC_VALIDATE_BC7_UNORM) || \
+      (defined(AGC_VALIDATE_BC7_SRGB) && AGC_VALIDATE_BC7_SRGB)
 #include "shaders/bc1_sample_frag_sb.h"
 #define FRAGMENT_DATA bc1_sample_frag_data
 #elif defined(AGC_VALIDATE_BC4_UNORM) && AGC_VALIDATE_BC4_UNORM
@@ -676,6 +678,12 @@ int sceKernelDeleteEqueue(SceKernelEqueue equeue);
 #ifndef AGC_VALIDATE_BC5_SNORM
 #define AGC_VALIDATE_BC5_SNORM 0
 #endif
+#ifndef AGC_VALIDATE_BC7_UNORM
+#define AGC_VALIDATE_BC7_UNORM 0
+#endif
+#ifndef AGC_VALIDATE_BC7_SRGB
+#define AGC_VALIDATE_BC7_SRGB 0
+#endif
 #if (AGC_VALIDATE_RGBA8_REFERENCE + AGC_VALIDATE_RGBA8_STD + \
      AGC_VALIDATE_RGB10A2 + AGC_VALIDATE_R11G11B10 + \
      AGC_VALIDATE_RGBA8_SRGB + AGC_VALIDATE_BGRA8_SRGB + \
@@ -696,6 +704,7 @@ int sceKernelDeleteEqueue(SceKernelEqueue equeue);
      AGC_VALIDATE_BC2_UNORM + AGC_VALIDATE_BC2_SRGB + \
      AGC_VALIDATE_BC3_UNORM + AGC_VALIDATE_BC3_SRGB + \
      AGC_VALIDATE_BC5_UNORM + AGC_VALIDATE_BC5_SNORM + \
+     AGC_VALIDATE_BC7_UNORM + AGC_VALIDATE_BC7_SRGB + \
      AGC_VALIDATE_R8_UNORM + AGC_VALIDATE_RG8_UNORM + \
      AGC_VALIDATE_R32_FLOAT + AGC_VALIDATE_RG32_FLOAT + \
      AGC_VALIDATE_RGBA32_FLOAT) > 1
@@ -707,7 +716,42 @@ int sceKernelDeleteEqueue(SceKernelEqueue equeue);
      AGC_VALIDATE_BC4_UNORM || AGC_VALIDATE_BC4_SNORM || \
      AGC_VALIDATE_BC2_UNORM || AGC_VALIDATE_BC2_SRGB || \
      AGC_VALIDATE_BC3_UNORM || AGC_VALIDATE_BC3_SRGB || \
-     AGC_VALIDATE_BC5_UNORM || AGC_VALIDATE_BC5_SNORM)
+     AGC_VALIDATE_BC5_UNORM || AGC_VALIDATE_BC5_SNORM || \
+     AGC_VALIDATE_BC7_UNORM || AGC_VALIDATE_BC7_SRGB)
+
+#if AGC_VALIDATE_BC_SAMPLE
+static uint32_t bc_validation_format(void)
+{
+#if AGC_VALIDATE_BC1_SRGB
+    return AGC_GFX1013_IMAGE_FORMAT_BC1_SRGB;
+#elif AGC_VALIDATE_BC1_UNORM
+    return AGC_GFX1013_IMAGE_FORMAT_BC1_UNORM;
+#elif AGC_VALIDATE_BC4_SNORM
+    return AGC_GFX1013_IMAGE_FORMAT_BC4_SNORM;
+#elif AGC_VALIDATE_BC4_UNORM
+    return AGC_GFX1013_IMAGE_FORMAT_BC4_UNORM;
+#elif AGC_VALIDATE_BC2_SRGB
+    return AGC_GFX1013_IMAGE_FORMAT_BC2_SRGB;
+#elif AGC_VALIDATE_BC2_UNORM
+    return AGC_GFX1013_IMAGE_FORMAT_BC2_UNORM;
+#elif AGC_VALIDATE_BC3_SRGB
+    return AGC_GFX1013_IMAGE_FORMAT_BC3_SRGB;
+#elif AGC_VALIDATE_BC3_UNORM
+    return AGC_GFX1013_IMAGE_FORMAT_BC3_UNORM;
+#elif AGC_VALIDATE_BC5_SNORM
+    return AGC_GFX1013_IMAGE_FORMAT_BC5_SNORM;
+#elif AGC_VALIDATE_BC5_UNORM
+    return AGC_GFX1013_IMAGE_FORMAT_BC5_UNORM;
+#elif AGC_VALIDATE_BC7_SRGB
+    return AGC_GFX1013_IMAGE_FORMAT_BC7_SRGB;
+#else
+    return AGC_GFX1013_IMAGE_FORMAT_BC7_UNORM;
+#endif
+}
+#define AGC_BC_VALIDATION_FORMAT() bc_validation_format()
+#else
+#define AGC_BC_VALIDATION_FORMAT() AGC_GFX1013_IMAGE_FORMAT_RGBA8_UNORM
+#endif
 
 #if AGC_VALIDATE_BC1_UNORM || AGC_VALIDATE_BC1_SRGB
 static void bc1_write_block(uint8_t *texture,
@@ -1272,6 +1316,252 @@ static uint32_t bc5_expected_pixel(const uint8_t *texture,
             lane > 2u ? 2u : lane, row, snorm);
     return bc5_decode_texel(texture, layer1_mip0, 4u,
         row + 3u > 6u ? 6u : row + 3u, snorm);
+}
+#endif
+
+#if AGC_VALIDATE_BC7_UNORM || AGC_VALIDATE_BC7_SRGB
+static void bc7_write_bits(uint8_t *block, uint32_t *offset,
+    uint32_t value, uint32_t count)
+{
+    for (uint32_t bit = 0u; bit < count; ++bit) {
+        uint32_t position = *offset + bit;
+        block[position / 8u] |=
+            (uint8_t)(((value >> bit) & 1u) << (position & 7u));
+    }
+    *offset += count;
+}
+
+static uint32_t bc7_read_bits(const uint8_t *block, uint32_t offset,
+    uint32_t count)
+{
+    uint32_t value = 0u;
+    for (uint32_t bit = 0u; bit < count; ++bit) {
+        uint32_t position = offset + bit;
+        value |= (uint32_t)((block[position / 8u] >>
+            (position & 7u)) & 1u) << bit;
+    }
+    return value;
+}
+
+static void bc7_write_mode4_block(uint8_t *texture,
+    const AgcGfx1013LinearBcSubresourceLayout *subresource,
+    uint32_t block_x, uint32_t block_y, bool reverse_color,
+    bool vertical_color)
+{
+    uint8_t *block = texture + subresource->offset +
+        (size_t)block_y * subresource->row_pitch + block_x * 16u;
+    const uint32_t color_indices[4] = {0u, 1u, 2u, 3u};
+    const uint32_t alpha_indices[4] = {0u, 2u, 5u, 7u};
+    const uint32_t endpoint0[3] = {
+        reverse_color ? 31u : 0u,
+        reverse_color ? 0u : 31u,
+        reverse_color ? 31u : 0u,
+    };
+    const uint32_t endpoint1[3] = {
+        reverse_color ? 0u : 31u,
+        reverse_color ? 31u : 0u,
+        reverse_color ? 0u : 31u,
+    };
+    uint32_t offset = 0u;
+
+    memset(block, 0, 16u);
+    bc7_write_bits(block, &offset, 0x10u, 5u);
+    bc7_write_bits(block, &offset, 0u, 2u);
+    bc7_write_bits(block, &offset, 0u, 1u);
+    for (uint32_t component = 0u; component < 3u; ++component) {
+        bc7_write_bits(block, &offset, endpoint0[component], 5u);
+        bc7_write_bits(block, &offset, endpoint1[component], 5u);
+    }
+    bc7_write_bits(block, &offset, 0u, 6u);
+    bc7_write_bits(block, &offset, 63u, 6u);
+    for (uint32_t y = 0u; y < 4u; ++y) {
+        for (uint32_t x = 0u; x < 4u; ++x) {
+            uint32_t position = y * 4u + x;
+            uint32_t index =
+                color_indices[vertical_color ? y : x];
+            bc7_write_bits(block, &offset, index,
+                position == 0u ? 1u : 2u);
+        }
+    }
+    for (uint32_t y = 0u; y < 4u; ++y) {
+        for (uint32_t x = 0u; x < 4u; ++x) {
+            uint32_t position = y * 4u + x;
+            uint32_t index =
+                alpha_indices[vertical_color ? x : y];
+            bc7_write_bits(block, &offset, index,
+                position == 0u ? 2u : 3u);
+        }
+    }
+}
+
+static void bc7_write_mode6_block(uint8_t *texture,
+    const AgcGfx1013LinearBcSubresourceLayout *subresource,
+    uint32_t block_x, uint32_t block_y, bool vertical)
+{
+    uint8_t *block = texture + subresource->offset +
+        (size_t)block_y * subresource->row_pitch + block_x * 16u;
+    const uint32_t indices[4] = {0u, 5u, 10u, 15u};
+    uint32_t offset = 0u;
+
+    memset(block, 0, 16u);
+    bc7_write_bits(block, &offset, 0x40u, 7u);
+    for (uint32_t component = 0u; component < 4u; ++component) {
+        bc7_write_bits(block, &offset, 0u, 7u);
+        bc7_write_bits(block, &offset, 127u, 7u);
+    }
+    bc7_write_bits(block, &offset, 0u, 1u);
+    bc7_write_bits(block, &offset, 1u, 1u);
+    for (uint32_t y = 0u; y < 4u; ++y) {
+        for (uint32_t x = 0u; x < 4u; ++x) {
+            uint32_t position = y * 4u + x;
+            bc7_write_bits(block, &offset, indices[vertical ? y : x],
+                position == 0u ? 3u : 4u);
+        }
+    }
+}
+
+static uint8_t bc7_expand_component(uint32_t value, uint32_t bits)
+{
+    return (uint8_t)((value << (8u - bits)) |
+        (value >> (2u * bits - 8u)));
+}
+
+static uint8_t bc7_interpolate(uint8_t endpoint0, uint8_t endpoint1,
+    uint32_t index, uint32_t bits)
+{
+    static const uint8_t weights2[4] = {0u, 21u, 43u, 64u};
+    static const uint8_t weights3[8] =
+        {0u, 9u, 18u, 27u, 37u, 46u, 55u, 64u};
+    static const uint8_t weights4[16] =
+        {0u, 4u, 9u, 13u, 17u, 21u, 26u, 30u,
+         34u, 38u, 43u, 47u, 51u, 55u, 60u, 64u};
+    uint32_t weight = bits == 2u ? weights2[index] :
+        (bits == 3u ? weights3[index] : weights4[index]);
+    return (uint8_t)(((64u - weight) * endpoint0 +
+        weight * endpoint1 + 32u) >> 6u);
+}
+
+static uint8_t bc7_srgb_to_unorm(uint8_t value)
+{
+    if (value == 0u || value == 1u)
+        return 0u;
+    if (value == 84u || value == 85u)
+        return 23u;
+    if (value == 170u)
+        return 103u;
+    if (value == 171u)
+        return 104u;
+    if (value == 254u)
+        return 253u;
+    return value;
+}
+
+static uint32_t bc7_mode(const uint8_t *block)
+{
+    for (uint32_t mode = 0u; mode < 8u; ++mode) {
+        if ((block[0] & (1u << mode)) != 0u)
+            return mode;
+    }
+    return 8u;
+}
+
+static uint32_t bc7_decode_texel(const uint8_t *texture,
+    const AgcGfx1013LinearBcSubresourceLayout *subresource,
+    uint32_t x, uint32_t y, bool srgb, uint32_t *decoded_mode)
+{
+    const uint8_t *block = texture + subresource->offset +
+        (size_t)(y / 4u) * subresource->row_pitch + (x / 4u) * 16u;
+    uint8_t endpoints[2][4] = {{0u}};
+    uint8_t result[4] = {0u, 0u, 0u, 0u};
+    uint32_t position = (y & 3u) * 4u + (x & 3u);
+    uint32_t mode = bc7_mode(block);
+    uint32_t color_index;
+    uint32_t alpha_index;
+    uint32_t color_bits;
+    uint32_t alpha_bits;
+
+    *decoded_mode = mode;
+    if (mode == 4u) {
+        uint32_t offset = 8u;
+        for (uint32_t component = 0u; component < 3u; ++component) {
+            endpoints[0][component] = bc7_expand_component(
+                bc7_read_bits(block, offset, 5u), 5u);
+            offset += 5u;
+            endpoints[1][component] = bc7_expand_component(
+                bc7_read_bits(block, offset, 5u), 5u);
+            offset += 5u;
+        }
+        endpoints[0][3] = bc7_expand_component(
+            bc7_read_bits(block, offset, 6u), 6u);
+        offset += 6u;
+        endpoints[1][3] = bc7_expand_component(
+            bc7_read_bits(block, offset, 6u), 6u);
+        color_index = bc7_read_bits(block,
+            position == 0u ? 50u : 49u + 2u * position,
+            position == 0u ? 1u : 2u);
+        alpha_index = bc7_read_bits(block,
+            position == 0u ? 81u : 80u + 3u * position,
+            position == 0u ? 2u : 3u);
+        color_bits = 2u;
+        alpha_bits = 3u;
+    } else if (mode == 6u) {
+        uint32_t offset = 7u;
+        uint32_t raw[2][4];
+        for (uint32_t component = 0u; component < 4u; ++component) {
+            raw[0][component] = bc7_read_bits(block, offset, 7u);
+            offset += 7u;
+            raw[1][component] = bc7_read_bits(block, offset, 7u);
+            offset += 7u;
+        }
+        uint32_t pbit0 = bc7_read_bits(block, offset, 1u);
+        uint32_t pbit1 = bc7_read_bits(block, offset + 1u, 1u);
+        for (uint32_t component = 0u; component < 4u; ++component) {
+            endpoints[0][component] =
+                (uint8_t)((raw[0][component] << 1u) | pbit0);
+            endpoints[1][component] =
+                (uint8_t)((raw[1][component] << 1u) | pbit1);
+        }
+        color_index = bc7_read_bits(block,
+            position == 0u ? 65u : 64u + 4u * position,
+            position == 0u ? 3u : 4u);
+        alpha_index = color_index;
+        color_bits = 4u;
+        alpha_bits = 4u;
+    } else {
+        return 0u;
+    }
+    for (uint32_t component = 0u; component < 3u; ++component)
+        result[component] = bc7_interpolate(endpoints[0][component],
+            endpoints[1][component], color_index, color_bits);
+    result[3] = bc7_interpolate(endpoints[0][3], endpoints[1][3],
+        alpha_index, alpha_bits);
+    if (srgb) {
+        result[0] = bc7_srgb_to_unorm(result[0]);
+        result[1] = bc7_srgb_to_unorm(result[1]);
+        result[2] = bc7_srgb_to_unorm(result[2]);
+    }
+    return result[0] | ((uint32_t)result[1] << 8u) |
+        ((uint32_t)result[2] << 16u) | ((uint32_t)result[3] << 24u);
+}
+
+static uint32_t bc7_expected_pixel(const uint8_t *texture,
+    const AgcGfx1013LinearBcSubresourceLayout *layer0_mip0,
+    const AgcGfx1013LinearBcSubresourceLayout *layer0_mip1,
+    const AgcGfx1013LinearBcSubresourceLayout *layer1_mip0,
+    uint32_t pixel_x, uint32_t pixel_y, bool srgb, uint32_t *decoded_mode)
+{
+    uint32_t local_x = pixel_x % 12u;
+    uint32_t lane = local_x & 3u;
+    uint32_t row = pixel_y & 3u;
+
+    if (local_x < 4u)
+        return bc7_decode_texel(texture, layer0_mip0,
+            lane, row, srgb, decoded_mode);
+    if (local_x < 8u)
+        return bc7_decode_texel(texture, layer0_mip1,
+            lane > 2u ? 2u : lane, row, srgb, decoded_mode);
+    return bc7_decode_texel(texture, layer1_mip0, 4u,
+        row + 3u > 6u ? 6u : row + 3u, srgb, decoded_mode);
 }
 #endif
 
@@ -2650,16 +2940,7 @@ static bool dispatch_graphics(GraphicsTest *test,
 #if AGC_VALIDATE_BC_SAMPLE
     const AgcGfx1013LinearBcSurfaceLayoutInput bc_layout_input = {
         5u, 7u, 2u, 3u,
-        AGC_VALIDATE_BC1_SRGB ? AGC_GFX1013_IMAGE_FORMAT_BC1_SRGB :
-            (AGC_VALIDATE_BC1_UNORM ? AGC_GFX1013_IMAGE_FORMAT_BC1_UNORM :
-            (AGC_VALIDATE_BC4_SNORM ? AGC_GFX1013_IMAGE_FORMAT_BC4_SNORM :
-            (AGC_VALIDATE_BC4_UNORM ? AGC_GFX1013_IMAGE_FORMAT_BC4_UNORM :
-            (AGC_VALIDATE_BC2_SRGB ? AGC_GFX1013_IMAGE_FORMAT_BC2_SRGB :
-            (AGC_VALIDATE_BC2_UNORM ? AGC_GFX1013_IMAGE_FORMAT_BC2_UNORM :
-            (AGC_VALIDATE_BC3_SRGB ? AGC_GFX1013_IMAGE_FORMAT_BC3_SRGB :
-            (AGC_VALIDATE_BC3_UNORM ? AGC_GFX1013_IMAGE_FORMAT_BC3_UNORM :
-            (AGC_VALIDATE_BC5_SNORM ? AGC_GFX1013_IMAGE_FORMAT_BC5_SNORM :
-                AGC_GFX1013_IMAGE_FORMAT_BC5_UNORM)))))))),
+        AGC_BC_VALIDATION_FORMAT(),
     };
     AgcGfx1013LinearBcSurfaceLayout bc_layout;
     AgcGfx1013LinearBcSubresourceLayout bc_layer0_mip0;
@@ -2786,7 +3067,7 @@ static bool dispatch_graphics(GraphicsTest *test,
     bc3_write_block((uint8_t *)gpu_texture, &bc_layer1_mip0,
         1u, 1u, 0u, 255u, alpha_six_vertical,
         0xffe0u, 0x07ffu, 0xffaa5500u);
-#else
+#elif AGC_VALIDATE_BC5_UNORM || AGC_VALIDATE_BC5_SNORM
     const bool bc5_snorm = AGC_VALIDATE_BC5_SNORM != 0;
     const uint8_t bc5_high = bc5_snorm ? 0x7fu : 0xffu;
     const uint8_t bc5_low = bc5_snorm ? 0x81u : 0x00u;
@@ -2823,6 +3104,26 @@ static bool dispatch_graphics(GraphicsTest *test,
     bc5_write_block((uint8_t *)gpu_texture, &bc_layer1_mip0,
         1u, 1u, bc5_low, bc5_high, bc5_vertical,
         bc5_mid_high, bc5_mid_low, bc5_horizontal);
+#else
+    bc7_write_mode4_block((uint8_t *)gpu_texture, &bc_layer0_mip0,
+        0u, 0u, false, false);
+    bc7_write_mode6_block((uint8_t *)gpu_texture, &bc_layer0_mip0,
+        1u, 0u, true);
+    bc7_write_mode6_block((uint8_t *)gpu_texture, &bc_layer0_mip0,
+        0u, 1u, false);
+    bc7_write_mode4_block((uint8_t *)gpu_texture, &bc_layer0_mip0,
+        1u, 1u, true, true);
+    bc7_write_mode4_block((uint8_t *)gpu_texture, &bc_layer0_mip1,
+        0u, 0u, true, false);
+    if (agcGfx1013GetLinearBcSubresourceLayout(
+            &bc_layout_input, 2u, 0u, &bc_subresource) != AGC_OK)
+        return false;
+    bc7_write_mode6_block((uint8_t *)gpu_texture, &bc_subresource,
+        0u, 0u, true);
+    bc7_write_mode6_block((uint8_t *)gpu_texture, &bc_layer1_mip0,
+        1u, 0u, true);
+    bc7_write_mode4_block((uint8_t *)gpu_texture, &bc_layer1_mip0,
+        1u, 1u, false, true);
 #endif
     printf("[BC] upload=%p size=%llu slice=%llu mips=3 layers=2\n",
            gpu_texture, (unsigned long long)bc_layout.allocation_size,
@@ -2849,18 +3150,7 @@ static bool dispatch_graphics(GraphicsTest *test,
         .address = (uint64_t)(uintptr_t)gpu_texture,
         .width = AGC_VALIDATE_BC_SAMPLE ? 5u : TEXTURE_WIDTH,
         .height = AGC_VALIDATE_BC_SAMPLE ? 7u : TEXTURE_HEIGHT,
-        .format = AGC_VALIDATE_BC1_SRGB ?
-            AGC_GFX1013_IMAGE_FORMAT_BC1_SRGB :
-            (AGC_VALIDATE_BC1_UNORM ? AGC_GFX1013_IMAGE_FORMAT_BC1_UNORM :
-            (AGC_VALIDATE_BC4_SNORM ? AGC_GFX1013_IMAGE_FORMAT_BC4_SNORM :
-            (AGC_VALIDATE_BC4_UNORM ? AGC_GFX1013_IMAGE_FORMAT_BC4_UNORM :
-            (AGC_VALIDATE_BC2_SRGB ? AGC_GFX1013_IMAGE_FORMAT_BC2_SRGB :
-            (AGC_VALIDATE_BC2_UNORM ? AGC_GFX1013_IMAGE_FORMAT_BC2_UNORM :
-            (AGC_VALIDATE_BC3_SRGB ? AGC_GFX1013_IMAGE_FORMAT_BC3_SRGB :
-            (AGC_VALIDATE_BC3_UNORM ? AGC_GFX1013_IMAGE_FORMAT_BC3_UNORM :
-            (AGC_VALIDATE_BC5_SNORM ? AGC_GFX1013_IMAGE_FORMAT_BC5_SNORM :
-            (AGC_VALIDATE_BC5_UNORM ? AGC_GFX1013_IMAGE_FORMAT_BC5_UNORM :
-                AGC_GFX1013_IMAGE_FORMAT_RGBA8_UNORM))))))))),
+        .format = AGC_BC_VALIDATION_FORMAT(),
         .image_type = AGC_VALIDATE_BC_SAMPLE ?
             AGC_GFX1013_IMAGE_TYPE_2D_ARRAY : AGC_GFX1013_IMAGE_TYPE_2D,
         .dst_sel_x = 4u,
@@ -4253,6 +4543,16 @@ static bool dispatch_graphics(GraphicsTest *test,
     uint32_t bc5_green_max = 0u;
     uint32_t bc5_channel_differences = 0u;
 #endif
+#if AGC_VALIDATE_BC7_UNORM || AGC_VALIDATE_BC7_SRGB
+    uint64_t bc7_packed_hash = UINT64_C(1469598103934665603);
+    uint32_t bc7_exact_mismatches = 0u;
+    uint32_t bc7_region_samples[3] = {0u, 0u, 0u};
+    uint32_t bc7_mode4_samples = 0u;
+    uint32_t bc7_mode6_samples = 0u;
+    uint32_t bc7_alpha_min = 255u;
+    uint32_t bc7_alpha_max = 0u;
+    uint32_t bc7_channel_differences = 0u;
+#endif
     for (uint32_t i = 0; i < target_pixels; i++) {
         uint32_t color = rt[i];
         if (color == DIAGNOSTIC_CLEAR_COLOR)
@@ -4370,6 +4670,32 @@ static bool dispatch_graphics(GraphicsTest *test,
         bc5_channel_differences += bc5_actual_red != bc5_actual_green;
         bc5_packed_hash ^= color;
         bc5_packed_hash *= UINT64_C(1099511628211);
+#endif
+#if AGC_VALIDATE_BC7_UNORM || AGC_VALIDATE_BC7_SRGB
+        uint32_t bc7_pixel_x = i % target->width;
+        uint32_t bc7_pixel_y = i / target->width;
+        uint32_t bc7_decoded_mode = 8u;
+        uint32_t bc7_expected = bc7_expected_pixel(
+            (const uint8_t *)gpu_texture, &bc_layer0_mip0,
+            &bc_layer0_mip1, &bc_layer1_mip0,
+            bc7_pixel_x, bc7_pixel_y, AGC_VALIDATE_BC7_SRGB != 0,
+            &bc7_decoded_mode);
+        uint32_t bc7_red = color & 0xffu;
+        uint32_t bc7_green = (color >> 8u) & 0xffu;
+        uint32_t bc7_blue = (color >> 16u) & 0xffu;
+        uint32_t bc7_alpha = color >> 24u;
+        bc7_exact_mismatches += color != bc7_expected;
+        bc7_region_samples[(bc7_pixel_x % 12u) / 4u]++;
+        bc7_mode4_samples += bc7_decoded_mode == 4u;
+        bc7_mode6_samples += bc7_decoded_mode == 6u;
+        if (bc7_alpha < bc7_alpha_min)
+            bc7_alpha_min = bc7_alpha;
+        if (bc7_alpha > bc7_alpha_max)
+            bc7_alpha_max = bc7_alpha;
+        bc7_channel_differences +=
+            bc7_red != bc7_green || bc7_green != bc7_blue;
+        bc7_packed_hash ^= color;
+        bc7_packed_hash *= UINT64_C(1099511628211);
 #endif
         if (unique_color_count < 8) {
             bool seen = false;
@@ -4540,6 +4866,32 @@ static bool dispatch_graphics(GraphicsTest *test,
     printf("[BC5] mip0/mip1/layer1 dual-channel selection: %s\n",
            bc5_regions_pass && bc5_decode_mismatches == 0u ? "PASS" : "FAIL");
     return bc5_pass;
+#elif AGC_VALIDATE_BC7_UNORM || AGC_VALIDATE_BC7_SRGB
+    const bool bc7_regions_pass = bc7_region_samples[0] != 0u &&
+        bc7_region_samples[1] != 0u && bc7_region_samples[2] != 0u;
+    const bool bc7_modes_pass =
+        bc7_mode4_samples != 0u && bc7_mode6_samples != 0u;
+    const bool bc7_range_pass =
+        bc7_alpha_min == 0u && bc7_alpha_max == 255u;
+    const bool bc7_independence_pass = bc7_channel_differences != 0u;
+    const bool bc7_pass = vertex_fetch_pass && indexed_draw_pass &&
+        texture_sampler_pass && bc7_exact_mismatches == 0u &&
+        bc7_regions_pass && bc7_modes_pass && bc7_range_pass &&
+        bc7_independence_pass;
+    printf("[BC7 %s] changed=%u regions={%u,%u,%u} modes={4:%u,6:%u} "
+           "alpha-range=%u..%u exact-mismatches=%u independence=%s "
+           "packed-fnv64=0x%016llx: %s\n",
+           AGC_VALIDATE_BC7_SRGB ? "SRGB" : "UNORM", changed,
+           bc7_region_samples[0], bc7_region_samples[1],
+           bc7_region_samples[2], bc7_mode4_samples, bc7_mode6_samples,
+           bc7_alpha_min, bc7_alpha_max, bc7_exact_mismatches,
+           bc7_independence_pass ? "PASS" : "FAIL",
+           (unsigned long long)bc7_packed_hash,
+           bc7_pass ? "PASS" : "FAIL");
+    printf("[BC7] mode4/mode6 mip0/mip1/layer1 selection: %s\n",
+           bc7_regions_pass && bc7_modes_pass &&
+           bc7_exact_mismatches == 0u ? "PASS" : "FAIL");
+    return bc7_pass;
 #else
     return vertex_fetch_pass && indexed_draw_pass && texture_sampler_pass;
 #endif
@@ -5283,7 +5635,8 @@ int main(void) {
       AGC_VALIDATE_BC4_SNORM || AGC_VALIDATE_BC2_UNORM || \
       AGC_VALIDATE_BC2_SRGB || AGC_VALIDATE_BC3_UNORM || \
       AGC_VALIDATE_BC3_SRGB || AGC_VALIDATE_BC5_UNORM || \
-      AGC_VALIDATE_BC5_SNORM
+      AGC_VALIDATE_BC5_SNORM || AGC_VALIDATE_BC7_UNORM || \
+      AGC_VALIDATE_BC7_SRGB
     RenderTargetConfig rgba8_target = {
         AGC_GRAPHICS_HEADLESS ? test.render_target : test.buffers[0],
         test.width, test.height,
@@ -5300,8 +5653,10 @@ int main(void) {
             (AGC_VALIDATE_BC3_UNORM ? "BC3_UNORM" :
             (AGC_VALIDATE_BC5_SNORM ? "BC5_SNORM" :
             (AGC_VALIDATE_BC5_UNORM ? "BC5_UNORM" :
+            (AGC_VALIDATE_BC7_SRGB ? "BC7_SRGB" :
+            (AGC_VALIDATE_BC7_UNORM ? "BC7_UNORM" :
             (AGC_GRAPHICS_HEADLESS ?
-                "RGBA8_UNORM" : "display RGBA8 standard swap"))))))))))
+                "RGBA8_UNORM" : "display RGBA8 standard swap"))))))))))))
     };
     printf("\n--- Step 4: %s sampled draw ---\n", rgba8_target.name);
     if (!dispatch_graphics(&test, &front, &back, &ps, &rgba8_target)) {
