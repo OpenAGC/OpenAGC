@@ -209,6 +209,13 @@ channel independence, and FNV64 `0x3bc37aa96460e455`. All lifecycle gates
 passed again. BC5 UNORM is hardware-qualified on exact FW 11.60; BC5 SNORM
 is next.
 
+## BC5 SNORM pass 1
+
+The pinned SNORM artifact passed with `224640` changed pixels,
+`{74880,74880,74880}` regions, full remapped R/G ranges, zero decode
+mismatches/error, channel independence, and FNV64 `0xf1464077ada8ce8d`.
+All lifecycle gates passed. Repeat the identical bytes once.
+
 ## BC3 UNORM pass 2
 
 The identical artifact reproduced `224640` changed pixels,
