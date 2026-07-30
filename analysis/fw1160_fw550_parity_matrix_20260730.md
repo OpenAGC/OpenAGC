@@ -55,7 +55,7 @@ reached its completion fence, shut the driver down, and returned PASS.
 | Uncompressed D32, D16, S8, and D16+S8 | Qualified | Qualified on both endpoints |
 | Ordinary D16 HTILE | Qualified | Qualified on both endpoints |
 | D16 HTILE expclear | Qualified | Qualified on both endpoints |
-| D32 HTILE ordinary/decompress/resummarize/expclear | Prepared | Hardware qualification missing |
+| D32 HTILE ordinary/decompress/resummarize/expclear | Prepared | FW 5.50 ordinary qualified; FW 11.60 ordinary and both expclear mirrors pending |
 | Combined D32+S8 HTILE and aspect masks | Prepared | Hardware qualification missing |
 | HTILE mip and array subresources | Missing | Prepare bounded mirrors |
 | 4x MSAA | Missing | Wait for the FW 5.50 baseline regression |
@@ -114,6 +114,12 @@ first wrapper output was filtered before the numeric line could be retained;
 the identical count-capture replay recovered and reproduced `7408`. The recipe
 now freezes that value. Run one enforcement replay before promoting the FW
 5.50 ordinary tuple and moving to its exact FW 11.60 mirror.
+
+The frozen enforcement replay also reproduced `7408`, exact D32 classes,
+bounded completion, driver shutdown, final PASS, and no residual `eboot.bin`.
+Ordinary D32 HTILE is therefore hardware-qualified on FW 5.50. The exact
+FW 11.60 ordinary artifact is the next permitted launch; establish its count,
+freeze it, and replay before any D32 expclear artifact.
 
 The combined D32+S8 tier is likewise prepared without a hardware claim. Eight
 artifacts cover ordinary HTILE and expclear of depth-only, stencil-only, or

@@ -509,6 +509,10 @@ the runner and shared teardown on FW 11.60 only.
   numeric line hidden by the first run's filtered wrapper output. The recipe
   now freezes `7408`; run one enforcement replay next, then advance to the
   pinned FW 11.60 ordinary mirror if it remains exact and clean.
+- The frozen FW 5.50 enforcement replay reproduced `7408`, exact D32 classes,
+  clean shutdown, and no residual process. Ordinary D32 HTILE is qualified on
+  FW 5.50. Run the pinned FW 11.60 ordinary mirror next, freeze its observed
+  metadata count, and replay before beginning D32 expclear.
 - Combined D32+S8 HTILE is now prepared offline in the same endpoint-paired
   form. Ordinary HTILE plus depth-only, stencil-only, and both-aspect expclear
   produce eight warning-free ELFs. The guarded runner pins exact D32 and S8

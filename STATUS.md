@@ -52,8 +52,10 @@ reproduced each artifact byte-for-byte. All four are preserved under their
 full hashes, and every deploy recipe enforces its hash before network access.
 The pinned FW 5.50 ordinary mirror has passed twice with exact D32 classes,
 `7408` changed HTILE words from `0xfffc000f`, clean shutdown, and final PASS.
-Its recipe now freezes `7408`; one enforcement replay remains before endpoint
-promotion and the FW 11.60 ordinary mirror.
+Its recipe now freezes `7408`; the subsequent enforcement replay reproduced
+the count, exact D32 classes, clean shutdown, and no residual process. Ordinary
+D32 HTILE is hardware-qualified on FW 5.50. Its exact FW 11.60 mirror is the
+active gate; D32 expclear remains blocked behind two exact ordinary passes.
 
 Combined D32+S8 HTILE preparation now covers ordinary metadata and
 depth-only, stencil-only, and both-aspect expclear for both exact endpoint
