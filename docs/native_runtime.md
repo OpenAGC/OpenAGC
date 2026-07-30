@@ -91,8 +91,9 @@ records `agcCmdSignalGpuLabel`; it emits the qualified EOP release write. A
 consumer records `agcCmdWaitGpuLabel`; it emits a 32-bit `WAIT_REG_MEM` exact
 equality wait on that same runtime-owned word. The consumer submit is rejected
 unless a matching producer value has already submitted on the same queue.
-This avoids an unbounded wait from an unproved dependency. Labels are exact
-values, not timelines; producer/consumer waits across graphics and compute
+This avoids an unbounded wait from an unproved dependency. A new signal value
+must differ from the label's current value so a wait cannot pass on stale
+memory. Labels are exact values, not timelines; producer/consumer waits across graphics and compute
 queues, submit wait/signal lists, and event objects remain unsupported.
 
 ## Fences and errors
@@ -126,7 +127,7 @@ The two-DCB graphics batch is hardware-qualified on exact FW 5.50 by artifact
 
 The same-queue GPU-label signal/wait path is hardware-qualified on exact FW
 5.50 by artifact
-`c968eabb7f3bfac3f761b119ccc4c5e7b16299e93e04a464cf932ce61a4296dc`; see
+`acca740f817c032081012ec95c09dd8f66b81288f0d3a68b5eaab8d757f55991`; see
 [`runtime_gpu_labels_fw550_20260731.md`](../analysis/runtime_gpu_labels_fw550_20260731.md).
 
 Stable native errors include invalid argument/state, busy ownership,

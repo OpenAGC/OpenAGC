@@ -60,7 +60,7 @@ both targets produced 1,152 distinct post-fence pixels. Depth/stencil, copy,
 scanout, cross-queue, submit-list synchronization, and timeline semantics
 remain pending. The same-queue GPU-label signal/wait path is hardware-qualified
 on exact FW 5.50 by artifact
-`c968eabb7f3bfac3f761b119ccc4c5e7b16299e93e04a464cf932ce61a4296dc`.
+`acca740f817c032081012ec95c09dd8f66b81288f0d3a68b5eaab8d757f55991`.
 
 Runtime API v5 adds `AgcFenceInfo`, a versioned snapshot of fence state,
 submission/completion identity, queue and command ownership, expected/observed
@@ -73,8 +73,9 @@ exact FW 5.50. Pending timeout reporting remains host-tested.
 Runtime API v6 adds `AgcGpuLabel`: an owned flexible-memory word that the
 runtime signals with EOP release and waits on with a 32-bit `WAIT_REG_MEM`.
 Consumers require an already-submitted matching producer signal on the same
-queue, retain the label while recorded, and reject cross-queue use. Artifact
-`c968eabb7f3bfac3f761b119ccc4c5e7b16299e93e04a464cf932ce61a4296dc` passed
+queue, retain the label while recorded, require a changed signal value to avoid
+stale waits, and reject cross-queue use. Artifact
+`acca740f817c032081012ec95c09dd8f66b81288f0d3a68b5eaab8d757f55991` passed
 the producer/consumer no-CPU-wait compute oracle, bounded completion, readback,
 and full teardown on exact FW 5.50. Labels are not timeline counters; submit
 wait/signal lists and cross-queue labels remain unqualified.

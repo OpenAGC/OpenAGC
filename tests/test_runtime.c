@@ -1480,6 +1480,15 @@ static void test_runtime_gpu_labels(void)
         AGC_OK, "label producer submits");
     TEST_ASSERT_EQ(agcDestroyQueue(compute_queue), AGC_ERROR_BUSY,
         "submitted label retains its exact producer queue");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(producer), AGC_OK,
+        "completed label producer resets before stale-value check");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(producer), AGC_OK,
+        "stale-value producer begins");
+    TEST_ASSERT_EQ(agcCmdSignalGpuLabel(producer, label, UINT32_C(0x1234)),
+        AGC_ERROR_INVALID_STATE,
+        "label rejects a signal value that could satisfy a stale wait");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(producer), AGC_OK,
+        "stale-value producer resets");
     submit.command_buffers = &consumer;
     TEST_ASSERT_EQ(agcQueueSubmit(compute_queue, &submit, consumer_fence),
         AGC_OK, "same-queue label consumer submits");

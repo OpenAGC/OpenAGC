@@ -7,7 +7,7 @@ raw system software `0x05500008` (FW ABI key `0x0550`). The exact
 `agc_runtime_compute.elf` artifact SHA-256 was:
 
 ```
-c968eabb7f3bfac3f761b119ccc4c5e7b16299e93e04a464cf932ce61a4296dc
+acca740f817c032081012ec95c09dd8f66b81288f0d3a68b5eaab8d757f55991
 ```
 
 The first public command buffer only records `agcCmdSignalGpuLabel`, which
