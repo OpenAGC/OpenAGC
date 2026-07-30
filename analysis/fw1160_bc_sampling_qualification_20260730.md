@@ -112,3 +112,23 @@ self-termination passed again.
 
 BC1 SRGB and BC1 UNORM are hardware-qualified on exact FW 11.60. Proceed to
 BC4 UNORM and SNORM; FW 5.50 replay remains separate.
+
+## BC4 UNORM first attempt
+
+The valid-mip artifact reached the fence and its independent decoder passed:
+
+- changed pixels: `224640`
+- mip/layer regions: `{74880,74880,74880}`
+- decode mismatches: `0`
+- maximum error: `0`
+- packed FNV64: `0x5327e8ad53b3a455`
+- shutdown, cleanup, and self-termination: PASS
+
+The final verdict failed only because the generic texture smoke check required
+eight distinct colors, while this scalar BC4 fixture intentionally emits six.
+Compressed formats now use a three-color baseline diversity floor and retain
+their stronger format-specific exact decode, range, channel, and region gates.
+Corrected BC4 artifacts were preserved before execution:
+
+- UNORM: `f74c393112fc465eace431a3fe288095ae4b3bf5ee993e8147ed0e9a2f22f2a4`
+- SNORM: `022f159f0186aab25222bfd882f9b59b8ab40bdfcf6d9c59da389d057454b28d`

@@ -650,8 +650,8 @@ RGB565 endpoints and 2-bit index patterns, and exercises partial edge blocks.
 The shader selects base mip, nonzero mip, and a second array layer; the bounded
 readback oracle independently decodes every covered BC1 texel, applies the SRGB
 transfer where required, demands zero mismatches and all selection regions,
-and records the native hash. Hardware execution and hash freezing remain
-pending a clean FW 11.60 reboot. Exact artifacts are pinned as SHA-256
+and records the native hash. Both variants passed twice on FW 11.60. Exact
+artifacts are pinned as SHA-256
 `db3965f2c8da26273b9683794595612c5b2c216b06a6b05ab05bb579a4842aa5`
 (UNORM) and
 `1206fa93091cc0f12043617d9e3f83b4951ef5f727a3aca9a94af73c61d7353f`
@@ -668,11 +668,9 @@ cleanup, so it cannot mislabel this class of failure as a transport timeout.
 The next corrected run reduced mismatches to `46779`, exactly exposing invalid
 mip-1 `texelFetch` coordinates: the 5x7 base mip shrinks to 2x3, but the fixture
 requested `x=2` and `y=3`. Every BC shader and CPU oracle now clamps mip 1 to
-its valid extent. Hardware qualification of the newly pinned artifacts remains
-pending. Corrected BC1 UNORM subsequently passed twice on FW 11.60 with
+its valid extent. Corrected BC1 UNORM subsequently passed twice on FW 11.60 with
 identical `224640` changed pixels, all three regions at `74880`, zero
-mismatches, and FNV64 `0x611e681989bb483d`. BC1 UNORM is hardware-qualified
-on that exact firmware; BC1 SRGB remains next.
+mismatches, and FNV64 `0x611e681989bb483d`.
 BC1 SRGB also passed twice with identical `224640` changed pixels, equal
 `74880` region counts, zero mismatches, and FNV64 `0x7ed831bc232c8da1`.
 Both BC1 variants are hardware-qualified on exact FW 11.60.
@@ -684,11 +682,15 @@ from `[-1,1]` into the qualified RGBA8 target, retaining signed-range evidence.
 The independent CPU decoder covers both BC4 interpolation modes and special
 terminal entries; the runner requires zero decoded mismatches, exact UNORM,
 SNORM within one stored-byte rounding unit, all selection regions, and a native
-hash. Hardware execution remains pending.
+hash. The first UNORM run reached the fence with zero decode mismatches and
+zero error, but the generic eight-color smoke threshold rejected its intended
+six-color scalar fixture. Compressed gates now use a three-color baseline
+floor and retain the exact format-specific oracle. Corrected execution remains
+pending.
 The exact artifacts are pinned as SHA-256
-`ea212723ae5ff994d5d2e2cc8292fa114793c89bb9808cdd3ba673c5578a4fa9`
+`f74c393112fc465eace431a3fe288095ae4b3bf5ee993e8147ed0e9a2f22f2a4`
 (UNORM) and
-`19d1f2fbc304c887aa27431384f8b43e07f2a7b08c63b878658962f37d3bf190`
+`022f159f0186aab25222bfd882f9b59b8ab40bdfcf6d9c59da389d057454b28d`
 (SNORM), with no-prerequisite FW 11.60 and FW 5.50 targets.
 
 BC2 UNORM and SRGB firmware-neutral sampling gates now build without an AGC

@@ -1086,11 +1086,15 @@ The SNORM shader maps `[-1,1]` to `[0,1]` before the already-qualified RGBA8
 target so negative and positive ranges remain observable. The CPU oracle
 decodes the block independently, requires exact UNORM output and at most one
 stored-byte rounding unit for SNORM, validates all mip/layer regions, and emits
-a native hash. Pin final bytes before hardware execution.
+a native hash. The first UNORM run decoded perfectly but exposed a generic
+eight-color smoke threshold that was too strict for the intentional six-color
+scalar fixture. Compressed formats now use a three-color baseline diversity
+floor while retaining their stronger format-specific oracles. Retry the
+corrected pinned UNORM artifact twice, then SNORM twice.
 The final firmware-neutral bytes are pinned as SHA-256
-`ea212723ae5ff994d5d2e2cc8292fa114793c89bb9808cdd3ba673c5578a4fa9`
+`f74c393112fc465eace431a3fe288095ae4b3bf5ee993e8147ed0e9a2f22f2a4`
 for BC4 UNORM and
-`19d1f2fbc304c887aa27431384f8b43e07f2a7b08c63b878658962f37d3bf190`
+`022f159f0186aab25222bfd882f9b59b8ab40bdfcf6d9c59da389d057454b28d`
 for BC4 SNORM. Both endpoint targets are no-build guarded replays.
 
 BC2 UNORM/SRGB portable gates now build by reusing the qualified
