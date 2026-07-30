@@ -592,6 +592,13 @@ all six pinned artifacts for identical-byte FW 5.50 replay and proceed to the
   packed hashes. Preserve FW 5.50 replay as pending. Implement `RG32_UINT`
   next.
 
+- `RG32_UINT` is host-qualified as append-only value 27 with gfx1013 `32_32`,
+  UINT, standard swap, eight bytes per pixel, and `32_GR` export 2. Exact PM4
+  (`CB_COLOR0_INFO=0x0007042c`), all-profile selection, every short-buffer
+  boundary, invalid-enum behavior, and maximum 64-bit layout arithmetic pass.
+  Build its dedicated two-lane portable hardware gate next; do not execute
+  mutable bytes.
+
 These formats need dedicated integer-output pixel shaders. Do not qualify them
 using a floating-point shader and assume the conversion is correct. Their
 oracles must validate exact integer values rather than approximate
@@ -605,7 +612,8 @@ The float forms already reach the maximum widths. Add:
 - `R32_UINT`, `RG32_UINT`, and `RGBA32_UINT`.
 - `R32_SINT`, `RG32_SINT`, and `RGBA32_SINT`.
 
-`R32_UINT` is hardware-qualified on FW 11.60. Continue with `RG32_UINT`, then
+`R32_UINT` is hardware-qualified on FW 11.60 and `RG32_UINT` is host-qualified.
+Build and pin the `RG32_UINT` portable hardware gate, then continue with
 `RGBA32_UINT`, using a dedicated export and independent exact-value oracle for
 every stored lane.
 
