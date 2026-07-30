@@ -163,6 +163,14 @@ The identical artifact reproduced `224640` changed pixels,
 `0x16b22a8b52c7ce8d`. All lifecycle gates passed again. BC4 UNORM and SNORM
 are hardware-qualified on exact FW 11.60.
 
+## BC6 corrected artifacts
+
+After the shared oracle corrections, both BC6 variants were rebuilt, passed
+firmware-neutral dependency verification, and were preserved before execution:
+
+- UFLOAT: `37c1159701d9615fc015c3f5b887f88f00fe12e694df7ff92f442fb7165c072c`
+- SFLOAT: `5bdffd1510c11ac7b334d630782fe931b9ca8b3f19ee31ab0b14b861eec32578`
+
 ## BC2 corrected artifacts
 
 After the shared valid-mip and compressed-diversity corrections, both BC2

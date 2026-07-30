@@ -786,9 +786,9 @@ second layer, partial-edge storage, positive and signed remapping, broad range,
 channel independence, alpha one, and a native hash, with at most two
 stored-byte units of RGB conversion tolerance. Exact artifacts are now pinned
 as SHA-256
-`d41928cfa512c15983818eb3a9c5f55b13a2e0efa4994cee9fe3163539363eb0`
+`37c1159701d9615fc015c3f5b887f88f00fe12e694df7ff92f442fb7165c072c`
 (UFLOAT) and
-`00e230842a850a01f964e2a003d9e8f5ce5f76f612778195769bed7f6b14c2d0`
+`5bdffd1510c11ac7b334d630782fe931b9ca8b3f19ee31ab0b14b861eec32578`
 (SFLOAT), with no-prerequisite FW 11.60 and FW 5.50 guarded targets. Hardware
 execution remains pending a clean FW 11.60 boot. See
 `analysis/bc6_fixture_generation_20260730.md`.
