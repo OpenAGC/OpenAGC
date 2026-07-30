@@ -510,8 +510,12 @@ profiles remain open.
 Runtime API v11 adds typed native buffer copies. `agcCmdCopyBuffer` rejects
 untransitioned, unaligned, out-of-bounds, and overlapping ranges before packet
 emission; host coverage verifies the `DMA_DATA` stream, transition validation,
-retention, and host-read destination release. Exact-FW copy qualification and
-the compute-to-copy-to-shader row remain open.
+retention, and host-read destination release. Artifact
+`6724c1371af5cec112abbd2f60cca34dbd61d4631f8b9dd3f79ceb9e6f9a8822` passed
+the public same-queue upload-to-copy-to-readback row (1,024 bytes, 256 matching
+words, and one bounded fence) on exact standard PS5 FW 5.50. Multi-packet,
+image, graphics-queue, compute-to-copy-to-shader, cross-queue, and other
+firmware rows remain open.
 
 Runtime API v8 adds the first typed queue-ownership handoff: a v2 transition
 releases a whole GPU-written resource on its source queue and writes the

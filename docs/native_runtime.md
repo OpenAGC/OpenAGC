@@ -130,8 +130,13 @@ Runtime API v11 adds `agcCmdCopyBuffer(command, source, sourceOffset,
 destination, destinationOffset, size)`. Source and destination must have
 explicit `CopySource` and `CopyDestination` usage on the command queue; ranges
 are nonzero, four-byte aligned, in bounds, and non-overlapping. The runtime
-retains both buffers and emits qualified `DMA_DATA` packets internally. This
-copy path is host-qualified; its hardware row remains open.
+retains both buffers and emits qualified `DMA_DATA` packets internally. The
+same-queue upload-to-copy-to-readback row passed on exact standard PS5 FW 5.50:
+the 1,024-byte artifact completed one bounded compute-queue fence and verified
+all 256 destination words; see
+[`runtime_copy_fw550_20260731.md`](../analysis/runtime_copy_fw550_20260731.md).
+Large/multi-packet copies, images, compute-to-copy-to-shader, graphics queues,
+cross-queue ownership, and other firmware profiles remain unqualified.
 
 `AgcGpuLabel` provides the first GPU-side dependency primitive. A producer
 records `agcCmdSignalGpuLabel`; it emits the qualified EOP release write. A

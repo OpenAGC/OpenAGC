@@ -129,8 +129,12 @@ completion and readback on exact FW 5.50; see
 Runtime API v11 adds `agcCmdCopyBuffer`: four-byte-aligned non-overlapping
 buffer copies require explicit `CopySource` and `CopyDestination` states,
 retain both buffers, and emit the qualified Ariel `DMA_DATA` packet sequence.
-This path is host-qualified; PS5 hardware qualification remains open.
-FW 11.60 remains hardware-unqualified.
+Artifact `6724c1371af5cec112abbd2f60cca34dbd61d4631f8b9dd3f79ceb9e6f9a8822`
+passed a 1,024-byte public upload-to-copy-to-readback sequence, one bounded
+compute-queue fence, and 256-word matching readback on exact standard PS5 FW
+5.50; see `analysis/runtime_copy_fw550_20260731.md`. Large/multi-packet,
+image, compute-to-copy-to-shader, graphics-queue, cross-queue, and FW 11.60
+rows remain hardware-unqualified.
 
 ## Native resource and memory management complete (2026-07-30)
 
