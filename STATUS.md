@@ -658,6 +658,11 @@ pending a clean FW 11.60 reboot. Exact artifacts are pinned as SHA-256
 (SRGB), with no-prerequisite guarded targets for FW 11.60 and identical-byte
 FW 5.50 replay.
 
+The first BC1 UNORM hardware attempt after the 32-bit integer sequence yielded
+no fresh file-backed verdict. Websrv, FTP, and ps5debug-NG remained reachable
+and no renderer process remained, matching the known stale loader symptom.
+This is inconclusive; reboot and retry the identical pinned bytes.
+
 BC4 UNORM and SNORM firmware-neutral sampling gates also build. Dedicated
 shaders sample the red channel from exact endpoint/index blocks across mip 0,
 mip 1, layer 0, layer 1, and partial edge storage. SNORM is explicitly remapped

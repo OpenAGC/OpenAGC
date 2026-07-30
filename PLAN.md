@@ -1056,6 +1056,11 @@ for BC1 UNORM and
 `0fc555979b3657761fbace24586363bf186137d3acb454162f5e997af40fdab8` for
 BC1 SRGB. Their FW 11.60 and FW 5.50 targets have no build prerequisites.
 
+The first BC1 UNORM launch on the post-integer-test boot produced no fresh
+file-backed verdict. All services stayed live and no renderer remained, which
+matches the known stale websrv loader state rather than a BC decode failure.
+Reboot FW 11.60 and retry the same pinned bytes; do not advance on this boot.
+
 BC4 UNORM/SNORM portable gates now build with dedicated scalar sampling
 shaders. They reuse the 5x7, three-mip, two-layer direct-upload geometry but
 encode independent 8-bit endpoints and 48-bit 3-bit-index payloads, including
