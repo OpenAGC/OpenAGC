@@ -1152,10 +1152,13 @@ decode mismatches/error, channel independence, and FNV64
 `0x6d3c92b92851ab4a`. BC6 UFLOAT is hardware-qualified on FW 11.60; qualify
 BC6 SFLOAT next.
 
-BC6 SFLOAT pass 1 succeeded on FW 11.60 with `224640` changed pixels, fixture
-counts `{74880,74880,18760,56120}`, decoded range `1..213`, zero decode
-mismatches/error, channel independence, and FNV64 `0x6a278a1c5abd3bfc`.
-Repeat the identical artifact once.
+BC6 SFLOAT passed twice on FW 11.60 with identical `224640` changed pixels,
+fixture counts `{74880,74880,18760,56120}`, decoded range `1..213`, zero
+decode mismatches/error, channel independence, and FNV64
+`0x6a278a1c5abd3bfc`. Both BC6 variants, and the complete planned BC1-BC7
+sampling matrix, are hardware-qualified on exact FW 11.60. Identical-byte FW
+5.50 replay remains a separate endpoint qualification; do not infer it from
+the FW 11.60 results.
 The final firmware-neutral bytes are pinned as SHA-256
 `f74c393112fc465eace431a3fe288095ae4b3bf5ee993e8147ed0e9a2f22f2a4`
 for BC4 UNORM and

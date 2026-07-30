@@ -771,15 +771,18 @@ now pinned as SHA-256
 `a98adaa1125c6ab1590d5c3cb1d65e19b0573ccf4f5e5a1ec0b40ad93bb17db6`
 (UNORM) and
 `f6a97569f854ddad7080247c44bec6dd1edccc0b7c248a8b1f8701b276c8eb27`
-(SRGB), with no-prerequisite FW 11.60 and FW 5.50 guarded targets. Hardware
-execution remains pending a clean FW 11.60 boot.
+(SRGB), with no-prerequisite FW 11.60 and FW 5.50 guarded targets. Both BC7
+variants passed twice on exact FW 11.60; FW 5.50 replay remains separate.
 BC6 UFLOAT passed twice on FW 11.60 with identical `224640` changed pixels,
 all four fixture counts `{74880,74880,18760,56120}`, range `0..220`, zero
 decode mismatches/error, channel independence, and FNV64
 `0x6d3c92b92851ab4a`. BC6 UFLOAT is hardware-qualified on exact FW 11.60.
-BC6 SFLOAT pass 1 also succeeded with identical fixture counts, range `1..213`,
-zero decode mismatches/error, channel independence, and FNV64
-`0x6a278a1c5abd3bfc`; pass 2 remains required.
+BC6 SFLOAT also passed twice with identical `224640` changed pixels, fixture
+counts `{74880,74880,18760,56120}`, range `1..213`, zero decode
+mismatches/error, channel independence, and FNV64 `0x6a278a1c5abd3bfc`.
+Both BC6 variants, and the complete planned BC1-BC7 sampling matrix, are
+hardware-qualified on exact FW 11.60. FW 5.50 identical-byte replay remains a
+separate endpoint qualification.
 BC7 UNORM passed twice on FW 11.60 with identical `224640` changed pixels,
 mode counts `{4:205880,6:18760}`, alpha range `0..255`, zero exact mismatches,
 channel independence, and FNV64 `0xf46729633292d01b`. BC7 UNORM is
@@ -796,8 +799,8 @@ as SHA-256
 `37c1159701d9615fc015c3f5b887f88f00fe12e694df7ff92f442fb7165c072c`
 (UFLOAT) and
 `5bdffd1510c11ac7b334d630782fe931b9ca8b3f19ee31ab0b14b861eec32578`
-(SFLOAT), with no-prerequisite FW 11.60 and FW 5.50 guarded targets. Hardware
-execution remains pending a clean FW 11.60 boot. See
+(SFLOAT), with no-prerequisite FW 11.60 and FW 5.50 guarded targets. Both
+artifacts passed twice on exact FW 11.60. See
 `analysis/bc6_fixture_generation_20260730.md`.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local

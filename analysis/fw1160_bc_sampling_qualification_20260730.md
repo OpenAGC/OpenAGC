@@ -193,6 +193,19 @@ The pinned SFLOAT artifact passed with `224640` changed pixels, fixture counts
 mismatches/error, channel independence, and FNV64 `0x6a278a1c5abd3bfc`.
 All lifecycle gates passed. Repeat the identical bytes once.
 
+## BC6 SFLOAT pass 2
+
+The identical artifact reproduced `224640` changed pixels, fixture counts
+`{74880,74880,18760,56120}`, decoded range `1..213`, zero decode
+mismatches/error, channel independence, and FNV64 `0x6a278a1c5abd3bfc`.
+Completion fence, marker, driver shutdown, memory cleanup, final verdict, and
+self-termination all passed again.
+
+BC6 UFLOAT and SFLOAT are hardware-qualified on exact FW 11.60. This completes
+the planned BC1-BC7 sampling matrix on that exact firmware, with every pinned
+artifact passing twice. Identical-byte FW 5.50 replay remains a separate
+endpoint qualification and is not implied by these results.
+
 ## BC2 corrected artifacts
 
 After the shared valid-mip and compressed-diversity corrections, both BC2
