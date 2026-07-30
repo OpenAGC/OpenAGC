@@ -60,6 +60,14 @@ both targets produced 1,152 distinct post-fence pixels. Depth/stencil, copy,
 scanout, cross-queue, multi-command-buffer waits/signals, and timeline
 semantics remain pending.
 
+Runtime API v5 adds `AgcFenceInfo`, a versioned snapshot of fence state,
+submission/completion identity, queue and command ownership, expected/observed
+markers, bounded-wait diagnostics, and the selected profile. Generic coverage
+locks unsignaled and timeout reporting plus successful ownership/reset
+behavior. Artifact `bd8545c05a7683bf4fb0c69e7c925317488ba7fd60e455ef7e1ecf715b477c9d`
+also passed the completed-fence query after a real public compute dispatch on
+exact FW 5.50. Pending timeout reporting remains host-tested.
+
 ## Native resource and memory management complete (2026-07-30)
 
 The PS5-only native runtime now suballocates buffers, images, shader code,

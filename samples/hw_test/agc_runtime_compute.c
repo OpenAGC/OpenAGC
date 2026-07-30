@@ -50,6 +50,7 @@ int main(void)
     AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
     AgcDescriptorWrite descriptor = AGC_DESCRIPTOR_WRITE_INIT;
     AgcResourceTransition transition = AGC_RESOURCE_TRANSITION_INIT;
+    AgcFenceInfo fence_info = AGC_FENCE_INFO_INIT;
     AgcRuntimeInfo runtime_info = AGC_RUNTIME_INFO_INIT;
     AgcShaderReflection reflection;
     AgcDevice device = NULL;
@@ -208,6 +209,18 @@ int main(void)
     if (result != AGC_OK)
         goto cleanup;
     completed = true;
+    result = agcGetFenceInfo(fence, &fence_info);
+    report_result("agcGetFenceInfo", result);
+    if (result != AGC_OK || fence_info.state != AGC_FENCE_STATE_SIGNALED ||
+        fence_info.last_wait_result != AGC_OK ||
+        fence_info.completion_value != fence_info.observed_completion_value) {
+        puts("Fence diagnostics: FAIL");
+        goto cleanup;
+    }
+    printf("Fence diagnostics: submission=%llu completed=%llu profile=%s\n",
+        (unsigned long long)fence_info.submission_id,
+        (unsigned long long)fence_info.last_completed_submission_id,
+        fence_info.profile_name);
     result = agcReadBuffer(output, 0u, output_words, sizeof(output_words));
     report_result("agcReadBuffer", result);
     if (result != AGC_OK)

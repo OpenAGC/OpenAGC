@@ -122,6 +122,8 @@ struct AgcQueueImpl {
     AgcDevice device;
     AgcQueueType type;
     int32_t backend_handle;
+    uint64_t next_submission_id;
+    uint64_t last_completed_submission_id;
 };
 
 struct AgcBufferImpl {
@@ -281,7 +283,15 @@ struct AgcFenceImpl {
     AgcQueue queue;
     AgcCommandBuffer command_buffer;
     uint32_t completion_value;
+    uint32_t observed_completion_value;
     uint32_t signaled;
+    uint32_t last_queue_type;
+    uint32_t last_command_buffer_state;
+    int32_t last_wait_result;
+    uint64_t submission_id;
+    uint64_t last_completed_submission_id;
+    uint64_t timeout_count;
+    uint64_t last_timeout_ns;
 };
 
 static AgcDevice g_active_device;
@@ -5862,6 +5872,11 @@ int32_t PS5_SYSV_ABI agcCreateFence(
     if (!fence)
         return AGC_ERROR_OUT_OF_MEMORY;
     fence->device = device;
+    fence->completion_value = 1u;
+    fence->observed_completion_value = desc->signaled ? 1u : 0u;
+    fence->last_queue_type = UINT32_MAX;
+    fence->last_command_buffer_state = AGC_COMMAND_BUFFER_STATE_INITIAL;
+    fence->last_wait_result = desc->signaled ? AGC_OK : AGC_ERROR_BUSY;
 #ifdef OPENAGC_PROSPERO
     result = agcRuntimeAllocate(device, AGC_MEMORY_HEAP_FLEXIBLE,
         sizeof(*completion), sizeof(*completion), 0u,
@@ -5872,7 +5887,6 @@ int32_t PS5_SYSV_ABI agcCreateFence(
     }
     completion = agcAllocationCpuAddress(fence->allocation);
     *completion = desc->signaled ? 1u : 0u;
-    fence->completion_value = 1u;
     result = agcFlushRuntimeAllocation(fence->allocation, 0u,
         sizeof(*completion));
     if (result != AGC_OK) {
@@ -5923,6 +5937,7 @@ static int32_t agcFencePollCompletion(AgcFence fence)
         return result;
     completion = *(const volatile uint32_t *)
         agcAllocationCpuAddress(fence->allocation);
+    fence->observed_completion_value = completion;
     if (completion != fence->completion_value)
         return AGC_ERROR_BUSY;
 #else
@@ -5937,9 +5952,12 @@ static int32_t agcFencePollCompletion(AgcFence fence)
         command_buffer->state = AGC_COMMAND_BUFFER_STATE_EXECUTABLE;
         command_buffer->completion_fence = NULL;
         queue->pending_count--;
+        queue->last_completed_submission_id = fence->submission_id;
         fence->pending_refs--;
         fence->command_buffer = NULL;
         fence->queue = NULL;
+        fence->last_completed_submission_id = fence->submission_id;
+        fence->last_command_buffer_state = AGC_COMMAND_BUFFER_STATE_EXECUTABLE;
     }
     return AGC_OK;
 }
@@ -5954,6 +5972,40 @@ int32_t PS5_SYSV_ABI agcGetFenceStatus(AgcFence fence)
     }
     result = agcFencePollCompletion(fence);
     return result == AGC_ERROR_BUSY ? AGC_ERROR_BUSY : result;
+}
+
+int32_t PS5_SYSV_ABI agcGetFenceInfo(AgcFence fence, AgcFenceInfo *info)
+{
+    int32_t result;
+
+    if (!fence || fence->magic != AGC_MAGIC_FENCE ||
+        !agcDeviceValid(fence->device) || !info ||
+        !agcHeaderValid(info->struct_size, sizeof(*info), info->version) ||
+        !agcReservedZero(info->reserved, 3u)) {
+        return AGC_ERROR_INVALID_ARGUMENT;
+    }
+    result = agcFencePollCompletion(fence);
+    if (result != AGC_OK && result != AGC_ERROR_BUSY)
+        return result;
+    *info = (AgcFenceInfo)AGC_FENCE_INFO_INIT;
+    info->state = fence->signaled ? AGC_FENCE_STATE_SIGNALED :
+        fence->pending_refs != 0u ? AGC_FENCE_STATE_PENDING :
+        AGC_FENCE_STATE_UNSIGNALED;
+    info->queue_type = fence->last_queue_type;
+    info->command_buffer_state = fence->last_command_buffer_state;
+    info->completion_value = fence->completion_value;
+    info->observed_completion_value = fence->observed_completion_value;
+    info->last_wait_result = fence->last_wait_result;
+    info->firmware_abi_key = fence->device->runtime_info.firmware_abi_key;
+    info->hardware_family = fence->device->runtime_info.hardware_family;
+    info->submission_id = fence->submission_id;
+    info->last_completed_submission_id =
+        fence->last_completed_submission_id;
+    info->timeout_count = fence->timeout_count;
+    info->last_timeout_ns = fence->last_timeout_ns;
+    memcpy(info->profile_name, fence->device->runtime_info.profile_name,
+        sizeof(info->profile_name));
+    return AGC_OK;
 }
 
 int32_t PS5_SYSV_ABI agcResetFence(AgcFence fence)
@@ -5977,6 +6029,9 @@ int32_t PS5_SYSV_ABI agcResetFence(AgcFence fence)
     }
 #endif
     fence->signaled = 0u;
+    fence->observed_completion_value = 0u;
+    fence->last_wait_result = AGC_ERROR_BUSY;
+    fence->last_command_buffer_state = AGC_COMMAND_BUFFER_STATE_INITIAL;
     return AGC_OK;
 }
 
@@ -5991,8 +6046,10 @@ int32_t PS5_SYSV_ABI agcWaitFence(AgcFence fence, uint64_t timeout_ns)
     if (timeout_ns == AGC_RUNTIME_INFINITE_TIMEOUT)
         return AGC_ERROR_INVALID_ARGUMENT;
     result = agcFencePollCompletion(fence);
-    if (result != AGC_ERROR_BUSY)
+    if (result != AGC_ERROR_BUSY) {
+        fence->last_wait_result = result;
         return result;
+    }
 #ifdef OPENAGC_PROSPERO
     if (fence->allocation) {
         uint64_t timeout_microseconds = timeout_ns / 1000u;
@@ -6004,12 +6061,29 @@ int32_t PS5_SYSV_ABI agcWaitFence(AgcFence fence, uint64_t timeout_ns)
         result = agcGpuMemoryWait32(&fence->allocation->block->memory,
             (size_t)fence->allocation->offset, fence->completion_value,
             (uint32_t)timeout_microseconds);
-        if (result != AGC_OK)
+        if (result != AGC_OK) {
+            fence->last_wait_result = result;
+            if (result == AGC_ERROR_TIMEOUT) {
+                fence->timeout_count++;
+                fence->last_timeout_ns = timeout_ns;
+            }
             return result;
-        return agcFencePollCompletion(fence);
+        }
+        result = agcFencePollCompletion(fence);
+        if (result == AGC_ERROR_BUSY)
+            result = AGC_ERROR_TIMEOUT;
+        fence->last_wait_result = result;
+        if (result == AGC_ERROR_TIMEOUT) {
+            fence->timeout_count++;
+            fence->last_timeout_ns = timeout_ns;
+        }
+        return result;
     }
     return AGC_ERROR_INTERNAL;
 #else
+    fence->last_wait_result = AGC_ERROR_TIMEOUT;
+    fence->timeout_count++;
+    fence->last_timeout_ns = timeout_ns;
     return AGC_ERROR_TIMEOUT;
 #endif
 }
@@ -6039,6 +6113,8 @@ int32_t PS5_SYSV_ABI agcQueueSubmit(
         return AGC_ERROR_INVALID_ARGUMENT;
     if (fence && fence->signaled)
         return AGC_ERROR_INVALID_STATE;
+    if (queue->next_submission_id == UINT64_MAX)
+        return AGC_ERROR_NOT_SUPPORTED;
     command_buffer = submit_info->command_buffers[0];
     if (!command_buffer || command_buffer->magic != AGC_MAGIC_COMMAND_BUFFER ||
         command_buffer->device != queue->device ||
@@ -6112,8 +6188,19 @@ int32_t PS5_SYSV_ABI agcQueueSubmit(
     }
     if (result == AGC_ERROR_NOT_INITIALIZED)
         result = AGC_ERROR_DEVICE_LOST;
-    if (result == AGC_OK)
+    if (result == AGC_OK) {
+        uint64_t submission_id = ++queue->next_submission_id;
+
         agcCommitCommandTransitions(command_buffer);
+        if (fence) {
+            fence->submission_id = submission_id;
+            fence->last_queue_type = (uint32_t)queue->type;
+            fence->last_command_buffer_state =
+                AGC_COMMAND_BUFFER_STATE_PENDING;
+            fence->observed_completion_value = 0u;
+            fence->last_wait_result = AGC_ERROR_BUSY;
+        }
+    }
 #ifdef OPENAGC_PROSPERO
     if (result == AGC_OK) {
         fence->command_buffer = command_buffer;
@@ -6128,9 +6215,16 @@ int32_t PS5_SYSV_ABI agcQueueSubmit(
     queue->pending_count--;
     if (fence) {
         fence->pending_refs--;
-        if (result == AGC_OK)
+        if (result == AGC_OK) {
             fence->signaled = 1u;
+            fence->observed_completion_value = fence->completion_value;
+            fence->last_completed_submission_id = fence->submission_id;
+            fence->last_command_buffer_state =
+                AGC_COMMAND_BUFFER_STATE_EXECUTABLE;
+        }
     }
+    if (result == AGC_OK)
+        queue->last_completed_submission_id = queue->next_submission_id;
     return result;
 }
 

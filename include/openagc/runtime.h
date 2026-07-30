@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-#define AGC_RUNTIME_API_VERSION 4u
+#define AGC_RUNTIME_API_VERSION 5u
 #define AGC_RUNTIME_STRUCTURE_VERSION_1 1u
 #define AGC_RUNTIME_STRUCTURE_VERSION_2 2u
 #define AGC_RUNTIME_PROFILE_NAME_SIZE 48u
@@ -720,6 +720,35 @@ typedef struct AgcFenceDesc {
     uint64_t reserved[4];
 } AgcFenceDesc;
 
+typedef enum AgcFenceState {
+    AGC_FENCE_STATE_UNSIGNALED = 0,
+    AGC_FENCE_STATE_PENDING = 1,
+    AGC_FENCE_STATE_SIGNALED = 2
+} AgcFenceState;
+
+/* Snapshot of the most recent submission that used a binary fence. A queue
+ * type of UINT32_MAX means the fence has not yet been submitted. The snapshot
+ * lets bounded wait failures identify their exact profile and marker without
+ * exposing backend handles or GPU addresses. */
+typedef struct AgcFenceInfo {
+    uint32_t struct_size;
+    uint32_t version;
+    AgcFenceState state;
+    uint32_t queue_type;
+    uint32_t command_buffer_state;
+    uint32_t completion_value;
+    uint32_t observed_completion_value;
+    int32_t last_wait_result;
+    uint16_t firmware_abi_key;
+    uint16_t hardware_family;
+    uint64_t submission_id;
+    uint64_t last_completed_submission_id;
+    uint64_t timeout_count;
+    uint64_t last_timeout_ns;
+    char profile_name[AGC_RUNTIME_PROFILE_NAME_SIZE];
+    uint64_t reserved[3];
+} AgcFenceInfo;
+
 /* Native PS5 resource formats. Values shared with gfx1013 image descriptors
  * deliberately retain their hardware encoding. */
 typedef enum AgcFormat {
@@ -855,6 +884,12 @@ typedef struct AgcImageSubresourceLayout {
     { sizeof(AgcFenceDesc), AGC_RUNTIME_STRUCTURE_VERSION_1, 0u, 0u, \
       {0u, 0u, 0u, 0u} }
 
+#define AGC_FENCE_INFO_INIT \
+    { sizeof(AgcFenceInfo), AGC_RUNTIME_STRUCTURE_VERSION_1, \
+      AGC_FENCE_STATE_UNSIGNALED, UINT32_MAX, \
+      AGC_COMMAND_BUFFER_STATE_INITIAL, 0u, 0u, AGC_ERROR_BUSY, 0u, 0u, \
+      0u, 0u, 0u, 0u, {0}, {0u, 0u, 0u} }
+
 typedef struct AgcSubmitInfo {
     uint32_t struct_size;
     uint32_t version;
@@ -935,6 +970,8 @@ _Static_assert(sizeof(AgcImageLayout) == 96u,
     "AgcImageLayout v1 size mismatch");
 _Static_assert(sizeof(AgcImageSubresourceLayout) == 96u,
     "AgcImageSubresourceLayout v1 size mismatch");
+_Static_assert(sizeof(AgcFenceInfo) == 144u,
+    "AgcFenceInfo v1 size mismatch");
 
 int32_t PS5_SYSV_ABI agcCreateDevice(
     const AgcDeviceDesc *desc, AgcDevice *device_out);
@@ -1038,6 +1075,7 @@ int32_t PS5_SYSV_ABI agcCreateFence(
     AgcDevice device, const AgcFenceDesc *desc, AgcFence *fence_out);
 int32_t PS5_SYSV_ABI agcDestroyFence(AgcFence fence);
 int32_t PS5_SYSV_ABI agcGetFenceStatus(AgcFence fence);
+int32_t PS5_SYSV_ABI agcGetFenceInfo(AgcFence fence, AgcFenceInfo *info);
 int32_t PS5_SYSV_ABI agcResetFence(AgcFence fence);
 int32_t PS5_SYSV_ABI agcWaitFence(AgcFence fence, uint64_t timeout_ns);
 int32_t PS5_SYSV_ABI agcQueueSubmit(

@@ -448,6 +448,14 @@ Never convert a timeout into success or wait forever. Diagnostics should name
 the queue, last submission, fence value, firmware profile, and most recent
 completed marker without pretending to recover a lost device.
 
+The first synchronization step is implemented as runtime API v5:
+`agcGetFenceInfo` reports the last queue/submission identity, command state,
+expected and observed marker, timeout count/deadline/result, and profile
+snapshot. Generic coverage exercises unsignaled and timeout cases; artifact
+`bd8545c05a7683bf4fb0c69e7c925317488ba7fd60e455ef7e1ecf715b477c9d` confirms
+the completed public-compute snapshot on exact FW 5.50. The remaining submit
+fan-in/out, GPU labels, timelines, and cross-queue work stays open.
+
 Exit criteria: exact host fixtures cover the supported transition matrix and
 atomic short-buffer failure; FW 5.50 and FW 11.60 gates cover render-to-shader,
 compute-to-copy, copy-to-shader, host-read, and present-to-render; repeated

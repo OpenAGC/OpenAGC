@@ -89,6 +89,21 @@ fence; reset is legal only when the fence has no pending owner.
 `AGC_RUNTIME_INFINITE_TIMEOUT` is an error; the runtime never silently waits
 forever.
 
+`agcGetFenceInfo` provides a versioned diagnostic snapshot without exposing a
+backend handle or GPU address. It reports the fence state, latest queue and
+command-buffer ownership, submission and completion IDs, expected and observed
+completion markers, timeout count/latest deadline/result, and the exact runtime
+profile. An unsubmitted fence uses `UINT32_MAX` as its queue type. Applications
+can log this snapshot after a bounded timeout; it describes the failure but does
+not convert a timeout into success or attempt recovery.
+
+The completed-fence snapshot is hardware-qualified on the exact FW 5.50 public
+compute path by artifact
+`bd8545c05a7683bf4fb0c69e7c925317488ba7fd60e455ef7e1ecf715b477c9d`; see
+[`runtime_fence_diagnostics_fw550_20260731.md`](../analysis/runtime_fence_diagnostics_fw550_20260731.md).
+Pending timeout diagnostics remain host-tested until a bounded on-console
+timeout oracle is safe and useful.
+
 Stable native errors include invalid argument/state, busy ownership,
 unsupported capability, command-space exhaustion, timeout, out of memory,
 submission failure, and device loss. An uninitialized backend submission is

@@ -720,9 +720,29 @@ static void test_runtime_fence_and_command_states(void)
     AgcFence fence = NULL;
     AgcCommandBuffer command_buffer = NULL;
     AgcCommandBufferState state = AGC_COMMAND_BUFFER_STATE_PENDING;
+    AgcFenceInfo fence_info = AGC_FENCE_INFO_INIT;
 
     TEST_ASSERT_EQ(agcCreateFence(device, &fence_desc, &fence), AGC_OK,
         "unsignaled fence creation succeeds");
+    fence_info.reserved[0] = 1u;
+    TEST_ASSERT_EQ(agcGetFenceInfo(fence, &fence_info),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "fence info rejects nonzero reserved fields");
+    fence_info.reserved[0] = 0u;
+    TEST_ASSERT_EQ(agcGetFenceInfo(fence, &fence_info), AGC_OK,
+        "unsignaled fence info query succeeds");
+    TEST_ASSERT_EQ(fence_info.state, AGC_FENCE_STATE_UNSIGNALED,
+        "new fence diagnostic state is unsignaled");
+    TEST_ASSERT_EQ(fence_info.queue_type, UINT32_MAX,
+        "new fence has no submission owner");
+    TEST_ASSERT_EQ(fence_info.completion_value, 1u,
+        "new fence diagnostic reports its expected completion marker");
+    TEST_ASSERT_EQ(fence_info.observed_completion_value, 0u,
+        "new fence has not observed a completion marker");
+    TEST_ASSERT_EQ(fence_info.last_wait_result, AGC_ERROR_BUSY,
+        "new fence diagnostic reports no successful wait");
+    TEST_ASSERT(strcmp(fence_info.profile_name, "generic-host") == 0,
+        "fence diagnostic names the active runtime profile");
     TEST_ASSERT_EQ(agcGetFenceStatus(fence), AGC_ERROR_BUSY,
         "unsignaled fence status is busy");
     TEST_ASSERT_EQ(agcWaitFence(fence, 0u), AGC_ERROR_TIMEOUT,
@@ -732,6 +752,14 @@ static void test_runtime_fence_and_command_states(void)
     TEST_ASSERT_EQ(agcWaitFence(fence, AGC_RUNTIME_INFINITE_TIMEOUT),
         AGC_ERROR_INVALID_ARGUMENT,
         "infinite fence wait is rejected");
+    TEST_ASSERT_EQ(agcGetFenceInfo(fence, &fence_info), AGC_OK,
+        "timed-out fence info query succeeds");
+    TEST_ASSERT_EQ(fence_info.timeout_count, 2u,
+        "fence diagnostic counts bounded timeouts");
+    TEST_ASSERT_EQ(fence_info.last_timeout_ns, 1000u,
+        "fence diagnostic records the most recent timeout deadline");
+    TEST_ASSERT_EQ(fence_info.last_wait_result, AGC_ERROR_TIMEOUT,
+        "fence diagnostic reports its most recent timeout");
 
     command_desc.capacity_dwords = 4u;
     TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc,
@@ -770,6 +798,7 @@ static void test_runtime_compute_submission(void)
     AgcCommandBuffer command_buffer = NULL;
     AgcFence fence = NULL;
     AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    AgcFenceInfo fence_info = AGC_FENCE_INFO_INIT;
     const AgcCommandBufferSubmit *captured;
     const uint32_t *words;
     uint32_t defaults[512] = {0};
@@ -829,8 +858,35 @@ static void test_runtime_compute_submission(void)
         "successful compute submission signals fence");
     TEST_ASSERT_EQ(agcWaitFence(fence, 1u), AGC_OK,
         "finite wait observes signaled compute fence");
+    TEST_ASSERT_EQ(agcGetFenceInfo(fence, &fence_info), AGC_OK,
+        "completed compute fence info query succeeds");
+    TEST_ASSERT_EQ(fence_info.state, AGC_FENCE_STATE_SIGNALED,
+        "completed compute fence diagnostic state is signaled");
+    TEST_ASSERT_EQ(fence_info.queue_type, kAgcQueueCompute,
+        "completed compute fence records its queue owner");
+    TEST_ASSERT_EQ(fence_info.command_buffer_state,
+        AGC_COMMAND_BUFFER_STATE_EXECUTABLE,
+        "completed compute fence records released command ownership");
+    TEST_ASSERT_EQ(fence_info.submission_id, 1u,
+        "completed compute fence records its queue submission identity");
+    TEST_ASSERT_EQ(fence_info.last_completed_submission_id, 1u,
+        "completed compute fence records its completed submission identity");
+    TEST_ASSERT_EQ(fence_info.completion_value, 1u,
+        "completed compute fence reports its expected marker");
+    TEST_ASSERT_EQ(fence_info.observed_completion_value, 1u,
+        "completed compute fence reports its observed marker");
+    TEST_ASSERT_EQ(fence_info.last_wait_result, AGC_OK,
+        "completed compute fence records successful wait status");
     TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
         "completed compute fence resets");
+    TEST_ASSERT_EQ(agcGetFenceInfo(fence, &fence_info), AGC_OK,
+        "reset compute fence info query succeeds");
+    TEST_ASSERT_EQ(fence_info.state, AGC_FENCE_STATE_UNSIGNALED,
+        "reset compute fence clears its signal state");
+    TEST_ASSERT_EQ(fence_info.observed_completion_value, 0u,
+        "reset compute fence clears its observed marker");
+    TEST_ASSERT_EQ(fence_info.submission_id, 1u,
+        "reset compute fence preserves latest submission identity");
     TEST_ASSERT_EQ(agcResetCommandBuffer(command_buffer), AGC_OK,
         "completed compute command buffer resets");
 
