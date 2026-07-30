@@ -15,5 +15,6 @@ void agcGameCompatConfigureContextState(
     uint64_t restore_list_gpu_address,
     uint32_t restore_count,
     uint32_t append_restore);
+void agcGameCompatResetRegisterDefaultsVersion(void);
 
 #endif /* OPENAGC_GAME_COMPAT_INTERNAL_H */

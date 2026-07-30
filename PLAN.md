@@ -65,17 +65,20 @@ The compile-time audit found no production expected-firmware build input. The
 39-profile VideoOut ledger and exact runtime table are complete. Register-
 default recovery is also complete: the selector is the caller's
 `sceAgcInit(version)` argument stored in the runtime record, not an unavailable
-hardware choice. Exact V7/V8/V9/V12 policies are wired for all active keys;
-only the endpoint policies are hardware-qualified.
+hardware choice. Every active key now carries its exact accepted upper bound;
+OpenAGC preserves the caller-selected version instead of using that maximum as
+a selected policy. FW5.50/V8 and FW11.60/V12 are hardware-qualified.
 
 Execute in this order:
 
 1. **Complete:** audit all installed public-library and application-consumer code for
    compile-time firmware constants, exact-version branches, and hidden
    firmware-specific shader, packet, memory, or VideoOut assumptions.
-2. **Complete:** recover a reproducible defaults-policy fact for every active
-   exact profile by proving the `sceAgcInit` argument flow into the runtime
-   record as well as the versioned dispatcher's accepted bound.
+2. **Complete:** recover register-default selection for every active exact
+   profile by proving the `sceAgcInit` caller-argument flow into the runtime
+   record, recording each dispatcher bound, and keeping selection distinct
+   from that bound in the direct backend. Explicit V0-V12 blob layouts and
+   allocation-fit tests cover every accepted caller choice.
 3. **Complete:** extract and verify the linear VideoOut registration branch offset and full
    original instruction signature from every active profile's own
    `libSceVideoOut.sprx`, then generate the runtime table used by the core.

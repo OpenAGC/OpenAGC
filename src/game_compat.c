@@ -33,6 +33,7 @@
 #include "agc_registers.h"
 #include "agc_shader.h"
 #include "agc_types.h"
+#include "driver_ops.h"
 #include "agc_workload_packet.h"
 #include "agc_workload_state.h"
 #include "game_compat_internal.h"
@@ -41,6 +42,13 @@
 #include "agcdriver.h"
 
 #include <string.h>
+
+static uint32_t g_agc_defaults_version = UINT32_MAX;
+
+void agcGameCompatResetRegisterDefaultsVersion(void)
+{
+    g_agc_defaults_version = UINT32_MAX;
+}
 
 /* ===================================================================== */
 /* libSceAgcDriver non-Direct variants                                   */
@@ -597,6 +605,11 @@ int32_t PS5_SYSV_ABI sceAgcInit(uint32_t version)
     if (ret != AGC_OK)
         return ret;
 
+    ret = agcDriverSelectRegisterDefaultsVersion(version);
+    if (ret != AGC_OK)
+        return ret;
+    g_agc_defaults_version = version;
+
     agcUpdatePacketMode();
 
     return AGC_OK;
@@ -757,6 +770,20 @@ void *PS5_SYSV_ABI sceAgcGetRegisterDefaults2Internal(uint32_t version)
 
     s_internal_built[version] = true;
     return &s_internal_defaults[version];
+}
+
+void *PS5_SYSV_ABI sceAgcGetRegisterDefaults(void)
+{
+    if (g_agc_defaults_version == UINT32_MAX)
+        return NULL;
+    return sceAgcGetRegisterDefaults2(g_agc_defaults_version);
+}
+
+void *PS5_SYSV_ABI sceAgcGetRegisterDefaultsInternal(void)
+{
+    if (g_agc_defaults_version == UINT32_MAX)
+        return NULL;
+    return sceAgcGetRegisterDefaults2Internal(g_agc_defaults_version);
 }
 
 /* ===================================================================== */

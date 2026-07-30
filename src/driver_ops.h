@@ -51,10 +51,12 @@ extern const AgcDriverOps agcProsperoDriverOps;
 #ifdef OPENAGC_PROSPERO
 int32_t agcProsperoConfigureRuntimeProfile(uint32_t raw_version);
 int32_t agcProsperoGetRuntimeProfile(AgcProsperoRuntimeProfile *profile_out);
+int32_t agcProsperoSelectRegisterDefaultsVersion(uint32_t version);
 #endif
 
 const AgcDriverOps *agcDriverGetOps(void);
 const char *agcDriverDebugBackendName(void);
+int32_t agcDriverSelectRegisterDefaultsVersion(uint32_t version);
 
 #ifdef OPENAGC_GENERIC
 int32_t agcDriverInstallOpsForTesting(const AgcDriverOps *ops);

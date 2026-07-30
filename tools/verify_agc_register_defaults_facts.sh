@@ -13,4 +13,5 @@ if ! cmp -s "$tmp" analysis/agc_register_defaults_facts.tsv; then
     exit 1
 fi
 
+python3 tools/verify_agc_register_defaults_registry.py
 echo "PASS: all 39 libSceAgc register-default selectors are reproducible"

@@ -193,7 +193,7 @@ int32_t  PS5_SYSV_ABI sceAgcDriverUnregisterOwnerAndResources(
 
 /* Default state queries */
 int32_t PS5_SYSV_ABI sceAgcGetDefaultState(AgcContextState *out_state);
-int32_t PS5_SYSV_ABI sceAgcGetRegisterDefaults(AgcContextState *out_state);
+void *PS5_SYSV_ABI sceAgcGetRegisterDefaults(void);
 int32_t PS5_SYSV_ABI sceAgcGetDefaultCxStateFlat(void *out_state, uint32_t size);
 
 /* Suspend-point CDBG helper. Its private driver carrier is not implemented;
@@ -516,6 +516,7 @@ int32_t PS5_SYSV_ABI sceAgcSuspendPoint(
  * register-defaults blob for that version. */
 void *PS5_SYSV_ABI sceAgcGetRegisterDefaults2(uint32_t version);
 void *PS5_SYSV_ABI sceAgcGetRegisterDefaults2Internal(uint32_t version);
+void *PS5_SYSV_ABI sceAgcGetRegisterDefaultsInternal(void);
 
 /* DCB packet builders missing from our API */
 

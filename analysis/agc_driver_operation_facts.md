@@ -37,10 +37,11 @@ non-empty HS patch lists remain disabled.
   permission stubs across all 39 profiles. Direct `/dev/gc` support therefore
   depends on separately recovered internal ioctl paths, never export presence.
 - All no-argument defaults wrappers read the version previously supplied to
-  `sceAgcInit`. Exact policies are enabled for all 39 profiles: V7, V8, V9, or
-  V12 according to each SPRX's caller-permitted bound, with FW 5.50 retaining
-  its hardware-qualified V8 override. FW 5.50 V8 and FW 11.60 V12 are hardware
-  qualified; the remaining 37 policies are hardware-unverified.
+  `sceAgcInit`. OpenAGC now does the same: every exact profile exposes its
+  SPRX-proven accepted range and the direct backend uses the caller-selected
+  version, never the range maximum as an inferred hardware choice. FW 5.50 V8
+  and FW 11.60 V12 are hardware-qualified caller/profile combinations; all
+  other combinations are hardware-unverified.
 - `agc_driver_ring_facts.tsv` semantically verifies the 16-byte TF/HS payloads
   behind each carrier group. FW 12.x adds explicit reserved-dword zeroing;
   OpenAGC's zero-initialized typed arguments satisfy both forms.

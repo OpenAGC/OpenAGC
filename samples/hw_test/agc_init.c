@@ -34,6 +34,7 @@
 #include "agc_error.h"
 #include "agc_pm4.h"
 #include "agc_runtime_diag.h"
+#include "agc_test_defaults.h"
 
 #ifndef AGC_EXPECT_FIRMWARE_ABI_KEY
 #define AGC_EXPECT_FIRMWARE_ABI_KEY 0x0550u
@@ -339,6 +340,12 @@ int main(void) {
     printf("    Runtime profile FW ABI 0x%04X: %s\n",
            AGC_EXPECT_FIRMWARE_ABI_KEY, profile_ok ? "PASS" : "FAIL");
     if (!profile_ok)
+        return 1;
+
+    err = sceAgcInit(agcTestDefaultsVersion(AGC_EXPECT_FIRMWARE_ABI_KEY));
+    printf("    sceAgcInit defaults selection: 0x%08X (%s)\n",
+           (unsigned)err, errstr(err));
+    if (err != AGC_OK)
         return 1;
 
     /* --- Step 2: Initialize internal memory --- */

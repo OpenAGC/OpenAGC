@@ -90,6 +90,11 @@ int main(void) {
         printf("    FATAL: cannot initialize AGC\n");
         return 1;
     }
+    err = sceAgcInit(8u);
+    if (err != AGC_OK) {
+        printf("    FATAL: cannot select V8 defaults\n");
+        return 1;
+    }
     printf("    /dev/gc opened, CONTEXT_QUERY succeeded\n");
 
     /* --- Step 2: Initialize internal memory --- */

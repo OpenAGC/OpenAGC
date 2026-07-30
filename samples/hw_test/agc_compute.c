@@ -33,6 +33,7 @@
 #include "agc_shader.h"
 #include "agc_runtime_diag.h"
 #include "gpu_credentials.h"
+#include "agc_test_defaults.h"
 #include <ps5/kernel.h>
 
 #ifndef AGC_EXPECT_FIRMWARE_ABI_KEY
@@ -344,6 +345,12 @@ static bool init_agc(void) {
     printf("[AGC] Runtime profile FW ABI 0x%04X: %s\n",
            AGC_EXPECT_FIRMWARE_ABI_KEY, profile_ok ? "PASS" : "FAIL");
     if (!profile_ok)
+        return false;
+
+    err = sceAgcInit(agcTestDefaultsVersion(AGC_EXPECT_FIRMWARE_ABI_KEY));
+    printf("[AGC] caller defaults selection: 0x%08X (%s)\n",
+           (unsigned)err, errstr(err));
+    if (err != AGC_OK)
         return false;
 
     printf("[AGC] sce_agc_initialize_internal_memory()...\n");

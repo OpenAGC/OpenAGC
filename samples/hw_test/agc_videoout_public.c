@@ -19,6 +19,7 @@
 #include "agc_videoout.h"
 #include "agcdriver.h"
 #include "gpu_credentials.h"
+#include "agc_test_defaults.h"
 
 #ifndef AGC_EXPECT_FIRMWARE_ABI_KEY
 #define AGC_EXPECT_FIRMWARE_ABI_KEY 0x1160u
@@ -158,6 +159,13 @@ int main(void)
         runtime_ok ? "PASS" : "FAIL");
     if (!runtime_ok)
         goto cleanup;
+
+    result = sceAgcInit(agcTestDefaultsVersion(
+        (uint16_t)(diagnostics.firmware_version >> 16)));
+    if (result != AGC_OK) {
+        printf("Caller defaults selection: FAIL (0x%08x)\n", (unsigned)result);
+        goto cleanup;
+    }
 
     result = sce_agc_initialize_internal_memory();
     if (result != AGC_OK) {

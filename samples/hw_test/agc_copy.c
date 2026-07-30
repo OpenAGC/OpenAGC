@@ -18,6 +18,7 @@
 #include "agc_runtime_diag.h"
 #include "agcdriver.h"
 #include "gpu_credentials.h"
+#include "agc_test_defaults.h"
 
 #ifndef AGC_EXPECT_FIRMWARE_ABI_KEY
 #define AGC_EXPECT_FIRMWARE_ABI_KEY 0x0550u
@@ -56,6 +57,12 @@ static bool initialize_driver(bool *driver_initialized)
            AGC_EXPECT_FIRMWARE_ABI_KEY, profile_ok ? "PASS" : "FAIL");
     if (!profile_ok)
         return false;
+
+    result = sceAgcInit(agcTestDefaultsVersion(AGC_EXPECT_FIRMWARE_ABI_KEY));
+    if (result != AGC_OK) {
+        printf("sceAgcInit: 0x%08x\n", (unsigned)result);
+        return false;
+    }
 
     result = sce_agc_initialize_internal_memory();
     if (result != AGC_OK) {

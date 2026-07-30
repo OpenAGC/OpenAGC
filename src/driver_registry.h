@@ -59,7 +59,8 @@ enum {
 typedef struct AgcProsperoDirectProfile {
     AgcProsperoRuntimeProfile runtime;
     uint32_t capabilities;
-    uint32_t defaults_version;
+    /* Highest caller-supplied sceAgcInit version accepted by this firmware. */
+    uint32_t defaults_max_version;
     bool submit_uses_frame_close_trailer;
     bool workload_has_sony_stream_table;
     bool workload_uses_sony_stream_packet;
@@ -74,6 +75,17 @@ typedef struct AgcProsperoDirectProfile {
     uint32_t hs_offchip_ioctl;
     uint32_t async_graphics_ioctl;
 } AgcProsperoDirectProfile;
+
+typedef struct AgcProsperoDefaultsLayout {
+    uint32_t primary_cx_length;
+    uint32_t primary_sh_length;
+    uint32_t primary_uc_length;
+    uint32_t internal_cx_length;
+    uint32_t internal_sh_length;
+    uint32_t internal_uc_length;
+    size_t primary_blob_size;
+    size_t internal_blob_size;
+} AgcProsperoDefaultsLayout;
 
 typedef struct AgcDriverRegistryEntry {
     const char *name;
@@ -91,6 +103,10 @@ bool agcProsperoBuildRuntimeProfile(uint32_t raw_version, bool is_trinity,
     AgcProsperoRuntimeProfile *profile_out);
 bool agcProsperoBuildDirectProfile(uint32_t raw_version, bool is_trinity,
     AgcProsperoDirectProfile *profile_out);
+bool agcProsperoDirectProfileAcceptsDefaultsVersion(
+    const AgcProsperoDirectProfile *profile, uint32_t version);
+bool agcProsperoDefaultsLayoutForVersion(uint32_t version,
+    AgcProsperoDefaultsLayout *layout_out);
 bool agcProsperoBuildStandardRegisterShadowDescriptors(uint64_t driver_base,
     AgcGcRegisterShadowDescriptor descriptors_out[2]);
 const AgcDriverRegistryEntry *agcDriverRegistryLookup(

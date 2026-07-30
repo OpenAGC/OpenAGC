@@ -38,6 +38,7 @@
 
 /* GPU credential bypass */
 #include "gpu_credentials.h"
+#include "agc_test_defaults.h"
 
 #include <ps5/kernel.h>
 
@@ -1091,6 +1092,12 @@ static bool init_agc(void) {
            AGC_EXPECT_FIRMWARE_ABI_KEY, profile_ok ? "PASS" : "FAIL");
     if (!profile_ok)
         return false;
+
+    err = sceAgcInit(agcTestDefaultsVersion(AGC_EXPECT_FIRMWARE_ABI_KEY));
+    if (err != AGC_OK) {
+        printf("sceAgcInit failed: 0x%08x\n", (unsigned)err);
+        return false;
+    }
 
     err = sce_agc_initialize_internal_memory();
     if (err != AGC_OK) { printf("sce_agc_initialize_internal_memory failed: 0x%08x\n", (unsigned)err); return false; }

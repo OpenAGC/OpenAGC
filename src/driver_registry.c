@@ -47,17 +47,17 @@ static const uint32_t g_trinity_profile_aliases[] = {
     0x1200u, 0x1202u, 0x1220u, 0x1240u, 0x1260u, 0x1270u
 };
 
-typedef struct AgcDirectDefaultsSelection {
+typedef struct AgcDirectDefaultsBound {
     uint16_t firmware_abi_key;
-    uint32_t selected_version;
-} AgcDirectDefaultsSelection;
+    uint32_t maximum_version;
+} AgcDirectDefaultsBound;
 
 /* sceAgcInit's version argument is stored at offset 0x44 of the runtime record
  * read by sceAgcGetRegisterDefaults. Each exact SPRX therefore publishes a
- * caller-selectable upper bound, not a hidden hardware selector. Intermediate
- * profiles use that exact bound as their hardware-pending direct policy. The
- * FW 5.50 V8 and FW 11.60 V12 policies retain their hardware qualification. */
-static const AgcDirectDefaultsSelection g_direct_defaults_selections[] = {
+ * caller-selectable upper bound, not a hidden hardware selector. Keep only
+ * that recovered bound here: the actual version is supplied by sceAgcInit and
+ * must never be inferred from the maximum accepted value. */
+static const AgcDirectDefaultsBound g_direct_defaults_bounds[] = {
     {0x0320u, AGC_REGISTER_DEFAULTS_VERSION_7},
     {0x0400u, AGC_REGISTER_DEFAULTS_VERSION_8},
     {0x0403u, AGC_REGISTER_DEFAULTS_VERSION_8},
@@ -65,7 +65,7 @@ static const AgcDirectDefaultsSelection g_direct_defaults_selections[] = {
     {0x0451u, AGC_REGISTER_DEFAULTS_VERSION_8},
     {0x0502u, AGC_REGISTER_DEFAULTS_VERSION_9},
     {0x0510u, AGC_REGISTER_DEFAULTS_VERSION_9},
-    {0x0550u, AGC_REGISTER_DEFAULTS_VERSION_8},
+    {0x0550u, AGC_REGISTER_DEFAULTS_VERSION_9},
     {0x0600u, AGC_REGISTER_DEFAULTS_VERSION_9},
     {0x0602u, AGC_REGISTER_DEFAULTS_VERSION_9},
     {0x0650u, AGC_REGISTER_DEFAULTS_VERSION_9},
@@ -145,15 +145,15 @@ static bool agcFirmwareAliasContains(const uint32_t *aliases,
     return false;
 }
 
-static bool agcDirectDefaultsVersionForFirmware(uint16_t abi_key,
-    uint32_t *version_out)
+static bool agcDirectDefaultsBoundForFirmware(uint16_t abi_key,
+    uint32_t *maximum_out)
 {
     size_t i;
 
-    for (i = 0; i < sizeof(g_direct_defaults_selections) /
-                    sizeof(g_direct_defaults_selections[0]); ++i) {
-        if (g_direct_defaults_selections[i].firmware_abi_key == abi_key) {
-            *version_out = g_direct_defaults_selections[i].selected_version;
+    for (i = 0; i < sizeof(g_direct_defaults_bounds) /
+                    sizeof(g_direct_defaults_bounds[0]); ++i) {
+        if (g_direct_defaults_bounds[i].firmware_abi_key == abi_key) {
+            *maximum_out = g_direct_defaults_bounds[i].maximum_version;
             return true;
         }
     }
@@ -243,7 +243,7 @@ bool agcProsperoBuildDirectProfile(uint32_t raw_version, bool is_trinity,
     profile.cwsr_size = is_trinity ? 0x1600000u : 0x1000000u;
     direct.runtime = profile;
     direct.capabilities = AGC_DIRECT_CAP_SUBMIT;
-    direct.defaults_version = AGC_DIRECT_DEFAULTS_VERSION_UNKNOWN;
+    direct.defaults_max_version = AGC_DIRECT_DEFAULTS_VERSION_UNKNOWN;
     direct.submit_ioctl = AGC_GC_IOCTL_SUBMIT_16;
 
     /* Every active driver publishes its standard-console register-shadow
@@ -279,8 +279,8 @@ bool agcProsperoBuildDirectProfile(uint32_t raw_version, bool is_trinity,
             AGC_DIRECT_CAP_HS_OFFCHIP | AGC_DIRECT_CAP_ASYNC_GRAPHICS;
     }
 
-    if (agcDirectDefaultsVersionForFirmware(abi_key,
-            &direct.defaults_version))
+    if (agcDirectDefaultsBoundForFirmware(abi_key,
+            &direct.defaults_max_version))
         direct.capabilities |= AGC_DIRECT_CAP_DEFAULT_STATES;
 
     /* AGC_DIRECT_CAP_WORKLOAD refers only to OpenAGC's one-ID convenience
@@ -342,6 +342,58 @@ bool agcProsperoBuildStandardRegisterShadowDescriptors(uint64_t driver_base,
     descriptors_out[1] = descriptors_out[0];
     descriptors_out[1].address =
         driver_base + AGC_GC_REG_SHADOW_SECOND_OFFSET;
+    return true;
+}
+
+bool agcProsperoDirectProfileAcceptsDefaultsVersion(
+    const AgcProsperoDirectProfile *profile, uint32_t version)
+{
+    return profile != NULL &&
+        (profile->capabilities & AGC_DIRECT_CAP_DEFAULT_STATES) != 0 &&
+        profile->defaults_max_version != AGC_DIRECT_DEFAULTS_VERSION_UNKNOWN &&
+        version <= profile->defaults_max_version;
+}
+
+bool agcProsperoDefaultsLayoutForVersion(uint32_t version,
+    AgcProsperoDefaultsLayout *layout_out)
+{
+    AgcProsperoDefaultsLayout layout;
+
+    if (!layout_out)
+        return false;
+    switch (version) {
+    case 0u: case 1u: case 2u: case 3u:
+        layout = (AgcProsperoDefaultsLayout){80u, 28u, 42u, 1u, 12u, 2u,
+            0x50000u, 0x8000u};
+        break;
+    case 4u:
+        layout = (AgcProsperoDefaultsLayout){80u, 28u, 42u, 2u, 15u, 2u,
+            0x50000u, 0xa000u};
+        break;
+    case 5u: case 6u:
+        layout = (AgcProsperoDefaultsLayout){80u, 29u, 47u, 3u, 15u, 3u,
+            0x50000u, 0xb000u};
+        break;
+    case 7u: case 8u:
+        layout = (AgcProsperoDefaultsLayout){78u, 29u, 20u, 4u, 15u, 3u,
+            0x41000u, 0xc000u};
+        break;
+    case 9u:
+        layout = (AgcProsperoDefaultsLayout){78u, 29u, 20u, 4u, 14u, 3u,
+            0x41000u, 0xc000u};
+        break;
+    case 10u: case 12u:
+        layout = (AgcProsperoDefaultsLayout){79u, 29u, 20u, 9u, 15u, 3u,
+            0x41000u, 0xf000u};
+        break;
+    case 11u:
+        layout = (AgcProsperoDefaultsLayout){84u, 32u, 21u, 8u, 12u, 3u,
+            0x46000u, 0xd000u};
+        break;
+    default:
+        return false;
+    }
+    *layout_out = layout;
     return true;
 }
 

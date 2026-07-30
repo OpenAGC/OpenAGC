@@ -23,7 +23,7 @@ system version (`raw >> 16`) and is fail-closed:
 |---|---|---|
 | Driver submit/memory/queue/suspend/TF/HS/async | Exact aliases in `driver_registry.c` | Runtime-selected for 39 active keys |
 | VideoOut linear-registration patch | Exact aliases in `videoout_patch.c` | Runtime-selected for 39 active keys; signatures reproduced from each key's SPRX |
-| Register defaults | Exact defaults-policy table | Caller-selectable V7/V8/V9/V12 policy wired for all 39 keys; endpoint policies hardware-qualified |
+| Register defaults | Exact accepted-bound table plus caller selection | `sceAgcInit(version)` is preserved for all 39 keys and rejected above each SPRX-proven bound; FW5.50/V8 and FW11.60/V12 hardware-qualified |
 | FW 5.50 detached-thread credential repair | Exact runtime `0x0550` guard | Intentional hardware-qualified exception; not a build-time choice |
 | Final suspend, EOP flip, workload | Exact runtime capability flags | Optional; unsupported profiles fail closed without blocking the baseline |
 | Register-shadow descriptors | Standard runtime capability group | Firmware-neutral helper name now reflects its actual group scope |
@@ -64,7 +64,11 @@ the FW 11.60 and FW 5.50 runs.
 - Only the FW 5.50 and FW 11.60 VideoOut rows are hardware-qualified. The other
   37 rows are SPRX-qualified and hardware-unverified.
 
-Register-default recovery is complete. The decisive evidence was not the
-dispatcher maximum alone: all 39 current init wrappers forward the version
-argument, and all 39 common initializers store it in the record read by the
-no-argument defaults API. Intermediate policies remain hardware-unverified.
+Register-default selection recovery is complete. The decisive evidence was
+not the dispatcher maximum alone: all 39 current init wrappers forward the
+caller's version argument, and all 39 common initializers store it in the
+record read by the no-argument defaults API. OpenAGC now models the maximum
+only as an accepted bound and preserves the caller choice separately.
+The Prospero builder covers every caller version 0..12 with version-specific
+table dimensions and DDID allocation sizes; notification without a prior
+caller selection fails closed.

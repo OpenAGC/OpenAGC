@@ -13,6 +13,8 @@ from pathlib import Path
 
 VERSIONED_NID = "2JtWUUiYBXs"
 RUNTIME_NID = "Wi82ArQtAwg"
+INTERNAL_VERSIONED_NID = "wRbq6ZjNop4"
+INTERNAL_RUNTIME_NID = "uIwxsqDlHRc"
 INIT_NID = "kW3GLb7QfPg"
 
 SYMBOL_RE = re.compile(
@@ -57,7 +59,8 @@ def symbols(readelf: str, sprx: Path) -> dict[str, tuple[int, int]]:
             continue
         address, size, nid = match.groups()
         nid = nid.split("#", 1)[0]
-        if nid in (VERSIONED_NID, RUNTIME_NID, INIT_NID) and int(size) > 0:
+        if nid in (VERSIONED_NID, RUNTIME_NID, INTERNAL_VERSIONED_NID,
+                   INTERNAL_RUNTIME_NID, INIT_NID) and int(size) > 0:
             result[nid] = (int(address, 16), int(size))
     return result
 
@@ -127,10 +130,29 @@ def verify_init_version_flow(init_body: list[str], all_instructions: list[tuple[
     if not any(instruction == "movl\t%edi, %esi" or
                instruction == "movl %edi, %esi" for instruction in init_body):
         raise ValueError("sceAgcInit does not forward its version argument")
+    targets = []
+    for instruction in init_body:
+        match = re.match(r"^jmpq?\s+(0x[0-9a-fA-F]+)", instruction)
+        if match:
+            targets.append(int(match.group(1), 16))
+    if not targets:
+        raise ValueError("sceAgcInit has no common-initializer tail call")
+    target = targets[-1]
+    initializer = [instruction for pc, instruction in all_instructions
+                   if target <= pc < target + 0x600]
     field = f"0x{field_offset:x}("
-    if not any(instruction.startswith("movl\t%") and field in instruction or
-               instruction.startswith("movl %") and field in instruction
-               for _, instruction in all_instructions):
+    saved_registers = {
+        match.group(1)
+        for instruction in initializer
+        if (match := re.match(
+            r"^movl\s+%esi,\s*%(ebx|r12d|r13d|r14d|r15d)$", instruction))
+    }
+    stored = any(
+        re.match(rf"^movl\s+%{register},", instruction) and
+        field in instruction
+        for register in saved_registers for instruction in initializer
+    )
+    if not saved_registers or not stored:
         raise ValueError("initializer does not store the version in the runtime record")
 
 
@@ -149,42 +171,58 @@ def main() -> int:
         if not sprx.is_file():
             raise SystemExit(f"missing libSceAgc for {key}: {sprx}")
         found = symbols(args.readelf, sprx)
-        missing = {VERSIONED_NID, RUNTIME_NID, INIT_NID} - found.keys()
+        missing = {VERSIONED_NID, RUNTIME_NID, INTERNAL_VERSIONED_NID,
+                   INTERNAL_RUNTIME_NID, INIT_NID} - found.keys()
         if missing:
             raise SystemExit(f"missing defaults exports for {key}: {','.join(sorted(missing))}")
         all_instructions = instructions(args.objdump, sprx)
         versioned_address, versioned_size = found[VERSIONED_NID]
         runtime_address, runtime_size = found[RUNTIME_NID]
+        internal_versioned_address, internal_versioned_size = found[INTERNAL_VERSIONED_NID]
+        internal_runtime_address, internal_runtime_size = found[INTERNAL_RUNTIME_NID]
         init_address, init_size = found[INIT_NID]
         versioned_body = body_for(all_instructions, versioned_address, versioned_size)
         runtime_body = body_for(all_instructions, runtime_address, runtime_size)
+        internal_versioned_body = body_for(
+            all_instructions, internal_versioned_address, internal_versioned_size)
+        internal_runtime_body = body_for(
+            all_instructions, internal_runtime_address, internal_runtime_size)
         init_body = body_for(all_instructions, init_address, init_size)
         try:
             maximum = max_version(versioned_body)
             stride, field_offset, selector = runtime_selector(runtime_body)
+            internal_maximum = max_version(internal_versioned_body)
+            internal_stride, internal_field_offset, internal_selector = \
+                runtime_selector(internal_runtime_body)
             verify_init_version_flow(init_body, all_instructions, field_offset)
         except ValueError as error:
             raise SystemExit(f"{key}: {error}") from error
-        if key == "0x0550":
-            selected, evidence = "8", "FW5.50-hardware-qualified-policy"
-        elif key == "0x1160":
-            selected, evidence = "12", "FW11.60-hardware-qualified-policy"
-        else:
-            selected = str(maximum)
-            evidence = "caller-selectable-hardware-pending-policy"
+        if (internal_maximum != maximum or internal_stride != stride or
+                internal_field_offset != field_offset or
+                internal_selector != selector):
+            raise SystemExit(f"{key}: primary/internal defaults selectors disagree")
         rows.append((
             key, relative_path, VERSIONED_NID, f"0x{versioned_address:x}",
             str(versioned_size), fingerprint(versioned_body), str(maximum),
             RUNTIME_NID, f"0x{runtime_address:x}", str(runtime_size),
             fingerprint(runtime_body), selector, f"0x{stride:x}",
-            f"0x{field_offset:x}", selected, evidence,
+            f"0x{field_offset:x}", "caller-argument-flow-proven",
+            INTERNAL_VERSIONED_NID, f"0x{internal_versioned_address:x}",
+            str(internal_versioned_size), fingerprint(internal_versioned_body),
+            str(internal_maximum), INTERNAL_RUNTIME_NID,
+            f"0x{internal_runtime_address:x}", str(internal_runtime_size),
+            fingerprint(internal_runtime_body),
         ))
 
     header = (
         "# firmware_abi_key\tlibSceAgc_relative_path\tversioned_nid\tversioned_vaddr\t"
         "versioned_size\tversioned_fingerprint\tmax_dispatch_version\truntime_nid\t"
         "runtime_vaddr\truntime_size\truntime_fingerprint\tselector_source\t"
-        "table_stride\tselector_field_offset\tselected_version\tselection_evidence"
+        "table_stride\tselector_field_offset\tselection_evidence\t"
+        "internal_versioned_nid\tinternal_versioned_vaddr\tinternal_versioned_size\t"
+        "internal_versioned_fingerprint\tinternal_max_dispatch_version\t"
+        "internal_runtime_nid\tinternal_runtime_vaddr\tinternal_runtime_size\t"
+        "internal_runtime_fingerprint"
     )
     text = header + "\n" + "\n".join("\t".join(row) for row in rows) + "\n"
     if args.output:

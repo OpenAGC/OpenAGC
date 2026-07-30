@@ -2,6 +2,7 @@
 #include "agcdriver.h"
 #include "agc_pm4.h"
 #include "agc_cb.h"
+#include "agc_context.h"
 #include "game_compat_internal.h"
 #include "agc_workload_state.h"
 
@@ -573,6 +574,11 @@ static void test_game_compat_init(void) {
     /* Current sceAgcInit takes exactly one defaults-version argument. */
     int32_t r = sceAgcInit(8);
     TEST_ASSERT_EQ(r, AGC_OK, "sceAgcInit returns OK");
+    TEST_ASSERT_EQ(((AgcRegisterDefaults *)sceAgcGetRegisterDefaults())->count,
+        127u, "no-argument defaults wrapper uses caller-selected V8");
+    TEST_ASSERT_EQ(((AgcRegisterDefaults *)
+        sceAgcGetRegisterDefaultsInternal())->count, 22u,
+        "no-argument internal defaults wrapper uses caller-selected V8");
 
     r = sceAgcInit_0090(NULL, 8);
     TEST_ASSERT_EQ(r, AGC_OK,
@@ -580,6 +586,8 @@ static void test_game_compat_init(void) {
 
     TEST_ASSERT_EQ(sceAgcInit(12), AGC_OK,
         "sceAgcInit accepts the FW 11.60 defaults version");
+    TEST_ASSERT_EQ(((AgcRegisterDefaults *)sceAgcGetRegisterDefaults())->count,
+        128u, "no-argument defaults wrapper follows caller-selected V12");
     r = sceAgcInit(13);
     TEST_ASSERT(r < 0, "sceAgcInit rejects an unsupported defaults version");
 

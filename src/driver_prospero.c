@@ -173,6 +173,7 @@ typedef struct {
     void            *mmio_base;      /* GPU register MMIO mapping (0xfe0200000) */
     uint32_t         ctx_capability; /* context query result from ioctl 0x2e */
     uint32_t         firmware_version; /* raw system-software version */
+    uint32_t         defaults_version; /* caller-selected sceAgcInit version */
     AgcProsperoRuntimeProfile profile; /* firmware and hardware ABI profile */
     AgcProsperoDirectProfile direct_profile; /* exact per-operation /dev/gc ABI */
     AgcProsperoQueue    queues[AGC_PROSPERO_MAX_QUEUES];
@@ -197,6 +198,7 @@ typedef struct {
 
 static AgcProsperoContext g_prospero = {
     .gc_fd = -1,
+    .defaults_version = AGC_DIRECT_DEFAULTS_VERSION_UNKNOWN,
 };
 
 typedef int (PS5_SYSV_ABI *AgcKernelHasTrinityModeFn)(void);
@@ -289,6 +291,7 @@ int32_t agcProsperoConfigureRuntimeProfile(uint32_t raw_version)
         return AGC_ERROR_NOT_SUPPORTED;
     g_prospero.profile = g_prospero.direct_profile.runtime;
     g_prospero.firmware_version = raw_version;
+    g_prospero.defaults_version = AGC_DIRECT_DEFAULTS_VERSION_UNKNOWN;
     printf("[openagc] profile fw=0x%08X family=%s model=%s "
            "submit=0x%08X queue_auth=%u tf_ring=%u eop=0x%X "
            "gpu_info=0x%X cwsr_work=0x%X cwsr_size=0x%X\n",
@@ -301,6 +304,22 @@ int32_t agcProsperoConfigureRuntimeProfile(uint32_t raw_version)
            g_prospero.profile.gpu_info_span,
            g_prospero.profile.cwsr_work_offset,
            g_prospero.profile.cwsr_size);
+    return AGC_OK;
+}
+
+int32_t agcProsperoSelectRegisterDefaultsVersion(uint32_t version)
+{
+    if ((g_prospero.direct_profile.capabilities &
+            AGC_DIRECT_CAP_DEFAULT_STATES) == 0)
+        return AGC_ERROR_NOT_SUPPORTED;
+    if (!agcProsperoDirectProfileAcceptsDefaultsVersion(
+            &g_prospero.direct_profile, version))
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (g_prospero.defaults_notified &&
+        g_prospero.defaults_version != version)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    g_prospero.defaults_version = version;
     return AGC_OK;
 }
 
@@ -583,11 +602,7 @@ static void agcProsperoFlushRange(const void *address, size_t size)
  * SceGnmDdid is 0xFC000 (1008 KB). The primary defaults blob needs
  * ~262 KB (127 groups), the internal defaults blob needs ~46 KB (22 groups).
  * We carve from the start of DDID to fit both, plus DCB scratch at the end. */
-#define AGC_DDID_PRIMARY_SIZE     0x41000   /* 260 KB for primary defaults */
-#define AGC_DDID_INTERNAL_V8_SIZE 0xC000    /* 48 KB for version 8 */
-#define AGC_DDID_INTERNAL_V10_SIZE 0xF000   /* 60 KB for version 10 */
 #define AGC_DDID_PRIMARY_OFFSET   0x00000   /* start of DDID */
-#define AGC_DDID_INTERNAL_OFFSET  AGC_DDID_PRIMARY_OFFSET + AGC_DDID_PRIMARY_SIZE
 #define AGC_DDID_MULTI_TRAILER_SIZE 64
 #define AGC_DDID_DCB_OFFSET       0xFC000 - 16  /* last 16 bytes for DCB scratch */
 #define AGC_DDID_WORKLOAD_ACTIVE_OFFSET   (0xFC000u - 0x100u)
@@ -596,44 +611,17 @@ static void agcProsperoFlushRange(const void *address, size_t size)
 #define AGC_GPU_INFO_WORKLOAD_TABLE_SIZE   0x200u
 #define AGC_OPENAGC_WORKLOAD_STREAM_ID     1u
 
-typedef struct AgcProsperoDefaultsLayout {
-    uint32_t primary_cx_length;
-    uint32_t primary_sh_length;
-    uint32_t primary_uc_length;
-    uint32_t internal_cx_length;
-    uint32_t internal_sh_length;
-    uint32_t internal_uc_length;
-    size_t internal_blob_size;
-} AgcProsperoDefaultsLayout;
-
 static AgcProsperoDefaultsLayout agcProsperoGetDefaultsLayout(void)
 {
-    if (g_prospero.direct_profile.defaults_version ==
-        AGC_REGISTER_DEFAULTS_VERSION_12) {
-        const AgcProsperoDefaultsLayout layout = {
-            AGC_REGISTER_DEFAULTS_V10_PRIMARY_CX_LENGTH,
-            AGC_REGISTER_DEFAULTS_V10_PRIMARY_SH_LENGTH,
-            AGC_REGISTER_DEFAULTS_V10_PRIMARY_UC_LENGTH,
-            AGC_REGISTER_DEFAULTS_V10_INTERNAL_CX_LENGTH,
-            AGC_REGISTER_DEFAULTS_V10_INTERNAL_SH_LENGTH,
-            AGC_REGISTER_DEFAULTS_V10_INTERNAL_UC_LENGTH,
-            AGC_DDID_INTERNAL_V10_SIZE,
-        };
-        return layout;
-    }
+    AgcProsperoDefaultsLayout layout;
 
-    {
-        const AgcProsperoDefaultsLayout layout = {
-            AGC_REGISTER_DEFAULTS_V8_PRIMARY_CX_LENGTH,
-            AGC_REGISTER_DEFAULTS_V8_PRIMARY_SH_LENGTH,
-            AGC_REGISTER_DEFAULTS_V8_PRIMARY_UC_LENGTH,
-            AGC_REGISTER_DEFAULTS_V8_INTERNAL_CX_LENGTH,
-            AGC_REGISTER_DEFAULTS_V8_INTERNAL_SH_LENGTH,
-            AGC_REGISTER_DEFAULTS_V8_INTERNAL_UC_LENGTH,
-            AGC_DDID_INTERNAL_V8_SIZE,
-        };
+    if (agcProsperoDefaultsLayoutForVersion(
+            g_prospero.defaults_version, &layout))
         return layout;
-    }
+    /* Selection has not happened yet. Reserve non-overlapping maximum space
+     * for the trailer; NotifyDefaultStates still fails closed. */
+    return (AgcProsperoDefaultsLayout){80u, 29u, 47u, 9u, 15u, 3u,
+        0x50000u, 0xf000u};
 }
 
 /* ===================================================================== */
@@ -840,7 +828,8 @@ int32_t PS5_SYSV_ABI agcProsperoInitializeInternalMemory(void)
     const AgcProsperoDefaultsLayout defaults_layout =
         agcProsperoGetDefaultsLayout();
     const size_t multi_trailer_offset =
-        AGC_DDID_INTERNAL_OFFSET + defaults_layout.internal_blob_size;
+        defaults_layout.primary_blob_size +
+        defaults_layout.internal_blob_size;
     int32_t trailer_ret = agcProsperoCarveSubRegion(
         &g_prospero.ddid, multi_trailer_offset,
         AGC_DDID_MULTI_TRAILER_SIZE, &g_prospero.multi_trailer);
@@ -1430,7 +1419,7 @@ int32_t PS5_SYSV_ABI agcProsperoNotifyDefaultStates(uint32_t flags)
         return AGC_ERROR_NOT_INITIALIZED;
     if ((g_prospero.direct_profile.capabilities &
             AGC_DIRECT_CAP_DEFAULT_STATES) == 0 ||
-        g_prospero.direct_profile.defaults_version ==
+        g_prospero.defaults_version ==
             AGC_DIRECT_DEFAULTS_VERSION_UNKNOWN)
         return AGC_ERROR_NOT_SUPPORTED;
 
@@ -1442,17 +1431,18 @@ int32_t PS5_SYSV_ABI agcProsperoNotifyDefaultStates(uint32_t flags)
      * loading. The actual submission path that consumes these blobs is still
      * pending hardware validation.
      *
-     * Version selection is exact-profile data. FW 5.50 uses version 8;
-     * firmware without a recovered mapping returns NOT_SUPPORTED above.
+     * Version selection comes from the caller's sceAgcInit(version), exactly
+     * like the Sony runtime record. The exact firmware profile supplies only
+     * the accepted upper bound.
      */
     uint32_t primary_count = 0;
     uint32_t internal_count = 0;
     const AgcRegisterDefaultsGroup *primary_groups =
         agcRegisterDefaultsGetPrimaryGroupsForVersion(
-            g_prospero.direct_profile.defaults_version, &primary_count);
+            g_prospero.defaults_version, &primary_count);
     const AgcRegisterDefaultsGroup *internal_groups =
         agcRegisterDefaultsGetInternalGroupsForVersion(
-            g_prospero.direct_profile.defaults_version, &internal_count);
+            g_prospero.defaults_version, &internal_count);
 
     const AgcProsperoDefaultsLayout layout = agcProsperoGetDefaultsLayout();
 
@@ -1462,13 +1452,13 @@ int32_t PS5_SYSV_ABI agcProsperoNotifyDefaultStates(uint32_t flags)
     size_t internal_size = agcRegisterDefaultsComputeSize(
         internal_count, layout.internal_cx_length, layout.internal_sh_length,
         layout.internal_uc_length);
-    printf("    [defaults] primary: %u groups, size=0x%zx (blob=0x%x)\n",
-           primary_count, primary_size, AGC_DDID_PRIMARY_SIZE);
+    printf("    [defaults] primary: %u groups, size=0x%zx (blob=0x%zx)\n",
+           primary_count, primary_size, layout.primary_blob_size);
     printf("    [defaults] internal: %u groups, size=0x%zx (blob=0x%x)\n",
            internal_count, internal_size, (unsigned)layout.internal_blob_size);
 
     int32_t ret = agcProsperoCarveSubRegion(
-        &g_prospero.ddid, AGC_DDID_PRIMARY_OFFSET, AGC_DDID_PRIMARY_SIZE,
+        &g_prospero.ddid, AGC_DDID_PRIMARY_OFFSET, layout.primary_blob_size,
         &g_prospero.primary_defaults);
     if (ret != AGC_OK) {
         printf("    [defaults] ERROR: carve primary failed: 0x%x (ddid size=0x%zx)\n",
@@ -1477,7 +1467,7 @@ int32_t PS5_SYSV_ABI agcProsperoNotifyDefaultStates(uint32_t flags)
     }
 
     ret = agcProsperoCarveSubRegion(
-        &g_prospero.ddid, AGC_DDID_INTERNAL_OFFSET, layout.internal_blob_size,
+        &g_prospero.ddid, layout.primary_blob_size, layout.internal_blob_size,
         &g_prospero.internal_defaults);
     if (ret != AGC_OK) {
         printf("    [defaults] ERROR: carve internal failed: 0x%x\n", ret);
@@ -1939,6 +1929,7 @@ int32_t PS5_SYSV_ABI agcProsperoShutdown(void)
     }
     memset(&g_prospero, 0, sizeof(g_prospero));
     g_prospero.gc_fd = -1;
+    g_prospero.defaults_version = AGC_DIRECT_DEFAULTS_VERSION_UNKNOWN;
     return AGC_OK;
 }
 

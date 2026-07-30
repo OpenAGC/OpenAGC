@@ -6,7 +6,9 @@
 
 #include "driver_ops.h"
 
+#include "agc_context.h"
 #include "driver_registry.h"
+#include "game_compat_internal.h"
 
 #ifdef OPENAGC_GENERIC
 #define AGC_DEFAULT_DRIVER_OPS agcGenericDriverOps
@@ -26,6 +28,17 @@ const AgcDriverOps *agcDriverGetOps(void)
 const char *agcDriverDebugBackendName(void)
 {
     return g_driver_ops ? g_driver_ops->name : "unselected";
+}
+
+int32_t agcDriverSelectRegisterDefaultsVersion(uint32_t version)
+{
+    if (version > AGC_REGISTER_DEFAULTS_VERSION_12)
+        return AGC_ERROR_INVALID_ARGUMENT;
+#ifdef OPENAGC_PROSPERO
+    return agcProsperoSelectRegisterDefaultsVersion(version);
+#else
+    return AGC_OK;
+#endif
 }
 
 #ifdef OPENAGC_GENERIC
@@ -86,6 +99,8 @@ int32_t PS5_SYSV_ABI agcDriverShutdown(void)
     if (result == AGC_OK)
         g_driver_ops = NULL;
 #endif
+    if (result == AGC_OK)
+        agcGameCompatResetRegisterDefaultsVersion();
     return result;
 }
 

@@ -28,6 +28,7 @@
 #include "agc_cb.h"
 #include "agc_error.h"
 #include "gpu_credentials.h"
+#include "agc_test_defaults.h"
 #include <ps5/kernel.h>
 
 /* PS5 kernel memory constants */
@@ -266,6 +267,13 @@ static bool init_agc(void) {
     printf("[AGC] init result: 0x%08X (%s)\n", (unsigned)err, errstr(err));
     if (err != AGC_OK) {
         printf("[AGC] FATAL: cannot initialize AGC\n");
+        return false;
+    }
+
+    err = sceAgcInit(agcTestDefaultsVersion(0x0550u));
+    if (err != AGC_OK) {
+        printf("[AGC] FATAL: cannot select V8 defaults: 0x%08X\n",
+               (unsigned)err);
         return false;
     }
 

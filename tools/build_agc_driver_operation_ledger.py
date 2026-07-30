@@ -58,11 +58,16 @@ def load_defaults(path: Path) -> dict[str, tuple[str, str]]:
         "key", "path", "versioned_nid", "versioned_vaddr", "versioned_size",
         "versioned_fingerprint", "max_dispatch_version", "runtime_nid",
         "runtime_vaddr", "runtime_size", "runtime_fingerprint", "selector_source",
-        "table_stride", "selector_field_offset", "selected_version", "evidence",
+        "table_stride", "selector_field_offset", "evidence",
+        "internal_versioned_nid", "internal_versioned_vaddr",
+        "internal_versioned_size", "internal_versioned_fingerprint",
+        "internal_max_dispatch_version", "internal_runtime_nid",
+        "internal_runtime_vaddr", "internal_runtime_size",
+        "internal_runtime_fingerprint",
     )
     for row in csv.DictReader(rows_without_comments(path), delimiter="\t",
                               fieldnames=fields):
-        result[row["key"]] = (row["selected_version"], row["evidence"])
+        result[row["key"]] = (row["max_dispatch_version"], row["evidence"])
     return result
 
 
@@ -84,17 +89,18 @@ def evidence_for(key: str, defaults: dict[str, tuple[str, str]]) -> dict[str, st
     }
     if key not in TRINITY_KEYS:
         evidence["memory"] = "RE-exact-standard-hardware-pending"
-    selected_version, selection_evidence = defaults[key]
-    if selected_version != "unknown":
-        evidence["enabled_direct_ops"] += f",defaults-v{selected_version}"
+    maximum_version, selection_evidence = defaults[key]
+    if maximum_version != "unknown":
+        evidence["enabled_direct_ops"] += ",defaults-caller-selected"
         evidence["defaults"] = (
-            f"SPRX-qualified-v{selected_version}-{selection_evidence}"
+            f"SPRX-qualified-caller-v0-v{maximum_version}-{selection_evidence}"
         )
     if key == "0x0550":
         evidence.update({
             "enabled_direct_ops": (
                 "submit16,memory,queue,suspend-primary,suspend-final,"
-                "workload-extension,tf-ring,hs-offchip,defaults-v8,async,"
+                "workload-extension,tf-ring,hs-offchip,"
+                "defaults-caller-selected,async,"
                 "eop-flip"
             ),
             "queue": "hardware-qualified",
@@ -103,7 +109,7 @@ def evidence_for(key: str, defaults: dict[str, tuple[str, str]]) -> dict[str, st
             "tf_ring": "hardware-qualified-public-0x80108128",
             "hs_offchip": "hardware-qualified-0xc010812c",
             "memory": "hardware-qualified-standard",
-            "defaults": "hardware-qualified-v8",
+            "defaults": "caller-v0-v9-SPRX-qualified-v8-hardware-qualified",
             "async_graphics": "hardware-qualified-0x80048126",
             "qualification": "hardware-qualified-FW5.50",
         })
@@ -111,7 +117,7 @@ def evidence_for(key: str, defaults: dict[str, tuple[str, str]]) -> dict[str, st
         evidence.update({
             "enabled_direct_ops": (
                 "submit16,memory,queue,suspend-primary,suspend-final,"
-                "tf-ring,hs-offchip,defaults-v12,async"
+                "tf-ring,hs-offchip,defaults-caller-selected,async"
             ),
             "queue": "hardware-qualified-authenticated-0xc0408121-0xc00c810e",
             "suspend_submit": "hardware-qualified-primary-final",
@@ -119,7 +125,7 @@ def evidence_for(key: str, defaults: dict[str, tuple[str, str]]) -> dict[str, st
             "tf_ring": "hardware-qualified-public-0x80108128",
             "hs_offchip": "hardware-qualified-zero-entry-carrier-0xc010812c",
             "memory": "hardware-qualified-standard-RE-exact-Trinity",
-            "defaults": "hardware-qualified-v12",
+            "defaults": "caller-v0-v12-SPRX-qualified-v12-hardware-qualified",
             "async_graphics": "hardware-qualified-0x80048126",
             "qualification": "hardware-qualified-standard-FW11.60",
         })

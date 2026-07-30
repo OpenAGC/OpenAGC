@@ -64,10 +64,20 @@ oracles. It also corrected `sceAgcInit` from an unsafe three-argument prototype
 to the one-version-argument ABI reproduced on FW 5.50 and FW 11.60; the legacy
 entry retains its state-plus-version form. The same audit proved that the
 defaults selector is this version argument stored at runtime-record offset
-`0x44`, not a hidden hardware choice. All 39 exact keys now select a
-caller-permitted V7/V8/V9/V12 policy. FW 5.50 V8 and FW 11.60 V12 remain the
-only hardware-qualified policies; the other 37 are SPRX-qualified and
-hardware-unverified. See `analysis/firmware_neutral_binary_audit_20260730.md`.
+`0x44`, not a hidden hardware choice. All 39 exact keys now expose an
+SPRX-proven accepted bound, while the direct backend preserves the caller's
+actual version separately. FW 5.50 V8 and FW 11.60 V12 remain the only
+hardware-qualified caller/profile combinations. See
+`analysis/firmware_neutral_binary_audit_20260730.md`.
+
+The Prospero defaults path no longer discards `sceAgcInit(version)` or treats a
+dispatcher's maximum as the selected version. Exact bounds cover all 39 active
+firmware keys, and explicit V0-V12 table dimensions keep the larger legacy and
+V11 blobs within non-overlapping DDID allocations. Default-state notification
+without a caller selection now fails closed.
+The no-argument current/internal defaults wrappers also use that recorded
+version and now match their pointer-returning Sony ABI; the former unrelated
+output-buffer declaration was removed.
 
 ## Reusable driver and flexible-memory teardown (2026-07-29)
 

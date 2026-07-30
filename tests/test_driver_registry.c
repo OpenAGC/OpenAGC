@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "agc_error.h"
+#include "agc_context.h"
 #include "agc_ioctl.h"
 #include "agc_pm4.h"
 #include "driver_ops.h"
@@ -128,8 +129,8 @@ static void test_direct_operation_profiles(void)
         AGC_DIRECT_CAP_HS_OFFCHIP | AGC_DIRECT_CAP_DEFAULT_STATES |
         AGC_DIRECT_CAP_ASYNC_GRAPHICS | AGC_DIRECT_CAP_EOP_FLIP,
         "FW 5.50 exposes only its qualified direct operations");
-    TEST_ASSERT_EQ(profile.defaults_version, 8u,
-        "FW 5.50 selects register-defaults version 8");
+    TEST_ASSERT_EQ(profile.defaults_max_version, 9u,
+        "FW 5.50 accepts register-defaults versions through 9");
     TEST_ASSERT(profile.submit_uses_frame_close_trailer,
         "FW 5.50 retains its hardware-proven close/trailer workaround");
     TEST_ASSERT_EQ(profile.tf_ring_ioctl, AGC_GC_IOCTL_SET_TF_RING,
@@ -171,8 +172,8 @@ static void test_direct_operation_profiles(void)
         "FW 11.60 exact version-12 defaults dispatcher is enabled");
     TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_EOP_FLIP) == 0,
         "FW 11.60 cannot inherit FW 5.50-only EOP flip evidence");
-    TEST_ASSERT_EQ(profile.defaults_version, 12u,
-        "FW 11.60 selects version 12, which maps to recovered V10 tables");
+    TEST_ASSERT_EQ(profile.defaults_max_version, 12u,
+        "FW 11.60 accepts register-defaults versions through 12");
     TEST_ASSERT_EQ(profile.tf_ring_ioctl, AGC_GC_IOCTL_SET_TF_RING,
         "FW 11.60 TF-ring uses 0x80108128, not final suspend");
     TEST_ASSERT_EQ(profile.hs_offchip_ioctl, AGC_GC_IOCTL_SET_HS_OFFCHIP,
@@ -201,8 +202,8 @@ static void test_direct_operation_profiles(void)
         AGC_DIRECT_CAP_HS_OFFCHIP | AGC_DIRECT_CAP_DEFAULT_STATES |
         AGC_DIRECT_CAP_ASYNC_GRAPHICS,
         "FW 12.20 exposes only its exact carrier-qualified subset");
-    TEST_ASSERT_EQ(profile.defaults_version, 12u,
-        "FW 12.20 selects its caller-permitted version-12 policy");
+    TEST_ASSERT_EQ(profile.defaults_max_version, 12u,
+        "FW 12.20 accepts caller versions through 12");
     TEST_ASSERT(profile.runtime.supports_tf_ring,
         "FW 12.20 explicit profile enables its public TF carrier");
     TEST_ASSERT_EQ(profile.tf_ring_ioctl, AGC_GC_IOCTL_SET_TF_RING,
@@ -245,6 +246,39 @@ static void test_standard_register_shadow_descriptors(void)
         "overflowing standard register-shadow base rejected");
 }
 
+static void test_all_register_defaults_layouts(void)
+{
+    for (uint32_t version = 0u; version <= 12u; ++version) {
+        AgcProsperoDefaultsLayout layout;
+        uint32_t primary_count = 0u;
+        uint32_t internal_count = 0u;
+
+        TEST_ASSERT(agcProsperoDefaultsLayoutForVersion(version, &layout),
+            "every caller-selectable defaults version has a blob layout");
+        (void)agcRegisterDefaultsGetPrimaryGroupsForVersion(
+            version, &primary_count);
+        (void)agcRegisterDefaultsGetInternalGroupsForVersion(
+            version, &internal_count);
+        TEST_ASSERT(agcRegisterDefaultsComputeSize(primary_count,
+            layout.primary_cx_length, layout.primary_sh_length,
+            layout.primary_uc_length) <= layout.primary_blob_size,
+            "primary defaults allocation fits the selected version");
+        TEST_ASSERT(agcRegisterDefaultsComputeSize(internal_count,
+            layout.internal_cx_length, layout.internal_sh_length,
+            layout.internal_uc_length) <= layout.internal_blob_size,
+            "internal defaults allocation fits the selected version");
+        TEST_ASSERT(layout.primary_blob_size + layout.internal_blob_size +
+            64u <= 0xfc000u,
+            "defaults blobs and deferred trailer fit the DDID region");
+    }
+
+    TEST_ASSERT(!agcProsperoDefaultsLayoutForVersion(13u,
+        &(AgcProsperoDefaultsLayout){0}),
+        "unsupported defaults version has no layout");
+    TEST_ASSERT(!agcProsperoDefaultsLayoutForVersion(8u, NULL),
+        "NULL defaults layout output rejected");
+}
+
 static void test_common_operation_carrier_profiles(void)
 {
     static const uint16_t active_keys[] = {
@@ -257,9 +291,9 @@ static void test_common_operation_carrier_profiles(void)
         0x1100u, 0x1120u, 0x1140u, 0x1160u,
         0x1200u, 0x1202u, 0x1220u, 0x1240u, 0x1260u, 0x1270u,
     };
-    static const uint8_t defaults_versions[] = {
+    static const uint8_t defaults_max_versions[] = {
         7u, 8u, 8u, 8u, 8u,
-        9u, 9u, 8u, 9u, 9u, 9u,
+        9u, 9u, 9u, 9u, 9u, 9u,
         9u, 9u, 9u, 9u, 9u,
         9u, 9u, 9u, 9u,
         12u, 12u, 12u, 12u, 12u,
@@ -269,8 +303,8 @@ static void test_common_operation_carrier_profiles(void)
     };
 
     _Static_assert(sizeof(active_keys) / sizeof(active_keys[0]) ==
-        sizeof(defaults_versions) / sizeof(defaults_versions[0]),
-        "every active profile needs one defaults policy");
+        sizeof(defaults_max_versions) / sizeof(defaults_max_versions[0]),
+        "every active profile needs one defaults bound");
 
     for (size_t i = 0; i < sizeof(active_keys) / sizeof(active_keys[0]); ++i) {
         AgcProsperoDirectProfile profile;
@@ -307,9 +341,18 @@ static void test_common_operation_carrier_profiles(void)
         }
         TEST_ASSERT((profile.capabilities &
             AGC_DIRECT_CAP_DEFAULT_STATES) != 0,
-            "every exact profile exposes its caller-selectable defaults policy");
-        TEST_ASSERT_EQ(profile.defaults_version, defaults_versions[i],
-            "exact profile retains its evidenced defaults policy");
+            "every exact profile exposes caller-selectable defaults");
+        TEST_ASSERT_EQ(profile.defaults_max_version, defaults_max_versions[i],
+            "exact profile retains its SPRX-evidenced defaults bound");
+        TEST_ASSERT(agcProsperoDirectProfileAcceptsDefaultsVersion(
+            &profile, defaults_max_versions[i]),
+            "profile accepts its exact maximum defaults version");
+        TEST_ASSERT(agcProsperoDirectProfileAcceptsDefaultsVersion(
+            &profile, 0u),
+            "profile accepts a caller-selected backward-compatible version");
+        TEST_ASSERT(!agcProsperoDirectProfileAcceptsDefaultsVersion(
+            &profile, (uint32_t)defaults_max_versions[i] + 1u),
+            "profile rejects a caller version above its exact SPRX bound");
         if (active_keys[i] == 0x0550u || active_keys[i] == 0x1160u) {
             TEST_ASSERT_EQ((profile.capabilities & AGC_DIRECT_CAP_EOP_FLIP) != 0,
                 active_keys[i] == 0x0550u,
@@ -319,6 +362,9 @@ static void test_common_operation_carrier_profiles(void)
                 "unverified EOP flip path fails closed");
         }
     }
+
+    TEST_ASSERT(!agcProsperoDirectProfileAcceptsDefaultsVersion(NULL, 0u),
+        "NULL profile rejects defaults selection");
 
     {
         static const uint16_t archival_keys[] = {0x0100u, 0x0200u, 0x0250u,
@@ -479,6 +525,7 @@ void test_suite_driver_registry(void)
     TEST_RUN(test_archival_and_fw320_firmware_profiles);
     TEST_RUN(test_direct_operation_profiles);
     TEST_RUN(test_standard_register_shadow_descriptors);
+    TEST_RUN(test_all_register_defaults_layouts);
     TEST_RUN(test_common_operation_carrier_profiles);
     TEST_RUN(test_trinity_runtime_profile);
     TEST_RUN(test_runtime_profile_diagnostic_labels);
