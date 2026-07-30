@@ -280,8 +280,9 @@ the runner and shared teardown on FW 11.60 only.
 - `RGBA16_SNORM` is host-implemented as append-only value 19 with gfx1013
   `16_16_16_16`, SNORM, standard swap, eight bytes per pixel, and FP16_ABGR
   export. Its exact PM4, all-profile, 0-27-dword, and 64-bit layout fixtures
-  pass, and its four-lane firmware-neutral gate builds. Hash pinning and
-  guarded FW 11.60 qualification remain pending.
+  pass. Its four-lane firmware-neutral ELF is pinned before execution as
+  SHA-256 `85ce21feba113b77b757dcf21f3292b9fb673e27707d72473bde258ca894748d`;
+  guarded FW 11.60 qualification remains pending.
 - Seven additional offscreen format gates now build under the same exact
   profile and bounded runner: R8, RG8, RGB10A2, R11G11B10, R32, RG32, and
   RGBA32. All seven passed twice on FW 11.60; logged RG32 reproduced FNV64

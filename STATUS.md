@@ -159,8 +159,9 @@ passes the firmware-neutral verifier, but is not yet hardware-qualified.
 `(format=0x0c, number=SNORM, swap=standard)`, eight bytes per pixel, and
 FP16_ABGR export. Exact host fixtures cover PM4, every active profile, every
 short command buffer, and maximum 64-bit surface arithmetic. Its reusable
-four-lane signed artifact builds and passes the neutral verifier but is not
-yet hash-pinned or hardware-qualified.
+four-lane signed artifact is pinned before execution as SHA-256
+`85ce21feba113b77b757dcf21f3292b9fb673e27707d72473bde258ca894748d` and
+passes the neutral verifier but is not yet hardware-qualified.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability
