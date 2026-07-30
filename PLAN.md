@@ -636,7 +636,9 @@ all six pinned artifacts for identical-byte FW 5.50 replay and proceed to the
   `32_32_32_32`, SINT, standard swap, 16 bytes per pixel, and `32_ABGR`
   export 9. Exact PM4 (`CB_COLOR0_INFO=0x00070538`), all-profile selection,
   every short-buffer boundary, invalid-enum behavior, and maximum layout
-  arithmetic pass. Build and pin its four-lane signed gate offline.
+  arithmetic pass. Its firmware-neutral four-lane signed gate now builds with
+  a dedicated `32_ABGR` integer export and fail-closed per-lane oracle. Pin the
+  final bytes offline before any endpoint execution.
 
 These formats need dedicated integer-output pixel shaders. Do not qualify them
 using a floating-point shader and assume the conversion is correct. Their

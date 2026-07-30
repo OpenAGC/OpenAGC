@@ -343,7 +343,10 @@ hardware execution remains ordered behind the clean-boot UINT gates.
 `32_ABGR` export 9. Exact host coverage locks `CB_COLOR0_INFO=0x00070538`, full
 PM4, all 39 profiles, every short command-buffer boundary, invalid enums, and
 maximum 64-bit surface arithmetic. The complete 32-bit UINT/SINT tuple matrix
-is now host-qualified; the generic suite passes 12,082 assertions.
+is now host-qualified; the generic suite passes 12,082 assertions. A dedicated
+four-lane signed-coordinate shader, exact SINT32 oracle, and firmware-neutral
+portable gate also build successfully; hardware execution remains gated on a
+clean FW 11.60 reboot.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability
