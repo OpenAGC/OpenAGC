@@ -425,7 +425,12 @@ terminal 0/255 entries, mip selection, a second array layer, and partial edge
 storage. The independent oracle decodes both fields, uses nearest rounding for
 alpha interpolation, converts only RGB for SRGB, and requires exact RGBA8
 agreement plus alpha endpoints 0 and 255. Artifact pinning and hardware
-execution remain pending.
+execution remain pending. Exact artifacts are now pinned as SHA-256
+`4e3d028c740037f6b3e5891cf3fe1d9b7c4be7b30a24e0a3d5d4174076b7a9e9`
+(UNORM) and
+`80d7fded2d9d0baeb14b859e0aeb2a3ce80d8358448711655622d13fceff1556`
+(SRGB), with no-prerequisite FW 11.60 and FW 5.50 guarded targets. Hardware
+execution remains pending a clean FW 11.60 boot.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability

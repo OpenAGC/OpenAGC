@@ -815,7 +815,12 @@ six-alpha-plus-terminal interpolation modes. The independent CPU oracle uses
 the qualified BC4 rounding rule for interpolated alpha, applies SRGB only to
 RGB, demands exact RGBA8 agreement and the full 0..255 alpha range, validates
 all selection regions, and records a native hash. Pin the final neutral bytes
-before any hardware attempt.
+before any hardware attempt. The pinned SHA-256 values are
+`4e3d028c740037f6b3e5891cf3fe1d9b7c4be7b30a24e0a3d5d4174076b7a9e9`
+for BC3 UNORM and
+`80d7fded2d9d0baeb14b859e0aeb2a3ce80d8358448711655622d13fceff1556`
+for BC3 SRGB. Their FW 11.60 and identical-byte FW 5.50 guarded targets have
+no build prerequisites.
 
 Use dedicated, deterministic source blocks containing endpoint, index,
 alpha, signed-range, and edge-block cases appropriate to each format. A
