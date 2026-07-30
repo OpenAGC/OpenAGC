@@ -226,6 +226,12 @@ words, zero outside change, exact `228096/228096` color, bounded completion,
 clean shutdown, final PASS, and no residual process. The recipe now freezes
 `32281`; run one enforcement replay before the FW 11.60 array mirror.
 
+The frozen FW 5.50 array replay reproduced `32281` selected words, zero
+outside change, exact `228096/228096` color, bounded completion, clean
+shutdown, final PASS, and no residual process. Current-source array-layer-1
+HTILE isolation is hardware-qualified on FW 5.50. Run the pinned FW 11.60
+array artifact next, freeze its selected count, and replay.
+
 That prerequisite sequence is now complete. Two relinks against the committed
 shader records reproduced all eight artifacts byte-for-byte, and dependency
 inspection found only VideoOut, kernel, libc, and networking. The exact FW

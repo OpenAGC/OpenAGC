@@ -642,6 +642,10 @@ the runner and shared teardown on FW 11.60 only.
   capture reported `32281` selected words, zero outside change, exact
   `228096/228096` color, clean shutdown, and no residual process. Its recipe
   now freezes `32281`; run one enforcement replay before FW 11.60.
+- The frozen FW 5.50 array replay reproduced `32281`, zero outside change,
+  exact `228096/228096` color, clean shutdown, and no residual process. Array-
+  layer-1 isolation is qualified on FW 5.50. Run the pinned FW 11.60 array
+  artifact next and freeze its selected count before replay.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and
