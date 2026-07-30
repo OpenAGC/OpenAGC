@@ -106,6 +106,12 @@ int32_t PS5_SYSV_ABI agcGenericSubmitMultiCommandBuffersDirect(
         return AGC_ERROR_NOT_INITIALIZED;
     if (count == 0 || !dcb_gpu_addrs || !dcb_sizes_in_bytes)
         return AGC_ERROR_INVALID_ARGUMENT;
+    if (g_debug_next_submit_result != AGC_OK) {
+        const int32_t result = g_debug_next_submit_result;
+
+        g_debug_next_submit_result = AGC_OK;
+        return result;
+    }
 
     return AGC_OK;
 }

@@ -90,10 +90,10 @@ No command call emits partial packets. Insufficient capacity returns
 `AGC_ERROR_COMMAND_SPACE_EXHAUSTED` with the cursor unchanged.
 
 The synchronization milestone supports a bounded 2–63 command-buffer batch on
-the graphics queue. Every member must be executable, nonempty, distinct, and
-owned by the same queue; one fence tracks the complete batch and releases all
-members after completion. The current compute route, empty batch members, and
-cross-queue submission remain fail-closed.
+the graphics and compute queues. Every member must be executable, nonempty,
+distinct, and owned by the same queue; one fence tracks the complete batch and
+releases all members after completion. Empty batch members and cross-queue
+submission remain fail-closed.
 
 For one command buffer, v2 `AgcSubmitInfo` can name bounded lists of
 `AgcGpuLabelPoint` waits and signals. The runtime validates every exact prior
@@ -101,13 +101,16 @@ producer point before mutation, inserts waits before the command body and EOP
 signals after it, and snapshots full command storage. Validation, capacity,
 flush, or driver-submit failure restores bytes and cursor exactly and releases
 temporary label retains. Signal points publish only after successful submit.
-For graphics batches, the first command receives the wait preamble and the
-last receives the signal tail; both endpoint storages are restored together on
-rejection. The exact FW 5.50 standard-PS5 oracle passed the two-nonempty-DCB
-graphics-batch form with a first-DCB wait and final-DCB signal, without CPU
-waits; see
+For graphics or compute batches, the first command receives the wait preamble
+and the last receives the signal tail; both endpoint storages are restored
+together on rejection. The exact FW 5.50 standard-PS5 oracle passed the
+two-nonempty-DCB graphics-batch form with a first-DCB wait and final-DCB
+signal, without CPU waits; see
 [`runtime_batch_submit_label_lists_fw550_20260731.md`](../analysis/runtime_batch_submit_label_lists_fw550_20260731.md).
-Other batch forms and FW 11.60 remain hardware-unqualified.
+The equivalent label-only compute-queue form also passed; see
+[`runtime_compute_batch_submit_label_lists_fw550_20260731.md`](../analysis/runtime_compute_batch_submit_label_lists_fw550_20260731.md).
+Other batch forms, compute workload batching, and FW 11.60 remain
+hardware-unqualified.
 
 `AgcGpuLabel` provides the first GPU-side dependency primitive. A producer
 records `agcCmdSignalGpuLabel`; it emits the qualified EOP release write. A

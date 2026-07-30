@@ -330,11 +330,17 @@ agc_runtime_eop.elf: agc_runtime_eop.c gpu_credentials.h $(OPENAGC_LIB)
 agc_runtime_submit_lists.elf: agc_runtime_submit_lists.c gpu_credentials.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -o $@ agc_runtime_submit_lists.c $(AGC_LDFLAGS)
 
-# Bounded graphics-batch submission diagnostic. The two nonempty graphics
-# command buffers carry only observable label EOP writes; runtime owns the
-# list wait prefix, list signal tail, and completion fence packets.
+# Bounded batch-submission diagnostic. The two nonempty command buffers carry
+# only observable label EOP writes; runtime owns the list wait prefix, list
+# signal tail, and completion fence packets. The default target uses graphics;
+# the following target compiles the exact same oracle for a compute queue.
 agc_runtime_batch_submit_lists.elf: agc_runtime_batch_submit_lists.c gpu_credentials.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -o $@ agc_runtime_batch_submit_lists.c $(AGC_LDFLAGS)
+
+agc_runtime_compute_batch_submit_lists.elf: agc_runtime_batch_submit_lists.c gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_BATCH_QUEUE_TYPE=kAgcQueueCompute \
+		-DAGC_BATCH_QUEUE_NAME='"compute"' -o $@ \
+		agc_runtime_batch_submit_lists.c $(AGC_LDFLAGS)
 
 # Public native-runtime graphics probe. It intentionally builds an isolated
 # compiler/runtime artifact pair rather than changing the qualified manual

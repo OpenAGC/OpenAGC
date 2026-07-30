@@ -95,11 +95,11 @@ The first multi-command submission path is now active for graphics: a 2–63
 member batch is validated as one queue-owned frame and receives one bounded
 fence, with every member retained until that fence completes. Artifact
 `30564bfdd87de4c89e575a03b7456aad57a2ca72af174aa41d1598a20322142b` passed
-the two-DCB MRT/readback/reset/teardown oracle on exact FW 5.50. Compute
-batches, empty members, timelines, and broader cross-queue transfer rows remain
-fail-closed or unqualified. Graphics-batch submit lists are hardware-qualified
-on exact FW 5.50 for a two-nonempty-DCB graphics batch with a first-DCB wait
-and final-DCB signal, artifact
+the two-DCB MRT/readback/reset/teardown oracle on exact FW 5.50. Empty members,
+timelines, and broader cross-queue transfer rows remain fail-closed or
+unqualified. Graphics-batch submit lists are hardware-qualified on exact FW
+5.50 for a two-nonempty-DCB graphics batch with a first-DCB wait and final-DCB
+signal, artifact
 `32112756c2446146758409b1605fa8c55a6385d270f454af2cadcfb4262d054b`.
 
 Runtime API v9 adds a v2 `AgcSubmitInfo` list of typed `AgcGpuLabelPoint`
@@ -113,6 +113,9 @@ exact FW 5.50; see `analysis/runtime_submit_label_lists_fw550_20260731.md`.
 Artifact `32112756c2446146758409b1605fa8c55a6385d270f454af2cadcfb4262d054b`
 also passed the bounded two-DCB graphics-batch wait/signal-list oracle on exact
 FW 5.50; see `analysis/runtime_batch_submit_label_lists_fw550_20260731.md`.
+The same label-only two-DCB batch form passed on the native compute queue,
+artifact `95caaab9277368f06db8907147604e8e8dbc3296189fd80e5e15a37f0d46f9a2`;
+see `analysis/runtime_compute_batch_submit_label_lists_fw550_20260731.md`.
 FW 11.60 remains hardware-unqualified.
 
 ## Native resource and memory management complete (2026-07-30)

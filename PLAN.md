@@ -461,7 +461,8 @@ batches of 2–63 distinct nonempty command buffers use one recovered direct
 kernel frame and one runtime-owned fence. Artifact
 `30564bfdd87de4c89e575a03b7456aad57a2ca72af174aa41d1598a20322142b` passed a
 two-DCB MRT/readback/reset/teardown oracle on exact FW 5.50. Compute batches
-and wait/signal dependencies remain intentionally rejected.
+are submitted through the same direct multi-DCB carrier; their label-list
+qualification is recorded below.
 
 Runtime API v6 adds the first GPU-side label dependency. A producer records an
 EOP release write through `agcCmdSignalGpuLabel`; a consumer records an exact
@@ -487,7 +488,10 @@ back together. Generic coverage is complete, and the exact FW 5.50 standard
 PS5 two-nonempty-DCB graphics-batch oracle passed a first-DCB wait and
 final-DCB signal without CPU waits, artifact
 `32112756c2446146758409b1605fa8c55a6385d270f454af2cadcfb4262d054b`.
-FW 11.60 batch-list qualification remains open.
+The equivalent native compute-queue oracle also passed without CPU waits,
+artifact `95caaab9277368f06db8907147604e8e8dbc3296189fd80e5e15a37f0d46f9a2`.
+Both results cover only two nonempty DCBs carrying label EOP writes; FW 11.60
+and broader compute-batch workload qualification remain open.
 
 Runtime API v8 adds the first typed queue-ownership handoff: a v2 transition
 releases a whole GPU-written resource on its source queue and writes the

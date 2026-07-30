@@ -6747,7 +6747,7 @@ int32_t PS5_SYSV_ABI agcWaitFence(AgcFence fence, uint64_t timeout_ns)
 #endif
 }
 
-static int32_t agcQueueSubmitGraphicsBatch(
+static int32_t agcQueueSubmitBatch(
     AgcQueue queue, const AgcSubmitInfo *submit_info, AgcFence fence)
 {
     AgcCommandBuffer command_buffers[AGC_RUNTIME_MAX_SUBMIT_COMMAND_BUFFERS];
@@ -6772,7 +6772,8 @@ static int32_t agcQueueSubmitGraphicsBatch(
     AgcGfx1013EopFenceState completion;
 #endif
 
-    if (queue->type != kAgcQueueGraphics || count < 2u ||
+    if ((queue->type != kAgcQueueGraphics && queue->type != kAgcQueueCompute) ||
+        count < 2u ||
         count > AGC_RUNTIME_MAX_SUBMIT_COMMAND_BUFFERS || !fence ||
         fence->pending_command_buffer_count != 0u)
         return AGC_ERROR_NOT_SUPPORTED;
@@ -7021,7 +7022,7 @@ int32_t PS5_SYSV_ABI agcQueueSubmit(
     if (queue->next_submission_id == UINT64_MAX)
         return AGC_ERROR_NOT_SUPPORTED;
     if (submit_info->command_buffer_count > 1u)
-        return agcQueueSubmitGraphicsBatch(queue, submit_info, fence);
+        return agcQueueSubmitBatch(queue, submit_info, fence);
     command_buffer = submit_info->command_buffers[0];
     if (!command_buffer || command_buffer->magic != AGC_MAGIC_COMMAND_BUFFER ||
         command_buffer->device != queue->device ||

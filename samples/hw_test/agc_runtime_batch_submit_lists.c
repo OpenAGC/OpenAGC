@@ -1,4 +1,4 @@
-/* Native-runtime graphics batch submission wait/signal-list hardware oracle. */
+/* Native-runtime batch submission wait/signal-list hardware oracle. */
 
 #include <signal.h>
 #include <stdbool.h>
@@ -9,6 +9,14 @@
 #include "agc_error.h"
 #include "openagc/runtime.h"
 #include "gpu_credentials.h"
+
+#ifndef AGC_BATCH_QUEUE_TYPE
+#define AGC_BATCH_QUEUE_TYPE kAgcQueueGraphics
+#endif
+
+#ifndef AGC_BATCH_QUEUE_NAME
+#define AGC_BATCH_QUEUE_NAME "graphics"
+#endif
 
 enum { kCompletionTimeoutNs = 200000000u };
 
@@ -54,7 +62,8 @@ int main(void)
     bool passed = false;
     int32_t result;
 
-    puts("=== OpenAGC graphics batch submit-list sample ===");
+    printf("=== OpenAGC %s batch submit-list sample ===\n",
+        AGC_BATCH_QUEUE_NAME);
     if (set_gpu_credentials() != 0) {
         puts("GPU credentials: FAIL");
         goto cleanup;
@@ -71,8 +80,8 @@ int main(void)
     printf("Runtime profile: %s (FW ABI 0x%04x)\n",
         runtime_info.profile_name, runtime_info.firmware_abi_key);
 
-    queue_desc.type = kAgcQueueGraphics;
-    command_desc.queue_type = kAgcQueueGraphics;
+    queue_desc.type = AGC_BATCH_QUEUE_TYPE;
+    command_desc.queue_type = AGC_BATCH_QUEUE_TYPE;
     command_desc.capacity_dwords = 32u;
     result = agcCreateQueue(device, &queue_desc, &queue);
     report_result("agcCreateQueue", result);
@@ -181,7 +190,7 @@ int main(void)
     batch_submit.signal_count = 1u;
     batch_submit.signals = signals;
     result = agcQueueSubmit(queue, &batch_submit, batch_fence);
-    report_result("agcQueueSubmit(graphics batch wait/signal)", result);
+    report_result("agcQueueSubmit(batch wait/signal)", result);
     if (result != AGC_OK)
         goto cleanup;
     batch_submitted = true;
@@ -203,7 +212,8 @@ int main(void)
     if (result != AGC_OK)
         goto cleanup;
     consumer_submitted = true;
-    puts("Submitted producer, two-command graphics batch wait/signal, and consumer without CPU waits.");
+    printf("Submitted producer, two-command %s batch wait/signal, and consumer without CPU waits.\n",
+        AGC_BATCH_QUEUE_NAME);
     result = agcWaitFence(consumer_fence, kCompletionTimeoutNs);
     report_result("agcWaitFence(consumer)", result);
     if (result != AGC_OK)
@@ -324,7 +334,7 @@ cleanup:
         if (result != AGC_OK)
             passed = false;
     }
-    printf("Native runtime graphics batch submit-list result: %s\n",
-        passed ? "PASS" : "FAIL");
+    printf("Native runtime %s batch submit-list result: %s\n",
+        AGC_BATCH_QUEUE_NAME, passed ? "PASS" : "FAIL");
     return passed ? 0 : 1;
 }

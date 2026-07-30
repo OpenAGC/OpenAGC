@@ -1487,6 +1487,160 @@ static void test_runtime_multi_graphics_submission(void)
         "multi-submit device destroys");
 }
 
+static void test_runtime_multi_compute_submission(void)
+{
+    AgcDevice device = create_device();
+    AgcQueue queue = create_queue(device, kAgcQueueCompute);
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
+    AgcGpuLabelDesc label_desc = AGC_GPU_LABEL_DESC_INIT;
+    AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    AgcSubmitInfo list_submit = AGC_SUBMIT_INFO_V2_INIT;
+    AgcGpuLabelPoint waits[1] = { AGC_GPU_LABEL_POINT_INIT };
+    AgcGpuLabelPoint signals[1] = { AGC_GPU_LABEL_POINT_INIT };
+    AgcGpuLabelInfo label_info = AGC_GPU_LABEL_INFO_INIT;
+    AgcCommandBuffer producer = NULL;
+    AgcCommandBuffer first = NULL;
+    AgcCommandBuffer last = NULL;
+    AgcCommandBuffer commands[2] = { NULL, NULL };
+    AgcFence fence = NULL;
+    AgcGpuLabel source = NULL;
+    AgcGpuLabel destination = NULL;
+    AgcGpuLabel first_body = NULL;
+    AgcGpuLabel last_body = NULL;
+    AgcCommandBufferState state;
+
+    command_desc.queue_type = kAgcQueueCompute;
+    command_desc.capacity_dwords = 64u;
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &producer),
+        AGC_OK, "compute multi-submit producer command creates");
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &first),
+        AGC_OK, "compute multi-submit first command creates");
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &last),
+        AGC_OK, "compute multi-submit last command creates");
+    TEST_ASSERT_EQ(agcCreateFence(device, &fence_desc, &fence), AGC_OK,
+        "compute multi-submit fence creates");
+    TEST_ASSERT_EQ(agcCreateGpuLabel(device, &label_desc, &source), AGC_OK,
+        "compute multi-submit source label creates");
+    TEST_ASSERT_EQ(agcCreateGpuLabel(device, &label_desc, &destination), AGC_OK,
+        "compute multi-submit destination label creates");
+    TEST_ASSERT_EQ(agcCreateGpuLabel(device, &label_desc, &first_body), AGC_OK,
+        "compute multi-submit first body label creates");
+    TEST_ASSERT_EQ(agcCreateGpuLabel(device, &label_desc, &last_body), AGC_OK,
+        "compute multi-submit last body label creates");
+
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(producer), AGC_OK,
+        "compute multi-submit producer begins");
+    TEST_ASSERT_EQ(agcCmdSignalGpuLabel(producer, source, 1u), AGC_OK,
+        "compute multi-submit producer signal records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(producer), AGC_OK,
+        "compute multi-submit producer ends");
+    submit.command_buffer_count = 1u;
+    submit.command_buffers = &producer;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
+        "compute multi-submit producer submits");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(producer), AGC_OK,
+        "compute multi-submit producer resets");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "compute multi-submit producer fence resets");
+
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(first), AGC_OK,
+        "compute multi-submit first begins");
+    TEST_ASSERT_EQ(agcCmdSignalGpuLabel(first, first_body, 1u), AGC_OK,
+        "compute multi-submit first body signal records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(first), AGC_OK,
+        "compute multi-submit first ends");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(last), AGC_OK,
+        "compute multi-submit last begins");
+    TEST_ASSERT_EQ(agcCmdSignalGpuLabel(last, last_body, 1u), AGC_OK,
+        "compute multi-submit last body signal records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(last), AGC_OK,
+        "compute multi-submit last ends");
+    commands[0] = first;
+    commands[1] = last;
+    waits[0].label = source;
+    waits[0].value = 1u;
+    signals[0].label = destination;
+    signals[0].value = 2u;
+    list_submit.command_buffer_count = 2u;
+    list_submit.command_buffers = commands;
+    list_submit.wait_count = 1u;
+    list_submit.waits = waits;
+    list_submit.signal_count = 1u;
+    list_submit.signals = signals;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &list_submit, fence), AGC_OK,
+        "compute batch inserts first wait and final signal atomically");
+    TEST_ASSERT_EQ(agcGetGpuLabelInfo(destination, &label_info), AGC_OK,
+        "compute batch destination label diagnostics query succeeds");
+    TEST_ASSERT_EQ(label_info.scheduled_value, 2u,
+        "compute batch commits final list signal after submit");
+    TEST_ASSERT_EQ(agcGetCommandBufferState(first, &state), AGC_OK,
+        "compute batch first command state queries");
+    TEST_ASSERT_EQ(state, AGC_COMMAND_BUFFER_STATE_EXECUTABLE,
+        "generic compute batch first command completes");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(first), AGC_OK,
+        "compute batch first command resets");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(last), AGC_OK,
+        "compute batch last command resets");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "compute batch fence resets");
+
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(first), AGC_OK,
+        "compute batch rollback first begins");
+    TEST_ASSERT_EQ(agcCmdSignalGpuLabel(first, first_body, 2u), AGC_OK,
+        "compute batch rollback first body signal records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(first), AGC_OK,
+        "compute batch rollback first ends");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(last), AGC_OK,
+        "compute batch rollback last begins");
+    TEST_ASSERT_EQ(agcCmdSignalGpuLabel(last, last_body, 2u), AGC_OK,
+        "compute batch rollback last body signal records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(last), AGC_OK,
+        "compute batch rollback last ends");
+    signals[0].value = 3u;
+    agcDriverDebugFailNextSubmit(AGC_ERROR_SUBMIT_FAILED);
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &list_submit, fence),
+        AGC_ERROR_SUBMIT_FAILED,
+        "compute batch driver failure restores both list endpoints");
+    TEST_ASSERT_EQ(agcGetGpuLabelInfo(destination, &label_info), AGC_OK,
+        "compute batch rollback label diagnostics query succeeds");
+    TEST_ASSERT_EQ(label_info.scheduled_value, 2u,
+        "failed compute batch does not publish list signal");
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &list_submit, fence), AGC_OK,
+        "compute batch retries after endpoint rollback");
+    TEST_ASSERT_EQ(agcGetGpuLabelInfo(destination, &label_info), AGC_OK,
+        "retried compute batch label diagnostics query succeeds");
+    TEST_ASSERT_EQ(label_info.scheduled_value, 3u,
+        "retried compute batch publishes next list signal");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(first), AGC_OK,
+        "retried compute batch first command resets");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(last), AGC_OK,
+        "retried compute batch last command resets");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "retried compute batch fence resets");
+
+    TEST_ASSERT_EQ(agcDestroyGpuLabel(last_body), AGC_OK,
+        "compute multi-submit last body label destroys");
+    TEST_ASSERT_EQ(agcDestroyGpuLabel(first_body), AGC_OK,
+        "compute multi-submit first body label destroys");
+    TEST_ASSERT_EQ(agcDestroyGpuLabel(destination), AGC_OK,
+        "compute multi-submit destination label destroys");
+    TEST_ASSERT_EQ(agcDestroyGpuLabel(source), AGC_OK,
+        "compute multi-submit source label destroys");
+    TEST_ASSERT_EQ(agcDestroyFence(fence), AGC_OK,
+        "compute multi-submit fence destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(last), AGC_OK,
+        "compute multi-submit last command destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(first), AGC_OK,
+        "compute multi-submit first command destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(producer), AGC_OK,
+        "compute multi-submit producer command destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
+        "compute multi-submit queue destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "compute multi-submit device destroys");
+}
+
 static void test_runtime_gpu_labels(void)
 {
     AgcDevice device = create_device();
@@ -4914,6 +5068,7 @@ void test_suite_runtime(void)
     TEST_RUN(test_runtime_compiler_graphics_sidecar);
     TEST_RUN(test_runtime_indexed_graphics_submission);
     TEST_RUN(test_runtime_multi_graphics_submission);
+    TEST_RUN(test_runtime_multi_compute_submission);
     TEST_RUN(test_runtime_gpu_labels);
     TEST_RUN(test_runtime_submit_label_lists);
     TEST_RUN(test_runtime_image_transfer);
