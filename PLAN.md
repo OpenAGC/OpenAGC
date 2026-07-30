@@ -1133,6 +1133,11 @@ BC5 SNORM passed twice on FW 11.60 with identical `224640` changed pixels,
 mismatches/error, channel independence, and FNV64 `0xf1464077ada8ce8d`.
 Both BC5 variants are hardware-qualified on FW 11.60. Rebuild and freeze BC7
 next, followed by BC6.
+
+BC7 UNORM pass 1 succeeded on FW 11.60 with `224640` changed pixels,
+`{74880,74880,74880}` regions, mode counts `{4:205880,6:18760}`, alpha range
+`0..255`, zero exact mismatches, channel independence, and FNV64
+`0xf46729633292d01b`. Repeat the identical artifact once.
 The final firmware-neutral bytes are pinned as SHA-256
 `f74c393112fc465eace431a3fe288095ae4b3bf5ee993e8147ed0e9a2f22f2a4`
 for BC4 UNORM and
