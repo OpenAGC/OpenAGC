@@ -131,6 +131,10 @@ add_test(NAME graphics_runner_fail_closed
     COMMAND sh
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_graphics_runner_fail_closed.sh
         ${CMAKE_CURRENT_SOURCE_DIR}/samples/hw_test/run_fw1160_graphics.sh)
+add_test(NAME depth_runner_combined_oracle
+    COMMAND sh
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_depth_runner_combined_oracle.sh
+        ${CMAKE_CURRENT_SOURCE_DIR}/samples/hw_test/run_fw1160_depth.sh)
 add_test(NAME firmware_neutral_elf_verifier
     COMMAND sh
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_firmware_neutral_elf_verifier.sh

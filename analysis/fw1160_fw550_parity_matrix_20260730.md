@@ -56,7 +56,7 @@ reached its completion fence, shut the driver down, and returned PASS.
 | Ordinary D16 HTILE | Prepared | Hardware qualification missing |
 | D16 HTILE expclear | Prepared | Hardware qualification missing |
 | D32 HTILE ordinary/decompress/resummarize/expclear | Prepared | Hardware qualification missing |
-| Combined D32+S8 HTILE and aspect masks | Missing | Prepare bounded mirrors |
+| Combined D32+S8 HTILE and aspect masks | Prepared | Hardware qualification missing |
 | HTILE mip and array subresources | Missing | Prepare bounded mirrors |
 | 4x MSAA | Missing | Wait for the FW 5.50 baseline regression |
 | Sample-rate shading | Missing | Add an exact invocation-count gate |
@@ -91,6 +91,18 @@ dependency on `libSceAgc.sprx` or `libSceAgcDriver.sprx`; none has been run on
 hardware. Preserve the execution order below: the FW 5.50 teardown and
 uncompressed-depth baselines must pass before either compressed-depth tuple is
 launched.
+
+The combined D32+S8 tier is likewise prepared without a hardware claim. Eight
+artifacts cover ordinary HTILE and expclear of depth-only, stencil-only, or
+both aspects for exact FW `0x1160` and matching headless FW `0x0550`. The
+runner now additionally requires the exact full-rectangle stencil distribution
+(`456192` replaced and `1617408` zero bytes) and, for expclear, an enabled
+aspect-specific RMW plan with zero selected mismatches, zero outside changes,
+preserved reserved bits, and its bounded fence. A host fixture proves that the
+runner accepts the intended aspect and rejects the wrong one. All eight ELFs
+build without warnings and avoid both AGC SPRX dependencies. They remain
+behind the same FW 5.50 cleanup, uncompressed-depth, D16 HTILE, and D32 HTILE
+qualification sequence.
 
 ## Higher-level consumers
 

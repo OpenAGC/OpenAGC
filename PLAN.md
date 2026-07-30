@@ -476,6 +476,14 @@ the runner and shared teardown on FW 11.60 only.
   checks. They remain hardware-unverified and must not run until the FW 5.50
   cleanup stress, uncompressed-depth regression, and preceding D16 HTILE gates
   pass. See `analysis/fw1160_fw550_parity_matrix_20260730.md`.
+- Combined D32+S8 HTILE is now prepared offline in the same endpoint-paired
+  form. Ordinary HTILE plus depth-only, stencil-only, and both-aspect expclear
+  produce eight warning-free ELFs. The guarded runner pins exact D32 and S8
+  distributions, HTILE mutation, aspect-specific masked RMW results, reserved
+  bits, completion, shutdown, and final PASS; its host oracle rejects a wrong
+  aspect. No combined artifact depends on either AGC SPRX. Hardware execution
+  remains ordered after the FW 5.50 cleanup and uncompressed/D16/D32 HTILE
+  baselines. See `analysis/fw1160_fw550_parity_matrix_20260730.md`.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and

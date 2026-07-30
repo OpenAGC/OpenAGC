@@ -82,6 +82,14 @@ if [ "${EXPECTED_D32_FULL_RECT:-0}" -eq 1 ]; then
     grep -q '^\[Depth Readback\] raw D32: one=1617408 near=228096 far=228096$' \
         "$output_file" || exit 1
 fi
+if [ "${EXPECTED_STENCIL_FULL_RECT:-0}" -eq 1 ]; then
+    grep -q '^\[Stencil Readback\] zero=1617408 replace-5a=456192 other=0$' \
+        "$output_file" || exit 1
+fi
+if [ -n "${EXPECTED_COMBINED_EXPCLEAR_ASPECTS:-}" ]; then
+    grep -Eq "^\[Combined Expclear RMW\] aspects=0x$EXPECTED_COMBINED_EXPCLEAR_ASPECTS gate=ON .* mismatch=0 outside-changed=0 reserved=PASS fence=48544c45: PASS$" \
+        "$output_file" || exit 1
+fi
 grep -q "Driver shutdown: PASS" "$output_file" || exit 1
 grep -q "Graphics result: PASS" "$output_file" || exit 1
 if grep -Eq "FAIL|FATAL|MISMATCH|timed out" "$output_file"; then

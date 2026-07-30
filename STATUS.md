@@ -38,6 +38,15 @@ dynamic libraries are VideoOut, kernel, libc, and networking; neither AGC SPRX
 is required. These four artifacts are hardware-unverified and remain blocked
 behind the FW 5.50 teardown, uncompressed-depth, and D16 HTILE sequence.
 
+Combined D32+S8 HTILE preparation now covers ordinary metadata and
+depth-only, stencil-only, and both-aspect expclear for both exact endpoint
+keys. The eight artifacts build without warnings or AGC SPRX dependencies.
+Their guarded runner requires exact D32 and stencil distributions and verifies
+the selected aspect's masked HTILE RMW, including unchanged outside words and
+reserved bits. A host oracle accepts the correct aspect and rejects a mismatch.
+This is preparation only; no new combined-depth hardware qualification is
+claimed.
+
 ## Regression safety fixes (2026-07-29)
 
 Default context-state construction now bounds register offsets in dwords,
