@@ -778,6 +778,16 @@ for BC1 UNORM and
 `0fc555979b3657761fbace24586363bf186137d3acb454162f5e997af40fdab8` for
 BC1 SRGB. Their FW 11.60 and FW 5.50 targets have no build prerequisites.
 
+BC4 UNORM/SNORM portable gates now build with dedicated scalar sampling
+shaders. They reuse the 5x7, three-mip, two-layer direct-upload geometry but
+encode independent 8-bit endpoints and 48-bit 3-bit-index payloads, including
+both endpoint-order interpolation modes and the special 0/1 or -1/1 entries.
+The SNORM shader maps `[-1,1]` to `[0,1]` before the already-qualified RGBA8
+target so negative and positive ranges remain observable. The CPU oracle
+decodes the block independently, requires exact UNORM output and at most one
+stored-byte rounding unit for SNORM, validates all mip/layer regions, and emits
+a native hash. Pin final bytes before hardware execution.
+
 Use dedicated, deterministic source blocks containing endpoint, index,
 alpha, signed-range, and edge-block cases appropriate to each format. A
 hardware gate must sample the compressed texture into an already-qualified

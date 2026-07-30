@@ -391,6 +391,15 @@ pending a clean FW 11.60 reboot. Exact artifacts are pinned as SHA-256
 (SRGB), with no-prerequisite guarded targets for FW 11.60 and identical-byte
 FW 5.50 replay.
 
+BC4 UNORM and SNORM firmware-neutral sampling gates also build. Dedicated
+shaders sample the red channel from exact endpoint/index blocks across mip 0,
+mip 1, layer 0, layer 1, and partial edge storage. SNORM is explicitly remapped
+from `[-1,1]` into the qualified RGBA8 target, retaining signed-range evidence.
+The independent CPU decoder covers both BC4 interpolation modes and special
+terminal entries; the runner requires zero decoded mismatches, exact UNORM,
+SNORM within one stored-byte rounding unit, all selection regions, and a native
+hash. Hardware execution remains pending.
+
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability
 ELF, non-indexed and indexed 10-dword multi-draw, GPU count-buffer selection,

@@ -251,6 +251,18 @@ case "$EXPECTED_TARGET" in
         grep -q '^\[BC1\] mip0/mip1/layer1 selection: PASS$' \
             "$output_file" || exit 1
         ;;
+    BC4_UNORM)
+        grep -Eq '^\[BC4 UNORM\] changed=[1-9][0-9]* regions=\{[1-9][0-9]*,[1-9][0-9]*,[1-9][0-9]*\} decode-mismatches=0 max-error=0 packed-fnv64=0x[0-9a-f]{16}: PASS$' \
+            "$output_file" || exit 1
+        grep -q '^\[BC4\] mip0/mip1/layer1 signed-range selection: PASS$' \
+            "$output_file" || exit 1
+        ;;
+    BC4_SNORM)
+        grep -Eq '^\[BC4 SNORM\] changed=[1-9][0-9]* regions=\{[1-9][0-9]*,[1-9][0-9]*,[1-9][0-9]*\} decode-mismatches=0 max-error=[01] packed-fnv64=0x[0-9a-f]{16}: PASS$' \
+            "$output_file" || exit 1
+        grep -q '^\[BC4\] mip0/mip1/layer1 signed-range selection: PASS$' \
+            "$output_file" || exit 1
+        ;;
     'offscreen RGB10A2')
         grep -Eq '^\[RGB10A2\] Packed top2 histogram:.*: PASS$' \
             "$output_file" || exit 1
