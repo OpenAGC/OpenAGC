@@ -522,7 +522,14 @@ FW 11.60/current-source FW 5.50 artifacts cross-build without warnings. The
 runner requires each explicit variant identity, binder success, the complete
 four-`4.0f` factor-ring oracle, positive offchip mutation, bounded fence,
 target-specific readback, clean shutdown, and final PASS. Hardware execution
-is pending; see `analysis/fw1160_tess_geometry_gate_plan_20260730.md`.
+passed twice per FW 11.60 variant. Ordinary geometry produced 155,321 FP16
+pixels/hash `0xce4e39671f7448bc`; invocations produced 127,488/hash
+`0x1527e4785be7854a`; line strip produced 6,749 single-white pixels/hash
+`0x929cf8dfd6a5b809`; BGRA8 produced 135,831 pixels/hash
+`0xe63963f065bd9a51` with vertex/index/texture PASS. Every fence was immediate,
+all runs changed 24 offchip words and four valid factors, shutdown passed, and
+no residual process remained. The exact FW 5.50 mirrors remain pending; see
+`analysis/fw1160_tess_geometry_gate_plan_20260730.md`.
 
 Exact next-tier ordinary D16/HTILE and D16 HTILE expclear artifacts now build
 for logged FW 11.60 and mirrored headless FW 5.50 profiles. The shared depth

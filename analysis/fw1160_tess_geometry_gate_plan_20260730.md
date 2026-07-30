@@ -37,10 +37,26 @@ HS+TES+PS binder success, positive offchip mutation, exactly four whole-ring
 target-specific readback, driver shutdown, and final PASS. The RGBA8 variant
 also requires the headless BGRA8 vertex/index/texture and packed-memory oracle.
 
-Run combined geometry twice, invocations twice, lines twice, then BGRA8 twice.
-Immediately precede every launch with the process-cleanup ELF and check for a
-residual `eboot` afterward. Stop on the first mismatch, timeout, residual
-process, or loss of console responsiveness.
+## FW 11.60 hardware result
+
+All four variants passed twice on the standard PS5 reporting raw firmware
+`0x11600005`:
+
+| Variant | Complete/changed pixels | Bounds/colors | Native FNV64 |
+| --- | ---: | --- | --- |
+| TES-to-NGG geometry | 155,321 FP16 | `724x627`, 8 colors | `0xce4e39671f7448bc` |
+| geometry invocations | 127,488 FP16 | `844x332`, 8 colors | `0x1527e4785be7854a` |
+| geometry line strip | 6,749 FP16 | `768x666`, 1 white color | `0x929cf8dfd6a5b809` |
+| geometry BGRA8 | 135,831 packed pixels | 8 colors; vertex/index/texture PASS | `0xe63963f065bd9a51` |
+
+Every run reached its fence immediately, changed 24 offchip words, found
+exactly four whole-ring `4.0f` factors with zero invalid values, passed the
+Wave32/tessellation PM4 audit and marker, shut down the driver cleanly, and
+reported final graphics PASS. ps5debug-NG found no residual `eboot` between or
+after runs; ports 744 and 8080 remained reachable.
+
+This hardware-qualifies the four combined-stage paths on the tested FW 11.60
+console. The result does not extend to HTILE, MSAA, or workload packets.
 
 The current-source FW 5.50 mirrors remain a separate regression requirement
 when that console becomes reachable.

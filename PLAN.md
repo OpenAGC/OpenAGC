@@ -144,8 +144,11 @@ AMD PM4 packet ancestry overlap in useful ways.
   invocations, line strip, and direct BGRA8. Exact logged FW 11.60 artifacts
   and current-source FW 5.50 mirrors build without warnings. Each inherits the
   whole-ring four-`4.0f` tessellation oracle, explicit variant identity,
-  bounded fence, target-specific readback, and clean shutdown. Run each twice
-  in that order. See `analysis/fw1160_tess_geometry_gate_plan_20260730.md`.
+  bounded fence, target-specific readback, and clean shutdown. All four passed
+  twice on FW `0x11600005` with exact repeated FP16/BGRA8 hashes, immediate
+  fences, offchip mutation `24`, four valid factors, clean shutdowns, and no
+  residual process. Keep the current-source FW 5.50 mirrors pending. See
+  `analysis/fw1160_tess_geometry_gate_plan_20260730.md`.
 - The first uncompressed depth/stencil tier is also built for exact FW 11.60:
   D32, D16, S8-only, then D16+S8. All four passed twice on standard FW
   `0x11600005`, with exact native distributions, immediate-to-3 ms fences,
