@@ -135,8 +135,13 @@ same-queue upload-to-copy-to-readback row passed on exact standard PS5 FW 5.50:
 the 1,024-byte artifact completed one bounded compute-queue fence and verified
 all 256 destination words; see
 [`runtime_copy_fw550_20260731.md`](../analysis/runtime_copy_fw550_20260731.md).
-Large/multi-packet copies, images, compute-to-copy-to-shader, graphics queues,
-cross-queue ownership, and other firmware profiles remain unqualified.
+The same-queue compute-to-copy-to-shader-read row is also FW 5.50 qualified:
+one reflected shader writes the transfer source, a typed copy produces the
+consumer input, and a second reflected shader reads that input before final
+host readback. It runs as one three-DCB batch with a bounded fence; see
+[`runtime_compute_copy_shader_fw550_20260731.md`](../analysis/runtime_compute_copy_shader_fw550_20260731.md).
+Large/multi-packet copies, images, graphics queues, cross-queue ownership,
+partial ranges, and other firmware profiles remain unqualified.
 
 `AgcGpuLabel` provides the first GPU-side dependency primitive. A producer
 records `agcCmdSignalGpuLabel`; it emits the qualified EOP release write. A

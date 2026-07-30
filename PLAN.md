@@ -514,8 +514,14 @@ retention, and host-read destination release. Artifact
 `6724c1371af5cec112abbd2f60cca34dbd61d4631f8b9dd3f79ceb9e6f9a8822` passed
 the public same-queue upload-to-copy-to-readback row (1,024 bytes, 256 matching
 words, and one bounded fence) on exact standard PS5 FW 5.50. Multi-packet,
-image, graphics-queue, compute-to-copy-to-shader, cross-queue, and other
-firmware rows remain open.
+image, graphics-queue, cross-queue, and other firmware rows remain open.
+Artifact `83342910f2fd15210f9219796eaccacead441f3bd02b8866d966b54c8a44675d`
+then passed the complete same-queue compute-to-copy-to-shader-read slice: a
+reflected producer dispatch, dependent `shader-write -> copy-source`, typed
+copy, `copy-destination -> shader-read`, reflected consumer dispatch, and
+final host readback in one three-DCB batch on exact standard PS5 FW 5.50.
+Images, graphics consumers, cross-queue ownership, partial ranges,
+multi-packet copies, and other firmware profiles remain open.
 
 Runtime API v8 adds the first typed queue-ownership handoff: a v2 transition
 releases a whole GPU-written resource on its source queue and writes the

@@ -1881,6 +1881,186 @@ static void test_runtime_copy_buffer_submission(void)
     TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK, "copy device destroys");
 }
 
+static void test_runtime_compute_copy_shader_batch(void)
+{
+    AgcDevice device = create_device();
+    AgcQueue queue = create_queue(device, kAgcQueueCompute);
+    AgcShader shader = create_shader(device, kAgcShaderStageCs);
+    AgcComputePipelineDesc pipeline_desc = AGC_COMPUTE_PIPELINE_DESC_INIT;
+    AgcBufferDesc produced_desc = AGC_BUFFER_DESC_INIT;
+    AgcBufferDesc copied_desc = AGC_BUFFER_DESC_INIT;
+    AgcBufferDesc output_desc = AGC_BUFFER_DESC_INIT;
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
+    AgcResourceTransition transition = AGC_RESOURCE_TRANSITION_INIT;
+    AgcResourceTransition dependency = AGC_RESOURCE_TRANSITION_V2_INIT;
+    AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    AgcComputePipeline pipeline = NULL;
+    AgcBuffer produced = NULL;
+    AgcBuffer copied = NULL;
+    AgcBuffer output = NULL;
+    AgcCommandBuffer producer = NULL;
+    AgcCommandBuffer copy = NULL;
+    AgcCommandBuffer consumer = NULL;
+    AgcCommandBuffer commands[3] = {NULL, NULL, NULL};
+    AgcFence fence = NULL;
+
+    pipeline_desc.shader = shader;
+    pipeline_desc.local_size_x = 64u;
+    produced_desc.size = 64u;
+    produced_desc.usage = AGC_BUFFER_USAGE_STORAGE_BIT |
+        AGC_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    copied_desc.size = 64u;
+    copied_desc.usage = AGC_BUFFER_USAGE_STORAGE_BIT |
+        AGC_BUFFER_USAGE_TRANSFER_DST_BIT;
+    output_desc.size = 64u;
+    output_desc.usage = AGC_BUFFER_USAGE_STORAGE_BIT;
+    output_desc.flags = AGC_BUFFER_CREATE_READBACK_BIT;
+    command_desc.queue_type = kAgcQueueCompute;
+    command_desc.capacity_dwords = 1024u;
+    TEST_ASSERT_EQ(agcCreateComputePipeline(device, &pipeline_desc, &pipeline),
+        AGC_OK, "compute-copy-shader pipeline creates");
+    TEST_ASSERT_EQ(agcCreateBuffer(device, &produced_desc, &produced), AGC_OK,
+        "compute-copy-shader produced buffer creates");
+    TEST_ASSERT_EQ(agcCreateBuffer(device, &copied_desc, &copied), AGC_OK,
+        "compute-copy-shader copied buffer creates");
+    TEST_ASSERT_EQ(agcCreateBuffer(device, &output_desc, &output), AGC_OK,
+        "compute-copy-shader output buffer creates");
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &producer),
+        AGC_OK, "compute-copy-shader producer command creates");
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &copy), AGC_OK,
+        "compute-copy-shader copy command creates");
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &consumer),
+        AGC_OK, "compute-copy-shader consumer command creates");
+    TEST_ASSERT_EQ(agcCreateFence(device, &fence_desc, &fence), AGC_OK,
+        "compute-copy-shader fence creates");
+
+    transition.resource_type = kAgcResourceTypeBuffer;
+    transition.buffer = produced;
+    transition.buffer_size = produced_desc.size;
+    transition.before = kAgcResourceUsageUndefined;
+    transition.after = kAgcResourceUsageShaderWrite;
+    transition.before_owner = kAgcResourceOwnerHost;
+    transition.after_owner = kAgcResourceOwnerCompute;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(producer), AGC_OK,
+        "compute-copy-shader producer begins");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(producer, 1u, &transition), AGC_OK,
+        "compute-copy-shader producer state records");
+    TEST_ASSERT_EQ(agcCmdBindComputePipeline(producer, pipeline), AGC_OK,
+        "compute-copy-shader producer pipeline binds");
+    TEST_ASSERT_EQ(agcCmdDispatch(producer, 1u, 1u, 1u), AGC_OK,
+        "compute-copy-shader producer dispatch records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(producer), AGC_OK,
+        "compute-copy-shader producer ends");
+
+    dependency.resource_type = kAgcResourceTypeBuffer;
+    dependency.buffer = produced;
+    dependency.buffer_size = produced_desc.size;
+    dependency.before = kAgcResourceUsageShaderWrite;
+    dependency.after = kAgcResourceUsageCopySource;
+    dependency.before_owner = kAgcResourceOwnerCompute;
+    dependency.after_owner = kAgcResourceOwnerCompute;
+    dependency.flags = AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(copy), AGC_OK,
+        "compute-copy-shader copy command begins");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(copy, 1u, &dependency), AGC_OK,
+        "compute-copy-shader source batch dependency records");
+    transition = (AgcResourceTransition)AGC_RESOURCE_TRANSITION_INIT;
+    transition.resource_type = kAgcResourceTypeBuffer;
+    transition.buffer = copied;
+    transition.buffer_size = copied_desc.size;
+    transition.before = kAgcResourceUsageUndefined;
+    transition.after = kAgcResourceUsageCopyDestination;
+    transition.before_owner = kAgcResourceOwnerHost;
+    transition.after_owner = kAgcResourceOwnerCompute;
+    TEST_ASSERT_EQ(agcCmdTransitionResources(copy, 1u, &transition), AGC_OK,
+        "compute-copy-shader destination copy state records");
+    TEST_ASSERT_EQ(agcCmdCopyBuffer(copy, produced, 0u, copied, 0u, 64u),
+        AGC_OK, "compute-copy-shader typed copy records");
+    transition.before = kAgcResourceUsageCopyDestination;
+    transition.after = kAgcResourceUsageShaderRead;
+    transition.before_owner = kAgcResourceOwnerCompute;
+    transition.after_owner = kAgcResourceOwnerCompute;
+    TEST_ASSERT_EQ(agcCmdTransitionResources(copy, 1u, &transition), AGC_OK,
+        "compute-copy-shader copied shader-read state records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(copy), AGC_OK,
+        "compute-copy-shader copy command ends");
+
+    dependency = (AgcResourceTransition)AGC_RESOURCE_TRANSITION_V2_INIT;
+    dependency.resource_type = kAgcResourceTypeBuffer;
+    dependency.buffer = copied;
+    dependency.buffer_size = copied_desc.size;
+    dependency.before = kAgcResourceUsageShaderRead;
+    dependency.after = kAgcResourceUsageShaderRead;
+    dependency.before_owner = kAgcResourceOwnerCompute;
+    dependency.after_owner = kAgcResourceOwnerCompute;
+    dependency.flags = AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(consumer), AGC_OK,
+        "compute-copy-shader consumer command begins");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(consumer, 1u, &dependency), AGC_OK,
+        "compute-copy-shader shader-read batch dependency records");
+    transition = (AgcResourceTransition)AGC_RESOURCE_TRANSITION_INIT;
+    transition.resource_type = kAgcResourceTypeBuffer;
+    transition.buffer = output;
+    transition.buffer_size = output_desc.size;
+    transition.before = kAgcResourceUsageUndefined;
+    transition.after = kAgcResourceUsageShaderWrite;
+    transition.before_owner = kAgcResourceOwnerHost;
+    transition.after_owner = kAgcResourceOwnerCompute;
+    TEST_ASSERT_EQ(agcCmdTransitionResources(consumer, 1u, &transition), AGC_OK,
+        "compute-copy-shader output state records");
+    TEST_ASSERT_EQ(agcCmdBindComputePipeline(consumer, pipeline), AGC_OK,
+        "compute-copy-shader consumer pipeline binds");
+    TEST_ASSERT_EQ(agcCmdDispatch(consumer, 1u, 1u, 1u), AGC_OK,
+        "compute-copy-shader consumer dispatch records");
+    transition.before = kAgcResourceUsageShaderWrite;
+    transition.after = kAgcResourceUsageHostRead;
+    transition.before_owner = kAgcResourceOwnerCompute;
+    transition.after_owner = kAgcResourceOwnerHost;
+    TEST_ASSERT_EQ(agcCmdTransitionResources(consumer, 1u, &transition), AGC_OK,
+        "compute-copy-shader output readback state records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(consumer), AGC_OK,
+        "compute-copy-shader consumer command ends");
+
+    commands[0] = producer;
+    commands[1] = copy;
+    commands[2] = consumer;
+    submit.command_buffer_count = 3u;
+    submit.command_buffers = commands;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
+        "compute-copy-shader ordered batch submits");
+    TEST_ASSERT_EQ(agcWaitFence(fence, 1u), AGC_OK,
+        "compute-copy-shader batch fence completes");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(producer), AGC_OK,
+        "compute-copy-shader producer resets");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(copy), AGC_OK,
+        "compute-copy-shader copy command resets");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(consumer), AGC_OK,
+        "compute-copy-shader consumer resets");
+    TEST_ASSERT_EQ(agcDestroyFence(fence), AGC_OK,
+        "compute-copy-shader fence destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(producer), AGC_OK,
+        "compute-copy-shader producer command destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(copy), AGC_OK,
+        "compute-copy-shader copy command destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(consumer), AGC_OK,
+        "compute-copy-shader consumer command destroys");
+    TEST_ASSERT_EQ(agcDestroyBuffer(output), AGC_OK,
+        "compute-copy-shader output destroys");
+    TEST_ASSERT_EQ(agcDestroyBuffer(copied), AGC_OK,
+        "compute-copy-shader copied buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyBuffer(produced), AGC_OK,
+        "compute-copy-shader produced buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyComputePipeline(pipeline), AGC_OK,
+        "compute-copy-shader pipeline destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(shader), AGC_OK,
+        "compute-copy-shader shader destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
+        "compute-copy-shader queue destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "compute-copy-shader device destroys");
+}
+
 static void test_runtime_gpu_labels(void)
 {
     AgcDevice device = create_device();
@@ -5311,6 +5491,7 @@ void test_suite_runtime(void)
     TEST_RUN(test_runtime_multi_compute_submission);
     TEST_RUN(test_runtime_batch_transition_chain);
     TEST_RUN(test_runtime_copy_buffer_submission);
+    TEST_RUN(test_runtime_compute_copy_shader_batch);
     TEST_RUN(test_runtime_gpu_labels);
     TEST_RUN(test_runtime_submit_label_lists);
     TEST_RUN(test_runtime_image_transfer);

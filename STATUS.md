@@ -133,8 +133,14 @@ Artifact `6724c1371af5cec112abbd2f60cca34dbd61d4631f8b9dd3f79ceb9e6f9a8822`
 passed a 1,024-byte public upload-to-copy-to-readback sequence, one bounded
 compute-queue fence, and 256-word matching readback on exact standard PS5 FW
 5.50; see `analysis/runtime_copy_fw550_20260731.md`. Large/multi-packet,
-image, compute-to-copy-to-shader, graphics-queue, cross-queue, and FW 11.60
-rows remain hardware-unqualified.
+image, graphics-queue, cross-queue, and FW 11.60 rows remain
+hardware-unqualified. Artifact
+`83342910f2fd15210f9219796eaccacead441f3bd02b8866d966b54c8a44675d` also
+passed the three-DCB reflected compute-to-copy-to-shader-read chain, one
+bounded batch fence, and 64-word final readback on exact standard PS5 FW 5.50;
+see `analysis/runtime_compute_copy_shader_fw550_20260731.md`. Images,
+graphics consumers, cross-queue ownership, partial ranges, multi-packet
+copies, and FW 11.60 remain unqualified.
 
 ## Native resource and memory management complete (2026-07-30)
 
