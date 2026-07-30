@@ -396,6 +396,9 @@
       (defined(AGC_VALIDATE_RGBA16_SINT) && AGC_VALIDATE_RGBA16_SINT)
 #include "shaders/sint16_frag_sb.h"
 #define FRAGMENT_DATA sint16_frag_data
+#elif defined(AGC_VALIDATE_R32_UINT) && AGC_VALIDATE_R32_UINT
+#include "shaders/uint32_r_frag_sb.h"
+#define FRAGMENT_DATA uint32_r_frag_data
 #elif AGC_NGG_INPUT_LINES || AGC_TESS_GEOMETRY_LINES
 #include "shaders/triangle_line_frag_sb.h"
 #define FRAGMENT_DATA triangle_line_frag_data
@@ -569,6 +572,9 @@ int sceKernelDeleteEqueue(SceKernelEqueue equeue);
 #ifndef AGC_VALIDATE_RGBA16_SINT
 #define AGC_VALIDATE_RGBA16_SINT 0
 #endif
+#ifndef AGC_VALIDATE_R32_UINT
+#define AGC_VALIDATE_R32_UINT 0
+#endif
 #ifndef AGC_VALIDATE_R8_UNORM
 #define AGC_VALIDATE_R8_UNORM 0
 #endif
@@ -601,6 +607,7 @@ int sceKernelDeleteEqueue(SceKernelEqueue equeue);
      AGC_VALIDATE_RGBA16_UINT + \
      AGC_VALIDATE_R16_SINT + AGC_VALIDATE_RG16_SINT + \
      AGC_VALIDATE_RGBA16_SINT + \
+     AGC_VALIDATE_R32_UINT + \
      AGC_VALIDATE_R8_UNORM + AGC_VALIDATE_RG8_UNORM + \
      AGC_VALIDATE_R32_FLOAT + AGC_VALIDATE_RG32_FLOAT + \
      AGC_VALIDATE_RGBA32_FLOAT) > 1
@@ -2860,6 +2867,148 @@ static bool dispatch_graphics(GraphicsTest *test,
         return pass;
     }
 
+    if (target->native_component_bytes == 4u &&
+        (target->number_type == AGC_GFX1013_SURFACE_NUMBER_UINT ||
+         target->number_type == AGC_GFX1013_SURFACE_NUMBER_SINT)) {
+        const uint32_t *rt = (const uint32_t *)rt_addr;
+        const uint32_t components = target->native_components;
+        const bool signed_integer = target->number_type ==
+            AGC_GFX1013_SURFACE_NUMBER_SINT;
+        uint32_t lane_min[4] = {
+            UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX};
+        uint32_t lane_max[4] = {0u, 0u, 0u, 0u};
+        int32_t lane_signed_min[4] = {
+            INT32_MAX, INT32_MAX, INT32_MAX, INT32_MAX};
+        int32_t lane_signed_max[4] = {
+            INT32_MIN, INT32_MIN, INT32_MIN, INT32_MIN};
+        uint32_t lane_unique[4][8] = {{0u}};
+        uint32_t lane_unique_count[4] = {0u, 0u, 0u, 0u};
+        uint32_t lane_changed[4] = {0u, 0u, 0u, 0u};
+        uint32_t lane_exact_mismatches[4] = {0u, 0u, 0u, 0u};
+        uint64_t lane_hash[4] = {
+            UINT64_C(1469598103934665603),
+            UINT64_C(1469598103934665603),
+            UINT64_C(1469598103934665603),
+            UINT64_C(1469598103934665603),
+        };
+        uint64_t packed_hash = UINT64_C(1469598103934665603);
+        uint32_t changed = 0u;
+        uint32_t complete = 0u;
+        uint32_t min_x = target->width;
+        uint32_t min_y = target->height;
+        uint32_t max_x = 0u;
+        uint32_t max_y = 0u;
+        for (uint32_t i = 0u; i < target_pixels; ++i) {
+            const uint32_t pixel_x = i % target->width;
+            const uint32_t pixel_y = i / target->width;
+            bool pixel_changed = false;
+            bool pixel_complete = true;
+            uint64_t pixel_hash = UINT64_C(1469598103934665603);
+            for (uint32_t lane = 0u; lane < components; ++lane) {
+                const uint32_t value = rt[i * components + lane];
+                pixel_changed |= value != 0x7fc00000u;
+                pixel_complete &= value != 0x7fc00000u;
+                pixel_hash = (pixel_hash ^ value) * UINT64_C(1099511628211);
+            }
+            if (!pixel_changed)
+                continue;
+            ++changed;
+            complete += pixel_complete;
+            packed_hash = (packed_hash ^ pixel_hash) * UINT64_C(1099511628211);
+            if (pixel_x < min_x) min_x = pixel_x;
+            if (pixel_y < min_y) min_y = pixel_y;
+            if (pixel_x > max_x) max_x = pixel_x;
+            if (pixel_y > max_y) max_y = pixel_y;
+            for (uint32_t lane = 0u; lane < components; ++lane) {
+                const uint32_t value = rt[i * components + lane];
+                if (value == 0x7fc00000u)
+                    continue;
+                uint32_t expected_index;
+                switch (lane) {
+                case 0u: expected_index = pixel_x; break;
+                case 1u: expected_index = pixel_y; break;
+                case 2u: expected_index = pixel_x + pixel_y; break;
+                default:
+                    expected_index = pixel_x * 17u + pixel_y * 31u;
+                    break;
+                }
+                uint32_t expected =
+                    (expected_index & 255u) * UINT32_C(0x01010101);
+                if (signed_integer)
+                    expected -= UINT32_C(0x80000000);
+                ++lane_changed[lane];
+                lane_exact_mismatches[lane] += value != expected;
+                if (value < lane_min[lane]) lane_min[lane] = value;
+                if (value > lane_max[lane]) lane_max[lane] = value;
+                if ((int32_t)value < lane_signed_min[lane])
+                    lane_signed_min[lane] = (int32_t)value;
+                if ((int32_t)value > lane_signed_max[lane])
+                    lane_signed_max[lane] = (int32_t)value;
+                lane_hash[lane] = (lane_hash[lane] ^ value) *
+                    UINT64_C(1099511628211);
+                if (lane_unique_count[lane] < 8u) {
+                    bool seen = false;
+                    for (uint32_t j = 0u; j < lane_unique_count[lane]; ++j)
+                        seen |= lane_unique[lane][j] == value;
+                    if (!seen)
+                        lane_unique[lane][lane_unique_count[lane]++] = value;
+                }
+            }
+        }
+        const uint32_t expected_changed = (uint32_t)
+            (((uint64_t)target_pixels * 1774u) / 16384u);
+        const uint32_t tolerance = target->width;
+        bool lanes_pass = true;
+        for (uint32_t lane = 0u; lane < components; ++lane) {
+            const bool coverage_pass =
+                lane_changed[lane] + tolerance >= expected_changed &&
+                lane_changed[lane] <= expected_changed + tolerance &&
+                lane_unique_count[lane] >= 8u;
+            const bool range_pass = signed_integer ?
+                (lane_signed_min[lane] <= -INT32_C(0x70000000) &&
+                 lane_signed_max[lane] >= INT32_C(0x70000000)) :
+                (lane_min[lane] <= UINT32_C(0x10000000) &&
+                 lane_max[lane] >= UINT32_C(0xefffffff));
+            const bool lane_pass = coverage_pass && range_pass &&
+                lane_exact_mismatches[lane] == 0u;
+            lanes_pass &= lane_pass;
+            if (signed_integer) {
+                printf("[SINT32 Lane %u] changed=%u range=%d..%d distinct=%u "
+                       "exact-mismatches=%u fnv64=0x%016llx: %s\n",
+                       lane, lane_changed[lane], lane_signed_min[lane],
+                       lane_signed_max[lane], lane_unique_count[lane],
+                       lane_exact_mismatches[lane],
+                       (unsigned long long)lane_hash[lane],
+                       lane_pass ? "PASS" : "FAIL");
+            } else {
+                printf("[UINT32 Lane %u] changed=%u range=0x%08x..0x%08x "
+                       "distinct=%u exact-mismatches=%u "
+                       "fnv64=0x%016llx: %s\n",
+                       lane, lane_changed[lane], lane_min[lane],
+                       lane_max[lane], lane_unique_count[lane],
+                       lane_exact_mismatches[lane],
+                       (unsigned long long)lane_hash[lane],
+                       lane_pass ? "PASS" : "FAIL");
+            }
+        }
+        bool independent = true;
+        for (uint32_t lhs = 0u; lhs < components; ++lhs) {
+            for (uint32_t rhs = lhs + 1u; rhs < components; ++rhs)
+                independent &= lane_hash[lhs] != lane_hash[rhs];
+        }
+        const bool pass =
+            changed + tolerance >= expected_changed &&
+            changed <= expected_changed + tolerance &&
+            complete == changed && lanes_pass && independent;
+        printf("[%s] changed=%u/%u bounds=%u..%u,%u..%u complete=%u "
+               "packed-fnv64=0x%016llx independence=%s: %s\n",
+               signed_integer ? "SINT32" : "UINT32", changed, target_pixels,
+               min_x, max_x, min_y, max_y, complete,
+               (unsigned long long)packed_hash,
+               independent ? "PASS" : "FAIL", pass ? "PASS" : "FAIL");
+        return pass;
+    }
+
     if (target->native_component_bytes == 4u) {
         const uint32_t *rt = (const uint32_t *)rt_addr;
         const uint32_t components = target->native_components;
@@ -3882,6 +4031,7 @@ int main(void) {
     visualize_native(&test, components, 1u);
 #endif
 #elif AGC_VALIDATE_R32_FLOAT || AGC_VALIDATE_RG32_FLOAT || \
+      AGC_VALIDATE_R32_UINT || \
       AGC_VALIDATE_RGBA32_FLOAT
     const uint32_t components = AGC_VALIDATE_RGBA32_FLOAT ? 4u :
         (AGC_VALIDATE_RG32_FLOAT ? 2u : 1u);
@@ -3890,10 +4040,12 @@ int main(void) {
         AGC_VALIDATE_RGBA32_FLOAT ? AGC_GFX1013_COLOR_FORMAT_32_32_32_32 :
         AGC_VALIDATE_RG32_FLOAT ? AGC_GFX1013_COLOR_FORMAT_32_32 :
             AGC_GFX1013_COLOR_FORMAT_32,
-        AGC_GFX1013_SURFACE_NUMBER_FLOAT,
+        AGC_VALIDATE_R32_UINT ? AGC_GFX1013_SURFACE_NUMBER_UINT :
+            AGC_GFX1013_SURFACE_NUMBER_FLOAT,
         AGC_GFX1013_SURFACE_SWAP_STD,
         components, 4u, AGC_VALIDATE_RGBA32_FLOAT ? "RGBA32_FLOAT" :
-            (AGC_VALIDATE_RG32_FLOAT ? "RG32_FLOAT" : "R32_FLOAT")
+            (AGC_VALIDATE_RG32_FLOAT ? "RG32_FLOAT" :
+                (AGC_VALIDATE_R32_UINT ? "R32_UINT" : "R32_FLOAT"))
     };
     printf("\n--- Step 4: %s offscreen draw ---\n", native_target.name);
     if (!dispatch_graphics(&test, &front, &back, &ps, &native_target)) {

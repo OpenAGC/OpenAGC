@@ -279,8 +279,12 @@ replays remain pending.
 `(format=0x04, number=UINT, swap=standard)`, four bytes per pixel, and `32_R`
 export 1. Exact host coverage locks `CB_COLOR0_INFO=0x00070410`, the complete
 PM4 stream, all 39 profiles, every short command buffer, invalid enums, and
-maximum 64-bit layout arithmetic. Its dedicated 32-bit unsigned hardware gate
-remains pending.
+maximum 64-bit layout arithmetic. Its dedicated `uvec4` shader uses `32_R`
+export 1 and exact coordinate-derived values spanning
+`0x00000000..0xffffffff`. The native oracle validates exact values, range,
+diversity, hashes, and bounded coverage; the isolated portable gate passes
+firmware-neutral dependency verification. Final-byte pinning and hardware
+execution remain pending.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability

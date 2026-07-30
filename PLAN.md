@@ -581,8 +581,11 @@ all six pinned artifacts for identical-byte FW 5.50 replay and proceed to the
   UINT, standard swap, four bytes per pixel, and `32_R` export 1. Exact PM4
   (`CB_COLOR0_INFO=0x00070410`), all-profile selection, every short-buffer
   boundary, invalid-enum behavior, and maximum 64-bit layout arithmetic pass.
-  Add its dedicated 32-bit unsigned shader and exact integer readback oracle
-  next.
+  Its dedicated `uvec4` shader uses `32_R` export 1 and emits exact
+  coordinate-derived values spanning `0x00000000..0xffffffff`. The native
+  oracle validates exact values, range, diversity, hashes, and bounded
+  coverage, and the isolated portable gate passes firmware-neutral dependency
+  verification. Pin its final bytes before execution.
 
 These formats need dedicated integer-output pixel shaders. Do not qualify them
 using a floating-point shader and assume the conversion is correct. Their
