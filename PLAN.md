@@ -587,7 +587,10 @@ all six pinned artifacts for identical-byte FW 5.50 replay and proceed to the
   coverage, and the isolated portable gate passes firmware-neutral dependency
   verification. The final firmware-neutral artifact is pinned as SHA-256
   `d2eb57d8e6f5f664a72b1ddfa7452ceae2b72328e0bd49445e18fc9bb233ff8f`.
-  Run those exact bytes twice on FW 11.60; preserve FW 5.50 replay as pending.
+  Those exact bytes passed twice on FW 11.60 with 255,744 exact samples, full
+  `0x00000000..0xffffffff` range, zero mismatches, and reproducible lane and
+  packed hashes. Preserve FW 5.50 replay as pending. Implement `RG32_UINT`
+  next.
 
 These formats need dedicated integer-output pixel shaders. Do not qualify them
 using a floating-point shader and assume the conversion is correct. Their
@@ -602,8 +605,9 @@ The float forms already reach the maximum widths. Add:
 - `R32_UINT`, `RG32_UINT`, and `RGBA32_UINT`.
 - `R32_SINT`, `RG32_SINT`, and `RGBA32_SINT`.
 
-Qualification order begins with host-qualified `R32_UINT`, followed by its
-portable hardware gate before widening to `RG32_UINT` and `RGBA32_UINT`.
+`R32_UINT` is hardware-qualified on FW 11.60. Continue with `RG32_UINT`, then
+`RGBA32_UINT`, using a dedicated export and independent exact-value oracle for
+every stored lane.
 
 `RGBA32_*` remains the regular color-buffer maximum:
 

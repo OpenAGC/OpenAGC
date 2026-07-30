@@ -285,7 +285,12 @@ export 1 and exact coordinate-derived values spanning
 diversity, hashes, and bounded coverage; the isolated portable gate passes
 firmware-neutral dependency verification. Its final bytes are pinned as
 SHA-256 `d2eb57d8e6f5f664a72b1ddfa7452ceae2b72328e0bd49445e18fc9bb233ff8f`;
-two FW 11.60 executions and the identical-byte FW 5.50 replay remain pending.
+those exact bytes passed twice on FW 11.60. Both runs produced 255,744 exact
+samples spanning `0x00000000..0xffffffff`, zero expected-value mismatches,
+lane FNV64 `0xac93e4f1b2bde483`, and packed FNV64
+`0xc861450bfbf7bf83`, with a zero-microsecond fence and clean teardown. The
+identical-byte FW 5.50 replay remains pending. See
+`analysis/fw1160_r32_uint_portable_qualification_20260730.md`.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability
