@@ -47,6 +47,7 @@ int main(void)
     AgcBufferDesc buffer_desc = AGC_BUFFER_DESC_INIT;
     AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
     AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
+    AgcGpuLabelDesc label_desc = AGC_GPU_LABEL_DESC_INIT;
     AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
     AgcDescriptorWrite descriptor = AGC_DESCRIPTOR_WRITE_INIT;
     AgcResourceTransition transition = AGC_RESOURCE_TRANSITION_INIT;
@@ -58,12 +59,17 @@ int main(void)
     AgcShader shader = NULL;
     AgcComputePipeline pipeline = NULL;
     AgcBuffer output = NULL;
+    AgcGpuLabel label = NULL;
+    AgcCommandBuffer signal_command_buffer = NULL;
     AgcCommandBuffer command_buffer = NULL;
+    AgcFence signal_fence = NULL;
     AgcFence fence = NULL;
     uint32_t push_constants[2] = {kOutputWordCount, kFillColor};
     uint32_t output_words[kOutputWordCount] = {0};
     bool submitted = false;
     bool completed = false;
+    bool signal_submitted = false;
+    bool signal_completed = false;
     bool passed = false;
     int32_t result;
 
@@ -141,13 +147,46 @@ int main(void)
     report_result("agcCreateCommandBuffer", result);
     if (result != AGC_OK)
         goto cleanup;
+    result = agcCreateCommandBuffer(device, &command_desc,
+        &signal_command_buffer);
+    report_result("agcCreateCommandBuffer(signal)", result);
+    if (result != AGC_OK)
+        goto cleanup;
     result = agcCreateFence(device, &fence_desc, &fence);
     report_result("agcCreateFence", result);
+    if (result != AGC_OK)
+        goto cleanup;
+    result = agcCreateFence(device, &fence_desc, &signal_fence);
+    report_result("agcCreateFence(signal)", result);
+    if (result != AGC_OK)
+        goto cleanup;
+    label_desc.initial_value = 0u;
+    result = agcCreateGpuLabel(device, &label_desc, &label);
+    report_result("agcCreateGpuLabel", result);
+    if (result != AGC_OK)
+        goto cleanup;
+
+    result = agcBeginCommandBuffer(signal_command_buffer);
+    report_result("agcBeginCommandBuffer(signal)", result);
+    if (result != AGC_OK)
+        goto cleanup;
+    result = agcCmdSignalGpuLabel(signal_command_buffer, label,
+        UINT32_C(0x4c414245));
+    report_result("agcCmdSignalGpuLabel", result);
+    if (result != AGC_OK)
+        goto cleanup;
+    result = agcEndCommandBuffer(signal_command_buffer);
+    report_result("agcEndCommandBuffer(signal)", result);
     if (result != AGC_OK)
         goto cleanup;
 
     result = agcBeginCommandBuffer(command_buffer);
     report_result("agcBeginCommandBuffer", result);
+    if (result != AGC_OK)
+        goto cleanup;
+    result = agcCmdWaitGpuLabel(command_buffer, label,
+        UINT32_C(0x4c414245));
+    report_result("agcCmdWaitGpuLabel", result);
     if (result != AGC_OK)
         goto cleanup;
     transition.resource_type = kAgcResourceTypeBuffer;
@@ -198,6 +237,12 @@ int main(void)
     if (result != AGC_OK)
         goto cleanup;
     submit.command_buffer_count = 1u;
+    submit.command_buffers = &signal_command_buffer;
+    result = agcQueueSubmit(queue, &submit, signal_fence);
+    report_result("agcQueueSubmit(signal)", result);
+    if (result != AGC_OK)
+        goto cleanup;
+    signal_submitted = true;
     submit.command_buffers = &command_buffer;
     result = agcQueueSubmit(queue, &submit, fence);
     report_result("agcQueueSubmit", result);
@@ -209,6 +254,11 @@ int main(void)
     if (result != AGC_OK)
         goto cleanup;
     completed = true;
+    result = agcWaitFence(signal_fence, kCompletionTimeoutNs);
+    report_result("agcWaitFence(signal)", result);
+    if (result != AGC_OK)
+        goto cleanup;
+    signal_completed = true;
     result = agcGetFenceInfo(fence, &fence_info);
     report_result("agcGetFenceInfo", result);
     if (result != AGC_OK || fence_info.state != AGC_FENCE_STATE_SIGNALED ||
@@ -235,6 +285,12 @@ int main(void)
     passed = true;
 
 cleanup:
+    if (signal_command_buffer && (!signal_submitted || signal_completed)) {
+        result = agcResetCommandBuffer(signal_command_buffer);
+        report_result("agcResetCommandBuffer(signal)", result);
+        if (result != AGC_OK)
+            passed = false;
+    }
     if (command_buffer && (!submitted || completed)) {
         result = agcResetCommandBuffer(command_buffer);
         report_result("agcResetCommandBuffer", result);
@@ -244,6 +300,24 @@ cleanup:
     if (fence) {
         result = agcDestroyFence(fence);
         report_result("agcDestroyFence", result);
+        if (result != AGC_OK)
+            passed = false;
+    }
+    if (signal_fence) {
+        result = agcDestroyFence(signal_fence);
+        report_result("agcDestroyFence(signal)", result);
+        if (result != AGC_OK)
+            passed = false;
+    }
+    if (label) {
+        result = agcDestroyGpuLabel(label);
+        report_result("agcDestroyGpuLabel", result);
+        if (result != AGC_OK)
+            passed = false;
+    }
+    if (signal_command_buffer) {
+        result = agcDestroyCommandBuffer(signal_command_buffer);
+        report_result("agcDestroyCommandBuffer(signal)", result);
         if (result != AGC_OK)
             passed = false;
     }

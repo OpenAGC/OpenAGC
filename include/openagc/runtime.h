@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-#define AGC_RUNTIME_API_VERSION 5u
+#define AGC_RUNTIME_API_VERSION 6u
 #define AGC_RUNTIME_STRUCTURE_VERSION_1 1u
 #define AGC_RUNTIME_STRUCTURE_VERSION_2 2u
 #define AGC_RUNTIME_PROFILE_NAME_SIZE 48u
@@ -36,6 +36,7 @@ typedef struct AgcGraphicsPipelineImpl *AgcGraphicsPipeline;
 typedef struct AgcComputePipelineImpl *AgcComputePipeline;
 typedef struct AgcCommandBufferImpl *AgcCommandBuffer;
 typedef struct AgcFenceImpl *AgcFence;
+typedef struct AgcGpuLabelImpl *AgcGpuLabel;
 
 typedef void *(PS5_SYSV_ABI *AgcAllocationFunction)(
     void *user_data, size_t size, size_t alignment);
@@ -720,6 +721,18 @@ typedef struct AgcFenceDesc {
     uint64_t reserved[4];
 } AgcFenceDesc;
 
+/* A GPU-visible 32-bit synchronization word. The first qualified runtime
+ * path permits a producer and consumer on the same queue only; a consumer
+ * wait is rejected until a producer signal has been successfully submitted.
+ * Values are exact equality points, not timeline semantics. */
+typedef struct AgcGpuLabelDesc {
+    uint32_t struct_size;
+    uint32_t version;
+    uint32_t initial_value;
+    uint32_t flags;
+    uint64_t reserved[4];
+} AgcGpuLabelDesc;
+
 typedef enum AgcFenceState {
     AGC_FENCE_STATE_UNSIGNALED = 0,
     AGC_FENCE_STATE_PENDING = 1,
@@ -884,6 +897,10 @@ typedef struct AgcImageSubresourceLayout {
     { sizeof(AgcFenceDesc), AGC_RUNTIME_STRUCTURE_VERSION_1, 0u, 0u, \
       {0u, 0u, 0u, 0u} }
 
+#define AGC_GPU_LABEL_DESC_INIT \
+    { sizeof(AgcGpuLabelDesc), AGC_RUNTIME_STRUCTURE_VERSION_1, 0u, 0u, \
+      {0u, 0u, 0u, 0u} }
+
 #define AGC_FENCE_INFO_INIT \
     { sizeof(AgcFenceInfo), AGC_RUNTIME_STRUCTURE_VERSION_1, \
       AGC_FENCE_STATE_UNSIGNALED, UINT32_MAX, \
@@ -960,6 +977,8 @@ _Static_assert(sizeof(AgcCommandBufferDesc) == 48u,
     "AgcCommandBufferDesc v1 size mismatch");
 _Static_assert(sizeof(AgcFenceDesc) == 48u,
     "AgcFenceDesc v1 size mismatch");
+_Static_assert(sizeof(AgcGpuLabelDesc) == 48u,
+    "AgcGpuLabelDesc v1 size mismatch");
 _Static_assert(sizeof(AgcSubmitInfo) == 56u,
     "AgcSubmitInfo v1 size mismatch");
 _Static_assert(sizeof(AgcAllocationInfo) == 160u,
@@ -1078,6 +1097,13 @@ int32_t PS5_SYSV_ABI agcGetFenceStatus(AgcFence fence);
 int32_t PS5_SYSV_ABI agcGetFenceInfo(AgcFence fence, AgcFenceInfo *info);
 int32_t PS5_SYSV_ABI agcResetFence(AgcFence fence);
 int32_t PS5_SYSV_ABI agcWaitFence(AgcFence fence, uint64_t timeout_ns);
+int32_t PS5_SYSV_ABI agcCreateGpuLabel(
+    AgcDevice device, const AgcGpuLabelDesc *desc, AgcGpuLabel *label_out);
+int32_t PS5_SYSV_ABI agcDestroyGpuLabel(AgcGpuLabel label);
+int32_t PS5_SYSV_ABI agcCmdWaitGpuLabel(
+    AgcCommandBuffer command_buffer, AgcGpuLabel label, uint32_t value);
+int32_t PS5_SYSV_ABI agcCmdSignalGpuLabel(
+    AgcCommandBuffer command_buffer, AgcGpuLabel label, uint32_t value);
 int32_t PS5_SYSV_ABI agcQueueSubmit(
     AgcQueue queue, const AgcSubmitInfo *submit_info, AgcFence fence);
 

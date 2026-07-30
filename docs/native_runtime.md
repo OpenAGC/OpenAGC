@@ -17,6 +17,9 @@ Runtime API v3 adds `AgcColorTargetBinding` and `agcCmdBindColorTargets` for
 typed graphics color attachments.
 Runtime API v4 adds `AgcDepthStencilTargetBinding` and
 `agcCmdBindDepthStencilTarget` for the qualified depth-surface path.
+Runtime API v5 adds `AgcFenceInfo` for versioned bounded-wait diagnostics.
+Runtime API v6 adds `AgcGpuLabel`, an explicit GPU-visible synchronization
+word for the qualified same-queue signal/wait path.
 OpenAGC rejects unknown versions, nonzero flags, or nonzero reserved fields
 without partial object or command creation.
 
@@ -40,6 +43,8 @@ Ownership dependencies are explicit:
 - an executable command buffer retains every pipeline, index/vertex/descriptor
   resource, color-target image, and command-owned resource-table allocation it
   references until reset or destruction;
+- an executable command buffer retains every GPU label it waits on or signals
+  until reset or destruction;
 - a device retains all child objects.
 
 Destroying an object with a live dependent, recorded reference, or pending
@@ -81,6 +86,15 @@ owned by the same queue; one fence tracks the complete batch and releases all
 members after completion. The current compute route, empty batch members,
 wait/signal lists, and cross-queue submission remain fail-closed.
 
+`AgcGpuLabel` provides the first GPU-side dependency primitive. A producer
+records `agcCmdSignalGpuLabel`; it emits the qualified EOP release write. A
+consumer records `agcCmdWaitGpuLabel`; it emits a 32-bit `WAIT_REG_MEM` exact
+equality wait on that same runtime-owned word. The consumer submit is rejected
+unless a matching producer value has already submitted on the same queue.
+This avoids an unbounded wait from an unproved dependency. Labels are exact
+values, not timelines; producer/consumer waits across graphics and compute
+queues, submit wait/signal lists, and event objects remain unsupported.
+
 ## Fences and errors
 
 `AgcFence` is a binary fence. A successful generic submission signals its
@@ -109,6 +123,11 @@ timeout oracle is safe and useful.
 The two-DCB graphics batch is hardware-qualified on exact FW 5.50 by artifact
 `30564bfdd87de4c89e575a03b7456aad57a2ca72af174aa41d1598a20322142b`; see
 [`runtime_multi_graphics_fw550_20260731.md`](../analysis/runtime_multi_graphics_fw550_20260731.md).
+
+The same-queue GPU-label signal/wait path is hardware-qualified on exact FW
+5.50 by artifact
+`c968eabb7f3bfac3f761b119ccc4c5e7b16299e93e04a464cf932ce61a4296dc`; see
+[`runtime_gpu_labels_fw550_20260731.md`](../analysis/runtime_gpu_labels_fw550_20260731.md).
 
 Stable native errors include invalid argument/state, busy ownership,
 unsupported capability, command-space exhaustion, timeout, out of memory,
@@ -231,8 +250,8 @@ The exact FW 5.50 1x linear RGBA8 MRT row
 `undefined -> color-target -> host-read` is also hardware-qualified, with two
 resources in each transition batch, as recorded in
 [`runtime_graphics_transitions_fw550_20260731.md`](../analysis/runtime_graphics_transitions_fw550_20260731.md).
-Depth/stencil, copy, scanout, cross-queue, and multi-command synchronization
-rows remain host-only.
+Depth/stencil, copy, scanout, cross-queue, submit-list, and timeline
+synchronization rows remain host-only.
 
 Prospero `agcQueueSubmit` submits both current graphics and compute command
 buffers through the direct DCB carrier only when the caller supplies an

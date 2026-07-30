@@ -57,8 +57,10 @@ teardown. The matching 1x linear RGBA8 MRT row
 `undefined -> color-target -> host-read` also passed on exact FW 5.50 in
 artifact `8cd97b0b26d568c92870047d65698bd71fe31b72c162c7ca1a62c59d159bf643`:
 both targets produced 1,152 distinct post-fence pixels. Depth/stencil, copy,
-scanout, cross-queue, multi-command-buffer waits/signals, and timeline
-semantics remain pending.
+scanout, cross-queue, submit-list synchronization, and timeline semantics
+remain pending. The same-queue GPU-label signal/wait path is hardware-qualified
+on exact FW 5.50 by artifact
+`c968eabb7f3bfac3f761b119ccc4c5e7b16299e93e04a464cf932ce61a4296dc`.
 
 Runtime API v5 adds `AgcFenceInfo`, a versioned snapshot of fence state,
 submission/completion identity, queue and command ownership, expected/observed
@@ -68,13 +70,22 @@ behavior. Artifact `bd8545c05a7683bf4fb0c69e7c925317488ba7fd60e455ef7e1ecf715b47
 also passed the completed-fence query after a real public compute dispatch on
 exact FW 5.50. Pending timeout reporting remains host-tested.
 
+Runtime API v6 adds `AgcGpuLabel`: an owned flexible-memory word that the
+runtime signals with EOP release and waits on with a 32-bit `WAIT_REG_MEM`.
+Consumers require an already-submitted matching producer signal on the same
+queue, retain the label while recorded, and reject cross-queue use. Artifact
+`c968eabb7f3bfac3f761b119ccc4c5e7b16299e93e04a464cf932ce61a4296dc` passed
+the producer/consumer no-CPU-wait compute oracle, bounded completion, readback,
+and full teardown on exact FW 5.50. Labels are not timeline counters; submit
+wait/signal lists and cross-queue labels remain unqualified.
+
 The first multi-command submission path is now active for graphics: a 2–63
 member batch is validated as one queue-owned frame and receives one bounded
 fence, with every member retained until that fence completes. Artifact
 `30564bfdd87de4c89e575a03b7456aad57a2ca72af174aa41d1598a20322142b` passed
 the two-DCB MRT/readback/reset/teardown oracle on exact FW 5.50. Compute
-batches, empty members, waits/signals, timelines, and cross-queue transfers
-remain fail-closed or unqualified.
+batches, empty members, submit wait/signal lists, timelines, and cross-queue
+transfers remain fail-closed or unqualified.
 
 ## Native resource and memory management complete (2026-07-30)
 

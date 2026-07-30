@@ -453,8 +453,8 @@ The first synchronization step is implemented as runtime API v5:
 expected and observed marker, timeout count/deadline/result, and profile
 snapshot. Generic coverage exercises unsignaled and timeout cases; artifact
 `bd8545c05a7683bf4fb0c69e7c925317488ba7fd60e455ef7e1ecf715b477c9d` confirms
-the completed public-compute snapshot on exact FW 5.50. The remaining submit
-fan-in/out, GPU labels, timelines, and cross-queue work stays open.
+the completed public-compute snapshot on exact FW 5.50. Submit wait/signal
+lists, timelines, and cross-queue work stay open.
 
 The first submit fan-in path is also established: graphics `AgcSubmitInfo`
 batches of 2–63 distinct nonempty command buffers use one recovered direct
@@ -462,6 +462,17 @@ kernel frame and one runtime-owned fence. Artifact
 `30564bfdd87de4c89e575a03b7456aad57a2ca72af174aa41d1598a20322142b` passed a
 two-DCB MRT/readback/reset/teardown oracle on exact FW 5.50. Compute batches
 and wait/signal dependencies remain intentionally rejected.
+
+Runtime API v6 adds the first GPU-side label dependency. A producer records an
+EOP release write through `agcCmdSignalGpuLabel`; a consumer records an exact
+32-bit `WAIT_REG_MEM` through `agcCmdWaitGpuLabel`. Submission accepts the
+consumer only after the matching producer value has submitted on the same
+queue; labels retain their backing word until both command buffers reset.
+Artifact `c968eabb7f3bfac3f761b119ccc4c5e7b16299e93e04a464cf932ce61a4296dc`
+passed a producer-then-consumer public compute oracle without a CPU wait
+between submissions, followed by bounded-fence readback and full teardown on
+exact FW 5.50. Submit wait/signal lists, timeline counters, cross-queue labels,
+and ownership transfers remain intentionally rejected.
 
 Exit criteria: exact host fixtures cover the supported transition matrix and
 atomic short-buffer failure; FW 5.50 and FW 11.60 gates cover render-to-shader,

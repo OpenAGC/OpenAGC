@@ -1422,6 +1422,134 @@ static void test_runtime_multi_graphics_submission(void)
         "multi-submit device destroys");
 }
 
+static void test_runtime_gpu_labels(void)
+{
+    AgcDevice device = create_device();
+    AgcQueueDesc queue_desc = AGC_QUEUE_DESC_INIT;
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
+    AgcGpuLabelDesc label_desc = AGC_GPU_LABEL_DESC_INIT;
+    AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    AgcQueue compute_queue = NULL;
+    AgcQueue graphics_queue = NULL;
+    AgcCommandBuffer producer = NULL;
+    AgcCommandBuffer consumer = NULL;
+    AgcCommandBuffer cross_consumer = NULL;
+    AgcFence producer_fence = NULL;
+    AgcFence consumer_fence = NULL;
+    AgcGpuLabel label = NULL;
+    AgcGpuLabel cross_label = NULL;
+
+    queue_desc.type = kAgcQueueCompute;
+    command_desc.queue_type = kAgcQueueCompute;
+    command_desc.capacity_dwords = 128u;
+    label_desc.initial_value = 0u;
+    TEST_ASSERT_EQ(agcCreateQueue(device, &queue_desc, &compute_queue), AGC_OK,
+        "label compute queue creates");
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &producer),
+        AGC_OK, "label producer command creates");
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &consumer),
+        AGC_OK, "label consumer command creates");
+    TEST_ASSERT_EQ(agcCreateFence(device, &fence_desc, &producer_fence), AGC_OK,
+        "label producer fence creates");
+    TEST_ASSERT_EQ(agcCreateFence(device, &fence_desc, &consumer_fence), AGC_OK,
+        "label consumer fence creates");
+    TEST_ASSERT_EQ(agcCreateGpuLabel(device, &label_desc, &label), AGC_OK,
+        "same-queue GPU label creates");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(producer), AGC_OK,
+        "label producer begins");
+    TEST_ASSERT_EQ(agcCmdSignalGpuLabel(producer, label, UINT32_C(0x1234)),
+        AGC_OK, "label producer signal records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(producer), AGC_OK,
+        "label producer ends");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(consumer), AGC_OK,
+        "label consumer begins");
+    TEST_ASSERT_EQ(agcCmdWaitGpuLabel(consumer, label, UINT32_C(0x1234)),
+        AGC_OK, "label consumer wait records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(consumer), AGC_OK,
+        "label consumer ends");
+    submit.command_buffer_count = 1u;
+    submit.command_buffers = &consumer;
+    TEST_ASSERT_EQ(agcQueueSubmit(compute_queue, &submit, consumer_fence),
+        AGC_ERROR_INVALID_STATE,
+        "label wait rejects before its producer has submitted");
+    TEST_ASSERT_EQ(agcDestroyGpuLabel(label), AGC_ERROR_BUSY,
+        "recorded label cannot be destroyed before command reset");
+    submit.command_buffers = &producer;
+    TEST_ASSERT_EQ(agcQueueSubmit(compute_queue, &submit, producer_fence),
+        AGC_OK, "label producer submits");
+    TEST_ASSERT_EQ(agcDestroyQueue(compute_queue), AGC_ERROR_BUSY,
+        "submitted label retains its exact producer queue");
+    submit.command_buffers = &consumer;
+    TEST_ASSERT_EQ(agcQueueSubmit(compute_queue, &submit, consumer_fence),
+        AGC_OK, "same-queue label consumer submits");
+    TEST_ASSERT_EQ(agcGetFenceStatus(producer_fence), AGC_OK,
+        "generic label producer completes");
+    TEST_ASSERT_EQ(agcGetFenceStatus(consumer_fence), AGC_OK,
+        "generic label consumer completes");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(consumer), AGC_OK,
+        "label consumer resets");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(producer), AGC_OK,
+        "label producer resets");
+    TEST_ASSERT_EQ(agcDestroyGpuLabel(label), AGC_OK,
+        "label destroys after producer and consumer reset");
+    label = NULL;
+
+    TEST_ASSERT_EQ(agcCreateGpuLabel(device, &label_desc, &cross_label),
+        AGC_OK, "cross-queue label creates");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(producer), AGC_OK,
+        "cross-queue producer begins");
+    TEST_ASSERT_EQ(agcCmdSignalGpuLabel(producer, cross_label, 7u), AGC_OK,
+        "cross-queue producer signal records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(producer), AGC_OK,
+        "cross-queue producer ends");
+    TEST_ASSERT_EQ(agcResetFence(producer_fence), AGC_OK,
+        "cross-queue producer fence resets");
+    submit.command_buffers = &producer;
+    TEST_ASSERT_EQ(agcQueueSubmit(compute_queue, &submit, producer_fence),
+        AGC_OK, "cross-queue producer submits");
+    queue_desc.type = kAgcQueueGraphics;
+    command_desc.queue_type = kAgcQueueGraphics;
+    TEST_ASSERT_EQ(agcCreateQueue(device, &queue_desc, &graphics_queue), AGC_OK,
+        "label graphics queue creates");
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc,
+        &cross_consumer), AGC_OK, "cross-queue consumer command creates");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(cross_consumer), AGC_OK,
+        "cross-queue consumer begins");
+    TEST_ASSERT_EQ(agcCmdWaitGpuLabel(cross_consumer, cross_label, 7u), AGC_OK,
+        "cross-queue consumer wait records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(cross_consumer), AGC_OK,
+        "cross-queue consumer ends");
+    TEST_ASSERT_EQ(agcResetFence(consumer_fence), AGC_OK,
+        "cross-queue consumer fence resets");
+    submit.command_buffers = &cross_consumer;
+    TEST_ASSERT_EQ(agcQueueSubmit(graphics_queue, &submit, consumer_fence),
+        AGC_ERROR_NOT_SUPPORTED,
+        "cross-queue label wait stays fail-closed");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(cross_consumer), AGC_OK,
+        "cross-queue consumer resets after rejection");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(producer), AGC_OK,
+        "cross-queue producer resets");
+    TEST_ASSERT_EQ(agcDestroyGpuLabel(cross_label), AGC_OK,
+        "cross-queue label destroys after command reset");
+    TEST_ASSERT_EQ(agcDestroyFence(consumer_fence), AGC_OK,
+        "label consumer fence destroys");
+    TEST_ASSERT_EQ(agcDestroyFence(producer_fence), AGC_OK,
+        "label producer fence destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(cross_consumer), AGC_OK,
+        "cross-queue consumer command destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(consumer), AGC_OK,
+        "label consumer command destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(producer), AGC_OK,
+        "label producer command destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(graphics_queue), AGC_OK,
+        "label graphics queue destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(compute_queue), AGC_OK,
+        "label compute queue destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "label device destroys");
+}
+
 static void test_runtime_image_transfer(void)
 {
     const uint32_t input[] = {0x11223344u, 0x55667788u, 0x99aabbccu};
@@ -4406,6 +4534,7 @@ void test_suite_runtime(void)
     TEST_RUN(test_runtime_compiler_graphics_sidecar);
     TEST_RUN(test_runtime_indexed_graphics_submission);
     TEST_RUN(test_runtime_multi_graphics_submission);
+    TEST_RUN(test_runtime_gpu_labels);
     TEST_RUN(test_runtime_image_transfer);
     TEST_RUN(test_runtime_resource_transitions);
     TEST_RUN(test_runtime_color_target_binding);
