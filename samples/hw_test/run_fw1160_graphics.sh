@@ -62,6 +62,13 @@ fi
 transport_status=0
 if [ -n "${RESULT_LOG_PATH:-}" ]; then
     result_ftp_url="ftp://$PS5_HOST:2121$RESULT_LOG_PATH"
+    result_dir=${RESULT_LOG_PATH%/*}
+    # The firmware-neutral artifact can log outside REMOTE_BASE. Ensure its
+    # stale-proof verdict directory exists before launch; FTP reports an error
+    # when MKD names an existing directory, so that response is intentionally
+    # ignored.
+    curl -sS --max-time 5 --quote "MKD $result_dir" \
+        "ftp://$PS5_HOST:2121/" >/dev/null 2>&1 || true
     curl -sS --max-time 5 --quote "DELE $RESULT_LOG_PATH" \
         "ftp://$PS5_HOST:2121/" >/dev/null 2>&1 || true
     curl -sS --fail --max-time 10 \
