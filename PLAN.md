@@ -701,6 +701,8 @@ the runner and shared teardown on FW 11.60 only.
   modes are qualified there. Run the pinned FW 11.60 full-4x artifact next.
 - FW 11.60 full-rate pass 1 exactly matched FW 5.50's per-sample and total
   tuple, guards, base oracles, and clean lifecycle. Replay the frozen tuple.
+- FW 11.60 full-rate pass 2 reproduced every exact oracle. Full-4x parity is
+  qualified on both endpoints. Run FW 11.60 partial-2x next.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and

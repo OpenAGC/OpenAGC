@@ -353,6 +353,11 @@ FW 11.60 full-rate pass 1 produced the exact same
 and unchanged color/D32 evidence. The file-backed verdict, fence, teardown,
 self-termination, and debugger absence passed. Freeze those counts for replay.
 
+FW 11.60 full-rate pass 2 reproduced every frozen count, guard, base oracle,
+fence, file-backed verdict, teardown, self-termination, and debugger absence.
+Full-4x sample-rate shading is hardware-qualified on both endpoints. Run the
+pinned FW 11.60 partial-2x artifact next.
+
 That prerequisite sequence is now complete. Two relinks against the committed
 shader records reproduced all eight artifacts byte-for-byte, and dependency
 inspection found only VideoOut, kernel, libc, and networking. The exact FW

@@ -191,6 +191,10 @@ FW 11.60 full-rate pass 1 exactly matched FW 5.50's four sample counts and
 total, with intact guards, unchanged base oracles, and a clean file-backed
 lifecycle. Its exact tuple is frozen for replay.
 
+FW 11.60 full-rate pass 2 reproduced every exact value and clean lifecycle.
+Full-4x OpenAGC sample-rate shading is hardware-qualified on both endpoints;
+FW 11.60 partial-2x remains.
+
 All four subresource artifacts now reproduce across two relinks, avoid AGC
 SPRX dependencies, are preserved under full hashes, and have cleanup-first
 hash-pinned deploy targets with exact color and selected/outside metadata
