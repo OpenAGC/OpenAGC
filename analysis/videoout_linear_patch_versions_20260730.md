@@ -30,8 +30,10 @@ registration, and returns `AGC_ERROR_NOT_SUPPORTED` for an unknown key or a
 signature mismatch. Host tests lock both offsets, signatures, normalization,
 and rejection of an unevidenced firmware key.
 
-Hardware qualification on FW 11.60 remains required before presentation is
-advertised as parity-complete.
+FW 11.60 hardware qualification is recorded below. It qualifies the public
+linear VideoOut lifecycle while a direct AGC context is active; rendering a
+graphics or compute result directly into the presented buffers remains a
+separate higher-level gate.
 
 ## Bounded hardware gate
 
@@ -46,4 +48,14 @@ The file-backed runner executes the process-cleanup ELF immediately before
 each payload and defaults to two repetitions. It pins artifact SHA-256
 `43927ea5dfb6d6f8253cf109cfa2b817f766918757979a22cdf419aa89e556e7` and
 requires exact profile, registration/restoration, marker, flip, teardown, and
-final PASS lines. This gate is prepared but not yet hardware-run.
+final PASS lines.
+
+## FW 11.60 hardware result
+
+The pinned payload passed twice on standard PS5 FW `0x11600005`. Both launches
+used the process-cleanup ELF immediately beforehand, selected ABI key `0x1160`,
+accepted V12 defaults and async setup, verified and restored the `+0x9922`
+instruction, completed the GPU marker after 50 ms, and completed both bounded
+VSYNC flips. Driver shutdown, flexible release, direct unmap, and direct-memory
+release all returned zero. The payload self-terminated after each verdict and
+websrv port 8080 plus ps5debug-NG port 744 remained reachable.
