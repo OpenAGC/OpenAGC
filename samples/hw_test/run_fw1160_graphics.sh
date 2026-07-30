@@ -160,6 +160,15 @@ case "$EXPECTED_TARGET" in
         grep -q '^\[UNORM16\] Channel independence: PASS$' \
             "$output_file" || exit 1
         ;;
+    R16_SNORM)
+        grep -Eq '^\[SNORM16\] GFX1013 R16_SNORM target: PASS$' \
+            "$output_file" || exit 1
+        grep -Eq '^\[SNORM16\] Stored components: 1; complete samples: [1-9][0-9]*; signed-range=-[0-9]+\.\.[0-9]+; out-of-range components: 0$' \
+            "$output_file" || exit 1
+        grep -Eq '^\[SNORM16 Lane 0\].*: PASS$' "$output_file" || exit 1
+        grep -q '^\[SNORM16\] Channel independence: PASS$' \
+            "$output_file" || exit 1
+        ;;
     R8_UNORM|RG8_UNORM)
         grep -Eq '^\[UNORM8\].*: PASS$' "$output_file" || exit 1
         ;;

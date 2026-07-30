@@ -259,8 +259,11 @@ the runner and shared teardown on FW 11.60 only.
   gfx1013 `16`, SNORM, standard swap, two bytes per pixel, and FP16_ABGR
   export. Exact PM4, all-profile selection, 64-bit layout limits,
   invalid-enum behavior, and every 0-27-dword short-buffer boundary pass on
-  the host. Its signed native oracle and FW 11.60 qualification remain next;
-  it is not yet hardware-qualified.
+  the host. Its firmware-neutral hardware gate now uses a reusable signed
+  four-lane fragment fixture and a sentinel-safe `int16_t` oracle with signed
+  endpoint, diversity, coverage, independence, and raw-hash checks. Hash-pin
+  the final ELF before its first FW 11.60 run; it is not yet
+  hardware-qualified.
 - Seven additional offscreen format gates now build under the same exact
   profile and bounded runner: R8, RG8, RGB10A2, R11G11B10, R32, RG32, and
   RGBA32. All seven passed twice on FW 11.60; logged RG32 reproduced FNV64

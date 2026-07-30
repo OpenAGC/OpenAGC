@@ -134,8 +134,12 @@ group and maps to `(format=0x02, number=SNORM, swap=standard)`, two bytes per
 pixel, and FP16_ABGR export. Host tests lock its exact 28-dword PM4 stream,
 all 39 active profiles, 64-bit layout boundaries, invalid-enum behavior, and
 all command capacities from zero through the 28-dword requirement. Hardware
-qualification is still pending a signed native oracle and immutable FW 11.60
-artifact; no firmware has a hardware-qualified label yet.
+qualification tooling now includes a reusable signed-output shader and an
+`int16_t` native oracle that checks bounded coverage, negative and positive
+near-endpoint ranges, diversity, sentinel collisions, per-lane hashes, and
+channel independence. The firmware-neutral ELF still needs to be hash-pinned
+and executed twice on FW 11.60; no firmware has a hardware-qualified label
+yet.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability

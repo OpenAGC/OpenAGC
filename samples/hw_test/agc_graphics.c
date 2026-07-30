@@ -381,6 +381,9 @@
 #elif defined(AGC_VALIDATE_RGBA16_UNORM) && AGC_VALIDATE_RGBA16_UNORM
 #include "shaders/rgba16_unorm_frag_sb.h"
 #define FRAGMENT_DATA rgba16_unorm_frag_data
+#elif defined(AGC_VALIDATE_R16_SNORM) && AGC_VALIDATE_R16_SNORM
+#include "shaders/snorm16_frag_sb.h"
+#define FRAGMENT_DATA snorm16_frag_data
 #elif AGC_NGG_INPUT_LINES || AGC_TESS_GEOMETRY_LINES
 #include "shaders/triangle_line_frag_sb.h"
 #define FRAGMENT_DATA triangle_line_frag_data
@@ -527,6 +530,9 @@ int sceKernelDeleteEqueue(SceKernelEqueue equeue);
 #ifndef AGC_VALIDATE_RGBA16_UNORM
 #define AGC_VALIDATE_RGBA16_UNORM 0
 #endif
+#ifndef AGC_VALIDATE_R16_SNORM
+#define AGC_VALIDATE_R16_SNORM 0
+#endif
 #ifndef AGC_VALIDATE_R8_UNORM
 #define AGC_VALIDATE_R8_UNORM 0
 #endif
@@ -553,7 +559,7 @@ int sceKernelDeleteEqueue(SceKernelEqueue equeue);
      AGC_VALIDATE_RGBA8_SRGB + AGC_VALIDATE_BGRA8_SRGB + \
      AGC_VALIDATE_R16_FLOAT + AGC_VALIDATE_RG16_FLOAT + \
      AGC_VALIDATE_R16_UNORM + AGC_VALIDATE_RG16_UNORM + \
-     AGC_VALIDATE_RGBA16_UNORM + \
+     AGC_VALIDATE_RGBA16_UNORM + AGC_VALIDATE_R16_SNORM + \
      AGC_VALIDATE_R8_UNORM + AGC_VALIDATE_RG8_UNORM + \
      AGC_VALIDATE_R32_FLOAT + AGC_VALIDATE_RG32_FLOAT + \
      AGC_VALIDATE_RGBA32_FLOAT) > 1
@@ -2879,6 +2885,10 @@ static bool dispatch_graphics(GraphicsTest *test,
         uint16_t lane_min[4] = {
             UINT16_MAX, UINT16_MAX, UINT16_MAX, UINT16_MAX};
         uint16_t lane_max[4] = {0u, 0u, 0u, 0u};
+        int16_t lane_signed_min[4] = {
+            INT16_MAX, INT16_MAX, INT16_MAX, INT16_MAX};
+        int16_t lane_signed_max[4] = {
+            INT16_MIN, INT16_MIN, INT16_MIN, INT16_MIN};
         uint16_t lane_unique[4][8] = {{0}};
         uint32_t lane_unique_count[4] = {0u, 0u, 0u, 0u};
         uint32_t lane_changed[4] = {0u, 0u, 0u, 0u};
@@ -2920,11 +2930,16 @@ static bool dispatch_graphics(GraphicsTest *test,
                 if (component < min_component) min_component = component;
                 if (component > max_component) max_component = component;
                 if (component != (uint16_t)FP16_CLEAR_SENTINEL) {
+                    const int16_t signed_component = (int16_t)component;
                     ++lane_changed[lane];
                     if (component < lane_min[lane])
                         lane_min[lane] = component;
                     if (component > lane_max[lane])
                         lane_max[lane] = component;
+                    if (signed_component < lane_signed_min[lane])
+                        lane_signed_min[lane] = signed_component;
+                    if (signed_component > lane_signed_max[lane])
+                        lane_signed_max[lane] = signed_component;
                     lane_hash[lane] = (lane_hash[lane] ^ component) *
                         UINT64_C(1099511628211);
                 }
@@ -2980,49 +2995,73 @@ static bool dispatch_graphics(GraphicsTest *test,
         const uint32_t coverage_tolerance = target->width;
         const bool unorm16 = target->number_type ==
             AGC_GFX1013_SURFACE_NUMBER_UNORM;
+        const bool snorm16 = target->number_type ==
+            AGC_GFX1013_SURFACE_NUMBER_SNORM;
+        const bool normalized16 = unorm16 || snorm16;
+        const char *normalized_label = unorm16 ? "UNORM16" :
+            (snorm16 ? "SNORM16" : "FP16");
         printf("[%s] Changed pixels: %u / %u (expected about %u)\n",
-               unorm16 ? "UNORM16" : "FP16", changed, target_pixels,
+               normalized_label, changed, target_pixels,
                expected_changed);
         if (changed != 0u) {
             printf("[%s] Coverage bounds: x=%u..%u y=%u..%u (%ux%u)\n",
-                   unorm16 ? "UNORM16" : "FP16",
+                   normalized_label,
                    min_x, max_x, min_y, max_y,
                    max_x - min_x + 1u, max_y - min_y + 1u);
         }
         printf("[%s] Distinct sampled colors: %u\n",
-               unorm16 ? "UNORM16" : "FP16", unique_color_count);
+               normalized_label, unique_color_count);
         for (uint32_t i = 0; i < unique_color_count; i++)
             printf("  %s_color[%u] = 0x%016llx\n",
-                   unorm16 ? "unorm16" : "fp16", i,
+                   unorm16 ? "unorm16" : (snorm16 ? "snorm16" : "fp16"), i,
                    (unsigned long long)unique_colors[i]);
-        printf("[%s] Stored components: %u; complete samples: %u; "
-               "range=0x%04x..0x%04x; out-of-range components: %u\n",
-               unorm16 ? "UNORM16" : "FP16", components,
-               complete_samples, min_component, max_component,
-               out_of_range_components);
+        if (snorm16) {
+            printf("[SNORM16] Stored components: %u; complete samples: %u; "
+                   "signed-range=%d..%d; out-of-range components: %u\n",
+                   components, complete_samples, lane_signed_min[0],
+                   lane_signed_max[0], out_of_range_components);
+        } else {
+            printf("[%s] Stored components: %u; complete samples: %u; "
+                   "range=0x%04x..0x%04x; out-of-range components: %u\n",
+                   normalized_label, components, complete_samples,
+                   min_component, max_component, out_of_range_components);
+        }
         printf("[%s] Native packed FNV64: 0x%016llx\n",
-               unorm16 ? "UNORM16" : "FP16",
+               normalized_label,
                (unsigned long long)packed_hash);
         bool lane_encoding_pass = true;
-        if (unorm16) {
+        if (normalized16) {
             for (uint32_t lane = 0u; lane < components; ++lane) {
-                const bool lane_pass =
+                const bool coverage_pass =
                     lane_changed[lane] + coverage_tolerance >=
                         expected_changed &&
                     lane_changed[lane] <=
                         expected_changed + coverage_tolerance &&
-                    lane_min[lane] <= 0x1000u &&
-                    lane_max[lane] >= 0xefffu &&
                     lane_unique_count[lane] >= 8u;
+                const bool range_pass = unorm16 ?
+                    (lane_min[lane] <= 0x1000u &&
+                     lane_max[lane] >= 0xefffu) :
+                    (lane_signed_min[lane] <= -0x7000 &&
+                     lane_signed_max[lane] >= 0x7000);
+                const bool lane_pass = coverage_pass && range_pass;
                 lane_encoding_pass &= lane_pass;
-                printf("[UNORM16 Lane %u] changed=%u "
-                       "range=0x%04x..0x%04x "
-                       "distinct=%u fnv64=0x%016llx: %s\n",
-                       lane, lane_changed[lane],
-                       lane_min[lane], lane_max[lane],
-                       lane_unique_count[lane],
-                       (unsigned long long)lane_hash[lane],
-                       lane_pass ? "PASS" : "FAIL");
+                if (snorm16) {
+                    printf("[SNORM16 Lane %u] changed=%u range=%d..%d "
+                           "distinct=%u fnv64=0x%016llx: %s\n",
+                           lane, lane_changed[lane], lane_signed_min[lane],
+                           lane_signed_max[lane], lane_unique_count[lane],
+                           (unsigned long long)lane_hash[lane],
+                           lane_pass ? "PASS" : "FAIL");
+                } else {
+                    printf("[UNORM16 Lane %u] changed=%u "
+                           "range=0x%04x..0x%04x "
+                           "distinct=%u fnv64=0x%016llx: %s\n",
+                           lane, lane_changed[lane],
+                           lane_min[lane], lane_max[lane],
+                           lane_unique_count[lane],
+                           (unsigned long long)lane_hash[lane],
+                           lane_pass ? "PASS" : "FAIL");
+                }
             }
             bool independent = true;
             for (uint32_t lhs = 0u; lhs < components; ++lhs) {
@@ -3030,7 +3069,7 @@ static bool dispatch_graphics(GraphicsTest *test,
                     independent &= lane_hash[lhs] != lane_hash[rhs];
             }
             lane_encoding_pass &= independent;
-            printf("[UNORM16] Channel independence: %s\n",
+            printf("[%s] Channel independence: %s\n", normalized_label,
                    independent ? "PASS" : "FAIL");
         }
 #if AGC_NGG_INPUT_LINES || AGC_TESS_GEOMETRY_LINES
@@ -3039,7 +3078,7 @@ static bool dispatch_graphics(GraphicsTest *test,
 #else
         const bool color_pass = unique_color_count >= 8u;
 #endif
-        const bool encoding_pass = !unorm16 || lane_encoding_pass;
+        const bool encoding_pass = !normalized16 || lane_encoding_pass;
 #if AGC_INDIRECT_DRAW_COUNT > 1
         const bool multi_draw_pass =
             changed > expected_changed + coverage_tolerance &&
@@ -3061,10 +3100,10 @@ static bool dispatch_graphics(GraphicsTest *test,
 #endif
                                color_pass &&
                                encoding_pass &&
-                               (unorm16 || complete_samples == changed) &&
+                               (normalized16 || complete_samples == changed) &&
                                out_of_range_components == 0u;
         printf("[%s] GFX1013 %s target: %s\n",
-               unorm16 ? "UNORM16" : "FP16",
+               normalized_label,
                target->name, fp16_pass ? "PASS" : "FAIL");
         return fp16_pass;
     }
@@ -3254,8 +3293,9 @@ static void visualize_fp16(GraphicsTest *test, uint32_t components) {
 }
 
 #if AGC_VALIDATE_R16_UNORM || AGC_VALIDATE_RG16_UNORM || \
-    AGC_VALIDATE_RGBA16_UNORM
-static void visualize_unorm16(GraphicsTest *test, uint32_t components) {
+    AGC_VALIDATE_RGBA16_UNORM || AGC_VALIDATE_R16_SNORM
+static void visualize_normalized16(GraphicsTest *test, uint32_t components,
+        bool signed_normalized) {
     const uint16_t *source = (const uint16_t *)test->render_target;
     uint32_t *display = (uint32_t *)test->buffers[0];
     const uint32_t preview_width = FP16_TARGET_WIDTH / FP16_PREVIEW_DIVISOR;
@@ -3286,10 +3326,19 @@ static void visualize_unorm16(GraphicsTest *test, uint32_t components) {
                 (components < 4u ||
                  alpha16 == (uint16_t)FP16_CLEAR_SENTINEL))
                 continue;
-            const uint8_t red = (uint8_t)(red16 >> 8u);
-            const uint8_t green = (uint8_t)(green16 >> 8u);
-            const uint8_t blue = (uint8_t)(blue16 >> 8u);
-            const uint8_t alpha = (uint8_t)(alpha16 >> 8u);
+            const uint8_t red = signed_normalized ?
+                (uint8_t)(((int32_t)(int16_t)red16 + 32768) >> 8u) :
+                (uint8_t)(red16 >> 8u);
+            const uint8_t green = signed_normalized ?
+                (uint8_t)(((int32_t)(int16_t)green16 + 32768) >> 8u) :
+                (uint8_t)(green16 >> 8u);
+            const uint8_t blue = signed_normalized ?
+                (uint8_t)(((int32_t)(int16_t)blue16 + 32768) >> 8u) :
+                (uint8_t)(blue16 >> 8u);
+            const uint8_t alpha = components < 4u ? UINT8_MAX :
+                (signed_normalized ?
+                    (uint8_t)(((int32_t)(int16_t)alpha16 + 32768) >> 8u) :
+                    (uint8_t)(alpha16 >> 8u));
             display[(origin_y + y) * test->width + origin_x + x] =
                 ((uint32_t)alpha << 24u) | ((uint32_t)blue << 16u) |
                 ((uint32_t)green << 8u) | red;
@@ -3297,8 +3346,9 @@ static void visualize_unorm16(GraphicsTest *test, uint32_t components) {
     }
     memcpy(test->buffers[1], test->buffers[0],
            (size_t)test->width * test->height * BYTES_PER_PIXEL);
-    printf("[UNORM16] %u-channel CPU preview: %ux%u centered on RGBA8 display\n",
-           components, preview_width, preview_height);
+    printf("[%s] %u-channel CPU preview: %ux%u centered on RGBA8 display\n",
+           signed_normalized ? "SNORM16" : "UNORM16", components,
+           preview_width, preview_height);
 }
 #endif
 #endif
@@ -3772,7 +3822,7 @@ int main(void) {
 #endif
 #elif AGC_VALIDATE_R16_FLOAT || AGC_VALIDATE_RG16_FLOAT || \
       AGC_VALIDATE_R16_UNORM || AGC_VALIDATE_RG16_UNORM || \
-      AGC_VALIDATE_RGBA16_UNORM
+      AGC_VALIDATE_RGBA16_UNORM || AGC_VALIDATE_R16_SNORM
     const uint32_t components =
         AGC_VALIDATE_RGBA16_UNORM ? 4u :
         ((AGC_VALIDATE_RG16_FLOAT || AGC_VALIDATE_RG16_UNORM) ? 2u : 1u);
@@ -3783,6 +3833,8 @@ int main(void) {
         (AGC_VALIDATE_RG16_FLOAT || AGC_VALIDATE_RG16_UNORM) ?
             AGC_GFX1013_COLOR_FORMAT_16_16 :
             AGC_GFX1013_COLOR_FORMAT_16,
+        AGC_VALIDATE_R16_SNORM ?
+            AGC_GFX1013_SURFACE_NUMBER_SNORM :
         (AGC_VALIDATE_R16_UNORM || AGC_VALIDATE_RG16_UNORM ||
          AGC_VALIDATE_RGBA16_UNORM) ?
             AGC_GFX1013_SURFACE_NUMBER_UNORM :
@@ -3791,8 +3843,9 @@ int main(void) {
         components, 2u, AGC_VALIDATE_RG16_FLOAT ?
             "RG16_FLOAT" : (AGC_VALIDATE_RG16_UNORM ?
                 "RG16_UNORM" : (AGC_VALIDATE_RGBA16_UNORM ?
-                    "RGBA16_UNORM" : (AGC_VALIDATE_R16_UNORM ?
-                        "R16_UNORM" : "R16_FLOAT")))
+                    "RGBA16_UNORM" : (AGC_VALIDATE_R16_SNORM ?
+                        "R16_SNORM" : (AGC_VALIDATE_R16_UNORM ?
+                            "R16_UNORM" : "R16_FLOAT"))))
     };
     printf("\n--- Step 4: %s offscreen draw ---\n",
            narrow_16_target.name);
@@ -3804,8 +3857,8 @@ int main(void) {
     }
 #if !AGC_GRAPHICS_HEADLESS
 #if AGC_VALIDATE_R16_UNORM || AGC_VALIDATE_RG16_UNORM || \
-    AGC_VALIDATE_RGBA16_UNORM
-    visualize_unorm16(&test, components);
+    AGC_VALIDATE_RGBA16_UNORM || AGC_VALIDATE_R16_SNORM
+    visualize_normalized16(&test, components, AGC_VALIDATE_R16_SNORM != 0);
 #else
     visualize_fp16(&test, components);
 #endif
