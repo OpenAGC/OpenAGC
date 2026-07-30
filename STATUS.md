@@ -709,9 +709,10 @@ hash. Exact artifacts are pinned as SHA-256
 (UNORM) and
 `d182824d912f7473f25beeba80ffc58e3ceb31d8a5b7bff678d2237b24c9c5b8`
 (SRGB), with no-prerequisite FW 11.60 and FW 5.50 targets. Hardware execution
-remains pending a clean FW 11.60 boot. BC2 UNORM pass 1 then succeeded with
-`224640` changed pixels, equal region counts, alpha range `0..255`, zero exact
-mismatches, and FNV64 `0xf3b07b5935bb483d`; pass 2 remains required.
+remains pending a clean FW 11.60 boot. BC2 UNORM then passed twice with
+identical `224640` changed pixels, equal region counts, alpha range `0..255`,
+zero exact mismatches, and FNV64 `0xf3b07b5935bb483d`. BC2 UNORM is
+hardware-qualified on exact FW 11.60.
 
 BC3 UNORM and SRGB firmware-neutral gates now build and pass dependency
 verification. Their 16-byte fixtures combine the BC1-style RGB565 color field
