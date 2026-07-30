@@ -60,12 +60,16 @@ reached its completion fence, shut the driver down, and returned PASS.
 | 4x MSAA | Missing | Wait for the FW 5.50 baseline regression |
 | Sample-rate shading | Missing | Add an exact invocation-count gate |
 
-The 2026-07-30 attempt to rebuild the uncompressed-depth mirrors was stopped
-before deployment. The sibling `openagc-psbc` compiler now emits 11 CX
-register entries for the depth NGG back half, while the FW 11.60-qualified
-artifact recorded zero. That one-byte record change invalidates the audited
-ELF hashes. Rebuild and audit both firmware artifacts from the same compiler
-revision before using them as a parity comparison.
+The first 2026-07-30 D32 mirror followed 11 successful graphics payloads and
+kernel-panicked FW 5.50. Investigation found that every graphics launch leaked
+its 65,536-byte command mapping and roughly 19 MiB graphics pool before
+`SIGKILL`; the sequence accumulated about 219 MiB before D32. The simultaneous
+shader-record byte change was not a command-stream delta because the sample
+already derived and emitted the physical 11-entry CX block. Graphics and
+compute now release all sample-owned flexible mappings, and ordinary depth
+builds consume committed qualified shader records. Fresh-boot teardown stress
+qualification is required before the uncompressed-depth mirror resumes. See
+`analysis/fw550_headless_flexible_memory_panic_20260730.md`.
 
 ## Higher-level consumers
 
@@ -81,11 +85,13 @@ FW 5.50 either.
 
 ## Required execution order
 
-1. Pin one `openagc-psbc` revision, rebuild both firmware variants, and rerun
-   the FW 5.50 color and uncompressed-depth mirrors.
-2. Only after the uncompressed-depth baseline passes, run the FW 5.50 ordinary
+1. On a fresh FW 5.50 boot, stress the fixed baseline past the old cumulative
+   flexible-memory threshold and require zero cleanup results after every run.
+2. Rerun the FW 5.50 color and uncompressed-depth mirrors using the committed
+   qualified shader records.
+3. Only after the uncompressed-depth baseline passes, run the FW 5.50 ordinary
    D16 HTILE mirror, then FW 11.60 ordinary and expclear twice each.
-3. Prepare and qualify D32 HTILE operations, combined depth/stencil,
+4. Prepare and qualify D32 HTILE operations, combined depth/stencil,
    subresources, and MSAA with the matching FW 5.50 mirror first.
-4. Add bounded FW 11.60 gates for the higher-level consumer gaps.
-5. Keep workload support fail closed and do not repeat stages 11-17 unchanged.
+5. Add bounded FW 11.60 gates for the higher-level consumer gaps.
+6. Keep workload support fail closed and do not repeat stages 11-17 unchanged.

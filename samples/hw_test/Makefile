@@ -262,9 +262,16 @@ shaders/depth_resolve_frag.sb: shaders/depth_resolve_frag.spv
 shaders/depth_resolve_frag_sb.h: shaders/depth_resolve_frag.sb
 	xxd -i -n depth_resolve_frag_data $< $@
 
-.PHONY: shaders_depth
-shaders_depth: shaders/depth_triangle_vert.spv shaders/triangle_geom.spv \
+.PHONY: shaders_depth regen_shaders_depth
+# Normal hardware builds consume the committed, hardware-qualified records.
+# Regeneration is explicit because a sibling psbc revision can legitimately
+# change register metadata and must be re-audited before deployment.
+shaders_depth: shaders/depth_triangle_ngg_front_sb.h \
+               shaders/depth_triangle_ngg_back_sb.h \
                shaders/depth_triangle_frag_sb.h
+
+regen_shaders_depth: shaders/depth_triangle_vert.spv shaders/triangle_geom.spv \
+                     shaders/depth_triangle_frag_sb.h
 	$(PSBC) -f shaders/triangle_geom.spv -s geometry \
 	    --pre-vertex shaders/depth_triangle_vert.spv \
 	    --wave32 \

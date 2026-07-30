@@ -82,6 +82,7 @@ int sceKernelReleaseDirectMemory(off_t directMemoryStart, size_t len);
  * This is what the AGC SPRX uses for internal GPU memory regions. */
 int sceKernelMapNamedSystemFlexibleMemory(
     void **addr, size_t len, int memoryType, int flags, const char *name);
+int sceKernelReleaseFlexibleMemory(void *addr, size_t len);
 
 /* Event queue */
 typedef int SceKernelEqueue;
@@ -122,7 +123,10 @@ typedef struct {
     void *mapped;
     size_t mapped_size;
     uint8_t *buffers[BUFFER_COUNT];
+    void *command_buffer;
+    size_t command_buffer_size;
     void *compute_buffer;  /* Flexible memory pool for compute shader & output */
+    size_t compute_buffer_size;
     uint32_t width;
     uint32_t height;
     uint32_t pitch_pixels;
@@ -175,6 +179,8 @@ static bool allocate_compute_buffers(ComputeTest *test) {
         return false;
     }
     cb_buffer = (uint32_t *)cb_addr;
+    test->command_buffer = cb_addr;
+    test->command_buffer_size = cb_size;
 
     /* Allocate 10MB Flexible Memory pool for compute shader output + code */
     size_t pool_size = 16 * 1024 * 1024;
@@ -186,6 +192,7 @@ static bool allocate_compute_buffers(ComputeTest *test) {
         return false;
     }
     test->compute_buffer = pool_addr;
+    test->compute_buffer_size = pool_size;
 
     printf("Command buffer: %zu bytes at %p (flexible memory, GPU-visible)\n",
            cb_size, cb_buffer);
@@ -605,6 +612,8 @@ int main(void) {
     int equeue_result = 0;
     int unmap_result = 0;
     int release_result = 0;
+    int command_release_result = 0;
+    int pool_release_result = 0;
     int32_t shutdown_result = AGC_ERROR_NOT_INITIALIZED;
 
     if (!init_agc())
@@ -715,9 +724,29 @@ cleanup:
             test.direct_memory, test.mapped_size);
     if (agc_attempted)
         shutdown_result = agcDriverShutdown();
+    if (test.compute_buffer != NULL && test.compute_buffer_size != 0u) {
+        pool_release_result = sceKernelReleaseFlexibleMemory(
+            test.compute_buffer, test.compute_buffer_size);
+        if (pool_release_result != 0)
+            (void)sceKernelMunmap(
+                test.compute_buffer, test.compute_buffer_size);
+        test.compute_buffer = NULL;
+        test.compute_buffer_size = 0u;
+    }
+    if (test.command_buffer != NULL && test.command_buffer_size != 0u) {
+        command_release_result = sceKernelReleaseFlexibleMemory(
+            test.command_buffer, test.command_buffer_size);
+        if (command_release_result != 0)
+            (void)sceKernelMunmap(
+                test.command_buffer, test.command_buffer_size);
+        test.command_buffer = NULL;
+        test.command_buffer_size = 0u;
+        cb_buffer = NULL;
+    }
 
     success = output_complete && flip_complete && delete_event_result == 0 &&
-        close_result == 0 && shutdown_result == AGC_OK;
+        close_result == 0 && shutdown_result == AGC_OK &&
+        command_release_result == 0 && pool_release_result == 0;
     printf("\n=== Compute Summary ===\n");
     printf("  Runtime profile: FW ABI 0x%04X\n",
            AGC_EXPECT_FIRMWARE_ABI_KEY);
@@ -737,6 +766,9 @@ cleanup:
     printf("  Driver shutdown: %s (0x%08x)\n",
            shutdown_result == AGC_OK ? "PASS" : "FAILED",
            (unsigned)shutdown_result);
+    printf("  Flexible cleanup: cb=0x%08x pool=0x%08x\n",
+           (unsigned)command_release_result,
+           (unsigned)pool_release_result);
     printf("Compute result: %s\n", success ? "PASS" : "FAIL");
     fflush(stdout);
     fflush(stderr);

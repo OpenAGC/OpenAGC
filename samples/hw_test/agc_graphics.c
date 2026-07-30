@@ -398,6 +398,9 @@ int sceKernelMapDirectMemory(
 int sceKernelMapNamedSystemFlexibleMemory(
     void **virtualAddress, size_t length, int protection, int flags,
     const char *name);
+int sceKernelReleaseFlexibleMemory(void *virtualAddress, size_t length);
+int sceKernelMunmap(void *virtualAddress, size_t length);
+int sceKernelReleaseDirectMemory(off_t directMemoryStart, size_t length);
 int sceKernelCreateEqueue(SceKernelEqueue *equeue, const char *name);
 int sceKernelWaitEqueue(SceKernelEqueue equeue, SceKernelEvent *events,
     int count, void *timeout, void *result);
@@ -554,7 +557,10 @@ typedef struct {
     void *mapped;
     size_t mapped_size;
     uint8_t *buffers[BUFFER_COUNT];
+    void *command_buffer;   /* Sample-owned flexible command mapping */
+    size_t command_buffer_size;
     void *compute_buffer;   /* Flexible memory pool for RT + shader code */
+    size_t compute_buffer_size;
     void *render_target;    /* Points into compute_buffer */
     void *msaa_color_surface; /* Optional 4x 64KB_R_X color image */
     size_t msaa_color_surface_size;
@@ -647,6 +653,8 @@ static const char *errstr(int32_t err) {
 
 static bool g_graphics_driver_initialized;
 static int32_t g_graphics_shutdown_result = AGC_ERROR_NOT_INITIALIZED;
+static GraphicsTest *g_graphics_test;
+static uint32_t *cb_buffer;  /* Command buffer in flexible memory */
 
 static int32_t shutdown_graphics_driver(void)
 {
@@ -655,6 +663,65 @@ static int32_t shutdown_graphics_driver(void)
     g_graphics_shutdown_result = agcDriverShutdown();
     g_graphics_driver_initialized = false;
     return g_graphics_shutdown_result;
+}
+
+/*
+ * Flexible mappings are not reliably reclaimed when WebSrv kills a payload.
+ * Headless graphics gates allocate roughly 18-20 MiB per launch, so omitting
+ * these releases exhausts the global flexible-memory pool across an ordered
+ * conformance run. Keep teardown idempotent for both the normal verdict path
+ * and early returns through atexit.
+ */
+static bool release_graphics_memory(GraphicsTest *test)
+{
+    int pool_release = 0;
+    int command_release = 0;
+    int direct_unmap = 0;
+    int direct_release = 0;
+
+    if (!test)
+        return true;
+
+    if (test->compute_buffer && test->compute_buffer_size != 0u) {
+        pool_release = sceKernelReleaseFlexibleMemory(
+            test->compute_buffer, test->compute_buffer_size);
+        if (pool_release != 0)
+            (void)sceKernelMunmap(
+                test->compute_buffer, test->compute_buffer_size);
+        test->compute_buffer = NULL;
+        test->compute_buffer_size = 0u;
+    }
+    if (test->command_buffer && test->command_buffer_size != 0u) {
+        command_release = sceKernelReleaseFlexibleMemory(
+            test->command_buffer, test->command_buffer_size);
+        if (command_release != 0)
+            (void)sceKernelMunmap(
+                test->command_buffer, test->command_buffer_size);
+        if (cb_buffer == test->command_buffer)
+            cb_buffer = NULL;
+        test->command_buffer = NULL;
+        test->command_buffer_size = 0u;
+    }
+    /* A live VideoOut handle may still own the direct mapping on an early
+     * error path. Successful presentation teardown sets handle to -1 first. */
+    if (test->handle < 0 && test->mapped && test->mapped_size != 0u) {
+        direct_unmap = sceKernelMunmap(test->mapped, test->mapped_size);
+        test->mapped = NULL;
+    }
+    if (test->handle < 0 && test->direct_memory >= 0 &&
+        test->mapped_size != 0u) {
+        direct_release = sceKernelReleaseDirectMemory(
+            test->direct_memory, test->mapped_size);
+        test->direct_memory = -1;
+        test->mapped_size = 0u;
+    }
+
+    printf("Graphics memory cleanup: pool=0x%08x cb=0x%08x "
+           "unmap=0x%08x direct=0x%08x\n",
+           (unsigned)pool_release, (unsigned)command_release,
+           (unsigned)direct_unmap, (unsigned)direct_release);
+    return pool_release == 0 && command_release == 0 &&
+        direct_unmap == 0 && direct_release == 0;
 }
 
 static void graphics_process_exit(void)
@@ -666,6 +733,7 @@ static void graphics_process_exit(void)
         fflush(stdout);
         fflush(stderr);
     }
+    (void)release_graphics_memory(g_graphics_test);
 #if AGC_SELF_TERMINATE
     kill(getpid(), SIGKILL);
 #endif
@@ -674,8 +742,6 @@ static void graphics_process_exit(void)
 /* ======================================================================== */
 /* Memory allocation                                                         */
 /* ======================================================================== */
-
-static uint32_t *cb_buffer = NULL;  /* Command buffer in flexible memory */
 
 static bool allocate_display_buffers(GraphicsTest *test) {
     test->buffer_stride = align_up(
@@ -718,6 +784,8 @@ static bool allocate_display_buffers(GraphicsTest *test) {
         return false;
     }
     cb_buffer = (uint32_t *)cb_addr;
+    test->command_buffer = cb_addr;
+    test->command_buffer_size = cb_size;
 
     /* The offscreen target is independent of the VideoOut dimensions. */
 #if AGC_DEPTH_VALIDATION
@@ -845,6 +913,7 @@ static bool allocate_display_buffers(GraphicsTest *test) {
         return false;
     }
     test->compute_buffer = pool_addr;
+    test->compute_buffer_size = pool_size;
 
     /* Render target follows shader data and any tessellation rings. */
     test->render_target = (uint8_t *)pool_addr + GRAPHICS_POOL_PREFIX;
@@ -3261,7 +3330,12 @@ static void visualize_r11g11b10(GraphicsTest *test)
 /* ======================================================================== */
 
 int main(void) {
-    GraphicsTest test = { .handle = -1, .direct_memory = -1 };
+    GraphicsTest test = {
+        .handle = -1,
+        .direct_memory = -1,
+        .flipqueue = -1,
+    };
+    g_graphics_test = &test;
 
     if (atexit(graphics_process_exit) != 0) {
         printf("FATAL: could not install graphics cleanup handler\n");
@@ -3568,6 +3642,10 @@ int main(void) {
 
     const int equeue_ret = sceKernelDeleteEqueue(test.flipqueue);
     const int close_ret = sceVideoOutClose(test.handle);
+    if (equeue_ret == 0)
+        test.flipqueue = -1;
+    if (close_ret == 0)
+        test.handle = -1;
     printf("VideoOut cleanup: close=0x%08x equeue=0x%08x\n",
            (unsigned)close_ret, (unsigned)equeue_ret);
     if (close_ret != 0) {
@@ -3580,7 +3658,9 @@ int main(void) {
     printf("Driver shutdown: %s (0x%08x)\n",
            shutdown_ret == AGC_OK ? "PASS" : "FAILED",
            (unsigned)shutdown_ret);
-    const bool success = close_ret == 0 && shutdown_ret == AGC_OK;
+    const bool memory_cleanup = release_graphics_memory(&test);
+    const bool success = close_ret == 0 && shutdown_ret == AGC_OK &&
+        memory_cleanup;
     printf("Graphics result: %s\n", success ? "PASS" : "FAIL");
     fflush(stdout);
     fflush(stderr);

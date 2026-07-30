@@ -9,12 +9,18 @@ geometry variants. They reproduced the corresponding FW 11.60 DCB sizes and
 exact output hashes, reached bounded fences, shut the driver down, and returned
 PASS with the cleanup ELF immediately preceding every payload.
 
-Uncompressed-depth deployment was deliberately stopped. Rebuilding it with
-the newer sibling `openagc-psbc` revision changed the depth NGG back record's
-CX-register count from 0 to 11 and invalidated all four audited ELF hashes.
-Both firmware variants must be rebuilt and reviewed using the same pinned
-compiler revision before this can serve as a regression comparison. HTILE and
-MSAA hardware gates remain blocked on that baseline. See
+The first uncompressed D32 deployment kernel-panicked after the 11 successful
+headless graphics mirrors. Investigation showed that each graphics payload
+left a 65,536-byte command mapping and about 19 MiB graphics pool unreleased
+before `SIGKILL`, accumulating about 219 MiB before the depth allocation.
+`agc_graphics` and `agc_compute` now release every sample-owned flexible
+mapping explicitly and make release failures fail the verdict. The concurrent
+one-byte shader-record rebuild was not a command-stream difference: the sample
+already derived and emitted that physical 11-entry CX block. Normal depth
+builds now retain committed qualified records; regeneration is explicit.
+Fresh-boot cleanup stress and uncompressed-depth regression remain required,
+and HTILE/MSAA stay blocked. See
+`analysis/fw550_headless_flexible_memory_panic_20260730.md` and
 `analysis/fw1160_fw550_parity_matrix_20260730.md`.
 
 ## Regression safety fixes (2026-07-29)

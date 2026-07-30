@@ -24,6 +24,15 @@ TES-to-NGG geometry all passed and reproduced the FW 11.60 hashes. Color and
 uncompressed-depth mirrors remain pending; do not advance to HTILE or MSAA
 until those baselines pass from one pinned shader-compiler revision.
 
+The first FW 5.50 D32 mirror then kernel-panicked after 11 successful headless
+graphics launches. Those launches had accumulated about 219 MiB because the
+sample never released its command and graphics-pool flexible mappings before
+`SIGKILL`. Graphics and compute teardown now owns those releases and fails the
+gate on a release error; depth shader regeneration is explicit rather than an
+implicit build side effect. Start with the fresh-boot cleanup stress gate in
+`analysis/fw550_headless_flexible_memory_panic_20260730.md`. Do not run depth,
+HTILE, or MSAA until it passes.
+
 ### FW 11.60 workload parity gate
 
 - Keep the public workload capability disabled while testing isolated causes
