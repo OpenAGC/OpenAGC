@@ -36,10 +36,26 @@ requested. Existing checks still require exact ABI selection, bounded fence,
 the target-specific FP16 coverage/value oracle, driver shutdown PASS, final
 graphics PASS, and absence of failure text.
 
-Run amplify twice, lines twice, then invocations twice. Every payload must be
-immediately preceded by the process-cleanup ELF; ps5debug-NG must find no
-residual `eboot` after each run. Stop on the first fence timeout, oracle
-mismatch, residual process, or console responsiveness loss.
+## FW 11.60 hardware result
+
+All three variants passed twice on the standard PS5 reporting raw firmware
+`0x11600005`:
+
+| Variant | DCB dwords | Fence, both runs | Complete FP16 pixels | Distinct colors | Native FNV64 |
+| --- | ---: | ---: | ---: | ---: | --- |
+| amplify | 2,470 | immediate | 127,488 | 8 | `0xac17a0b9c08e25d7` |
+| lines | 2,461 | immediate | 255,744 | 1 | `0xf27532f1c0414783` |
+| invocations | 2,470 | immediate | 127,488 | 8 | `0xac17a0b9c08e25d7` |
+
+The amplify and invocation gates reproduced bounds `844x332`; the line gate
+reproduced `768x665` and the exact single white FP16 value
+`0x3c003c003c003c00`. Every run passed the Wave32 PM4 audit, marker, complete
+component and range checks, driver shutdown, and final verdict. ps5debug-NG
+found no residual `eboot` between or after the runs, and ports 744 and 8080
+remained reachable.
+
+This independently hardware-qualifies the three non-tessellation NGG geometry
+variants on the tested FW 11.60 console.
 
 The current-source FW 5.50 mirrors remain a separate regression requirement
 when that console becomes reachable.

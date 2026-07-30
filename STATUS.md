@@ -495,8 +495,11 @@ geometry variants: amplification, line topology, and multiple invocations.
 The sample emits an explicit variant identity into its file-backed verdict and
 the guarded runner requires that exact identity in addition to the existing
 ABI, fence, FP16, shutdown, and final-result checks. Logged FW 11.60 artifacts
-and current-source FW 5.50 mirrors cross-build without warnings; hardware
-execution remains pending. See
+and current-source FW 5.50 mirrors cross-build without warnings. All three FW
+11.60 variants passed twice: amplify and invocations each produced 127,488
+complete pixels with FNV64 `0xac17a0b9c08e25d7`; lines produced 255,744
+complete single-white pixels with FNV64 `0xf27532f1c0414783`. Every fence was
+immediate, shutdown passed, and no residual process remained. See
 `analysis/fw1160_ngg_geometry_gate_plan_20260730.md`.
 
 Exact next-tier ordinary D16/HTILE and D16 HTILE expclear artifacts now build

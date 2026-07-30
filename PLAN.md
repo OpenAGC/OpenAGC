@@ -123,8 +123,10 @@ AMD PM4 packet ancestry overlap in useful ways.
   line topology, and multiple invocations. Exact logged FW 11.60 artifacts and
   current-source headless FW 5.50 mirrors build without warnings. An explicit
   variant identity is now part of each verdict and the runner rejects a
-  baseline payload under a variant gate. Run each FW 11.60 artifact twice in
-  that order before preparing tessellation. See
+  baseline payload under a variant gate. All three passed twice on FW
+  `0x11600005` with immediate fences, exact variant-specific FP16 coverage and
+  hashes, clean shutdowns, and no residual process. Prepare isolated
+  tessellation next; keep the current-source FW 5.50 mirrors pending. See
   `analysis/fw1160_ngg_geometry_gate_plan_20260730.md`.
 - The first uncompressed depth/stencil tier is also built for exact FW 11.60:
   D32, D16, S8-only, then D16+S8. All four passed twice on standard FW
