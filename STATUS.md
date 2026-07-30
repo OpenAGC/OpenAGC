@@ -746,8 +746,10 @@ tolerance. Exact artifacts are now pinned as SHA-256
 `2ecb276612e06b42e2408e5b5352272493cd2f167eb47bbee79ff4dc6ffebeb7`
 (UNORM) and
 `cf6fcaa788fe65fd7b0bb352888dce09be674ddfbbfde2d37faf0ab9cb6a3fe0`
-(SNORM), with no-prerequisite FW 11.60 and FW 5.50 guarded targets. Hardware
-execution remains pending a clean FW 11.60 boot.
+(SNORM), with no-prerequisite FW 11.60 and FW 5.50 guarded targets. BC5 UNORM
+pass 1 succeeded on FW 11.60 with `224640` changed pixels, equal region counts,
+full R/G ranges, zero decode mismatches/error, channel independence, and FNV64
+`0x3bc37aa96460e455`; pass 2 remains required.
 
 BC7 UNORM and SRGB firmware-neutral gates now build using exact mode-4 and
 mode-6 fixtures. The former independently exercises color and alpha index

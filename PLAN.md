@@ -1122,6 +1122,11 @@ BC3 SRGB passed twice on FW 11.60 with identical `224640` changed pixels,
 `{74880,74880,74880}` regions, alpha range `0..255`, zero exact mismatches,
 and FNV64 `0x4cef62aedf2c8da1`. Both BC3 variants are hardware-qualified on
 FW 11.60. Rebuild and freeze BC5 next.
+
+BC5 UNORM pass 1 succeeded on FW 11.60 with `224640` changed pixels,
+`{74880,74880,74880}` regions, full R/G `0..255` ranges, zero decode
+mismatches/error, channel independence, and FNV64 `0x3bc37aa96460e455`.
+Repeat the identical artifact once.
 The final firmware-neutral bytes are pinned as SHA-256
 `f74c393112fc465eace431a3fe288095ae4b3bf5ee993e8147ed0e9a2f22f2a4`
 for BC4 UNORM and
