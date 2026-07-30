@@ -153,7 +153,11 @@ FP16_ABGR export. Host coverage locks its exact PM4 stream, all 39 profiles,
 all capacities through 28 dwords, and large 64-bit layout arithmetic. The
 portable two-lane artifact is pinned before execution as SHA-256
 `cc545a61e7b6689f63a905651acbee900acb52306ea0e732a664f8fe5e662352` and
-passes the firmware-neutral verifier, but is not yet hardware-qualified.
+passes the firmware-neutral verifier. The identical bytes passed twice on
+standard FW `0x11600005`, reproducing lane hashes
+`0x3908f13005165ed7` and `0x33cc2d1e90919107`, packed FNV64
+`0x4600d1f630de5ed7`, immediate fences, and zero-valued teardown. FW 5.50
+replay remains pending.
 
 `AGC_GFX1013_RT_FORMAT_RGBA16_SNORM` is appended at value 19 and maps to
 `(format=0x0c, number=SNORM, swap=standard)`, eight bytes per pixel, and
@@ -161,7 +165,11 @@ FP16_ABGR export. Exact host fixtures cover PM4, every active profile, every
 short command buffer, and maximum 64-bit surface arithmetic. Its reusable
 four-lane signed artifact is pinned before execution as SHA-256
 `85ce21feba113b77b757dcf21f3292b9fb673e27707d72473bde258ca894748d` and
-passes the neutral verifier but is not yet hardware-qualified.
+passes the neutral verifier. The identical bytes passed twice on standard FW
+`0x11600005`; all four signed lanes reached both range thresholds, their
+pairwise hashes differed, packed FNV64 reproduced as `0xd3b5d7c030de5ed7`,
+and fences plus teardown passed. FW 5.50 replay remains pending. See
+`analysis/fw1160_rg_rgba16_snorm_portable_qualification_20260730.md`.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability
