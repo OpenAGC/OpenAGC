@@ -7,6 +7,7 @@ PS5_HOST=${PS5_HOST:?set PS5_HOST}
 COPY_ARTIFACT=${COPY_ARTIFACT:?set COPY_ARTIFACT}
 PROCESS_CLEANUP_ELF=${PROCESS_CLEANUP_ELF:?set PROCESS_CLEANUP_ELF}
 EXPECTED_FW_ABI=${EXPECTED_FW_ABI:-0x1160}
+EXPECTED_COPY_HASH=${EXPECTED_COPY_HASH:-0xdd3702089b80f950}
 RESULT_LOG_PATH=${RESULT_LOG_PATH:-}
 REMOTE_BASE=/data/homebrew/openagc_fw${EXPECTED_FW_ABI#0x}_copy
 
@@ -66,7 +67,7 @@ grep -q "Runtime profile FW ABI $EXPECTED_FW_ABI: PASS" "$output_file" || exit 1
 grep -Eq '^Copy submit: 0x00000000 dwords=[1-9][0-9]* dma-packets=4 bytes=8294400$' \
     "$output_file" || exit 1
 grep -q '^Copy completion fence: PASS (0x00000000)$' "$output_file" || exit 1
-grep -Eq '^Copy compare: mismatches=0 first=4294967295 source-fnv64=0x([0-9a-f]{16}) destination-fnv64=0x\1: PASS$' \
+grep -Fq "Copy compare: mismatches=0 first=4294967295 source-fnv64=$EXPECTED_COPY_HASH destination-fnv64=$EXPECTED_COPY_HASH: PASS" \
     "$output_file" || exit 1
 grep -q '^Driver shutdown: PASS (0x00000000)$' "$output_file" || exit 1
 grep -q '^Copy result: PASS$' "$output_file" || exit 1

@@ -37,11 +37,21 @@ file-backed daemon verdict on FW 11.60. It requires:
 - exact four-digit runtime ABI selection;
 - submit success reporting four packets and exactly 8,294,400 bytes;
 - bounded completion-fence PASS;
-- zero mismatched words and identical 64-bit source/destination hashes;
+- zero mismatched words and exact source/destination FNV64
+  `0xdd3702089b80f950`;
 - driver shutdown PASS and final copy PASS;
 - no failure, fatal, mismatch, or timeout text.
 
-Run the exact FW 11.60 artifact twice. Check ps5debug-NG for residual `eboot`
-after each run and stop on any mismatch, timeout, residue, or responsiveness
-loss. The current-source FW 5.50 mirror remains a separate regression
-requirement when that console becomes reachable.
+## FW 11.60 hardware result
+
+The exact artifact passed twice on the standard PS5 reporting raw firmware
+`0x11600005`. Both runs submitted a 38-dword DCB containing four raw DMA
+packets for exactly 8,294,400 bytes, reached the completion fence, found zero
+of 2,073,600 words mismatched, and reproduced source/destination FNV64
+`0xdd3702089b80f950`. Driver shutdown and final copy verdict passed.
+
+ps5debug-NG found no residual `eboot` after either run; ports 744 and 8080
+remained reachable. This independently hardware-qualifies the application-
+facing raw buffer-copy composition on the tested FW 11.60 console. The
+current-source FW 5.50 mirror remains a separate regression requirement when
+that console becomes reachable.

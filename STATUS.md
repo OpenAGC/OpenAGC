@@ -537,7 +537,11 @@ flexible mappings, emits the four proven seven-dword raw `DMA_DATA` packets,
 signals a bounded EOP fence, invalidates the destination, and requires
 byte-for-byte equality through zero word mismatches and identical native
 FNV64 hashes. Exact logged FW 11.60 and current-source headless FW 5.50
-artifacts cross-build without warnings; hardware execution is pending. See
+artifacts cross-build without warnings. FW 11.60 passed twice: 38-dword DCB,
+four packets, exactly 8,294,400 bytes, zero of 2,073,600 words mismatched,
+source/destination FNV64 `0xdd3702089b80f950`, clean shutdown, and no residual
+process. The runner now locks that exact hash. The FW 5.50 mirror remains
+pending. See
 `analysis/fw1160_buffer_copy_gate_plan_20260730.md`.
 
 Exact next-tier ordinary D16/HTILE and D16 HTILE expclear artifacts now build

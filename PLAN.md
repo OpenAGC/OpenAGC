@@ -154,7 +154,9 @@ AMD PM4 packet ancestry overlap in useful ways.
   gfx1013 `DMA_DATA` packets, waits on an EOP fence, invalidates the
   destination, and requires zero word mismatches plus identical native FNV64
   hashes. Exact logged FW 11.60 and headless FW 5.50 artifacts build without
-  warnings; run FW 11.60 twice. See
+  warnings. FW 11.60 passed twice with a 38-dword DCB, exact 8,294,400-byte
+  transfer, zero mismatches, reproducible hash `0xdd3702089b80f950`, clean
+  shutdown, and no residual process. Keep the FW 5.50 mirror pending. See
   `analysis/fw1160_buffer_copy_gate_plan_20260730.md`.
 - The first uncompressed depth/stencil tier is also built for exact FW 11.60:
   D32, D16, S8-only, then D16+S8. All four passed twice on standard FW
