@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-#define AGC_RUNTIME_API_VERSION 17u
+#define AGC_RUNTIME_API_VERSION 18u
 #define AGC_RUNTIME_STRUCTURE_VERSION_1 1u
 #define AGC_RUNTIME_STRUCTURE_VERSION_2 2u
 #define AGC_RUNTIME_PROFILE_NAME_SIZE 48u
@@ -1156,6 +1156,8 @@ int32_t PS5_SYSV_ABI agcCreateImage(
 int32_t PS5_SYSV_ABI agcDestroyImage(AgcImage image);
 int32_t PS5_SYSV_ABI agcGetImageStateInfo(
     AgcImage image, AgcResourceStateInfo *info);
+int32_t PS5_SYSV_ABI agcGetImageSubresourceStateInfo(AgcImage image,
+    const AgcImageSubresourceRange *range, AgcResourceStateInfo *info);
 /* Existing view/present-chain/command references delay collection safely. */
 int32_t PS5_SYSV_ABI agcDestroyImageDeferred(
     AgcImage image, AgcFence fence);

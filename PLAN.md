@@ -640,6 +640,16 @@ driver mutation. Whole-buffer handoffs remain qualified and partial ownership
 handoffs remain fail-closed. See
 `analysis/runtime_buffer_range_states_host_20260731.md`.
 
+Runtime API v18 extends the same transactional contract to exact image
+aspect/mip/layer ranges. Command-local and ordered-batch validation overlay
+only intersecting subresources; color/depth attachments and descriptors query
+their actual footprint. Whole-image copy and VideoOut presentation require a
+uniform complete-image state. `agcGetImageSubresourceStateInfo` reports a
+uniform selected range, while the whole-image query fails closed when the
+image is fragmented. Partial queue-ownership handoffs and HTILE transitions
+remain open. See
+`analysis/runtime_image_subresource_states_host_20260731.md`.
+
 The pending FW 5.50 presentation ladder and retirement stress now have one
 shared fail-closed runner. All six Make targets pin the current artifact hash,
 launch the process-cleanup ELF first, verify service recovery, require exact

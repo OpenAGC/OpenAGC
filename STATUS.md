@@ -47,9 +47,10 @@ The first Milestone 4 runtime slice is host-tested: versioned typed
 transitions cover declared buffer/image usages and explicit
 host/graphics/compute ownership, derive the existing qualified gfx1013 barrier
 packets internally, retain resources while recorded, and commit state only on
-successful submit. Runtime API v17 adds same-queue buffer byte ranges; partial
-image subresources, partial ownership handoffs, HTILE, duplicate resources in
-one transition call, and unrecognized cross-queue ownership fail closed. The v2 explicit
+successful submit. Runtime API v17 adds same-queue buffer byte ranges, and v18
+adds exact image aspect/mip/layer state ranges plus range diagnostics. Partial
+ownership handoffs, HTILE, duplicate resources in one transition call, and
+unrecognized cross-queue ownership fail closed. The v2 explicit
 release/acquire handoff is host-qualified. The slice is host-qualified
 except for the exact FW 5.50 public compute row
 `undefined -> shader-write -> host-read`: artifact
@@ -205,6 +206,17 @@ simulate the same interval overlays before driver mutation. Mixed whole-buffer
 queries fail closed in favor of `agcGetBufferRangeStateInfo`. Host coverage
 passes 16,634 assertions; partial cross-queue transfer and image subresources
 remain fail-closed. See `analysis/runtime_buffer_range_states_host_20260731.md`.
+Runtime API v18 adds transactional image aspect/mip/layer states. A compact
+per-subresource table is allocated only when an image fragments and collapses
+back to the uniform state when all cells converge. Color and depth/stencil
+attachments validate the selected subresource, descriptors validate their
+view range, while whole-image copy and presentation reject fragmented images.
+`agcGetImageSubresourceStateInfo` reports a uniform selected range and the
+whole-image query returns `AGC_ERROR_NOT_SUPPORTED` for mixed state. Partial
+cross-queue ownership and HTILE transitions remain fail-closed. Clean generic
+coverage passes 16,680 assertions and CTest passes 7/7; Prospero compiles with
+no new warnings. See
+`analysis/runtime_image_subresource_states_host_20260731.md`.
 The pending FW 5.50 presentation stages and batch-retirement stress are now
 exposed only through six cleanup-first, SHA-256-pinned Make deployment targets.
 The shared runner verifies firmware, exact verdict, error-free device teardown,

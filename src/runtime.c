@@ -67,6 +67,7 @@ typedef struct AgcRuntimeRecordedTransition {
     uint32_t dependency_value;
     uint64_t buffer_offset;
     uint64_t buffer_size;
+    AgcImageSubresourceRange image_range;
 } AgcRuntimeRecordedTransition;
 
 typedef struct AgcRuntimeBatchTransitionState {
@@ -77,6 +78,7 @@ typedef struct AgcRuntimeBatchTransitionState {
     uint32_t command_index;
     uint64_t buffer_offset;
     uint64_t buffer_size;
+    AgcImageSubresourceRange image_range;
 } AgcRuntimeBatchTransitionState;
 
 typedef struct AgcRuntimeBufferStateRange {
@@ -203,6 +205,8 @@ struct AgcImageImpl {
     AgcRuntimeAllocation *allocation;
     AgcResourceUsage usage_state;
     AgcResourceOwner owner_state;
+    uint32_t subresource_state_count;
+    uint16_t *subresource_states;
     AgcResourceUsage transfer_usage;
     AgcResourceOwner transfer_owner;
     AgcGpuLabel transfer_label;
@@ -381,6 +385,10 @@ struct AgcFenceImpl {
     uint64_t timeout_count;
     uint64_t last_timeout_ns;
 };
+
+static int agcCommandImageRangeState(AgcCommandBuffer command_buffer,
+    AgcImage image, const AgcImageSubresourceRange *range,
+    AgcResourceUsage *usage, AgcResourceOwner *owner);
 
 static AgcDevice g_active_device;
 
@@ -1887,6 +1895,201 @@ int32_t PS5_SYSV_ABI agcGetBufferStateInfo(
     return agcGetBufferRangeStateInfoImpl(buffer, 0u, buffer->size, info);
 }
 
+static AgcImageAspectFlags agcRuntimeImageAspectMask(const AgcImage image)
+{
+    switch (image->desc.format) {
+    case AGC_FORMAT_D16_UNORM:
+    case AGC_FORMAT_D32_FLOAT:
+        return AGC_IMAGE_ASPECT_DEPTH_BIT;
+    case AGC_FORMAT_S8_UINT:
+        return AGC_IMAGE_ASPECT_STENCIL_BIT;
+    case AGC_FORMAT_D16_UNORM_S8_UINT:
+    case AGC_FORMAT_D32_FLOAT_S8_UINT:
+        return AGC_IMAGE_ASPECT_DEPTH_BIT | AGC_IMAGE_ASPECT_STENCIL_BIT;
+    default:
+        return AGC_IMAGE_ASPECT_COLOR_BIT;
+    }
+}
+
+static uint32_t agcImageAspectCount(AgcImageAspectFlags aspects)
+{
+    uint32_t count = 0u;
+    while (aspects != 0u) {
+        count += aspects & 1u;
+        aspects >>= 1u;
+    }
+    return count;
+}
+
+static int agcImageRangeValid(const AgcImage image,
+    const AgcImageSubresourceRange *range)
+{
+    const AgcImageAspectFlags supported = agcRuntimeImageAspectMask(image);
+
+    return range && range->aspect_mask != 0u &&
+        (range->aspect_mask & ~supported) == 0u &&
+        range->mip_level_count != 0u && range->array_layer_count != 0u &&
+        range->base_mip_level < image->desc.mip_levels &&
+        range->mip_level_count <=
+            image->desc.mip_levels - range->base_mip_level &&
+        range->base_array_layer < image->desc.array_layers &&
+        range->array_layer_count <=
+            image->desc.array_layers - range->base_array_layer &&
+        range->reserved0 == 0u;
+}
+
+static int agcImageRangeIsWhole(const AgcImage image,
+    const AgcImageSubresourceRange *range)
+{
+    return range->aspect_mask == agcRuntimeImageAspectMask(image) &&
+        range->base_mip_level == 0u &&
+        range->mip_level_count == image->desc.mip_levels &&
+        range->base_array_layer == 0u &&
+        range->array_layer_count == image->desc.array_layers;
+}
+
+static uint16_t agcImagePackState(AgcResourceUsage usage,
+    AgcResourceOwner owner)
+{
+    return (uint16_t)((uint32_t)usage | ((uint32_t)owner << 8u));
+}
+
+static void agcImageUnpackState(uint16_t state, AgcResourceUsage *usage,
+    AgcResourceOwner *owner)
+{
+    *usage = (AgcResourceUsage)(state & 0xffu);
+    *owner = (AgcResourceOwner)(state >> 8u);
+}
+
+static uint32_t agcImageSubresourceIndex(const AgcImage image,
+    AgcImageAspectFlags aspect, uint32_t mip, uint32_t layer)
+{
+    AgcImageAspectFlags supported = agcRuntimeImageAspectMask(image);
+    uint32_t aspect_index = 0u;
+    AgcImageAspectFlags bit;
+
+    for (bit = 1u; bit < aspect; bit <<= 1u)
+        if ((supported & bit) != 0u)
+            aspect_index++;
+    return (aspect_index * image->desc.array_layers + layer) *
+        image->desc.mip_levels + mip;
+}
+
+static int32_t agcImageEnsureSubresourceStates(AgcImage image)
+{
+    size_t count;
+    uint16_t initial;
+    uint16_t *states;
+    size_t i;
+
+    if (image->subresource_states)
+        return AGC_OK;
+    count = (size_t)agcImageAspectCount(agcRuntimeImageAspectMask(image)) *
+        image->desc.mip_levels * image->desc.array_layers;
+    if (count == 0u || count > UINT32_MAX ||
+        count > SIZE_MAX / sizeof(*states))
+        return AGC_ERROR_OUT_OF_MEMORY;
+    states = agcAlloc(image->device, count * sizeof(*states),
+        _Alignof(uint16_t));
+    if (!states)
+        return AGC_ERROR_OUT_OF_MEMORY;
+    initial = agcImagePackState(image->usage_state, image->owner_state);
+    for (i = 0u; i < count; ++i)
+        states[i] = initial;
+    image->subresource_states = states;
+    image->subresource_state_count = (uint32_t)count;
+    return AGC_OK;
+}
+
+static int agcImageCommittedRangeState(const AgcImage image,
+    const AgcImageSubresourceRange *range, AgcResourceUsage *usage,
+    AgcResourceOwner *owner)
+{
+    AgcImageAspectFlags aspect;
+    uint16_t first = 0u;
+    int found = 0;
+
+    if (!agcImageRangeValid(image, range))
+        return 0;
+    if (!image->subresource_states) {
+        *usage = image->usage_state;
+        *owner = image->owner_state;
+        return 1;
+    }
+    for (aspect = 1u; aspect <= AGC_IMAGE_ASPECT_STENCIL_BIT;
+         aspect <<= 1u) {
+        uint32_t layer;
+        if ((range->aspect_mask & aspect) == 0u)
+            continue;
+        for (layer = range->base_array_layer;
+             layer < range->base_array_layer + range->array_layer_count;
+             ++layer) {
+            uint32_t mip;
+            for (mip = range->base_mip_level;
+                 mip < range->base_mip_level + range->mip_level_count;
+                 ++mip) {
+                uint16_t state = image->subresource_states[
+                    agcImageSubresourceIndex(image, aspect, mip, layer)];
+                if (!found) {
+                    first = state;
+                    found = 1;
+                } else if (state != first) {
+                    return 0;
+                }
+            }
+        }
+    }
+    if (!found)
+        return 0;
+    agcImageUnpackState(first, usage, owner);
+    return 1;
+}
+
+static void agcImageCommitRangeState(AgcImage image,
+    const AgcImageSubresourceRange *range, AgcResourceUsage usage,
+    AgcResourceOwner owner)
+{
+    uint16_t state = agcImagePackState(usage, owner);
+    AgcImageAspectFlags aspect;
+    uint32_t i;
+
+    if (agcImageRangeIsWhole(image, range)) {
+        if (image->subresource_states)
+            agcFree(image->device, image->subresource_states);
+        image->subresource_states = NULL;
+        image->subresource_state_count = 0u;
+        image->usage_state = usage;
+        image->owner_state = owner;
+        return;
+    }
+    for (aspect = 1u; aspect <= AGC_IMAGE_ASPECT_STENCIL_BIT;
+         aspect <<= 1u) {
+        uint32_t layer;
+        if ((range->aspect_mask & aspect) == 0u)
+            continue;
+        for (layer = range->base_array_layer;
+             layer < range->base_array_layer + range->array_layer_count;
+             ++layer) {
+            uint32_t mip;
+            for (mip = range->base_mip_level;
+                 mip < range->base_mip_level + range->mip_level_count;
+                 ++mip) {
+                image->subresource_states[
+                    agcImageSubresourceIndex(image, aspect, mip, layer)] =
+                    state;
+            }
+        }
+    }
+    state = image->subresource_states[0];
+    for (i = 1u; i < image->subresource_state_count; ++i)
+        if (image->subresource_states[i] != state)
+            return;
+    agcImageUnpackState(state, &image->usage_state, &image->owner_state);
+    agcFree(image->device, image->subresource_states);
+    image->subresource_states = NULL;
+    image->subresource_state_count = 0u;
+}
+
 int32_t PS5_SYSV_ABI agcCreateImage(
     AgcDevice device, const AgcImageDesc *desc, AgcImage *image_out)
 {
@@ -1937,24 +2140,26 @@ int32_t PS5_SYSV_ABI agcDestroyImage(AgcImage image)
         return AGC_ERROR_INVALID_STATE;
     device = image->device;
     agcRuntimeFree(device, image->allocation);
+    if (image->subresource_states)
+        agcFree(device, image->subresource_states);
     image->magic = 0u;
     agcDestroyChild(device, image);
     return AGC_OK;
 }
 
-int32_t PS5_SYSV_ABI agcGetImageStateInfo(
-    AgcImage image, AgcResourceStateInfo *info)
+static int32_t agcGetImageSubresourceStateInfoImpl(AgcImage image,
+    const AgcImageSubresourceRange *range, AgcResourceStateInfo *info)
 {
-    if (!image || image->magic != AGC_MAGIC_IMAGE ||
-        !agcDeviceValid(image->device) || !info ||
-        !agcHeaderValid(info->struct_size, sizeof(*info), info->version) ||
-        info->reserved0 != 0u || !agcReservedZero(info->reserved, 4u))
-        return AGC_ERROR_INVALID_ARGUMENT;
+    AgcResourceUsage usage;
+    AgcResourceOwner owner;
+
+    if (!agcImageCommittedRangeState(image, range, &usage, &owner))
+        return AGC_ERROR_NOT_SUPPORTED;
 
     *info = (AgcResourceStateInfo)AGC_RESOURCE_STATE_INFO_INIT;
     info->resource_type = kAgcResourceTypeImage;
-    info->usage = image->usage_state;
-    info->owner = image->owner_state;
+    info->usage = usage;
+    info->owner = owner;
     info->transfer_usage = image->transfer_usage;
     info->transfer_owner = image->transfer_owner;
     info->transfer_label = image->transfer_label;
@@ -1968,6 +2173,33 @@ int32_t PS5_SYSV_ABI agcGetImageStateInfo(
     if (image->deferred)
         info->flags |= AGC_RESOURCE_STATE_DEFERRED_BIT;
     return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGetImageSubresourceStateInfo(AgcImage image,
+    const AgcImageSubresourceRange *range, AgcResourceStateInfo *info)
+{
+    if (!image || image->magic != AGC_MAGIC_IMAGE ||
+        !agcDeviceValid(image->device) || !range || !info ||
+        !agcHeaderValid(info->struct_size, sizeof(*info), info->version) ||
+        info->reserved0 != 0u || !agcReservedZero(info->reserved, 4u) ||
+        !agcImageRangeValid(image, range))
+        return AGC_ERROR_INVALID_ARGUMENT;
+    return agcGetImageSubresourceStateInfoImpl(image, range, info);
+}
+
+int32_t PS5_SYSV_ABI agcGetImageStateInfo(
+    AgcImage image, AgcResourceStateInfo *info)
+{
+    AgcImageSubresourceRange range;
+
+    if (!image || image->magic != AGC_MAGIC_IMAGE ||
+        !agcDeviceValid(image->device) || !info ||
+        !agcHeaderValid(info->struct_size, sizeof(*info), info->version) ||
+        info->reserved0 != 0u || !agcReservedZero(info->reserved, 4u))
+        return AGC_ERROR_INVALID_ARGUMENT;
+    range = (AgcImageSubresourceRange){ agcRuntimeImageAspectMask(image), 0u,
+        image->desc.mip_levels, 0u, image->desc.array_layers, 0u };
+    return agcGetImageSubresourceStateInfoImpl(image, &range, info);
 }
 
 int32_t PS5_SYSV_ABI agcCreatePresentChain(AgcDevice device,
@@ -2073,6 +2305,9 @@ int32_t PS5_SYSV_ABI agcPresent(AgcPresentChain present_chain,
     uint64_t timeout_ns)
 {
     AgcImage image;
+    AgcImageSubresourceRange range;
+    AgcResourceUsage usage;
+    AgcResourceOwner owner;
     uint64_t timeout_us;
     int32_t result;
 
@@ -2087,10 +2322,13 @@ int32_t PS5_SYSV_ABI agcPresent(AgcPresentChain present_chain,
     if (timeout_ns == 0u)
         return AGC_ERROR_TIMEOUT;
     image = present_chain->images[image_index];
+    range = (AgcImageSubresourceRange){ agcRuntimeImageAspectMask(image), 0u,
+        image->desc.mip_levels, 0u, image->desc.array_layers, 0u };
     if (image->magic != AGC_MAGIC_IMAGE || image->deferred ||
         image->transfer_pending ||
-        image->usage_state != kAgcResourceUsageVideoOutScanout ||
-        image->owner_state != kAgcResourceOwnerGraphics)
+        !agcImageCommittedRangeState(image, &range, &usage, &owner) ||
+        usage != kAgcResourceUsageVideoOutScanout ||
+        owner != kAgcResourceOwnerGraphics)
         return AGC_ERROR_INVALID_STATE;
     result = agcWaitFence(ready_fence, timeout_ns);
     if (result != AGC_OK)
@@ -4752,9 +4990,11 @@ int32_t PS5_SYSV_ABI agcCmdBindColorTargets(
         }
     }
     for (i = 0u; i < target_count; ++i) {
-        agcCommandTransitionState(command_buffer, kAgcResourceTypeImage,
-            targets[i].image, &usage, &owner);
-        if (usage != kAgcResourceUsageColorTarget ||
+        AgcImageSubresourceRange range = { AGC_IMAGE_ASPECT_COLOR_BIT,
+            targets[i].mip_level, 1u, targets[i].array_layer, 1u, 0u };
+        if (!agcCommandImageRangeState(command_buffer, targets[i].image,
+                &range, &usage, &owner) ||
+            usage != kAgcResourceUsageColorTarget ||
             owner != kAgcResourceOwnerGraphics)
             return AGC_ERROR_INVALID_STATE;
     }
@@ -4876,10 +5116,15 @@ int32_t PS5_SYSV_ABI agcCmdBindDepthStencilTarget(
         command_buffer->graphics_pipeline) ?
         kAgcResourceUsageDepthStencilWrite :
         kAgcResourceUsageDepthStencilRead;
-    agcCommandTransitionState(command_buffer, kAgcResourceTypeImage, image,
-        &usage, &owner);
-    if (usage != required_usage || owner != kAgcResourceOwnerGraphics)
-        return AGC_ERROR_INVALID_STATE;
+    {
+        AgcImageSubresourceRange range = {
+            agcRuntimeImageAspectMask(image), target->mip_level, 1u,
+            target->array_layer, 1u, 0u };
+        if (!agcCommandImageRangeState(command_buffer, image, &range,
+                &usage, &owner) || usage != required_usage ||
+            owner != kAgcResourceOwnerGraphics)
+            return AGC_ERROR_INVALID_STATE;
+    }
     address = agcAllocationGpuAddress(image->allocation);
     state.width = layout.width;
     state.height = layout.height;
@@ -5127,22 +5372,6 @@ static int agcRuntimeImageUsageSupports(const AgcImage image,
     }
 }
 
-static AgcImageAspectFlags agcRuntimeImageAspectMask(const AgcImage image)
-{
-    switch (image->desc.format) {
-    case AGC_FORMAT_D16_UNORM:
-    case AGC_FORMAT_D32_FLOAT:
-        return AGC_IMAGE_ASPECT_DEPTH_BIT;
-    case AGC_FORMAT_S8_UINT:
-        return AGC_IMAGE_ASPECT_STENCIL_BIT;
-    case AGC_FORMAT_D16_UNORM_S8_UINT:
-    case AGC_FORMAT_D32_FLOAT_S8_UINT:
-        return AGC_IMAGE_ASPECT_DEPTH_BIT | AGC_IMAGE_ASPECT_STENCIL_BIT;
-    default:
-        return AGC_IMAGE_ASPECT_COLOR_BIT;
-    }
-}
-
 static int32_t agcRuntimeMapLowUsage(AgcResourceUsage usage,
     AgcGfx1013ResourceUsage *low_usage)
 {
@@ -5233,12 +5462,86 @@ static int agcCommandBufferRangeState(AgcCommandBuffer command_buffer,
     return found;
 }
 
+static int agcImageRangeContainsSubresource(
+    const AgcImageSubresourceRange *range, AgcImageAspectFlags aspect,
+    uint32_t mip, uint32_t layer)
+{
+    return (range->aspect_mask & aspect) != 0u &&
+        mip >= range->base_mip_level &&
+        mip - range->base_mip_level < range->mip_level_count &&
+        layer >= range->base_array_layer &&
+        layer - range->base_array_layer < range->array_layer_count;
+}
+
+static int agcCommandImageRangeState(AgcCommandBuffer command_buffer,
+    AgcImage image, const AgcImageSubresourceRange *range,
+    AgcResourceUsage *usage, AgcResourceOwner *owner)
+{
+    AgcImageAspectFlags aspect;
+    AgcResourceUsage first_usage = kAgcResourceUsageCount;
+    AgcResourceOwner first_owner = kAgcResourceOwnerCount;
+    int found = 0;
+
+    if (!agcImageRangeValid(image, range))
+        return 0;
+    for (aspect = 1u; aspect <= AGC_IMAGE_ASPECT_STENCIL_BIT;
+         aspect <<= 1u) {
+        uint32_t layer;
+        if ((range->aspect_mask & aspect) == 0u)
+            continue;
+        for (layer = range->base_array_layer;
+             layer < range->base_array_layer + range->array_layer_count;
+             ++layer) {
+            uint32_t mip;
+            for (mip = range->base_mip_level;
+                 mip < range->base_mip_level + range->mip_level_count;
+                 ++mip) {
+                AgcResourceUsage cell_usage;
+                AgcResourceOwner cell_owner;
+                uint32_t i;
+                if (image->subresource_states) {
+                    agcImageUnpackState(image->subresource_states[
+                        agcImageSubresourceIndex(image, aspect, mip, layer)],
+                        &cell_usage, &cell_owner);
+                } else {
+                    cell_usage = image->usage_state;
+                    cell_owner = image->owner_state;
+                }
+                for (i = 0u;
+                     i < command_buffer->recorded_transition_count; ++i) {
+                    const AgcRuntimeRecordedTransition *record =
+                        &command_buffer->recorded_transitions[i];
+                    if (record->resource_type == kAgcResourceTypeImage &&
+                        record->resource == image &&
+                        record->flags != AGC_RESOURCE_TRANSITION_RELEASE_BIT &&
+                        agcImageRangeContainsSubresource(&record->image_range,
+                            aspect, mip, layer)) {
+                        cell_usage = record->after;
+                        cell_owner = record->after_owner;
+                    }
+                }
+                if (!found) {
+                    first_usage = cell_usage;
+                    first_owner = cell_owner;
+                    found = 1;
+                } else if (cell_usage != first_usage ||
+                    cell_owner != first_owner) {
+                    return 0;
+                }
+            }
+        }
+    }
+    if (!found)
+        return 0;
+    *usage = first_usage;
+    *owner = first_owner;
+    return 1;
+}
+
 static void agcCommandTransitionState(AgcCommandBuffer command_buffer,
     AgcResourceType resource_type, void *resource, AgcResourceUsage *usage,
     AgcResourceOwner *owner)
 {
-    uint32_t i;
-
     if (resource_type == kAgcResourceTypeBuffer) {
         const AgcBuffer buffer = (const AgcBuffer)resource;
         if (!agcCommandBufferRangeState(command_buffer, (AgcBuffer)buffer,
@@ -5248,20 +5551,16 @@ static void agcCommandTransitionState(AgcCommandBuffer command_buffer,
         }
         return;
     }
-    for (i = command_buffer->recorded_transition_count; i > 0u; --i) {
-        const AgcRuntimeRecordedTransition *record =
-            &command_buffer->recorded_transitions[i - 1u];
-        if (record->resource_type == resource_type &&
-            record->resource == resource) {
-            *usage = record->after;
-            *owner = record->after_owner;
-            return;
-        }
-    }
     {
         const AgcImage image = (const AgcImage)resource;
-        *usage = image->usage_state;
-        *owner = image->owner_state;
+        const AgcImageSubresourceRange range = {
+            agcRuntimeImageAspectMask(image), 0u, image->desc.mip_levels,
+            0u, image->desc.array_layers, 0u };
+        if (!agcCommandImageRangeState(command_buffer, (AgcImage)image,
+                &range, usage, owner)) {
+            *usage = kAgcResourceUsageCount;
+            *owner = kAgcResourceOwnerCount;
+        }
     }
 }
 
@@ -5339,21 +5638,17 @@ static int32_t agcRuntimeValidateTransition(
         resource = buffer;
     } else {
         AgcImage image = transition->image;
-        AgcImageAspectFlags aspects;
         if (!image || transition->buffer || image->magic != AGC_MAGIC_IMAGE ||
             image->device != command_buffer->device || image->deferred ||
             image->desc.usage & AGC_IMAGE_USAGE_HTILE_BIT ||
             transition->buffer_offset != 0u || transition->buffer_size != 0u ||
             !agcRuntimeImageUsageSupports(image, transition->before) ||
-            !agcRuntimeImageUsageSupports(image, transition->after))
+            !agcRuntimeImageUsageSupports(image, transition->after) ||
+            !agcImageRangeValid(image, &transition->image_range))
             return AGC_ERROR_INVALID_ARGUMENT;
-        aspects = agcRuntimeImageAspectMask(image);
-        if (transition->image_range.aspect_mask != aspects ||
-            transition->image_range.base_mip_level != 0u ||
-            transition->image_range.mip_level_count != image->desc.mip_levels ||
-            transition->image_range.base_array_layer != 0u ||
-            transition->image_range.array_layer_count != image->desc.array_layers ||
-            transition->image_range.reserved0 != 0u)
+        if ((flags == AGC_RESOURCE_TRANSITION_RELEASE_BIT ||
+             flags == AGC_RESOURCE_TRANSITION_ACQUIRE_BIT) &&
+            !agcImageRangeIsWhole(image, &transition->image_range))
             return AGC_ERROR_NOT_SUPPORTED;
         resource = image;
     }
@@ -5376,8 +5671,9 @@ static int32_t agcRuntimeValidateTransition(
                 &current_usage, &current_owner))
             return AGC_ERROR_INVALID_STATE;
     } else {
-        agcCommandTransitionState(command_buffer, transition->resource_type,
-            resource, &current_usage, &current_owner);
+        if (!agcCommandImageRangeState(command_buffer, (AgcImage)resource,
+                &transition->image_range, &current_usage, &current_owner))
+            return AGC_ERROR_INVALID_STATE;
     }
     if ((current_usage != transition->before ||
          current_owner != transition->before_owner) &&
@@ -5541,6 +5837,73 @@ static int agcBatchBufferRangeState(AgcBuffer buffer,
     return found;
 }
 
+static int agcBatchImageRangeState(AgcImage image,
+    const AgcRuntimeBatchTransitionState *states, uint32_t state_count,
+    const AgcImageSubresourceRange *range, uint32_t command_index,
+    int require_prior_command, AgcResourceUsage *usage,
+    AgcResourceOwner *owner)
+{
+    AgcImageAspectFlags aspect;
+    AgcResourceUsage first_usage = kAgcResourceUsageCount;
+    AgcResourceOwner first_owner = kAgcResourceOwnerCount;
+    int found = 0;
+
+    for (aspect = 1u; aspect <= AGC_IMAGE_ASPECT_STENCIL_BIT;
+         aspect <<= 1u) {
+        uint32_t layer;
+        if ((range->aspect_mask & aspect) == 0u)
+            continue;
+        for (layer = range->base_array_layer;
+             layer < range->base_array_layer + range->array_layer_count;
+             ++layer) {
+            uint32_t mip;
+            for (mip = range->base_mip_level;
+                 mip < range->base_mip_level + range->mip_level_count;
+                 ++mip) {
+                AgcResourceUsage cell_usage;
+                AgcResourceOwner cell_owner;
+                uint32_t provenance = UINT32_MAX;
+                uint32_t i;
+                if (image->subresource_states) {
+                    agcImageUnpackState(image->subresource_states[
+                        agcImageSubresourceIndex(image, aspect, mip, layer)],
+                        &cell_usage, &cell_owner);
+                } else {
+                    cell_usage = image->usage_state;
+                    cell_owner = image->owner_state;
+                }
+                for (i = 0u; i < state_count; ++i) {
+                    if (states[i].resource_type == kAgcResourceTypeImage &&
+                        states[i].resource == image &&
+                        agcImageRangeContainsSubresource(
+                            &states[i].image_range, aspect, mip, layer)) {
+                        cell_usage = states[i].usage;
+                        cell_owner = states[i].owner;
+                        provenance = states[i].command_index;
+                    }
+                }
+                if (require_prior_command &&
+                    (provenance == UINT32_MAX ||
+                     provenance >= command_index))
+                    return 0;
+                if (!found) {
+                    first_usage = cell_usage;
+                    first_owner = cell_owner;
+                    found = 1;
+                } else if (cell_usage != first_usage ||
+                    cell_owner != first_owner) {
+                    return 0;
+                }
+            }
+        }
+    }
+    if (!found)
+        return 0;
+    *usage = first_usage;
+    *owner = first_owner;
+    return 1;
+}
+
 static int32_t agcReserveSubmissionBufferStates(
     AgcCommandBuffer const *command_buffers, uint32_t command_count)
 {
@@ -5559,6 +5922,16 @@ static int32_t agcReserveSubmissionBufferStates(
             uint32_t count = 0u;
             uint32_t i;
 
+            if (record->resource_type == kAgcResourceTypeImage) {
+                AgcImage image = (AgcImage)record->resource;
+                if (!agcImageRangeIsWhole(image, &record->image_range)) {
+                    int32_t image_result =
+                        agcImageEnsureSubresourceStates(image);
+                    if (image_result != AGC_OK)
+                        return image_result;
+                }
+                continue;
+            }
             if (record->resource_type != kAgcResourceTypeBuffer)
                 continue;
             buffer = (AgcBuffer)record->resource;
@@ -5622,8 +5995,6 @@ static int32_t agcValidateSubmissionTransitions(
                 &command_buffer->recorded_transitions[transition_index];
             AgcResourceUsage usage;
             AgcResourceOwner owner;
-            uint32_t provenance = UINT32_MAX;
-            uint32_t j;
 
             if (record->resource_type == kAgcResourceTypeBuffer) {
                 if (!agcBatchBufferRangeState((AgcBuffer)record->resource,
@@ -5635,19 +6006,11 @@ static int32_t agcValidateSubmissionTransitions(
                     result = AGC_ERROR_INVALID_STATE;
             } else {
                 const AgcImage image = (const AgcImage)record->resource;
-                usage = image->usage_state;
-                owner = image->owner_state;
-                for (j = 0u; j < state_count; ++j) {
-                    if (states[j].resource_type == kAgcResourceTypeImage &&
-                        states[j].resource == image) {
-                        usage = states[j].usage;
-                        owner = states[j].owner;
-                        provenance = states[j].command_index;
-                    }
-                }
-                if (record->flags ==
-                        AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT &&
-                    (provenance == UINT32_MAX || provenance >= i))
+                if (!agcBatchImageRangeState((AgcImage)image, states,
+                        state_count, &record->image_range, i,
+                        record->flags ==
+                            AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT,
+                        &usage, &owner))
                     result = AGC_ERROR_INVALID_STATE;
             }
             if (result != AGC_OK)
@@ -5667,6 +6030,7 @@ static int32_t agcValidateSubmissionTransitions(
             states[state_count].command_index = i;
             states[state_count].buffer_offset = record->buffer_offset;
             states[state_count].buffer_size = record->buffer_size;
+            states[state_count].image_range = record->image_range;
             state_count++;
         }
     }
@@ -5711,8 +6075,8 @@ static void agcCommitCommandTransitions(AgcCommandBuffer command_buffer)
                 image->transfer_value = record->dependency_value;
                 image->transfer_pending = 1u;
             } else {
-                image->usage_state = record->after;
-                image->owner_state = record->after_owner;
+                agcImageCommitRangeState(image, &record->image_range,
+                    record->after, record->after_owner);
                 if (record->flags == AGC_RESOURCE_TRANSITION_ACQUIRE_BIT) {
                     image->transfer_label = NULL;
                     image->transfer_acquire_command = NULL;
@@ -6043,6 +6407,12 @@ int32_t PS5_SYSV_ABI agcCmdTransitionResources(
                 if (result != AGC_OK)
                     return result;
             }
+        } else if (!agcImageRangeIsWhole(transitions[i].image,
+                &transitions[i].image_range)) {
+            int32_t result =
+                agcImageEnsureSubresourceStates(transitions[i].image);
+            if (result != AGC_OK)
+                return result;
         }
     }
     for (i = 0u; i < transition_count; ++i) {
@@ -6081,7 +6451,7 @@ int32_t PS5_SYSV_ABI agcCmdTransitionResources(
                 resource, transitions[i].before, transitions[i].before_owner,
                 transitions[i].after, transitions[i].after_owner, flags, label,
                 value, transitions[i].buffer_offset,
-                transitions[i].buffer_size };
+                transitions[i].buffer_size, transitions[i].image_range };
         if (flags == AGC_RESOURCE_TRANSITION_RELEASE_BIT) {
             command_buffer->recorded_label_signals[
                 command_buffer->recorded_label_signal_count++] =
@@ -6364,15 +6734,20 @@ static int32_t agcCommandValidateDescriptorBufferState(
 }
 
 static int32_t agcCommandValidateDescriptorImageState(
-    AgcCommandBuffer command_buffer, const AgcImage image,
+    AgcCommandBuffer command_buffer, const AgcImageView view,
     const AgcShaderDescriptorMapping *mapping)
 {
+    AgcImage image = view->image;
+    AgcImageSubresourceRange range = {
+        agcRuntimeImageAspectMask(image), view->desc.base_mip_level,
+        view->desc.mip_level_count, view->desc.base_array_layer,
+        view->desc.array_layer_count, 0u };
     AgcResourceUsage usage;
     AgcResourceOwner owner;
 
-    agcCommandTransitionState(command_buffer, kAgcResourceTypeImage,
-        (void *)image, &usage, &owner);
-    if (owner != agcRuntimeCommandOwner(command_buffer) ||
+    if (!agcCommandImageRangeState(command_buffer, image, &range,
+            &usage, &owner) ||
+        owner != agcRuntimeCommandOwner(command_buffer) ||
         !agcRuntimeDescriptorUsageMatches(mapping, usage))
         return AGC_ERROR_INVALID_STATE;
     return AGC_OK;
@@ -6419,7 +6794,7 @@ static int32_t agcCommandEncodeDescriptor(
              AGC_IMAGE_USAGE_SAMPLED_BIT) == 0u))
             return AGC_ERROR_RESOURCE_INVALID;
         result = agcCommandValidateDescriptorImageState(command_buffer,
-            write->image_view->image, mapping);
+            write->image_view, mapping);
         if (result != AGC_OK)
             return result;
         memcpy(encoded->bytes,
@@ -6436,7 +6811,7 @@ static int32_t agcCommandEncodeDescriptor(
              AGC_IMAGE_USAGE_SAMPLED_BIT) == 0u)
             return AGC_ERROR_RESOURCE_INVALID;
         result = agcCommandValidateDescriptorImageState(command_buffer,
-            write->image_view->image, mapping);
+            write->image_view, mapping);
         if (result != AGC_OK)
             return result;
         memcpy(encoded->bytes,

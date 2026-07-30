@@ -2134,6 +2134,164 @@ static void test_runtime_buffer_range_fragmentation(void)
         "fragmentation device destroys");
 }
 
+static void test_runtime_image_subresource_states(void)
+{
+    AgcDevice device = create_device();
+    AgcQueue queue = create_queue(device, kAgcQueueCompute);
+    AgcImageDesc image_desc = AGC_IMAGE_DESC_INIT;
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
+    AgcResourceTransition transition = AGC_RESOURCE_TRANSITION_INIT;
+    AgcImageSubresourceRange selected = {
+        AGC_IMAGE_ASPECT_COLOR_BIT, 1u, 1u, 1u, 1u, 0u };
+    AgcImageSubresourceRange neighbor = {
+        AGC_IMAGE_ASPECT_COLOR_BIT, 0u, 1u, 1u, 1u, 0u };
+    AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    AgcResourceStateInfo info = AGC_RESOURCE_STATE_INFO_INIT;
+    AgcImage image = NULL;
+    AgcImage depth_stencil = NULL;
+    AgcCommandBuffer command = NULL;
+    AgcFence fence = NULL;
+
+    image_desc.width = 8u;
+    image_desc.height = 8u;
+    image_desc.mip_levels = 3u;
+    image_desc.array_layers = 2u;
+    image_desc.format = AGC_FORMAT_RGBA8_UNORM;
+    image_desc.usage = AGC_IMAGE_USAGE_SAMPLED_BIT |
+        AGC_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    command_desc.queue_type = kAgcQueueCompute;
+    command_desc.capacity_dwords = 256u;
+    TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &image), AGC_OK,
+        "subresource-state image creates");
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
+        AGC_OK, "subresource-state command creates");
+    TEST_ASSERT_EQ(agcCreateFence(device, &fence_desc, &fence), AGC_OK,
+        "subresource-state fence creates");
+
+    transition.resource_type = kAgcResourceTypeImage;
+    transition.image = image;
+    transition.image_range = selected;
+    transition.before = kAgcResourceUsageUndefined;
+    transition.after = kAgcResourceUsageShaderRead;
+    transition.before_owner = kAgcResourceOwnerHost;
+    transition.after_owner = kAgcResourceOwnerCompute;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+        "partial image transition command begins");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(command, 1u, &transition),
+        AGC_OK, "one image mip/layer transition records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+        "partial image transition command ends");
+    submit.command_buffer_count = 1u;
+    submit.command_buffers = &command;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
+        "partial image transition submits");
+    TEST_ASSERT_EQ(agcGetImageStateInfo(image, &info),
+        AGC_ERROR_NOT_SUPPORTED,
+        "fragmented image rejects ambiguous whole-state query");
+    info = (AgcResourceStateInfo)AGC_RESOURCE_STATE_INFO_INIT;
+    TEST_ASSERT_EQ(agcGetImageSubresourceStateInfo(image, &selected, &info),
+        AGC_OK, "selected image subresource state query succeeds");
+    TEST_ASSERT_EQ(info.usage, kAgcResourceUsageShaderRead,
+        "selected image subresource preserves usage");
+    TEST_ASSERT_EQ(info.owner, kAgcResourceOwnerCompute,
+        "selected image subresource preserves owner");
+    info = (AgcResourceStateInfo)AGC_RESOURCE_STATE_INFO_INIT;
+    TEST_ASSERT_EQ(agcGetImageSubresourceStateInfo(image, &neighbor, &info),
+        AGC_OK, "untouched image subresource state query succeeds");
+    TEST_ASSERT_EQ(info.usage, kAgcResourceUsageUndefined,
+        "untouched image subresource remains undefined");
+    TEST_ASSERT_EQ(info.owner, kAgcResourceOwnerHost,
+        "untouched image subresource remains host-owned");
+    neighbor.aspect_mask = AGC_IMAGE_ASPECT_DEPTH_BIT;
+    info = (AgcResourceStateInfo)AGC_RESOURCE_STATE_INFO_INIT;
+    TEST_ASSERT_EQ(agcGetImageSubresourceStateInfo(image, &neighbor, &info),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "image state query rejects an unsupported aspect");
+
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+        "partial image transition command resets");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "partial image transition fence resets");
+    transition.before = kAgcResourceUsageShaderRead;
+    transition.after = kAgcResourceUsageUndefined;
+    transition.before_owner = kAgcResourceOwnerCompute;
+    transition.after_owner = kAgcResourceOwnerHost;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+        "image subresource merge command begins");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(command, 1u, &transition),
+        AGC_OK, "selected image subresource discard records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+        "image subresource merge command ends");
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
+        "image subresource merge submits");
+    info = (AgcResourceStateInfo)AGC_RESOURCE_STATE_INFO_INIT;
+    TEST_ASSERT_EQ(agcGetImageStateInfo(image, &info), AGC_OK,
+        "merged image restores whole-state query");
+    TEST_ASSERT_EQ(info.usage, kAgcResourceUsageUndefined,
+        "merged image restores undefined usage");
+    TEST_ASSERT_EQ(info.owner, kAgcResourceOwnerHost,
+        "merged image restores host ownership");
+
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+        "image subresource merge command resets");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "image aspect transition fence resets");
+    image_desc = (AgcImageDesc)AGC_IMAGE_DESC_INIT;
+    image_desc.width = 4u;
+    image_desc.height = 4u;
+    image_desc.format = AGC_FORMAT_D32_FLOAT_S8_UINT;
+    image_desc.usage = AGC_IMAGE_USAGE_DEPTH_STENCIL_BIT |
+        AGC_IMAGE_USAGE_SAMPLED_BIT;
+    TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &depth_stencil), AGC_OK,
+        "depth-stencil aspect-state image creates");
+    selected = (AgcImageSubresourceRange){ AGC_IMAGE_ASPECT_DEPTH_BIT,
+        0u, 1u, 0u, 1u, 0u };
+    transition.image = depth_stencil;
+    transition.image_range = selected;
+    transition.before = kAgcResourceUsageUndefined;
+    transition.after = kAgcResourceUsageShaderRead;
+    transition.before_owner = kAgcResourceOwnerHost;
+    transition.after_owner = kAgcResourceOwnerCompute;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+        "depth aspect transition command begins");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(command, 1u, &transition),
+        AGC_OK, "depth-only aspect transition records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+        "depth aspect transition command ends");
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
+        "depth-only aspect transition submits");
+    info = (AgcResourceStateInfo)AGC_RESOURCE_STATE_INFO_INIT;
+    TEST_ASSERT_EQ(agcGetImageSubresourceStateInfo(depth_stencil, &selected,
+        &info), AGC_OK, "depth aspect state query succeeds");
+    TEST_ASSERT_EQ(info.usage, kAgcResourceUsageShaderRead,
+        "depth aspect preserves its exact usage");
+    neighbor = (AgcImageSubresourceRange){ AGC_IMAGE_ASPECT_STENCIL_BIT,
+        0u, 1u, 0u, 1u, 0u };
+    info = (AgcResourceStateInfo)AGC_RESOURCE_STATE_INFO_INIT;
+    TEST_ASSERT_EQ(agcGetImageSubresourceStateInfo(depth_stencil, &neighbor,
+        &info), AGC_OK, "stencil aspect state query succeeds");
+    TEST_ASSERT_EQ(info.usage, kAgcResourceUsageUndefined,
+        "stencil aspect remains independently undefined");
+    TEST_ASSERT_EQ(agcGetImageStateInfo(depth_stencil, &info),
+        AGC_ERROR_NOT_SUPPORTED,
+        "split depth-stencil aspects reject ambiguous whole query");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+        "depth aspect transition command resets");
+    TEST_ASSERT_EQ(agcDestroyImage(depth_stencil), AGC_OK,
+        "fragmented depth-stencil state storage destroys safely");
+    TEST_ASSERT_EQ(agcDestroyFence(fence), AGC_OK,
+        "subresource-state fence destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+        "subresource-state command destroys");
+    TEST_ASSERT_EQ(agcDestroyImage(image), AGC_OK,
+        "subresource-state image destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
+        "subresource-state queue destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "subresource-state device destroys");
+}
+
 static void test_runtime_copy_image_submission(void)
 {
     AgcDevice device = create_device();
@@ -6783,6 +6941,7 @@ void test_suite_runtime(void)
     TEST_RUN(test_runtime_batch_transition_chain);
     TEST_RUN(test_runtime_copy_buffer_submission);
     TEST_RUN(test_runtime_buffer_range_fragmentation);
+    TEST_RUN(test_runtime_image_subresource_states);
     TEST_RUN(test_runtime_copy_image_submission);
     TEST_RUN(test_runtime_compute_copy_shader_batch);
     TEST_RUN(test_runtime_gpu_labels);

@@ -413,10 +413,20 @@ successful submit validation. Copies and buffer descriptors validate their
 exact byte ranges; vertex and index bindings validate from their binding
 offset through the represented tail. `agcGetBufferRangeStateInfo` queries a
 uniform range, while the whole-buffer query returns `AGC_ERROR_NOT_SUPPORTED`
-when the buffer is fragmented. HTILE images, partial image subresources,
-partial cross-queue ownership transfers, and unqualified usage combinations
-still fail closed. A resource may appear only once in one transition call;
-applications record disjoint or later state changes in ordered calls.
+when the buffer is fragmented.
+
+Runtime API v18 applies the same transactional contract to image aspects,
+mips, and array layers. State storage stays uniform until the first partial
+transition, then uses a compact lazy table and collapses again when every
+subresource converges. Color and depth/stencil targets validate the selected
+mip/layer/aspects, and descriptors validate the exact image-view range.
+Whole-image copy and VideoOut presentation require a uniform complete-image
+state. `agcGetImageSubresourceStateInfo` queries a uniform selected range;
+`agcGetImageStateInfo` returns `AGC_ERROR_NOT_SUPPORTED` when any aspect,
+mip, or layer differs. HTILE images, partial cross-queue ownership transfers,
+and unqualified usage combinations still fail closed. A resource may appear
+only once in one transition call; applications record disjoint or later state
+changes in ordered calls.
 
 The supported usages are undefined/discard, copy source/destination, shader
 read/write, color target, depth/stencil read/write, VideoOut scanout, and host
@@ -439,8 +449,9 @@ closed. Submit-list label dependencies remain available independently.
 
 The complete object lifecycle, validation, finite fence, memory/resource,
 reflected pipeline validation, compute dispatch recording, indexed-graphics
-recording, typed color-target binding, the explicit transition matrix, and
-same-queue buffer byte ranges are host-qualified through the generic backend.
+recording, typed color-target binding, the explicit transition matrix,
+same-queue buffer byte ranges, and image aspect/mip/layer states are
+host-qualified through the generic backend.
 The same
 public header and implementation compile for Prospero, and device creation owns
 exact backend selection, caller default version, internal memory, and
