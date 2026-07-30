@@ -85,7 +85,7 @@ def evidence_for(key: str, defaults: dict[str, tuple[str, str]]) -> dict[str, st
         "memory": "RE-exact-standard-Trinity-hardware-pending",
         "defaults": "disabled-caller-selected-version-unknown",
         "async_graphics": "RE-exact-0x80048126-hardware-pending",
-        "qualification": "RE-operation-carriers-hardware-pending",
+        "qualification": "SPRX-qualified-hardware-unverified",
     }
     if key not in TRINITY_KEYS:
         evidence["memory"] = "RE-exact-standard-hardware-pending"

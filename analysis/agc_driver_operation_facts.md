@@ -33,6 +33,9 @@ non-empty HS patch lists remain disabled.
   carrier evidence. Outside the tested FW 5.50 and standard-PS5 FW 11.60
   profiles these operations remain hardware-unverified; other fields record
   why each operation stays disabled.
+- `tools/verify_firmware_qualification_labels.py` locks the qualification
+  boundary: only FW5.50 and standard FW11.60 are hardware-qualified, while all
+  other 37 active rows are exactly `SPRX-qualified-hardware-unverified`.
 - The direct-named Sony suspend, TF-ring, and HS-offchip exports are common
   permission stubs across all 39 profiles. Direct `/dev/gc` support therefore
   depends on separately recovered internal ioctl paths, never export presence.
