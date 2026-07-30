@@ -337,6 +337,12 @@ fence, teardown, self-termination, and debugger absence. OpenAGC full 4x
 sample-rate shading is hardware-qualified on FW 5.50. Proceed to the separately
 pinned partial-2x artifact before testing either mode on FW 11.60.
 
+FW 5.50 partial-rate pass 1 produced total `5061792` with all four sample
+counters still zero and all guards intact. This is approximately half the full
+rate total and independently demonstrates the programmed two-iteration mode.
+The base color/D32 oracle, fence, teardown, self-termination, and debugger
+absence passed. The exact `0,0,0,0,5061792` tuple is frozen for replay.
+
 That prerequisite sequence is now complete. Two relinks against the committed
 shader records reproduced all eight artifacts byte-for-byte, and dependency
 inspection found only VideoOut, kernel, libc, and networking. The exact FW
