@@ -14,7 +14,94 @@ The project target is native PS5 AGC behavior, not PS4 GNM compatibility. GNM
 is still a valuable reference because PS5 backward compatibility, GNM, AGC, and
 AMD PM4 packet ancestry overlap in useful ways.
 
+## Primary Product Requirement: One Firmware-Neutral Homebrew Binary
+
+The main deliverable is one homebrew game binary linked with OpenAGC that can
+run unchanged on every supported PS5 firmware. A game built on or for FW 11.60
+must not require recompilation for FW 5.50, and a game built on or for FW 5.50
+must not require recompilation for FW 11.60 or another supported profile.
+
+Acceptance requires all of the following:
+
+1. The application-facing OpenAGC headers, symbols, structs, and calling
+   conventions are firmware-independent.
+2. Production application builds contain no compile-time expected-firmware
+   key. Test-only macros may assert the console under test, but they must not
+   select the implementation linked into the game.
+3. OpenAGC reads the console's full runtime version, for example
+   `0x11600005`, normalizes only the ABI key (`0x1160`), and selects every
+   firmware-dependent driver, defaults, memory, queue, submission, VideoOut,
+   and optional-feature detail internally.
+4. Every supported key is an exact table entry backed by its own SPRX facts.
+   Numeric ranges, nearest-version fallback, and compatibility-group inference
+   do not constitute support. Unknown keys fail closed without corrupting
+   process or GPU state.
+5. One pinned portability ELF and one SHA-256 digest exercise the baseline
+   game lifecycle: application-neutral GPU authorization, `/dev/gc` init,
+   internal memory, register defaults, async graphics, real GPU execution,
+   bounded VideoOut presentation, teardown, and relaunch.
+6. That identical ELF must pass on both available endpoint consoles: standard
+   PS5 FW 5.50 and standard PS5 FW 11.60. Rebuilding with a different firmware
+   macro or comparing two source-equivalent ELFs does not satisfy this gate.
+7. Intermediate exact firmware profiles may be enabled from reproducible SPRX
+   evidence when hardware is unavailable, but documentation must label them
+   hardware-unverified. Optional capabilities unavailable on a profile are
+   discovered at runtime and disabled without preventing the common baseline
+   game path.
+
+The active support floor remains FW 3.20. FW 1.x, FW 2.x, and FW 3.00 remain
+archival unless that policy is explicitly changed with matching evidence and
+hardware need.
+
 ## Current Execution Order
+
+### Firmware-neutral binary portability (highest priority)
+
+The direct backend already recognizes 39 exact active ABI keys from FW 3.20
+through FW 12.70 and selects them from the runtime version; submit, memory,
+queue, primary suspend, TF-ring, HS-offchip, and async carriers have per-key
+SPRX evidence. That is necessary but not yet sufficient for a portable game.
+The current audit found two baseline blockers:
+
+- register-default notification has a selected version only for FW 5.50 (V8)
+  and FW 11.60 (V12); other exact profiles currently fail closed;
+- linear VideoOut registration has verified patch signatures only for FW 5.50
+  (`+0x7e61`) and FW 11.60 (`+0x9922`); other profiles currently fail closed.
+
+Execute in this order:
+
+1. Audit all installed public-library and application-consumer code for
+   compile-time firmware constants, exact-version branches, and hidden
+   firmware-specific shader, packet, memory, or VideoOut assumptions.
+2. Recover a reproducible defaults-selection fact for every active exact
+   firmware/GPU profile. Prefer the runtime hardware selector's real value;
+   never substitute the dispatcher's maximum accepted version.
+3. Extract and verify the linear VideoOut registration branch offset and full
+   original instruction signature from every active profile's own
+   `libSceVideoOut.sprx`, then generate the runtime table used by the core.
+4. Define the common baseline capability contract a normal game can require.
+   Keep workload packets, EOP flip, non-empty HS patch lists, and other narrow
+   operations optional and runtime-queryable rather than allowing them to make
+   the baseline binary firmware-specific.
+5. Build one unpinned portability payload. It must print the detected full
+   version and selected four-digit key, but it must not be compiled with
+   `AGC_EXPECT_FIRMWARE_ABI_KEY` or link a firmware SPRX.
+6. Pin that ELF's SHA-256 before hardware execution. Run the exact same bytes
+   on FW 11.60 and, when available, FW 5.50, with the cleanup payload
+   immediately before every launch and file-backed bounded verdicts.
+7. Preserve the same artifact for future intermediate-firmware testing. Until
+   matching hardware exists, run corpus verifiers and host fixtures for every
+   exact profile and report those rows as SPRX-qualified/hardware-unverified.
+8. Resume higher-level parity work only with firmware-neutral artifacts so
+   each new game-facing capability strengthens the one-binary contract.
+
+The FW 11.60 public VideoOut lifecycle and flexible-memory relaunch stress are
+already hardware-qualified supporting components. They do not by themselves
+prove binary portability because their existing qualification payloads contain
+test-only expected-firmware macros and have not run as identical bytes on both
+endpoint consoles.
+
+### Existing FW 11.60 versus FW 5.50 capability work
 
 The complete FW 11.60-versus-FW 5.50 capability inventory and required gate
 order are maintained in
