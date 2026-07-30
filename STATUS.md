@@ -213,7 +213,9 @@ UINT16_ABGR export 7. Exact host coverage locks
 `CB_COLOR0_INFO=0x00070430`, the complete PM4 stream, all 39 profiles, every
 short command buffer, invalid enums, and maximum 64-bit layout arithmetic.
 The generic suite passes 8,635 assertions and the clean Prospero build passes.
-The four-lane portable hardware gate remains pending.
+The isolated four-lane portable gate builds with the UINT16_ABGR shader and
+passes firmware-neutral dependency verification. Final-byte pinning and
+hardware execution remain pending.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability

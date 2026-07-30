@@ -325,7 +325,9 @@ the runner and shared teardown on FW 11.60 only.
   `16_16_16_16`, UINT, standard swap, eight bytes per pixel, and UINT16_ABGR
   export 7. Exact PM4 (`CB_COLOR0_INFO=0x00070430`), all-profile selection,
   every short-buffer boundary, invalid-enum behavior, and maximum 64-bit
-  layout arithmetic pass. The four-lane portable gate is next.
+  layout arithmetic pass. Its isolated four-lane portable gate now builds
+  with the integer fragment shader and passes firmware-neutral dependency
+  verification. Pin the final bytes before execution.
 - Seven additional offscreen format gates now build under the same exact
   profile and bounded runner: R8, RG8, RGB10A2, R11G11B10, R32, RG32, and
   RGBA32. All seven passed twice on FW 11.60; logged RG32 reproduced FNV64
