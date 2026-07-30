@@ -7,20 +7,20 @@ success by D16 HTILE expclear. This preserves the FW 5.50 qualification order:
 uncompressed D16, ordinary compressed D16/HTILE with expclear disabled, then
 the expclear variant.
 
-FW 11.60 uncompressed D16 already passed twice with the current full-rectangle
-viewport, but project policy also requires the matching modern headless FW
-5.50 D16 regression before any compressed FW 11.60 payload. The FW 5.50
-console remains offline. The artifacts below are therefore build-qualified but
-must not be launched yet.
+FW 11.60 uncompressed D16 passed twice with the current full-rectangle
+viewport, and the matching modern headless FW 5.50 regression subsequently
+passed. The ordinary and expclear D16/HTILE tiers have now completed their
+guarded endpoint sequence. The D32 HTILE tier is the next permitted
+compressed-depth work.
 
 ## Exact artifacts
 
 | Firmware | Gate | SHA-256 |
 | --- | --- | --- |
-| 11.60 | D16 + ordinary HTILE, logged | `e41556e119341376cdee8bfadfbc27a8be71e10ef60eb402955174bbf33a3354` |
-| 11.60 | D16 + HTILE expclear, logged | `aa5f81c013a87ec9fe135853d2a4183cfcde19bf91127eb7e35611a151219a2d` |
-| 5.50 | D16 + ordinary HTILE, headless mirror | `e6c79acc6cb4d96e67599c3a79d2ab0e4b971a6c8e7ac60774e14e2f4dbfb1ee` |
-| 5.50 | D16 + HTILE expclear, headless mirror | `f5a6e1c2f621e9f00d98b088a951ed7787d9d215bb2624d6c56d386e9ea6ef47` |
+| 11.60 | D16 + ordinary HTILE, logged | `1f730666c8b39b3b2bdc1d18ee05b0228e4df8c842ff9e49590138134c2d9ed1` |
+| 11.60 | D16 + HTILE expclear, logged | `740b5645214ccd13dc6e8099f7b35d98600dde0a89f9f97f3b8c04df3c9bc55f` |
+| 5.50 | D16 + ordinary HTILE, headless mirror | `a3f85b521571cd5249f00daffb94e4b5e1d3f32334fe48339694cb469c4c58df` |
+| 5.50 | D16 + HTILE expclear, headless mirror | `41904f868ef6171ec854e80f79e281b8c681b009caf4d7dbc0979edfba498c32` |
 
 All four compile without warnings. The FW 11.60 pair forces ABI key `0x1160`,
 uses the standard version-12 defaults and file-backed daemon transport, rejects
@@ -135,3 +135,10 @@ FW 11.60 pass 2 reproduced `49152`, the exact D16 classes, clean shutdown, and
 no residual process. The pinned FW 5.50 mirror is now permitted and its recipe
 requires the same `49152` count before D16 expclear can be promoted across
 endpoints.
+
+The pinned FW 5.50 mirror then passed cleanup-first with exact D16 classes,
+`49152` changed HTILE words from `0xfffffff0`, bounded fence completion,
+driver shutdown, final PASS, and no residual `eboot.bin`. D16 HTILE expclear
+is therefore hardware-qualified on both endpoints. Proceed to the separately
+prepared D32 HTILE ordinary/decompress/resummarize gate; do not skip ahead to
+combined D32+S8 or MSAA.

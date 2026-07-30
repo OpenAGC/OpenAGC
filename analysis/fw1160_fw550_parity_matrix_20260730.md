@@ -54,7 +54,7 @@ reached its completion fence, shut the driver down, and returned PASS.
 |---|---|---|
 | Uncompressed D32, D16, S8, and D16+S8 | Qualified | Qualified on both endpoints |
 | Ordinary D16 HTILE | Qualified | Qualified on both endpoints |
-| D16 HTILE expclear | Prepared | Hardware qualification missing |
+| D16 HTILE expclear | Qualified | Qualified on both endpoints |
 | D32 HTILE ordinary/decompress/resummarize/expclear | Prepared | Hardware qualification missing |
 | Combined D32+S8 HTILE and aspect masks | Prepared | Hardware qualification missing |
 | HTILE mip and array subresources | Missing | Prepare bounded mirrors |
@@ -130,9 +130,15 @@ FW 5.50 either.
    flexible-memory threshold and require zero cleanup results after every run.
 2. Rerun the FW 5.50 color and uncompressed-depth mirrors using the committed
    qualified shader records.
-3. Only after the uncompressed-depth baseline passes, run the FW 5.50 ordinary
-   D16 HTILE mirror, then FW 11.60 ordinary and expclear twice each.
+3. The uncompressed-depth, ordinary D16 HTILE, and D16 expclear endpoint
+   sequences are complete.
 4. Prepare and qualify D32 HTILE operations, combined depth/stencil,
    subresources, and MSAA with the matching FW 5.50 mirror first.
 5. Add bounded FW 11.60 gates for the higher-level consumer gaps.
 6. Keep workload support fail closed and do not repeat stages 11-17 unchanged.
+
+The current-source D16 expclear artifacts completed that endpoint sequence:
+FW 11.60 passed twice and FW 5.50 passed the pinned mirror with exact D16
+classes and `49152` changed HTILE words from `0xfffffff0`. Every accepted run
+used cleanup first, reached its fence, shut down the driver, returned PASS,
+and left no residual process. D32 HTILE is now the active depth tier.
