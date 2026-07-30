@@ -247,6 +247,12 @@ beyond it. Two disjoint buffer ranges and two disjoint image ranges now share
 one increasing label per resource in generic coverage. Clean generic coverage
 passes 16,852 assertions; exact-firmware qualification remains pending. See
 `analysis/runtime_gpu_timeline_waits_host_20260731.md`.
+Runtime API v22 adds atomic fence-driven command-buffer recycling. A bounded
+batch is fully validated before one fence poll; busy, duplicate, foreign, or
+invalid-state input changes no member. Once complete, every recorded reference
+is released and all storage returns to `Initial` together. The generic suite
+passes 16,902 assertions; see
+`analysis/runtime_command_recycling_host_20260731.md`.
 The pending FW 5.50 presentation stages, batch-retirement stress, timeline
 wait, and partial-range handoffs are exposed only through nine cleanup-first,
 SHA-256-pinned Make deployment targets.

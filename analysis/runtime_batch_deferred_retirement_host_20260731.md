@@ -27,7 +27,8 @@ The exact fixture repeats 32 cycles. Every cycle:
 6. Queues both still-command-referenced resources for deferred destruction.
 7. Waits at most 200 ms for the batch fence.
 8. Proves collection returns `AGC_ERROR_BUSY` while command references remain.
-9. Resets both commands, collects both resources, and resets the fence.
+9. Recycles both commands atomically from the completed fence, collects both
+   resources, and resets the fence.
 10. Verifies deferred count is zero and allocation count/live bytes exactly
     equal the pre-loop baseline.
 
@@ -35,7 +36,7 @@ The present-chain fixture additionally retires an image while the chain retains
 it, verifies new presentation is rejected, destroys the chain, and then
 collects the image.
 
-The complete host binary passes 16,402 assertions with zero failures. Generic
+The complete host binary passes 16,902 assertions with zero failures. Generic
 and Prospero builds complete without warnings.
 
 ## Prospero artifact
@@ -43,7 +44,7 @@ and Prospero builds complete without warnings.
 `samples/hw_test/agc_runtime_retirement_stress.elf` carries the same 32-cycle
 sequence and bounded waits.
 
-- SHA-256: `012deac94e37a69a558643fb045d74d8fc3c9c1419515df4a51cae4882b63e1a`
+- SHA-256: `a3d04e6472c2cdd0ea09624cd3536dd5eb53345fa063aa5cee937636290852fb`
 - Expected verdict: `BATCH_RETIREMENT_STRESS PASS`
 - Expected teardown: both labels, fence, both command buffers, queue, and
   device return `AGC_OK`.

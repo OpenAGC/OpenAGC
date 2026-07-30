@@ -35,11 +35,11 @@ The three directly relevant artifacts reproduced across two consecutive
 builds and are pinned as:
 
 - timeline wait:
-  `3153c0ac987bc1eff0abb96c7635818150178c7b4ea9f6b6570cd8ac713ee1e0`
+  `c30a07d6b8c55b495df9736476376e2e7d8869e17e90f1f7e98a60f85be6976f`
 - partial buffer handoff:
-  `f3d0c76eec898c63d22a9e5a1ddb86728e141f77709cd9ce8984eeb8071fbb0e`
+  `7b55c694eb8fabcfaf17a7141725a0ca9814ade8afab56213a32f5d8ea07c501`
 - partial image handoff:
-  `6b3a56ac8d382b287ecd636be85ac59adc4585955530a9e3bfbb166debf285f4`
+  `07b17b74865d8c810655196ff6d02c6569b8561c4087f79033d765b16c745f1a`
 
 The API v21 FW 5.50 preflight stopped before upload because `10.0.1.41`
 accepted neither websrv port 8080 nor FTP port 2121. No payload ran and no

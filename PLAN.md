@@ -465,6 +465,13 @@ Never convert a timeout into success or wait forever. Diagnostics should name
 the queue, last submission, fence value, firmware profile, and most recent
 completed marker without pretending to recover a lost device.
 
+Runtime API v22 closes the command-reuse half of step 6 with
+`agcRecycleCommandBuffers`. The call prevalidates a bounded, distinct batch,
+polls its fence once, and only then releases recorded references and returns
+all command storage to `INITIAL`. Busy or invalid input leaves the entire batch
+unchanged. Deferred buffer/image retirement remains keyed to the same bounded
+completion and reference-release rules.
+
 The first synchronization step is implemented as runtime API v5:
 `agcGetFenceInfo` reports the last queue/submission identity, command state,
 expected and observed marker, timeout count/deadline/result, and profile

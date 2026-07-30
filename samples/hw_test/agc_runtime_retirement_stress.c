@@ -215,11 +215,9 @@ int main(void)
             report_result("pre-reset collection expected busy", result);
             goto cleanup;
         }
-        result = agcResetCommandBuffer(commands[1]);
-        if (result == AGC_OK)
-            result = agcResetCommandBuffer(commands[0]);
+        result = agcRecycleCommandBuffers(fence, 2u, commands);
         if (result != AGC_OK) {
-            report_result("agcResetCommandBuffer(batch)", result);
+            report_result("agcRecycleCommandBuffers(batch)", result);
             goto cleanup;
         }
         result = agcCollectDeferredFrees(device);

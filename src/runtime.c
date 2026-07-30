@@ -8689,6 +8689,55 @@ int32_t PS5_SYSV_ABI agcWaitFence(AgcFence fence, uint64_t timeout_ns)
 #endif
 }
 
+int32_t PS5_SYSV_ABI agcRecycleCommandBuffers(AgcFence fence,
+    uint32_t command_buffer_count,
+    AgcCommandBuffer const *command_buffers)
+{
+    uint32_t i;
+    int32_t result;
+
+    if (!fence || fence->magic != AGC_MAGIC_FENCE ||
+        !agcDeviceValid(fence->device) || !command_buffers ||
+        command_buffer_count == 0u ||
+        command_buffer_count > AGC_RUNTIME_MAX_SUBMIT_COMMAND_BUFFERS)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    for (i = 0u; i < command_buffer_count; ++i) {
+        AgcCommandBuffer command_buffer = command_buffers[i];
+        uint32_t j;
+
+        if (!command_buffer ||
+            command_buffer->magic != AGC_MAGIC_COMMAND_BUFFER ||
+            command_buffer->device != fence->device)
+            return AGC_ERROR_INVALID_ARGUMENT;
+        if (command_buffer->state != AGC_COMMAND_BUFFER_STATE_EXECUTABLE &&
+            command_buffer->state != AGC_COMMAND_BUFFER_STATE_PENDING)
+            return AGC_ERROR_INVALID_STATE;
+        if (command_buffer->state == AGC_COMMAND_BUFFER_STATE_PENDING &&
+            command_buffer->completion_fence != fence)
+            return AGC_ERROR_INVALID_ARGUMENT;
+        for (j = 0u; j < i; ++j)
+            if (command_buffers[j] == command_buffer)
+                return AGC_ERROR_INVALID_ARGUMENT;
+    }
+    result = agcFencePollCompletion(fence);
+    if (result != AGC_OK)
+        return result;
+    for (i = 0u; i < command_buffer_count; ++i) {
+        AgcCommandBuffer command_buffer = command_buffers[i];
+        if (command_buffer->state != AGC_COMMAND_BUFFER_STATE_EXECUTABLE ||
+            command_buffer->pending_refs != 0u)
+            return AGC_ERROR_INVALID_STATE;
+    }
+    for (i = 0u; i < command_buffer_count; ++i) {
+        AgcCommandBuffer command_buffer = command_buffers[i];
+        agcReleaseCommandReferences(command_buffer);
+        agcCbReset(&command_buffer->cursor, command_buffer->storage,
+            (size_t)command_buffer->capacity_dwords * sizeof(uint32_t));
+        command_buffer->state = AGC_COMMAND_BUFFER_STATE_INITIAL;
+    }
+    return AGC_OK;
+}
+
 static int32_t agcQueueSubmitBatch(
     AgcQueue queue, const AgcSubmitInfo *submit_info, AgcFence fence)
 {

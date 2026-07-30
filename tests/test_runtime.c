@@ -1933,6 +1933,120 @@ static void test_runtime_batch_transition_chain(void)
         "batch transition device destroys");
 }
 
+static void test_runtime_fence_driven_command_reuse(void)
+{
+    AgcDevice device = create_device();
+    AgcQueue queue = create_queue(device, kAgcQueueCompute);
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
+    AgcGpuLabelDesc label_desc = AGC_GPU_LABEL_DESC_INIT;
+    AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    AgcCommandBuffer commands[2] = { NULL, NULL };
+    AgcCommandBuffer invalid = NULL;
+    AgcCommandBuffer invalid_batch[2];
+    AgcCommandBuffer duplicates[2];
+    AgcGpuLabel labels[2] = { NULL, NULL };
+    AgcFence fence = NULL;
+    AgcCommandBufferState state;
+    uint32_t i;
+
+    command_desc.queue_type = kAgcQueueCompute;
+    command_desc.capacity_dwords = 64u;
+    for (i = 0u; i < 2u; ++i) {
+        TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc,
+            &commands[i]), AGC_OK, "recycle batch command creates");
+        TEST_ASSERT_EQ(agcCreateGpuLabel(device, &label_desc, &labels[i]),
+            AGC_OK, "recycle batch label creates");
+        TEST_ASSERT_EQ(agcBeginCommandBuffer(commands[i]), AGC_OK,
+            "recycle first-cycle command begins");
+        TEST_ASSERT_EQ(agcCmdSignalGpuLabel(commands[i], labels[i], 1u),
+            AGC_OK, "recycle first-cycle signal records");
+        TEST_ASSERT_EQ(agcEndCommandBuffer(commands[i]), AGC_OK,
+            "recycle first-cycle command ends");
+    }
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &invalid),
+        AGC_OK, "recycle invalid-member command creates");
+    TEST_ASSERT_EQ(agcCreateFence(device, &fence_desc, &fence), AGC_OK,
+        "recycle fence creates");
+
+    TEST_ASSERT_EQ(agcRecycleCommandBuffers(fence, 2u, commands),
+        AGC_ERROR_BUSY,
+        "unsignaled fence cannot recycle executable command storage");
+    TEST_ASSERT_EQ(agcGetCommandBufferState(commands[0], &state), AGC_OK,
+        "busy recycle command state query succeeds");
+    TEST_ASSERT_EQ(state, AGC_COMMAND_BUFFER_STATE_EXECUTABLE,
+        "busy recycle leaves command state unchanged");
+
+    submit.command_buffer_count = 2u;
+    submit.command_buffers = commands;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
+        "recycle first batch submits");
+    duplicates[0] = commands[0];
+    duplicates[1] = commands[0];
+    TEST_ASSERT_EQ(agcRecycleCommandBuffers(fence, 2u, duplicates),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "recycle rejects duplicate command storage atomically");
+    TEST_ASSERT_EQ(agcGetCommandBufferState(commands[0], &state), AGC_OK,
+        "duplicate recycle command state query succeeds");
+    TEST_ASSERT_EQ(state, AGC_COMMAND_BUFFER_STATE_EXECUTABLE,
+        "duplicate recycle leaves the first command executable");
+
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(invalid), AGC_OK,
+        "recycle invalid member enters recording state");
+    invalid_batch[0] = commands[0];
+    invalid_batch[1] = invalid;
+    TEST_ASSERT_EQ(agcRecycleCommandBuffers(fence, 2u, invalid_batch),
+        AGC_ERROR_INVALID_STATE,
+        "recycle rejects a non-executable member atomically");
+    TEST_ASSERT_EQ(agcGetCommandBufferState(commands[0], &state), AGC_OK,
+        "invalid-member first command state query succeeds");
+    TEST_ASSERT_EQ(state, AGC_COMMAND_BUFFER_STATE_EXECUTABLE,
+        "invalid-member rejection preserves earlier command state");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(invalid), AGC_OK,
+        "recycle invalid member resets independently");
+
+    TEST_ASSERT_EQ(agcDestroyGpuLabel(labels[0]), AGC_ERROR_BUSY,
+        "submitted command label remains retained before recycle");
+    TEST_ASSERT_EQ(agcRecycleCommandBuffers(fence, 2u, commands), AGC_OK,
+        "signaled fence recycles the complete command batch");
+    for (i = 0u; i < 2u; ++i) {
+        TEST_ASSERT_EQ(agcGetCommandBufferState(commands[i], &state), AGC_OK,
+            "recycled command state query succeeds");
+        TEST_ASSERT_EQ(state, AGC_COMMAND_BUFFER_STATE_INITIAL,
+            "recycled command returns to initial state");
+    }
+
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "recycle fence resets for storage reuse");
+    for (i = 0u; i < 2u; ++i) {
+        TEST_ASSERT_EQ(agcBeginCommandBuffer(commands[i]), AGC_OK,
+            "recycled command begins a second cycle");
+        TEST_ASSERT_EQ(agcCmdSignalGpuLabel(commands[i], labels[i], 2u),
+            AGC_OK, "recycled storage records a later timeline point");
+        TEST_ASSERT_EQ(agcEndCommandBuffer(commands[i]), AGC_OK,
+            "recycled second-cycle command ends");
+    }
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
+        "recycled command storage submits a second batch");
+    TEST_ASSERT_EQ(agcRecycleCommandBuffers(fence, 2u, commands), AGC_OK,
+        "second completed batch recycles without allocation replacement");
+
+    TEST_ASSERT_EQ(agcDestroyFence(fence), AGC_OK,
+        "recycle fence destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(invalid), AGC_OK,
+        "recycle invalid-member command destroys");
+    for (i = 0u; i < 2u; ++i) {
+        TEST_ASSERT_EQ(agcDestroyGpuLabel(labels[i]), AGC_OK,
+            "recycled command label destroys");
+        TEST_ASSERT_EQ(agcDestroyCommandBuffer(commands[i]), AGC_OK,
+            "recycled command destroys");
+    }
+    TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
+        "recycle queue destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "recycle device destroys");
+}
+
 static void test_runtime_copy_buffer_submission(void)
 {
     AgcDevice device = create_device();
@@ -7462,6 +7576,7 @@ void test_suite_runtime(void)
     TEST_RUN(test_runtime_multi_graphics_submission);
     TEST_RUN(test_runtime_multi_compute_submission);
     TEST_RUN(test_runtime_batch_transition_chain);
+    TEST_RUN(test_runtime_fence_driven_command_reuse);
     TEST_RUN(test_runtime_copy_buffer_submission);
     TEST_RUN(test_runtime_buffer_range_fragmentation);
     TEST_RUN(test_runtime_image_subresource_states);

@@ -49,9 +49,9 @@ hardware-qualified.
 Two reproducible cleanup-first FW 5.50 probes are pinned for that gate:
 
 - partial buffer handoff:
-  `f3d0c76eec898c63d22a9e5a1ddb86728e141f77709cd9ce8984eeb8071fbb0e`
+  `7b55c694eb8fabcfaf17a7141725a0ca9814ade8afab56213a32f5d8ea07c501`
 - partial image mip/layer handoff:
-  `6b3a56ac8d382b287ecd636be85ac59adc4585955530a9e3bfbb166debf285f4`
+  `07b17b74865d8c810655196ff6d02c6569b8561c4087f79033d765b16c745f1a`
 
 Runtime API v21 strengthens each probe to release and acquire two disjoint
 ranges through one increasing label. The repinned guarded targets require FW

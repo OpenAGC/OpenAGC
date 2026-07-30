@@ -402,42 +402,42 @@ agc_runtime_present_stage4.elf: agc_runtime_present.c gpu_credentials.h $(OPENAG
 deploy_agc_runtime_present_stage0: agc_runtime_present.elf
 	PS5_HOST=$(PS5_HOST) RUNTIME_ARTIFACT=$(THIS_DIR)/$< \
 		EXPECTED_FW_ABI=0x0550 \
-		EXPECTED_ARTIFACT_SHA256=114b29345150c4758e49c704f3cb6ce7febe671be141ab19b82cac41ce3d270b \
+		EXPECTED_ARTIFACT_SHA256=70c9f44db94154a8105b4379ccb86f213736047001f6d09ba72a97688542c714 \
 		EXPECTED_VERDICT='PRESENT_STAGE_0 PASS' REMOTE_NAME=openagc_present_stage0 \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_runtime_guarded.sh
 
 deploy_agc_runtime_present_stage1: agc_runtime_present_stage1.elf
 	PS5_HOST=$(PS5_HOST) RUNTIME_ARTIFACT=$(THIS_DIR)/$< \
 		EXPECTED_FW_ABI=0x0550 \
-		EXPECTED_ARTIFACT_SHA256=f7c35b50644ef945f56db85439901e4a7f6381a60ef0cacd3c33eb0f6b0c7bcb \
+		EXPECTED_ARTIFACT_SHA256=84e709cb15a18b3262e81b732d4258ae52e42913ad063fd9dfe332745c9e6643 \
 		EXPECTED_VERDICT='PRESENT_STAGE_1 PASS' REMOTE_NAME=openagc_present_stage1 \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_runtime_guarded.sh
 
 deploy_agc_runtime_present_stage2: agc_runtime_present_stage2.elf
 	PS5_HOST=$(PS5_HOST) RUNTIME_ARTIFACT=$(THIS_DIR)/$< \
 		EXPECTED_FW_ABI=0x0550 \
-		EXPECTED_ARTIFACT_SHA256=19b0cec88f1bd6327f93c363b4c67843a50a01212dba88e35cee0f82f88dbed8 \
+		EXPECTED_ARTIFACT_SHA256=d67bbade7d48a918cb2636ac1e42f0c176dca99848a3a00f244019f5686ece11 \
 		EXPECTED_VERDICT='PRESENT_STAGE_2 PASS' REMOTE_NAME=openagc_present_stage2 \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_runtime_guarded.sh
 
 deploy_agc_runtime_present_stage3: agc_runtime_present_stage3.elf
 	PS5_HOST=$(PS5_HOST) RUNTIME_ARTIFACT=$(THIS_DIR)/$< \
 		EXPECTED_FW_ABI=0x0550 \
-		EXPECTED_ARTIFACT_SHA256=d98ac9b2204cab7075bd1667a45e0d3f29760a5b584621fb2fd04bfeec01869b \
+		EXPECTED_ARTIFACT_SHA256=d5ee2434129f16d068110208671bba72d95637681db22d2226919d487a4452f6 \
 		EXPECTED_VERDICT='PRESENT_STAGE_3 PASS' REMOTE_NAME=openagc_present_stage3 \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_runtime_guarded.sh
 
 deploy_agc_runtime_present_stage4: agc_runtime_present_stage4.elf
 	PS5_HOST=$(PS5_HOST) RUNTIME_ARTIFACT=$(THIS_DIR)/$< \
 		EXPECTED_FW_ABI=0x0550 \
-		EXPECTED_ARTIFACT_SHA256=871e2073c88fef24cc969925647b7935d6bcd340443530dd392a8087e1a89155 \
+		EXPECTED_ARTIFACT_SHA256=108416ea85233ff5768062a8bc5b062376a2ee2ced909b5358e2a7e050e658bf \
 		EXPECTED_VERDICT='PRESENT_STAGE_4 PASS' REMOTE_NAME=openagc_present_stage4 \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_runtime_guarded.sh
 
 deploy_agc_runtime_retirement_stress: agc_runtime_retirement_stress.elf
 	PS5_HOST=$(PS5_HOST) RUNTIME_ARTIFACT=$(THIS_DIR)/$< \
 		EXPECTED_FW_ABI=0x0550 \
-		EXPECTED_ARTIFACT_SHA256=00b6c4e9f34559fd05fe5cfdddbbfee41c40b66d64fbe5fb1ec0caf1d4ba29ed \
+		EXPECTED_ARTIFACT_SHA256=a3d04e6472c2cdd0ea09624cd3536dd5eb53345fa063aa5cee937636290852fb \
 		EXPECTED_VERDICT='BATCH_RETIREMENT_STRESS PASS' \
 		REMOTE_NAME=openagc_retirement_stress \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_runtime_guarded.sh
@@ -455,7 +455,7 @@ agc_runtime_timeline_wait.elf: agc_runtime_eop.c gpu_credentials.h $(OPENAGC_LIB
 deploy_agc_runtime_timeline_wait: agc_runtime_timeline_wait.elf
 	PS5_HOST=$(PS5_HOST) RUNTIME_ARTIFACT=$(THIS_DIR)/$< \
 		EXPECTED_FW_ABI=0x0550 \
-		EXPECTED_ARTIFACT_SHA256=3153c0ac987bc1eff0abb96c7635818150178c7b4ea9f6b6570cd8ac713ee1e0 \
+		EXPECTED_ARTIFACT_SHA256=c30a07d6b8c55b495df9736476376e2e7d8869e17e90f1f7e98a60f85be6976f \
 		EXPECTED_VERDICT='TIMELINE_WAIT PASS' \
 		REMOTE_NAME=openagc_timeline_wait \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_runtime_guarded.sh
@@ -478,7 +478,7 @@ agc_runtime_partial_image_handoff.elf: agc_runtime_eop.c gpu_credentials.h $(OPE
 deploy_agc_runtime_partial_buffer_handoff: agc_runtime_partial_buffer_handoff.elf
 	PS5_HOST=$(PS5_HOST) RUNTIME_ARTIFACT=$(THIS_DIR)/$< \
 		EXPECTED_FW_ABI=0x0550 \
-		EXPECTED_ARTIFACT_SHA256=f3d0c76eec898c63d22a9e5a1ddb86728e141f77709cd9ce8984eeb8071fbb0e \
+		EXPECTED_ARTIFACT_SHA256=7b55c694eb8fabcfaf17a7141725a0ca9814ade8afab56213a32f5d8ea07c501 \
 		EXPECTED_VERDICT='Native runtime partial buffer handoff result: PASS' \
 		REMOTE_NAME=openagc_partial_buffer_handoff \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_runtime_guarded.sh
@@ -486,7 +486,7 @@ deploy_agc_runtime_partial_buffer_handoff: agc_runtime_partial_buffer_handoff.el
 deploy_agc_runtime_partial_image_handoff: agc_runtime_partial_image_handoff.elf
 	PS5_HOST=$(PS5_HOST) RUNTIME_ARTIFACT=$(THIS_DIR)/$< \
 		EXPECTED_FW_ABI=0x0550 \
-		EXPECTED_ARTIFACT_SHA256=6b3a56ac8d382b287ecd636be85ac59adc4585955530a9e3bfbb166debf285f4 \
+		EXPECTED_ARTIFACT_SHA256=07b17b74865d8c810655196ff6d02c6569b8561c4087f79033d765b16c745f1a \
 		EXPECTED_VERDICT='Native runtime partial image handoff result: PASS' \
 		REMOTE_NAME=openagc_partial_image_handoff \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_runtime_guarded.sh

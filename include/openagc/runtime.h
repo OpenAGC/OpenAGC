@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-#define AGC_RUNTIME_API_VERSION 21u
+#define AGC_RUNTIME_API_VERSION 22u
 #define AGC_RUNTIME_STRUCTURE_VERSION_1 1u
 #define AGC_RUNTIME_STRUCTURE_VERSION_2 2u
 #define AGC_RUNTIME_PROFILE_NAME_SIZE 48u
@@ -1283,6 +1283,11 @@ int32_t PS5_SYSV_ABI agcGetFenceStatus(AgcFence fence);
 int32_t PS5_SYSV_ABI agcGetFenceInfo(AgcFence fence, AgcFenceInfo *info);
 int32_t PS5_SYSV_ABI agcResetFence(AgcFence fence);
 int32_t PS5_SYSV_ABI agcWaitFence(AgcFence fence, uint64_t timeout_ns);
+/* Atomically returns a completed submission's command storage to Initial
+ * state. The fence is polled once; BUSY leaves every command unchanged. */
+int32_t PS5_SYSV_ABI agcRecycleCommandBuffers(AgcFence fence,
+    uint32_t command_buffer_count,
+    AgcCommandBuffer const *command_buffers);
 int32_t PS5_SYSV_ABI agcCreateGpuLabel(
     AgcDevice device, const AgcGpuLabelDesc *desc, AgcGpuLabel *label_out);
 int32_t PS5_SYSV_ABI agcDestroyGpuLabel(AgcGpuLabel label);

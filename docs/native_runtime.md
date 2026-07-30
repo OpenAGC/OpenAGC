@@ -35,6 +35,8 @@ ranges and image aspect/mip/layer ranges, with multiple disjoint transfers
 pending on one resource.
 Runtime API v21 makes GPU command, submit-list, and ownership-acquire waits
 timeline-aware: a submitted label value satisfies every earlier point.
+Runtime API v22 adds `agcRecycleCommandBuffers`, which polls one completed
+fence and atomically returns a validated command-buffer batch to `INITIAL`.
 OpenAGC rejects unknown versions, nonzero flags, or nonzero reserved fields
 without partial object or command creation.
 
@@ -95,6 +97,10 @@ Command buffers have four public states:
 the runtime supplies the carrier packet internally. `agcResetCommandBuffer`
 releases recorded object references and returns a non-pending command buffer
 to `INITIAL`; it also provides recovery after validation or capacity failure.
+`agcRecycleCommandBuffers` is the fence-driven batch form: it validates every
+distinct member before polling, returns `AGC_ERROR_BUSY` without mutation when
+the fence is incomplete, and releases references and resets storage only when
+every member is complete. A rejected member leaves the whole batch unchanged.
 No command call emits partial packets. Insufficient capacity returns
 `AGC_ERROR_COMMAND_SPACE_EXHAUSTED` with the cursor unchanged.
 
@@ -288,6 +294,13 @@ fence; reset is legal only when the fence has no pending owner.
 `AGC_ERROR_TIMEOUT` when the fence is unsignaled. Passing
 `AGC_RUNTIME_INFINITE_TIMEOUT` is an error; the runtime never silently waits
 forever.
+
+`agcRecycleCommandBuffers` polls its fence once rather than waiting. It accepts
+1–63 distinct command buffers owned by the fence device. Members must already
+be executable or pending during validation and must all be executable with no
+pending submission references after the poll; a pending member must belong to
+the supplied fence. Success releases every recorded object reference, resets
+the command storage, and returns all members to `INITIAL` as one transaction.
 
 `agcGetFenceInfo` provides a versioned diagnostic snapshot without exposing a
 backend handle or GPU address. It reports the fence state, latest queue and
