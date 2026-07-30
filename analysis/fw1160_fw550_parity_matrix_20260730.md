@@ -224,6 +224,14 @@ allocation-aware count and rejects the ordinary count. This attempt is not
 promoted because the pre-launch wrapper contract was wrong; rerun the identical
 pinned artifact with the corrected fail-closed oracle.
 
+The corrected-wrapper FW 11.60 depth-only pass succeeded. Its aspect-`0x1`
+RMW selected all `49152` metadata words with zero mismatch, zero outside
+change, and preserved reserved bits; the final HTILE readback also changed
+exactly `49152`. It reproduced the allocation-aware D32 and exact S8
+distributions, completed immediately, shut down cleanly, returned final PASS,
+and left no residual process. The recipe now freezes `49152`; one identical
+replay remains before the FW 5.50 depth-only mirror.
+
 ## Higher-level consumers
 
 The following FW 5.50-qualified application-facing paths still need bounded

@@ -97,7 +97,11 @@ the ordinary logical D32 clear count. Combined expclear pre-fills the entire
 swizzled allocation, so its exact count is `1755648`, including padding. The
 runner and all six recipes now encode that allocation-aware value, with host
 accept/reject coverage. The same pinned depth-only artifact must be rerun;
-stencil-only and both-aspect remain blocked.
+the corrected-wrapper pass then succeeded with aspect `0x1`, zero RMW
+mismatches or outside changes, reserved bits preserved, `49152` changed words,
+exact allocation-aware D32 and S8 distributions, clean shutdown, and no
+residual process. Its recipe now freezes `49152`; stencil-only and both-aspect
+remain blocked behind one identical replay and the FW 5.50 depth-only mirror.
 
 Ordinary D16 HTILE is now hardware-qualified twice on each endpoint. The
 pinned current-source artifacts reproduced exact D16 classes, clean teardown,

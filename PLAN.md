@@ -570,6 +570,10 @@ the runner and shared teardown on FW 11.60 only.
   a validated explicit D32 count; every combined expclear recipe requires the
   allocation-aware value, and the host fixture accepts it while rejecting the
   ordinary count. Rerun the identical pinned FW 11.60 depth-only artifact.
+- The corrected-wrapper FW 11.60 depth-only pass succeeded with aspect `0x1`,
+  zero RMW mismatches/outside changes, reserved bits preserved, `49152`
+  changed words, exact allocation-aware D32 and S8 distributions, clean
+  shutdown, and no residual process. Freeze `49152` and replay once.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and
