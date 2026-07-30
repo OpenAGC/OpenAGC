@@ -18,7 +18,39 @@ keeping the implementation buildable without proprietary SDK headers.
 The current tree is a foundation layer, not a complete official-SDK drop-in.
 Host builds provide testable AGC packet, command-buffer, submit-descriptor,
 descriptor, and shader helpers. The PS5 `/dev/gc` backend is implemented and
-builds with ps5-payload-sdk; hardware validation is the remaining step.
+builds with ps5-payload-sdk. Its qualified graphics, compute, copy, format,
+depth/HTILE, MSAA, queue, submit, teardown, and presentation paths have run on
+real FW 5.50 and FW 11.60 hardware within the scopes recorded in `STATUS.md`.
+
+## Product Direction
+
+OpenAGC keeps the recovered `sceAgc*` and `sceAgcDriver*` surface as its
+low-level compatibility and reverse-engineering foundation. The next product
+layer is a firmware-neutral native C API with opaque device, queue, buffer,
+image, sampler, shader, pipeline, command-buffer, and fence objects. Ordinary
+applications should not need to assemble PM4, choose cache-control bits,
+allocate one direct-memory block per resource, or branch on firmware.
+
+The authoritative execution order is maintained in `PLAN.md`:
+
+1. Close the identical-byte FW 5.50/FW 11.60 portability gate.
+2. Define the native device/object lifecycle and `agcGetRuntimeInfo`
+   capability query.
+3. Add suballocated resource memory, shader reflection, and validated graphics
+   and compute pipeline objects.
+4. Add typed resource transitions, bounded synchronization, deferred
+   destruction, validation, capture/inspection, and complete API documentation.
+5. Qualify one long-running reference-game ELF unchanged on both endpoint
+   firmwares.
+6. Rehabilitate `../Vulkan-PS5` as a translation layer above the native API,
+   without a second firmware selector, allocator, PM4 backend, or synchronization
+   model.
+
+The completed 16/32-bit integer render-target matrix, all 14 BC1-BC7 sampling
+encodings, the planned depth/HTILE progression, and the planned 4x MSAA matrix
+remain regression coverage. New formats and packet builders are demand-driven
+by the native runtime, the reference game, Vulkan, a homebrew port, or a safety
+fix.
 
 ## Features
 
@@ -118,8 +150,10 @@ builds with ps5-payload-sdk; hardware validation is the remaining step.
 - **Shader binary format** — RDNA2 ISA shader header parsing
 - **Two backend targets:**
   - `generic` — pure software implementation for host testing
-  - `prospero` — native PS5 `/dev/gc` backend with ioctl submission and internal
-    memory allocation, including fail-closed process authorization setup
+  - `prospero` — native PS5 `/dev/gc` backend with ioctl submission, internal
+    memory allocation, exact runtime-profile selection, and fail-closed process
+    authorization setup; supported subsets are hardware-qualified on FW 5.50
+    and FW 11.60
 - **Binary-compatible struct layouts** — `_Static_assert` verified sizes
 - **Hardware validation samples** — `samples/hw_test/` builds ELF + fake-SELF
   packages for VideoOut and AGC init smoke tests
@@ -145,7 +179,9 @@ builds with ps5-payload-sdk; hardware validation is the remaining step.
 
 ## Status
 
-**Phase 1: Reverse-engineering foundation** — In progress.
+**Low-level compatibility foundation** — implemented, host-regression tested,
+and hardware-qualified for the exact capabilities listed below. The native
+application-facing runtime described in `PLAN.md` is the next product phase.
 
 Completed and tested:
 - Core type definitions and error codes
@@ -183,7 +219,7 @@ Completed and tested:
   default-state `CLEAR_STATE` submission, and suspend-point submit/query
 - Hardware validation samples (`samples/hw_test/`) built as ELF and fake-SELF
 - Build system (CMake + Makefile)
-- Test suite with 4236 passing assertions on the host generic backend
+- Test suite with 12240 passing assertions on the host generic backend
 
 Tessellation clients use the Oberon-wide ring profile in `agc_graphics.h`:
 four shader engines, two shader arrays per engine, five physical CUs per
@@ -309,7 +345,7 @@ make test
 Current expected host result:
 
 ```text
-5147 passed, 0 failed
+12240 passed, 0 failed
 ```
 
 ### PS5
@@ -324,8 +360,10 @@ cmake --build build-prospero
 
 The `prospero` backend builds as a native PS5 `/dev/gc` driver backend. It
 implements ioctl submission, internal memory allocation, default-state
-submission, and suspend-point submission. It requires hardware validation
-before it can be considered production-ready.
+submission, suspend-point submission, runtime firmware profiles, and the
+qualified graphics/compute lifecycle. Support remains capability- and exact-
+firmware-specific; consult `STATUS.md` rather than treating a successful build
+or registered profile as a blanket hardware-support claim.
 
 ## Installable SDK and CMake package
 

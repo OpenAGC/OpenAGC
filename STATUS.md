@@ -1,5 +1,47 @@
 # openagc Status
 
+## Current product direction (2026-07-30)
+
+The proven `sceAgc*`/`sceAgcDriver*`, PM4, shader, `/dev/gc`, firmware-profile,
+graphics, compute, format, depth/HTILE, MSAA, synchronization, memory, and
+VideoOut work is now the low-level foundation for an application-facing
+runtime. `PLAN.md` is the authoritative forward roadmap; chronological entries
+below remain qualification evidence and may describe a gate that a later entry
+closes.
+
+Current execution order:
+
+1. **Close the one-binary portability gate.** The FW 5.50 and FW 11.60 cleanup
+   stress gates are complete. The pinned firmware-neutral portability ELF has
+   passed twice on FW 11.60; its hash-identical FW 5.50 replay remains the
+   product gate. The FW 11.60 workload operation remains fail-closed after all
+   known packet forms stalled, and is not part of the baseline contract.
+2. **Define the native C runtime.** Add opaque `AgcDevice`, `AgcQueue`, resource,
+   shader, pipeline, command-buffer, and fence objects above the compatible
+   exports. Add `agcGetRuntimeInfo` so applications query capabilities and
+   qualification state rather than firmware numbers.
+3. **Add resource and pipeline safety.** Implement heap suballocation,
+   overflow-safe layouts, staging, reflection from `openagc-psbc`, and graphics
+   and compute pipelines that reject shader/export, attachment, blend,
+   descriptor, sample-count, and stage-linkage mismatches before PM4 emission.
+4. **Own transitions and synchronization.** Track explicit resource usage and
+   derive qualified release/acquire/flush/invalidate actions internally. Add
+   bounded fences, multi-command-buffer submission, waits/signals, deferred
+   retirement, validation diagnostics, and capture/command-stream inspection.
+5. **Document and integrate.** Publish lifecycle, memory, shader, pipeline,
+   synchronization, capability, error, and capture documentation. Qualify one
+   long-running reference-game ELF unchanged on FW 5.50 and FW 11.60.
+6. **Rehabilitate `../Vulkan-PS5` last.** Make it a constrained translation
+   layer above native OpenAGC objects. It must not retain a second PM4 backend,
+   allocator, firmware selector, or synchronization model.
+
+The completed R/RG/RGBA16 UNORM/SNORM/UINT/SINT tuples, all six 32-bit integer
+tuples, all 14 BC1-BC7 sampling encodings, the planned depth/HTILE progression,
+and the planned 4x MSAA matrix are regression coverage, not current
+implementation priorities. Remaining tiled BC, packed/alternate-swap, color-
+metadata, HDR, and depth/MSAA combinations are demand-driven and retain the
+existing host/SPRX/exact-firmware qualification labels.
+
 ## Format, compressed-depth, and MSAA milestone complete (2026-07-30)
 
 The planned progression from R16/RG16/RGBA16 SNORM through dedicated 16-bit
@@ -2271,7 +2313,7 @@ make -B test
 Current expected result:
 
 ```text
-5137 passed, 0 failed
+12240 passed, 0 failed
 ```
 
 PS5 prospero backend (cross-compiled, no tests):
@@ -2284,9 +2326,10 @@ cmake --build build-prospero
 ```
 
 Expected result: `build-prospero/libopenagc.a` — PS5 x86_64 static library,
-zero warnings, zero errors. All `sceAgcDriver*` and `sce_agc_*` symbols
-present in the symbol table. Hardware validation in progress — see
-"Hardware Validation Results" section below.
+zero warnings, zero errors. All `sceAgcDriver*` and `sce_agc_*` symbols are
+present in the symbol table. Hardware qualification is capability- and exact-
+firmware-specific; see "Hardware Validation Results" below and do not infer
+blanket support from a successful cross-build.
 
 ### PS5 packaging (LibProsperoPkg)
 

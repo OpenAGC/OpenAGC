@@ -9,11 +9,36 @@ providing `sceAgc*` / `sceAgcDriver*` ABI compatibility with the Sony PS5 SDK,
 buildable without proprietary SDK headers. Targets two backends:
 
 - `generic` — pure software host backend, used for tests
-- `prospero` — native PS5 `/dev/gc` backend (implemented, awaiting hardware
-  validation)
+- `prospero` — native PS5 `/dev/gc` backend, hardware-qualified for the exact
+  FW 5.50 and FW 11.60 capability subsets recorded in `STATUS.md`
 
 The codebase is C (C99-ish), Apache 2.0 licensed, and depends only on libc on the
 host. Do not introduce new dependencies without checking the build files first.
+
+## Product Architecture and Priority
+
+Preserve two public layers:
+
+1. The recovered `sceAgc*` / `sceAgcDriver*` / cursor-builder layer is the
+   low-level ABI-compatibility, reverse-engineering, and expert-diagnostics
+   foundation.
+2. The preferred application layer is a firmware-neutral native C runtime with
+   opaque device, queue, buffer, image, image-view, sampler, shader, graphics-
+   pipeline, compute-pipeline, command-buffer, and fence objects.
+
+Ordinary applications must not assemble PM4, select raw cache-control bits,
+allocate one direct-memory object per resource, or branch on firmware. The
+native runtime selects exact submit/queue/default-state/memory/VideoOut policy
+internally and reports capabilities and qualification through
+`agcGetRuntimeInfo`. Unknown profiles and unsupported optional operations fail
+before GPU or process mutation.
+
+Use the authoritative product roadmap near the top of `PLAN.md`. Prioritize
+complete resource-to-pipeline-to-submit-to-present vertical slices, early
+shader/render-target compatibility validation, bounded synchronization,
+documentation, and the reference game over obscure packet-builder breadth.
+Add a low-level builder early only when a native-runtime slice, hardware safety
+fix, or observed compatibility import requires it.
 
 ## Build & Test
 
@@ -64,7 +89,9 @@ Before marking a task complete:
 3. No new compiler warnings under `-Wall -Wextra -Wpedantic` (already enabled
    in both CMake and Makefile).
 4. Any new public symbol is declared in the appropriate `include/*.h` with the
-   `PS5_SYSV_ABI` calling-convention macro and matches Sony-style naming.
+   `PS5_SYSV_ABI` calling-convention macro. Compatibility exports match exact
+   Sony-style names; native runtime entry points use the documented `agc*`
+   namespace and opaque `Agc*` handles.
 5. Any new struct layout that must match firmware ABI gets a
    `_Static_assert` size/offset check.
 6. If you added a packet builder, add a test in `tests/test_cb.c` or
@@ -79,6 +106,9 @@ Before marking a task complete:
   - Public Sony-compatible functions: `sceAgc*`, `sceAgcDriver*`,
     `sceAgcCb*`, `sceAgcDcb*`, `sceAgcAcb*` — match the firmware export names
     exactly.
+  - Public native runtime functions: `agcCreate*`, `agcDestroy*`, `agcCmd*`,
+    `agcQueue*`, and query/wait helpers in the `agc*` namespace. Do not present
+    native convenience APIs as recovered Sony exports.
   - Internal helpers: `agc*` / `agcCb*` / `agcPm4*` lowercase camelCase.
   - Types: `SceAgc*` / `Agc*` PascalCase.
   - Macros/constants: `AGC_*` / `AGC_PM4_*` UPPER_SNAKE.
@@ -483,25 +513,55 @@ Files:
 
 ## Current Roadmap
 
-The reusable FW 5.50 gfx1013 graphics and compute paths are host-tested and
-hardware-validated. Combined D32+S8 HTILE expclear is enabled after depth-only,
-stencil-only, and both-aspect cases each passed twice with exact metadata,
-D32/S8, fence, and 1,800-flip oracles.
+The reusable gfx1013 graphics and compute paths are host-tested and hardware-
+qualified within the exact FW 5.50 and FW 11.60 scopes in `STATUS.md`. The
+planned regular-color/integer, all-14-encoding BC sampling, D16/D32/S8/HTILE,
+combined-aspect expclear, and 4x MSAA endpoint milestone is complete. Treat it
+as regression coverage rather than reopening it as the next feature ladder.
 
 FW 3.20 is the lowest active compatibility target. FW 1.00 and 2.x profiles
 are archival RE data only: preserve their known aliases and evidence, but do
 not recover missing legacy-only ABIs or advertise those versions as supported.
 
-See `STATUS.md` and `PLAN.md`. Next RE tasks, by priority:
+See `STATUS.md` and `PLAN.md`. Execute new product work in this order:
 
-1. **Additional render-target formats** — standard/alternate-swap RGBA8 UNORM
-   and SRGB, RGB10A2, R11G11B10, and RGBA16F are FW 5.50
-   hardware-qualified. Qualify further 16-bit tuples next in increasing
-   hardware-risk order.
-2. **Additional depth/stencil formats** — qualify D16, S8-only, and D16+S8
-   independently before enabling compressed combinations.
-3. **Game compatibility** — continue expanding the observed-title corpus and
-   resolve useful imports only from evidence.
+1. **Firmware-neutral endpoint gate** — preserve the pinned portability ELF
+   and complete its identical-byte FW 5.50 replay after the already-passed
+   cleanup-stress prerequisites. Keep the same baseline passing on FW 11.60.
+2. **Native runtime contract** — add versioned descriptor structs, opaque
+   `AgcDevice`, `AgcQueue`, resource, shader, pipeline, command-buffer, and
+   fence handles, explicit ownership/state rules, finite waits, and
+   `agcGetRuntimeInfo` capability/qualification reporting.
+3. **Memory and resources** — add overflow-safe buffer/image layouts, heap
+   suballocation, upload/readback staging, debug names, leak/high-water
+   reporting, and fence-keyed deferred frees.
+4. **Reflection and pipelines** — turn `openagc-psbc` metadata into descriptor,
+   push-constant, vertex-input, user-SGPR, export, wave, and stage-linkage
+   reflection. Reject shader/attachment, integer-blend, descriptor, sample-
+   count, and stage mismatches before command emission.
+5. **Transitions and synchronization** — expose typed resource usages and
+   derive qualified release/acquire/flush/invalidate packets internally. Add
+   multi-command-buffer submission, GPU waits/signals, timeline-style
+   counters, queue ownership where proven, bounded diagnostics, and safe
+   resource retirement.
+6. **Validation, capture, and documentation** — add an optional debug layer,
+   versioned command capture plus host packet/register decoder, and complete
+   lifecycle/memory/shader/pipeline/synchronization/capability API guides.
+7. **Reference game** — exercise textured meshes, BC assets, depth, blending,
+   storage/uniform data, compute-to-graphics, streaming, level reloads,
+   VideoOut, capture, and long-running memory stability in one hash-identical
+   ELF on FW 5.50 and FW 11.60.
+8. **`../Vulkan-PS5` rehabilitation** — begin only after the native contracts
+   above are stable. Vulkan translates to OpenAGC objects and must not retain a
+   duplicate PM4 backend, allocator, firmware selector, reflection path, or
+   synchronization model.
+
+Continue tiled BC layout/copy/mips, useful packed/alternate-swap formats,
+color metadata, HDR, remaining depth/MSAA combinations, game-import recovery,
+and new packet builders only when demanded by a native vertical slice,
+reference-game/Vulkan requirement, observed homebrew/title use, or safety fix.
+Retain host-tested, SPRX/profile-qualified hardware-unverified, and exact-
+firmware hardware-qualified labels separately.
 
 Application-facing direct indexed, indirect, and indexed-indirect drawing is
 host-tested and hardware-qualified on FW 5.50. Preserve canonical `SET_BASE`
@@ -627,6 +687,11 @@ FW 5.50 kernel dispatcher; neither is a graphics blocker.
   `_Static_assert`.
 - Do not hand-pack PM4 headers — use `agcPm4Header3*`.
 - Do not put PS5-specific `/dev/gc` code in `driver_generic.c`.
+- Do not duplicate OpenAGC's firmware selection, allocator, PM4 emission,
+  reflection, resource-state tracking, or synchronization inside
+  `../Vulkan-PS5` or application samples.
+- Do not expose firmware-number branches or raw cache-control words through the
+  native application API; expose capabilities and typed transitions.
 - Do not commit firmware binaries, SPRX modules, or microcode files.
 - Do not delete or rewrite existing RE-provenance comments.
 - Do not change `PS5_SYSV_ABI` calling convention or public function
