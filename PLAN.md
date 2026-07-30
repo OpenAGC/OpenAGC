@@ -829,7 +829,12 @@ channels from `[-1,1]` to `[0,1]`. The CPU oracle independently decodes each
 stream, covers both interpolation modes and terminal values, requires the full
 0..255 range in both channels, proves channel independence and all mip/layer
 regions, allows only the established one-byte SNORM rounding tolerance, and
-records a native hash. Pin the final neutral bytes before hardware execution.
+records a native hash. The pinned SHA-256 values are
+`313dfca6a5e088f0cb9eca2c8e12133ed66fbb211150a9b0dd7a0de21f05bbbd`
+for BC5 UNORM and
+`3e001fab86e7e7371bd58716e4560431c4ac84be7c3b674ca9c76dacf685d759`
+for BC5 SNORM. Their FW 11.60 and identical-byte FW 5.50 guarded targets have
+no build prerequisites.
 
 Use dedicated, deterministic source blocks containing endpoint, index,
 alpha, signed-range, and edge-block cases appropriate to each format. A

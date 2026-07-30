@@ -438,7 +438,12 @@ two independently patterned BC4 streams. The bounded oracle decodes R and G
 separately, covers both endpoint-order interpolation modes and terminal
 values, demands full ranges and channel independence, validates every
 mip/layer region, and permits only the established one-byte SNORM rounding
-tolerance. Artifact pinning and hardware execution remain pending.
+tolerance. Exact artifacts are now pinned as SHA-256
+`313dfca6a5e088f0cb9eca2c8e12133ed66fbb211150a9b0dd7a0de21f05bbbd`
+(UNORM) and
+`3e001fab86e7e7371bd58716e4560431c4ac84be7c3b674ca9c76dacf685d759`
+(SNORM), with no-prerequisite FW 11.60 and FW 5.50 guarded targets. Hardware
+execution remains pending a clean FW 11.60 boot.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability
