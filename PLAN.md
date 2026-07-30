@@ -1221,6 +1221,12 @@ twice and reproduced `224640` changed pixels, regions `{74880,74880,74880}`,
 full R/G ranges, zero decode mismatches/error, channel independence, and FNV64
 `0x3bc37aa96460e455` on both runs. BC5 UNORM is hardware-qualified on both
 endpoints; qualify BC5 SNORM next.
+
+BC5 SNORM pass 1 on FW 5.50 used pinned SHA-256
+`cf6fcaa788fe65fd7b0bb352888dce09be674ddfbbfde2d37faf0ab9cb6a3fe0`
+and reproduced `224640` changed pixels, regions `{74880,74880,74880}`, full
+remapped R/G ranges, zero decode mismatches/error, channel independence, and
+FNV64 `0xf1464077ada8ce8d`. Repeat the identical artifact once.
 The final firmware-neutral bytes are pinned as SHA-256
 `f74c393112fc465eace431a3fe288095ae4b3bf5ee993e8147ed0e9a2f22f2a4`
 for BC4 UNORM and

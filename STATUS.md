@@ -801,6 +801,10 @@ reproduced `224640` changed pixels, equal regions, full R/G ranges, zero decode
 mismatches/error, channel independence, and FNV64 `0x3bc37aa96460e455` on both
 runs. All lifecycle gates passed; BC5 SNORM is next.
 
+BC5 SNORM pass 1 on FW 5.50 reproduced the exact FW 11.60-qualified coverage,
+full remapped R/G ranges, zero decode mismatches/error, channel independence,
+and FNV64 `0xf1464077ada8ce8d`. All lifecycle gates passed; one replay remains.
+
 BC3 UNORM on FW 5.50 used the exact FW 11.60-qualified bytes twice and
 reproduced `224640` changed pixels, equal regions, alpha range `0..255`, zero
 exact mismatches, and FNV64 `0xae513a67c9bb483d` on both runs. All lifecycle
