@@ -779,6 +779,8 @@ static void test_runtime_compute_submission(void)
     TEST_ASSERT_EQ(captured->dword_count, 36u,
         "compute submission captures validated pipeline state and dispatch");
     words = (const uint32_t *)(uintptr_t)captured->command_address;
+    TEST_ASSERT_EQ(captured->command_address & 0xffu, 0u,
+        "compute submission command allocation is GPU-address aligned");
     words += captured->dword_count - 5u;
     TEST_ASSERT_EQ((words[0] >> 8) & 0xffu, AGC_PM4_OP_DISPATCH_DIRECT,
         "compute submission records DISPATCH_DIRECT");
@@ -857,6 +859,8 @@ static void test_runtime_indexed_graphics_submission(void)
     TEST_ASSERT_EQ(captured->dword_count, 97u,
         "indexed graphics submission captures pipeline bind and draw");
     words = (const uint32_t *)(uintptr_t)captured->command_address;
+    TEST_ASSERT_EQ(captured->command_address & 0xffu, 0u,
+        "graphics submission command allocation is GPU-address aligned");
     words += captured->dword_count - 11u;
     TEST_ASSERT_EQ((words[0] >> 8) & 0xffu, AGC_PM4_OP_SET_INDEX_SIZE,
         "indexed submission records SET_INDEX_SIZE");

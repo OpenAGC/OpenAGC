@@ -147,8 +147,11 @@ header and implementation compile for Prospero, and device creation owns exact
 backend selection, caller default version, internal memory, and default-state
 initialization.
 
-Prospero `agcQueueSubmit` currently returns `AGC_ERROR_NOT_SUPPORTED` before
-GPU mutation. Broader graphics stages and unqualified fixed options such as
-alpha-to-coverage and alpha-to-one remain fail-closed. The reflected pipeline/
-resource path is host-tested and is not hardware-qualified; hardware testing
-is a separate, explicit promotion gate.
+Prospero `agcQueueSubmit` submits the GPU-visible command allocation through
+the existing direct DCB/ACB carriers only when the caller supplies an unsignaled
+runtime fence. The runtime appends an EOP completion write, keeps the command
+buffer and its recorded resources pending, and releases them only after status
+polling or a finite fence wait observes the GPU-written value. This bridge has
+host-carrier and Prospero cross-build coverage only; no PS5 execution or
+hardware qualification is implied. Broader graphics stages and unqualified
+fixed options such as alpha-to-coverage and alpha-to-one remain fail-closed.

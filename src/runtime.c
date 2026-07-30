@@ -232,6 +232,7 @@ struct AgcCommandBufferImpl {
     uint32_t *storage;
     AgcRuntimeAllocation *allocation;
     AgcRuntimeAllocation *resource_allocation;
+    AgcFence completion_fence;
     SceAgcCb cursor;
     AgcGraphicsPipeline graphics_pipeline;
     AgcComputePipeline compute_pipeline;
@@ -254,6 +255,10 @@ struct AgcFenceImpl {
     uint32_t magic;
     uint32_t pending_refs;
     AgcDevice device;
+    AgcRuntimeAllocation *allocation;
+    AgcQueue queue;
+    AgcCommandBuffer command_buffer;
+    uint32_t completion_value;
     uint32_t signaled;
 };
 
@@ -5079,6 +5084,10 @@ int32_t PS5_SYSV_ABI agcCreateFence(
     AgcDevice device, const AgcFenceDesc *desc, AgcFence *fence_out)
 {
     AgcFence fence;
+#ifdef OPENAGC_PROSPERO
+    uint32_t *completion;
+    int32_t result;
+#endif
 
     if (!fence_out)
         return AGC_ERROR_INVALID_ARGUMENT;
@@ -5092,8 +5101,27 @@ int32_t PS5_SYSV_ABI agcCreateFence(
     fence = agcCreateChild(device, sizeof(*fence));
     if (!fence)
         return AGC_ERROR_OUT_OF_MEMORY;
-    fence->magic = AGC_MAGIC_FENCE;
     fence->device = device;
+#ifdef OPENAGC_PROSPERO
+    result = agcRuntimeAllocate(device, AGC_MEMORY_HEAP_FLEXIBLE,
+        sizeof(*completion), sizeof(*completion), 0u,
+        AGC_OBJECT_TYPE_COUNT, fence, &fence->allocation);
+    if (result != AGC_OK) {
+        agcDestroyChild(device, fence);
+        return result;
+    }
+    completion = agcAllocationCpuAddress(fence->allocation);
+    *completion = desc->signaled ? 1u : 0u;
+    fence->completion_value = 1u;
+    result = agcFlushRuntimeAllocation(fence->allocation, 0u,
+        sizeof(*completion));
+    if (result != AGC_OK) {
+        agcRuntimeFree(device, fence->allocation);
+        agcDestroyChild(device, fence);
+        return result;
+    }
+#endif
+    fence->magic = AGC_MAGIC_FENCE;
     fence->signaled = desc->signaled;
     *fence_out = fence;
     return AGC_OK;
@@ -5110,18 +5138,62 @@ int32_t PS5_SYSV_ABI agcDestroyFence(AgcFence fence)
     if (fence->pending_refs != 0u)
         return AGC_ERROR_BUSY;
     device = fence->device;
+    if (fence->allocation)
+        agcRuntimeFree(device, fence->allocation);
     fence->magic = 0u;
     agcDestroyChild(device, fence);
     return AGC_OK;
 }
 
+static int32_t agcFencePollCompletion(AgcFence fence)
+{
+#ifdef OPENAGC_PROSPERO
+    uint32_t completion;
+    int32_t result;
+#endif
+
+    if (fence->signaled)
+        return AGC_OK;
+#ifdef OPENAGC_PROSPERO
+    if (!fence->allocation)
+        return AGC_ERROR_INTERNAL;
+    result = agcGpuMemoryInvalidate(&fence->allocation->block->memory,
+        (size_t)fence->allocation->offset, sizeof(completion));
+    if (result != AGC_OK)
+        return result;
+    completion = *(const volatile uint32_t *)
+        agcAllocationCpuAddress(fence->allocation);
+    if (completion != fence->completion_value)
+        return AGC_ERROR_BUSY;
+#else
+    return AGC_ERROR_BUSY;
+#endif
+    fence->signaled = 1u;
+    if (fence->command_buffer) {
+        AgcCommandBuffer command_buffer = fence->command_buffer;
+        AgcQueue queue = fence->queue;
+
+        command_buffer->pending_refs--;
+        command_buffer->state = AGC_COMMAND_BUFFER_STATE_EXECUTABLE;
+        command_buffer->completion_fence = NULL;
+        queue->pending_count--;
+        fence->pending_refs--;
+        fence->command_buffer = NULL;
+        fence->queue = NULL;
+    }
+    return AGC_OK;
+}
+
 int32_t PS5_SYSV_ABI agcGetFenceStatus(AgcFence fence)
 {
+    int32_t result;
+
     if (!fence || fence->magic != AGC_MAGIC_FENCE ||
         !agcDeviceValid(fence->device)) {
         return AGC_ERROR_INVALID_ARGUMENT;
     }
-    return fence->signaled ? AGC_OK : AGC_ERROR_BUSY;
+    result = agcFencePollCompletion(fence);
+    return result == AGC_ERROR_BUSY ? AGC_ERROR_BUSY : result;
 }
 
 int32_t PS5_SYSV_ABI agcResetFence(AgcFence fence)
@@ -5132,25 +5204,66 @@ int32_t PS5_SYSV_ABI agcResetFence(AgcFence fence)
     }
     if (fence->pending_refs != 0u)
         return AGC_ERROR_BUSY;
+#ifdef OPENAGC_PROSPERO
+    if (fence->allocation) {
+        uint32_t *completion = agcAllocationCpuAddress(fence->allocation);
+        int32_t result;
+
+        *completion = 0u;
+        result = agcFlushRuntimeAllocation(fence->allocation, 0u,
+            sizeof(*completion));
+        if (result != AGC_OK)
+            return result;
+    }
+#endif
     fence->signaled = 0u;
     return AGC_OK;
 }
 
 int32_t PS5_SYSV_ABI agcWaitFence(AgcFence fence, uint64_t timeout_ns)
 {
+    int32_t result;
+
     if (!fence || fence->magic != AGC_MAGIC_FENCE ||
         !agcDeviceValid(fence->device)) {
         return AGC_ERROR_INVALID_ARGUMENT;
     }
     if (timeout_ns == AGC_RUNTIME_INFINITE_TIMEOUT)
         return AGC_ERROR_INVALID_ARGUMENT;
-    return fence->signaled ? AGC_OK : AGC_ERROR_TIMEOUT;
+    result = agcFencePollCompletion(fence);
+    if (result != AGC_ERROR_BUSY)
+        return result;
+#ifdef OPENAGC_PROSPERO
+    if (fence->allocation) {
+        uint64_t timeout_microseconds = timeout_ns / 1000u;
+
+        if (timeout_ns % 1000u != 0u)
+            timeout_microseconds++;
+        if (timeout_microseconds > UINT32_MAX)
+            timeout_microseconds = UINT32_MAX;
+        result = agcGpuMemoryWait32(&fence->allocation->block->memory,
+            (size_t)fence->allocation->offset, fence->completion_value,
+            (uint32_t)timeout_microseconds);
+        if (result != AGC_OK)
+            return result;
+        return agcFencePollCompletion(fence);
+    }
+    return AGC_ERROR_INTERNAL;
+#else
+    return AGC_ERROR_TIMEOUT;
+#endif
 }
 
 int32_t PS5_SYSV_ABI agcQueueSubmit(
     AgcQueue queue, const AgcSubmitInfo *submit_info, AgcFence fence)
 {
     AgcCommandBuffer command_buffer;
+    AgcCommandBufferSubmit packet;
+    int32_t result;
+#ifdef OPENAGC_PROSPERO
+    AgcGfx1013EopFenceState completion;
+    uintptr_t original_cursor;
+#endif
 
     if (!queue || queue->magic != AGC_MAGIC_QUEUE ||
         !agcDeviceValid(queue->device) || !submit_info ||
@@ -5173,25 +5286,44 @@ int32_t PS5_SYSV_ABI agcQueueSubmit(
         return AGC_ERROR_INVALID_ARGUMENT;
     if (command_buffer->state != AGC_COMMAND_BUFFER_STATE_EXECUTABLE)
         return AGC_ERROR_INVALID_STATE;
+#ifdef OPENAGC_PROSPERO
+    /* Native submission needs an observable GPU completion point so recorded
+     * resources cannot be reset or freed while the kernel-owned queue runs. */
+    if (!fence)
+        return AGC_ERROR_NOT_SUPPORTED;
+    if (fence->command_buffer || command_buffer->completion_fence ||
+        !fence->allocation)
+        return AGC_ERROR_INVALID_STATE;
+    *(uint32_t *)agcAllocationCpuAddress(fence->allocation) = 0u;
+    result = agcFlushRuntimeAllocation(fence->allocation, 0u,
+        sizeof(uint32_t));
+    if (result != AGC_OK)
+        return result;
+    completion.address = agcAllocationGpuAddress(fence->allocation);
+    completion.value = fence->completion_value;
+    original_cursor = command_buffer->cursor.cursor_up;
+    result = agcGfx1013SignalEopFence(&command_buffer->cursor, &completion);
+    if (result != AGC_OK)
+        return result == AGC_ERROR_BUFFER_TOO_SMALL ?
+            AGC_ERROR_COMMAND_SPACE_EXHAUSTED : result;
+    command_buffer->completion_fence = fence;
+#endif
     {
         uint64_t command_size = (uint64_t)
             agcCbUsedDwords(&command_buffer->cursor) * sizeof(uint32_t);
         int32_t flush_result = agcFlushRuntimeAllocation(
             command_buffer->allocation, 0u, command_size);
-        if (flush_result != AGC_OK)
+        if (flush_result != AGC_OK) {
+#ifdef OPENAGC_PROSPERO
+            command_buffer->cursor.cursor_up = original_cursor;
+            command_buffer->completion_fence = NULL;
+#endif
             return flush_result;
+        }
     }
 
-#ifdef OPENAGC_PROSPERO
-    /* Milestone 1 qualifies the object contract on the generic backend. Until
-     * pipeline objects emit a complete reflected hardware bind in Milestone 3,
-     * reject native submission before GPU mutation. */
-    return AGC_ERROR_NOT_SUPPORTED;
-#else
-    AgcCommandBufferSubmit packet;
-    int32_t result;
-
-    packet.command_address = (uintptr_t)command_buffer->storage;
+    packet.command_address = (uintptr_t)agcAllocationGpuAddress(
+        command_buffer->allocation);
     packet.dword_count = agcCbUsedDwords(&command_buffer->cursor);
     packet.reserved = 0u;
     command_buffer->state = AGC_COMMAND_BUFFER_STATE_PENDING;
@@ -5205,6 +5337,15 @@ int32_t PS5_SYSV_ABI agcQueueSubmit(
         result = sceAgcDriverSubmitDcb(&packet);
     if (result == AGC_ERROR_NOT_INITIALIZED)
         result = AGC_ERROR_DEVICE_LOST;
+#ifdef OPENAGC_PROSPERO
+    if (result == AGC_OK) {
+        fence->command_buffer = command_buffer;
+        fence->queue = queue;
+        return AGC_OK;
+    }
+    command_buffer->cursor.cursor_up = original_cursor;
+    command_buffer->completion_fence = NULL;
+#endif
     command_buffer->pending_refs--;
     command_buffer->state = AGC_COMMAND_BUFFER_STATE_EXECUTABLE;
     queue->pending_count--;
@@ -5214,7 +5355,6 @@ int32_t PS5_SYSV_ABI agcQueueSubmit(
             fence->signaled = 1u;
     }
     return result;
-#endif
 }
 
 static AgcRuntimeAllocation *agcObjectAllocation(AgcDevice device,
@@ -5427,10 +5567,13 @@ int32_t PS5_SYSV_ABI agcCollectDeferredFrees(AgcDevice device)
     while (*link) {
         AgcDeferredFree *entry = *link;
         int32_t result;
-        if (!entry->fence->signaled) {
+        result = agcFencePollCompletion(entry->fence);
+        if (result == AGC_ERROR_BUSY) {
             link = &entry->next;
             continue;
         }
+        if (result != AGC_OK)
+            return result;
         if (entry->type == AGC_OBJECT_TYPE_BUFFER) {
             AgcBuffer buffer = entry->object;
             buffer->deferred = 0u;

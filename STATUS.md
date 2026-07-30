@@ -169,11 +169,17 @@ state normalization, multisample minimums, and required dynamic-state gating.
 Line and point polygon modes fail pipeline creation with the other unqualified
 rasterization options. Graphics scratch remains unsupported and
 fails during pipeline creation; reflected gfx1013 LDS requirements are bounded
-before bind generation. The full generic suite now reports 14,033
+before bind generation. The full generic suite now reports 14,035
 passed and 0 failed; the compiler's
 library, varying/export, NGG, and tessellation suites pass. This slice is
 host-tested only. No PS5 hardware test was run or claimed. See
 `docs/shader_pipelines.md`.
+
+The Prospero native queue bridge submits the GPU-visible command allocation
+through the direct carrier only with an explicit runtime fence, appends an EOP
+completion write, and retains command ownership until a bounded status poll or
+wait observes that write. It is covered by the generic carrier checks and the
+Prospero cross-build; no PS5 execution claim is made.
 
 An opt-in combined-tree integration target compiles real `openagc-psbc`
 vertex, fragment, and compute artifacts, then creates OpenAGC graphics and

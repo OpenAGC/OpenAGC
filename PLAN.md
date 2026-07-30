@@ -263,7 +263,7 @@ logical shader bundles. Reflection v2 adds compiler-derived front-stage
 interfaces and geometry topology/limit facts without changing its serialized
 size; v1/API-14 artifacts remain accepted. The runtime recomputes the
 compiler's FNV-1a stage-linkage hash over its four interface masks before
-accepting a reflected shader. The full generic suite reports 14,033 passed.
+accepting a reflected shader. The full generic suite reports 14,035 passed.
 The opt-in combined-tree contract test now compiles real `openagc-psbc`
 vertex/fragment/compute output and creates OpenAGC graphics/compute pipelines
 without sample-local register knowledge; its 256-byte code alignment and
@@ -277,6 +277,10 @@ Compiler-fused VS/TCS plus TES/NGG and TES-to-geometry pipelines are also
 host-packaged. They validate complete stage and patch linkage, derive off-chip
 layouts from reflection, reuse runtime-owned device rings, require whole-patch
 draws, and pass isolated and combined host submission tests.
+On Prospero, native runtime submission now carries GPU-visible DCB/ACB
+addresses and appends a runtime-owned EOP completion fence before retaining
+recorded resources as pending. This bridge has only host-carrier coverage and
+Prospero cross-build evidence; it is not a hardware promotion.
 Remaining unqualified geometry forms, remaining
 unqualified fixed options, and any explicit PS5 hardware promotion remain
 open; do not label this milestone complete yet.
