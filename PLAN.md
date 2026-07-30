@@ -869,6 +869,9 @@ all six pinned artifacts for identical-byte FW 5.50 replay and proceed to the
   zero mismatches, independent hashes, packed FNV64 `0x4d36e6ccd1b3e617`,
   and a clean lifecycle. Replay once before advancing to signed formats.
 
+  The identical replay reproduced every exact oracle. `RGBA32_UINT` is
+  hardware-qualified on FW 11.60; proceed to `R32_SINT`.
+
 - `R32_SINT` is host-qualified as append-only value 29 with gfx1013 `32`,
   SINT, standard swap, four bytes per pixel, and `32_R` export 1. Exact PM4
   (`CB_COLOR0_INFO=0x00070510`), all-profile selection, every short-buffer

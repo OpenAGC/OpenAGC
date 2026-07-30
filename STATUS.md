@@ -558,6 +558,9 @@ That prerequisite is now satisfied. Pinned RGBA32_UINT pass 1 completed with
 independent hashes, packed FNV64 `0x4d36e6ccd1b3e617`, clean teardown, and no
 residual process. One identical replay remains.
 
+The identical replay reproduced every exact RGBA32_UINT oracle and clean
+lifecycle. RGBA32_UINT is hardware-qualified on FW 11.60; R32_SINT is next.
+
 `AGC_GFX1013_RT_FORMAT_R32_SINT` is appended at value 29 and maps to
 `(format=0x04, number=SINT, swap=standard)`, four bytes per pixel, and `32_R`
 export 1. Exact host coverage locks `CB_COLOR0_INFO=0x00070510`, complete PM4,

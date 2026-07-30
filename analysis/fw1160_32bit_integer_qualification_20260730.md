@@ -18,3 +18,10 @@ teardown, self-termination, and a ps5debug-NG residual-process check.
 - Fence, teardown, self-termination, and debugger absence passed.
 
 One identical-byte replay remains before promotion.
+
+## RGBA32_UINT pass 2
+
+The identical pinned bytes reproduced every sample count, full-range lane,
+zero mismatch count, lane hash, packed hash, fence, teardown,
+self-termination, and debugger absence. RGBA32_UINT is hardware-qualified on
+FW 11.60.
