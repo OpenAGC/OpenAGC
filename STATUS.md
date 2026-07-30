@@ -212,7 +212,7 @@ FNV64 `0xb4bccb0f2909e483`, immediate fences, and zero-valued teardown. Exact FW
 UINT16_ABGR export 7. Exact host coverage locks
 `CB_COLOR0_INFO=0x00070430`, the complete PM4 stream, all 39 profiles, every
 short command buffer, invalid enums, and maximum 64-bit layout arithmetic.
-The generic suite passes 9,784 assertions and the clean Prospero build passes.
+The generic suite passes 10,167 assertions and the clean Prospero build passes.
 The isolated four-lane portable gate builds with the UINT16_ABGR shader and
 passes firmware-neutral dependency verification. The final unexecuted ELF is
 pinned as SHA-256
@@ -275,6 +275,13 @@ The complete 16-bit UINT/SINT render-target matrix is now hardware-qualified
 on FW 11.60 with dedicated integer-output shaders. All six exact-byte FW 5.50
 replays remain pending.
 
+`AGC_GFX1013_RT_FORMAT_R32_UINT` is appended at value 26 and maps to
+`(format=0x04, number=UINT, swap=standard)`, four bytes per pixel, and `32_R`
+export 1. Exact host coverage locks `CB_COLOR0_INFO=0x00070410`, the complete
+PM4 stream, all 39 profiles, every short command buffer, invalid enums, and
+maximum 64-bit layout arithmetic. Its dedicated 32-bit unsigned hardware gate
+remains pending.
+
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability
 ELF, non-indexed and indexed 10-dword multi-draw, GPU count-buffer selection,
@@ -283,7 +290,7 @@ twice on FW 11.60 before pinning. FW 5.50 execution remains pending; none of
 these FW 11.60 results is labeled cross-firmware hardware qualification. See
 `analysis/fw1160_rg16_unorm_and_endpoint_replay_20260730.md`.
 
-Offline portability closure is complete. The generic suite passes 9,784
+Offline portability closure is complete. The generic suite passes 10,167
 assertions, including full raw-version normalization, exact profile selection,
 and common-V7 acceptance across all 39 active profiles; the clean Prospero
 cross-build also passes. Submission, queue, memory, suspend, workload, TF/HS,

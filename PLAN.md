@@ -577,6 +577,13 @@ The full 16-bit UINT/SINT matrix is hardware-qualified on FW 11.60. Preserve
 all six pinned artifacts for identical-byte FW 5.50 replay and proceed to the
 32-bit integer matrix.
 
+- `R32_UINT` is host-qualified as append-only value 26 with gfx1013 `32`,
+  UINT, standard swap, four bytes per pixel, and `32_R` export 1. Exact PM4
+  (`CB_COLOR0_INFO=0x00070410`), all-profile selection, every short-buffer
+  boundary, invalid-enum behavior, and maximum 64-bit layout arithmetic pass.
+  Add its dedicated 32-bit unsigned shader and exact integer readback oracle
+  next.
+
 These formats need dedicated integer-output pixel shaders. Do not qualify them
 using a floating-point shader and assume the conversion is correct. Their
 oracles must validate exact integer values rather than approximate
@@ -589,6 +596,9 @@ The float forms already reach the maximum widths. Add:
 
 - `R32_UINT`, `RG32_UINT`, and `RGBA32_UINT`.
 - `R32_SINT`, `RG32_SINT`, and `RGBA32_SINT`.
+
+Qualification order begins with host-qualified `R32_UINT`, followed by its
+portable hardware gate before widening to `RG32_UINT` and `RGBA32_UINT`.
 
 `RGBA32_*` remains the regular color-buffer maximum:
 
