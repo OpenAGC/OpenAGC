@@ -7,6 +7,7 @@
 #ifndef OPENAGC_SHADER_REFLECTION_H
 #define OPENAGC_SHADER_REFLECTION_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include "agc_types.h"
@@ -16,7 +17,10 @@ extern "C" {
 #endif
 
 #define AGC_SHADER_REFLECTION_VERSION_1 1u
-#define AGC_SHADER_COMPILER_API_VERSION 14u
+#define AGC_SHADER_REFLECTION_VERSION_2 2u
+#define AGC_SHADER_REFLECTION_VERSION AGC_SHADER_REFLECTION_VERSION_2
+#define AGC_SHADER_COMPILER_API_VERSION_14 14u
+#define AGC_SHADER_COMPILER_API_VERSION 15u
 #define AGC_SHADER_ENTRY_POINT_SIZE 64u
 #define AGC_SHADER_MAX_DESCRIPTOR_BINDINGS 128u
 #define AGC_SHADER_MAX_USER_SGPRS 64u
@@ -90,6 +94,18 @@ typedef enum AgcShaderVertexInputRate {
     AGC_SHADER_VERTEX_INPUT_RATE_INSTANCE = 1,
     AGC_SHADER_VERTEX_INPUT_RATE_COUNT
 } AgcShaderVertexInputRate;
+
+typedef enum AgcShaderPrimitiveTopology {
+    AGC_SHADER_PRIMITIVE_UNDEFINED = 0,
+    AGC_SHADER_PRIMITIVE_POINTS,
+    AGC_SHADER_PRIMITIVE_LINES,
+    AGC_SHADER_PRIMITIVE_LINE_STRIP,
+    AGC_SHADER_PRIMITIVE_TRIANGLES,
+    AGC_SHADER_PRIMITIVE_TRIANGLE_STRIP,
+    AGC_SHADER_PRIMITIVE_LINES_ADJACENCY,
+    AGC_SHADER_PRIMITIVE_TRIANGLES_ADJACENCY,
+    AGC_SHADER_PRIMITIVE_TOPOLOGY_COUNT
+} AgcShaderPrimitiveTopology;
 
 /* These values are the gfx1013 SPI_SHADER_COL_FORMAT nibble encodings. */
 typedef enum AgcShaderColorExportFormat {
@@ -207,13 +223,24 @@ typedef struct AgcShaderReflection {
         push_constant_ranges[AGC_SHADER_MAX_PUSH_CONSTANT_RANGES];
     AgcShaderVertexInput vertex_inputs[AGC_SHADER_MAX_VERTEX_INPUTS];
     AgcShaderColorExport color_exports[AGC_SHADER_MAX_COLOR_EXPORTS];
-    uint64_t reserved[8];
+    AgcShaderStage front_stage;
+    AgcShaderPrimitiveTopology geometry_input_primitive;
+    AgcShaderPrimitiveTopology geometry_output_primitive;
+    uint32_t geometry_vertices_in;
+    uint32_t geometry_vertices_out;
+    uint32_t geometry_invocations;
+    uint64_t reserved1;
+    uint64_t front_stage_input_mask;
+    uint64_t front_stage_output_mask;
+    uint64_t front_patch_input_mask;
+    uint64_t front_patch_output_mask;
 } AgcShaderReflection;
 
 #define AGC_SHADER_REFLECTION_INIT \
     { .struct_size = sizeof(AgcShaderReflection), \
-      .version = AGC_SHADER_REFLECTION_VERSION_1, \
-      .stage = kAgcShaderStageCs, .hash_algorithm = AGC_SHADER_HASH_NONE }
+      .version = AGC_SHADER_REFLECTION_VERSION, \
+      .stage = kAgcShaderStageCs, .hash_algorithm = AGC_SHADER_HASH_NONE, \
+      .front_stage = kAgcShaderStageCount }
 
 _Static_assert(sizeof(AgcShaderDescriptorMapping) == 24u,
     "shader descriptor mapping size mismatch");
@@ -225,8 +252,12 @@ _Static_assert(sizeof(AgcShaderVertexInput) == 32u,
     "shader vertex-input size mismatch");
 _Static_assert(sizeof(AgcShaderColorExport) == 20u,
     "shader color-export size mismatch");
+_Static_assert(offsetof(AgcShaderReflection, front_stage) == 5680u,
+    "shader reflection front-stage offset mismatch");
+_Static_assert(offsetof(AgcShaderReflection, front_stage_input_mask) == 5712u,
+    "shader reflection front-interface offset mismatch");
 _Static_assert(sizeof(AgcShaderReflection) == 5744u,
-    "shader reflection v1 size mismatch");
+    "shader reflection size mismatch");
 
 #ifdef __cplusplus
 }

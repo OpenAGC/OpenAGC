@@ -84,7 +84,11 @@ suites. See `docs/memory_resources.md`.
 ## Versioned shader reflection and validated pipeline host slice (2026-07-30)
 
 `openagc/shader_reflection.h` is now the pointer-free, versioned ABI shared by
-OpenAGC and `openagc-psbc` API v14. It records compiler and shader-record
+OpenAGC and `openagc-psbc` API v15. Reflection v2 keeps the original 5,744-byte
+serialized size while replacing reserved tail space with the embedded front
+stage and interface masks plus geometry input/output topology, vertex limits,
+and invocation count. Existing v1/API-14 records remain accepted. It records
+compiler and shader-record
 versions, stage and entry point, FNV-1a code hash, wave size, descriptor and
 user/system-SGPR layouts, push ranges, vertex inputs, color exports, local
 size, scratch/LDS, sample behavior, NGG/fused-stage flags, and linkage masks.
@@ -136,7 +140,7 @@ linkage, vertex-stride, descriptor, push-range, and unbound-resource cases. It
 also exercises successful descriptor/push dispatch, vertex-table drawing,
 direct and indirect descriptor addressing, resource retention/reset, exact
 depth/stencil register state, legacy state normalization, multisample minimums,
-and required dynamic-state gating. The full generic suite now reports 13,882
+and required dynamic-state gating. The full generic suite now reports 13,887
 passed and 0 failed; the compiler's
 library, varying/export, NGG, and tessellation suites pass. This slice is
 host-tested only. No PS5 hardware test was run or claimed. See

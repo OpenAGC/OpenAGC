@@ -182,7 +182,8 @@ static AgcShader create_shader_with_reflection(AgcDevice device,
     binary.code[0] = 0xBF810000u;
     reflection.stage = stage;
     reflection.shader_record_version = AGC_SHADER_RECORD_VERSION_GEN5;
-    reflection.compiler_api_version = AGC_SHADER_COMPILER_API_VERSION;
+    if (reflection.compiler_api_version == 0u)
+        reflection.compiler_api_version = AGC_SHADER_COMPILER_API_VERSION;
     if (reflection.wave_size == 0u)
         reflection.wave_size = 32u;
     reflection.hash_algorithm = AGC_SHADER_HASH_FNV1A64;
@@ -274,6 +275,7 @@ static AgcShader create_ngg_shader_bundle(AgcDevice device,
     reflection.code_size = sizeof(binary.code);
     reflection.front_code_offset = offsetof(RuntimeShaderFixture, code);
     reflection.front_code_size = sizeof(front_binary.code);
+    reflection.front_stage = stage;
     reflection.code_hash = shader_fixture_hash(&binary, sizeof(binary));
     reflection.code_hash = shader_fixture_hash_update(reflection.code_hash,
         &front_binary, sizeof(front_binary));
@@ -1140,7 +1142,7 @@ static void test_runtime_shader_reflection_contract(void)
         "shader reflection query succeeds");
     TEST_ASSERT_EQ(reflection.struct_size, sizeof(reflection),
         "shader reflection reports its exact ABI size");
-    TEST_ASSERT_EQ(reflection.version, AGC_SHADER_REFLECTION_VERSION_1,
+    TEST_ASSERT_EQ(reflection.version, AGC_SHADER_REFLECTION_VERSION,
         "shader reflection reports its contract version");
     TEST_ASSERT_EQ(reflection.compiler_api_version,
         AGC_SHADER_COMPILER_API_VERSION,
@@ -1171,6 +1173,28 @@ static void test_runtime_shader_reflection_contract(void)
         "compiler-style NGG bundle retains its front program range");
     TEST_ASSERT_EQ(agcDestroyShader(ngg_shader), AGC_OK,
         "compiler-style NGG shader bundle destroys");
+
+    {
+        AgcShaderReflection legacy = {0};
+        AgcShader legacy_shader;
+
+        legacy.struct_size = sizeof(legacy);
+        legacy.version = AGC_SHADER_REFLECTION_VERSION_1;
+        legacy.compiler_api_version = AGC_SHADER_COMPILER_API_VERSION_14;
+        legacy_shader = create_shader_with_reflection(
+            device, kAgcShaderStageCs, &legacy);
+        reflection = (AgcShaderReflection)AGC_SHADER_REFLECTION_INIT;
+        TEST_ASSERT_EQ(agcGetShaderReflection(legacy_shader, &reflection),
+            AGC_OK, "API-14 reflection remains queryable");
+        TEST_ASSERT_EQ(reflection.version,
+            AGC_SHADER_REFLECTION_VERSION_1,
+            "legacy shader preserves reflection v1");
+        TEST_ASSERT_EQ(reflection.compiler_api_version,
+            AGC_SHADER_COMPILER_API_VERSION_14,
+            "legacy shader preserves compiler API 14");
+        TEST_ASSERT_EQ(agcDestroyShader(legacy_shader), AGC_OK,
+            "legacy reflected shader destroys");
+    }
 
     {
         RuntimeShaderFixture back_only = {0};

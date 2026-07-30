@@ -249,7 +249,7 @@ passes 13,614 assertions. See `docs/memory_resources.md`.
 
 ### Milestone 3: reflection and validated pipeline objects
 
-Host slice implemented on 2026-07-30: shared reflection ABI/API v14,
+Host slice implemented on 2026-07-30: shared reflection ABI/API v15,
 serialized-record and hash validation, reflected basic graphics/compute
 pipelines, cached qualified bind/dispatch groups, typed descriptor/vertex/push
 binding, command-owned resource tables, declared dynamic-state recording, and
@@ -259,7 +259,10 @@ now package the existing qualified gfx1013 register builders. Direct and
 compiler-emitted indirect descriptor-set SGPR layouts both use runtime-owned
 tables and fail closed if mixed ambiguously within a shader. Compiler-emitted
 NGG and tessellation main/front binary subtype pairs are validated as complete
-logical shader bundles. The full generic suite reports 13,882 passed.
+logical shader bundles. Reflection v2 adds compiler-derived front-stage
+interfaces and geometry topology/limit facts without changing its serialized
+size; v1/API-14 artifacts remain accepted. The full generic suite reports
+13,887 passed.
 Tessellation/geometry packaging, remaining
 unqualified fixed options, and any explicit PS5 hardware promotion remain
 open; do not label this milestone complete yet.

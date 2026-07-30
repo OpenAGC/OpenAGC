@@ -6,7 +6,7 @@ contract on a host; it is not a second GPU target.
 ## Shared reflection ABI
 
 `openagc/shader_reflection.h` defines the pointer-free
-`AgcShaderReflection` record shared with `openagc-psbc` API v14. The compiler
+`AgcShaderReflection` record shared with `openagc-psbc` API v15. The compiler
 fills it from SPIR-V, NIR/ACO, and the generated `AgcShaderRecord`; applications
 must not invent or patch compiler-derived fields. The record is copied by value
 and includes explicit size/version fields and reserved-zero space.
@@ -15,7 +15,10 @@ The reflection identifies the stage and entry point, compiler and shader-record
 versions, FNV-1a hash of the serialized main/front binaries, code ranges, wave
 size, descriptor mappings, user/system SGPRs, push ranges, vertex inputs,
 pixel exports, local size, scratch/LDS, sample behavior, NGG/fused-stage state,
-and adjacent-stage linkage masks.
+adjacent-stage linkage masks, the embedded front stage and its interface masks,
+and geometry input/output topology, vertex limits, and invocation count.
+Reflection v2 retains the fixed 5,744-byte serialized size; the runtime also
+accepts existing v1/compiler-API-14 records with their former reserved tail.
 
 Create a reflected shader with `AGC_SHADER_DESC_INIT`, setting `code`,
 `code_size`, and `reflection`; fused records also set `front_code` and

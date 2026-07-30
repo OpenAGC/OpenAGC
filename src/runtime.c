@@ -1773,18 +1773,28 @@ static int agcShaderReflectionValid(
         AGC_SHADER_SYSTEM_SGPR_WORKGROUP_ID_BIT |
         AGC_SHADER_SYSTEM_SGPR_NUM_WORKGROUPS_BIT;
     uint64_t hash;
+    int legacy_reflection;
+    int current_reflection;
     uint32_t i;
     uint32_t j;
 
+    if (!reflection)
+        return 0;
+    legacy_reflection =
+        reflection->version == AGC_SHADER_REFLECTION_VERSION_1 &&
+        reflection->compiler_api_version ==
+            AGC_SHADER_COMPILER_API_VERSION_14;
+    current_reflection =
+        reflection->version == AGC_SHADER_REFLECTION_VERSION_2 &&
+        reflection->compiler_api_version ==
+            AGC_SHADER_COMPILER_API_VERSION;
     if (!reflection || reflection->struct_size != sizeof(*reflection) ||
-        reflection->version != AGC_SHADER_REFLECTION_VERSION_1 ||
+        (!legacy_reflection && !current_reflection) ||
         reflection->stage != stage || stage >= kAgcShaderStageCount ||
         (reflection->flags & ~known_flags) != 0u ||
         (reflection->system_sgpr_mask & ~known_system_sgprs) != 0u ||
         reflection->shader_record_version !=
             AGC_SHADER_RECORD_VERSION_GEN5 ||
-        reflection->compiler_api_version !=
-            AGC_SHADER_COMPILER_API_VERSION ||
         (reflection->wave_size != 32u && reflection->wave_size != 64u) ||
         reflection->hash_algorithm != AGC_SHADER_HASH_FNV1A64 ||
         reflection->entry_point[0] == '\0' ||
@@ -1803,9 +1813,51 @@ static int agcShaderReflectionValid(
         reflection->code_offset >= binary_size ||
         reflection->code_size == 0u ||
         reflection->code_size > binary_size - reflection->code_offset ||
-        reflection->reserved0 != 0u ||
-        !agcReservedZero(reflection->reserved, 8u)) {
+        reflection->reserved0 != 0u) {
         return 0;
+    }
+    if ((legacy_reflection &&
+         (reflection->front_stage != 0u ||
+          reflection->geometry_input_primitive != 0u ||
+          reflection->geometry_output_primitive != 0u ||
+          reflection->geometry_vertices_in != 0u ||
+          reflection->geometry_vertices_out != 0u ||
+          reflection->geometry_invocations != 0u ||
+          reflection->reserved1 != 0u ||
+          reflection->front_stage_input_mask != 0u ||
+          reflection->front_stage_output_mask != 0u ||
+          reflection->front_patch_input_mask != 0u ||
+          reflection->front_patch_output_mask != 0u)) ||
+        (current_reflection &&
+         (reflection->reserved1 != 0u ||
+          reflection->front_stage > kAgcShaderStageCount ||
+          ((front_binary_size == 0u) !=
+           (reflection->front_stage == kAgcShaderStageCount))))) {
+        return 0;
+    }
+    if (current_reflection) {
+        if (stage == kAgcShaderStageGs) {
+            if (reflection->geometry_input_primitive ==
+                    AGC_SHADER_PRIMITIVE_UNDEFINED ||
+                reflection->geometry_input_primitive >=
+                    AGC_SHADER_PRIMITIVE_TOPOLOGY_COUNT ||
+                reflection->geometry_output_primitive ==
+                    AGC_SHADER_PRIMITIVE_UNDEFINED ||
+                reflection->geometry_output_primitive >=
+                    AGC_SHADER_PRIMITIVE_TOPOLOGY_COUNT ||
+                reflection->geometry_vertices_in == 0u ||
+                reflection->geometry_vertices_out == 0u ||
+                reflection->geometry_invocations == 0u)
+                return 0;
+        } else if (reflection->geometry_input_primitive !=
+                       AGC_SHADER_PRIMITIVE_UNDEFINED ||
+                   reflection->geometry_output_primitive !=
+                       AGC_SHADER_PRIMITIVE_UNDEFINED ||
+                   reflection->geometry_vertices_in != 0u ||
+                   reflection->geometry_vertices_out != 0u ||
+                   reflection->geometry_invocations != 0u) {
+            return 0;
+        }
     }
     if ((stage != kAgcShaderStageVs &&
          reflection->vertex_input_count != 0u) ||
@@ -2070,9 +2122,9 @@ int32_t PS5_SYSV_ABI agcGetShaderReflection(
     if (!shader || shader->magic != AGC_MAGIC_SHADER ||
         !agcDeviceValid(shader->device) || !reflection ||
         reflection->struct_size != sizeof(*reflection) ||
-        reflection->version != AGC_SHADER_REFLECTION_VERSION_1 ||
+        reflection->version != AGC_SHADER_REFLECTION_VERSION ||
         reflection->reserved0 != 0u ||
-        !agcReservedZero(reflection->reserved, 8u)) {
+        reflection->reserved1 != 0u) {
         return AGC_ERROR_INVALID_ARGUMENT;
     }
     if (!shader->has_reflection)

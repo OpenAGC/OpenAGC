@@ -108,7 +108,7 @@ capabilities, never on `firmware_version` or `firmware_abi_key`.
 ## Shader and pipeline validation
 
 Runtime API v2 consumes pointer-free `AgcShaderReflection` records shared with
-`openagc-psbc` API v14. Shader creation checks the reflection version, compiler
+`openagc-psbc` API v15. Shader creation checks the reflection version, compiler
 and shader-record versions, stage, entry point, FNV-1a hash, serialized record
 type, executable offsets, descriptor and push layouts, SGPR records, vertex
 inputs, color exports, wave size, scratch/LDS, and stage-specific limits before
