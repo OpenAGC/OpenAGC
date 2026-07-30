@@ -84,7 +84,11 @@
 #ifndef AGC_DRAW_INDEXED_INDIRECT
 #define AGC_DRAW_INDEXED_INDIRECT 0
 #endif
-#if (AGC_DRAW_INDEXED + AGC_DRAW_INDIRECT + AGC_DRAW_INDEXED_INDIRECT) > 1
+#ifndef AGC_DRAW_SONY_MULTI_INDIRECT
+#define AGC_DRAW_SONY_MULTI_INDIRECT 0
+#endif
+#if (AGC_DRAW_INDEXED + AGC_DRAW_INDIRECT + AGC_DRAW_INDEXED_INDIRECT + \
+     AGC_DRAW_SONY_MULTI_INDIRECT) > 1
 #error "select only one isolated application draw mode"
 #endif
 
@@ -1843,7 +1847,8 @@ static bool dispatch_graphics(GraphicsTest *test,
         ((uint8_t *)test->compute_buffer + TEXTURE_DESC_OFFSET);
     memcpy(gpu_vertices, vertices, sizeof(vertices));
     memcpy(gpu_indices, indices, sizeof(indices));
-#if AGC_DRAW_INDIRECT || AGC_DRAW_INDEXED_INDIRECT
+#if AGC_DRAW_INDIRECT || AGC_DRAW_INDEXED_INDIRECT || \
+    AGC_DRAW_SONY_MULTI_INDIRECT
     uint32_t *draw_args = (uint32_t *)
         ((uint8_t *)test->compute_buffer + DRAW_ARGS_OFFSET);
 #if AGC_DRAW_INDEXED_INDIRECT
@@ -2373,7 +2378,8 @@ static bool dispatch_graphics(GraphicsTest *test,
     state_error = agcGfx1013DrawBaselineIndexed(&cb, &indexed_draw);
     printf("[Draw] reusable baseline direct u16 indexed: 0x%08x\n",
            (unsigned)state_error);
-#elif AGC_DRAW_INDIRECT || AGC_DRAW_INDEXED_INDIRECT
+#elif AGC_DRAW_INDIRECT || AGC_DRAW_INDEXED_INDIRECT || \
+      AGC_DRAW_SONY_MULTI_INDIRECT
     const AgcGfx1013IndirectDrawState indirect_draw = {
         .draw = baseline_draw,
         .argument_buffer_address = (uint64_t)(uintptr_t)draw_args,
@@ -2391,6 +2397,44 @@ static bool dispatch_graphics(GraphicsTest *test,
         .indexed = AGC_DRAW_INDEXED_INDIRECT,
     };
     state_error = agcGfx1013DrawBaselineIndirect(&cb, &indirect_draw);
+#if AGC_DRAW_SONY_MULTI_INDIRECT
+    if (state_error == AGC_OK) {
+        static const uint32_t expected_packet[10] = {
+            0xc0082c00u, 0u, 0x08fu, 0x090u, 0x280u,
+            1u, 0u, 0u, 16u, 2u,
+        };
+        uint32_t used = agcCbUsedDwords(&cb);
+        uint32_t *qualified_packet;
+        const uint64_t modifier = UINT64_C(1) | UINT64_C(1) << 2u |
+            UINT64_C(3) << 9u | UINT64_C(4) << 19u;
+
+        if (used < 5u) {
+            printf("[Sony Multi Indirect] qualified tail audit: FAIL\n");
+            return false;
+        }
+        qualified_packet = dispatch_cb + used - 5u;
+        if (qualified_packet[0] !=
+                agcPm4Header3(AGC_PM4_OP_DRAW_INDIRECT, 5u)) {
+            printf("[Sony Multi Indirect] qualified tail audit: FAIL\n");
+            return false;
+        }
+        cb.cursor_up -= 5u * sizeof(uint32_t);
+        uint32_t *sony_packet = sceAgcDcbDrawIndirectMulti(
+            &cb, 0u, 0u, 1u, NULL, 16u, modifier);
+        bool packet_ok = sony_packet == qualified_packet;
+        for (uint32_t i = 0u; i < 10u; ++i) {
+            printf("[Sony Multi Indirect] dword[%u]=0x%08x expected=0x%08x\n",
+                   i, sony_packet ? sony_packet[i] : 0u,
+                   expected_packet[i]);
+            packet_ok = packet_ok && sony_packet &&
+                sony_packet[i] == expected_packet[i];
+        }
+        printf("[Sony Multi Indirect] exact 10-dword packet: %s\n",
+               packet_ok ? "PASS" : "FAIL");
+        if (!packet_ok)
+            return false;
+    }
+#endif
     printf("[Draw] reusable baseline %s indirect: 0x%08x\n",
            AGC_DRAW_INDEXED_INDIRECT ? "u16 indexed" : "non-indexed",
            (unsigned)state_error);

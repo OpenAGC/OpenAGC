@@ -608,6 +608,11 @@ agc_graphics_indirect_fw1160_logged.elf: agc_graphics.c ps5_video_out.h gpu_cred
 	$(CC) $(CFLAGS) $(FW1160_GRAPHICS_LOG_FLAGS) -DAGC_DRAW_INDIRECT=1 \
 		-o $@ agc_graphics.c $(AGC_LDFLAGS)
 
+agc_graphics_sony_multi_indirect_fw1160_logged.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW1160_GRAPHICS_LOG_FLAGS) \
+		-DAGC_DRAW_SONY_MULTI_INDIRECT=1 \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
 agc_graphics_indexed_indirect_fw1160_logged.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) $(FW1160_GRAPHICS_LOG_FLAGS) \
 		-DAGC_DRAW_INDEXED_INDIRECT=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
@@ -1281,6 +1286,13 @@ deploy_agc_graphics_indexed_fw1160_logged: agc_graphics_indexed_fw1160_logged.el
 deploy_agc_graphics_indirect_fw1160_logged: agc_graphics_indirect_fw1160_logged.elf
 	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
 		EXPECTED_DRAW_MODE='reusable baseline non-indexed indirect' \
+		RESULT_LOG_PATH=/data/homebrew/openagc_fw1160_graphics/result.log \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
+
+deploy_agc_graphics_sony_multi_indirect_fw1160_logged: agc_graphics_sony_multi_indirect_fw1160_logged.elf
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_DRAW_MODE='reusable baseline non-indexed indirect' \
+		EXPECTED_PACKET_AUDIT='[Sony Multi Indirect] exact 10-dword packet: PASS' \
 		RESULT_LOG_PATH=/data/homebrew/openagc_fw1160_graphics/result.log \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
 
