@@ -1209,14 +1209,14 @@ deploy_agc_graphics_fw1160: agc_graphics_fw1160.elf
 deploy_agc_graphics_r16_unorm_portable_fw1160: agc_graphics_r16_unorm_portable.elf
 	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
 		EXPECTED_FW_ABI=0x1160 EXPECTED_TARGET=R16_UNORM \
-		EXPECTED_ARTIFACT_SHA256=df32eaf88b96646489ea92fcb96b60ac07604d06c1227f5a8d7263f26b50a355 \
+		EXPECTED_ARTIFACT_SHA256=c0a5ad4732bf13c41f96560cb2dbfa3c39dffb9a47958ccbd2bef5754523220a \
 		RESULT_LOG_PATH=/data/homebrew/openagc_portable_graphics/result.log \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
 
 deploy_agc_graphics_r16_unorm_portable_fw550: agc_graphics_r16_unorm_portable.elf
 	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
 		EXPECTED_FW_ABI=0x0550 EXPECTED_TARGET=R16_UNORM \
-		EXPECTED_ARTIFACT_SHA256=df32eaf88b96646489ea92fcb96b60ac07604d06c1227f5a8d7263f26b50a355 \
+		EXPECTED_ARTIFACT_SHA256=c0a5ad4732bf13c41f96560cb2dbfa3c39dffb9a47958ccbd2bef5754523220a \
 		RESULT_LOG_PATH=/data/homebrew/openagc_portable_graphics/result.log \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
 

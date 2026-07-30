@@ -42,8 +42,11 @@
 
 #include <ps5/kernel.h>
 
-#ifndef AGC_EXPECT_FIRMWARE_ABI_KEY
-#define AGC_EXPECT_FIRMWARE_ABI_KEY 0x0550u
+#ifdef AGC_EXPECT_FIRMWARE_ABI_KEY
+#define AGC_HAS_EXPECTED_FIRMWARE_ABI_KEY 1
+#else
+#define AGC_HAS_EXPECTED_FIRMWARE_ABI_KEY 0
+#define AGC_EXPECT_FIRMWARE_ABI_KEY 0u
 #endif
 
 #ifndef AGC_GRAPHICS_HEADLESS
@@ -1111,19 +1114,21 @@ static bool init_agc(void) {
     if (err != AGC_OK) { printf("sce_agc_initialize failed: 0x%08x\n", (unsigned)err); return false; }
     g_graphics_driver_initialized = true;
 
-    AgcDriverRuntimeDiagnostics runtime_diag;
+    AgcDriverRuntimeDiagnostics runtime_diag = {0};
     err = agcDriverDebugRuntimeProfile(&runtime_diag);
+    const uint16_t runtime_key =
+        (uint16_t)(runtime_diag.firmware_version >> 16u);
     const bool profile_ok = err == AGC_OK &&
-        (runtime_diag.firmware_version >> 16u) ==
-            AGC_EXPECT_FIRMWARE_ABI_KEY &&
-        runtime_diag.profile.family == AGC_PROSPERO_ABI_STANDARD &&
+        (!AGC_HAS_EXPECTED_FIRMWARE_ABI_KEY ||
+         runtime_key == AGC_EXPECT_FIRMWARE_ABI_KEY) &&
+        runtime_diag.profile.family != AGC_PROSPERO_ABI_UNSUPPORTED &&
         !runtime_diag.profile.is_trinity;
     printf("Runtime profile FW ABI 0x%04X: %s\n",
-           AGC_EXPECT_FIRMWARE_ABI_KEY, profile_ok ? "PASS" : "FAIL");
+           runtime_key, profile_ok ? "PASS" : "FAIL");
     if (!profile_ok)
         return false;
 
-    err = sceAgcInit(agcTestDefaultsVersion(AGC_EXPECT_FIRMWARE_ABI_KEY));
+    err = sceAgcInit(agcTestDefaultsVersion(runtime_key));
     if (err != AGC_OK) {
         printf("sceAgcInit failed: 0x%08x\n", (unsigned)err);
         return false;
