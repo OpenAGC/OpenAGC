@@ -196,11 +196,16 @@ all `SRC1_*` blend factors. The reflection ABI does not yet carry a secondary
 export index, so the separate low-level dual-source builder evidence cannot
 promote an ambiguous runtime contract.
 
-The Prospero native queue bridge submits the GPU-visible command allocation
-through the direct carrier only with an explicit runtime fence, appends an EOP
-completion write, and retains command ownership until a bounded status poll or
-wait observes that write. It is covered by the generic carrier checks and the
-Prospero cross-build; no PS5 execution claim is made.
+The Prospero native queue bridge submits the GPU-visible graphics and compute
+command allocations through the direct DCB carrier only with an explicit
+runtime fence, appends an EOP completion write, and retains command ownership
+until a bounded status poll or wait observes that write. Its first public
+runtime FW 5.50 compute attempt used the former user-special-queue ACB route:
+submission returned `AGC_OK`, but the EOP fence timed out. The revised DCB
+route matches the separately qualified compute carrier and is covered by the
+generic carrier checks and the Prospero cross-build; its changed artifact has
+not yet passed an exact-firmware PS5 oracle, so no runtime hardware claim is
+made.
 
 An opt-in combined-tree integration target compiles real `openagc-psbc`
 vertex, fragment, and compute artifacts, then creates OpenAGC graphics and

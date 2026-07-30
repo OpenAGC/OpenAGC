@@ -855,19 +855,31 @@ int32_t PS5_SYSV_ABI agcCreateQueue(
     } else if (desc->type == kAgcQueueCompute) {
         if (device->compute_queue_count != 0u)
             return AGC_ERROR_BUSY;
+#ifdef OPENAGC_PROSPERO
+        /* The qualified FW 5.50 compute stream uses the direct DCB carrier
+         * after async graphics setup.  A user-special queue/ACB submission
+         * accepted the runtime stream but did not reach its EOP fence. */
+        handle = sceAgcDriverSetupAsyncGraphics(1u);
+        if (handle != AGC_OK)
+            return handle;
+        handle = -1;
+#else
         handle = sceAgcDriverSetupAsyncGraphics(0u);
         if (handle != AGC_OK)
             return handle;
         handle = _sceAgcDriverCreateUserSpecialQueue();
         if (handle < 0)
             return handle;
+#endif
     } else {
         return AGC_ERROR_NOT_SUPPORTED;
     }
     queue = agcCreateChild(device, sizeof(*queue));
     if (!queue) {
+#ifndef OPENAGC_PROSPERO
         if (desc->type == kAgcQueueCompute)
             (void)_sceAgcDriverDestroyUserSpecialQueue();
+#endif
         return AGC_ERROR_OUT_OF_MEMORY;
     }
     queue->magic = AGC_MAGIC_QUEUE;
@@ -885,7 +897,9 @@ int32_t PS5_SYSV_ABI agcCreateQueue(
 int32_t PS5_SYSV_ABI agcDestroyQueue(AgcQueue queue)
 {
     AgcDevice device;
+#ifndef OPENAGC_PROSPERO
     int32_t result;
+#endif
 
     if (!queue || queue->magic != AGC_MAGIC_QUEUE ||
         !agcDeviceValid(queue->device)) {
@@ -895,9 +909,11 @@ int32_t PS5_SYSV_ABI agcDestroyQueue(AgcQueue queue)
         return AGC_ERROR_BUSY;
     device = queue->device;
     if (queue->type == kAgcQueueCompute) {
+#ifndef OPENAGC_PROSPERO
         result = _sceAgcDriverDestroyUserSpecialQueue();
         if (result != AGC_OK)
             return result;
+#endif
         device->compute_queue_count--;
     } else {
         device->graphics_queue_count--;
@@ -5657,10 +5673,17 @@ int32_t PS5_SYSV_ABI agcQueueSubmit(
     queue->pending_count++;
     if (fence)
         fence->pending_refs++;
-    if (queue->type == kAgcQueueCompute)
-        result = sceAgcDriverSubmitAcb((uint32_t)queue->backend_handle, &packet);
-    else
+    if (queue->type == kAgcQueueCompute) {
+#ifdef OPENAGC_PROSPERO
+        /* Direct DCB compute submission is hardware-proven on FW 5.50.
+         * Keep the host backend on its ACB queue path for carrier coverage. */
         result = sceAgcDriverSubmitDcb(&packet);
+#else
+        result = sceAgcDriverSubmitAcb((uint32_t)queue->backend_handle, &packet);
+#endif
+    } else {
+        result = sceAgcDriverSubmitDcb(&packet);
+    }
     if (result == AGC_ERROR_NOT_INITIALIZED)
         result = AGC_ERROR_DEVICE_LOST;
 #ifdef OPENAGC_PROSPERO

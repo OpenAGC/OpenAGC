@@ -326,10 +326,14 @@ Compiler-fused VS/TCS plus TES/NGG and TES-to-geometry pipelines are also
 host-packaged. They validate complete stage and patch linkage, derive off-chip
 layouts from reflection, reuse runtime-owned device rings, require whole-patch
 draws, and pass isolated and combined host submission tests.
-On Prospero, native runtime submission now carries GPU-visible DCB/ACB
-addresses and appends a runtime-owned EOP completion fence before retaining
-recorded resources as pending. This bridge has only host-carrier coverage and
-Prospero cross-build evidence; it is not a hardware promotion.
+On Prospero, native runtime submission carries GPU-visible graphics and
+compute buffers through the direct DCB carrier and appends a runtime-owned EOP
+completion fence before retaining recorded resources as pending. The first
+public-runtime FW 5.50 compute attempt used its former user-special-queue ACB
+route: submission returned `AGC_OK`, but the EOP fence timed out. The revised
+DCB route matches the separately hardware-qualified compute carrier, has
+generic coverage and a clean Prospero cross-build, and still awaits its own
+changed-artifact FW 5.50 rerun; it is not a hardware promotion.
 Remaining unqualified geometry forms, remaining
 unqualified fixed options, and any explicit PS5 hardware promotion remain
 open; do not label this milestone complete yet.
