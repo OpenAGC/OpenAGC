@@ -126,6 +126,10 @@ passed a reflected dispatch in the first DCB and its dependent
 `shader-write -> host-read` transition in the second, followed by batch-fence
 completion and readback on exact FW 5.50; see
 `analysis/runtime_batch_transition_chain_fw550_20260731.md`.
+Runtime API v11 adds `agcCmdCopyBuffer`: four-byte-aligned non-overlapping
+buffer copies require explicit `CopySource` and `CopyDestination` states,
+retain both buffers, and emit the qualified Ariel `DMA_DATA` packet sequence.
+This path is host-qualified; PS5 hardware qualification remains open.
 FW 11.60 remains hardware-unqualified.
 
 ## Native resource and memory management complete (2026-07-30)

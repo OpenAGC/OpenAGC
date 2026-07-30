@@ -507,6 +507,12 @@ and dependent `shader-write -> host-read` transition in the second, then batch
 fence/readback on exact FW 5.50. Cross-queue dependencies and other firmware
 profiles remain open.
 
+Runtime API v11 adds typed native buffer copies. `agcCmdCopyBuffer` rejects
+untransitioned, unaligned, out-of-bounds, and overlapping ranges before packet
+emission; host coverage verifies the `DMA_DATA` stream, transition validation,
+retention, and host-read destination release. Exact-FW copy qualification and
+the compute-to-copy-to-shader row remain open.
+
 Runtime API v8 adds the first typed queue-ownership handoff: a v2 transition
 releases a whole GPU-written resource on its source queue and writes the
 caller-provided monotonic label value, while the matching destination-side v2

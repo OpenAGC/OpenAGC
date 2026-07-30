@@ -1788,6 +1788,99 @@ static void test_runtime_batch_transition_chain(void)
         "batch transition device destroys");
 }
 
+static void test_runtime_copy_buffer_submission(void)
+{
+    AgcDevice device = create_device();
+    AgcQueue queue = create_queue(device, kAgcQueueCompute);
+    AgcBufferDesc source_desc = AGC_BUFFER_DESC_INIT;
+    AgcBufferDesc destination_desc = AGC_BUFFER_DESC_INIT;
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
+    AgcResourceTransition transitions[2] = {
+        AGC_RESOURCE_TRANSITION_INIT, AGC_RESOURCE_TRANSITION_INIT
+    };
+    AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    AgcBuffer source = NULL;
+    AgcBuffer destination = NULL;
+    AgcCommandBuffer command_buffer = NULL;
+    AgcFence fence = NULL;
+    const AgcCommandBufferSubmit *captured;
+    const uint32_t *words;
+    uint32_t owner = UINT32_MAX;
+
+    source_desc.size = 64u;
+    source_desc.usage = AGC_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    destination_desc.size = 64u;
+    destination_desc.usage = AGC_BUFFER_USAGE_TRANSFER_DST_BIT;
+    destination_desc.flags = AGC_BUFFER_CREATE_READBACK_BIT;
+    command_desc.queue_type = kAgcQueueCompute;
+    command_desc.capacity_dwords = 64u;
+    TEST_ASSERT_EQ(agcCreateBuffer(device, &source_desc, &source), AGC_OK,
+        "copy source buffer creates");
+    TEST_ASSERT_EQ(agcCreateBuffer(device, &destination_desc, &destination), AGC_OK,
+        "copy destination buffer creates");
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc,
+        &command_buffer), AGC_OK, "copy command buffer creates");
+    TEST_ASSERT_EQ(agcCreateFence(device, &fence_desc, &fence), AGC_OK,
+        "copy fence creates");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command_buffer), AGC_OK,
+        "copy command begins");
+    TEST_ASSERT_EQ(agcCmdCopyBuffer(command_buffer, source, 0u, destination,
+        0u, 64u), AGC_ERROR_INVALID_STATE,
+        "copy rejects before typed transitions");
+    transitions[0].resource_type = kAgcResourceTypeBuffer;
+    transitions[0].buffer = source;
+    transitions[0].buffer_size = source_desc.size;
+    transitions[0].before = kAgcResourceUsageUndefined;
+    transitions[0].after = kAgcResourceUsageCopySource;
+    transitions[0].before_owner = kAgcResourceOwnerHost;
+    transitions[0].after_owner = kAgcResourceOwnerCompute;
+    transitions[1].resource_type = kAgcResourceTypeBuffer;
+    transitions[1].buffer = destination;
+    transitions[1].buffer_size = destination_desc.size;
+    transitions[1].before = kAgcResourceUsageUndefined;
+    transitions[1].after = kAgcResourceUsageCopyDestination;
+    transitions[1].before_owner = kAgcResourceOwnerHost;
+    transitions[1].after_owner = kAgcResourceOwnerCompute;
+    TEST_ASSERT_EQ(agcCmdTransitionResources(command_buffer, 2u, transitions),
+        AGC_OK, "copy source and destination transitions record");
+    TEST_ASSERT_EQ(agcCmdCopyBuffer(command_buffer, source, 0u, destination,
+        0u, 64u), AGC_OK, "typed copy records DMA packet");
+    TEST_ASSERT_EQ(agcCmdCopyBuffer(command_buffer, destination, 0u,
+        destination, 4u, 32u), AGC_ERROR_INVALID_ARGUMENT,
+        "overlapping copy rejects without command mutation");
+    transitions[1].before = kAgcResourceUsageCopyDestination;
+    transitions[1].after = kAgcResourceUsageHostRead;
+    transitions[1].before_owner = kAgcResourceOwnerCompute;
+    transitions[1].after_owner = kAgcResourceOwnerHost;
+    TEST_ASSERT_EQ(agcCmdTransitionResources(command_buffer, 1u,
+        &transitions[1]), AGC_OK, "copy destination host-read transition records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command_buffer), AGC_OK,
+        "copy command ends");
+    submit.command_buffer_count = 1u;
+    submit.command_buffers = &command_buffer;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
+        "typed copy submits");
+    captured = agcDriverDebugLastAcbSubmit(&owner);
+    words = (const uint32_t *)(uintptr_t)captured->command_address;
+    TEST_ASSERT(captured != NULL && owner != UINT32_MAX &&
+        runtime_has_opcode(words, captured->dword_count, AGC_PM4_OP_DMA_DATA),
+        "typed copy submit contains DMA_DATA");
+    TEST_ASSERT_EQ(agcDestroyBuffer(source), AGC_ERROR_BUSY,
+        "submitted copy retains source through command reset");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command_buffer), AGC_OK,
+        "copy command resets");
+    TEST_ASSERT_EQ(agcDestroyFence(fence), AGC_OK, "copy fence destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(command_buffer), AGC_OK,
+        "copy command buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyBuffer(destination), AGC_OK,
+        "copy destination buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyBuffer(source), AGC_OK,
+        "copy source buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK, "copy queue destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK, "copy device destroys");
+}
+
 static void test_runtime_gpu_labels(void)
 {
     AgcDevice device = create_device();
@@ -5217,6 +5310,7 @@ void test_suite_runtime(void)
     TEST_RUN(test_runtime_multi_graphics_submission);
     TEST_RUN(test_runtime_multi_compute_submission);
     TEST_RUN(test_runtime_batch_transition_chain);
+    TEST_RUN(test_runtime_copy_buffer_submission);
     TEST_RUN(test_runtime_gpu_labels);
     TEST_RUN(test_runtime_submit_label_lists);
     TEST_RUN(test_runtime_image_transfer);

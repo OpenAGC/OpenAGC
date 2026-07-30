@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-#define AGC_RUNTIME_API_VERSION 10u
+#define AGC_RUNTIME_API_VERSION 11u
 #define AGC_RUNTIME_STRUCTURE_VERSION_1 1u
 #define AGC_RUNTIME_STRUCTURE_VERSION_2 2u
 #define AGC_RUNTIME_PROFILE_NAME_SIZE 48u
@@ -1143,6 +1143,12 @@ int32_t PS5_SYSV_ABI agcCmdBindDepthStencilTarget(
 int32_t PS5_SYSV_ABI agcCmdTransitionResources(
     AgcCommandBuffer command_buffer, uint32_t transition_count,
     const AgcResourceTransition *transitions);
+/* Copies a four-byte-aligned buffer range after explicit CopySource and
+ * CopyDestination transitions establish ownership on this command buffer's
+ * queue. Overlapping source/destination ranges are rejected. */
+int32_t PS5_SYSV_ABI agcCmdCopyBuffer(AgcCommandBuffer command_buffer,
+    AgcBuffer source, uint64_t source_offset, AgcBuffer destination,
+    uint64_t destination_offset, uint64_t size);
 int32_t PS5_SYSV_ABI agcCmdBindDescriptors(AgcCommandBuffer command_buffer,
     uint32_t write_count, const AgcDescriptorWrite *writes);
 int32_t PS5_SYSV_ABI agcCmdBindVertexBuffers(AgcCommandBuffer command_buffer,

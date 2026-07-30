@@ -126,6 +126,13 @@ transition and second-DCB dependent `shader-write -> host-read` transition,
 then readback; see
 [`runtime_batch_transition_chain_fw550_20260731.md`](../analysis/runtime_batch_transition_chain_fw550_20260731.md).
 
+Runtime API v11 adds `agcCmdCopyBuffer(command, source, sourceOffset,
+destination, destinationOffset, size)`. Source and destination must have
+explicit `CopySource` and `CopyDestination` usage on the command queue; ranges
+are nonzero, four-byte aligned, in bounds, and non-overlapping. The runtime
+retains both buffers and emits qualified `DMA_DATA` packets internally. This
+copy path is host-qualified; its hardware row remains open.
+
 `AgcGpuLabel` provides the first GPU-side dependency primitive. A producer
 records `agcCmdSignalGpuLabel`; it emits the qualified EOP release write. A
 consumer records `agcCmdWaitGpuLabel`; it emits a 32-bit `WAIT_REG_MEM` exact
