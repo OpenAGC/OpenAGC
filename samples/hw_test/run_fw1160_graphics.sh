@@ -14,11 +14,22 @@ REQUIRE_COUNT_BUFFER_ORACLE=${REQUIRE_COUNT_BUFFER_ORACLE:-0}
 EXPECTED_VARIANT=${EXPECTED_VARIANT:-}
 REQUIRE_TESS_RINGS=${REQUIRE_TESS_RINGS:-0}
 EXPECTED_FW_ABI=${EXPECTED_FW_ABI:-0x1160}
+EXPECTED_ARTIFACT_SHA256=${EXPECTED_ARTIFACT_SHA256:-}
 REMOTE_BASE=/data/homebrew/openagc_fw${EXPECTED_FW_ABI#0x}_graphics
 
 if [ ! -s "$GRAPHICS_ARTIFACT" ] || [ ! -s "$PROCESS_CLEANUP_ELF" ]; then
     echo "missing graphics-test or process-cleanup ELF" >&2
     exit 2
+fi
+if [ -n "$EXPECTED_ARTIFACT_SHA256" ]; then
+    artifact_sha=$(shasum -a 256 "$GRAPHICS_ARTIFACT" | awk '{print $1}') ||
+        exit 2
+    if [ "$artifact_sha" != "$EXPECTED_ARTIFACT_SHA256" ]; then
+        echo "graphics artifact SHA-256 mismatch" >&2
+        echo "expected: $EXPECTED_ARTIFACT_SHA256" >&2
+        echo "actual:   $artifact_sha" >&2
+        exit 2
+    fi
 fi
 
 curl -sS --fail --ftp-create-dirs -T "$PROCESS_CLEANUP_ELF" \
@@ -35,7 +46,19 @@ curl -sS --fail --max-time 5 "http://$PS5_HOST:8080/" >/dev/null || exit 1
 curl -sS --fail --ftp-create-dirs -T "$GRAPHICS_ARTIFACT" \
     "ftp://$PS5_HOST:2121$REMOTE_BASE/eboot.elf" || exit 1
 output_file=$(mktemp) || exit 2
-trap 'rm -f "$output_file"' EXIT HUP INT TERM
+uploaded_file=$(mktemp) || exit 2
+trap 'rm -f "$output_file" "$uploaded_file"' EXIT HUP INT TERM
+if [ -n "$EXPECTED_ARTIFACT_SHA256" ]; then
+    curl -sS --fail "ftp://$PS5_HOST:2121$REMOTE_BASE/eboot.elf" \
+        -o "$uploaded_file" || exit 1
+    uploaded_sha=$(shasum -a 256 "$uploaded_file" | awk '{print $1}') ||
+        exit 1
+    if [ "$uploaded_sha" != "$EXPECTED_ARTIFACT_SHA256" ]; then
+        echo "uploaded graphics artifact SHA-256 mismatch" >&2
+        exit 1
+    fi
+    echo "Pinned graphics ELF: $EXPECTED_ARTIFACT_SHA256"
+fi
 transport_status=0
 if [ -n "${RESULT_LOG_PATH:-}" ]; then
     result_ftp_url="ftp://$PS5_HOST:2121$RESULT_LOG_PATH"
@@ -102,6 +125,12 @@ if [ "$REQUIRE_TESS_RINGS" -eq 1 ]; then
         "$output_file" || exit 1
 fi
 case "$EXPECTED_TARGET" in
+    R16_UNORM)
+        grep -Eq '^\[UNORM16\] GFX1013 R16_UNORM target: PASS$' \
+            "$output_file" || exit 1
+        grep -Eq '^\[UNORM16\] Stored components: 1; complete samples: [1-9][0-9]*; range=0x[0-9a-f]{4}\.\.0x[0-9a-f]{4}; out-of-range components: 0$' \
+            "$output_file" || exit 1
+        ;;
     R8_UNORM|RG8_UNORM)
         grep -Eq '^\[UNORM8\].*: PASS$' "$output_file" || exit 1
         ;;

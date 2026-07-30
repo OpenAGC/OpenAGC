@@ -512,6 +512,9 @@ int sceKernelDeleteEqueue(SceKernelEqueue equeue);
 #ifndef AGC_VALIDATE_RG16_FLOAT
 #define AGC_VALIDATE_RG16_FLOAT 0
 #endif
+#ifndef AGC_VALIDATE_R16_UNORM
+#define AGC_VALIDATE_R16_UNORM 0
+#endif
 #ifndef AGC_VALIDATE_R8_UNORM
 #define AGC_VALIDATE_R8_UNORM 0
 #endif
@@ -537,6 +540,7 @@ int sceKernelDeleteEqueue(SceKernelEqueue equeue);
      AGC_VALIDATE_RGB10A2 + AGC_VALIDATE_R11G11B10 + \
      AGC_VALIDATE_RGBA8_SRGB + AGC_VALIDATE_BGRA8_SRGB + \
      AGC_VALIDATE_R16_FLOAT + AGC_VALIDATE_RG16_FLOAT + \
+     AGC_VALIDATE_R16_UNORM + \
      AGC_VALIDATE_R8_UNORM + AGC_VALIDATE_RG8_UNORM + \
      AGC_VALIDATE_R32_FLOAT + AGC_VALIDATE_RG32_FLOAT + \
      AGC_VALIDATE_RGBA32_FLOAT) > 1
@@ -2855,6 +2859,8 @@ static bool dispatch_graphics(GraphicsTest *test,
         uint32_t changed = 0;
         uint32_t complete_samples = 0;
         uint32_t out_of_range_components = 0;
+        uint16_t min_component = UINT16_MAX;
+        uint16_t max_component = 0u;
         uint64_t packed_hash = UINT64_C(1469598103934665603);
         uint32_t min_x = target->width;
         uint32_t min_y = target->height;
@@ -2881,8 +2887,11 @@ static bool dispatch_graphics(GraphicsTest *test,
             complete_samples += pixel_complete;
             for (uint32_t lane = 0; lane < components; lane++) {
                 uint16_t component = (uint16_t)(color >> (lane * 16u));
-                if ((component & 0x8000u) != 0u || component > 0x3c00u)
+                if (target->number_type == AGC_GFX1013_SURFACE_NUMBER_FLOAT &&
+                    ((component & 0x8000u) != 0u || component > 0x3c00u))
                     out_of_range_components++;
+                if (component < min_component) min_component = component;
+                if (component > max_component) max_component = component;
             }
             if (unique_color_count < 8) {
                 bool seen = false;
@@ -2924,21 +2933,30 @@ static bool dispatch_graphics(GraphicsTest *test,
             (((uint64_t)target_pixels * 1774u) / 16384u);
 #endif
         const uint32_t coverage_tolerance = target->width;
-        printf("[FP16] Changed pixels: %u / %u (expected about %u)\n",
-               changed, target_pixels, expected_changed);
+        const bool unorm16 = target->number_type ==
+            AGC_GFX1013_SURFACE_NUMBER_UNORM;
+        printf("[%s] Changed pixels: %u / %u (expected about %u)\n",
+               unorm16 ? "UNORM16" : "FP16", changed, target_pixels,
+               expected_changed);
         if (changed != 0u) {
-            printf("[FP16] Coverage bounds: x=%u..%u y=%u..%u (%ux%u)\n",
+            printf("[%s] Coverage bounds: x=%u..%u y=%u..%u (%ux%u)\n",
+                   unorm16 ? "UNORM16" : "FP16",
                    min_x, max_x, min_y, max_y,
                    max_x - min_x + 1u, max_y - min_y + 1u);
         }
-        printf("[FP16] Distinct sampled colors: %u\n", unique_color_count);
+        printf("[%s] Distinct sampled colors: %u\n",
+               unorm16 ? "UNORM16" : "FP16", unique_color_count);
         for (uint32_t i = 0; i < unique_color_count; i++)
-            printf("  fp16_color[%u] = 0x%016llx\n", i,
+            printf("  %s_color[%u] = 0x%016llx\n",
+                   unorm16 ? "unorm16" : "fp16", i,
                    (unsigned long long)unique_colors[i]);
-        printf("[FP16] Stored components: %u; complete samples: %u; "
-               "out-of-range components: %u\n",
-               components, complete_samples, out_of_range_components);
-        printf("[FP16] Native packed FNV64: 0x%016llx\n",
+        printf("[%s] Stored components: %u; complete samples: %u; "
+               "range=0x%04x..0x%04x; out-of-range components: %u\n",
+               unorm16 ? "UNORM16" : "FP16", components,
+               complete_samples, min_component, max_component,
+               out_of_range_components);
+        printf("[%s] Native packed FNV64: 0x%016llx\n",
+               unorm16 ? "UNORM16" : "FP16",
                (unsigned long long)packed_hash);
 #if AGC_NGG_INPUT_LINES || AGC_TESS_GEOMETRY_LINES
         const bool color_pass = unique_color_count == 1u &&
@@ -2946,6 +2964,8 @@ static bool dispatch_graphics(GraphicsTest *test,
 #else
         const bool color_pass = unique_color_count >= 8u;
 #endif
+        const bool encoding_pass = !unorm16 ||
+            (min_component <= 0x1000u && max_component >= 0xefffu);
 #if AGC_INDIRECT_DRAW_COUNT > 1
         const bool multi_draw_pass =
             changed > expected_changed + coverage_tolerance &&
@@ -2957,8 +2977,6 @@ static bool dispatch_graphics(GraphicsTest *test,
         printf("[Indirect Count] GPU-selected records=2: %s\n",
                multi_draw_pass ? "PASS" : "FAIL");
 #endif
-#else
-        const bool multi_draw_pass = true;
 #endif
         const bool fp16_pass =
 #if AGC_INDIRECT_DRAW_COUNT > 1
@@ -2968,9 +2986,11 @@ static bool dispatch_graphics(GraphicsTest *test,
                                changed <= expected_changed + coverage_tolerance &&
 #endif
                                color_pass &&
+                               encoding_pass &&
                                complete_samples == changed &&
                                out_of_range_components == 0u;
-        printf("[FP16] GFX1013 %s target: %s\n",
+        printf("[%s] GFX1013 %s target: %s\n",
+               unorm16 ? "UNORM16" : "FP16",
                target->name, fp16_pass ? "PASS" : "FAIL");
         return fp16_pass;
     }
@@ -3158,6 +3178,37 @@ static void visualize_fp16(GraphicsTest *test, uint32_t components) {
     printf("[FP16] %u-component CPU preview: %ux%u centered on RGBA8 display\n",
            components, preview_width, preview_height);
 }
+
+#if AGC_VALIDATE_R16_UNORM
+static void visualize_unorm16(GraphicsTest *test) {
+    const uint16_t *source = (const uint16_t *)test->render_target;
+    uint32_t *display = (uint32_t *)test->buffers[0];
+    const uint32_t preview_width = FP16_TARGET_WIDTH / FP16_PREVIEW_DIVISOR;
+    const uint32_t preview_height = FP16_TARGET_HEIGHT / FP16_PREVIEW_DIVISOR;
+    const uint32_t origin_x = (test->width - preview_width) / 2u;
+    const uint32_t origin_y = (test->height - preview_height) / 2u;
+
+    for (uint32_t i = 0u; i < test->width * test->height; ++i)
+        display[i] = DIAGNOSTIC_CLEAR_COLOR;
+    for (uint32_t y = 0u; y < preview_height; ++y) {
+        const uint32_t source_y = y * FP16_PREVIEW_DIVISOR;
+        for (uint32_t x = 0u; x < preview_width; ++x) {
+            const uint16_t value = source[
+                source_y * FP16_TARGET_WIDTH +
+                x * FP16_PREVIEW_DIVISOR];
+            if (value == (uint16_t)FP16_CLEAR_SENTINEL)
+                continue;
+            const uint8_t red = (uint8_t)(value >> 8u);
+            display[(origin_y + y) * test->width + origin_x + x] =
+                UINT32_C(0xff000000) | red;
+        }
+    }
+    memcpy(test->buffers[1], test->buffers[0],
+           (size_t)test->width * test->height * BYTES_PER_PIXEL);
+    printf("[UNORM16] CPU preview: %ux%u centered on RGBA8 display\n",
+           preview_width, preview_height);
+}
+#endif
 #endif
 
 #if AGC_VALIDATE_R8_UNORM || AGC_VALIDATE_RG8_UNORM || \
@@ -3627,27 +3678,34 @@ int main(void) {
 #if !AGC_GRAPHICS_HEADLESS
     visualize_native(&test, components, 4u);
 #endif
-#elif AGC_VALIDATE_R16_FLOAT || AGC_VALIDATE_RG16_FLOAT
+#elif AGC_VALIDATE_R16_FLOAT || AGC_VALIDATE_RG16_FLOAT || \
+      AGC_VALIDATE_R16_UNORM
     const uint32_t components = AGC_VALIDATE_RG16_FLOAT ? 2u : 1u;
-    RenderTargetConfig fp16_narrow_target = {
+    RenderTargetConfig narrow_16_target = {
         test.render_target, FP16_TARGET_WIDTH, FP16_TARGET_HEIGHT,
         AGC_VALIDATE_RG16_FLOAT ? AGC_GFX1013_COLOR_FORMAT_16_16 :
             AGC_GFX1013_COLOR_FORMAT_16,
-        AGC_GFX1013_SURFACE_NUMBER_FLOAT,
+        AGC_VALIDATE_R16_UNORM ? AGC_GFX1013_SURFACE_NUMBER_UNORM :
+            AGC_GFX1013_SURFACE_NUMBER_FLOAT,
         AGC_GFX1013_SURFACE_SWAP_STD,
         components, 2u, AGC_VALIDATE_RG16_FLOAT ?
-            "RG16_FLOAT" : "R16_FLOAT"
+            "RG16_FLOAT" : (AGC_VALIDATE_R16_UNORM ?
+                "R16_UNORM" : "R16_FLOAT")
     };
     printf("\n--- Step 4: %s offscreen draw ---\n",
-           fp16_narrow_target.name);
+           narrow_16_target.name);
     if (!dispatch_graphics(
-            &test, &front, &back, &ps, &fp16_narrow_target)) {
+            &test, &front, &back, &ps, &narrow_16_target)) {
         printf("FATAL: %s render-target validation failed\n",
-               fp16_narrow_target.name);
+               narrow_16_target.name);
         return 1;
     }
 #if !AGC_GRAPHICS_HEADLESS
+#if AGC_VALIDATE_R16_UNORM
+    visualize_unorm16(&test);
+#else
     visualize_fp16(&test, components);
+#endif
 #endif
 #elif AGC_VALIDATE_R11G11B10
     RenderTargetConfig r11g11b10_target = {

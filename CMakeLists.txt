@@ -127,6 +127,14 @@ add_test(NAME portability_runner_fail_closed
     COMMAND sh
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_portability_runner.sh
         ${CMAKE_CURRENT_SOURCE_DIR}/samples/hw_test/run_portability.sh)
+add_test(NAME graphics_runner_fail_closed
+    COMMAND sh
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_graphics_runner_fail_closed.sh
+        ${CMAKE_CURRENT_SOURCE_DIR}/samples/hw_test/run_fw1160_graphics.sh)
+add_test(NAME firmware_neutral_elf_verifier
+    COMMAND sh
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_firmware_neutral_elf_verifier.sh
+        ${CMAKE_CURRENT_SOURCE_DIR}/tools/verify_firmware_neutral_elf.sh)
 endif()
 
 # === Host shader compiler packaging ===

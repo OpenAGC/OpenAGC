@@ -523,6 +523,16 @@ FW1160_GRAPHICS_LOG_FLAGS := $(FW1160_GRAPHICS_FLAGS) \
 	-DAGC_RESULT_LOG_PATH='"/data/homebrew/openagc_fw1160_graphics/result.log"'
 FW550_HEADLESS_GRAPHICS_FLAGS := -DAGC_EXPECT_FIRMWARE_ABI_KEY=0x0550u \
 	-DAGC_GRAPHICS_HEADLESS=1 -DAGC_SELF_TERMINATE=1
+PORTABLE_GRAPHICS_FLAGS := -DAGC_GRAPHICS_HEADLESS=1 -DAGC_SELF_TERMINATE=1 \
+	-DAGC_RESULT_LOG_PATH='"/data/homebrew/openagc_portable_graphics/result.log"'
+
+# Firmware-neutral color gate. The exact same ELF is replayed on every
+# supported profile; do not add AGC_EXPECT_FIRMWARE_ABI_KEY here.
+agc_graphics_r16_unorm_portable.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(PORTABLE_GRAPHICS_FLAGS) -DAGC_VALIDATE_R16_UNORM=1 \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+	../../tools/verify_firmware_neutral_elf.sh $@ \
+		/data/homebrew/openagc_portable_graphics/result.log
 
 agc_graphics_r16_float_fw1160.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) $(FW1160_GRAPHICS_FLAGS) -DAGC_VALIDATE_R16_FLOAT=1 \
@@ -1160,6 +1170,8 @@ deploy_agc_graphics: agc_graphics.elf
 	PS5_HOST=$(PS5_HOST) ./run_fw550_conformance.sh --sample agc_graphics
 
 .PHONY: deploy_agc_graphics_fw1160 \
+	deploy_agc_graphics_r16_unorm_portable_fw1160 \
+	deploy_agc_graphics_r16_unorm_portable_fw550 \
 	deploy_agc_graphics_r16_float_fw1160 \
 	deploy_agc_graphics_rg16_float_fw1160 \
 	deploy_agc_graphics_rgb10a2_fw1160 \
@@ -1192,6 +1204,20 @@ deploy_agc_graphics: agc_graphics.elf
 	deploy_agc_tess_geometry_rgba8_fw1160_logged
 deploy_agc_graphics_fw1160: agc_graphics_fw1160.elf
 	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
+
+deploy_agc_graphics_r16_unorm_portable_fw1160: agc_graphics_r16_unorm_portable.elf
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_FW_ABI=0x1160 EXPECTED_TARGET=R16_UNORM \
+		EXPECTED_ARTIFACT_SHA256=df32eaf88b96646489ea92fcb96b60ac07604d06c1227f5a8d7263f26b50a355 \
+		RESULT_LOG_PATH=/data/homebrew/openagc_portable_graphics/result.log \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
+
+deploy_agc_graphics_r16_unorm_portable_fw550: agc_graphics_r16_unorm_portable.elf
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_FW_ABI=0x0550 EXPECTED_TARGET=R16_UNORM \
+		EXPECTED_ARTIFACT_SHA256=df32eaf88b96646489ea92fcb96b60ac07604d06c1227f5a8d7263f26b50a355 \
+		RESULT_LOG_PATH=/data/homebrew/openagc_portable_graphics/result.log \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
 
 deploy_agc_graphics_r16_float_fw1160: agc_graphics_r16_float_fw1160.elf

@@ -4,6 +4,7 @@
 
 #include "agc_error.h"
 #include "agc_context.h"
+#include "agc_graphics.h"
 #include "agc_ioctl.h"
 #include "agc_pm4.h"
 #include "driver_ops.h"
@@ -312,6 +313,8 @@ static void test_common_operation_carrier_profiles(void)
         AgcFirmwareVersion version =
             agcFirmwareNormalize(active_raw_versions[i]);
         AgcProsperoDirectProfile profile;
+        AgcGfx1013ColorTargetFormatInfo r16_unorm_info;
+        AgcGfx1013ColorTargetState r16_unorm_target;
         uint32_t raw = active_raw_versions[i];
         uint16_t key = (uint16_t)(raw >> 16);
         uint8_t major_bcd = (uint8_t)(key >> 8);
@@ -330,6 +333,22 @@ static void test_common_operation_carrier_profiles(void)
             "full firmware value selects its exact direct profile");
         TEST_ASSERT(agcProsperoFirmwareSupported(raw),
             "every active exact profile is runtime-selectable");
+        TEST_ASSERT_EQ(agcGfx1013GetColorTargetFormatInfo(
+            AGC_GFX1013_RT_FORMAT_R16_UNORM, &r16_unorm_info), AGC_OK,
+            "firmware-neutral R16 UNORM tuple resolves for active profile");
+        TEST_ASSERT_EQ(r16_unorm_info.color_format,
+            AGC_GFX1013_COLOR_FORMAT_16,
+            "active profile shares the gfx1013 16-bit color encoding");
+        TEST_ASSERT_EQ(r16_unorm_info.number_type,
+            AGC_GFX1013_SURFACE_NUMBER_UNORM,
+            "active profile shares the gfx1013 UNORM number encoding");
+        TEST_ASSERT_EQ(agcGfx1013InitColorTarget(&r16_unorm_target,
+            UINT64_C(0x0000000201000000), 1536u, 1536u,
+            AGC_GFX1013_RT_FORMAT_R16_UNORM), AGC_OK,
+            "firmware-neutral R16 UNORM target initializes");
+        TEST_ASSERT_EQ(r16_unorm_target.number_type,
+            AGC_GFX1013_SURFACE_NUMBER_UNORM,
+            "active profile receives the same typed R16 UNORM state");
         TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_TF_RING) != 0,
             "active profile exposes exact public TF-ring carrier");
         TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_MEMORY) != 0,

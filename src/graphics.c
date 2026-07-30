@@ -1425,7 +1425,16 @@ static const AgcGfx1013ColorTargetFormatEntry
          {AGC_GFX1013_COLOR_FORMAT_8_8_8_8,
           AGC_GFX1013_SURFACE_NUMBER_SRGB, AGC_GFX1013_SURFACE_SWAP_ALT,
           4u, AGC_GFX1013_SPI_EXPORT_FP16_ABGR}},
+        {AGC_GFX1013_RT_FORMAT_R16_UNORM,
+         {AGC_GFX1013_COLOR_FORMAT_16, AGC_GFX1013_SURFACE_NUMBER_UNORM,
+          AGC_GFX1013_SURFACE_SWAP_STD, 2u,
+          AGC_GFX1013_SPI_EXPORT_FP16_ABGR}},
 };
+
+_Static_assert(sizeof(kAgcGfx1013ColorTargetFormats) /
+        sizeof(kAgcGfx1013ColorTargetFormats[0]) ==
+        AGC_GFX1013_RT_FORMAT_COUNT,
+    "color target format table must cover every public format");
 
 int32_t PS5_SYSV_ABI agcGfx1013GetColorTargetFormatInfo(
     AgcGfx1013ColorTargetFormat format,
