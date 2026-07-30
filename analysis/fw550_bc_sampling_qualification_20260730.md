@@ -112,3 +112,13 @@ check passed again.
 
 BC2 UNORM is hardware-qualified on exact FW 5.50 and FW 11.60. BC2 SRGB is
 next.
+
+## BC2 SRGB pass 1
+
+Artifact SHA-256:
+`d182824d912f7473f25beeba80ffc58e3ceb31d8a5b7bff678d2237b24c9c5b8`
+
+The guarded run produced `224640` changed pixels, regions
+`{74880,74880,74880}`, alpha range `0..255`, zero exact mismatches, and FNV64
+`0x0a8a977e6f2c8da1`. All format and lifecycle gates passed, including the
+post-run residual-process check. Repeat the identical artifact once.
