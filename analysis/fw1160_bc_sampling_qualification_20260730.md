@@ -194,6 +194,13 @@ firmware-neutral dependency verification, and were preserved before execution:
 - UNORM: `54807cec76c1b1e0d6669d4e72110e1dec55933b76a4f40a5da79098bea0b1af`
 - SRGB: `7a5587e843d43217389b39b86129fa28de83da91d81648b37f4fa13b3fdb2b61`
 
+## BC3 UNORM pass 1
+
+The pinned UNORM artifact passed with `224640` changed pixels,
+`{74880,74880,74880}` regions, alpha range `0..255`, zero exact mismatches,
+and FNV64 `0xae513a67c9bb483d`. All lifecycle gates passed. Repeat the
+identical bytes once.
+
 ## BC2 UNORM pass 2
 
 The identical artifact reproduced `224640` changed pixels,
