@@ -459,6 +459,16 @@ now pinned as SHA-256
 (SRGB), with no-prerequisite FW 11.60 and FW 5.50 guarded targets. Hardware
 execution remains pending a clean FW 11.60 boot.
 
+BC6 UFLOAT and SFLOAT firmware-neutral gates now build with dedicated shaders
+and no runtime Mesa or AGC SPRX dependency. Mesa's independent BPTC
+encoder/decoder generated four deterministic mode-3 block classes and their
+selected decoded expectations. The bounded oracle covers mip 0, mip 1, a
+second layer, partial-edge storage, positive and signed remapping, broad range,
+channel independence, alpha one, and a native hash, with at most two
+stored-byte units of RGB conversion tolerance. Artifact pinning and hardware
+execution remain
+pending. See `analysis/bc6_fixture_generation_20260730.md`.
+
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability
 ELF, non-indexed and indexed 10-dword multi-draw, GPU count-buffer selection,

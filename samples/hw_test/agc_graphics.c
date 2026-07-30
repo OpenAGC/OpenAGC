@@ -436,6 +436,12 @@
 #elif defined(AGC_VALIDATE_BC5_SNORM) && AGC_VALIDATE_BC5_SNORM
 #include "shaders/bc5_snorm_sample_frag_sb.h"
 #define FRAGMENT_DATA bc5_snorm_sample_frag_data
+#elif defined(AGC_VALIDATE_BC6_UFLOAT) && AGC_VALIDATE_BC6_UFLOAT
+#include "shaders/bc6_ufloat_sample_frag_sb.h"
+#define FRAGMENT_DATA bc6_ufloat_sample_frag_data
+#elif defined(AGC_VALIDATE_BC6_SFLOAT) && AGC_VALIDATE_BC6_SFLOAT
+#include "shaders/bc6_sfloat_sample_frag_sb.h"
+#define FRAGMENT_DATA bc6_sfloat_sample_frag_data
 #elif AGC_NGG_INPUT_LINES || AGC_TESS_GEOMETRY_LINES
 #include "shaders/triangle_line_frag_sb.h"
 #define FRAGMENT_DATA triangle_line_frag_data
@@ -684,6 +690,12 @@ int sceKernelDeleteEqueue(SceKernelEqueue equeue);
 #ifndef AGC_VALIDATE_BC7_SRGB
 #define AGC_VALIDATE_BC7_SRGB 0
 #endif
+#ifndef AGC_VALIDATE_BC6_UFLOAT
+#define AGC_VALIDATE_BC6_UFLOAT 0
+#endif
+#ifndef AGC_VALIDATE_BC6_SFLOAT
+#define AGC_VALIDATE_BC6_SFLOAT 0
+#endif
 #if (AGC_VALIDATE_RGBA8_REFERENCE + AGC_VALIDATE_RGBA8_STD + \
      AGC_VALIDATE_RGB10A2 + AGC_VALIDATE_R11G11B10 + \
      AGC_VALIDATE_RGBA8_SRGB + AGC_VALIDATE_BGRA8_SRGB + \
@@ -705,6 +717,7 @@ int sceKernelDeleteEqueue(SceKernelEqueue equeue);
      AGC_VALIDATE_BC3_UNORM + AGC_VALIDATE_BC3_SRGB + \
      AGC_VALIDATE_BC5_UNORM + AGC_VALIDATE_BC5_SNORM + \
      AGC_VALIDATE_BC7_UNORM + AGC_VALIDATE_BC7_SRGB + \
+     AGC_VALIDATE_BC6_UFLOAT + AGC_VALIDATE_BC6_SFLOAT + \
      AGC_VALIDATE_R8_UNORM + AGC_VALIDATE_RG8_UNORM + \
      AGC_VALIDATE_R32_FLOAT + AGC_VALIDATE_RG32_FLOAT + \
      AGC_VALIDATE_RGBA32_FLOAT) > 1
@@ -717,7 +730,8 @@ int sceKernelDeleteEqueue(SceKernelEqueue equeue);
      AGC_VALIDATE_BC2_UNORM || AGC_VALIDATE_BC2_SRGB || \
      AGC_VALIDATE_BC3_UNORM || AGC_VALIDATE_BC3_SRGB || \
      AGC_VALIDATE_BC5_UNORM || AGC_VALIDATE_BC5_SNORM || \
-     AGC_VALIDATE_BC7_UNORM || AGC_VALIDATE_BC7_SRGB)
+     AGC_VALIDATE_BC7_UNORM || AGC_VALIDATE_BC7_SRGB || \
+     AGC_VALIDATE_BC6_UFLOAT || AGC_VALIDATE_BC6_SFLOAT)
 
 #if AGC_VALIDATE_BC_SAMPLE
 static uint32_t bc_validation_format(void)
@@ -744,8 +758,12 @@ static uint32_t bc_validation_format(void)
     return AGC_GFX1013_IMAGE_FORMAT_BC5_UNORM;
 #elif AGC_VALIDATE_BC7_SRGB
     return AGC_GFX1013_IMAGE_FORMAT_BC7_SRGB;
-#else
+#elif AGC_VALIDATE_BC7_UNORM
     return AGC_GFX1013_IMAGE_FORMAT_BC7_UNORM;
+#elif AGC_VALIDATE_BC6_SFLOAT
+    return AGC_GFX1013_IMAGE_FORMAT_BC6_SFLOAT;
+#else
+    return AGC_GFX1013_IMAGE_FORMAT_BC6_UFLOAT;
 #endif
 }
 #define AGC_BC_VALIDATION_FORMAT() bc_validation_format()
@@ -1562,6 +1580,107 @@ static uint32_t bc7_expected_pixel(const uint8_t *texture,
             lane > 2u ? 2u : lane, row, srgb, decoded_mode);
     return bc7_decode_texel(texture, layer1_mip0, 4u,
         row + 3u > 6u ? 6u : row + 3u, srgb, decoded_mode);
+}
+#endif
+
+#if AGC_VALIDATE_BC6_UFLOAT || AGC_VALIDATE_BC6_SFLOAT
+/* Mesa's independent mode-3 BPTC encoder generated these blocks from four
+ * deterministic RGB fields. Its decoder generated the selected RGBA8 oracle
+ * values after the same UFLOAT clamp or SFLOAT [-1,1] remap as the shaders. */
+static const uint8_t bc6_blocks[2][4][16] = {
+    {
+        {0x43u, 0xb6u, 0xe2u, 0x70u, 0xbbu, 0xceu, 0xbbu, 0xf1u,
+         0x30u, 0x3au, 0x80u, 0xacu, 0xc0u, 0xfeu, 0xf5u, 0xffu},
+        {0x03u, 0x37u, 0xe9u, 0xa4u, 0xebu, 0xceu, 0xbcu, 0xeeu,
+         0x30u, 0x99u, 0x93u, 0xf0u, 0xffu, 0x09u, 0xffu, 0x3fu},
+        {0x03u, 0x00u, 0xdcu, 0x70u, 0x13u, 0xafu, 0xbau, 0xf7u,
+         0xf0u, 0x22u, 0xbbu, 0xbfu, 0xf0u, 0x22u, 0xbbu, 0xbfu},
+        {0x03u, 0x00u, 0xd0u, 0x40u, 0x8bu, 0x2eu, 0xbdu, 0xeeu,
+         0xfau, 0xddu, 0xd0u, 0x5du, 0xd0u, 0xddu, 0xd0u, 0xdfu},
+    },
+    {
+        {0xc3u, 0x63u, 0x9cu, 0x49u, 0xbeu, 0xc6u, 0x9cu, 0x75u,
+         0x30u, 0x3au, 0x80u, 0xacu, 0xc0u, 0xfeu, 0xf5u, 0xffu},
+        {0x43u, 0xe9u, 0x6bu, 0x8eu, 0x49u, 0x87u, 0x1eu, 0x76u,
+         0x00u, 0x55u, 0x50u, 0xb0u, 0xbbu, 0x05u, 0xffu, 0x0fu},
+        {0x23u, 0x61u, 0x92u, 0x49u, 0x56u, 0x07u, 0x9au, 0x7bu,
+         0xf0u, 0x22u, 0xbbu, 0xbfu, 0xf0u, 0x22u, 0xbbu, 0xbfu},
+        {0x23u, 0x61u, 0x8bu, 0x2du, 0xeeu, 0x25u, 0x1eu, 0x72u,
+         0xfau, 0xddu, 0xd0u, 0x5du, 0xd0u, 0xddu, 0xd0u, 0xdfu},
+    },
+};
+
+static const uint32_t bc6_expected0[2][16] = {
+    {
+        0xff556e4au, 0xff667858u, 0xff9a9e7au, 0xff667858u,
+        0xff556e4au, 0xff83906fu, 0xffafaa85u, 0xff9a9e7au,
+        0xff556e4au, 0xffafaa85u, 0xffc6b799u, 0xffd1bda2u,
+        0xff707e61u, 0xffd1bda2u, 0xffd1bda2u, 0xffd1bda2u,
+    },
+    {
+        0xff546d49u, 0xff7f7f7eu, 0xff808080u, 0xff7f7f7eu,
+        0xff546d49u, 0xff808080u, 0xff818180u, 0xff808080u,
+        0xff546d49u, 0xff818180u, 0xff98958au, 0xffd0bea1u,
+        0xff7f7f7fu, 0xffd0bea1u, 0xffd0bea1u, 0xffd0bea1u,
+    },
+};
+
+static const uint32_t bc6_expected1[2][12] = {
+    {
+        0xff8f8f55u, 0xff989f64u, 0xffa8bd80u,
+        0xff989f64u, 0xffa8bd80u, 0xff8f8f55u,
+        0xffbadcbau, 0xffbadcbau, 0xffa8bd80u,
+        0xffbadcbau, 0xffbadcbau, 0xffbadcbau,
+    },
+    {
+        0xff91a177u, 0xff91a177u, 0xff9cb37fu,
+        0xff91a177u, 0xff9cb37fu, 0xff91a177u,
+        0xffb6d580u, 0xffb6d580u, 0xff9cb37fu,
+        0xffd4f2c8u, 0xffd4f2c8u, 0xffd4f2c8u,
+    },
+};
+
+static const uint32_t bc6_expected2[2] = {
+    0xffc77e0eu, 0xff808080u,
+};
+
+static const uint32_t bc6_expected3[2][3] = {
+    {0xff4d5500u, 0xff333300u, 0xff333300u},
+    {0xff7f7f7fu, 0xff333301u, 0xff333301u},
+};
+
+static void bc6_write_block(uint8_t *texture,
+    const AgcGfx1013LinearBcSubresourceLayout *subresource,
+    uint32_t block_x, uint32_t block_y, uint32_t fixture, bool is_signed)
+{
+    uint8_t *block = texture + subresource->offset +
+        (size_t)block_y * subresource->row_pitch + block_x * 16u;
+    memcpy(block, bc6_blocks[is_signed ? 1u : 0u][fixture], 16u);
+}
+
+static uint32_t bc6_expected_pixel(uint32_t pixel_x, uint32_t pixel_y,
+    bool is_signed, uint32_t *fixture)
+{
+    uint32_t signed_index = is_signed ? 1u : 0u;
+    uint32_t local_x = pixel_x % 12u;
+    uint32_t lane = local_x & 3u;
+    uint32_t row = pixel_y & 3u;
+
+    if (local_x < 4u) {
+        *fixture = 0u;
+        return bc6_expected0[signed_index][row * 4u + lane];
+    }
+    if (local_x < 8u) {
+        *fixture = 1u;
+        return bc6_expected1[signed_index][row * 3u +
+            (lane > 2u ? 2u : lane)];
+    }
+    if (row == 0u) {
+        *fixture = 2u;
+        return bc6_expected2[signed_index];
+    }
+    *fixture = 3u;
+    return bc6_expected3[signed_index][row - 1u];
 }
 #endif
 
@@ -3104,7 +3223,7 @@ static bool dispatch_graphics(GraphicsTest *test,
     bc5_write_block((uint8_t *)gpu_texture, &bc_layer1_mip0,
         1u, 1u, bc5_low, bc5_high, bc5_vertical,
         bc5_mid_high, bc5_mid_low, bc5_horizontal);
-#else
+#elif AGC_VALIDATE_BC7_UNORM || AGC_VALIDATE_BC7_SRGB
     bc7_write_mode4_block((uint8_t *)gpu_texture, &bc_layer0_mip0,
         0u, 0u, false, false);
     bc7_write_mode6_block((uint8_t *)gpu_texture, &bc_layer0_mip0,
@@ -3124,6 +3243,27 @@ static bool dispatch_graphics(GraphicsTest *test,
         1u, 0u, true);
     bc7_write_mode4_block((uint8_t *)gpu_texture, &bc_layer1_mip0,
         1u, 1u, false, true);
+#elif AGC_VALIDATE_BC6_UFLOAT || AGC_VALIDATE_BC6_SFLOAT
+    const bool bc6_signed = AGC_VALIDATE_BC6_SFLOAT != 0;
+    bc6_write_block((uint8_t *)gpu_texture, &bc_layer0_mip0,
+        0u, 0u, 0u, bc6_signed);
+    bc6_write_block((uint8_t *)gpu_texture, &bc_layer0_mip0,
+        1u, 0u, 0u, bc6_signed);
+    bc6_write_block((uint8_t *)gpu_texture, &bc_layer0_mip0,
+        0u, 1u, 0u, bc6_signed);
+    bc6_write_block((uint8_t *)gpu_texture, &bc_layer0_mip0,
+        1u, 1u, 0u, bc6_signed);
+    bc6_write_block((uint8_t *)gpu_texture, &bc_layer0_mip1,
+        0u, 0u, 1u, bc6_signed);
+    if (agcGfx1013GetLinearBcSubresourceLayout(
+            &bc_layout_input, 2u, 0u, &bc_subresource) != AGC_OK)
+        return false;
+    bc6_write_block((uint8_t *)gpu_texture, &bc_subresource,
+        0u, 0u, 0u, bc6_signed);
+    bc6_write_block((uint8_t *)gpu_texture, &bc_layer1_mip0,
+        1u, 0u, 2u, bc6_signed);
+    bc6_write_block((uint8_t *)gpu_texture, &bc_layer1_mip0,
+        1u, 1u, 3u, bc6_signed);
 #endif
     printf("[BC] upload=%p size=%llu slice=%llu mips=3 layers=2\n",
            gpu_texture, (unsigned long long)bc_layout.allocation_size,
@@ -4553,6 +4693,15 @@ static bool dispatch_graphics(GraphicsTest *test,
     uint32_t bc7_alpha_max = 0u;
     uint32_t bc7_channel_differences = 0u;
 #endif
+#if AGC_VALIDATE_BC6_UFLOAT || AGC_VALIDATE_BC6_SFLOAT
+    uint64_t bc6_packed_hash = UINT64_C(1469598103934665603);
+    uint32_t bc6_decode_mismatches = 0u;
+    uint32_t bc6_max_error = 0u;
+    uint32_t bc6_fixture_samples[4] = {0u, 0u, 0u, 0u};
+    uint32_t bc6_component_min = 255u;
+    uint32_t bc6_component_max = 0u;
+    uint32_t bc6_channel_differences = 0u;
+#endif
     for (uint32_t i = 0; i < target_pixels; i++) {
         uint32_t color = rt[i];
         if (color == DIAGNOSTIC_CLEAR_COLOR)
@@ -4696,6 +4845,42 @@ static bool dispatch_graphics(GraphicsTest *test,
             bc7_red != bc7_green || bc7_green != bc7_blue;
         bc7_packed_hash ^= color;
         bc7_packed_hash *= UINT64_C(1099511628211);
+#endif
+#if AGC_VALIDATE_BC6_UFLOAT || AGC_VALIDATE_BC6_SFLOAT
+        uint32_t bc6_pixel_x = i % target->width;
+        uint32_t bc6_pixel_y = i / target->width;
+        uint32_t bc6_fixture = 0u;
+        uint32_t bc6_expected = bc6_expected_pixel(
+            bc6_pixel_x, bc6_pixel_y, AGC_VALIDATE_BC6_SFLOAT != 0,
+            &bc6_fixture);
+        uint32_t bc6_pixel_error = 0u;
+        uint32_t bc6_channels[3] = {
+            color & 0xffu, (color >> 8u) & 0xffu,
+            (color >> 16u) & 0xffu,
+        };
+        for (uint32_t channel = 0u; channel < 3u; ++channel) {
+            uint32_t expected_channel =
+                (bc6_expected >> (8u * channel)) & 0xffu;
+            uint32_t error = bc6_channels[channel] > expected_channel ?
+                bc6_channels[channel] - expected_channel :
+                expected_channel - bc6_channels[channel];
+            if (error > bc6_pixel_error)
+                bc6_pixel_error = error;
+            if (bc6_channels[channel] < bc6_component_min)
+                bc6_component_min = bc6_channels[channel];
+            if (bc6_channels[channel] > bc6_component_max)
+                bc6_component_max = bc6_channels[channel];
+        }
+        if (bc6_pixel_error > bc6_max_error)
+            bc6_max_error = bc6_pixel_error;
+        bc6_decode_mismatches += bc6_pixel_error > 2u ||
+            (color & 0xff000000u) != 0xff000000u;
+        bc6_fixture_samples[bc6_fixture]++;
+        bc6_channel_differences +=
+            bc6_channels[0] != bc6_channels[1] ||
+            bc6_channels[1] != bc6_channels[2];
+        bc6_packed_hash ^= color;
+        bc6_packed_hash *= UINT64_C(1099511628211);
 #endif
         if (unique_color_count < 8) {
             bool seen = false;
@@ -4892,6 +5077,30 @@ static bool dispatch_graphics(GraphicsTest *test,
            bc7_regions_pass && bc7_modes_pass &&
            bc7_exact_mismatches == 0u ? "PASS" : "FAIL");
     return bc7_pass;
+#elif AGC_VALIDATE_BC6_UFLOAT || AGC_VALIDATE_BC6_SFLOAT
+    const bool bc6_fixtures_pass = bc6_fixture_samples[0] != 0u &&
+        bc6_fixture_samples[1] != 0u && bc6_fixture_samples[2] != 0u &&
+        bc6_fixture_samples[3] != 0u;
+    const bool bc6_range_pass = AGC_VALIDATE_BC6_SFLOAT ?
+        (bc6_component_min < 128u && bc6_component_max > 128u) :
+        (bc6_component_min <= 32u && bc6_component_max >= 192u);
+    const bool bc6_independence_pass = bc6_channel_differences != 0u;
+    const bool bc6_pass = vertex_fetch_pass && indexed_draw_pass &&
+        texture_sampler_pass && bc6_decode_mismatches == 0u &&
+        bc6_fixtures_pass && bc6_range_pass && bc6_independence_pass;
+    printf("[BC6 %s] changed=%u fixtures={%u,%u,%u,%u} range=%u..%u "
+           "decode-mismatches=%u max-error=%u independence=%s "
+           "packed-fnv64=0x%016llx: %s\n",
+           AGC_VALIDATE_BC6_SFLOAT ? "SFLOAT" : "UFLOAT", changed,
+           bc6_fixture_samples[0], bc6_fixture_samples[1],
+           bc6_fixture_samples[2], bc6_fixture_samples[3],
+           bc6_component_min, bc6_component_max, bc6_decode_mismatches,
+           bc6_max_error, bc6_independence_pass ? "PASS" : "FAIL",
+           (unsigned long long)bc6_packed_hash,
+           bc6_pass ? "PASS" : "FAIL");
+    printf("[BC6] mip0/mip1/layer1 signed-mode selection: %s\n",
+           bc6_fixtures_pass && bc6_decode_mismatches == 0u ? "PASS" : "FAIL");
+    return bc6_pass;
 #else
     return vertex_fetch_pass && indexed_draw_pass && texture_sampler_pass;
 #endif
@@ -5636,7 +5845,8 @@ int main(void) {
       AGC_VALIDATE_BC2_SRGB || AGC_VALIDATE_BC3_UNORM || \
       AGC_VALIDATE_BC3_SRGB || AGC_VALIDATE_BC5_UNORM || \
       AGC_VALIDATE_BC5_SNORM || AGC_VALIDATE_BC7_UNORM || \
-      AGC_VALIDATE_BC7_SRGB
+      AGC_VALIDATE_BC7_SRGB || AGC_VALIDATE_BC6_UFLOAT || \
+      AGC_VALIDATE_BC6_SFLOAT
     RenderTargetConfig rgba8_target = {
         AGC_GRAPHICS_HEADLESS ? test.render_target : test.buffers[0],
         test.width, test.height,
@@ -5655,8 +5865,10 @@ int main(void) {
             (AGC_VALIDATE_BC5_UNORM ? "BC5_UNORM" :
             (AGC_VALIDATE_BC7_SRGB ? "BC7_SRGB" :
             (AGC_VALIDATE_BC7_UNORM ? "BC7_UNORM" :
+            (AGC_VALIDATE_BC6_SFLOAT ? "BC6_SFLOAT" :
+            (AGC_VALIDATE_BC6_UFLOAT ? "BC6_UFLOAT" :
             (AGC_GRAPHICS_HEADLESS ?
-                "RGBA8_UNORM" : "display RGBA8 standard swap"))))))))))))
+                "RGBA8_UNORM" : "display RGBA8 standard swap"))))))))))))))
     };
     printf("\n--- Step 4: %s sampled draw ---\n", rgba8_target.name);
     if (!dispatch_graphics(&test, &front, &back, &ps, &rgba8_target)) {

@@ -852,6 +852,17 @@ for BC7 UNORM and
 for BC7 SRGB. Their FW 11.60 and identical-byte FW 5.50 guarded targets have
 no build prerequisites.
 
+BC6 UFLOAT/SFLOAT portable gates now build with dedicated RGB sampling
+shaders. Four deterministic mode-3 block classes and their independently
+decoded expectations were generated offline with Mesa's BPTC reference
+encoder/decoder; the ELFs contain only fixed blocks and bounded tables, not a
+Mesa dependency. UFLOAT clamps positive RGB directly, while SFLOAT remaps
+`[-1,1]` to `[0,1]`. The oracle requires all fixture classes, mip/layer and
+partial-edge selection, broad range, channel independence, alpha one, a native
+hash, and no RGB error above two stored-byte units. Preserve and pin the final
+neutral bytes before hardware execution. See
+`analysis/bc6_fixture_generation_20260730.md`.
+
 Use dedicated, deterministic source blocks containing endpoint, index,
 alpha, signed-range, and edge-block cases appropriate to each format. A
 hardware gate must sample the compressed texture into an already-qualified
