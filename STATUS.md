@@ -301,7 +301,12 @@ enums, and maximum 64-bit surface arithmetic. The generic suite now passes
 fail-closed runner checks build as a firmware-neutral portable gate. Its final
 bytes are pinned as SHA-256
 `da7c0203a288d994986ff37100e3eac5f8cb962fca00a4821c53f54fc9cb9511`;
-two FW 11.60 runs and the identical-byte FW 5.50 replay remain pending.
+the first FW 11.60 launch produced no fresh verdict. A subsequent known-good
+R32_UINT control also produced no verdict, proving the current boot's websrv
+loader state is unusable rather than proving an RG32 failure. ps5debug-NG found
+no residual `eboot.elf`; reboot and reinjection are required before retrying.
+Two FW 11.60 passes and the identical-byte FW 5.50 replay remain pending. See
+`analysis/fw1160_rg32_uint_first_attempt_20260730.md`.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability

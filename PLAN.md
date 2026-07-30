@@ -599,7 +599,11 @@ all six pinned artifacts for identical-byte FW 5.50 replay and proceed to the
   Its dedicated `32_GR` shader and two-lane exact-value oracle build as a
   firmware-neutral portable gate. The final bytes are pinned as SHA-256
   `da7c0203a288d994986ff37100e3eac5f8cb962fca00a4821c53f54fc9cb9511`.
-  Run those exact bytes twice on FW 11.60; preserve FW 5.50 replay as pending.
+  Its first launch was inconclusive because the current websrv loader produced
+  no fresh verdict; the already-qualified R32_UINT control then failed the
+  same way. Reboot and reinject ps5debug-NG before running those exact bytes
+  twice. Preserve FW 5.50 replay as pending. See
+  `analysis/fw1160_rg32_uint_first_attempt_20260730.md`.
 
 These formats need dedicated integer-output pixel shaders. Do not qualify them
 using a floating-point shader and assume the conversion is correct. Their
