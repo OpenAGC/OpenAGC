@@ -27,7 +27,8 @@ pipelines. Prospero builds the same API, but native queue submission remains
 fail-closed pending an explicit hardware-promotion gate.
 
 1. **Complete pipeline safety.** Extend the host-tested reflection/pipeline
-   slice with the required tessellation/geometry paths and any still-needed
+   slice with the required tessellation path, remaining geometry forms, and
+   any still-needed
    qualified fixed options while preserving transactional failure for every
    unsupported combination.
 2. **Own transitions and synchronization.** Track explicit resource usage and
@@ -134,13 +135,22 @@ rather than inventing missing operations. Alpha-to-coverage and alpha-to-one
 remain unqualified and now return `AGC_ERROR_NOT_SUPPORTED` instead of being
 silently ignored.
 
+The first fused geometry pipeline is packaged without exposing the compiler's
+front/back split to applications. A `geometry_shader` handle containing the
+compiler-emitted VS-front/GS-back pair owns the primitive stage, so a redundant
+standalone `vertex_shader` is rejected. Pipeline creation validates reflection
+v2 front-stage linkage and currently accepts only triangle input, three input
+vertices, and one invocation. Host submission proves that the low-level bind
+patches the front-stage continuation address. Other geometry topologies and
+invocation counts fail before PM4 emission.
+
 The compatibility matrix covers valid float, UINT, and SINT 16/32-bit pairs
 and rejects cross-class, missing/extra export, compressed attachment, blend,
 linkage, vertex-stride, descriptor, push-range, and unbound-resource cases. It
 also exercises successful descriptor/push dispatch, vertex-table drawing,
 direct and indirect descriptor addressing, resource retention/reset, exact
 depth/stencil register state, legacy state normalization, multisample minimums,
-and required dynamic-state gating. The full generic suite now reports 13,887
+and required dynamic-state gating. The full generic suite now reports 13,926
 passed and 0 failed; the compiler's
 library, varying/export, NGG, and tessellation suites pass. This slice is
 host-tested only. No PS5 hardware test was run or claimed. See

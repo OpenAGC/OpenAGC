@@ -279,6 +279,14 @@ static void test_gfx1013_wave32_vs_ps_binding(void)
         "gfx1013 primitive continuation SGPR emitted");
     TEST_ASSERT_EQ(value, 0x34567800u,
         "gfx1013 primitive continuation placeholder patched");
+    primitive_record.shader_type = (uint8_t)kAgcShaderBinaryTypeGsBack;
+    primitive_record.num_sh_registers = 2u;
+    state.primitive.num_sh_registers = 2u;
+    TEST_ASSERT_EQ(agcGfx1013ValidateWave32VsPs(&state),
+        AGC_ERROR_SHADER_INVALID,
+        "gfx1013 GsBack requires its front-stage continuation binding");
+    primitive_record.num_sh_registers = 3u;
+    state.primitive.num_sh_registers = 3u;
     TEST_ASSERT(find_register(
         buffer, agcCbUsedDwords(&cb), AGC_PM4_OP_SET_CONTEXT_REG,
         AGC_REG_VGT_DRAW_PAYLOAD_CNTL, &value),

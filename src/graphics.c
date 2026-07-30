@@ -267,8 +267,10 @@ static int32_t agcGfx1013ValidateVsPsImpl(
         return AGC_ERROR_INVALID_ARGUMENT;
     if (!agcShaderRecordIsValid(state->primitive.record) ||
         !agcShaderRecordIsValid(state->pixel.record) ||
-        state->primitive.record->shader_type !=
-            (uint8_t)kAgcShaderBinaryTypeGs ||
+        (state->primitive.record->shader_type !=
+             (uint8_t)kAgcShaderBinaryTypeGs &&
+         state->primitive.record->shader_type !=
+             (uint8_t)kAgcShaderBinaryTypeGsBack) ||
         state->pixel.record->shader_type != kAgcShaderTypePs)
         return AGC_ERROR_SHADER_INVALID_TYPE;
     if (!agcGfx1013AddressIsProgramCompatible(
@@ -277,6 +279,11 @@ static int32_t agcGfx1013ValidateVsPsImpl(
         return AGC_ERROR_INVALID_ALIGNMENT;
     if (!agcGfx1013FindProgramPair(&state->primitive, &primitive_lo) ||
         !agcGfx1013FindProgramPair(&state->pixel, &pixel_lo))
+        return AGC_ERROR_SHADER_INVALID;
+    if (state->primitive.record->shader_type ==
+            (uint8_t)kAgcShaderBinaryTypeGsBack &&
+        !agcGfx1013BindingHasValue(
+            &state->primitive, OPENAGC_NEXT_STAGE_PC_PLACEHOLDER))
         return AGC_ERROR_SHADER_INVALID;
     if (agcGfx1013BindingHasValue(
             &state->primitive, OPENAGC_NEXT_STAGE_PC_PLACEHOLDER) &&

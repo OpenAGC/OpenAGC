@@ -16,5 +16,7 @@ build-*/
 
 # Generated output
 logs/
+__pycache__/
 samples/hw_test/pkg_out/
+samples/hw_test/conformance-logs/
 .tokensave

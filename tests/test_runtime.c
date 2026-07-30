@@ -234,7 +234,7 @@ static AgcShader create_ngg_shader_bundle(AgcDevice device,
     binary.record.version = AGC_SHADER_RECORD_VERSION_GEN5;
     binary.record.code = offsetof(RuntimeShaderFixture, code);
     binary.record.shader_type = (uint8_t)kAgcShaderBinaryTypeGsBack;
-    binary.record.num_sh_registers = 2u;
+    binary.record.num_sh_registers = 3u;
     binary.record.sh_registers = offsetof(RuntimeShaderFixture, sh_registers);
     binary.record.num_cx_registers = 1u;
     binary.record.cx_registers = offsetof(RuntimeShaderFixture, cx_registers);
@@ -243,6 +243,9 @@ static AgcShader create_ngg_shader_bundle(AgcDevice device,
         AGC_REG_SPI_SHADER_PGM_LO_GS, 0u};
     binary.sh_registers[1] = (AgcRegisterValue){
         AGC_REG_SPI_SHADER_PGM_HI_GS, 0u};
+    binary.sh_registers[2] = (AgcRegisterValue){
+        AGC_REG_SPI_SHADER_USER_DATA_GS_0 + 15u,
+        OPENAGC_NEXT_STAGE_PC_PLACEHOLDER};
     binary.cx_registers[0] = (AgcRegisterValue){
         AGC_REG_SPI_PS_IN_CONTROL, 0u};
     binary.specials.ge_cntl = (AgcShaderSpecialRegister){
@@ -275,7 +278,24 @@ static AgcShader create_ngg_shader_bundle(AgcDevice device,
     reflection.code_size = sizeof(binary.code);
     reflection.front_code_offset = offsetof(RuntimeShaderFixture, code);
     reflection.front_code_size = sizeof(front_binary.code);
-    reflection.front_stage = stage;
+    reflection.front_stage = stage == kAgcShaderStageGs ?
+        kAgcShaderStageVs : stage;
+    if (stage == kAgcShaderStageGs) {
+        if (reflection.geometry_input_primitive ==
+            AGC_SHADER_PRIMITIVE_UNDEFINED)
+            reflection.geometry_input_primitive =
+                AGC_SHADER_PRIMITIVE_TRIANGLES;
+        if (reflection.geometry_output_primitive ==
+            AGC_SHADER_PRIMITIVE_UNDEFINED)
+            reflection.geometry_output_primitive =
+                AGC_SHADER_PRIMITIVE_TRIANGLE_STRIP;
+        if (reflection.geometry_vertices_in == 0u)
+            reflection.geometry_vertices_in = 3u;
+        if (reflection.geometry_vertices_out == 0u)
+            reflection.geometry_vertices_out = 3u;
+        if (reflection.geometry_invocations == 0u)
+            reflection.geometry_invocations = 1u;
+    }
     reflection.code_hash = shader_fixture_hash(&binary, sizeof(binary));
     reflection.code_hash = shader_fixture_hash_update(reflection.code_hash,
         &front_binary, sizeof(front_binary));
@@ -1709,6 +1729,146 @@ static void test_runtime_indirect_descriptor_set_table(void)
         "indirect descriptor device destroys");
 }
 
+static void test_runtime_geometry_pipeline_bundle(void)
+{
+    AgcDevice device = create_device();
+    AgcQueue queue = create_queue(device, kAgcQueueGraphics);
+    AgcShaderReflection gs_requirements = AGC_SHADER_REFLECTION_INIT;
+    AgcShaderReflection ps_requirements = AGC_SHADER_REFLECTION_INIT;
+    AgcShaderVertexInput vertex_input = {
+        0u, 0u, 0u, 16u, AGC_SHADER_VERTEX_FORMAT_R32G32B32A32_SFLOAT,
+        AGC_SHADER_VERTEX_INPUT_RATE_VERTEX, 0u, 0xfu};
+    AgcGraphicsPipelineDesc pipeline_desc = AGC_GRAPHICS_PIPELINE_DESC_INIT;
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcBufferDesc buffer_desc = AGC_BUFFER_DESC_INIT;
+    AgcVertexBufferBinding vertex_binding = AGC_VERTEX_BUFFER_BINDING_INIT;
+    AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    AgcGraphicsPipeline pipeline = NULL;
+    AgcCommandBuffer command = NULL;
+    AgcBuffer vertex_buffer = NULL;
+    AgcBuffer index_buffer = NULL;
+    AgcShader geometry;
+    AgcShader pixel;
+    AgcShader redundant_vertex;
+    const AgcCommandBufferSubmit *captured;
+    const uint32_t *words;
+    uint32_t continuation_address = 0u;
+
+    gs_requirements.stage_output_mask = UINT64_C(1) << 32;
+    gs_requirements.front_stage_input_mask = UINT64_C(1) << 0;
+    gs_requirements.front_stage_output_mask = UINT64_C(1) << 32;
+    gs_requirements.vertex_input_count = 1u;
+    gs_requirements.vertex_inputs[0] = vertex_input;
+    gs_requirements.user_sgpr_count = 1u;
+    gs_requirements.user_sgprs[0] = (AgcShaderUserSgpr){
+        AGC_SHADER_USER_SGPR_VERTEX_BUFFER_TABLE, 0u,
+        AGC_REG_SPI_SHADER_USER_DATA_GS_0, 1u};
+    ps_requirements.stage_input_mask = UINT64_C(1) << 32;
+    geometry = create_ngg_shader_bundle(
+        device, kAgcShaderStageGs, &gs_requirements);
+    pixel = create_shader_with_reflection(
+        device, kAgcShaderStagePs, &ps_requirements);
+    pipeline_desc.geometry_shader = geometry;
+    pipeline_desc.pixel_shader = pixel;
+    pipeline_desc.vertex_inputs = &vertex_input;
+    pipeline_desc.vertex_input_count = 1u;
+    TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc,
+        &pipeline), AGC_OK,
+        "fused VS-front/GS-back geometry bundle creates pipeline");
+
+    redundant_vertex = create_shader(device, kAgcShaderStageVs);
+    pipeline_desc.vertex_shader = redundant_vertex;
+    {
+        AgcGraphicsPipeline invalid = NULL;
+        TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc,
+            &invalid), AGC_ERROR_VALIDATION_FAILED,
+            "geometry bundle rejects an unused standalone vertex shader");
+        TEST_ASSERT(invalid == NULL,
+            "redundant geometry stage leaves pipeline output null");
+    }
+    pipeline_desc.vertex_shader = NULL;
+    TEST_ASSERT_EQ(agcDestroyShader(redundant_vertex), AGC_OK,
+        "redundant vertex shader destroys");
+
+    buffer_desc.size = 256u;
+    buffer_desc.usage = AGC_BUFFER_USAGE_VERTEX_BIT;
+    TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &vertex_buffer),
+        AGC_OK, "geometry vertex buffer creates");
+    buffer_desc.usage = AGC_BUFFER_USAGE_INDEX_BIT;
+    TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &index_buffer),
+        AGC_OK, "geometry index buffer creates");
+    command_desc.capacity_dwords = 256u;
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
+        AGC_OK, "geometry command buffer creates");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+        "geometry command buffer begins");
+    TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(command, pipeline), AGC_OK,
+        "geometry pipeline bind records cached state");
+    vertex_binding.buffer = vertex_buffer;
+    vertex_binding.stride = 16u;
+    TEST_ASSERT_EQ(agcCmdBindVertexBuffers(command, 1u, &vertex_binding),
+        AGC_OK, "geometry front-stage vertex table binds");
+    TEST_ASSERT_EQ(agcCmdBindIndexBuffer(command, index_buffer, 0u,
+        kAgcIndexSize16), AGC_OK, "geometry index buffer binds");
+    TEST_ASSERT_EQ(agcCmdDrawIndexed(command, 3u, 1u, 0u, 0, 0u),
+        AGC_OK, "triangle-input geometry draw records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+        "geometry command buffer becomes executable");
+    submit.command_buffer_count = 1u;
+    submit.command_buffers = &command;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, NULL), AGC_OK,
+        "geometry command buffer submits on host");
+    captured = agcDriverDebugLastDcbSubmit();
+    TEST_ASSERT(captured != NULL,
+        "geometry command submission is captured");
+    words = (const uint32_t *)(uintptr_t)captured->command_address;
+    TEST_ASSERT(runtime_find_shader_register(words, captured->dword_count,
+        AGC_REG_SPI_SHADER_USER_DATA_GS_0 + 15u,
+        &continuation_address),
+        "geometry bind emits its front-stage continuation address");
+    TEST_ASSERT(continuation_address != 0u &&
+        continuation_address != OPENAGC_NEXT_STAGE_PC_PLACEHOLDER,
+        "geometry continuation placeholder is patched by the pipeline");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+        "geometry command buffer resets");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+        "geometry command buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyBuffer(index_buffer), AGC_OK,
+        "geometry index buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyBuffer(vertex_buffer), AGC_OK,
+        "geometry vertex buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(pipeline), AGC_OK,
+        "geometry pipeline destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(pixel), AGC_OK,
+        "geometry pixel shader destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(geometry), AGC_OK,
+        "geometry bundle destroys");
+
+    gs_requirements.geometry_input_primitive =
+        AGC_SHADER_PRIMITIVE_LINES;
+    gs_requirements.geometry_vertices_in = 2u;
+    geometry = create_ngg_shader_bundle(
+        device, kAgcShaderStageGs, &gs_requirements);
+    pixel = create_shader_with_reflection(
+        device, kAgcShaderStagePs, &ps_requirements);
+    pipeline_desc.geometry_shader = geometry;
+    pipeline_desc.pixel_shader = pixel;
+    pipeline = NULL;
+    TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc,
+        &pipeline), AGC_ERROR_NOT_SUPPORTED,
+        "unpackaged line-input geometry fails before PM4");
+    TEST_ASSERT(pipeline == NULL,
+        "unsupported geometry topology leaves pipeline output null");
+    TEST_ASSERT_EQ(agcDestroyShader(pixel), AGC_OK,
+        "line-input geometry pixel shader destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(geometry), AGC_OK,
+        "line-input geometry bundle destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
+        "geometry pipeline queue destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "geometry pipeline device destroys");
+}
+
 static void test_runtime_ps5_image_layouts(void)
 {
     AgcDevice device = create_device();
@@ -2375,6 +2535,7 @@ void test_suite_runtime(void)
     TEST_RUN(test_runtime_graphics_pipeline_compatibility_matrix);
     TEST_RUN(test_runtime_pipeline_layout_and_stage_validation);
     TEST_RUN(test_runtime_indirect_descriptor_set_table);
+    TEST_RUN(test_runtime_geometry_pipeline_bundle);
     TEST_RUN(test_runtime_allocation_callbacks);
     TEST_RUN(test_runtime_allocation_failure_rollback);
     TEST_RUN(test_runtime_all_object_lifecycle);

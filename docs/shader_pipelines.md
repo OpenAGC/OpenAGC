@@ -81,21 +81,30 @@ preserves both static masks. The runtime normalizes the former 64-byte v1
 depth-only layout with implicit 0–1 bounds; v1 stencil requests fail closed.
 
 The currently host-tested graphics subset is an NGG vertex shader plus a
-Wave32 pixel shader, supported fill/cull/front-face rasterization, supported
+Wave32 pixel shader or a compiler-fused VS-front/GS-back geometry bundle plus
+a Wave32 pixel shader, supported fill/cull/front-face rasterization, supported
 color/depth/stencil formats, complete depth/stencil testing, the declared
-dynamic states above, and the qualified gfx1013 bind groups. Compute supports
-Wave32, at most 1,024 invocations per group, no scratch, and at most 64 KiB
-LDS, including direct or indirect reflected descriptor-set addressing.
-Alpha-to-coverage, alpha-to-one, tessellation and geometry pipeline
-packaging, and Prospero submission remain fail-closed.
+dynamic states above, and the qualified gfx1013 bind groups. In the geometry
+form, `geometry_shader` owns both compiler records and `vertex_shader` must be
+`NULL`; supplying both is rejected instead of silently ignoring either
+handle. The packaged geometry subset accepts triangle input, three input
+vertices, and one invocation. Line, adjacency, and multi-invocation forms
+remain fail-closed before PM4 emission.
+
+Compute supports Wave32, at most 1,024 invocations per group, no scratch, and
+at most 64 KiB LDS, including direct or indirect reflected descriptor-set
+addressing. Alpha-to-coverage, alpha-to-one, tessellation pipeline packaging,
+the remaining geometry topologies, and Prospero submission remain
+fail-closed.
 
 ## Qualification
 
 The generic suite covers valid float/normalized, UINT, and SINT attachment
 pairs, negative compatibility/layout fixtures, successful descriptor/push and
 vertex-table execution paths, direct and indirect set-address emission,
-resource lifetime, exact depth/stencil register encoding, v1 state
-normalization, multisample minimums, and required dynamic-state gating. These
+fused geometry continuation patching, resource lifetime, exact depth/stencil
+register encoding, v1 state normalization, multisample minimums, and required
+dynamic-state gating. These
 results are host-tested only. A future explicit PS5 promotion gate will qualify
 exact firmware artifacts; no hardware qualification is implied by pipeline
 creation or a successful host command recording.

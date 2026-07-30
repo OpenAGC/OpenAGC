@@ -173,7 +173,7 @@ struct AgcGraphicsPipelineImpl {
     uint32_t magic;
     uint32_t recorded_refs;
     AgcDevice device;
-    AgcShader vertex_shader;
+    AgcShader primitive_shader;
     AgcShader pixel_shader;
     uint32_t descriptor_mapping_count;
     uint32_t push_constant_range_count;
@@ -1860,6 +1860,9 @@ static int agcShaderReflectionValid(
         }
     }
     if ((stage != kAgcShaderStageVs &&
+         !(current_reflection &&
+           reflection->front_stage == kAgcShaderStageVs &&
+           (stage == kAgcShaderStageHs || stage == kAgcShaderStageGs)) &&
          reflection->vertex_input_count != 0u) ||
         (stage != kAgcShaderStagePs &&
          (reflection->color_export_count != 0u ||
@@ -2805,7 +2808,7 @@ static int32_t agcBuildGraphicsPipelineBind(
     AgcGraphicsPipeline pipeline)
 {
     AgcGfx1013Wave32VsPsState shader_state = {0};
-    AgcShaderRecord primitive_record = pipeline->vertex_shader->record;
+    AgcShaderRecord primitive_record = pipeline->primitive_shader->record;
     AgcShaderRecord pixel_record = pipeline->pixel_shader->record;
     AgcRegisterValue primitive_sh[UINT8_MAX];
     AgcRegisterValue pixel_sh[UINT8_MAX];
@@ -2820,17 +2823,17 @@ static int32_t agcBuildGraphicsPipelineBind(
     shader_state.primitive.record = &primitive_record;
     shader_state.primitive.sh_registers = primitive_sh;
     shader_state.primitive.num_sh_registers =
-        agcPipelineCopyStaticShRegisters(pipeline->vertex_shader,
+        agcPipelineCopyStaticShRegisters(pipeline->primitive_shader,
             primitive_sh, UINT8_MAX);
     primitive_record.num_sh_registers =
         (uint8_t)shader_state.primitive.num_sh_registers;
     shader_state.primitive.cx_registers =
         (const AgcRegisterValue *)(uintptr_t)
-            pipeline->vertex_shader->record.cx_registers;
+            pipeline->primitive_shader->record.cx_registers;
     shader_state.primitive.num_cx_registers =
-        pipeline->vertex_shader->record.num_cx_registers;
+        pipeline->primitive_shader->record.num_cx_registers;
     shader_state.primitive.code_address =
-        pipeline->vertex_shader->program_gpu_address;
+        pipeline->primitive_shader->program_gpu_address;
     shader_state.pixel.record = &pixel_record;
     shader_state.pixel.sh_registers = pixel_sh;
     shader_state.pixel.num_sh_registers =
@@ -2846,7 +2849,7 @@ static int32_t agcBuildGraphicsPipelineBind(
     shader_state.pixel.code_address =
         pipeline->pixel_shader->program_gpu_address;
     shader_state.primitive_back_code_address =
-        pipeline->vertex_shader->front_program_gpu_address;
+        pipeline->primitive_shader->front_program_gpu_address;
     shader_state.primitive_type = 4u;
 
     agcCbInit(&cb, pipeline->bind_words, sizeof(pipeline->bind_words));
@@ -2948,7 +2951,7 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
     const AgcGraphicsPipelineDesc *desc, AgcGraphicsPipeline *pipeline_out)
 {
     AgcGraphicsPipeline pipeline;
-    AgcShader vs;
+    AgcShader primitive;
     AgcShader ps;
     AgcRasterizationState rasterization = AGC_RASTERIZATION_STATE_INIT;
     AgcDepthStencilPipelineState depth_stencil =
@@ -2990,47 +2993,70 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
         return AGC_ERROR_INVALID_ARGUMENT;
     }
     if (desc->tessellation_control_shader ||
-        desc->tessellation_evaluation_shader || desc->geometry_shader)
+        desc->tessellation_evaluation_shader)
         return AGC_ERROR_NOT_SUPPORTED;
-    vs = desc->vertex_shader;
+    if (desc->geometry_shader) {
+        if (desc->vertex_shader)
+            return AGC_ERROR_VALIDATION_FAILED;
+        primitive = desc->geometry_shader;
+    } else {
+        primitive = desc->vertex_shader;
+    }
     ps = desc->pixel_shader;
-    if (!vs || !ps || vs->magic != AGC_MAGIC_SHADER ||
-        ps->magic != AGC_MAGIC_SHADER || vs->device != device ||
-        ps->device != device || vs->stage != kAgcShaderStageVs ||
+    if (!primitive || !ps || primitive->magic != AGC_MAGIC_SHADER ||
+        ps->magic != AGC_MAGIC_SHADER || primitive->device != device ||
+        ps->device != device ||
+        primitive->stage != (desc->geometry_shader ?
+            kAgcShaderStageGs : kAgcShaderStageVs) ||
         ps->stage != kAgcShaderStagePs) {
         return AGC_ERROR_SHADER_INVALID_TYPE;
     }
-    if (!vs->has_reflection || !ps->has_reflection)
+    if (!primitive->has_reflection || !ps->has_reflection)
         return AGC_ERROR_SHADER_INVALID;
-    result = agcPipelineValidateShaderUserData(&vs->reflection);
+    if (desc->geometry_shader &&
+        (primitive->reflection.version != AGC_SHADER_REFLECTION_VERSION_2 ||
+         primitive->reflection.front_stage != kAgcShaderStageVs ||
+         !primitive->has_front_record ||
+         (primitive->reflection.flags &
+          (AGC_SHADER_REFLECTION_NGG_BIT |
+           AGC_SHADER_REFLECTION_FUSED_STAGE_BIT)) !=
+             (AGC_SHADER_REFLECTION_NGG_BIT |
+              AGC_SHADER_REFLECTION_FUSED_STAGE_BIT) ||
+         primitive->reflection.geometry_input_primitive !=
+             AGC_SHADER_PRIMITIVE_TRIANGLES ||
+         primitive->reflection.geometry_vertices_in != 3u ||
+         primitive->reflection.geometry_invocations != 1u)) {
+        return AGC_ERROR_NOT_SUPPORTED;
+    }
+    result = agcPipelineValidateShaderUserData(&primitive->reflection);
     if (result != AGC_OK)
         return result;
     result = agcPipelineValidateShaderUserData(&ps->reflection);
     if (result != AGC_OK)
         return result;
-    if ((vs->reflection.flags & AGC_SHADER_REFLECTION_NGG_BIT) == 0u ||
+    if ((primitive->reflection.flags & AGC_SHADER_REFLECTION_NGG_BIT) == 0u ||
         ps->reflection.wave_size != 32u)
         return AGC_ERROR_NOT_SUPPORTED;
     if ((ps->reflection.stage_input_mask &
-         ~vs->reflection.stage_output_mask) != 0u)
+         ~primitive->reflection.stage_output_mask) != 0u)
         return AGC_ERROR_VALIDATION_FAILED;
-    if (desc->vertex_input_count != vs->reflection.vertex_input_count)
+    if (desc->vertex_input_count != primitive->reflection.vertex_input_count)
         return AGC_ERROR_VALIDATION_FAILED;
     for (i = 0u; i < desc->vertex_input_count; ++i) {
-        for (j = 0u; j < vs->reflection.vertex_input_count; ++j) {
+        for (j = 0u; j < primitive->reflection.vertex_input_count; ++j) {
             if (agcPipelineVertexInputEqual(
                     &desc->vertex_inputs[i],
-                    &vs->reflection.vertex_inputs[j]))
+                    &primitive->reflection.vertex_inputs[j]))
                 break;
         }
-        if (j == vs->reflection.vertex_input_count)
+        if (j == primitive->reflection.vertex_input_count)
             return AGC_ERROR_VALIDATION_FAILED;
     }
-    if (!agcPipelineReflectionDescriptorsMatch(&vs->reflection,
+    if (!agcPipelineReflectionDescriptorsMatch(&primitive->reflection,
             desc->descriptor_mappings, desc->descriptor_mapping_count) ||
         !agcPipelineReflectionDescriptorsMatch(&ps->reflection,
             desc->descriptor_mappings, desc->descriptor_mapping_count) ||
-        !agcPipelineReflectionPushRangesMatch(&vs->reflection,
+        !agcPipelineReflectionPushRangesMatch(&primitive->reflection,
             desc->push_constant_ranges,
             desc->push_constant_range_count) ||
         !agcPipelineReflectionPushRangesMatch(&ps->reflection,
@@ -3047,7 +3073,7 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
             (mapping->byte_offset & 3u) != 0u ||
             (mapping->byte_stride & 3u) != 0u ||
             !agcPipelineLayoutEntryUsed(
-                &vs->reflection, &ps->reflection, mapping)) {
+                &primitive->reflection, &ps->reflection, mapping)) {
             return AGC_ERROR_VALIDATION_FAILED;
         }
         for (j = 0u; j < i; ++j) {
@@ -3063,7 +3089,7 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
             (range->offset & 3u) != 0u || (range->size & 3u) != 0u ||
             (range->stage_mask & ~((1u << kAgcShaderStageCount) - 1u)) != 0u ||
             !agcPipelinePushEntryUsed(
-                &vs->reflection, &ps->reflection, range)) {
+                &primitive->reflection, &ps->reflection, range)) {
             return AGC_ERROR_VALIDATION_FAILED;
         }
     }
@@ -3137,11 +3163,11 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
     result = agcPipelineBuildResourceLayout(desc->descriptor_mappings,
         desc->descriptor_mapping_count, desc->vertex_inputs,
         desc->vertex_input_count,
-        vs->reflection.push_constant_size >
+        primitive->reflection.push_constant_size >
             ps->reflection.push_constant_size ?
-            vs->reflection.push_constant_size :
+            primitive->reflection.push_constant_size :
             ps->reflection.push_constant_size,
-        agcPipelineUsesIndirectDescriptorSets(&vs->reflection) ||
+        agcPipelineUsesIndirectDescriptorSets(&primitive->reflection) ||
             agcPipelineUsesIndirectDescriptorSets(&ps->reflection),
         &resource_layout);
     if (result != AGC_OK)
@@ -3151,7 +3177,7 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
         return AGC_ERROR_OUT_OF_MEMORY;
     pipeline->magic = AGC_MAGIC_GRAPHICS_PIPELINE;
     pipeline->device = device;
-    pipeline->vertex_shader = vs;
+    pipeline->primitive_shader = primitive;
     pipeline->pixel_shader = ps;
     pipeline->descriptor_mapping_count = desc->descriptor_mapping_count;
     pipeline->push_constant_range_count = desc->push_constant_range_count;
@@ -3184,7 +3210,7 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
         agcDestroyChild(device, pipeline);
         return result;
     }
-    vs->dependency_refs++;
+    primitive->dependency_refs++;
     ps->dependency_refs++;
     *pipeline_out = pipeline;
     return AGC_OK;
@@ -3201,7 +3227,7 @@ int32_t PS5_SYSV_ABI agcDestroyGraphicsPipeline(AgcGraphicsPipeline pipeline)
     if (pipeline->recorded_refs != 0u)
         return AGC_ERROR_BUSY;
     device = pipeline->device;
-    pipeline->vertex_shader->dependency_refs--;
+    pipeline->primitive_shader->dependency_refs--;
     pipeline->pixel_shader->dependency_refs--;
     pipeline->magic = 0u;
     agcDestroyChild(device, pipeline);
@@ -4007,7 +4033,8 @@ int32_t PS5_SYSV_ABI agcCmdPushConstants(AgcCommandBuffer command_buffer,
          !command_buffer->compute_pipeline))
         return AGC_ERROR_INVALID_STATE;
     supported_stage_mask = command_buffer->graphics_pipeline ?
-        ((1u << kAgcShaderStageVs) | (1u << kAgcShaderStagePs)) :
+        ((1u << command_buffer->graphics_pipeline->primitive_shader->stage) |
+         (1u << kAgcShaderStagePs)) :
         (1u << kAgcShaderStageCs);
     if ((stage_mask & ~supported_stage_mask) != 0u)
         return AGC_ERROR_VALIDATION_FAILED;
@@ -4477,15 +4504,15 @@ int32_t PS5_SYSV_ABI agcCmdDrawIndexed(AgcCommandBuffer command_buffer,
     if (index_count == 0u || instance_count == 0u)
         return AGC_ERROR_INVALID_ARGUMENT;
     if ((vertex_offset != 0 &&
-         (command_buffer->graphics_pipeline->vertex_shader->reflection.
+        (command_buffer->graphics_pipeline->primitive_shader->reflection.
           system_sgpr_mask & AGC_SHADER_SYSTEM_SGPR_BASE_VERTEX_BIT) == 0u) ||
         (first_instance != 0u &&
-         (command_buffer->graphics_pipeline->vertex_shader->reflection.
+         (command_buffer->graphics_pipeline->primitive_shader->reflection.
           system_sgpr_mask &
           AGC_SHADER_SYSTEM_SGPR_START_INSTANCE_BIT) == 0u))
         return AGC_ERROR_NOT_SUPPORTED;
     result = agcCommandShaderResourcesReady(command_buffer,
-        command_buffer->graphics_pipeline->vertex_shader);
+        command_buffer->graphics_pipeline->primitive_shader);
     if (result != AGC_OK)
         return result;
     result = agcCommandShaderResourcesReady(command_buffer,
@@ -4507,7 +4534,7 @@ int32_t PS5_SYSV_ABI agcCmdDrawIndexed(AgcCommandBuffer command_buffer,
     }
     agcCbInit(&temporary_cb, temporary, sizeof(temporary));
     result = agcCommandEmitGraphicsUserData(&temporary_cb, command_buffer,
-        command_buffer->graphics_pipeline->vertex_shader,
+        command_buffer->graphics_pipeline->primitive_shader,
         vertex_offset, first_instance, 0u);
     if (result != AGC_OK)
         return result;
