@@ -283,8 +283,9 @@ maximum 64-bit layout arithmetic. Its dedicated `uvec4` shader uses `32_R`
 export 1 and exact coordinate-derived values spanning
 `0x00000000..0xffffffff`. The native oracle validates exact values, range,
 diversity, hashes, and bounded coverage; the isolated portable gate passes
-firmware-neutral dependency verification. Final-byte pinning and hardware
-execution remain pending.
+firmware-neutral dependency verification. Its final bytes are pinned as
+SHA-256 `d2eb57d8e6f5f664a72b1ddfa7452ceae2b72328e0bd49445e18fc9bb233ff8f`;
+two FW 11.60 executions and the identical-byte FW 5.50 replay remain pending.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability

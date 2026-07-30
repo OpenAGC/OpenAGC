@@ -585,7 +585,9 @@ all six pinned artifacts for identical-byte FW 5.50 replay and proceed to the
   coordinate-derived values spanning `0x00000000..0xffffffff`. The native
   oracle validates exact values, range, diversity, hashes, and bounded
   coverage, and the isolated portable gate passes firmware-neutral dependency
-  verification. Pin its final bytes before execution.
+  verification. The final firmware-neutral artifact is pinned as SHA-256
+  `d2eb57d8e6f5f664a72b1ddfa7452ceae2b72328e0bd49445e18fc9bb233ff8f`.
+  Run those exact bytes twice on FW 11.60; preserve FW 5.50 replay as pending.
 
 These formats need dedicated integer-output pixel shaders. Do not qualify them
 using a floating-point shader and assume the conversion is correct. Their
