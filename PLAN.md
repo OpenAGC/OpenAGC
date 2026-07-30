@@ -1097,9 +1097,11 @@ pixels, `{74880,74880,74880}` regions, zero decode mismatches, zero maximum
 error, and FNV64 `0x5327e8ad53b3a455`. BC4 UNORM is hardware-qualified on
 FW 11.60; qualify BC4 SNORM next.
 
-BC4 SNORM pass 1 succeeded on FW 11.60 with `224640` changed pixels,
+BC4 SNORM passed twice on FW 11.60 with identical `224640` changed pixels,
 `{74880,74880,74880}` regions, zero decode mismatches, zero maximum error,
-and FNV64 `0x16b22a8b52c7ce8d`. Repeat the identical artifact once.
+and FNV64 `0x16b22a8b52c7ce8d`. Both BC4 variants are hardware-qualified on
+FW 11.60. Rebuild and freeze BC2 after the shared diversity-gate change, then
+qualify BC2 UNORM/SRGB.
 The final firmware-neutral bytes are pinned as SHA-256
 `f74c393112fc465eace431a3fe288095ae4b3bf5ee993e8147ed0e9a2f22f2a4`
 for BC4 UNORM and

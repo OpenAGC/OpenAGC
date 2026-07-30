@@ -155,3 +155,10 @@ passed with `224640` changed pixels, `{74880,74880,74880}` regions, zero
 decode mismatches, zero maximum error, and FNV64 `0x16b22a8b52c7ce8d`.
 Fence, marker, shutdown, cleanup, verdict, and self-termination passed. Repeat
 the identical bytes once.
+
+## BC4 SNORM corrected pass 2
+
+The identical artifact reproduced `224640` changed pixels,
+`{74880,74880,74880}` regions, zero decode mismatches/error, and FNV64
+`0x16b22a8b52c7ce8d`. All lifecycle gates passed again. BC4 UNORM and SNORM
+are hardware-qualified on exact FW 11.60.
