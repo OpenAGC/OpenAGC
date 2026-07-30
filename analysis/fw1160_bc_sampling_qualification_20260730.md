@@ -171,3 +171,10 @@ were preserved before execution:
 
 - UNORM: `e86a53fdb7b3c65cf13dcf66ca0588867d1cb37fab6bbf5b446c654948847b5b`
 - SRGB: `d182824d912f7473f25beeba80ffc58e3ceb31d8a5b7bff678d2237b24c9c5b8`
+
+## BC2 UNORM pass 1
+
+The pinned UNORM artifact passed with `224640` changed pixels,
+`{74880,74880,74880}` regions, alpha range `0..255`, zero exact mismatches,
+and FNV64 `0xf3b07b5935bb483d`. All lifecycle gates passed. Repeat the
+identical bytes once.
