@@ -62,6 +62,7 @@ extern "C" {
     (AGC_GFX1013_TESS_OFFCHIP_BUFFER_COUNT * \
      AGC_GFX1013_TESS_OFFCHIP_BUFFER_DWORDS * 4u)
 #define AGC_GFX1013_TESS_FACTOR_RING_SIZE     0x1e000u
+#define AGC_GFX1013_HS_LDS_MAX_SIZE           0x10000u
 /* Gfx10.3 encodes the global buffer count here. Gfx11 changed this field to a
  * per-shader-engine count; do not divide the Oberon value by ENGINE_COUNT. */
 #define AGC_GFX1013_TESS_OFFCHIP_PARAM \

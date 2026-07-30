@@ -901,6 +901,14 @@ static void test_gfx1013_wave32_tessellation_binding(void)
     TEST_ASSERT_EQ(value, 0x00e0210du,
         "LS+HS+DS+NGG Wave32 stage enables combined");
 
+    hs_record.shader_type = (uint8_t)kAgcShaderBinaryTypeHsBack;
+    gs_record.shader_type = (uint8_t)kAgcShaderBinaryTypeGsBack;
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013ValidateWave32TessVsPs(&state), AGC_OK,
+        "compiler HsBack/GsBack tessellation records validate directly");
+    TEST_ASSERT_EQ(agcGfx1013BindWave32TessVsPs(&cb, &state), AGC_OK,
+        "compiler HsBack/GsBack tessellation records bind directly");
+
     state.hull_lds_size = 1u;
     agcCbReset(&cb, buffer, sizeof(buffer));
     TEST_ASSERT_EQ(

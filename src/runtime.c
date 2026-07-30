@@ -101,6 +101,10 @@ struct AgcDeviceImpl {
     uint64_t high_water_allocation_count;
     uint64_t high_water_bytes;
     uint64_t deferred_free_count;
+    AgcRuntimeAllocation *tessellation_offchip_allocation;
+    AgcRuntimeAllocation *tessellation_factor_allocation;
+    AgcRuntimeAllocation *tessellation_table_allocation;
+    uint32_t tessellation_initialized;
 };
 
 struct AgcQueueImpl {
@@ -173,6 +177,7 @@ struct AgcGraphicsPipelineImpl {
     uint32_t magic;
     uint32_t recorded_refs;
     AgcDevice device;
+    AgcShader hull_shader;
     AgcShader primitive_shader;
     AgcShader pixel_shader;
     uint32_t descriptor_mapping_count;
@@ -191,6 +196,9 @@ struct AgcGraphicsPipelineImpl {
     AgcMultisampleState multisample;
     AgcDynamicStateFlags dynamic_state_mask;
     AgcRuntimePipelineResourceLayout resource_layout;
+    uint32_t tessellation_input_control_points;
+    uint32_t tessellation_tcs_offchip_layout;
+    uint32_t tessellation_tes_offchip_layout;
     uint32_t bind_dword_count;
     uint32_t resource_layout_requires_bindings;
     uint32_t bind_words[AGC_RUNTIME_PIPELINE_BIND_MAX_DWORDS];
@@ -533,6 +541,108 @@ static void agcRuntimeFree(AgcDevice device, AgcRuntimeAllocation *allocation)
         agcDestroyMemoryBlock(device, block);
 }
 
+static void agcRuntimeDestroyTessellationStorage(AgcDevice device)
+{
+    if (device->tessellation_table_allocation)
+        agcRuntimeFree(device, device->tessellation_table_allocation);
+    if (device->tessellation_factor_allocation)
+        agcRuntimeFree(device, device->tessellation_factor_allocation);
+    if (device->tessellation_offchip_allocation)
+        agcRuntimeFree(device, device->tessellation_offchip_allocation);
+    device->tessellation_table_allocation = NULL;
+    device->tessellation_factor_allocation = NULL;
+    device->tessellation_offchip_allocation = NULL;
+    device->tessellation_initialized = 0u;
+}
+
+static int agcRuntimeTessellationSupported(AgcDevice device)
+{
+    (void)device;
+#ifdef OPENAGC_PROSPERO
+    {
+        AgcDriverRuntimeDiagnostics diagnostics;
+        return agcDriverDebugRuntimeProfile(&diagnostics) == AGC_OK &&
+            diagnostics.profile.supports_tf_ring;
+    }
+#else
+    return 1;
+#endif
+}
+
+static int32_t agcRuntimeInitializeTessellationStorage(AgcDevice device)
+{
+    AgcGfx1013TessellationRingTable table;
+    AgcGfx1013TessellationState state;
+    int32_t result;
+
+    if (device->tessellation_initialized)
+        return AGC_OK;
+    if (!agcRuntimeTessellationSupported(device))
+        return AGC_ERROR_NOT_SUPPORTED;
+    result = agcRuntimeAllocate(device, AGC_MEMORY_HEAP_GARLIC,
+        AGC_GFX1013_TESS_OFFCHIP_RING_SIZE, AGC_GARLIC_ALIGNMENT, 0u,
+        AGC_OBJECT_TYPE_COUNT, device,
+        &device->tessellation_offchip_allocation);
+    if (result != AGC_OK)
+        return result;
+    result = agcRuntimeAllocate(device, AGC_MEMORY_HEAP_GARLIC,
+        AGC_GFX1013_TESS_FACTOR_RING_SIZE, AGC_GARLIC_ALIGNMENT, 0u,
+        AGC_OBJECT_TYPE_COUNT, device,
+        &device->tessellation_factor_allocation);
+    if (result != AGC_OK)
+        goto fail;
+    result = agcRuntimeAllocate(device, AGC_MEMORY_HEAP_FLEXIBLE,
+        sizeof(table), 256u, 0u, AGC_OBJECT_TYPE_COUNT, device,
+        &device->tessellation_table_allocation);
+    if (result != AGC_OK)
+        goto fail;
+    (void)snprintf(device->tessellation_offchip_allocation->debug_name,
+        AGC_RUNTIME_DEBUG_NAME_SIZE, "%s", "runtime-tess-offchip-ring");
+    (void)snprintf(device->tessellation_factor_allocation->debug_name,
+        AGC_RUNTIME_DEBUG_NAME_SIZE, "%s", "runtime-tess-factor-ring");
+    (void)snprintf(device->tessellation_table_allocation->debug_name,
+        AGC_RUNTIME_DEBUG_NAME_SIZE, "%s", "runtime-tess-ring-table");
+    memset(&state, 0, sizeof(state));
+    state.offchip_ring_address = agcAllocationGpuAddress(
+        device->tessellation_offchip_allocation);
+    state.factor_ring_address = agcAllocationGpuAddress(
+        device->tessellation_factor_allocation);
+    state.offchip_ring_size = AGC_GFX1013_TESS_OFFCHIP_RING_SIZE;
+    state.factor_ring_size = AGC_GFX1013_TESS_FACTOR_RING_SIZE;
+    state.offchip_param = AGC_GFX1013_TESS_OFFCHIP_PARAM;
+    result = agcGfx1013BuildTessellationRingTable(&table, &state);
+    if (result != AGC_OK)
+        goto fail;
+    memset(agcAllocationCpuAddress(device->tessellation_offchip_allocation),
+        0, AGC_GFX1013_TESS_OFFCHIP_RING_SIZE);
+    memset(agcAllocationCpuAddress(device->tessellation_factor_allocation),
+        0, AGC_GFX1013_TESS_FACTOR_RING_SIZE);
+    memcpy(agcAllocationCpuAddress(device->tessellation_table_allocation),
+        &table, sizeof(table));
+    result = agcFlushRuntimeAllocation(
+        device->tessellation_offchip_allocation, 0u,
+        AGC_GFX1013_TESS_OFFCHIP_RING_SIZE);
+    if (result == AGC_OK)
+        result = agcFlushRuntimeAllocation(
+            device->tessellation_factor_allocation, 0u,
+            AGC_GFX1013_TESS_FACTOR_RING_SIZE);
+    if (result == AGC_OK)
+        result = agcFlushRuntimeAllocation(
+            device->tessellation_table_allocation, 0u, sizeof(table));
+    if (result == AGC_OK)
+        result = sceAgcDriverSetTFRing((uintptr_t)agcAllocationGpuAddress(
+            device->tessellation_factor_allocation),
+            AGC_GFX1013_TESS_FACTOR_RING_SIZE);
+    if (result != AGC_OK)
+        goto fail;
+    device->tessellation_initialized = 1u;
+    return AGC_OK;
+
+fail:
+    agcRuntimeDestroyTessellationStorage(device);
+    return result;
+}
+
 static void agcDestroyMemoryBlocks(AgcDevice device)
 {
     uint32_t heap;
@@ -694,6 +804,7 @@ int32_t PS5_SYSV_ABI agcDestroyDevice(AgcDevice device)
     result = agcDriverShutdown();
     if (result != AGC_OK)
         return result;
+    agcRuntimeDestroyTessellationStorage(device);
     agcDestroyMemoryBlocks(device);
     allocation = device->allocation;
     device->magic = 0u;
@@ -1753,6 +1864,59 @@ static int agcShaderColorExportFormatValid(
     }
 }
 
+static int agcShaderTessellationReflectionValid(
+    const AgcShaderReflection *reflection)
+{
+    const int reads_factors_flag =
+        (reflection->flags &
+         AGC_SHADER_REFLECTION_READS_TESS_FACTORS_BIT) != 0u;
+    const int has_tessellation =
+        reflection->tessellation_patch_count != 0u ||
+        reflection->tessellation_input_control_points != 0u ||
+        reflection->tessellation_output_control_points != 0u ||
+        reflection->tessellation_vertex_output_count != 0u ||
+        reflection->tessellation_control_output_count != 0u ||
+        reflection->tessellation_primitive_mode != 0u ||
+        reflection->tessellation_reads_factors != 0u ||
+        reflection->tessellation_lds_size != 0u;
+
+    if (!has_tessellation)
+        return !reads_factors_flag;
+    if (reflection->tessellation_patch_count == 0u ||
+        reflection->tessellation_patch_count > 0x7fu ||
+        reflection->tessellation_output_control_points == 0u ||
+        reflection->tessellation_output_control_points > 32u ||
+        reflection->tessellation_reads_factors > 1u ||
+        reads_factors_flag !=
+            (reflection->tessellation_reads_factors != 0u))
+        return 0;
+    if (reflection->stage == kAgcShaderStageHs) {
+        return (reflection->version != AGC_SHADER_REFLECTION_VERSION_2 ||
+                reflection->front_stage == kAgcShaderStageVs) &&
+            reflection->tessellation_input_control_points != 0u &&
+            reflection->tessellation_input_control_points <= 32u &&
+            reflection->tessellation_vertex_output_count <= 0x3fu &&
+            reflection->tessellation_control_output_count <= 0x3fu &&
+            reflection->tessellation_primitive_mode == 0u &&
+            reflection->tessellation_reads_factors == 0u &&
+            reflection->tessellation_lds_size != 0u &&
+            reflection->tessellation_lds_size <=
+                AGC_GFX1013_HS_LDS_MAX_SIZE;
+    }
+    if (reflection->stage == kAgcShaderStageDs ||
+        reflection->stage == kAgcShaderStageGs) {
+        return (reflection->version != AGC_SHADER_REFLECTION_VERSION_2 ||
+                reflection->front_stage == kAgcShaderStageDs) &&
+            reflection->tessellation_input_control_points == 0u &&
+            reflection->tessellation_vertex_output_count == 0u &&
+            reflection->tessellation_control_output_count == 0u &&
+            reflection->tessellation_primitive_mode != 0u &&
+            reflection->tessellation_primitive_mode <= 3u &&
+            reflection->tessellation_lds_size == 0u;
+    }
+    return 0;
+}
+
 static int agcShaderReflectionValid(
     const AgcShaderReflection *reflection, AgcShaderStage stage,
     const void *binary, uint64_t binary_size, const void *front_binary,
@@ -1813,7 +1977,8 @@ static int agcShaderReflectionValid(
         reflection->code_offset >= binary_size ||
         reflection->code_size == 0u ||
         reflection->code_size > binary_size - reflection->code_offset ||
-        reflection->reserved0 != 0u) {
+        reflection->reserved0 != 0u ||
+        !agcShaderTessellationReflectionValid(reflection)) {
         return 0;
     }
     if ((legacy_reflection &&
@@ -2200,16 +2365,19 @@ static int agcPipelineReflectionPushRangesMatch(
 
 static int agcPipelineLayoutEntryUsed(
     const AgcShaderReflection *a, const AgcShaderReflection *b,
+    const AgcShaderReflection *c,
     const AgcShaderDescriptorMapping *entry)
 {
     uint32_t i;
-    const AgcShaderReflection *reflections[2] = {a, b};
+    const AgcShaderReflection *reflections[3] = {a, b, c};
     uint32_t reflection_index;
 
-    for (reflection_index = 0u; reflection_index < 2u;
+    for (reflection_index = 0u; reflection_index < 3u;
          ++reflection_index) {
         const AgcShaderReflection *reflection =
             reflections[reflection_index];
+        if (!reflection)
+            continue;
         for (i = 0u; i < reflection->descriptor_mapping_count; ++i) {
             if (agcPipelineDescriptorEqual(
                     &reflection->descriptor_mappings[i], entry))
@@ -2221,16 +2389,19 @@ static int agcPipelineLayoutEntryUsed(
 
 static int agcPipelinePushEntryUsed(
     const AgcShaderReflection *a, const AgcShaderReflection *b,
+    const AgcShaderReflection *c,
     const AgcShaderPushConstantRange *entry)
 {
-    const AgcShaderReflection *reflections[2] = {a, b};
+    const AgcShaderReflection *reflections[3] = {a, b, c};
     uint32_t reflection_index;
     uint32_t i;
 
-    for (reflection_index = 0u; reflection_index < 2u;
+    for (reflection_index = 0u; reflection_index < 3u;
          ++reflection_index) {
         const AgcShaderReflection *reflection =
             reflections[reflection_index];
+        if (!reflection)
+            continue;
         for (i = 0u; i < reflection->push_constant_range_count; ++i) {
             const AgcShaderPushConstantRange *range =
                 &reflection->push_constant_ranges[i];
@@ -2804,12 +2975,32 @@ static uint32_t agcPipelineCopyStaticShRegisters(AgcShader shader,
     return count;
 }
 
+static void agcPipelineBuildShaderBinding(AgcShader shader,
+    AgcShaderRecord *record, AgcRegisterValue *sh_registers,
+    AgcGfx1013ShaderBinding *binding)
+{
+    *record = shader->record;
+    binding->record = record;
+    binding->sh_registers = sh_registers;
+    binding->num_sh_registers = agcPipelineCopyStaticShRegisters(
+        shader, sh_registers, UINT8_MAX);
+    record->num_sh_registers = (uint8_t)binding->num_sh_registers;
+    binding->cx_registers = (const AgcRegisterValue *)(uintptr_t)
+        shader->record.cx_registers;
+    binding->num_cx_registers = shader->record.num_cx_registers;
+    binding->code_address = shader->program_gpu_address;
+}
+
 static int32_t agcBuildGraphicsPipelineBind(
     AgcGraphicsPipeline pipeline)
 {
     AgcGfx1013Wave32VsPsState shader_state = {0};
-    AgcShaderRecord primitive_record = pipeline->primitive_shader->record;
-    AgcShaderRecord pixel_record = pipeline->pixel_shader->record;
+    AgcGfx1013Wave32TessVsPsState tess_shader_state = {0};
+    AgcGfx1013TessellationState tessellation = {0};
+    AgcShaderRecord hull_record = {0};
+    AgcShaderRecord primitive_record = {0};
+    AgcShaderRecord pixel_record = {0};
+    AgcRegisterValue hull_sh[UINT8_MAX];
     AgcRegisterValue primitive_sh[UINT8_MAX];
     AgcRegisterValue pixel_sh[UINT8_MAX];
     AgcGfx1013ColorBlendState blend_state = {0};
@@ -2820,40 +3011,59 @@ static int32_t agcBuildGraphicsPipelineBind(
     uint32_t i;
     int32_t result;
 
-    shader_state.primitive.record = &primitive_record;
-    shader_state.primitive.sh_registers = primitive_sh;
-    shader_state.primitive.num_sh_registers =
-        agcPipelineCopyStaticShRegisters(pipeline->primitive_shader,
-            primitive_sh, UINT8_MAX);
-    primitive_record.num_sh_registers =
-        (uint8_t)shader_state.primitive.num_sh_registers;
-    shader_state.primitive.cx_registers =
-        (const AgcRegisterValue *)(uintptr_t)
-            pipeline->primitive_shader->record.cx_registers;
-    shader_state.primitive.num_cx_registers =
-        pipeline->primitive_shader->record.num_cx_registers;
-    shader_state.primitive.code_address =
-        pipeline->primitive_shader->program_gpu_address;
-    shader_state.pixel.record = &pixel_record;
-    shader_state.pixel.sh_registers = pixel_sh;
-    shader_state.pixel.num_sh_registers =
-        agcPipelineCopyStaticShRegisters(pipeline->pixel_shader,
-            pixel_sh, UINT8_MAX);
-    pixel_record.num_sh_registers =
-        (uint8_t)shader_state.pixel.num_sh_registers;
-    shader_state.pixel.cx_registers =
-        (const AgcRegisterValue *)(uintptr_t)
-            pipeline->pixel_shader->record.cx_registers;
-    shader_state.pixel.num_cx_registers =
-        pipeline->pixel_shader->record.num_cx_registers;
-    shader_state.pixel.code_address =
-        pipeline->pixel_shader->program_gpu_address;
-    shader_state.primitive_back_code_address =
-        pipeline->primitive_shader->front_program_gpu_address;
-    shader_state.primitive_type = 4u;
-
     agcCbInit(&cb, pipeline->bind_words, sizeof(pipeline->bind_words));
-    result = agcGfx1013BindVsPs(&cb, &shader_state);
+    if (pipeline->hull_shader) {
+        agcPipelineBuildShaderBinding(pipeline->hull_shader,
+            &hull_record, hull_sh, &tess_shader_state.hull);
+        agcPipelineBuildShaderBinding(pipeline->primitive_shader,
+            &primitive_record, primitive_sh,
+            &tess_shader_state.primitive);
+        agcPipelineBuildShaderBinding(pipeline->pixel_shader,
+            &pixel_record, pixel_sh, &tess_shader_state.pixel);
+        tess_shader_state.hull_back_code_address =
+            pipeline->hull_shader->front_program_gpu_address;
+        tess_shader_state.primitive_back_code_address =
+            pipeline->primitive_shader->front_program_gpu_address;
+        tess_shader_state.ring_descriptor_address = agcAllocationGpuAddress(
+            pipeline->device->tessellation_table_allocation);
+        tess_shader_state.tcs_offchip_layout =
+            pipeline->tessellation_tcs_offchip_layout;
+        tess_shader_state.tes_offchip_layout =
+            pipeline->tessellation_tes_offchip_layout;
+        tess_shader_state.hull_lds_size =
+            pipeline->hull_shader->reflection.tessellation_lds_size;
+        tess_shader_state.primitive_type = 9u;
+        tessellation.offchip_ring_address = agcAllocationGpuAddress(
+            pipeline->device->tessellation_offchip_allocation);
+        tessellation.factor_ring_address = agcAllocationGpuAddress(
+            pipeline->device->tessellation_factor_allocation);
+        tessellation.offchip_ring_size =
+            AGC_GFX1013_TESS_OFFCHIP_RING_SIZE;
+        tessellation.factor_ring_size =
+            AGC_GFX1013_TESS_FACTOR_RING_SIZE;
+        tessellation.offchip_param = AGC_GFX1013_TESS_OFFCHIP_PARAM;
+        tessellation.max_tess_level = UINT32_C(0x42800000);
+        tessellation.min_tess_level = 0u;
+        tessellation.esgs_ring_itemsize = 1u;
+        tessellation.distribution = UINT32_C(0xd8181e0c);
+        tessellation.tf_param = UINT32_C(0x61);
+        result = agcGfx1013SetTessellationRings(&cb, &tessellation);
+        if (result == AGC_OK)
+            result = agcGfx1013BindWave32TessVsPs(
+                &cb, &tess_shader_state);
+        if (result == AGC_OK)
+            result = agcGfx1013SetTessellationContext(
+                &cb, &tessellation);
+    } else {
+        agcPipelineBuildShaderBinding(pipeline->primitive_shader,
+            &primitive_record, primitive_sh, &shader_state.primitive);
+        agcPipelineBuildShaderBinding(pipeline->pixel_shader,
+            &pixel_record, pixel_sh, &shader_state.pixel);
+        shader_state.primitive_back_code_address =
+            pipeline->primitive_shader->front_program_gpu_address;
+        shader_state.primitive_type = 4u;
+        result = agcGfx1013BindVsPs(&cb, &shader_state);
+    }
     if (result != AGC_OK)
         return result;
     if (pipeline->color_attachment_count != 0u) {
@@ -2951,7 +3161,9 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
     const AgcGraphicsPipelineDesc *desc, AgcGraphicsPipeline *pipeline_out)
 {
     AgcGraphicsPipeline pipeline;
+    AgcShader hull = NULL;
     AgcShader primitive;
+    AgcShader vertex_stage;
     AgcShader ps;
     AgcRasterizationState rasterization = AGC_RASTERIZATION_STATE_INIT;
     AgcDepthStencilPipelineState depth_stencil =
@@ -2965,6 +3177,10 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
         AGC_DYNAMIC_STATE_DEPTH_BIAS_BIT;
     uint32_t i;
     uint32_t j;
+    uint32_t tessellation_tcs_layout = 0u;
+    uint32_t tessellation_tes_layout = 0u;
+    uint32_t push_constant_size;
+    int tessellated;
     int32_t result;
 
     if (!pipeline_out)
@@ -2992,28 +3208,42 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
         (desc->dynamic_state_mask & ~known_dynamic_states) != 0u) {
         return AGC_ERROR_INVALID_ARGUMENT;
     }
-    if (desc->tessellation_control_shader ||
-        desc->tessellation_evaluation_shader)
-        return AGC_ERROR_NOT_SUPPORTED;
-    if (desc->geometry_shader) {
-        if (desc->vertex_shader)
+    tessellated = desc->tessellation_control_shader != NULL;
+    if (tessellated) {
+        if (desc->vertex_shader ||
+            (desc->tessellation_evaluation_shader != NULL) ==
+                (desc->geometry_shader != NULL))
             return AGC_ERROR_VALIDATION_FAILED;
-        primitive = desc->geometry_shader;
+        hull = desc->tessellation_control_shader;
+        primitive = desc->geometry_shader ? desc->geometry_shader :
+            desc->tessellation_evaluation_shader;
     } else {
-        primitive = desc->vertex_shader;
+        if (desc->tessellation_evaluation_shader)
+            return AGC_ERROR_VALIDATION_FAILED;
+        if (desc->geometry_shader) {
+            if (desc->vertex_shader)
+                return AGC_ERROR_VALIDATION_FAILED;
+            primitive = desc->geometry_shader;
+        } else {
+            primitive = desc->vertex_shader;
+        }
     }
+    vertex_stage = hull ? hull : primitive;
     ps = desc->pixel_shader;
     if (!primitive || !ps || primitive->magic != AGC_MAGIC_SHADER ||
         ps->magic != AGC_MAGIC_SHADER || primitive->device != device ||
-        ps->device != device ||
-        primitive->stage != (desc->geometry_shader ?
-            kAgcShaderStageGs : kAgcShaderStageVs) ||
+        ps->device != device || (hull &&
+        (hull->magic != AGC_MAGIC_SHADER || hull->device != device ||
+         hull->stage != kAgcShaderStageHs)) ||
+        primitive->stage != (desc->geometry_shader ? kAgcShaderStageGs :
+            (tessellated ? kAgcShaderStageDs : kAgcShaderStageVs)) ||
         ps->stage != kAgcShaderStagePs) {
         return AGC_ERROR_SHADER_INVALID_TYPE;
     }
-    if (!primitive->has_reflection || !ps->has_reflection)
+    if (!primitive->has_reflection || !ps->has_reflection ||
+        (hull && !hull->has_reflection))
         return AGC_ERROR_SHADER_INVALID;
-    if (desc->geometry_shader &&
+    if (desc->geometry_shader && !tessellated &&
         (primitive->reflection.version != AGC_SHADER_REFLECTION_VERSION_2 ||
          primitive->reflection.front_stage != kAgcShaderStageVs ||
          !primitive->has_front_record ||
@@ -3028,6 +3258,67 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
          primitive->reflection.geometry_invocations != 1u)) {
         return AGC_ERROR_NOT_SUPPORTED;
     }
+    if (tessellated) {
+        const AgcShaderReflection *hs = &hull->reflection;
+        const AgcShaderReflection *prim = &primitive->reflection;
+        const uint64_t primitive_input_mask = desc->geometry_shader ?
+            prim->front_stage_input_mask : prim->stage_input_mask;
+        const uint64_t primitive_patch_input_mask = desc->geometry_shader ?
+            prim->front_patch_input_mask : prim->patch_input_mask;
+        AgcGfx1013TessellationLayoutState layout;
+
+        if (hs->version != AGC_SHADER_REFLECTION_VERSION_2 ||
+            hs->front_stage != kAgcShaderStageVs ||
+            !hull->has_front_record || hs->wave_size != 32u ||
+            (hs->flags & AGC_SHADER_REFLECTION_FUSED_STAGE_BIT) == 0u ||
+            prim->version != AGC_SHADER_REFLECTION_VERSION_2 ||
+            prim->front_stage != kAgcShaderStageDs ||
+            !primitive->has_front_record || prim->wave_size != 32u ||
+            (prim->flags & (AGC_SHADER_REFLECTION_NGG_BIT |
+             AGC_SHADER_REFLECTION_FUSED_STAGE_BIT)) !=
+                (AGC_SHADER_REFLECTION_NGG_BIT |
+                 AGC_SHADER_REFLECTION_FUSED_STAGE_BIT) ||
+            hs->tessellation_patch_count !=
+                prim->tessellation_patch_count ||
+            hs->tessellation_output_control_points !=
+                prim->tessellation_output_control_points) {
+            return AGC_ERROR_NOT_SUPPORTED;
+        }
+        if ((hs->stage_input_mask & ~hs->front_stage_output_mask) != 0u ||
+            (primitive_input_mask & ~hs->stage_output_mask) != 0u ||
+            (primitive_patch_input_mask & ~hs->patch_output_mask) != 0u ||
+            (desc->geometry_shader &&
+             (prim->stage_input_mask & ~prim->front_stage_output_mask) !=
+                 0u)) {
+            return AGC_ERROR_VALIDATION_FAILED;
+        }
+        if (desc->geometry_shader &&
+            (prim->geometry_input_primitive !=
+                 AGC_SHADER_PRIMITIVE_TRIANGLES ||
+             prim->geometry_vertices_in != 3u ||
+             prim->geometry_invocations != 1u)) {
+            return AGC_ERROR_NOT_SUPPORTED;
+        }
+        layout = (AgcGfx1013TessellationLayoutState){
+            hs->tessellation_patch_count,
+            hs->tessellation_input_control_points,
+            hs->tessellation_output_control_points,
+            hs->tessellation_vertex_output_count,
+            hs->tessellation_control_output_count,
+            prim->tessellation_primitive_mode,
+            prim->tessellation_reads_factors,
+        };
+        result = agcGfx1013BuildTessellationOffchipLayouts(&layout,
+            &tessellation_tcs_layout, &tessellation_tes_layout);
+        if (result != AGC_OK)
+            return result == AGC_ERROR_INVALID_ARGUMENT ?
+                AGC_ERROR_VALIDATION_FAILED : result;
+    }
+    if (hull) {
+        result = agcPipelineValidateShaderUserData(&hull->reflection);
+        if (result != AGC_OK)
+            return result;
+    }
     result = agcPipelineValidateShaderUserData(&primitive->reflection);
     if (result != AGC_OK)
         return result;
@@ -3040,22 +3331,28 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
     if ((ps->reflection.stage_input_mask &
          ~primitive->reflection.stage_output_mask) != 0u)
         return AGC_ERROR_VALIDATION_FAILED;
-    if (desc->vertex_input_count != primitive->reflection.vertex_input_count)
+    if (desc->vertex_input_count !=
+            vertex_stage->reflection.vertex_input_count)
         return AGC_ERROR_VALIDATION_FAILED;
     for (i = 0u; i < desc->vertex_input_count; ++i) {
-        for (j = 0u; j < primitive->reflection.vertex_input_count; ++j) {
+        for (j = 0u; j < vertex_stage->reflection.vertex_input_count; ++j) {
             if (agcPipelineVertexInputEqual(
                     &desc->vertex_inputs[i],
-                    &primitive->reflection.vertex_inputs[j]))
+                    &vertex_stage->reflection.vertex_inputs[j]))
                 break;
         }
-        if (j == primitive->reflection.vertex_input_count)
+        if (j == vertex_stage->reflection.vertex_input_count)
             return AGC_ERROR_VALIDATION_FAILED;
     }
-    if (!agcPipelineReflectionDescriptorsMatch(&primitive->reflection,
+    if ((hull && !agcPipelineReflectionDescriptorsMatch(&hull->reflection,
+            desc->descriptor_mappings, desc->descriptor_mapping_count)) ||
+        !agcPipelineReflectionDescriptorsMatch(&primitive->reflection,
             desc->descriptor_mappings, desc->descriptor_mapping_count) ||
         !agcPipelineReflectionDescriptorsMatch(&ps->reflection,
             desc->descriptor_mappings, desc->descriptor_mapping_count) ||
+        (hull && !agcPipelineReflectionPushRangesMatch(&hull->reflection,
+            desc->push_constant_ranges,
+            desc->push_constant_range_count)) ||
         !agcPipelineReflectionPushRangesMatch(&primitive->reflection,
             desc->push_constant_ranges,
             desc->push_constant_range_count) ||
@@ -3073,6 +3370,7 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
             (mapping->byte_offset & 3u) != 0u ||
             (mapping->byte_stride & 3u) != 0u ||
             !agcPipelineLayoutEntryUsed(
+                hull ? &hull->reflection : NULL,
                 &primitive->reflection, &ps->reflection, mapping)) {
             return AGC_ERROR_VALIDATION_FAILED;
         }
@@ -3089,6 +3387,7 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
             (range->offset & 3u) != 0u || (range->size & 3u) != 0u ||
             (range->stage_mask & ~((1u << kAgcShaderStageCount) - 1u)) != 0u ||
             !agcPipelinePushEntryUsed(
+                hull ? &hull->reflection : NULL,
                 &primitive->reflection, &ps->reflection, range)) {
             return AGC_ERROR_VALIDATION_FAILED;
         }
@@ -3160,23 +3459,33 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
             multisample.minimum_sample_shading *
                 (float)multisample.rasterization_samples)
         return AGC_ERROR_VALIDATION_FAILED;
+    push_constant_size = primitive->reflection.push_constant_size >
+        ps->reflection.push_constant_size ?
+        primitive->reflection.push_constant_size :
+        ps->reflection.push_constant_size;
+    if (hull && hull->reflection.push_constant_size > push_constant_size)
+        push_constant_size = hull->reflection.push_constant_size;
     result = agcPipelineBuildResourceLayout(desc->descriptor_mappings,
         desc->descriptor_mapping_count, desc->vertex_inputs,
-        desc->vertex_input_count,
-        primitive->reflection.push_constant_size >
-            ps->reflection.push_constant_size ?
-            primitive->reflection.push_constant_size :
-            ps->reflection.push_constant_size,
+        desc->vertex_input_count, push_constant_size,
         agcPipelineUsesIndirectDescriptorSets(&primitive->reflection) ||
+            (hull && agcPipelineUsesIndirectDescriptorSets(
+                &hull->reflection)) ||
             agcPipelineUsesIndirectDescriptorSets(&ps->reflection),
         &resource_layout);
     if (result != AGC_OK)
         return result;
+    if (tessellated) {
+        result = agcRuntimeInitializeTessellationStorage(device);
+        if (result != AGC_OK)
+            return result;
+    }
     pipeline = agcCreateChild(device, sizeof(*pipeline));
     if (!pipeline)
         return AGC_ERROR_OUT_OF_MEMORY;
     pipeline->magic = AGC_MAGIC_GRAPHICS_PIPELINE;
     pipeline->device = device;
+    pipeline->hull_shader = hull;
     pipeline->primitive_shader = primitive;
     pipeline->pixel_shader = ps;
     pipeline->descriptor_mapping_count = desc->descriptor_mapping_count;
@@ -3201,6 +3510,14 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
     pipeline->multisample = multisample;
     pipeline->dynamic_state_mask = desc->dynamic_state_mask;
     pipeline->resource_layout = resource_layout;
+    if (hull) {
+        pipeline->tessellation_input_control_points =
+            hull->reflection.tessellation_input_control_points;
+        pipeline->tessellation_tcs_offchip_layout =
+            tessellation_tcs_layout;
+        pipeline->tessellation_tes_offchip_layout =
+            tessellation_tes_layout;
+    }
     pipeline->resource_layout_requires_bindings =
         desc->descriptor_mapping_count != 0u ||
         desc->push_constant_range_count != 0u;
@@ -3210,6 +3527,8 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
         agcDestroyChild(device, pipeline);
         return result;
     }
+    if (hull)
+        hull->dependency_refs++;
     primitive->dependency_refs++;
     ps->dependency_refs++;
     *pipeline_out = pipeline;
@@ -3227,6 +3546,8 @@ int32_t PS5_SYSV_ABI agcDestroyGraphicsPipeline(AgcGraphicsPipeline pipeline)
     if (pipeline->recorded_refs != 0u)
         return AGC_ERROR_BUSY;
     device = pipeline->device;
+    if (pipeline->hull_shader)
+        pipeline->hull_shader->dependency_refs--;
     pipeline->primitive_shader->dependency_refs--;
     pipeline->pixel_shader->dependency_refs--;
     pipeline->magic = 0u;
@@ -4034,7 +4355,9 @@ int32_t PS5_SYSV_ABI agcCmdPushConstants(AgcCommandBuffer command_buffer,
         return AGC_ERROR_INVALID_STATE;
     supported_stage_mask = command_buffer->graphics_pipeline ?
         ((1u << command_buffer->graphics_pipeline->primitive_shader->stage) |
-         (1u << kAgcShaderStagePs)) :
+         (1u << kAgcShaderStagePs) |
+         (command_buffer->graphics_pipeline->hull_shader ?
+          (1u << kAgcShaderStageHs) : 0u)) :
         (1u << kAgcShaderStageCs);
     if ((stage_mask & ~supported_stage_mask) != 0u)
         return AGC_ERROR_VALIDATION_FAILED;
@@ -4491,6 +4814,7 @@ int32_t PS5_SYSV_ABI agcCmdDrawIndexed(AgcCommandBuffer command_buffer,
     uint64_t byte_count;
     uint32_t dword_count;
     uint32_t *destination;
+    AgcShader vertex_stage;
     int32_t result;
 
     if (!command_buffer || command_buffer->magic != AGC_MAGIC_COMMAND_BUFFER ||
@@ -4503,14 +4827,27 @@ int32_t PS5_SYSV_ABI agcCmdDrawIndexed(AgcCommandBuffer command_buffer,
         return AGC_ERROR_INVALID_STATE;
     if (index_count == 0u || instance_count == 0u)
         return AGC_ERROR_INVALID_ARGUMENT;
+    if (command_buffer->graphics_pipeline->hull_shader &&
+        index_count % command_buffer->graphics_pipeline->
+            tessellation_input_control_points != 0u)
+        return AGC_ERROR_VALIDATION_FAILED;
+    vertex_stage = command_buffer->graphics_pipeline->hull_shader ?
+        command_buffer->graphics_pipeline->hull_shader :
+        command_buffer->graphics_pipeline->primitive_shader;
     if ((vertex_offset != 0 &&
-        (command_buffer->graphics_pipeline->primitive_shader->reflection.
+        (vertex_stage->reflection.
           system_sgpr_mask & AGC_SHADER_SYSTEM_SGPR_BASE_VERTEX_BIT) == 0u) ||
         (first_instance != 0u &&
-         (command_buffer->graphics_pipeline->primitive_shader->reflection.
+         (vertex_stage->reflection.
           system_sgpr_mask &
           AGC_SHADER_SYSTEM_SGPR_START_INSTANCE_BIT) == 0u))
         return AGC_ERROR_NOT_SUPPORTED;
+    if (command_buffer->graphics_pipeline->hull_shader) {
+        result = agcCommandShaderResourcesReady(command_buffer,
+            command_buffer->graphics_pipeline->hull_shader);
+        if (result != AGC_OK)
+            return result;
+    }
     result = agcCommandShaderResourcesReady(command_buffer,
         command_buffer->graphics_pipeline->primitive_shader);
     if (result != AGC_OK)
@@ -4533,6 +4870,13 @@ int32_t PS5_SYSV_ABI agcCmdDrawIndexed(AgcCommandBuffer command_buffer,
         return AGC_ERROR_RESOURCE_INVALID;
     }
     agcCbInit(&temporary_cb, temporary, sizeof(temporary));
+    if (command_buffer->graphics_pipeline->hull_shader) {
+        result = agcCommandEmitGraphicsUserData(&temporary_cb, command_buffer,
+            command_buffer->graphics_pipeline->hull_shader,
+            vertex_offset, first_instance, 0u);
+        if (result != AGC_OK)
+            return result;
+    }
     result = agcCommandEmitGraphicsUserData(&temporary_cb, command_buffer,
         command_buffer->graphics_pipeline->primitive_shader,
         vertex_offset, first_instance, 0u);

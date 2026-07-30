@@ -167,7 +167,6 @@ typedef struct AgcGfx1013RuntimePatches {
 #define AGC_GFX1013_HS_LDS_SIZE_MASK  (0x1ffu << 18u)
 #define AGC_GFX1013_HS_LDS_ALLOCATION_GRANULARITY 1024u
 #define AGC_GFX1013_HS_LDS_ENCODING_GRANULARITY 512u
-#define AGC_GFX1013_HS_LDS_MAX_SIZE 65536u
 
 static bool agcGfx1013BindingHasValue(
     const AgcGfx1013ShaderBinding *binding, uint32_t value)
@@ -817,9 +816,14 @@ int32_t PS5_SYSV_ABI agcGfx1013ValidateWave32TessVsPs(
     if (!agcShaderRecordIsValid(state->hull.record) ||
         !agcShaderRecordIsValid(state->primitive.record) ||
         !agcShaderRecordIsValid(state->pixel.record) ||
-        state->hull.record->shader_type != (uint8_t)kAgcShaderBinaryTypeHs ||
-        state->primitive.record->shader_type !=
-            (uint8_t)kAgcShaderBinaryTypeGs ||
+        (state->hull.record->shader_type !=
+             (uint8_t)kAgcShaderBinaryTypeHs &&
+         state->hull.record->shader_type !=
+             (uint8_t)kAgcShaderBinaryTypeHsBack) ||
+        (state->primitive.record->shader_type !=
+             (uint8_t)kAgcShaderBinaryTypeGs &&
+         state->primitive.record->shader_type !=
+             (uint8_t)kAgcShaderBinaryTypeGsBack) ||
         state->pixel.record->shader_type != kAgcShaderTypePs)
         return AGC_ERROR_SHADER_INVALID_TYPE;
     if (!agcGfx1013AddressIsProgramCompatible(state->hull.code_address) ||

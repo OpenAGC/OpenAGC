@@ -91,11 +91,30 @@ handle. The packaged geometry subset accepts triangle input, three input
 vertices, and one invocation. Line, adjacency, and multi-invocation forms
 remain fail-closed before PM4 emission.
 
+Tessellation uses compiler-owned fused bundles as well. Set
+`tessellation_control_shader` to an HsBack/HsFront bundle whose front program
+is the vertex stage, leave `vertex_shader` `NULL`, and supply exactly one
+post-tessellation form:
+
+- `tessellation_evaluation_shader` for a TES/NGG bundle, with
+  `geometry_shader` `NULL`; or
+- `geometry_shader` for a fused TES-front/GS-back bundle, with
+  `tessellation_evaluation_shader` `NULL`.
+
+Supplying redundant standalone front-stage handles is rejected. Pipeline
+creation links the VS, TCS, TES, optional GS, and PS interfaces; matches patch
+counts and control-point counts; and derives both off-chip layouts from the
+compiler reflection. The runtime lazily owns one device-wide gfx1013 off-chip
+ring, factor ring, and descriptor table, preflights TF-ring support, publishes
+the table, and reuses the storage across tessellation pipelines. Indexed draws
+must contain whole input-control-point patches. The combined geometry form
+currently retains the triangle-input, three-vertex, one-invocation geometry
+limit above.
+
 Compute supports Wave32, at most 1,024 invocations per group, no scratch, and
 at most 64 KiB LDS, including direct or indirect reflected descriptor-set
-addressing. Alpha-to-coverage, alpha-to-one, tessellation pipeline packaging,
-the remaining geometry topologies, and Prospero submission remain
-fail-closed.
+addressing. Alpha-to-coverage, alpha-to-one, the remaining geometry
+topologies, and Prospero submission remain fail-closed.
 
 ## Qualification
 
@@ -103,8 +122,10 @@ The generic suite covers valid float/normalized, UINT, and SINT attachment
 pairs, negative compatibility/layout fixtures, successful descriptor/push and
 vertex-table execution paths, direct and indirect set-address emission,
 fused geometry continuation patching, resource lifetime, exact depth/stencil
-register encoding, v1 state normalization, multisample minimums, and required
-dynamic-state gating. These
+register encoding, v1 state normalization, multisample minimums, required
+dynamic-state gating, device-wide tessellation-ring reuse, reflected off-chip
+layout patching, whole-patch draw validation, TCS push binding, and isolated
+plus TES-to-geometry submission. These
 results are host-tested only. A future explicit PS5 promotion gate will qualify
 exact firmware artifacts; no hardware qualification is implied by pipeline
 creation or a successful host command recording.

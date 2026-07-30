@@ -26,9 +26,8 @@ host-qualified. The first Milestone 3 host slice now consumes versioned
 pipelines. Prospero builds the same API, but native queue submission remains
 fail-closed pending an explicit hardware-promotion gate.
 
-1. **Complete pipeline safety.** Extend the host-tested reflection/pipeline
-   slice with the required tessellation path, remaining geometry forms, and
-   any still-needed
+1. **Complete pipeline safety.** Audit the host-tested reflection/pipeline
+   slice for remaining geometry forms and any still-needed
    qualified fixed options while preserving transactional failure for every
    unsupported combination.
 2. **Own transitions and synchronization.** Track explicit resource usage and
@@ -144,13 +143,25 @@ vertices, and one invocation. Host submission proves that the low-level bind
 patches the front-stage continuation address. Other geometry topologies and
 invocation counts fail before PM4 emission.
 
+Tessellation pipeline packaging now consumes the compiler's HsBack/HsFront
+VS/TCS bundle and either a TES/NGG bundle or a TES-front/GS-back geometry
+bundle. Redundant standalone VS/TES handles fail transactionally. Pipeline
+creation validates the complete VS-to-TCS-to-TES/GS-to-PS interface, patch and
+control-point agreement, Wave32/fused-stage requirements, and compiler-derived
+off-chip layouts. The runtime lazily allocates and publishes one device-wide
+gfx1013 off-chip ring, factor ring, and descriptor table after preflighting
+TF-ring support, then reuses them across pipelines. Draws require complete
+input-control-point patches. Host submissions cover isolated tessellation and
+TES-to-geometry, including TCS resource/push addresses and continuation
+patching.
+
 The compatibility matrix covers valid float, UINT, and SINT 16/32-bit pairs
 and rejects cross-class, missing/extra export, compressed attachment, blend,
 linkage, vertex-stride, descriptor, push-range, and unbound-resource cases. It
 also exercises successful descriptor/push dispatch, vertex-table drawing,
 direct and indirect descriptor addressing, resource retention/reset, exact
 depth/stencil register state, legacy state normalization, multisample minimums,
-and required dynamic-state gating. The full generic suite now reports 13,926
+and required dynamic-state gating. The full generic suite now reports 13,993
 passed and 0 failed; the compiler's
 library, varying/export, NGG, and tessellation suites pass. This slice is
 host-tested only. No PS5 hardware test was run or claimed. See
