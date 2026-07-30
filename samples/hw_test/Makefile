@@ -353,6 +353,20 @@ agc_runtime_compute_copy_chain.elf: shaders_runtime_compute_copy \
 		agc_runtime_compute_copy_chain.c gpu_credentials.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -o $@ agc_runtime_compute_copy_chain.c $(AGC_LDFLAGS)
 
+# Reflected compute consumer for the render-target ownership-transfer oracle.
+.PHONY: shaders_runtime_image_consume
+shaders_runtime_image_consume: shaders/render_consume_native.comp
+	$(GLSLANG) -V --target-env vulkan1.2 $< \
+		-o shaders/render_consume_native.spv
+	$(PSBC) -f shaders/render_consume_native.spv -s compute \
+		-o shaders/render_consume_native.sb \
+		--reflection-header shaders/render_consume_native_reflection.h \
+		--reflection-symbol render_consume_native_reflection \
+		--descriptor-binding 0:0:combined-image-sampler:1 \
+		--descriptor-binding 0:1:storage-buffer:1 --wave32
+	xxd -i -n render_consume_native_data shaders/render_consume_native.sb \
+		shaders/render_consume_native_sb.h
+
 # Public native-runtime typed buffer copy.  It validates the upload-to-copy-
 # to-readback state chain and public DMA carrier on one bounded compute queue.
 agc_runtime_copy.elf: agc_runtime_copy.c gpu_credentials.h $(OPENAGC_LIB)

@@ -567,6 +567,14 @@ carrier passed without a CPU wait on exact FW 5.50, artifact
 The graphics-to-compute image row remains host-only; FW 11.60 and the remaining
 hardware resource-handoff rows remain open.
 
+The graphics-to-compute row now reaches an actual reflected consumer in the
+generic contract. A combined image/sampler descriptor rejects the released but
+unacquired image, accepts it only after the exact destination acquire, and
+records the compute dispatch after the wait/invalidate stream. The compiler-
+produced consumer artifact copies a 64x64 RGBA8 image into a storage buffer and
+is ready for endpoint promotion; see
+`analysis/runtime_sampled_image_handoff_host_20260731.md`.
+
 Exit criteria: exact host fixtures cover the supported transition matrix and
 atomic short-buffer failure; FW 5.50 and FW 11.60 gates cover render-to-shader,
 compute-to-copy, copy-to-shader, host-read, and present-to-render; repeated

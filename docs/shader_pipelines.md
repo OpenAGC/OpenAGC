@@ -108,6 +108,12 @@ Successful bindings retain their resources until command-buffer reset or
 destruction; rejected bindings retain nothing. Push-constant coverage is
 tracked per stage, so draw or dispatch fails with
 `AGC_ERROR_RESOURCE_NOT_BOUND` until every reflected dword is initialized.
+Sampled, combined image/sampler, storage-image, and input-attachment writes
+also require the underlying whole image to have a compatible typed state on
+the recording queue. Cross-queue release alone is insufficient: the descriptor
+remains unavailable until the matching acquire records on the consumer command
+buffer. The generic render-to-shader fixture locks this ordering before its
+reflected compute dispatch.
 
 A graphics pipeline whose reflected pixel shader exports color must bind one
 `AgcColorTargetBinding` per declared attachment with

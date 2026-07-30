@@ -366,6 +366,11 @@ host-qualified: the generic fixture locks the source EOP release, destination
 exact-value wait and cache invalidate, pending destruction guard, and final
 compute-owned state. See
 [`runtime_image_handoff_host_20260731.md`](../analysis/runtime_image_handoff_host_20260731.md).
+That host row also reaches a reflected compute consumer: its combined
+image/sampler descriptor fails while the image is merely released, succeeds
+after the destination acquire, and records dispatch only after the exact wait
+and invalidate. See
+[`runtime_sampled_image_handoff_host_20260731.md`](../analysis/runtime_sampled_image_handoff_host_20260731.md).
 The complementary whole-image compute `shader-write` to graphics `shader-read`
 carrier passed without a CPU wait on exact standard-PS5 FW 5.50, including both
 bounded fences and full teardown. See

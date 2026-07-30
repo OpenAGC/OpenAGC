@@ -90,8 +90,12 @@ fixture; see `analysis/runtime_image_handoff_host_20260731.md`. The complementar
 whole-image compute `shader-write` to graphics `shader-read` carrier is
 hardware-qualified on exact FW 5.50 by artifact
 `70f15e0a5687e431f532d384f5ffb1062b4883bb99746dcaf3857e3dfc5cf7fd`;
-see `analysis/runtime_image_handoff_fw550_20260731.md`. Other resource-handoff
-rows remain host-qualified only. Artifact
+see `analysis/runtime_image_handoff_fw550_20260731.md`. The graphics-to-compute
+image row now has a reflected combined image/sampler consumer fixture: binding
+fails before acquire and succeeds only after the exact wait/invalidate stream,
+then dispatch records. See
+`analysis/runtime_sampled_image_handoff_host_20260731.md`. Other
+resource-handoff rows remain host-qualified only. Artifact
 `1af09900242e5e0af40c12dfb68bd8ea4fb059bdb85654d969cfff88cb15d016` passed
 the producer/consumer no-CPU-wait compute oracle, bounded completion, readback,
 and full teardown on exact FW 5.50. Labels enforce strictly increasing 32-bit
