@@ -121,6 +121,12 @@ Ordinary D32 HTILE is therefore hardware-qualified on FW 5.50. The exact
 FW 11.60 ordinary artifact is the next permitted launch; establish its count,
 freeze it, and replay before any D32 expclear artifact.
 
+FW 11.60 ordinary pass 1 selected `0x1160`, reproduced the same `7408` changed
+HTILE words and exact D32 classes as FW 5.50, reached its fence immediately,
+shut down cleanly, returned final PASS, and left no residual `eboot.bin`. The
+logged recipe now freezes `7408`. One identical cleanup-first replay remains
+before ordinary D32 HTILE can be promoted across both endpoints.
+
 The combined D32+S8 tier is likewise prepared without a hardware claim. Eight
 artifacts cover ordinary HTILE and expclear of depth-only, stencil-only, or
 both aspects for exact FW `0x1160` and matching headless FW `0x0550`. The

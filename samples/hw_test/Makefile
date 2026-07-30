@@ -2612,7 +2612,8 @@ deploy_agc_depth_d16_expclear_fw1160_logged: agc_depth_d16_expclear_fw1160_logge
 deploy_agc_depth_d32_htile_fw1160_logged: agc_depth_d32_htile_fw1160_logged.elf
 	PS5_HOST=$(PS5_HOST) DEPTH_ARTIFACT=$(THIS_DIR)/$< \
 		RESULT_LOG_PATH=/data/homebrew/openagc_fw1160_depth/result.log \
-		EXPECTED_HTILE_INITIAL=fffc000f EXPECTED_D32_FULL_RECT=1 \
+		EXPECTED_HTILE_INITIAL=fffc000f EXPECTED_HTILE_CHANGED=7408 \
+		EXPECTED_D32_FULL_RECT=1 \
 		EXPECTED_ARTIFACT_SHA256=f67d8d2087cd463e60e118cd9aa6813b4b63162d8c88a61bb1882fc96d9a8a0d \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_depth.sh
 

@@ -55,7 +55,10 @@ The pinned FW 5.50 ordinary mirror has passed twice with exact D32 classes,
 Its recipe now freezes `7408`; the subsequent enforcement replay reproduced
 the count, exact D32 classes, clean shutdown, and no residual process. Ordinary
 D32 HTILE is hardware-qualified on FW 5.50. Its exact FW 11.60 mirror is the
-active gate; D32 expclear remains blocked behind two exact ordinary passes.
+active gate. FW 11.60 pass 1 reproduced `7408`, exact D32 classes, immediate
+completion, clean shutdown, and no residual process; the recipe now freezes
+that count. One identical replay remains. D32 expclear stays blocked behind
+that replay.
 
 Combined D32+S8 HTILE preparation now covers ordinary metadata and
 depth-only, stencil-only, and both-aspect expclear for both exact endpoint
