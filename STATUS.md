@@ -578,7 +578,7 @@ artifacts and exact headless FW 5.50 mirrors cross-build without warnings.
 The guarded runner now fails closed unless the verdict names the intended
 draw-composition path with `AGC_OK`, in addition to its ABI, fence, RGBA16F,
 shutdown, and final-verdict checks. All three variants passed twice on FW
-`0x11600005`: 2,473/2,471/2,479-dword DCBs, immediate fences, 255,744 complete
+`0x11600005`: the current 2,473/2,476/2,484-dword DCBs, immediate fences, 255,744 complete
 FP16 pixels, identical FNV64 `0x4a40c2eb4f12bc26`, clean shutdowns, and no
 residual process. The current-source FW 5.50 mirror regression remains
 pending; see `analysis/fw1160_indexed_indirect_gate_plan_20260730.md`.
@@ -734,11 +734,12 @@ FW `0x11600005`. Two cleanup-first headless runs emitted and audited
 cleanly, and left websrv and FTP responsive. The earlier failed Mesa-style
 ten-dword experiment used a different layout.
 
-This result does not yet promote the Sony packet to the application default.
-FW 5.50 still needs the same fixed-count gate, and indexed plus count-buffer
-multi-draw remain untested. `agcGfx1013DrawBaselineIndirect` therefore retains
-the hardware-proven 5/7-dword application stream and its 45/55-dword exact
-fixtures. See `analysis/agc_indirect_draw_abi.md` and
+The Sony packet is now the application default. The ordinary
+`agcGfx1013DrawBaselineIndirect` path emitted the exact non-indexed bytes on
+two further cleanup-first passes, and its fixed-count indexed ten-dword path
+also passed twice with the same pixel oracle and clean teardown. FW 5.50 still
+needs both current default gates; count-buffer and draw-count-greater-than-one
+forms remain untested on hardware. See `analysis/agc_indirect_draw_abi.md` and
 `analysis/fw1160_sony_multi_indirect_qualification_20260730.md`.
 
 ## Application-facing indexed/indirect draw composition (2026-07-27)
@@ -751,12 +752,13 @@ instance count, and the complete shader/frame/resource prefix before emitting
 `DRAW_INDEX_2`.
 
 `agcGfx1013DrawBaselineIndirect` validates the indirect argument base and
-offset, single/multi stride, base-vertex and start-instance register locations,
-and optional index-buffer state before emitting `SET_BASE` plus the appropriate
-single or multi draw packet. Exact host fixtures lock the 47-dword direct
-indexed, 45-dword non-indexed indirect, and 55-dword indexed multi-indirect
-streams. Short buffers, invalid ranges, and invalid strides leave the command
-cursor unchanged.
+offset, single/multi stride, Sony-representable base-vertex and start-instance
+register locations, supported initiators, and optional index-buffer state
+before emitting `SET_BASE` plus the Sony ten-dword multi packet. Exact host
+fixtures lock the 47-dword direct indexed, 50-dword non-indexed indirect, and
+58-dword indexed multi-indirect streams. The compositor also preserves the
+builder's full 16-dword GetSize reservation. Short buffers, invalid ranges,
+unsupported modifier fields, and invalid strides leave the cursor unchanged.
 
 All three isolated FW `0x05500008` hardware gates pass through curl/websrv.
 Direct u16 indexed, non-indexed indirect, and u16 indexed-indirect each changed
@@ -769,18 +771,18 @@ using canonical control value zero passed, and an exact host assertion now
 locks that header. Full evidence is in
 `analysis/fw550_indexed_indirect_qualification_20260727.md`.
 
-The later Vulkan multi-draw audit compared the application-facing 7-dword PS5
+The later Vulkan multi-draw audit compared the former application-facing
+7-dword PS5
 packet against Mesa's 10-dword gfx10+ definition. A bounded FW 5.50 run on
 2026-07-28 tested that Mesa-style form and failed at submission: PID 156 received a fatal GPU
 signal, the graphics queue remained active, and the kernel reset the GPU. The
 console recovered, but this disproved that cross-platform packet assumption;
 it did not test the separately recovered Sony 10-dword public export layout.
-OpenAGC retains the 7-dword application form, which had already passed
-multi-indirect readback on FW 5.50. The typed DrawIndex fields remain
-reserved and are rejected when nonzero; Vulkan consumers can implement
-DrawIndex by issuing single indirect packets with explicit user-SGPR values.
-Exact typed fixtures lock the 7-dword/55-dword application streams and reject
-unqualified DrawIndex controls.
+OpenAGC now uses the separately recovered Sony ten-dword form, not Mesa's
+packet. The typed DrawIndex fields remain reserved and are rejected when
+nonzero; Vulkan consumers can implement DrawIndex by issuing indirect packets
+with explicit user-SGPR values. Exact typed fixtures lock the 50/58-dword
+application streams and reject unqualified DrawIndex controls.
 
 ## Application-facing buffer-copy composition (2026-07-28)
 

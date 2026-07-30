@@ -3,14 +3,16 @@
 ## Scope
 
 This gate isolates the recovered Sony `sceAgcDcbDrawIndirectMulti` public ABI
-from both OpenAGC's established application-facing 5/7-dword path and the
-historical failed Mesa-style 10-dword experiment. It tests one fixed-count,
-non-indexed draw on the standard PS5 reporting raw firmware `0x11600005`.
+from the historical failed Mesa-style 10-dword experiment. It tests the
+fixed-count application default on the standard PS5 reporting raw firmware
+`0x11600005`.
 
-The ordinary proven graphics composer first emits the complete shader, frame,
-resource, `SET_BASE`, and five-dword indirect stream. The probe verifies the
-final packet header, rewinds only that packet, and replaces it through the
-public Sony-compatible builder. The resulting ten dwords must exactly equal:
+The initial diagnostic replaced only the former five-dword tail after the
+ordinary composer built the complete prefix. After that isolated gate passed,
+`agcGfx1013DrawBaselineIndirect` was promoted to call the Sony multi builder
+directly. The current probe no longer rewinds or replaces anything: it invokes
+the ordinary default compositor and audits its final ten dwords, which must
+exactly equal:
 
 ```text
 c0082c00 00000000 0000008f 00000090 00000280
@@ -25,7 +27,7 @@ initiator two.
 ## Guarded artifact
 
 - ELF: `samples/hw_test/agc_graphics_sony_multi_indirect_fw1160_logged.elf`
-- SHA-256: `bb577a3616c1820278322b1e0b1563f230265672bbbb50e5a5cc1d834cd2734e`
+- SHA-256: `e353d550b144d28062ef68bc0867b9f60cbcd47acdb8d61ab8b8c8808e1c68fe`
 - Cleanup SHA-256: `9fd6b41cf2ea87989c4217234c6f34c96a1ca5dc482355af1258539db77d4d76`
 - Target: `deploy_agc_graphics_sony_multi_indirect_fw1160_logged`
 
@@ -36,7 +38,8 @@ graphics PASS unless the exact ten-dword audit line is also present.
 
 ## Hardware result
 
-Two independent cleanup-first runs passed:
+Two initial isolated replacement runs and two subsequent default-path runs
+passed. The table records the two current default-path runs:
 
 | Oracle | Run 1 | Run 2 |
 | --- | ---: | ---: |
@@ -52,10 +55,16 @@ Two independent cleanup-first runs passed:
 After the second run, TCP ports 8080 and 2121 remained responsive. There was
 no fence timeout, stale process symptom, UI freeze, GPU reset, or kernel panic.
 
+The fixed-count indexed default was then run twice through
+`deploy_agc_graphics_indexed_indirect_fw1160_logged`. Both 2,484-dword DCBs
+reached the fence immediately, changed the same 255,744 FP16 pixels, matched
+FNV64 `0x4a40c2eb4f12bc26`, and shut down cleanly. Its artifact SHA-256 was
+`c4cdc1ced26e3572235f5c5fca1a7b36f6f77f18de1423c80f562bbaf262d343`.
+
 ## Promotion boundary
 
-This qualifies only fixed-count non-indexed Sony multi-indirect on FW 11.60.
-It does not qualify the indexed opcode, indirect count-buffer control, more
-than one draw, or another firmware. Keep the established application-facing
-5/7-dword path as the default until the exact fixed-count packet passes on FW
-5.50. Test indexed and count-buffer variants as separate gates afterward.
+The Sony ten-dword multi packet is now the application default for single and
+multiple, indexed and non-indexed indirect draws. Hardware evidence currently
+qualifies fixed-count non-indexed and indexed forms on FW 11.60 only. Repeat
+those exact current artifacts on FW 5.50 when available. Indirect count-buffer
+control and draw counts greater than one remain separate hardware gates.

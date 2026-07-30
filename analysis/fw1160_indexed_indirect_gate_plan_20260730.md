@@ -20,11 +20,11 @@ clean driver shutdown.
 | Profile | Draw path | ELF | SHA-256 |
 | --- | --- | --- | --- |
 | `0x1160` logged | direct u16 indexed | `agc_graphics_indexed_fw1160_logged.elf` | `7d30374aa51c01b167ef2b5d2fee1269ccf1f55319da949ffd8dc1c4949b7d81` |
-| `0x1160` logged | non-indexed indirect | `agc_graphics_indirect_fw1160_logged.elf` | `79f9c3a1a4097b5ee1f58fa6c38c46ed1ff6def9fff2633dde431ad47de2d41b` |
-| `0x1160` logged | u16 indexed-indirect | `agc_graphics_indexed_indirect_fw1160_logged.elf` | `096fc7ecf8c49f74c79152a93c2155f32fcf9960014b3c74225fa39deda3acfe` |
+| `0x1160` logged | non-indexed indirect | `agc_graphics_indirect_fw1160_logged.elf` | `fc7d66a21223648db06a34bc38f5136208d95c9fc2c5444e57aef36101852896` |
+| `0x1160` logged | u16 indexed-indirect | `agc_graphics_indexed_indirect_fw1160_logged.elf` | `c4cdc1ced26e3572235f5c5fca1a7b36f6f77f18de1423c80f562bbaf262d343` |
 | `0x0550` headless mirror | direct u16 indexed | `agc_graphics_indexed_fw550_headless.elf` | `79e6bc94b23911b4d23c13ff78908c1f563b20944ed14d4885de2b1643955703` |
-| `0x0550` headless mirror | non-indexed indirect | `agc_graphics_indirect_fw550_headless.elf` | `ebd70a634f44d8c6f0040ad2a2b7d9bc214f5f22c40e3c91c39e6ffcf5d6a758` |
-| `0x0550` headless mirror | u16 indexed-indirect | `agc_graphics_indexed_indirect_fw550_headless.elf` | `c223f3901ec6f25a77614f3dca7687b3bf3fb1c1e0904ce793b280165c1e3262` |
+| `0x0550` headless mirror | non-indexed indirect | `agc_graphics_indirect_fw550_headless.elf` | `e2bbf7b1bd8f0d1f476147b9c2d9baf43fbe650df7e7cdd569e784da882d47f3` |
+| `0x0550` headless mirror | u16 indexed-indirect | `agc_graphics_indexed_indirect_fw550_headless.elf` | `1ca79d68c0cbda0ce4be5a938d0b67556d749cabf0ea0a3796cb8eed8c300e65` |
 
 All six artifacts cross-build without warnings from the current source and
 current `libopenagc.a`. Firmware blobs are neither linked nor embedded.
@@ -55,8 +55,8 @@ All three variants passed twice on the standard PS5 reporting raw firmware
 | Draw path | DCB dwords | Fence, both runs | Complete FP16 pixels | Native FNV64 |
 | --- | ---: | ---: | ---: | --- |
 | direct u16 indexed | 2,473 | immediate | 255,744 | `0x4a40c2eb4f12bc26` |
-| non-indexed indirect | 2,471 | immediate | 255,744 | `0x4a40c2eb4f12bc26` |
-| u16 indexed-indirect | 2,479 | immediate | 255,744 | `0x4a40c2eb4f12bc26` |
+| non-indexed indirect, Sony default | 2,476 | immediate | 255,744 | `0x4a40c2eb4f12bc26` |
+| u16 indexed-indirect, Sony default | 2,484 | immediate | 255,744 | `0x4a40c2eb4f12bc26` |
 
 Every run also reproduced the exact 768x665 coverage bounds, eight sampled
 colors, zero incomplete or out-of-range components, the Wave32 PM4 audit,
@@ -64,10 +64,11 @@ colors, zero incomplete or out-of-range components, the Wave32 PM4 audit,
 ps5debug-NG found no residual `eboot` between or after the runs; ports 744 and
 8080 remained reachable.
 
-This independently hardware-qualifies the three draw-composition variants on
-the tested FW 11.60 console. It does not qualify count-buffer multi-draw, the
-rejected Mesa-style 10-dword packet form, or the subsequently recovered and
-byte-distinct Sony 10-dword public export layout.
+This independently hardware-qualifies the three current draw-composition
+variants on the tested FW 11.60 console. The indirect rows now use the
+recovered, byte-distinct Sony 10-dword default. This does not qualify
+count-buffer multi-draw, draw counts greater than one, or the rejected
+Mesa-style 10-dword packet form.
 
 ## Execution policy
 

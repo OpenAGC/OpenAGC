@@ -96,14 +96,14 @@ Execute in this order:
    matching hardware exists, run corpus verifiers and host fixtures for every
    exact profile and report those rows as SPRX-qualified/hardware-unverified.
 8. **Complete:** recover the Sony indirect-draw public ABI across all 39
-   active profiles. Keep its 5/10-dword exports distinct from the
-   hardware-qualified application-facing 5/7-dword path, select the sole FW
-   3.20 initiator difference by exact runtime key, and lock modifier,
-   count-address, GetSize, cursor, and short-buffer behavior with fixtures.
-   The exact fixed-count non-indexed 10-dword form passed twice on FW11.60
-   through a cleanup-first bounded gate. Keep the 5/7-dword application path
-   as the default until the same Sony form passes on FW5.50; indexed and
-   count-buffer multi-draw remain separate qualification gates.
+   active profiles, select the sole FW 3.20 initiator difference by exact
+   runtime key, and lock modifier, count-address, GetSize, cursor, and
+   short-buffer behavior with fixtures. The application-facing indirect
+   compositor now defaults to the Sony 10-dword multi form for both single and
+   multiple draws. Fixed-count non-indexed and indexed forms each passed twice
+   on FW11.60 through cleanup-first bounded gates. Repeat both exact current
+   paths on FW5.50 when that console is available; count-buffer and draw-count
+   greater than one remain separate hardware gates.
 9. Resume higher-level parity work only with firmware-neutral artifacts so
    each new game-facing capability strengthens the one-binary contract.
 

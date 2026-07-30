@@ -82,8 +82,13 @@ count-buffer forms remain SPRX-qualified and host-tested only.
 
 The earlier FW 5.50 failure involved a different, Mesa-style ten-dword
 experiment and does not validate or invalidate these recovered Sony bytes.
-Until the exact Sony form also passes on FW 5.50, the application-facing
-`agcGfx1013DrawBaselineIndirect` path deliberately retains its separately
-qualified fixed-count 5/7-dword packets. Existing exact 45/55-dword stream
-fixtures protect that separation from regression. See
+The application-facing `agcGfx1013DrawBaselineIndirect` path now defaults to
+the Sony multi builders for both one and multiple draws. It accepts the two
+modifier register windows and initiators that Sony can represent, reserves the
+full 16-dword GetSize maximum atomically, and emits a ten-dword core. Exact
+50/58-dword stream fixtures protect the non-indexed/indexed composition.
+
+Both fixed-count default forms passed twice on FW 11.60. The exact current
+paths remain pending on FW 5.50, and count-buffer plus draw-count-greater-than-
+one forms remain hardware-unverified. See
 `fw1160_sony_multi_indirect_qualification_20260730.md` for the hardware record.
