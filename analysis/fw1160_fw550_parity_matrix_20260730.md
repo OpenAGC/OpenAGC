@@ -164,6 +164,25 @@ build without warnings and avoid both AGC SPRX dependencies. They remain
 behind the FW 5.50 uncompressed-depth, D16 HTILE, and D32 HTILE qualification
 sequence.
 
+That prerequisite sequence is now complete. Two relinks against the committed
+shader records reproduced all eight artifacts byte-for-byte, and dependency
+inspection found only VideoOut, kernel, libc, and networking. The exact FW
+11.60 hashes are ordinary
+`636bd2dd304d5edb62f9213c40cfec80870060baa98f6aa044e5800681afc120`, depth
+expclear `48057d05dfa531fcb65958c3a2645bdcda709b211bc9520f2cbde0801e6261fb`,
+stencil expclear
+`edbb8672c26b7f1eb1aedb57c9c27a77da89edba5d05435ed06bb68d65498a7a`, and
+both expclear `70a65a0f19f474ed5b1521700087bebdb97e0126ac0a6b0596338b389071a1ef`.
+The FW 5.50 hashes are ordinary
+`8cdfdfe8073a6f567949e259081eb7ade0b5e2857ad8755d028b87da07e9ad5c`, depth
+expclear `4aa1a5bf0eb0e7e8f41ec057009f02e279030498138f6f1d534a8c54944b8d46`,
+stencil expclear
+`a08270e7bde95ff1406c86644ab692e192bb547e4515e193e02e6eb830150b6f`, and both
+expclear `43c9c150cbd0f464a19ddb9b3bb3c4415a5fa4a9dbd2d79e739dcbb29fb3efdc`.
+Every artifact is preserved under its full hash and every deploy recipe checks
+that hash before network access. The pinned FW 5.50 ordinary combined gate is
+the next permitted launch.
+
 ## Higher-level consumers
 
 The following FW 5.50-qualified application-facing paths still need bounded

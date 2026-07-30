@@ -2629,6 +2629,7 @@ deploy_agc_depth_stencil_htile_fw1160_logged: agc_depth_stencil_htile_fw1160_log
 	PS5_HOST=$(PS5_HOST) DEPTH_ARTIFACT=$(THIS_DIR)/$< \
 		RESULT_LOG_PATH=/data/homebrew/openagc_fw1160_depth/result.log \
 		EXPECTED_HTILE_INITIAL=fffff30f EXPECTED_D32_FULL_RECT=1 \
+		EXPECTED_ARTIFACT_SHA256=636bd2dd304d5edb62f9213c40cfec80870060baa98f6aa044e5800681afc120 \
 		EXPECTED_STENCIL_FULL_RECT=1 PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) \
 		sh ./run_fw1160_depth.sh
 
@@ -2637,6 +2638,7 @@ deploy_agc_depth_stencil_expclear_depth_fw1160_logged: agc_depth_stencil_expclea
 		RESULT_LOG_PATH=/data/homebrew/openagc_fw1160_depth/result.log \
 		EXPECTED_HTILE_INITIAL=fffff30f EXPECTED_D32_FULL_RECT=1 \
 		EXPECTED_STENCIL_FULL_RECT=1 EXPECTED_COMBINED_EXPCLEAR_ASPECTS=1 \
+		EXPECTED_ARTIFACT_SHA256=48057d05dfa531fcb65958c3a2645bdcda709b211bc9520f2cbde0801e6261fb \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_depth.sh
 
 deploy_agc_depth_stencil_expclear_stencil_fw1160_logged: agc_depth_stencil_expclear_stencil_fw1160_logged.elf
@@ -2644,6 +2646,7 @@ deploy_agc_depth_stencil_expclear_stencil_fw1160_logged: agc_depth_stencil_expcl
 		RESULT_LOG_PATH=/data/homebrew/openagc_fw1160_depth/result.log \
 		EXPECTED_HTILE_INITIAL=fffff30f EXPECTED_D32_FULL_RECT=1 \
 		EXPECTED_STENCIL_FULL_RECT=1 EXPECTED_COMBINED_EXPCLEAR_ASPECTS=2 \
+		EXPECTED_ARTIFACT_SHA256=edbb8672c26b7f1eb1aedb57c9c27a77da89edba5d05435ed06bb68d65498a7a \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_depth.sh
 
 deploy_agc_depth_stencil_expclear_both_fw1160_logged: agc_depth_stencil_expclear_both_fw1160_logged.elf
@@ -2651,6 +2654,7 @@ deploy_agc_depth_stencil_expclear_both_fw1160_logged: agc_depth_stencil_expclear
 		RESULT_LOG_PATH=/data/homebrew/openagc_fw1160_depth/result.log \
 		EXPECTED_HTILE_INITIAL=fffff30f EXPECTED_D32_FULL_RECT=1 \
 		EXPECTED_STENCIL_FULL_RECT=1 EXPECTED_COMBINED_EXPCLEAR_ASPECTS=3 \
+		EXPECTED_ARTIFACT_SHA256=70a65a0f19f474ed5b1521700087bebdb97e0126ac0a6b0596338b389071a1ef \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_depth.sh
 
 .PHONY: deploy_agc_depth_d16_fw550_headless \
@@ -2728,6 +2732,7 @@ deploy_agc_depth_stencil_htile_fw550_headless: agc_depth_stencil_htile_fw550_hea
 	PS5_HOST=$(PS5_HOST) DEPTH_ARTIFACT=$(THIS_DIR)/$< \
 		EXPECTED_FW_ABI=0x0550 EXPECTED_HTILE_INITIAL=fffff30f \
 		EXPECTED_D32_FULL_RECT=1 EXPECTED_STENCIL_FULL_RECT=1 \
+		EXPECTED_ARTIFACT_SHA256=8cdfdfe8073a6f567949e259081eb7ade0b5e2857ad8755d028b87da07e9ad5c \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_depth.sh
 
 deploy_agc_depth_stencil_expclear_depth_fw550_headless: agc_depth_stencil_expclear_depth_fw550_headless.elf
@@ -2735,6 +2740,7 @@ deploy_agc_depth_stencil_expclear_depth_fw550_headless: agc_depth_stencil_expcle
 		EXPECTED_FW_ABI=0x0550 EXPECTED_HTILE_INITIAL=fffff30f \
 		EXPECTED_D32_FULL_RECT=1 EXPECTED_STENCIL_FULL_RECT=1 \
 		EXPECTED_COMBINED_EXPCLEAR_ASPECTS=1 \
+		EXPECTED_ARTIFACT_SHA256=4aa1a5bf0eb0e7e8f41ec057009f02e279030498138f6f1d534a8c54944b8d46 \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_depth.sh
 
 deploy_agc_depth_stencil_expclear_stencil_fw550_headless: agc_depth_stencil_expclear_stencil_fw550_headless.elf
@@ -2742,6 +2748,7 @@ deploy_agc_depth_stencil_expclear_stencil_fw550_headless: agc_depth_stencil_expc
 		EXPECTED_FW_ABI=0x0550 EXPECTED_HTILE_INITIAL=fffff30f \
 		EXPECTED_D32_FULL_RECT=1 EXPECTED_STENCIL_FULL_RECT=1 \
 		EXPECTED_COMBINED_EXPCLEAR_ASPECTS=2 \
+		EXPECTED_ARTIFACT_SHA256=a08270e7bde95ff1406c86644ab692e192bb547e4515e193e02e6eb830150b6f \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_depth.sh
 
 deploy_agc_depth_stencil_expclear_both_fw550_headless: agc_depth_stencil_expclear_both_fw550_headless.elf
@@ -2749,6 +2756,7 @@ deploy_agc_depth_stencil_expclear_both_fw550_headless: agc_depth_stencil_expclea
 		EXPECTED_FW_ABI=0x0550 EXPECTED_HTILE_INITIAL=fffff30f \
 		EXPECTED_D32_FULL_RECT=1 EXPECTED_STENCIL_FULL_RECT=1 \
 		EXPECTED_COMBINED_EXPCLEAR_ASPECTS=3 \
+		EXPECTED_ARTIFACT_SHA256=43c9c150cbd0f464a19ddb9b3bb3c4415a5fa4a9dbd2d79e739dcbb29fb3efdc \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_depth.sh
 
 deploy_agc_depth: agc_depth.elf

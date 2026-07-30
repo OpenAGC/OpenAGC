@@ -542,6 +542,11 @@ the runner and shared teardown on FW 11.60 only.
   aspect. No combined artifact depends on either AGC SPRX. Hardware execution
   remains ordered after the FW 5.50 cleanup and uncompressed/D16/D32 HTILE
   baselines. See `analysis/fw1160_fw550_parity_matrix_20260730.md`.
+- The prerequisite D32 tier is complete. All eight combined artifacts now
+  reproduce across two committed-shader relinks, avoid both AGC SPRX
+  dependencies, are preserved under full hashes, and fail before network
+  access on byte drift. Run the pinned FW 5.50 ordinary combined D32+S8 HTILE
+  gate next and freeze its exact metadata count before replay.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and
