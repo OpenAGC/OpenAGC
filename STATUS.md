@@ -201,11 +201,12 @@ command allocations through the direct DCB carrier only with an explicit
 runtime fence, appends an EOP completion write, and retains command ownership
 until a bounded status poll or wait observes that write. Its first public
 runtime FW 5.50 compute attempt used the former user-special-queue ACB route:
-submission returned `AGC_OK`, but the EOP fence timed out. The revised DCB
-route matches the separately qualified compute carrier and is covered by the
-generic carrier checks and the Prospero cross-build; its changed artifact has
-not yet passed an exact-firmware PS5 oracle, so no runtime hardware claim is
-made.
+submission returned `AGC_OK`, but the EOP fence timed out. The changed direct
+DCB artifact also returned `AGC_OK` and timed out at that fence. The DCB route
+matches the separately qualified compute carrier and is covered by generic
+carrier checks and the Prospero cross-build, but it has not resolved the
+public-runtime oracle; no runtime hardware claim is made. A changed EOP-only
+runtime diagnostic is required before another hardware attempt.
 
 An opt-in combined-tree integration target compiles real `openagc-psbc`
 vertex, fragment, and compute artifacts, then creates OpenAGC graphics and
