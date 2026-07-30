@@ -2408,18 +2408,29 @@ static bool dispatch_graphics(GraphicsTest *test,
 #if AGC_TESSELLATION
     uint32_t offchip_changed = 0;
     uint32_t factor_changed = 0;
+    uint32_t factor_invalid = 0;
     const uint32_t *factor_words = (const uint32_t *)factor_ring;
     for (uint32_t i = 0; i < AGC_GFX1013_TESS_OFFCHIP_RING_SIZE / 4u; ++i)
         offchip_changed += offchip_words[i] != 0xDEADBEEFu;
-    for (uint32_t i = 0; i < AGC_GFX1013_TESS_FACTOR_RING_SIZE / 4u; ++i)
-        factor_changed += factor_words[i] != 0u;
-    printf("[Tess Rings] offchip changed=%u factor changed=%u\n",
-           offchip_changed, factor_changed);
+    for (uint32_t i = 0; i < AGC_GFX1013_TESS_FACTOR_RING_SIZE / 4u; ++i) {
+        if (factor_words[i] != 0u) {
+            ++factor_changed;
+            factor_invalid += factor_words[i] != 0x40800000u;
+        }
+    }
+    printf("[Tess Rings] offchip changed=%u factor changed=%u invalid=%u\n",
+           offchip_changed, factor_changed, factor_invalid);
     printf("[Tess Rings] offchip[0..3]=%08x %08x %08x %08x "
            "factor[0..3]=%08x %08x %08x %08x\n",
            offchip_words[0], offchip_words[1], offchip_words[2],
            offchip_words[3], factor_words[0], factor_words[1],
            factor_words[2], factor_words[3]);
+    if (offchip_changed == 0u || factor_changed != 4u ||
+        factor_invalid != 0u) {
+        printf("[Tess Rings] mutation/value oracle: FAIL\n");
+        return false;
+    }
+    printf("[Tess Rings] mutation/value oracle: PASS\n");
     uint32_t dumped = 0;
     for (uint32_t i = 0;
          i < AGC_GFX1013_TESS_OFFCHIP_RING_SIZE / 4u && dumped < 32u; ++i) {

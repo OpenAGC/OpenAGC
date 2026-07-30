@@ -82,7 +82,9 @@ fi
 if [ "$REQUIRE_TESS_RINGS" -eq 1 ]; then
     grep -Fq '[Tess] reusable gfx1013 HS+TES+PS bind: 0x00000000' \
         "$output_file" || exit 1
-    grep -Eq '^\[Tess Rings\] offchip changed=[1-9][0-9]* factor changed=[1-9][0-9]*$' \
+    grep -Eq '^\[Tess Rings\] offchip changed=[1-9][0-9]* factor changed=4 invalid=0$' \
+        "$output_file" || exit 1
+    grep -Fq '[Tess Rings] mutation/value oracle: PASS' \
         "$output_file" || exit 1
 fi
 case "$EXPECTED_TARGET" in

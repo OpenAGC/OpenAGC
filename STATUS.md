@@ -504,9 +504,12 @@ immediate, shutdown passed, and no residual process remained. See
 
 The isolated Wave32 HS+TES+PS tier now has exact logged FW 11.60 and headless
 FW 5.50 artifacts. The runner requires explicit tessellation identity, the
-reusable binder returning `AGC_OK`, positive offchip- and factor-ring mutation,
-the exact FP16 oracle, bounded fence, clean shutdown, and final PASS. Both
-artifacts cross-build without warnings; hardware execution remains pending.
+reusable binder returning `AGC_OK`, positive offchip mutation, exactly four
+whole-ring `4.0f` factor values, the exact FP16 oracle, bounded fence, clean
+shutdown, and final PASS. Two exploratory FW 11.60 runs passed graphics but
+showed the factor-ring slot rotates; the validator now scans the entire ring
+instead of sampling indices 0-3. Strengthened two-pass hardware execution is
+pending. Both exact artifacts cross-build without warnings.
 See `analysis/fw1160_tessellation_gate_plan_20260730.md`.
 
 Exact next-tier ordinary D16/HTILE and D16 HTILE expclear artifacts now build

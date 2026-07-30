@@ -130,8 +130,11 @@ AMD PM4 packet ancestry overlap in useful ways.
   `analysis/fw1160_ngg_geometry_gate_plan_20260730.md`.
 - The isolated HS+TES+PS gate is now prepared with exact logged FW 11.60 and
   headless FW 5.50 artifacts. Its runner requires the explicit tessellation
-  identity, an `AGC_OK` reusable binder, positive offchip- and factor-ring
-  mutation, the ordinary exact FP16 oracle, bounded fence, and clean shutdown.
+  identity, an `AGC_OK` reusable binder, positive offchip mutation, exactly
+  four whole-ring `4.0f` factor values, the ordinary exact FP16 oracle,
+  bounded fence, and clean shutdown. An exploratory pair proved that the
+  factor-ring slot rotates, so first-word sampling was replaced by a complete
+  ring scan; rerun the strengthened artifact twice.
   Run it twice before preparing combined TES-to-NGG geometry. See
   `analysis/fw1160_tessellation_gate_plan_20260730.md`.
 - The first uncompressed depth/stencil tier is also built for exact FW 11.60:
