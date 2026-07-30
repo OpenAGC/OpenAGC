@@ -79,6 +79,14 @@ The no-argument current/internal defaults wrappers also use that recorded
 version and now match their pointer-returning Sony ABI; the former unrelated
 output-buffer declaration was removed.
 
+The first firmware-neutral portability ELF is built and pinned. Its SHA-256 is
+`e04004fee2254e6169805f153ce4812197726ed5f53a9295a4493f0d8ac9a9ce`; it has
+no `AGC_EXPECT_FIRMWARE_ABI_KEY` build definition and no dynamic dependency on
+either AGC SPRX. It exercises authorization, `/dev/gc`, V7 defaults, async,
+real GPU execution, bounded public VideoOut, full teardown, and relaunch. The
+FW11.60 run is pending; the same preserved bytes remain reserved for FW5.50.
+All other active exact profiles remain SPRX-qualified/hardware-unverified.
+
 ## Reusable driver and flexible-memory teardown (2026-07-29)
 
 `agcDriverShutdown` now provides a public, backend-neutral teardown boundary.

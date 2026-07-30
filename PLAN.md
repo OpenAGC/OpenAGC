@@ -82,14 +82,14 @@ Execute in this order:
 3. **Complete:** extract and verify the linear VideoOut registration branch offset and full
    original instruction signature from every active profile's own
    `libSceVideoOut.sprx`, then generate the runtime table used by the core.
-4. Define the common baseline capability contract a normal game can require.
+4. **Complete:** define the common baseline capability contract a normal game can require.
    Keep workload packets, EOP flip, non-empty HS patch lists, and other narrow
    operations optional and runtime-queryable rather than allowing them to make
    the baseline binary firmware-specific.
-5. Build one unpinned portability payload. It must print the detected full
+5. **Complete:** build one unpinned portability payload. It prints the detected full
    version and selected four-digit key, but it must not be compiled with
    `AGC_EXPECT_FIRMWARE_ABI_KEY` or link a firmware SPRX.
-6. Pin that ELF's SHA-256 before hardware execution. Run the exact same bytes
+6. **Pinned; hardware pending:** pin that ELF's SHA-256 before hardware execution. Run the exact same bytes
    on FW 11.60 and, when available, FW 5.50, with the cleanup payload
    immediately before every launch and file-backed bounded verdicts.
 7. Preserve the same artifact for future intermediate-firmware testing. Until
@@ -103,6 +103,12 @@ already hardware-qualified supporting components. They do not by themselves
 prove binary portability because their existing qualification payloads contain
 test-only expected-firmware macros and have not run as identical bytes on both
 endpoint consoles.
+
+The neutral target is now `samples/hw_test/agc_portability.elf`, pinned as
+SHA-256 `e04004fee2254e6169805f153ce4812197726ed5f53a9295a4493f0d8ac9a9ce`
+before hardware execution. It contains no expected-firmware macro or AGC SPRX
+dependency and uses the common V7 caller ABI. See
+`analysis/firmware_neutral_portability_elf_20260730.md`.
 
 ### Existing FW 11.60 versus FW 5.50 capability work
 

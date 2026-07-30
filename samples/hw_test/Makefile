@@ -178,6 +178,22 @@ agc_videoout_public_fw1160_logged.elf: agc_videoout_public.c gpu_credentials.h $
 		-DAGC_RESULT_LOG_PATH='"/data/homebrew/openagc_fw1160_videoout/result.log"' \
 		-o $@ agc_videoout_public.c $(AGC_LDFLAGS)
 
+# Firmware-neutral baseline gate. Deliberately has no
+# AGC_EXPECT_FIRMWARE_ABI_KEY definition and no firmware SPRX dependency.
+agc_portability.elf: agc_videoout_public.c gpu_credentials.h agc_test_defaults.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_PORTABILITY_GATE=1 \
+		-DAGC_RESULT_LOG_PATH='"/data/homebrew/openagc_portability/result.log"' \
+		-o $@ agc_videoout_public.c $(AGC_LDFLAGS)
+	../../tools/verify_portability_elf.sh $@
+
+.PHONY: portability_fw1160
+portability_fw1160: agc_portability.elf run_portability.sh
+	PS5_HOST=$(PS5_HOST) PORTABILITY_ARTIFACT=$(THIS_DIR)/$< \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) \
+		EXPECTED_ARTIFACT_SHA256=e04004fee2254e6169805f153ce4812197726ed5f53a9295a4493f0d8ac9a9ce \
+		EXPECTED_FIRMWARE_ABI_KEY=1160 PORTABILITY_ITERATIONS=2 \
+		sh ./run_portability.sh
+
 .PHONY: videoout_public_fw1160
 videoout_public_fw1160: agc_videoout_public_fw1160_logged.elf run_fw1160_videoout.sh
 	PS5_HOST=$(PS5_HOST) VIDEOOUT_ARTIFACT=$(THIS_DIR)/$< \

@@ -21,12 +21,12 @@
 #include "gpu_credentials.h"
 #include "agc_test_defaults.h"
 
-#ifndef AGC_EXPECT_FIRMWARE_ABI_KEY
-#define AGC_EXPECT_FIRMWARE_ABI_KEY 0x1160u
-#endif
-
 #ifndef AGC_RESULT_LOG_PATH
+#ifdef AGC_PORTABILITY_GATE
+#define AGC_RESULT_LOG_PATH "/data/homebrew/openagc_portability/result.log"
+#else
 #define AGC_RESULT_LOG_PATH "/data/homebrew/openagc_fw1160_videoout/result.log"
+#endif
 #endif
 
 enum {
@@ -40,7 +40,14 @@ enum {
 
 #define DIRECT_MEMORY_SEARCH_END 0x300000000ull
 #define SCE_KERNEL_WC_GARLIC 3
+#ifdef AGC_PORTABILITY_GATE
+#define EXPECTED_MARKER 0x504f5254u /* "PORT" */
+#else
+#ifndef AGC_EXPECT_FIRMWARE_ABI_KEY
+#define AGC_EXPECT_FIRMWARE_ABI_KEY 0x1160u
+#endif
 #define EXPECTED_MARKER 0x1160cafeu
+#endif
 
 int sceKernelAllocateDirectMemory(
     off_t search_start, off_t search_end, size_t length, size_t alignment,
@@ -153,15 +160,34 @@ int main(void)
     driver_initialized = true;
     result = agcDriverDebugRuntimeProfile(&diagnostics);
     runtime_ok = result == AGC_OK &&
+        diagnostics.profile.family != AGC_PROSPERO_ABI_UNSUPPORTED;
+#ifndef AGC_PORTABILITY_GATE
+    runtime_ok = runtime_ok &&
         (diagnostics.firmware_version >> 16) == AGC_EXPECT_FIRMWARE_ABI_KEY;
+#endif
+#ifdef AGC_PORTABILITY_GATE
+    printf("Runtime profile raw=0x%08x key=0x%04x family=%s model=%s: %s\n",
+        (unsigned)diagnostics.firmware_version,
+        (unsigned)(diagnostics.firmware_version >> 16),
+        agcProsperoAbiFamilyName(diagnostics.profile.family),
+        diagnostics.profile.is_trinity ? "trinity" : "standard-ps5",
+        runtime_ok ? "PASS" : "FAIL");
+#else
     printf("Runtime profile FW ABI 0x%04x: %s\n",
         (unsigned)(diagnostics.firmware_version >> 16),
         runtime_ok ? "PASS" : "FAIL");
+#endif
     if (!runtime_ok)
         goto cleanup;
 
+#ifdef AGC_PORTABILITY_GATE
+    /* V7 is the common caller ABI accepted by every active FW3.20-12.70
+     * profile. Firmware-specific table bounds remain inside OpenAGC. */
+    result = sceAgcInit(7u);
+#else
     result = sceAgcInit(agcTestDefaultsVersion(
         (uint16_t)(diagnostics.firmware_version >> 16)));
+#endif
     if (result != AGC_OK) {
         printf("Caller defaults selection: FAIL (0x%08x)\n", (unsigned)result);
         goto cleanup;
@@ -246,7 +272,11 @@ cleanup:
         presentation_ok && shutdown_result == AGC_OK &&
         submit_release_result == 0 && unmap_result == 0 &&
         direct_release_result == 0;
+#ifdef AGC_PORTABILITY_GATE
+    printf("Portability result: %s\n", success ? "PASS" : "FAIL");
+#else
     printf("Public VideoOut result: %s\n", success ? "PASS" : "FAIL");
+#endif
     fflush(stdout);
     kill(getpid(), SIGKILL);
     return success ? 0 : 1;
