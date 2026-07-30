@@ -561,7 +561,18 @@ static void test_gfx1013_indexed_indirect_draw_wrappers(void)
     TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndirect(&cb, &indirect),
         AGC_ERROR_INVALID_ARGUMENT,
         "gfx1013 indirect rejects missing count buffer");
+    indirect.count_indirect = 2u;
+    indirect.count_address = UINT64_C(0x200040004);
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndirect(&cb, &indirect),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "gfx1013 indirect rejects invalid count selector");
     indirect.count_indirect = 0u;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndirect(&cb, &indirect),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "gfx1013 indirect rejects unused count address");
+    indirect.count_address = 0u;
 
     indirect.base_vertex_location = 0x08fu;
     indirect.start_instance_location = 0x090u;
