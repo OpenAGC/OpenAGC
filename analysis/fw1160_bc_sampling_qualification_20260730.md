@@ -186,6 +186,14 @@ The identical artifact reproduced `224640` changed pixels,
 and FNV64 `0x4cef62aedf2c8da1`. All lifecycle gates passed again. BC3 UNORM
 and SRGB are hardware-qualified on exact FW 11.60.
 
+## BC5 corrected artifacts
+
+After the shared oracle corrections, both BC5 variants were rebuilt, passed
+firmware-neutral dependency verification, and were preserved before execution:
+
+- UNORM: `2ecb276612e06b42e2408e5b5352272493cd2f167eb47bbee79ff4dc6ffebeb7`
+- SNORM: `cf6fcaa788fe65fd7b0bb352888dce09be674ddfbbfde2d37faf0ab9cb6a3fe0`
+
 ## BC3 UNORM pass 2
 
 The identical artifact reproduced `224640` changed pixels,

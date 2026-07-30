@@ -743,9 +743,9 @@ separately, covers both endpoint-order interpolation modes and terminal
 values, demands full ranges and channel independence, validates every
 mip/layer region, and permits only the established one-byte SNORM rounding
 tolerance. Exact artifacts are now pinned as SHA-256
-`65304aac7b4e49a180dbf8aeb0a81abe240d8579157184a673b2079b29528a8c`
+`2ecb276612e06b42e2408e5b5352272493cd2f167eb47bbee79ff4dc6ffebeb7`
 (UNORM) and
-`5b385bd503a69ea763681e66eb9627c5a74c60dd482d5e9dc02d4dbfd52e80b0`
+`cf6fcaa788fe65fd7b0bb352888dce09be674ddfbbfde2d37faf0ab9cb6a3fe0`
 (SNORM), with no-prerequisite FW 11.60 and FW 5.50 guarded targets. Hardware
 execution remains pending a clean FW 11.60 boot.
 

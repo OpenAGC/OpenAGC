@@ -1165,9 +1165,9 @@ stream, covers both interpolation modes and terminal values, requires the full
 0..255 range in both channels, proves channel independence and all mip/layer
 regions, allows only the established one-byte SNORM rounding tolerance, and
 records a native hash. The pinned SHA-256 values are
-`65304aac7b4e49a180dbf8aeb0a81abe240d8579157184a673b2079b29528a8c`
+`2ecb276612e06b42e2408e5b5352272493cd2f167eb47bbee79ff4dc6ffebeb7`
 for BC5 UNORM and
-`5b385bd503a69ea763681e66eb9627c5a74c60dd482d5e9dc02d4dbfd52e80b0`
+`cf6fcaa788fe65fd7b0bb352888dce09be674ddfbbfde2d37faf0ab9cb6a3fe0`
 for BC5 SNORM. Their FW 11.60 and identical-byte FW 5.50 guarded targets have
 no build prerequisites.
 
