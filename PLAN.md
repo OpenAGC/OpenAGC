@@ -609,8 +609,10 @@ all six pinned artifacts for identical-byte FW 5.50 replay and proceed to the
   `32_32_32_32`, UINT, standard swap, 16 bytes per pixel, and `32_ABGR`
   export 9. Exact PM4 (`CB_COLOR0_INFO=0x00070438`), all-profile selection,
   every short-buffer boundary, invalid-enum behavior, and maximum 64-bit
-  layout arithmetic pass. Build its four-lane portable gate offline, but do
-  not execute it until the FW 11.60 console has rebooted and RG32_UINT passes.
+  layout arithmetic pass. Its dedicated `32_ABGR` shader and four-lane exact
+  oracle build as a firmware-neutral portable gate. The gate expands its
+  render-target allocation to the required 16 bytes per pixel. Do not pin or
+  execute it until the FW 11.60 console has rebooted and RG32_UINT passes.
 
 These formats need dedicated integer-output pixel shaders. Do not qualify them
 using a floating-point shader and assume the conversion is correct. Their

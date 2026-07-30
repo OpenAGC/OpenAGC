@@ -313,8 +313,10 @@ Two FW 11.60 passes and the identical-byte FW 5.50 replay remain pending. See
 `32_ABGR` export 9. Host coverage locks `CB_COLOR0_INFO=0x00070438`, exact PM4,
 all 39 profiles, every short command-buffer boundary, invalid enums, and
 maximum 64-bit surface arithmetic. The generic suite passes 10,933 assertions.
-Hardware-gate construction is next, but execution must remain ordered behind
-the clean-boot RG32_UINT qualification.
+Its dedicated `32_ABGR` shader, four-lane exact oracle, 16-byte-per-pixel pool
+sizing, and fail-closed runner checks build as a firmware-neutral portable
+gate. Pinning and execution remain ordered behind the clean-boot RG32_UINT
+qualification.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability
