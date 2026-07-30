@@ -79,8 +79,8 @@ expert use, but make the native API the recommended application surface.
    SHA-256 `e04004fee2254e6169805f153ce4812197726ed5f53a9295a4493f0d8ac9a9ce`
    passed twice as identical bytes on both FW 5.50 and FW 11.60 after their
    cleanup stress prerequisites. Preserve this exact artifact as regression
-   evidence. Milestones 1 and 2 are complete; Milestone 3 reflection and
-   validated pipeline objects are now the active product task.
+   evidence. Milestones 1 through 3 are complete; Milestone 4 resource-state
+   transitions and synchronization is now the active product task.
 2. **Do not reopen completed format work.** All R/RG/RGBA16
    UNORM/SNORM/UINT/SINT tuples, all six 32-bit UINT/SINT color tuples, all 14
    BC1-BC7 sampling encodings, the planned D16/D32/S8/HTILE progression, and
@@ -247,7 +247,7 @@ buffer and image ranges remaining unavailable until their fences complete.
 Live allocation and byte counts return to baseline. The complete generic suite
 passes 13,614 assertions. See `docs/memory_resources.md`.
 
-### Milestone 3: reflection and validated pipeline objects
+### Milestone 3: reflection and validated pipeline objects — complete
 
 Host slice implemented on 2026-07-30: shared reflection ABI/API v15,
 serialized-record and hash validation, reflected basic graphics/compute
@@ -275,8 +275,11 @@ The generated `fill_color_native` compute binary/reflection pair is consumed
 by the generic runtime-contract test and the separate
 `agc_runtime_compute.elf` probe, which uses only native objects, reflected
 descriptor/push binding, a bounded fence wait, and readback verification.
-That probe has Prospero cross-build coverage only; the existing manually
-assembled `agc_compute.elf` remains the hardware-qualified baseline.
+The existing manually assembled `agc_compute.elf` was the hardware-qualified
+baseline. The public runtime artifact
+`52a1e82a75cafe5b7541f130e862ae6cf4813ecedd460dd7017408ef2a254775`
+now also passed reflected dispatch, bounded fence wait, readback, reset, and
+full teardown on exact FW 5.50.
 Runtime API v3 now adds typed `AgcColorTargetBinding` command recording for
 reflected graphics exports. It validates exact image/attachment format and
 sample agreement, matching dimensions, qualified target-base alignment, and
@@ -292,10 +295,14 @@ exact artifacts in a generic two-color-target/depth-target/vertex/index/
 dynamic-state submission contract, and builds `agc_runtime_graphics.elf`.
 The standalone probe prefills its two linear RGBA8 targets through the native
 image-transfer API, then requires post-fence MRT readback to replace the
-sentinel over matching coverage with distinct outputs. It has not been
-deployed and is not yet a hardware qualification. Its runtime graphics bind
-starts with the exact 2,184-dword V8 default sequence before pipeline state;
-the host capture fixture locks that prefix and the probe reserves 4,096 dwords.
+sentinel over matching coverage with distinct outputs. Its runtime graphics
+bind starts with the exact 2,184-dword V8 default sequence before pipeline
+state; the host capture fixture locks that prefix and the probe reserves 4,096
+dwords.
+The changed artifact `e7c3cb908910e28ea1ee1d9c3db0a887d45bd1d9e84e356cf6c8a159167d2941`
+then passed once on exact FW 5.50: both MRT targets overwrote exactly 1,152
+sentinel pixels with distinct outputs after the bounded fence wait, and every
+runtime object reset/destroy call returned `AGC_OK`.
 `agcGetRuntimeInfo` keeps native runtime capabilities host-tested until a
 public runtime artifact passes its own exact-firmware oracle; hardware evidence
 for an underlying direct carrier does not promote an unrun runtime slice.
@@ -348,12 +355,10 @@ expanded command-space coverage and a clean PS5 cross-build. The changed
 artifact `52a1e82a75cafe5b7541f130e862ae6cf4813ecedd460dd7017408ef2a254775`
 then passed its exact FW 5.50 public-runtime compute lifecycle: reflected
 pipeline dispatch, bounded fence wait, readback verification, reset, and full
-teardown. This promotes that compute slice only; the native graphics probe and
-remaining unqualified pipeline options are still open, so do not label this
-milestone complete yet.
-Remaining unqualified geometry forms, remaining
-unqualified fixed options, and any explicit PS5 hardware promotion remain
-open; do not label this milestone complete yet.
+teardown. The separate native graphics probe has now also passed its exact
+FW 5.50 reflected MRT/depth draw and readback oracle. The remaining
+unqualified geometry and fixed-function options stay explicitly fail-closed;
+they do not prevent this milestone's validated-pipeline exit criteria.
 Every current unsupported rasterization option (line/point polygon mode, depth
 clamp, rasterizer discard, and non-unit line width) has a host fixture proving
 `AGC_ERROR_NOT_SUPPORTED` and no pipeline output before command emission.
@@ -396,6 +401,13 @@ register sequence.
 Exit criteria: host tests cover a compatibility cross-product of shader
 exports and attachment types, negative pipeline fixtures emit zero commands,
 and hardware samples bind pipelines without sample-local register assembly.
+
+Completed on 2026-07-31. The generic suite covers the compatibility
+cross-product and transactional negative cases. The public compute oracle
+passed its reflected dispatch/readback lifecycle, and public graphics oracle
+`e7c3cb908910e28ea1ee1d9c3db0a887d45bd1d9e84e356cf6c8a159167d2941` passed
+its reflected NGG/MRT/depth draw/readback lifecycle, both on exact FW 5.50
+without application PM4 or firmware selection.
 
 ### Milestone 4: command recording, resource states, and synchronization
 

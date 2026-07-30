@@ -204,10 +204,9 @@ shader, compute pipeline, command buffer, and fence from the generated
 and push constants before dispatch. The first FW 5.50 deployment reached
 `agcQueueSubmit` successfully but timed out at the runtime EOP fence while
 using the former ACB route. The changed direct-DCB artifact reached the same
-timeout. Its generic artifact-contract test and revised Prospero cross-build
-pass, but neither artifact is hardware-qualified. The EOP-only oracle passed,
-so the next changed workload diagnostic must isolate the emitted compute state
-that precedes `DISPATCH_DIRECT`.
+timeout. The EOP-only oracle then isolated the carrier and completion path;
+the subsequent V8-default artifact passed its full reflected workload on exact
+FW 5.50, as recorded below.
 
 The first isolated difference is now fixed in `agcCmdDispatch`: it emits all
 174 qualified V8 compute SH-default registers before programming shader,
@@ -217,8 +216,8 @@ the runtime stream contains the full default sequence plus the dispatch. The
 changed artifact (`52a1e82a75cafe5b7541f130e862ae6cf4813ecedd460dd7017408ef2a254775`)
 passed on exact FW 5.50: submission, bounded fence wait, readback verification,
 reset, and every object teardown returned `AGC_OK`. This hardware-qualifies the
-reflected native compute slice for this exact profile; it does not qualify the
-separate native graphics sample or unqualified pipeline options.
+reflected native compute slice for this exact profile. The separate graphics
+sample is qualified below; unrun optional pipeline features remain unqualified.
 
 `samples/hw_test/agc_runtime_eop.elf` is that bounded public-runtime
 diagnostic. It creates the same device, compute queue, command buffer, and
@@ -241,5 +240,9 @@ RGBA8 targets are prefilled through `agcWriteImage`, then read through
 to replace the sentinel over matching coverage and to differ from the other
 output. Every native graphics bind also begins with the exact 2,184-dword FW
 5.50 V8 graphics-default prefix before shader and fixed-function state; the
-probe therefore reserves 4,096 dwords. The probe has not been deployed
-or hardware-qualified.
+probe therefore reserves 4,096 dwords. Artifact
+`e7c3cb908910e28ea1ee1d9c3db0a887d45bd1d9e84e356cf6c8a159167d2941` passed
+once on exact FW 5.50: both targets changed exactly 1,152 sentinel pixels,
+every changed pair differed, the bounded fence completed, and every object
+reset/destroy call returned `AGC_OK`. This qualifies the native baseline
+graphics slice for that profile, not unrun optional pipeline features.

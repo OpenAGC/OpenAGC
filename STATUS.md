@@ -18,26 +18,21 @@ passed twice as identical bytes on both endpoint consoles. The FW 11.60
 workload operation remains fail-closed after all known packet forms stalled
 and is not part of the baseline contract.
 
-The native C runtime contract and resource/memory milestone are complete. Its
-opaque objects, versioned descriptors, ownership/state validation, finite
-fences, stable errors, and runtime capability/qualification reporting are
-host-qualified. The first Milestone 3 host slice now consumes versioned
-`openagc-psbc` reflection and validates/caches basic graphics and compute
-pipelines. Prospero builds the same API, but native queue submission remains
-fail-closed pending an explicit hardware-promotion gate.
+The native C runtime contract, resource/memory milestone, and Milestone 3
+reflection/pipeline work are complete. Its opaque objects, versioned
+descriptors, ownership/state validation, finite fences, stable errors, and
+runtime capability/qualification reporting are host-qualified. Public runtime
+compute and baseline graphics oracles now also passed on exact FW 5.50 through
+the direct DCB carrier, without application PM4 or firmware selection.
 
-1. **Complete pipeline safety.** Audit the host-tested reflection/pipeline
-   slice for any still-needed
-   qualified fixed options while preserving transactional failure for every
-   unsupported combination.
-2. **Own transitions and synchronization.** Track explicit resource usage and
+1. **Own transitions and synchronization.** Track explicit resource usage and
    derive qualified release/acquire/flush/invalidate actions internally. Add
    bounded fences, multi-command-buffer submission, waits/signals, deferred
    retirement, validation diagnostics, and capture/command-stream inspection.
-3. **Document and integrate.** Publish lifecycle, memory, shader, pipeline,
+2. **Document and integrate.** Publish lifecycle, memory, shader, pipeline,
    synchronization, capability, error, and capture documentation. Qualify one
    long-running reference-game ELF unchanged on FW 5.50 and FW 11.60.
-4. **Rehabilitate `../Vulkan-PS5` last.** Make it a constrained translation
+3. **Rehabilitate `../Vulkan-PS5` last.** Make it a constrained translation
    layer above native OpenAGC objects. It must not retain a second PM4 backend,
    allocator, firmware selector, or synchronization model.
 
@@ -81,7 +76,7 @@ buffer/image reuse. Live allocation and byte counts return to baseline. The
 resource milestone closed at 13,614 passed and 0 failed across all six CTest
 suites. See `docs/memory_resources.md`.
 
-## Versioned shader reflection and validated pipeline host slice (2026-07-30)
+## Versioned shader reflection and validated pipeline objects complete (2026-07-31)
 
 `openagc/shader_reflection.h` is now the pointer-free, versioned ABI shared by
 OpenAGC and `openagc-psbc` API v15. Reflection v2 keeps the original 5,744-byte
@@ -218,7 +213,7 @@ The exact artifact
 passed on FW 5.50: its reflected compute dispatch, 200 ms bounded fence wait,
 readback verification, command reset, and complete resource/device teardown
 all returned `AGC_OK`. This hardware-qualifies the native reflected compute
-slice for the tested profile, not the undeployed native graphics slice.
+slice for the tested profile.
 
 An opt-in combined-tree integration target compiles real `openagc-psbc`
 vertex, fragment, and compute artifacts, then creates OpenAGC graphics and
@@ -232,9 +227,10 @@ The generated `fill_color_native` compute binary/reflection pair is now
 consumed by a generic runtime artifact-contract fixture and the separate
 `agc_runtime_compute.elf` probe. The probe creates only native runtime objects,
 binds reflected storage/push requirements, submits through a bounded fence, and
-reads back its result. Its Prospero cross-build passes, but it has not been
-deployed or hardware-qualified; the manually assembled `agc_compute.elf`
-remains the qualified compute baseline.
+reads back its result. Artifact
+`52a1e82a75cafe5b7541f130e862ae6cf4813ecedd460dd7017408ef2a254775` passed
+that full public compute lifecycle on exact FW 5.50; the manually assembled
+`agc_compute.elf` remains a separate low-level baseline.
 
 Runtime API v3 adds typed color-target command binding for reflected graphics
 pipelines. `agcCmdBindColorTargets` validates image usage, exact attachment
@@ -254,10 +250,14 @@ reflected graphics pipeline, two RGBA8 color targets and a D16 depth target,
 dynamic viewport/scissor state, and a bounded-fence submission without raw PM4
 assembly. The native probe initializes both targets with `agcWriteImage` and
 requires `agcReadImage` to observe matching overwritten coverage and distinct
-MRT0/MRT1 outputs after the fence. The artifact cross-builds, but has not been
-deployed and no hardware qualification is claimed. Native graphics binds now
-emit the 2,184-dword V8 graphics-default prefix before their cached pipeline
-state; host capture locks this ordering and the probe reserves 4,096 dwords.
+MRT0/MRT1 outputs after the fence. The exact artifact
+`e7c3cb908910e28ea1ee1d9c3db0a887d45bd1d9e84e356cf6c8a159167d2941` passed
+once on FW 5.50: each target changed exactly 1,152 sentinel pixels, all 1,152
+pairwise outputs differed, and every reset/destroy call returned `AGC_OK`.
+Native graphics binds emit the 2,184-dword V8 graphics-default prefix before
+their cached pipeline state; host capture locks this ordering and the probe
+reserves 4,096 dwords. This hardware-qualifies the native baseline graphics
+slice for the exact tested profile.
 `agcGetRuntimeInfo` therefore keeps the native runtime capabilities
 host-tested: separate hardware evidence for an underlying direct carrier does
 not promote an unrun public runtime slice.
