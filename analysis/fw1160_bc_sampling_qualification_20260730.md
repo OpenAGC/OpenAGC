@@ -199,7 +199,15 @@ firmware-neutral dependency verification, and were preserved before execution:
 The pinned UNORM artifact passed with `224640` changed pixels,
 `{74880,74880,74880}` regions, full R/G `0..255` ranges, zero decode
 mismatches/error, channel independence, and FNV64 `0x3bc37aa96460e455`.
-All lifecycle gates passed. Repeat the identical bytes once.
+All lifecycle gates passed.
+
+## BC5 UNORM pass 2
+
+The identical artifact reproduced `224640` changed pixels,
+`{74880,74880,74880}` regions, full R/G ranges, zero decode mismatches/error,
+channel independence, and FNV64 `0x3bc37aa96460e455`. All lifecycle gates
+passed again. BC5 UNORM is hardware-qualified on exact FW 11.60; BC5 SNORM
+is next.
 
 ## BC3 UNORM pass 2
 
