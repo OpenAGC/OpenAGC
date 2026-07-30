@@ -105,6 +105,12 @@ then still requires the post-cleanup websrv health check before artifact upload.
 A host fixture reproduces the timeout and proves that the fresh file-backed
 verdict path continues. This attempt carries no GPU qualification evidence.
 
+After reboot and ps5debug-NG reinjection, the pinned FW 11.60 ordinary artifact
+passed its first actual launch. It selected `0x1160`, reproduced the exact D16
+classes and the same `7408` changed HTILE words seen twice on FW 5.50, shut
+down cleanly, and left no residual `eboot.bin`. The FW 11.60 recipe now freezes
+`7408`; one identical cleanup-first replay remains before expclear is allowed.
+
 Both D16 expclear endpoint artifacts are also staged but remain launch-blocked
 behind the two FW 11.60 ordinary passes. Forced relinks reproduced exact hashes
 `740b5645214ccd13dc6e8099f7b35d98600dde0a89f9f97f3b8c04df3c9bc55f`
