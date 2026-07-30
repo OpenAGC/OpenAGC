@@ -599,6 +599,12 @@ the runner and shared teardown on FW 11.60 only.
 - The identical FW 11.60 both-aspect replay reproduced every exact invariant.
   Run the pinned FW 5.50 both-aspect mirror next with `49152` frozen. A pass
   completes combined D32+S8 HTILE and advances the plan to mip/array HTILE.
+- The pinned FW 5.50 both-aspect mirror reproduced every exact aspect-`0x3`,
+  metadata, allocation-aware D32, S8, fence, shutdown, and cleanup invariant.
+  The complete combined tier is qualified on both endpoints. Add current-
+  source firmware-keyed headless mip and array artifacts, guarded deploy
+  targets, and exact selected-versus-outside metadata oracles next; do not
+  reuse the historical FW 5.50 VideoOut ELFs as cross-firmware evidence.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and

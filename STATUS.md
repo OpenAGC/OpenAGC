@@ -117,7 +117,12 @@ combined expclear is hardware-qualified on both endpoints. Both-aspect FW
 mismatches/outside changes, `49152` changed words, exact allocation-aware D32
 and S8 values, clean shutdown, and no residual process. Its recipe now freezes
 that count; the identical replay reproduced every invariant. The pinned FW
-5.50 both-aspect mirror is the final combined-tier gate with `49152` frozen.
+5.50 both-aspect mirror reproduced every exact aspect-`0x3`, metadata,
+allocation-aware D32, S8, fence, shutdown, and cleanup invariant with `49152`
+frozen. Combined D32+S8 ordinary and all three expclear aspect masks are
+hardware-qualified on both endpoints. Current-source HTILE mip/array endpoint
+mirrors are now the active depth tier; only historical FW 5.50 VideoOut
+fixtures exist today.
 
 Ordinary D16 HTILE is now hardware-qualified twice on each endpoint. The
 pinned current-source artifacts reproduced exact D16 classes, clean teardown,

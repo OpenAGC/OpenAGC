@@ -56,8 +56,8 @@ reached its completion fence, shut the driver down, and returned PASS.
 | Ordinary D16 HTILE | Qualified | Qualified on both endpoints |
 | D16 HTILE expclear | Qualified | Qualified on both endpoints |
 | D32 HTILE ordinary/decompress/resummarize/expclear | Qualified | Qualified on both endpoints |
-| Combined D32+S8 HTILE and aspect masks | Ordinary, depth-only, and stencil-only qualified | Both-aspect expclear pending |
-| HTILE mip and array subresources | Missing | Prepare bounded mirrors |
+| Combined D32+S8 HTILE and aspect masks | Qualified | Qualified on both endpoints |
+| HTILE mip and array subresources | Historical FW 5.50 qualification only | Prepare current-source bounded endpoint mirrors |
 | 4x MSAA | Missing | Wait for the FW 5.50 baseline regression |
 | Sample-rate shading | Missing | Add an exact invocation-count gate |
 
@@ -277,6 +277,15 @@ metadata `0xfffc00f0`, `49152` changed words, exact allocation-aware D32 and S8
 distributions, immediate completion, clean shutdown, final PASS, and no
 residual process. The pinned FW 5.50 both-aspect mirror now freezes `49152` and
 is the final combined-tier endpoint gate.
+
+The pinned FW 5.50 both-aspect mirror reproduced aspect `0x3`, expected
+metadata `0xfffc00f0`, zero RMW mismatch or outside change, preserved reserved
+bits, `49152` changed words, exact allocation-aware D32 and S8 distributions,
+bounded completion, clean shutdown, final PASS, and no residual process.
+Combined D32+S8 ordinary HTILE and depth-only, stencil-only, and both-aspect
+expclear are hardware-qualified on both endpoints. The next tier is current-
+source HTILE mip and array isolation; the older FW 5.50 VideoOut evidence does
+not replace new hash-pinned endpoint mirrors.
 
 ## Higher-level consumers
 
