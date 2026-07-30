@@ -371,8 +371,11 @@ the runner and shared teardown on FW 11.60 only.
   and the packed hash, and passes firmware-neutral dependency verification.
   The final unexecuted ELF is pinned as SHA-256
   `b9bdb9641c22bfedfb9367fe60ba97baaef84af191d0326001c2e8285afbef34`.
-  Run those identical bytes twice on FW 11.60; exact FW 5.50 replay remains
-  pending.
+  Those identical bytes passed twice on FW `0x11600005`: all four lanes
+  spanned `-32768..32767` with zero exact mismatches, six passing independence
+  comparisons, packed FNV64 `0x0a12ca15c78ce483`, immediate fences, and clean
+  teardown. Exact FW 5.50 replay remains pending. See
+  `analysis/fw1160_rgba16_sint_portable_qualification_20260730.md`.
 - Seven additional offscreen format gates now build under the same exact
   profile and bounded runner: R8, RG8, RGB10A2, R11G11B10, R32, RG32, and
   RGBA32. All seven passed twice on FW 11.60; logged RG32 reproduced FNV64
@@ -568,7 +571,11 @@ After normalized formats pass, qualify:
 3. `RGBA16_UINT` — complete on FW 11.60; exact FW 5.50 replay pending.
 4. `R16_SINT` — complete on FW 11.60; exact FW 5.50 replay pending.
 5. `RG16_SINT` — complete on FW 11.60; exact FW 5.50 replay pending.
-6. `RGBA16_SINT` — host-qualified; portable four-lane gate pending.
+6. `RGBA16_SINT` — complete on FW 11.60; exact FW 5.50 replay pending.
+
+The full 16-bit UINT/SINT matrix is hardware-qualified on FW 11.60. Preserve
+all six pinned artifacts for identical-byte FW 5.50 replay and proceed to the
+32-bit integer matrix.
 
 These formats need dedicated integer-output pixel shaders. Do not qualify them
 using a floating-point shader and assume the conversion is correct. Their

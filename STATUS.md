@@ -265,7 +265,15 @@ diversity, all six pairwise independence checks, and the packed hash, and
 passes firmware-neutral dependency verification. The final unexecuted ELF is
 pinned as SHA-256
 `b9bdb9641c22bfedfb9367fe60ba97baaef84af191d0326001c2e8285afbef34`.
-Two identical-byte FW 11.60 runs and exact FW 5.50 replay remain pending.
+Those identical bytes passed twice on FW `0x11600005`: all four lanes spanned
+`-32768..32767` with zero exact mismatches, six passing independence checks,
+packed FNV64 `0x0a12ca15c78ce483`, immediate fences, and clean teardown. Exact
+FW 5.50 replay remains pending. See
+`analysis/fw1160_rgba16_sint_portable_qualification_20260730.md`.
+
+The complete 16-bit UINT/SINT render-target matrix is now hardware-qualified
+on FW 11.60 with dedicated integer-output shaders. All six exact-byte FW 5.50
+replays remain pending.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability
