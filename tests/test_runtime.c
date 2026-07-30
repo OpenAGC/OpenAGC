@@ -2525,6 +2525,7 @@ static void test_runtime_resource_transitions(void)
     AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
     AgcResourceTransition transition = AGC_RESOURCE_TRANSITION_INIT;
     AgcResourceTransition handoff = AGC_RESOURCE_TRANSITION_V2_INIT;
+    AgcResourceTransition image_handoff = AGC_RESOURCE_TRANSITION_V2_INIT;
     AgcResourceTransition duplicate[2];
     AgcResourceTransition image_transitions[2] = {
         AGC_RESOURCE_TRANSITION_INIT,
@@ -2533,10 +2534,12 @@ static void test_runtime_resource_transitions(void)
     AgcBuffer buffer = NULL;
     AgcImage image = NULL;
     AgcImage second_image = NULL;
+    AgcImage handoff_image = NULL;
     AgcCommandBuffer compute_command = NULL;
     AgcCommandBuffer graphics_command = NULL;
     AgcFence fence = NULL;
     AgcGpuLabel label = NULL;
+    AgcGpuLabel image_label = NULL;
     AgcGpuLabelDesc label_desc = AGC_GPU_LABEL_DESC_INIT;
     const AgcCommandBufferSubmit *captured;
     const uint32_t *words;
@@ -2802,6 +2805,117 @@ static void test_runtime_resource_transitions(void)
         "color-to-host transition completes on host");
     TEST_ASSERT_EQ(agcResetCommandBuffer(graphics_command), AGC_OK,
         "color-to-host command resets");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "color-to-host fence resets before image handoff");
+
+    image_desc.usage = AGC_IMAGE_USAGE_COLOR_TARGET_BIT |
+        AGC_IMAGE_USAGE_SAMPLED_BIT | AGC_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &handoff_image), AGC_OK,
+        "cross-queue handoff image creates");
+    image_transitions[0] = (AgcResourceTransition)
+        AGC_RESOURCE_TRANSITION_INIT;
+    image_transitions[0].resource_type = kAgcResourceTypeImage;
+    image_transitions[0].image = handoff_image;
+    image_transitions[0].before = kAgcResourceUsageUndefined;
+    image_transitions[0].after = kAgcResourceUsageColorTarget;
+    image_transitions[0].before_owner = kAgcResourceOwnerHost;
+    image_transitions[0].after_owner = kAgcResourceOwnerGraphics;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(graphics_command), AGC_OK,
+        "image-handoff setup command begins");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(graphics_command, 1u,
+        image_transitions), AGC_OK,
+        "image-handoff setup records graphics ownership");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(graphics_command), AGC_OK,
+        "image-handoff setup command ends");
+    submit.command_buffers = &graphics_command;
+    TEST_ASSERT_EQ(agcQueueSubmit(graphics_queue, &submit, fence), AGC_OK,
+        "image-handoff setup submits");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(graphics_command), AGC_OK,
+        "image-handoff setup command resets");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "image-handoff setup fence resets");
+    TEST_ASSERT_EQ(agcCreateGpuLabel(device, &label_desc, &image_label), AGC_OK,
+        "image-handoff dependency label creates");
+
+    image_handoff.resource_type = kAgcResourceTypeImage;
+    image_handoff.image = handoff_image;
+    image_handoff.image_range.aspect_mask = AGC_IMAGE_ASPECT_COLOR_BIT;
+    image_handoff.image_range.mip_level_count = image_desc.mip_levels;
+    image_handoff.image_range.array_layer_count = image_desc.array_layers;
+    image_handoff.before = kAgcResourceUsageColorTarget;
+    image_handoff.after = kAgcResourceUsageShaderRead;
+    image_handoff.before_owner = kAgcResourceOwnerGraphics;
+    image_handoff.after_owner = kAgcResourceOwnerCompute;
+    image_handoff.flags = AGC_RESOURCE_TRANSITION_RELEASE_BIT;
+    image_handoff.dependency_label = image_label;
+    image_handoff.dependency_value = 1u;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(graphics_command), AGC_OK,
+        "image-handoff release command begins");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(graphics_command, 1u,
+        &image_handoff), AGC_OK,
+        "image-handoff release records color-write completion");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(graphics_command), AGC_OK,
+        "image-handoff release command ends");
+    TEST_ASSERT_EQ(agcQueueSubmit(graphics_queue, &submit, fence), AGC_OK,
+        "image-handoff release submits on graphics");
+    captured = agcDriverDebugLastDcbSubmit();
+    words = (const uint32_t *)(uintptr_t)captured->command_address;
+    TEST_ASSERT_EQ(agcPm4Opcode(words[0]), AGC_PM4_OP_RELEASE_MEM,
+        "image-handoff release emits the qualified EOP signal");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(graphics_command), AGC_OK,
+        "image-handoff release command resets");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "image-handoff release fence resets");
+    TEST_ASSERT_EQ(agcDestroyImage(handoff_image), AGC_ERROR_BUSY,
+        "pending image handoff prevents premature destruction");
+
+    image_handoff.flags = AGC_RESOURCE_TRANSITION_ACQUIRE_BIT;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(compute_command), AGC_OK,
+        "image-handoff acquire command begins");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(compute_command, 1u,
+        &image_handoff), AGC_OK,
+        "image-handoff acquire records wait and invalidate");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(compute_command), AGC_OK,
+        "image-handoff acquire command ends");
+    submit.command_buffers = &compute_command;
+    TEST_ASSERT_EQ(agcQueueSubmit(compute_queue, &submit, fence), AGC_OK,
+        "image-handoff acquire submits on compute");
+    captured = agcDriverDebugLastAcbSubmit(&owner);
+    words = (const uint32_t *)(uintptr_t)captured->command_address;
+    TEST_ASSERT_EQ(agcPm4Opcode(words[0]), AGC_PM4_OP_WAIT_REG_MEM,
+        "image-handoff acquire waits for the exact release value");
+    TEST_ASSERT_EQ(agcPm4Opcode(words[7]), AGC_PM4_OP_ACQUIRE_MEM,
+        "image-handoff acquire invalidates caches after its wait");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(compute_command), AGC_OK,
+        "image-handoff acquire command resets");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "image-handoff acquire fence resets");
+    TEST_ASSERT_EQ(agcDestroyGpuLabel(image_label), AGC_OK,
+        "image-handoff dependency label destroys after command reset");
+    image_label = NULL;
+
+    image_transitions[0] = (AgcResourceTransition)
+        AGC_RESOURCE_TRANSITION_INIT;
+    image_transitions[0].resource_type = kAgcResourceTypeImage;
+    image_transitions[0].image = handoff_image;
+    image_transitions[0].before = kAgcResourceUsageShaderRead;
+    image_transitions[0].after = kAgcResourceUsageHostRead;
+    image_transitions[0].before_owner = kAgcResourceOwnerCompute;
+    image_transitions[0].after_owner = kAgcResourceOwnerHost;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(compute_command), AGC_OK,
+        "post-handoff image host transition begins");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(compute_command, 1u,
+        image_transitions), AGC_OK,
+        "post-handoff image state is owned by compute");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(compute_command), AGC_OK,
+        "post-handoff image host transition ends");
+    TEST_ASSERT_EQ(agcQueueSubmit(compute_queue, &submit, fence), AGC_OK,
+        "post-handoff image host transition submits");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(compute_command), AGC_OK,
+        "post-handoff image host transition resets");
+    TEST_ASSERT_EQ(agcDestroyImage(handoff_image), AGC_OK,
+        "acquired image destroys after final state submit");
+    handoff_image = NULL;
     TEST_ASSERT_EQ(agcDestroyFence(fence), AGC_OK, "transition fence destroys");
     TEST_ASSERT_EQ(agcDestroyCommandBuffer(graphics_command), AGC_OK,
         "transition graphics command destroys");

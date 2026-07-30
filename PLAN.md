@@ -558,7 +558,11 @@ acquire rejection, exact dependency, reset reservation, and final destination
 ownership. The exact FW 5.50 standard-PS5 whole-buffer compute `shader-write`
 to graphics `shader-read` row passed without a CPU wait, artifact
 `a8becfe1cf68a988c997fe506849bf549365a7ff6c472efe7b2504e6e2c41797`.
-FW 11.60 and all other resource-handoff rows remain open.
+Generic coverage also passes a whole-image graphics `color-target` to compute
+`shader-read` handoff, including the source EOP signal, destination wait plus
+invalidate, pending-resource destruction guard, and final compute ownership.
+That image row is host-qualified only; FW 11.60 and the remaining hardware
+resource-handoff rows remain open.
 
 Exit criteria: exact host fixtures cover the supported transition matrix and
 atomic short-buffer failure; FW 5.50 and FW 11.60 gates cover render-to-shader,

@@ -319,7 +319,7 @@ release/flush and acquire/invalidate sequence.
 
 The initial v1 implementation deliberately has a narrow, deterministic scope:
 it accepts whole buffers and complete image mip/layer/aspect ranges only.
-HTILE images, partial ranges, graphics-to-compute ownership transfers, and
+HTILE images, partial ranges, v1 graphics-to-compute ownership transfers, and
 unqualified usage combinations fail closed. A resource may appear only once in
 one transition batch; applications record a later state change in a separate
 call. Command buffers retain transitioned resources, track their requested
@@ -361,6 +361,11 @@ resources in each transition batch, as recorded in
 The exact FW 5.50 standard-PS5 whole-buffer compute `shader-write` to graphics
 `shader-read` v2 handoff passed its no-CPU-wait release/acquire oracle, recorded
 in [`runtime_crossqueue_resource_handoff_fw550_20260731.md`](../analysis/runtime_crossqueue_resource_handoff_fw550_20260731.md).
+The whole-image graphics `color-target` to compute `shader-read` v2 row is
+host-qualified: the generic fixture locks the source EOP release, destination
+exact-value wait and cache invalidate, pending destruction guard, and final
+compute-owned state. See
+[`runtime_image_handoff_host_20260731.md`](../analysis/runtime_image_handoff_host_20260731.md).
 The same public graphics probe qualified upload vertex/index buffers in
 `shader-read`/Graphics state; see
 [`runtime_graphics_input_state_gate_fw550_20260731.md`](../analysis/runtime_graphics_input_state_gate_fw550_20260731.md).
