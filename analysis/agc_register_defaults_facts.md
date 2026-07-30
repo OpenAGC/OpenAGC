@@ -13,19 +13,23 @@ tools/verify_agc_register_defaults_facts.sh /Volumes/Untitled/unp
 The versioned `sceAgcGetRegisterDefaults2` dispatcher supports different
 version ranges across firmware generations: 0..7 on FW 3.20, 0..8 on FW
 4.x, 0..9 on FW 5.02 through FW 8.60, and 0..12 from FW 9.00 onward. These
-upper bounds describe accepted dispatcher inputs; they do not identify the
-version selected for a particular GPU.
+upper bounds describe accepted caller inputs.
 
 All 39 no-argument `sceAgcGetRegisterDefaults` wrappers are instruction-for-
 instruction identical after relocation normalization. Each indexes an
-80-byte runtime hardware record and loads a selector from offset `0x44`
-before tail-calling the versioned implementation. Consequently, firmware
-version alone cannot safely choose a defaults version. FW 5.50 version 8 is
-the only selected version in this ledger because that exact pairing passed
-the hardware sample. Every other direct profile remains fail-closed for
-default-state notification until its runtime selector is observed or an
-equivalent hardware-qualified table fact is recovered.
+80-byte runtime record and loads a selector from offset `0x44` before
+tail-calling the versioned implementation. The earlier analysis incorrectly
+described this as a hidden hardware selector. In every active SPRX, the current
+one-argument `sceAgcInit(version)` wrapper forwards its EDI argument and the
+common initializer stores that value at record offset `0x44`.
+
+The direct backend therefore uses an exact caller-selectable policy: V7 for FW
+3.20, V8 for FW 4.x, V9 for FW 5.02/5.10 and FW 6.00 through 8.60, and V12 for
+FW 9.00 onward. FW 5.50 deliberately retains its hardware-qualified V8 policy
+instead of moving to its also-permitted V9. FW 11.60 retains its
+hardware-qualified V12 policy. The other 37 policies are exact SPRX-qualified
+but hardware-unverified.
 
 The committed fingerprints group identical dispatchers into six generations
-and the runtime selector into one common group. Firmware binaries remain
+and the runtime-record wrapper into one common group. Firmware binaries remain
 external RE inputs and are never copied into the repository.

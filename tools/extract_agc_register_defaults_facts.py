@@ -13,6 +13,7 @@ from pathlib import Path
 
 VERSIONED_NID = "2JtWUUiYBXs"
 RUNTIME_NID = "Wi82ArQtAwg"
+INIT_NID = "kW3GLb7QfPg"
 
 SYMBOL_RE = re.compile(
     r"^\s*\d+:\s+([0-9a-fA-F]+)\s+(\d+)\s+FUNC\s+\S+\s+\S+\s+\S+\s+(\S+)"
@@ -56,7 +57,7 @@ def symbols(readelf: str, sprx: Path) -> dict[str, tuple[int, int]]:
             continue
         address, size, nid = match.groups()
         nid = nid.split("#", 1)[0]
-        if nid in (VERSIONED_NID, RUNTIME_NID) and int(size) > 0:
+        if nid in (VERSIONED_NID, RUNTIME_NID, INIT_NID) and int(size) > 0:
             result[nid] = (int(address, 16), int(size))
     return result
 
@@ -118,7 +119,19 @@ def runtime_selector(body: list[str]) -> tuple[int, int, str]:
     if len(field_offsets) != 1 or len(shifts) != 1 or not has_times_five or not has_table_index:
         raise ValueError("runtime wrapper is not the expected indexed hardware-table selector")
     stride = 5 << shifts[0]
-    return stride, field_offsets[0], "runtime-hardware-table"
+    return stride, field_offsets[0], "sceAgcInit-version-argument"
+
+
+def verify_init_version_flow(init_body: list[str], all_instructions: list[tuple[int, str]],
+                             field_offset: int) -> None:
+    if not any(instruction == "movl\t%edi, %esi" or
+               instruction == "movl %edi, %esi" for instruction in init_body):
+        raise ValueError("sceAgcInit does not forward its version argument")
+    field = f"0x{field_offset:x}("
+    if not any(instruction.startswith("movl\t%") and field in instruction or
+               instruction.startswith("movl %") and field in instruction
+               for _, instruction in all_instructions):
+        raise ValueError("initializer does not store the version in the runtime record")
 
 
 def main() -> int:
@@ -136,25 +149,29 @@ def main() -> int:
         if not sprx.is_file():
             raise SystemExit(f"missing libSceAgc for {key}: {sprx}")
         found = symbols(args.readelf, sprx)
-        missing = {VERSIONED_NID, RUNTIME_NID} - found.keys()
+        missing = {VERSIONED_NID, RUNTIME_NID, INIT_NID} - found.keys()
         if missing:
             raise SystemExit(f"missing defaults exports for {key}: {','.join(sorted(missing))}")
         all_instructions = instructions(args.objdump, sprx)
         versioned_address, versioned_size = found[VERSIONED_NID]
         runtime_address, runtime_size = found[RUNTIME_NID]
+        init_address, init_size = found[INIT_NID]
         versioned_body = body_for(all_instructions, versioned_address, versioned_size)
         runtime_body = body_for(all_instructions, runtime_address, runtime_size)
+        init_body = body_for(all_instructions, init_address, init_size)
         try:
             maximum = max_version(versioned_body)
             stride, field_offset, selector = runtime_selector(runtime_body)
+            verify_init_version_flow(init_body, all_instructions, field_offset)
         except ValueError as error:
             raise SystemExit(f"{key}: {error}") from error
-        selected_versions = {
-            "0x0550": ("8", "FW5.50-hardware-qualified"),
-            "0x1160": ("12", "FW11.60-hardware-qualified"),
-        }
-        selected, evidence = selected_versions.get(
-            key, ("unknown", "runtime-selected-not-static"))
+        if key == "0x0550":
+            selected, evidence = "8", "FW5.50-hardware-qualified-policy"
+        elif key == "0x1160":
+            selected, evidence = "12", "FW11.60-hardware-qualified-policy"
+        else:
+            selected = str(maximum)
+            evidence = "caller-selectable-hardware-pending-policy"
         rows.append((
             key, relative_path, VERSIONED_NID, f"0x{versioned_address:x}",
             str(versioned_size), fingerprint(versioned_body), str(maximum),

@@ -23,7 +23,7 @@ system version (`raw >> 16`) and is fail-closed:
 |---|---|---|
 | Driver submit/memory/queue/suspend/TF/HS/async | Exact aliases in `driver_registry.c` | Runtime-selected for 39 active keys |
 | VideoOut linear-registration patch | Exact aliases in `videoout_patch.c` | Runtime-selected for 39 active keys; signatures reproduced from each key's SPRX |
-| Register defaults | Exact defaults-selection table | Runtime-selected only for `0x0550` V8 and `0x1160` V12; **remaining portability blocker** |
+| Register defaults | Exact defaults-policy table | Caller-selectable V7/V8/V9/V12 policy wired for all 39 keys; endpoint policies hardware-qualified |
 | FW 5.50 detached-thread credential repair | Exact runtime `0x0550` guard | Intentional hardware-qualified exception; not a build-time choice |
 | Final suspend, EOP flip, workload | Exact runtime capability flags | Optional; unsupported profiles fail closed without blocking the baseline |
 | Register-shadow descriptors | Standard runtime capability group | Firmware-neutral helper name now reflects its actual group scope |
@@ -64,6 +64,7 @@ the FW 11.60 and FW 5.50 runs.
 - Only the FW 5.50 and FW 11.60 VideoOut rows are hardware-qualified. The other
   37 rows are SPRX-qualified and hardware-unverified.
 
-Register-default recovery is now the critical path. Dispatcher maximum
-versions are insufficient evidence: each active key needs the actual runtime
-hardware selector before its baseline default-state capability may be enabled.
+Register-default recovery is complete. The decisive evidence was not the
+dispatcher maximum alone: all 39 current init wrappers forward the version
+argument, and all 39 common initializers store it in the record read by the
+no-argument defaults API. Intermediate policies remain hardware-unverified.

@@ -62,20 +62,20 @@ through FW 12.70 and selects them from the runtime version; submit, memory,
 queue, primary suspend, TF-ring, HS-offchip, and async carriers have per-key
 SPRX evidence. That is necessary but not yet sufficient for a portable game.
 The compile-time audit found no production expected-firmware build input. The
-39-profile VideoOut ledger and exact runtime table are complete. One baseline
-blocker remains:
-
-- register-default notification has a selected version only for FW 5.50 (V8)
-  and FW 11.60 (V12); other exact profiles currently fail closed.
+39-profile VideoOut ledger and exact runtime table are complete. Register-
+default recovery is also complete: the selector is the caller's
+`sceAgcInit(version)` argument stored in the runtime record, not an unavailable
+hardware choice. Exact V7/V8/V9/V12 policies are wired for all active keys;
+only the endpoint policies are hardware-qualified.
 
 Execute in this order:
 
 1. **Complete:** audit all installed public-library and application-consumer code for
    compile-time firmware constants, exact-version branches, and hidden
    firmware-specific shader, packet, memory, or VideoOut assumptions.
-2. Recover a reproducible defaults-selection fact for every active exact
-   firmware/GPU profile. Prefer the runtime hardware selector's real value;
-   never substitute the dispatcher's maximum accepted version.
+2. **Complete:** recover a reproducible defaults-policy fact for every active
+   exact profile by proving the `sceAgcInit` argument flow into the runtime
+   record as well as the versioned dispatcher's accepted bound.
 3. **Complete:** extract and verify the linear VideoOut registration branch offset and full
    original instruction signature from every active profile's own
    `libSceVideoOut.sprx`, then generate the runtime table used by the core.

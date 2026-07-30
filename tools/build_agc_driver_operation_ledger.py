@@ -78,7 +78,7 @@ def evidence_for(key: str, defaults: dict[str, tuple[str, str]]) -> dict[str, st
         "tf_ring": "RE-exact-public-0x80108128-hardware-pending",
         "hs_offchip": "RE-exact-0xc010812c-hardware-pending",
         "memory": "RE-exact-standard-Trinity-hardware-pending",
-        "defaults": "disabled-runtime-selected-version-unknown",
+        "defaults": "disabled-caller-selected-version-unknown",
         "async_graphics": "RE-exact-0x80048126-hardware-pending",
         "qualification": "RE-operation-carriers-hardware-pending",
     }
@@ -86,8 +86,9 @@ def evidence_for(key: str, defaults: dict[str, tuple[str, str]]) -> dict[str, st
         evidence["memory"] = "RE-exact-standard-hardware-pending"
     selected_version, selection_evidence = defaults[key]
     if selected_version != "unknown":
+        evidence["enabled_direct_ops"] += f",defaults-v{selected_version}"
         evidence["defaults"] = (
-            f"hardware-qualified-v{selected_version}-{selection_evidence}"
+            f"SPRX-qualified-v{selected_version}-{selection_evidence}"
         )
     if key == "0x0550":
         evidence.update({

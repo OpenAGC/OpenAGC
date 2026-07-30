@@ -9,8 +9,8 @@ python3 tools/build_agc_driver_operation_ledger.py \
 ```
 
 The generator consumes `agc_register_defaults_facts.tsv`; defaults capability
-cannot be inferred from a driver-wrapper fingerprint or dispatcher upper
-bound.
+requires both the dispatcher bound and the proven `sceAgcInit` argument flow
+into runtime-record offset `0x44`.
 
 The operation columns state what the direct backend may actually issue. The
 fingerprint columns identify normalized Sony export-wrapper groups from
@@ -36,10 +36,11 @@ non-empty HS patch lists remain disabled.
 - The direct-named Sony suspend, TF-ring, and HS-offchip exports are common
   permission stubs across all 39 profiles. Direct `/dev/gc` support therefore
   depends on separately recovered internal ioctl paths, never export presence.
-- All no-argument defaults wrappers select through a runtime hardware table.
-  Only FW 5.50 has a hardware-observed selected version (8), so all other
-  direct defaults operations remain disabled even when their versioned
-  dispatcher accepts version 8, 9, or 12.
+- All no-argument defaults wrappers read the version previously supplied to
+  `sceAgcInit`. Exact policies are enabled for all 39 profiles: V7, V8, V9, or
+  V12 according to each SPRX's caller-permitted bound, with FW 5.50 retaining
+  its hardware-qualified V8 override. FW 5.50 V8 and FW 11.60 V12 are hardware
+  qualified; the remaining 37 policies are hardware-unverified.
 - `agc_driver_ring_facts.tsv` semantically verifies the 16-byte TF/HS payloads
   behind each carrier group. FW 12.x adds explicit reserved-dword zeroing;
   OpenAGC's zero-initialized typed arguments satisfy both forms.

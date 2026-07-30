@@ -81,8 +81,8 @@ hardware gate. The internal `0x80048127` helper's result semantics are not
 exposed by those wrappers and OpenAGC no longer substitutes it for the public
 query. Private OpenAGC primary/final carriers retain the separately recovered
 `0xc010811c` / `0xc0108139` ioctls. `libSceAgc` exposes a versioned 0..12 defaults
-dispatcher, and its no-argument API reads the selected version from a runtime
-hardware table. FW 11.60 initialization supplies version 12, which maps to the
+dispatcher, and its no-argument API reads the version supplied to
+`sceAgcInit` from runtime-record offset `0x44`. FW 11.60's version-12 policy maps to the
 recovered V10 tables; the exact 79/29/20 primary and 9/15/3 internal dimensions
 and larger `0xf000` internal DDID slot passed twice on hardware.
 

@@ -198,8 +198,11 @@ static void test_direct_operation_profiles(void)
         AGC_DIRECT_CAP_SUBMIT | AGC_DIRECT_CAP_MEMORY | AGC_DIRECT_CAP_QUEUE |
         AGC_DIRECT_CAP_SUSPEND_PRIMARY |
         AGC_DIRECT_CAP_TF_RING |
-        AGC_DIRECT_CAP_HS_OFFCHIP | AGC_DIRECT_CAP_ASYNC_GRAPHICS,
+        AGC_DIRECT_CAP_HS_OFFCHIP | AGC_DIRECT_CAP_DEFAULT_STATES |
+        AGC_DIRECT_CAP_ASYNC_GRAPHICS,
         "FW 12.20 exposes only its exact carrier-qualified subset");
+    TEST_ASSERT_EQ(profile.defaults_version, 12u,
+        "FW 12.20 selects its caller-permitted version-12 policy");
     TEST_ASSERT(profile.runtime.supports_tf_ring,
         "FW 12.20 explicit profile enables its public TF carrier");
     TEST_ASSERT_EQ(profile.tf_ring_ioctl, AGC_GC_IOCTL_SET_TF_RING,
@@ -254,6 +257,20 @@ static void test_common_operation_carrier_profiles(void)
         0x1100u, 0x1120u, 0x1140u, 0x1160u,
         0x1200u, 0x1202u, 0x1220u, 0x1240u, 0x1260u, 0x1270u,
     };
+    static const uint8_t defaults_versions[] = {
+        7u, 8u, 8u, 8u, 8u,
+        9u, 9u, 8u, 9u, 9u, 9u,
+        9u, 9u, 9u, 9u, 9u,
+        9u, 9u, 9u, 9u,
+        12u, 12u, 12u, 12u, 12u,
+        12u, 12u, 12u, 12u,
+        12u, 12u, 12u, 12u,
+        12u, 12u, 12u, 12u, 12u, 12u,
+    };
+
+    _Static_assert(sizeof(active_keys) / sizeof(active_keys[0]) ==
+        sizeof(defaults_versions) / sizeof(defaults_versions[0]),
+        "every active profile needs one defaults policy");
 
     for (size_t i = 0; i < sizeof(active_keys) / sizeof(active_keys[0]); ++i) {
         AgcProsperoDirectProfile profile;
@@ -288,23 +305,16 @@ static void test_common_operation_carrier_profiles(void)
             TEST_ASSERT(profile.submit_uses_frame_close_trailer,
                 "standard compatibility group shares one submit policy");
         }
+        TEST_ASSERT((profile.capabilities &
+            AGC_DIRECT_CAP_DEFAULT_STATES) != 0,
+            "every exact profile exposes its caller-selectable defaults policy");
+        TEST_ASSERT_EQ(profile.defaults_version, defaults_versions[i],
+            "exact profile retains its evidenced defaults policy");
         if (active_keys[i] == 0x0550u || active_keys[i] == 0x1160u) {
-            TEST_ASSERT((profile.capabilities &
-                AGC_DIRECT_CAP_DEFAULT_STATES) != 0,
-                "hardware-qualified exact runtime defaults selection is enabled");
-            TEST_ASSERT_EQ(profile.defaults_version,
-                active_keys[i] == 0x0550u ? 8u : 12u,
-                "exact profile retains its selected defaults version");
             TEST_ASSERT_EQ((profile.capabilities & AGC_DIRECT_CAP_EOP_FLIP) != 0,
                 active_keys[i] == 0x0550u,
                 "EOP flip remains independently qualified");
         } else {
-            TEST_ASSERT((profile.capabilities &
-                AGC_DIRECT_CAP_DEFAULT_STATES) == 0,
-                "unobserved runtime defaults selection fails closed");
-            TEST_ASSERT_EQ(profile.defaults_version,
-                AGC_DIRECT_DEFAULTS_VERSION_UNKNOWN,
-                "dispatcher upper bound cannot select a defaults version");
             TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_EOP_FLIP) == 0,
                 "unverified EOP flip path fails closed");
         }

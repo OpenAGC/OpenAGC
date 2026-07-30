@@ -52,12 +52,51 @@ typedef struct AgcDirectDefaultsSelection {
     uint32_t selected_version;
 } AgcDirectDefaultsSelection;
 
-/* A dispatcher upper bound does not select a defaults version.  This table
- * contains only runtime selections proven for the exact firmware/GPU pair.
- * FW 5.50 selected V8 in the hardware-qualified default-state sample. */
+/* sceAgcInit's version argument is stored at offset 0x44 of the runtime record
+ * read by sceAgcGetRegisterDefaults. Each exact SPRX therefore publishes a
+ * caller-selectable upper bound, not a hidden hardware selector. Intermediate
+ * profiles use that exact bound as their hardware-pending direct policy. The
+ * FW 5.50 V8 and FW 11.60 V12 policies retain their hardware qualification. */
 static const AgcDirectDefaultsSelection g_direct_defaults_selections[] = {
+    {0x0320u, AGC_REGISTER_DEFAULTS_VERSION_7},
+    {0x0400u, AGC_REGISTER_DEFAULTS_VERSION_8},
+    {0x0403u, AGC_REGISTER_DEFAULTS_VERSION_8},
+    {0x0450u, AGC_REGISTER_DEFAULTS_VERSION_8},
+    {0x0451u, AGC_REGISTER_DEFAULTS_VERSION_8},
+    {0x0502u, AGC_REGISTER_DEFAULTS_VERSION_9},
+    {0x0510u, AGC_REGISTER_DEFAULTS_VERSION_9},
     {0x0550u, AGC_REGISTER_DEFAULTS_VERSION_8},
-    {0x1160u, AGC_REGISTER_DEFAULTS_VERSION_12}
+    {0x0600u, AGC_REGISTER_DEFAULTS_VERSION_9},
+    {0x0602u, AGC_REGISTER_DEFAULTS_VERSION_9},
+    {0x0650u, AGC_REGISTER_DEFAULTS_VERSION_9},
+    {0x0701u, AGC_REGISTER_DEFAULTS_VERSION_9},
+    {0x0720u, AGC_REGISTER_DEFAULTS_VERSION_9},
+    {0x0740u, AGC_REGISTER_DEFAULTS_VERSION_9},
+    {0x0760u, AGC_REGISTER_DEFAULTS_VERSION_9},
+    {0x0761u, AGC_REGISTER_DEFAULTS_VERSION_9},
+    {0x0800u, AGC_REGISTER_DEFAULTS_VERSION_9},
+    {0x0820u, AGC_REGISTER_DEFAULTS_VERSION_9},
+    {0x0840u, AGC_REGISTER_DEFAULTS_VERSION_9},
+    {0x0860u, AGC_REGISTER_DEFAULTS_VERSION_9},
+    {0x0900u, AGC_REGISTER_DEFAULTS_VERSION_12},
+    {0x0905u, AGC_REGISTER_DEFAULTS_VERSION_12},
+    {0x0920u, AGC_REGISTER_DEFAULTS_VERSION_12},
+    {0x0940u, AGC_REGISTER_DEFAULTS_VERSION_12},
+    {0x0960u, AGC_REGISTER_DEFAULTS_VERSION_12},
+    {0x1001u, AGC_REGISTER_DEFAULTS_VERSION_12},
+    {0x1020u, AGC_REGISTER_DEFAULTS_VERSION_12},
+    {0x1040u, AGC_REGISTER_DEFAULTS_VERSION_12},
+    {0x1060u, AGC_REGISTER_DEFAULTS_VERSION_12},
+    {0x1100u, AGC_REGISTER_DEFAULTS_VERSION_12},
+    {0x1120u, AGC_REGISTER_DEFAULTS_VERSION_12},
+    {0x1140u, AGC_REGISTER_DEFAULTS_VERSION_12},
+    {0x1160u, AGC_REGISTER_DEFAULTS_VERSION_12},
+    {0x1200u, AGC_REGISTER_DEFAULTS_VERSION_12},
+    {0x1202u, AGC_REGISTER_DEFAULTS_VERSION_12},
+    {0x1220u, AGC_REGISTER_DEFAULTS_VERSION_12},
+    {0x1240u, AGC_REGISTER_DEFAULTS_VERSION_12},
+    {0x1260u, AGC_REGISTER_DEFAULTS_VERSION_12},
+    {0x1270u, AGC_REGISTER_DEFAULTS_VERSION_12},
 };
 
 static uint16_t agcBcdByte(uint32_t value)

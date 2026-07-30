@@ -62,9 +62,12 @@ The compile-time assumption audit found no expected-firmware build input in
 the production library. Firmware pins remain confined to hardware-test
 oracles. It also corrected `sceAgcInit` from an unsafe three-argument prototype
 to the one-version-argument ABI reproduced on FW 5.50 and FW 11.60; the legacy
-entry retains its state-plus-version form. Exact register-default selection is still available only for FW 5.50
-V8 and FW 11.60 V12, making per-profile defaults recovery the next portability
-blocker. See `analysis/firmware_neutral_binary_audit_20260730.md`.
+entry retains its state-plus-version form. The same audit proved that the
+defaults selector is this version argument stored at runtime-record offset
+`0x44`, not a hidden hardware choice. All 39 exact keys now select a
+caller-permitted V7/V8/V9/V12 policy. FW 5.50 V8 and FW 11.60 V12 remain the
+only hardware-qualified policies; the other 37 are SPRX-qualified and
+hardware-unverified. See `analysis/firmware_neutral_binary_audit_20260730.md`.
 
 ## Reusable driver and flexible-memory teardown (2026-07-29)
 
