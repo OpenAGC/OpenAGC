@@ -532,6 +532,43 @@ typedef struct AgcGfx1013Image2DState {
     uint32_t last_array_layer;
 } AgcGfx1013Image2DState;
 
+typedef struct AgcGfx1013BcFormatInfo {
+    uint32_t resource_format;
+    uint32_t block_width;
+    uint32_t block_height;
+    uint32_t bytes_per_block;
+} AgcGfx1013BcFormatInfo;
+
+typedef struct AgcGfx1013LinearBcSurfaceLayoutInput {
+    uint32_t width;
+    uint32_t height;
+    uint32_t layer_count;
+    uint32_t mip_level_count;
+    uint32_t resource_format;
+} AgcGfx1013LinearBcSurfaceLayoutInput;
+
+typedef struct AgcGfx1013LinearBcSurfaceLayout {
+    uint64_t allocation_size;
+    uint64_t slice_size;
+    uint32_t pitch_blocks;
+    uint32_t padded_height_blocks;
+    uint32_t alignment;
+    uint32_t block_width;
+    uint32_t block_height;
+    uint32_t bytes_per_block;
+} AgcGfx1013LinearBcSurfaceLayout;
+
+typedef struct AgcGfx1013LinearBcSubresourceLayout {
+    uint64_t offset;
+    uint64_t size;
+    uint32_t row_pitch;
+    uint32_t pitch_blocks;
+    uint32_t width_blocks;
+    uint32_t height_blocks;
+    uint32_t width;
+    uint32_t height;
+} AgcGfx1013LinearBcSubresourceLayout;
+
 typedef struct AgcGfx1013CombinedImageSamplerDescriptor {
     AgcGfx1013ImageDescriptor image;
     AgcSamplerDescriptor sampler;
@@ -542,6 +579,12 @@ _Static_assert(sizeof(AgcGfx1013BufferDescriptor) == 16,
     "gfx1013 buffer descriptor must be 16 bytes");
 _Static_assert(sizeof(AgcGfx1013ImageDescriptor) == 32,
     "gfx1013 image descriptor must be 32 bytes");
+_Static_assert(sizeof(AgcGfx1013BcFormatInfo) == 16,
+    "gfx1013 BC format info must be 16 bytes");
+_Static_assert(sizeof(AgcGfx1013LinearBcSurfaceLayout) == 40,
+    "gfx1013 linear BC surface layout must be 40 bytes");
+_Static_assert(sizeof(AgcGfx1013LinearBcSubresourceLayout) == 40,
+    "gfx1013 linear BC subresource layout must be 40 bytes");
 _Static_assert(sizeof(AgcGfx1013CombinedImageSamplerDescriptor) == 64,
     "gfx1013 combined image/sampler descriptor must be 64 bytes");
 _Static_assert(offsetof(AgcGfx1013CombinedImageSamplerDescriptor, sampler) == 32,
@@ -556,6 +599,14 @@ int32_t PS5_SYSV_ABI agcGfx1013RawBufferDescriptorEncode(
 int32_t PS5_SYSV_ABI agcGfx1013Image2DDescriptorEncode(
     AgcGfx1013ImageDescriptor *descriptor,
     const AgcGfx1013Image2DState *state);
+int32_t PS5_SYSV_ABI agcGfx1013GetBcFormatInfo(
+    uint32_t resource_format, AgcGfx1013BcFormatInfo *info);
+int32_t PS5_SYSV_ABI agcGfx1013GetLinearBcSurfaceLayout(
+    const AgcGfx1013LinearBcSurfaceLayoutInput *input,
+    AgcGfx1013LinearBcSurfaceLayout *layout);
+int32_t PS5_SYSV_ABI agcGfx1013GetLinearBcSubresourceLayout(
+    const AgcGfx1013LinearBcSurfaceLayoutInput *input, uint32_t mip_level,
+    uint32_t layer, AgcGfx1013LinearBcSubresourceLayout *layout);
 int32_t PS5_SYSV_ABI agcGfx1013CombinedImageSamplerDescriptorEncode(
     AgcGfx1013CombinedImageSamplerDescriptor *descriptor,
     const AgcGfx1013Image2DState *image,

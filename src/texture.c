@@ -403,6 +403,208 @@ int32_t PS5_SYSV_ABI agcGfx1013RawBufferDescriptorEncode(
     return AGC_OK;
 }
 
+static const AgcGfx1013BcFormatInfo kAgcGfx1013BcFormats[] = {
+    {AGC_GFX1013_IMAGE_FORMAT_BC1_UNORM, 4u, 4u, 8u},
+    {AGC_GFX1013_IMAGE_FORMAT_BC1_SRGB, 4u, 4u, 8u},
+    {AGC_GFX1013_IMAGE_FORMAT_BC2_UNORM, 4u, 4u, 16u},
+    {AGC_GFX1013_IMAGE_FORMAT_BC2_SRGB, 4u, 4u, 16u},
+    {AGC_GFX1013_IMAGE_FORMAT_BC3_UNORM, 4u, 4u, 16u},
+    {AGC_GFX1013_IMAGE_FORMAT_BC3_SRGB, 4u, 4u, 16u},
+    {AGC_GFX1013_IMAGE_FORMAT_BC4_UNORM, 4u, 4u, 8u},
+    {AGC_GFX1013_IMAGE_FORMAT_BC4_SNORM, 4u, 4u, 8u},
+    {AGC_GFX1013_IMAGE_FORMAT_BC5_UNORM, 4u, 4u, 16u},
+    {AGC_GFX1013_IMAGE_FORMAT_BC5_SNORM, 4u, 4u, 16u},
+    {AGC_GFX1013_IMAGE_FORMAT_BC6_UFLOAT, 4u, 4u, 16u},
+    {AGC_GFX1013_IMAGE_FORMAT_BC6_SFLOAT, 4u, 4u, 16u},
+    {AGC_GFX1013_IMAGE_FORMAT_BC7_UNORM, 4u, 4u, 16u},
+    {AGC_GFX1013_IMAGE_FORMAT_BC7_SRGB, 4u, 4u, 16u},
+};
+
+_Static_assert(sizeof(kAgcGfx1013BcFormats) /
+    sizeof(kAgcGfx1013BcFormats[0]) == 14u,
+    "every native gfx1013 BC resource format needs one table entry");
+
+static const AgcGfx1013BcFormatInfo *agcGfx1013FindBcFormat(
+    uint32_t resource_format)
+{
+    uint32_t i;
+
+    for (i = 0u; i < sizeof(kAgcGfx1013BcFormats) /
+         sizeof(kAgcGfx1013BcFormats[0]); ++i) {
+        if (kAgcGfx1013BcFormats[i].resource_format == resource_format)
+            return &kAgcGfx1013BcFormats[i];
+    }
+    return NULL;
+}
+
+static uint32_t agcGfx1013BcMipDimension(uint32_t value, uint32_t mip_level)
+{
+    uint32_t mask = (1u << mip_level) - 1u;
+    return (value >> mip_level) + ((value & mask) != 0u ? 1u : 0u);
+}
+
+static uint32_t agcGfx1013BcBlockCount(uint32_t texels)
+{
+    return (texels + 3u) / 4u;
+}
+
+static uint32_t agcGfx1013BcAlignBlocks(uint32_t blocks,
+    uint32_t bytes_per_block)
+{
+    uint32_t alignment = 256u / bytes_per_block;
+    return (blocks + alignment - 1u) & ~(alignment - 1u);
+}
+
+static int agcGfx1013BcAddSize(uint64_t *total, uint64_t value)
+{
+    if (*total > UINT64_MAX - value)
+        return 0;
+    *total += value;
+    return 1;
+}
+
+static uint64_t agcGfx1013BcMipSize(uint32_t width, uint32_t height,
+    uint32_t bytes_per_block, uint32_t *pitch_blocks,
+    uint32_t *height_blocks)
+{
+    uint32_t blocks_w = agcGfx1013BcBlockCount(width);
+    uint32_t blocks_h = agcGfx1013BcBlockCount(height);
+    uint32_t pitch = agcGfx1013BcAlignBlocks(blocks_w, bytes_per_block);
+
+    if (pitch_blocks)
+        *pitch_blocks = pitch;
+    if (height_blocks)
+        *height_blocks = blocks_h;
+    return (uint64_t)pitch * blocks_h * bytes_per_block;
+}
+
+static int32_t agcGfx1013ValidateLinearBcLayoutInput(
+    const AgcGfx1013LinearBcSurfaceLayoutInput *input,
+    const AgcGfx1013BcFormatInfo **format)
+{
+    uint32_t max_dimension;
+    uint32_t max_mips = 1u;
+
+    if (!input || input->width == 0u || input->height == 0u ||
+        input->layer_count == 0u || input->mip_level_count == 0u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    *format = agcGfx1013FindBcFormat(input->resource_format);
+    if (!*format)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (input->width > 16384u || input->height > 16384u ||
+        input->layer_count > 8192u)
+        return AGC_ERROR_VALIDATION_FAILED;
+
+    max_dimension = input->width > input->height ?
+        input->width : input->height;
+    while (max_dimension > 1u) {
+        max_dimension >>= 1u;
+        ++max_mips;
+    }
+    if (input->mip_level_count > max_mips)
+        return AGC_ERROR_VALIDATION_FAILED;
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013GetBcFormatInfo(
+    uint32_t resource_format, AgcGfx1013BcFormatInfo *info)
+{
+    const AgcGfx1013BcFormatInfo *entry;
+
+    if (!info)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    entry = agcGfx1013FindBcFormat(resource_format);
+    if (!entry)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    *info = *entry;
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013GetLinearBcSurfaceLayout(
+    const AgcGfx1013LinearBcSurfaceLayoutInput *input,
+    AgcGfx1013LinearBcSurfaceLayout *layout)
+{
+    const AgcGfx1013BcFormatInfo *format;
+    AgcGfx1013LinearBcSurfaceLayout result = {0};
+    uint64_t slice_size = 0u;
+    uint32_t mip;
+    int32_t error;
+
+    if (!layout)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    error = agcGfx1013ValidateLinearBcLayoutInput(input, &format);
+    if (error != AGC_OK)
+        return error;
+
+    mip = input->mip_level_count;
+    while (mip-- > 0u) {
+        uint32_t mip_width = agcGfx1013BcMipDimension(input->width, mip);
+        uint32_t mip_height = agcGfx1013BcMipDimension(input->height, mip);
+        uint64_t mip_size = agcGfx1013BcMipSize(mip_width, mip_height,
+            format->bytes_per_block, NULL, NULL);
+        if (!agcGfx1013BcAddSize(&slice_size, mip_size))
+            return AGC_ERROR_VALIDATION_FAILED;
+    }
+    if (slice_size > UINT64_MAX / input->layer_count)
+        return AGC_ERROR_VALIDATION_FAILED;
+
+    result.allocation_size = slice_size * input->layer_count;
+    result.slice_size = slice_size;
+    (void)agcGfx1013BcMipSize(input->width, input->height,
+        format->bytes_per_block, &result.pitch_blocks,
+        &result.padded_height_blocks);
+    result.alignment = 256u;
+    result.block_width = format->block_width;
+    result.block_height = format->block_height;
+    result.bytes_per_block = format->bytes_per_block;
+    *layout = result;
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013GetLinearBcSubresourceLayout(
+    const AgcGfx1013LinearBcSurfaceLayoutInput *input, uint32_t mip_level,
+    uint32_t layer, AgcGfx1013LinearBcSubresourceLayout *layout)
+{
+    const AgcGfx1013BcFormatInfo *format;
+    AgcGfx1013LinearBcSurfaceLayout aggregate;
+    AgcGfx1013LinearBcSubresourceLayout result = {0};
+    uint64_t offset;
+    uint32_t mip;
+    int32_t error;
+
+    if (!layout || !input || mip_level >= input->mip_level_count ||
+        layer >= input->layer_count)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    error = agcGfx1013ValidateLinearBcLayoutInput(input, &format);
+    if (error != AGC_OK)
+        return error;
+    error = agcGfx1013GetLinearBcSurfaceLayout(input, &aggregate);
+    if (error != AGC_OK)
+        return error;
+
+    offset = aggregate.slice_size * layer;
+    mip = input->mip_level_count;
+    while (--mip > mip_level) {
+        uint32_t mip_width = agcGfx1013BcMipDimension(input->width, mip);
+        uint32_t mip_height = agcGfx1013BcMipDimension(input->height, mip);
+        if (!agcGfx1013BcAddSize(&offset,
+                agcGfx1013BcMipSize(mip_width, mip_height,
+                    format->bytes_per_block, NULL, NULL)))
+            return AGC_ERROR_VALIDATION_FAILED;
+    }
+
+    result.width = agcGfx1013BcMipDimension(input->width, mip_level);
+    result.height = agcGfx1013BcMipDimension(input->height, mip_level);
+    result.size = agcGfx1013BcMipSize(result.width, result.height,
+        format->bytes_per_block, &result.pitch_blocks,
+        &result.height_blocks);
+    result.width_blocks = agcGfx1013BcBlockCount(result.width);
+    result.row_pitch = result.pitch_blocks * format->bytes_per_block;
+    result.offset = offset;
+    *layout = result;
+    return AGC_OK;
+}
+
 int32_t PS5_SYSV_ABI agcGfx1013Image2DDescriptorEncode(
     AgcGfx1013ImageDescriptor *descriptor,
     const AgcGfx1013Image2DState *state)

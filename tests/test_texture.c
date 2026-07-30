@@ -924,23 +924,25 @@ static void test_gfx1013_bc_image_formats(void)
     static const struct {
         uint32_t format;
         uint32_t expected_word1;
+        uint32_t bytes_per_block;
     } cases[] = {
-        {AGC_GFX1013_IMAGE_FORMAT_BC1_UNORM, 0x4a900000u},
-        {AGC_GFX1013_IMAGE_FORMAT_BC1_SRGB, 0x4aa00000u},
-        {AGC_GFX1013_IMAGE_FORMAT_BC2_UNORM, 0x4ab00000u},
-        {AGC_GFX1013_IMAGE_FORMAT_BC2_SRGB, 0x4ac00000u},
-        {AGC_GFX1013_IMAGE_FORMAT_BC3_UNORM, 0x4ad00000u},
-        {AGC_GFX1013_IMAGE_FORMAT_BC3_SRGB, 0x4ae00000u},
-        {AGC_GFX1013_IMAGE_FORMAT_BC4_UNORM, 0x4af00000u},
-        {AGC_GFX1013_IMAGE_FORMAT_BC4_SNORM, 0x4b000000u},
-        {AGC_GFX1013_IMAGE_FORMAT_BC5_UNORM, 0x4b100000u},
-        {AGC_GFX1013_IMAGE_FORMAT_BC5_SNORM, 0x4b200000u},
-        {AGC_GFX1013_IMAGE_FORMAT_BC6_UFLOAT, 0x4b300000u},
-        {AGC_GFX1013_IMAGE_FORMAT_BC6_SFLOAT, 0x4b400000u},
-        {AGC_GFX1013_IMAGE_FORMAT_BC7_UNORM, 0x4b500000u},
-        {AGC_GFX1013_IMAGE_FORMAT_BC7_SRGB, 0x4b600000u},
+        {AGC_GFX1013_IMAGE_FORMAT_BC1_UNORM, 0x4a900000u, 8u},
+        {AGC_GFX1013_IMAGE_FORMAT_BC1_SRGB, 0x4aa00000u, 8u},
+        {AGC_GFX1013_IMAGE_FORMAT_BC2_UNORM, 0x4ab00000u, 16u},
+        {AGC_GFX1013_IMAGE_FORMAT_BC2_SRGB, 0x4ac00000u, 16u},
+        {AGC_GFX1013_IMAGE_FORMAT_BC3_UNORM, 0x4ad00000u, 16u},
+        {AGC_GFX1013_IMAGE_FORMAT_BC3_SRGB, 0x4ae00000u, 16u},
+        {AGC_GFX1013_IMAGE_FORMAT_BC4_UNORM, 0x4af00000u, 8u},
+        {AGC_GFX1013_IMAGE_FORMAT_BC4_SNORM, 0x4b000000u, 8u},
+        {AGC_GFX1013_IMAGE_FORMAT_BC5_UNORM, 0x4b100000u, 16u},
+        {AGC_GFX1013_IMAGE_FORMAT_BC5_SNORM, 0x4b200000u, 16u},
+        {AGC_GFX1013_IMAGE_FORMAT_BC6_UFLOAT, 0x4b300000u, 16u},
+        {AGC_GFX1013_IMAGE_FORMAT_BC6_SFLOAT, 0x4b400000u, 16u},
+        {AGC_GFX1013_IMAGE_FORMAT_BC7_UNORM, 0x4b500000u, 16u},
+        {AGC_GFX1013_IMAGE_FORMAT_BC7_SRGB, 0x4b600000u, 16u},
     };
     AgcGfx1013ImageDescriptor image = {{0}};
+    AgcGfx1013BcFormatInfo info;
     AgcGfx1013Image2DState state = {
         .address = 0x0000000202700000ull,
         .width = 2u,
@@ -959,6 +961,16 @@ static void test_gfx1013_bc_image_formats(void)
             AGC_OK, "gfx1013 BC sampled-image format encodes");
         TEST_ASSERT_EQ(image.words[1], cases[i].expected_word1,
             "gfx1013 BC format occupies the exact 9-bit resource field");
+        TEST_ASSERT_EQ(agcGfx1013GetBcFormatInfo(cases[i].format, &info),
+            AGC_OK, "gfx1013 BC format table resolves");
+        TEST_ASSERT_EQ(info.resource_format, cases[i].format,
+            "gfx1013 BC format table preserves resource encoding");
+        TEST_ASSERT_EQ(info.block_width, 4u,
+            "gfx1013 BC format uses four-texel block width");
+        TEST_ASSERT_EQ(info.block_height, 4u,
+            "gfx1013 BC format uses four-texel block height");
+        TEST_ASSERT_EQ(info.bytes_per_block, cases[i].bytes_per_block,
+            "gfx1013 BC format uses exact block storage");
     }
 
     state.format = 0x200u;
@@ -968,6 +980,166 @@ static void test_gfx1013_bc_image_formats(void)
         "gfx1013 image descriptor rejects a tenth format bit");
     TEST_ASSERT_EQ(image.words[0], 0xa5a5a5a5u,
         "rejected oversized image format preserves destination");
+    memset(&info, 0xa5, sizeof(info));
+    TEST_ASSERT_EQ(agcGfx1013GetBcFormatInfo(
+        AGC_GFX1013_IMAGE_FORMAT_RGBA8_UNORM, &info),
+        AGC_ERROR_INVALID_ARGUMENT, "non-BC resource format is rejected");
+    TEST_ASSERT_EQ(info.resource_format, 0xa5a5a5a5u,
+        "rejected BC format lookup preserves destination");
+}
+
+static void test_gfx1013_linear_bc_layout(void)
+{
+    AgcGfx1013LinearBcSurfaceLayoutInput input = {
+        1u, 1u, 1u, 1u, AGC_GFX1013_IMAGE_FORMAT_BC1_UNORM
+    };
+    AgcGfx1013LinearBcSurfaceLayout layout;
+    AgcGfx1013LinearBcSubresourceLayout subresource;
+
+    TEST_ASSERT_EQ(agcGfx1013GetLinearBcSurfaceLayout(&input, &layout),
+        AGC_OK, "gfx1013 1x1 BC1 linear layout computes");
+    TEST_ASSERT_EQ(layout.pitch_blocks, 32u,
+        "BC1 linear pitch aligns to 256 bytes");
+    TEST_ASSERT_EQ(layout.padded_height_blocks, 1u,
+        "1x1 BC1 still occupies one complete block row");
+    TEST_ASSERT_EQ(layout.slice_size, UINT64_C(256),
+        "1x1 BC1 slice occupies one aligned row");
+    TEST_ASSERT_EQ(layout.allocation_size, UINT64_C(256),
+        "1x1 BC1 allocation matches its only slice");
+    TEST_ASSERT_EQ(layout.alignment, 256u,
+        "gfx1013 linear BC base alignment");
+    TEST_ASSERT_EQ(layout.block_width, 4u,
+        "BC1 layout exposes four-texel block width");
+    TEST_ASSERT_EQ(layout.block_height, 4u,
+        "BC1 layout exposes four-texel block height");
+    TEST_ASSERT_EQ(layout.bytes_per_block, 8u,
+        "BC1 layout exposes eight-byte blocks");
+
+    input.width = 5u;
+    input.height = 7u;
+    TEST_ASSERT_EQ(agcGfx1013GetLinearBcSurfaceLayout(&input, &layout),
+        AGC_OK, "gfx1013 partial-edge BC1 layout computes");
+    TEST_ASSERT_EQ(layout.pitch_blocks, 32u,
+        "partial-edge BC1 row keeps 256-byte pitch");
+    TEST_ASSERT_EQ(layout.padded_height_blocks, 2u,
+        "seven texel rows ceiling-divide to two BC rows");
+    TEST_ASSERT_EQ(layout.slice_size, UINT64_C(512),
+        "partial-edge BC1 slice includes both block rows");
+    input.mip_level_count = 3u;
+    TEST_ASSERT_EQ(agcGfx1013GetLinearBcSubresourceLayout(
+        &input, 1u, 0u, &subresource), AGC_OK,
+        "gfx1013 odd-sized BC1 mip resolves");
+    TEST_ASSERT_EQ(subresource.width, 3u,
+        "linear BC mip width follows AddrLib ceiling shift");
+    TEST_ASSERT_EQ(subresource.height, 4u,
+        "linear BC mip height follows AddrLib ceiling shift");
+    input.mip_level_count = 1u;
+
+    input.resource_format = AGC_GFX1013_IMAGE_FORMAT_BC7_SRGB;
+    TEST_ASSERT_EQ(agcGfx1013GetLinearBcSurfaceLayout(&input, &layout),
+        AGC_OK, "gfx1013 partial-edge BC7 layout computes");
+    TEST_ASSERT_EQ(layout.pitch_blocks, 16u,
+        "BC7 sixteen-byte blocks align sixteen blocks per row");
+    TEST_ASSERT_EQ(layout.slice_size, UINT64_C(512),
+        "partial-edge BC7 slice uses exact sixteen-byte blocks");
+
+    input.width = 8u;
+    input.height = 8u;
+    input.layer_count = 2u;
+    input.mip_level_count = 4u;
+    input.resource_format = AGC_GFX1013_IMAGE_FORMAT_BC1_UNORM;
+    TEST_ASSERT_EQ(agcGfx1013GetLinearBcSurfaceLayout(&input, &layout),
+        AGC_OK, "gfx1013 BC1 mip-array layout computes");
+    TEST_ASSERT_EQ(layout.slice_size, UINT64_C(1280),
+        "BC1 mip slice stores smallest mip first");
+    TEST_ASSERT_EQ(layout.allocation_size, UINT64_C(2560),
+        "BC1 two-layer allocation multiplies exact slice size");
+    TEST_ASSERT_EQ(agcGfx1013GetLinearBcSubresourceLayout(
+        &input, 0u, 1u, &subresource), AGC_OK,
+        "gfx1013 BC1 base mip in second layer resolves");
+    TEST_ASSERT_EQ(subresource.offset, UINT64_C(2048),
+        "BC1 base mip follows smaller mips and first layer");
+    TEST_ASSERT_EQ(subresource.size, UINT64_C(512),
+        "BC1 8x8 base mip exact size");
+    TEST_ASSERT_EQ(subresource.row_pitch, 256u,
+        "BC1 subresource row pitch is byte-exact");
+    TEST_ASSERT_EQ(subresource.pitch_blocks, 32u,
+        "BC1 subresource exposes aligned pitch blocks");
+    TEST_ASSERT_EQ(subresource.width_blocks, 2u,
+        "BC1 8x8 subresource has two logical blocks per row");
+    TEST_ASSERT_EQ(subresource.height_blocks, 2u,
+        "BC1 8x8 subresource has two logical block rows");
+    TEST_ASSERT_EQ(agcGfx1013GetLinearBcSubresourceLayout(
+        &input, 3u, 0u, &subresource), AGC_OK,
+        "gfx1013 BC1 1x1 tail mip resolves");
+    TEST_ASSERT_EQ(subresource.offset, UINT64_C(0),
+        "smallest linear BC mip begins the slice");
+    TEST_ASSERT_EQ(subresource.width, 1u,
+        "BC tail mip retains one logical texel width");
+    TEST_ASSERT_EQ(subresource.width_blocks, 1u,
+        "BC tail mip retains one complete compressed block");
+
+    input.width = 1u;
+    input.height = 1u;
+    input.layer_count = 6u;
+    input.mip_level_count = 1u;
+    TEST_ASSERT_EQ(agcGfx1013GetLinearBcSurfaceLayout(&input, &layout),
+        AGC_OK, "gfx1013 six-face BC1 layout computes");
+    TEST_ASSERT_EQ(layout.allocation_size, UINT64_C(1536),
+        "six BC cube faces use six independent aligned slices");
+}
+
+static void test_gfx1013_linear_bc_layout_validation(void)
+{
+    AgcGfx1013LinearBcSurfaceLayoutInput input = {
+        16u, 16u, 1u, 5u, AGC_GFX1013_IMAGE_FORMAT_BC1_UNORM
+    };
+    AgcGfx1013LinearBcSurfaceLayout layout;
+    AgcGfx1013LinearBcSubresourceLayout subresource;
+
+    memset(&layout, 0xa5, sizeof(layout));
+    input.resource_format = AGC_GFX1013_IMAGE_FORMAT_RGBA8_UNORM;
+    TEST_ASSERT_EQ(agcGfx1013GetLinearBcSurfaceLayout(&input, &layout),
+        AGC_ERROR_INVALID_ARGUMENT, "linear BC layout rejects non-BC format");
+    TEST_ASSERT_EQ(layout.allocation_size, UINT64_C(0xa5a5a5a5a5a5a5a5),
+        "rejected linear BC layout preserves output");
+    input.resource_format = AGC_GFX1013_IMAGE_FORMAT_BC1_UNORM;
+    input.mip_level_count = 6u;
+    TEST_ASSERT_EQ(agcGfx1013GetLinearBcSurfaceLayout(&input, &layout),
+        AGC_ERROR_VALIDATION_FAILED,
+        "linear BC layout rejects too many mip levels");
+    input.mip_level_count = 5u;
+    input.width = 16385u;
+    TEST_ASSERT_EQ(agcGfx1013GetLinearBcSurfaceLayout(&input, &layout),
+        AGC_ERROR_VALIDATION_FAILED,
+        "linear BC layout rejects oversized dimensions");
+    input.width = 16u;
+    TEST_ASSERT_EQ(agcGfx1013GetLinearBcSubresourceLayout(
+        &input, 5u, 0u, &subresource), AGC_ERROR_INVALID_ARGUMENT,
+        "linear BC subresource rejects invalid mip");
+    TEST_ASSERT_EQ(agcGfx1013GetLinearBcSubresourceLayout(
+        &input, 0u, 1u, &subresource), AGC_ERROR_INVALID_ARGUMENT,
+        "linear BC subresource rejects invalid layer");
+
+    input.width = 16384u;
+    input.height = 16384u;
+    input.layer_count = 8192u;
+    input.mip_level_count = 1u;
+    input.resource_format = AGC_GFX1013_IMAGE_FORMAT_BC7_UNORM;
+    TEST_ASSERT_EQ(agcGfx1013GetLinearBcSurfaceLayout(&input, &layout),
+        AGC_OK, "maximum accepted linear BC7 layout computes");
+    TEST_ASSERT_EQ(layout.slice_size, UINT64_C(268435456),
+        "maximum BC7 slice arithmetic remains 64-bit exact");
+    TEST_ASSERT_EQ(layout.allocation_size, UINT64_C(2199023255552),
+        "maximum BC7 layer multiplication remains 64-bit exact");
+    input.layer_count = 8193u;
+    TEST_ASSERT_EQ(agcGfx1013GetLinearBcSurfaceLayout(&input, &layout),
+        AGC_ERROR_VALIDATION_FAILED,
+        "linear BC layout rejects layer count beyond descriptor range");
+    input.layer_count = 1u;
+    input.width = 0u;
+    TEST_ASSERT_EQ(agcGfx1013GetLinearBcSurfaceLayout(&input, &layout),
+        AGC_ERROR_INVALID_ARGUMENT, "linear BC layout rejects zero width");
 }
 
 static void test_gfx1013_msaa_image_descriptor(void)
@@ -1130,6 +1302,8 @@ void test_suite_texture(void) {
     TEST_RUN(test_gfx1013_hardware_descriptors);
     TEST_RUN(test_gfx1013_hardware_descriptor_validation);
     TEST_RUN(test_gfx1013_bc_image_formats);
+    TEST_RUN(test_gfx1013_linear_bc_layout);
+    TEST_RUN(test_gfx1013_linear_bc_layout_validation);
     TEST_RUN(test_gfx1013_msaa_image_descriptor);
     TEST_RUN(test_gfx1013_array_image_descriptors);
 }

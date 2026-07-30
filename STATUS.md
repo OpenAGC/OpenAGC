@@ -357,7 +357,17 @@ though the packing expression was correct. The public header now exposes all
 14 native BC1-BC7 UNORM/SNORM/SRGB/UFLOAT/SFLOAT encodings, exact host fixtures
 lock their descriptor dwords, and value `0x200` fails closed while preserving
 the destination. This is host descriptor coverage, not BC layout or hardware
-sampling qualification. The generic suite passes 12,112 assertions.
+sampling qualification by itself.
+
+The firmware-neutral linear BC layout API is host-qualified for all 14 native
+BC1-BC7 encodings. It mirrors the gfx10 AddrLib linear contract with 4x4
+ceiling-divided blocks, 8/16-byte block sizes, 256-byte pitch and base
+alignment, smallest-mip-first storage, per-layer slices, and checked 64-bit
+arithmetic. Aggregate and subresource queries cover odd dimensions, partial
+edge blocks, mip tails, arrays, six cube faces, and the maximum accepted
+16,384x16,384 by 8,192-layer allocation. Public layout structs have exact size
+assertions and rejected calls preserve outputs. Tiled layout and GPU sampling
+are still unqualified. The generic suite passes 12,230 assertions.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability

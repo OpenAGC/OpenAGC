@@ -724,15 +724,21 @@ The descriptor blocker is resolved offline: gfx10.3's image format field is
 now validated as the hardware-defined 9-bit field instead of the previous
 incorrect 6-bit ceiling. Exact host fixtures lock all native BC1-BC7 resource
 encodings (`169..182`) and reject a tenth format bit without modifying the
-destination descriptor. This is descriptor qualification only; BC layout and
-sampling remain pending.
+destination descriptor. The direct-upload linear layout is also host-qualified
+for all 14 encodings using the gfx10 AddrLib contract: 4x4 ceiling-divided
+blocks, 8- or 16-byte block storage, 256-byte row/base alignment, smallest-mip-
+first offsets, independent array/cube slices, and checked 64-bit sizes. Exact
+fixtures cover partial blocks, odd-dimension ceiling-shifted mips, 1x1 tails,
+arrays, six cube faces, maximum dimensions/layers, and invalid inputs. Tiled BC
+layout and GPU sampling remain pending and must not be inferred from this
+linear host qualification.
 
 - Block width and height.
 - Bytes per block.
 - Compatible number type, including UNORM, SNORM, SRGB, or the signed/unsigned
   BC6 floating-point interpretation where applicable.
-- Tile mode, row pitch, slice size, alignment, mip offsets, array layers, and
-  cube faces.
+- Tiled mode, row pitch, slice size, alignment, mip offsets, array layers, and
+  cube faces. The linear direct-upload subset is complete; tiled layouts remain.
 - Component selection and exact texture-descriptor encoding.
 
 Every BC layout must use checked arithmetic and ceiling-divided block counts.
