@@ -5,6 +5,7 @@
 #include "test.h"
 
 #include <stdint.h>
+#include <string.h>
 
 #include "agc_driver_debug.h"
 #include "agc_graphics.h"
@@ -12,6 +13,9 @@
 #include "agc_registers.h"
 #include "agc_texture.h"
 #include "openagc/runtime.h"
+
+#include "../samples/hw_test/shaders/fill_color_native_reflection.h"
+#include "../samples/hw_test/shaders/fill_color_native_sb.h"
 
 static AgcDevice create_device(void)
 {
@@ -805,6 +809,112 @@ static void test_runtime_compute_submission(void)
     TEST_ASSERT_EQ(agcDestroyShader(shader), AGC_OK, "compute shader destroys");
     TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK, "compute queue destroys");
     TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK, "compute device destroys");
+}
+
+static void test_runtime_compiler_reflection_sidecar(void)
+{
+    const uint32_t push_constants[] = {64u, UINT32_C(0xff00ff00)};
+    AgcDevice device = create_device();
+    AgcQueue queue = create_queue(device, kAgcQueueCompute);
+    AgcShaderReflection reflection;
+    AgcShaderDesc shader_desc = AGC_SHADER_DESC_INIT;
+    AgcComputePipelineDesc pipeline_desc = AGC_COMPUTE_PIPELINE_DESC_INIT;
+    AgcBufferDesc buffer_desc = AGC_BUFFER_DESC_INIT;
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcDescriptorWrite write = AGC_DESCRIPTOR_WRITE_INIT;
+    AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
+    AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    AgcShader shader = NULL;
+    AgcComputePipeline pipeline = NULL;
+    AgcBuffer buffer = NULL;
+    AgcCommandBuffer command_buffer = NULL;
+    AgcFence fence = NULL;
+
+    TEST_ASSERT_EQ(fill_color_native_reflection_bytes_size,
+        sizeof(reflection),
+        "serialized native compute reflection retains the ABI size");
+    memcpy(&reflection, fill_color_native_reflection_bytes,
+        sizeof(reflection));
+    TEST_ASSERT_EQ(reflection.stage, kAgcShaderStageCs,
+        "serialized native compute reflection identifies compute stage");
+    TEST_ASSERT_EQ(reflection.descriptor_mapping_count, 1u,
+        "serialized native compute reflection retains its storage binding");
+    TEST_ASSERT_EQ(reflection.push_constant_size, sizeof(push_constants),
+        "serialized native compute reflection retains push constants");
+
+    shader_desc.stage = reflection.stage;
+    shader_desc.code = fill_color_native_data;
+    shader_desc.code_size = fill_color_native_data_len;
+    shader_desc.reflection = &reflection;
+    TEST_ASSERT_EQ(agcCreateShader(device, &shader_desc, &shader), AGC_OK,
+        "serialized compute artifact creates a native shader");
+
+    pipeline_desc.shader = shader;
+    pipeline_desc.local_size_x = reflection.local_size_x;
+    pipeline_desc.local_size_y = reflection.local_size_y;
+    pipeline_desc.local_size_z = reflection.local_size_z;
+    pipeline_desc.descriptor_mapping_count =
+        reflection.descriptor_mapping_count;
+    pipeline_desc.descriptor_mappings = reflection.descriptor_mappings;
+    pipeline_desc.push_constant_range_count =
+        reflection.push_constant_range_count;
+    pipeline_desc.push_constant_ranges = reflection.push_constant_ranges;
+    TEST_ASSERT_EQ(agcCreateComputePipeline(device, &pipeline_desc, &pipeline),
+        AGC_OK, "serialized compute artifact creates a native pipeline");
+
+    buffer_desc.size = 256u;
+    buffer_desc.usage = AGC_BUFFER_USAGE_STORAGE_BIT;
+    buffer_desc.flags = AGC_BUFFER_CREATE_READBACK_BIT;
+    TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &buffer), AGC_OK,
+        "native compute output buffer creation succeeds");
+    command_desc.queue_type = kAgcQueueCompute;
+    command_desc.capacity_dwords = 256u;
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc,
+        &command_buffer), AGC_OK,
+        "native compute sidecar command buffer creation succeeds");
+    TEST_ASSERT_EQ(agcCreateFence(device, &fence_desc, &fence), AGC_OK,
+        "native compute sidecar fence creation succeeds");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command_buffer), AGC_OK,
+        "native compute sidecar command buffer begins");
+    TEST_ASSERT_EQ(agcCmdBindComputePipeline(command_buffer, pipeline), AGC_OK,
+        "native compute sidecar pipeline binds");
+    write.set = reflection.descriptor_mappings[0].set;
+    write.binding = reflection.descriptor_mappings[0].binding;
+    write.type = reflection.descriptor_mappings[0].type;
+    write.buffer = buffer;
+    write.buffer_range = buffer_desc.size;
+    TEST_ASSERT_EQ(agcCmdBindDescriptors(command_buffer, 1u, &write), AGC_OK,
+        "native compute sidecar storage descriptor binds");
+    TEST_ASSERT_EQ(agcCmdPushConstants(command_buffer,
+        1u << kAgcShaderStageCs, 0u, sizeof(push_constants),
+        push_constants), AGC_OK,
+        "native compute sidecar push constants bind");
+    TEST_ASSERT_EQ(agcCmdDispatch(command_buffer, 1u, 1u, 1u), AGC_OK,
+        "native compute sidecar dispatch records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command_buffer), AGC_OK,
+        "native compute sidecar command buffer ends");
+    submit.command_buffer_count = 1u;
+    submit.command_buffers = &command_buffer;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
+        "native compute sidecar command buffer submits");
+    TEST_ASSERT_EQ(agcGetFenceStatus(fence), AGC_OK,
+        "generic native compute sidecar submission signals its fence");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command_buffer), AGC_OK,
+        "completed native compute sidecar command buffer resets");
+    TEST_ASSERT_EQ(agcDestroyFence(fence), AGC_OK,
+        "native compute sidecar fence destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(command_buffer), AGC_OK,
+        "native compute sidecar command buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyBuffer(buffer), AGC_OK,
+        "native compute sidecar output buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyComputePipeline(pipeline), AGC_OK,
+        "native compute sidecar pipeline destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(shader), AGC_OK,
+        "native compute sidecar shader destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
+        "native compute sidecar queue destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "native compute sidecar device destroys");
 }
 
 static void test_runtime_indexed_graphics_submission(void)
@@ -3091,6 +3201,7 @@ void test_suite_runtime(void)
     TEST_RUN(test_runtime_all_object_lifecycle);
     TEST_RUN(test_runtime_fence_and_command_states);
     TEST_RUN(test_runtime_compute_submission);
+    TEST_RUN(test_runtime_compiler_reflection_sidecar);
     TEST_RUN(test_runtime_indexed_graphics_submission);
     TEST_RUN(test_runtime_command_space_atomic_failure);
     TEST_RUN(test_runtime_dynamic_graphics_state);

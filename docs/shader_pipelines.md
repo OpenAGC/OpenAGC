@@ -29,7 +29,10 @@ header with the `.sb` output from the same compiler invocation and copy its
 bytes into `AgcShaderReflection` before `agcCreateShader`; do not recreate
 metadata from the shader record or application conventions. Use
 `--reflection-symbol <identifier>` when a translation unit embeds more than
-one artifact.
+one artifact. Pass file-based resource layouts with
+`--descriptor-binding SET:BIND:TYPE:COUNT` and
+`--push-constant-size BYTES`; the generated reflection is the source of truth
+for the corresponding native pipeline descriptor.
 
 Create a reflected shader with `AGC_SHADER_DESC_INIT`, setting `code`,
 `code_size`, and `reflection`; fused records also set `front_code` and

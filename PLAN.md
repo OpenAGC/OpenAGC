@@ -263,7 +263,7 @@ logical shader bundles. Reflection v2 adds compiler-derived front-stage
 interfaces and geometry topology/limit facts without changing its serialized
 size; v1/API-14 artifacts remain accepted. The runtime recomputes the
 compiler's FNV-1a stage-linkage hash over its four interface masks before
-accepting a reflected shader. The full generic suite reports 14,035 passed.
+accepting a reflected shader. The full generic suite reports 14,063 passed.
 The opt-in combined-tree contract test now compiles real `openagc-psbc`
 vertex/fragment/compute output and creates OpenAGC graphics/compute pipelines
 without sample-local register knowledge; its 256-byte code alignment and
@@ -271,6 +271,12 @@ no-GS NGG front-program patching are validated on the host.
 For file-based consumers, `openagc-psbc --reflection-header` now emits the
 matching pointer-free reflection sidecar, so a sample can use compiler facts
 without reconstructing metadata from its shader record.
+The generated `fill_color_native` compute binary/reflection pair is consumed
+by the generic runtime-contract test and the separate
+`agc_runtime_compute.elf` probe, which uses only native objects, reflected
+descriptor/push binding, a bounded fence wait, and readback verification.
+That probe has Prospero cross-build coverage only; the existing manually
+assembled `agc_compute.elf` remains the hardware-qualified baseline.
 Compiler-fused VS-front/GS-back geometry pipelines are
 host-packaged for the already-qualified triangle and line inputs plus compiler
 invocation counts; redundant standalone VS handles, incomplete input

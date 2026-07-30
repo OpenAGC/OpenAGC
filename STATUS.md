@@ -169,7 +169,7 @@ state normalization, multisample minimums, and required dynamic-state gating.
 Line and point polygon modes fail pipeline creation with the other unqualified
 rasterization options. Graphics scratch remains unsupported and
 fails during pipeline creation; reflected gfx1013 LDS requirements are bounded
-before bind generation. The full generic suite now reports 14,035
+before bind generation. The full generic suite now reports 14,063
 passed and 0 failed; the compiler's
 library, varying/export, NGG, and tessellation suites pass. This slice is
 host-tested only. No PS5 hardware test was run or claimed. See
@@ -188,6 +188,14 @@ register data. It caught and closes the PS5 program-address contract at two
 boundaries: compiler code is now 256-byte aligned for `SPI_SHADER_PGM_LO`, and
 the runtime patches the ES program pair for a no-GS NGG front record. This is
 host integration evidence only, not a hardware qualification.
+
+The generated `fill_color_native` compute binary/reflection pair is now
+consumed by a generic runtime artifact-contract fixture and the separate
+`agc_runtime_compute.elf` probe. The probe creates only native runtime objects,
+binds reflected storage/push requirements, submits through a bounded fence, and
+reads back its result. Its Prospero cross-build passes, but it has not been
+deployed or hardware-qualified; the manually assembled `agc_compute.elf`
+remains the qualified compute baseline.
 
 ## Native runtime C API contract complete (2026-07-30)
 

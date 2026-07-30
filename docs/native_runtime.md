@@ -155,3 +155,10 @@ polling or a finite fence wait observes the GPU-written value. This bridge has
 host-carrier and Prospero cross-build coverage only; no PS5 execution or
 hardware qualification is implied. Broader graphics stages and unqualified
 fixed options such as alpha-to-coverage and alpha-to-one remain fail-closed.
+
+`samples/hw_test/agc_runtime_compute.elf` is the dedicated public-runtime
+compute probe. It creates a device, compute queue, readback storage buffer,
+shader, compute pipeline, command buffer, and fence from the generated
+`fill_color_native` binary/reflection pair, then binds the reflected descriptor
+and push constants before dispatch. Its generic artifact-contract test and
+Prospero cross-build pass; it has not been deployed or hardware-qualified.

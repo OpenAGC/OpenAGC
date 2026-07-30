@@ -1,0 +1,20 @@
+#version 450
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, std430) buffer OutputBuffer {
+    uint data[];
+} output_buffer;
+
+layout(push_constant) uniform PushConstants {
+    uint total_pixels;
+    uint color;
+} push_constants;
+
+void main()
+{
+    uint pixel_idx = gl_GlobalInvocationID.x;
+
+    if (pixel_idx < push_constants.total_pixels)
+        output_buffer.data[pixel_idx] = push_constants.color;
+}

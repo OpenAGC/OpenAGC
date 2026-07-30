@@ -304,6 +304,24 @@ agc_compute_fw1160.elf: agc_compute.c ps5_video_out.h gpu_credentials.h shaders/
 		-DAGC_COMPUTE_HEADLESS=1 -DAGC_SELF_TERMINATE=1 \
 		-o $@ agc_compute.c $(AGC_LDFLAGS)
 
+# Public native-runtime compute sample.  It is intentionally separate from
+# agc_compute.elf, which preserves the manually assembled hardware baseline.
+.PHONY: shaders_runtime_compute
+shaders_runtime_compute: shaders/fill_color_native.comp
+	$(GLSLANG) -V --target-env vulkan1.2 $< -o shaders/fill_color_native.spv
+	$(PSBC) -f shaders/fill_color_native.spv -s compute \
+		-o shaders/fill_color_native.sb \
+		--reflection-header shaders/fill_color_native_reflection.h \
+		--reflection-symbol fill_color_native_reflection \
+		--descriptor-binding 0:0:storage-buffer:1 \
+		--push-constant-size 8 --wave32
+	xxd -i -n fill_color_native_data shaders/fill_color_native.sb \
+		shaders/fill_color_native_sb.h
+
+agc_runtime_compute.elf: shaders_runtime_compute agc_runtime_compute.c \
+		gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -o $@ agc_runtime_compute.c $(AGC_LDFLAGS)
+
 agc_copy_fw1160_logged.elf: agc_copy.c gpu_credentials.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_EXPECT_FIRMWARE_ABI_KEY=0x1160u \
 		-DAGC_SELF_TERMINATE=1 \
