@@ -596,6 +596,9 @@ the runner and shared teardown on FW 11.60 only.
   `0xfffc00f0`, zero RMW mismatches/outside changes, `49152` changed words,
   exact allocation-aware D32 and S8 values, clean shutdown, and no residual
   process. Freeze `49152` and replay once before the FW 5.50 mirror.
+- The identical FW 11.60 both-aspect replay reproduced every exact invariant.
+  Run the pinned FW 5.50 both-aspect mirror next with `49152` frozen. A pass
+  completes combined D32+S8 HTILE and advances the plan to mip/array HTILE.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and

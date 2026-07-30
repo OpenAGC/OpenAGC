@@ -2766,6 +2766,7 @@ deploy_agc_depth_stencil_expclear_stencil_fw550_headless: agc_depth_stencil_expc
 deploy_agc_depth_stencil_expclear_both_fw550_headless: agc_depth_stencil_expclear_both_fw550_headless.elf
 	PS5_HOST=$(PS5_HOST) DEPTH_ARTIFACT=$(THIS_DIR)/$< \
 		EXPECTED_FW_ABI=0x0550 EXPECTED_HTILE_INITIAL=fffff30f \
+		EXPECTED_HTILE_CHANGED=49152 \
 		EXPECTED_D32_FULL_RECT=1 EXPECTED_D32_ONE_COUNT=1755648 \
 		EXPECTED_STENCIL_FULL_RECT=1 \
 		EXPECTED_COMBINED_EXPCLEAR_ASPECTS=3 \

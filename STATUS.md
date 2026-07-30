@@ -116,7 +116,8 @@ combined expclear is hardware-qualified on both endpoints. Both-aspect FW
 11.60 pass 1 reproduced aspect `0x3`, expected metadata `0xfffc00f0`, zero RMW
 mismatches/outside changes, `49152` changed words, exact allocation-aware D32
 and S8 values, clean shutdown, and no residual process. Its recipe now freezes
-that count.
+that count; the identical replay reproduced every invariant. The pinned FW
+5.50 both-aspect mirror is the final combined-tier gate with `49152` frozen.
 
 Ordinary D16 HTILE is now hardware-qualified twice on each endpoint. The
 pinned current-source artifacts reproduced exact D16 classes, clean teardown,

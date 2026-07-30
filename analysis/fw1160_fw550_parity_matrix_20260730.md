@@ -272,6 +272,12 @@ and S8 distributions. It completed immediately, shut down cleanly, returned
 final PASS, and left no residual process. The recipe now freezes `49152`; one
 identical replay remains before the FW 5.50 both-aspect mirror.
 
+The identical FW 11.60 both-aspect replay reproduced aspect `0x3`, expected
+metadata `0xfffc00f0`, `49152` changed words, exact allocation-aware D32 and S8
+distributions, immediate completion, clean shutdown, final PASS, and no
+residual process. The pinned FW 5.50 both-aspect mirror now freezes `49152` and
+is the final combined-tier endpoint gate.
+
 ## Higher-level consumers
 
 The following FW 5.50-qualified application-facing paths still need bounded
