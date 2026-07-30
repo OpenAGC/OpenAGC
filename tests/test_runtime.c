@@ -2735,6 +2735,216 @@ static void test_runtime_gpu_labels(void)
         "label device destroys");
 }
 
+static void test_runtime_gpu_label_timeline_waits(void)
+{
+    AgcDevice device = create_device();
+    AgcQueue queue = create_queue(device, kAgcQueueCompute);
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
+    AgcGpuLabelDesc label_desc = AGC_GPU_LABEL_DESC_INIT;
+    AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    AgcGpuLabelInfo info = AGC_GPU_LABEL_INFO_INIT;
+    union {
+        AgcGpuLabelInfo aligned;
+        struct {
+            uint8_t prefix[AGC_GPU_LABEL_INFO_V1_SIZE];
+            uint64_t canary;
+        } legacy;
+    } v1_storage = {0};
+    AgcGpuLabelInfo *v1_info =
+        (AgcGpuLabelInfo *)(void *)v1_storage.legacy.prefix;
+    AgcCommandBuffer commands[2] = {NULL, NULL};
+    AgcGpuLabel label = NULL;
+    AgcFence fence = NULL;
+
+    command_desc.queue_type = kAgcQueueCompute;
+    command_desc.capacity_dwords = 128u;
+    label_desc.initial_value = 3u;
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc,
+        &commands[0]), AGC_OK, "timeline first command creates");
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc,
+        &commands[1]), AGC_OK, "timeline second command creates");
+    TEST_ASSERT_EQ(agcCreateFence(device, &fence_desc, &fence), AGC_OK,
+        "timeline fence creates");
+    TEST_ASSERT_EQ(agcCreateGpuLabel(device, &label_desc, &label), AGC_OK,
+        "timeline label creates with a nonzero initial point");
+    TEST_ASSERT_EQ(agcGetGpuLabelStatus(label, 3u), AGC_OK,
+        "timeline initial point is already observed");
+    TEST_ASSERT_EQ(agcGetGpuLabelStatus(label, 4u),
+        AGC_ERROR_INVALID_STATE,
+        "timeline status rejects a point that has not been scheduled");
+    TEST_ASSERT_EQ(agcWaitGpuLabel(label, 3u,
+        AGC_RUNTIME_INFINITE_TIMEOUT), AGC_ERROR_INVALID_ARGUMENT,
+        "timeline wait rejects an unbounded deadline");
+    TEST_ASSERT_EQ(agcWaitGpuLabel(label, 4u, UINT64_C(1000000)),
+        AGC_ERROR_INVALID_STATE,
+        "timeline wait rejects an unscheduled future point");
+    TEST_ASSERT_EQ(agcWaitGpuLabel(label, 3u, UINT64_C(1000000)), AGC_OK,
+        "timeline wait accepts an observed initial point");
+    TEST_ASSERT_EQ(agcGetGpuLabelInfo(label, &info), AGC_OK,
+        "timeline v2 diagnostics query succeeds");
+    TEST_ASSERT_EQ(info.last_wait_value, 3u,
+        "timeline diagnostics report the last bounded target");
+    TEST_ASSERT_EQ(info.last_wait_result, AGC_OK,
+        "timeline diagnostics report bounded wait success");
+    TEST_ASSERT_EQ(info.timeout_count, 0u,
+        "timeline diagnostics begin without timeouts");
+    v1_info->struct_size = AGC_GPU_LABEL_INFO_V1_SIZE;
+    v1_info->version = AGC_RUNTIME_STRUCTURE_VERSION_1;
+    v1_storage.legacy.canary = UINT64_C(0xcafebabedeadbeef);
+    TEST_ASSERT_EQ(agcGetGpuLabelInfo(label, v1_info), AGC_OK,
+        "timeline diagnostics preserve the v1 prefix ABI");
+    TEST_ASSERT_EQ(v1_info->scheduled_value, 3u,
+        "timeline v1 diagnostics report the scheduled point");
+    TEST_ASSERT_EQ(v1_storage.legacy.canary,
+        UINT64_C(0xcafebabedeadbeef),
+        "timeline v1 diagnostics do not write the v2 tail");
+
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(commands[0]), AGC_OK,
+        "timeline ordered-signal command begins");
+    TEST_ASSERT_EQ(agcCmdSignalGpuLabel(commands[0], label, 5u), AGC_OK,
+        "timeline first increasing signal records");
+    TEST_ASSERT_EQ(agcCmdSignalGpuLabel(commands[0], label, 5u),
+        AGC_ERROR_INVALID_STATE,
+        "timeline command rejects a repeated tentative point");
+    TEST_ASSERT_EQ(agcCmdSignalGpuLabel(commands[0], label, 4u),
+        AGC_ERROR_INVALID_STATE,
+        "timeline command rejects a decreasing tentative point");
+    TEST_ASSERT_EQ(agcCmdSignalGpuLabel(commands[0], label, 6u), AGC_OK,
+        "timeline second increasing signal records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(commands[0]), AGC_OK,
+        "timeline ordered-signal command ends");
+    submit.command_buffer_count = 1u;
+    submit.command_buffers = &commands[0];
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
+        "timeline ordered signals submit");
+    TEST_ASSERT_EQ(agcGetGpuLabelStatus(label, 5u), AGC_OK,
+        "timeline status treats an observed later value as completing five");
+    TEST_ASSERT_EQ(agcWaitGpuLabel(label, 6u, UINT64_C(1000000)), AGC_OK,
+        "timeline waits for the latest submitted point");
+    info = (AgcGpuLabelInfo)AGC_GPU_LABEL_INFO_INIT;
+    TEST_ASSERT_EQ(agcGetGpuLabelInfo(label, &info), AGC_OK,
+        "timeline submitted diagnostics query succeeds");
+    TEST_ASSERT_EQ(info.scheduled_value, 6u,
+        "timeline submitted diagnostics report the final signal");
+    TEST_ASSERT_EQ(info.observed_value, 6u,
+        "timeline generic backend observes the final signal");
+    TEST_ASSERT_EQ(info.last_wait_value, 6u,
+        "timeline submitted diagnostics report the waited point");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(commands[0]), AGC_OK,
+        "timeline ordered-signal command resets");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "timeline ordered-signal fence resets");
+
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(commands[0]), AGC_OK,
+        "timeline batch first command begins");
+    TEST_ASSERT_EQ(agcCmdSignalGpuLabel(commands[0], label, 8u), AGC_OK,
+        "timeline batch first signal records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(commands[0]), AGC_OK,
+        "timeline batch first command ends");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(commands[1]), AGC_OK,
+        "timeline batch stale command begins");
+    TEST_ASSERT_EQ(agcCmdSignalGpuLabel(commands[1], label, 7u), AGC_OK,
+        "timeline independently-recorded stale signal records tentatively");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(commands[1]), AGC_OK,
+        "timeline batch stale command ends");
+    submit.command_buffer_count = 2u;
+    submit.command_buffers = commands;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence),
+        AGC_ERROR_INVALID_STATE,
+        "timeline batch rejects decreasing cross-command signal order");
+    info = (AgcGpuLabelInfo)AGC_GPU_LABEL_INFO_INIT;
+    TEST_ASSERT_EQ(agcGetGpuLabelInfo(label, &info), AGC_OK,
+        "timeline rejected-batch diagnostics query succeeds");
+    TEST_ASSERT_EQ(info.scheduled_value, 6u,
+        "timeline rejected batch publishes no tentative point");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(commands[1]), AGC_OK,
+        "timeline stale batch command resets");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(commands[1]), AGC_OK,
+        "timeline corrected batch command begins");
+    TEST_ASSERT_EQ(agcCmdSignalGpuLabel(commands[1], label, 9u), AGC_OK,
+        "timeline corrected batch signal records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(commands[1]), AGC_OK,
+        "timeline corrected batch command ends");
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
+        "timeline increasing cross-command batch submits");
+    TEST_ASSERT_EQ(agcWaitGpuLabel(label, 9u, UINT64_C(1000000)), AGC_OK,
+        "timeline corrected batch point completes");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(commands[1]), AGC_OK,
+        "timeline corrected second command resets");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(commands[0]), AGC_OK,
+        "timeline corrected first command resets");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "timeline corrected batch fence resets");
+
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(commands[0]), AGC_OK,
+        "timeline stale-recording command begins");
+    TEST_ASSERT_EQ(agcCmdSignalGpuLabel(commands[0], label, 10u), AGC_OK,
+        "timeline stale candidate records before advancement");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(commands[0]), AGC_OK,
+        "timeline stale-recording command ends");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(commands[1]), AGC_OK,
+        "timeline advancing command begins");
+    TEST_ASSERT_EQ(agcCmdSignalGpuLabel(commands[1], label, 11u), AGC_OK,
+        "timeline advancing signal records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(commands[1]), AGC_OK,
+        "timeline advancing command ends");
+    submit.command_buffer_count = 1u;
+    submit.command_buffers = &commands[1];
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
+        "timeline advancing command submits first");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(commands[1]), AGC_OK,
+        "timeline advancing command resets");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "timeline advancing fence resets");
+    submit.command_buffers = &commands[0];
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence),
+        AGC_ERROR_INVALID_STATE,
+        "timeline submit rejects a recording made stale by another submit");
+    info = (AgcGpuLabelInfo)AGC_GPU_LABEL_INFO_INIT;
+    TEST_ASSERT_EQ(agcGetGpuLabelInfo(label, &info), AGC_OK,
+        "timeline stale-submit diagnostics query succeeds");
+    TEST_ASSERT_EQ(info.scheduled_value, 11u,
+        "timeline stale submit preserves the newer committed point");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(commands[0]), AGC_OK,
+        "timeline stale-recording command resets");
+
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(commands[0]), AGC_OK,
+        "timeline terminal command begins");
+    TEST_ASSERT_EQ(agcCmdSignalGpuLabel(commands[0], label, UINT32_MAX),
+        AGC_OK, "timeline terminal point records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(commands[0]), AGC_OK,
+        "timeline terminal command ends");
+    submit.command_buffer_count = 1u;
+    submit.command_buffers = &commands[0];
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
+        "timeline terminal point submits");
+    TEST_ASSERT_EQ(agcWaitGpuLabel(label, UINT32_MAX, UINT64_C(1000000)),
+        AGC_OK, "timeline terminal point completes");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(commands[0]), AGC_OK,
+        "timeline terminal command resets");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(commands[0]), AGC_OK,
+        "timeline post-terminal command begins");
+    TEST_ASSERT_EQ(agcCmdSignalGpuLabel(commands[0], label, UINT32_MAX),
+        AGC_ERROR_INVALID_STATE,
+        "timeline terminal point cannot repeat or wrap");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(commands[0]), AGC_OK,
+        "timeline post-terminal command resets");
+
+    TEST_ASSERT_EQ(agcDestroyFence(fence), AGC_OK,
+        "timeline fence destroys");
+    TEST_ASSERT_EQ(agcDestroyGpuLabel(label), AGC_OK,
+        "timeline label destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(commands[1]), AGC_OK,
+        "timeline second command destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(commands[0]), AGC_OK,
+        "timeline first command destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
+        "timeline queue destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "timeline device destroys");
+}
+
 static void test_runtime_submit_label_lists(void)
 {
     AgcDevice device = create_device();
@@ -6945,6 +7155,7 @@ void test_suite_runtime(void)
     TEST_RUN(test_runtime_copy_image_submission);
     TEST_RUN(test_runtime_compute_copy_shader_batch);
     TEST_RUN(test_runtime_gpu_labels);
+    TEST_RUN(test_runtime_gpu_label_timeline_waits);
     TEST_RUN(test_runtime_submit_label_lists);
     TEST_RUN(test_runtime_image_transfer);
     TEST_RUN(test_runtime_resource_transitions);

@@ -363,6 +363,10 @@ struct AgcGpuLabelImpl {
     uint32_t last_signal_value;
     uint32_t last_signal_queue_type;
     uint64_t last_signal_submission_id;
+    uint32_t last_wait_value;
+    int32_t last_wait_result;
+    uint64_t timeout_count;
+    uint64_t last_timeout_ns;
 };
 
 struct AgcFenceImpl {
@@ -389,6 +393,8 @@ struct AgcFenceImpl {
 static int agcCommandImageRangeState(AgcCommandBuffer command_buffer,
     AgcImage image, const AgcImageSubresourceRange *range,
     AgcResourceUsage *usage, AgcResourceOwner *owner);
+static uint32_t agcCommandLatestLabelSignalValue(
+    const AgcCommandBuffer command_buffer, const AgcGpuLabel label);
 
 static AgcDevice g_active_device;
 
@@ -5716,7 +5722,8 @@ static int32_t agcRuntimeValidateTransition(
             pending = ((AgcBuffer)resource)->transfer_pending;
         else
             pending = ((AgcImage)resource)->transfer_pending;
-        if (pending || value <= label->last_signal_value)
+        if (pending || value <=
+                agcCommandLatestLabelSignalValue(command_buffer, label))
             return AGC_ERROR_INVALID_STATE;
         low_transition->before = before;
         low_transition->after = AGC_GFX1013_RESOURCE_USAGE_HOST_READ;
@@ -6129,6 +6136,53 @@ static int32_t agcValidateCommandLabelWaits(const AgcQueue queue,
             return AGC_ERROR_INVALID_STATE;
         if (label->last_signal_value != wait->value)
             return AGC_ERROR_INVALID_STATE;
+    }
+    return AGC_OK;
+}
+
+static uint32_t agcCommandLatestLabelSignalValue(
+    const AgcCommandBuffer command_buffer, const AgcGpuLabel label)
+{
+    uint32_t value = label->last_signal_value;
+    uint32_t i;
+
+    for (i = 0u; i < command_buffer->recorded_label_signal_count; ++i)
+        if (command_buffer->recorded_label_signals[i].label == label)
+            value = command_buffer->recorded_label_signals[i].value;
+    return value;
+}
+
+static int32_t agcValidateBatchLabelSignalOrder(
+    AgcCommandBuffer const *command_buffers, uint32_t command_count)
+{
+    uint32_t command_index;
+
+    for (command_index = 0u; command_index < command_count; ++command_index) {
+        AgcCommandBuffer command_buffer = command_buffers[command_index];
+        uint32_t signal_index;
+
+        for (signal_index = 0u;
+             signal_index < command_buffer->recorded_label_signal_count;
+             ++signal_index) {
+            const AgcRuntimeRecordedLabelSignal *signal =
+                &command_buffer->recorded_label_signals[signal_index];
+            uint32_t previous = signal->label->last_signal_value;
+            uint32_t i;
+
+            for (i = 0u; i <= command_index; ++i) {
+                AgcCommandBuffer prior_command = command_buffers[i];
+                uint32_t limit = i == command_index ? signal_index :
+                    prior_command->recorded_label_signal_count;
+                uint32_t j;
+
+                for (j = 0u; j < limit; ++j)
+                    if (prior_command->recorded_label_signals[j].label ==
+                        signal->label)
+                        previous = prior_command->recorded_label_signals[j].value;
+            }
+            if (signal->value <= previous)
+                return AGC_ERROR_INVALID_STATE;
+        }
     }
     return AGC_OK;
 }
@@ -7761,6 +7815,7 @@ int32_t PS5_SYSV_ABI agcCreateGpuLabel(
     label->device = device;
     label->last_signal_value = desc->initial_value;
     label->last_signal_queue_type = UINT32_MAX;
+    label->last_wait_result = AGC_ERROR_BUSY;
     *label_out = label;
     return AGC_OK;
 }
@@ -7783,37 +7838,125 @@ int32_t PS5_SYSV_ABI agcDestroyGpuLabel(AgcGpuLabel label)
     return AGC_OK;
 }
 
-int32_t PS5_SYSV_ABI agcGetGpuLabelInfo(
-    AgcGpuLabel label, AgcGpuLabelInfo *info)
+static int32_t agcGpuLabelObservedValue(AgcGpuLabel label,
+    uint32_t *observed)
 {
-    uint32_t observed;
 #ifdef OPENAGC_PROSPERO
     int32_t result;
-#endif
 
-    if (!label || label->magic != AGC_MAGIC_GPU_LABEL ||
-        !agcDeviceValid(label->device) || !info ||
-        !agcHeaderValid(info->struct_size, sizeof(*info), info->version) ||
-        !agcReservedZero(info->reserved, 2u))
-        return AGC_ERROR_INVALID_ARGUMENT;
-#ifdef OPENAGC_PROSPERO
     result = agcGpuMemoryInvalidate(&label->allocation->block->memory,
-        (size_t)label->allocation->offset, sizeof(observed));
+        (size_t)label->allocation->offset, sizeof(*observed));
     if (result != AGC_OK)
         return result;
 #endif
-    observed = *(const volatile uint32_t *)
+    *observed = *(const volatile uint32_t *)
         agcAllocationCpuAddress(label->allocation);
-    *info = (AgcGpuLabelInfo)AGC_GPU_LABEL_INFO_INIT;
-    info->scheduled_value = label->last_signal_value;
-    info->observed_value = observed;
-    info->queue_type = label->last_signal_queue_type;
-    info->last_signal_submission_id = label->last_signal_submission_id;
-    info->firmware_abi_key = label->device->runtime_info.firmware_abi_key;
-    info->hardware_family = label->device->runtime_info.hardware_family;
-    memcpy(info->profile_name, label->device->runtime_info.profile_name,
-        sizeof(info->profile_name));
     return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGetGpuLabelInfo(
+    AgcGpuLabel label, AgcGpuLabelInfo *info)
+{
+    AgcGpuLabelInfo snapshot = AGC_GPU_LABEL_INFO_INIT;
+    uint32_t observed;
+    uint32_t v1;
+    int32_t result;
+
+    if (!label || label->magic != AGC_MAGIC_GPU_LABEL ||
+        !agcDeviceValid(label->device) || !info)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    v1 = info->version == AGC_RUNTIME_STRUCTURE_VERSION_1 &&
+        info->struct_size == AGC_GPU_LABEL_INFO_V1_SIZE;
+    if ((!v1 && (info->version != AGC_RUNTIME_STRUCTURE_VERSION_2 ||
+            info->struct_size != sizeof(*info))) || info->reserved0 != 0u ||
+        !agcReservedZero(info->reserved, 2u) ||
+        (!v1 && !agcReservedZero(info->reserved_v2, 2u)))
+        return AGC_ERROR_INVALID_ARGUMENT;
+    result = agcGpuLabelObservedValue(label, &observed);
+    if (result != AGC_OK)
+        return result;
+    snapshot.scheduled_value = label->last_signal_value;
+    snapshot.observed_value = observed;
+    snapshot.queue_type = label->last_signal_queue_type;
+    snapshot.last_signal_submission_id = label->last_signal_submission_id;
+    snapshot.firmware_abi_key =
+        label->device->runtime_info.firmware_abi_key;
+    snapshot.hardware_family = label->device->runtime_info.hardware_family;
+    snapshot.last_wait_value = label->last_wait_value;
+    snapshot.last_wait_result = label->last_wait_result;
+    snapshot.timeout_count = label->timeout_count;
+    snapshot.last_timeout_ns = label->last_timeout_ns;
+    memcpy(snapshot.profile_name, label->device->runtime_info.profile_name,
+        sizeof(snapshot.profile_name));
+    if (v1) {
+        snapshot.struct_size = AGC_GPU_LABEL_INFO_V1_SIZE;
+        snapshot.version = AGC_RUNTIME_STRUCTURE_VERSION_1;
+        memcpy(info, &snapshot, AGC_GPU_LABEL_INFO_V1_SIZE);
+    } else {
+        *info = snapshot;
+    }
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGetGpuLabelStatus(
+    AgcGpuLabel label, uint32_t value)
+{
+    uint32_t observed;
+    int32_t result;
+
+    if (!label || label->magic != AGC_MAGIC_GPU_LABEL ||
+        !agcDeviceValid(label->device))
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (value > label->last_signal_value)
+        return AGC_ERROR_INVALID_STATE;
+    result = agcGpuLabelObservedValue(label, &observed);
+    if (result != AGC_OK)
+        return result;
+    return observed >= value ? AGC_OK : AGC_ERROR_BUSY;
+}
+
+int32_t PS5_SYSV_ABI agcWaitGpuLabel(
+    AgcGpuLabel label, uint32_t value, uint64_t timeout_ns)
+{
+    int32_t result;
+
+    if (!label || label->magic != AGC_MAGIC_GPU_LABEL ||
+        !agcDeviceValid(label->device))
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (timeout_ns == AGC_RUNTIME_INFINITE_TIMEOUT)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    label->last_wait_value = value;
+    result = agcGetGpuLabelStatus(label, value);
+    if (result != AGC_ERROR_BUSY) {
+        label->last_wait_result = result;
+        return result;
+    }
+#ifdef OPENAGC_PROSPERO
+    {
+        uint64_t timeout_microseconds = timeout_ns / 1000u;
+
+        if (timeout_ns % 1000u != 0u)
+            timeout_microseconds++;
+        if (timeout_microseconds > UINT32_MAX)
+            timeout_microseconds = UINT32_MAX;
+        result = agcGpuMemoryWait32(&label->allocation->block->memory,
+            (size_t)label->allocation->offset, label->last_signal_value,
+            (uint32_t)timeout_microseconds);
+        if (result == AGC_OK)
+            result = agcGetGpuLabelStatus(label, value);
+        if (result == AGC_ERROR_BUSY)
+            result = AGC_ERROR_TIMEOUT;
+    }
+#else
+    (void)timeout_ns;
+    result = AGC_ERROR_TIMEOUT;
+#endif
+    label->last_wait_result = result;
+    if (result == AGC_ERROR_TIMEOUT) {
+        label->timeout_count++;
+        label->last_timeout_ns = timeout_ns;
+    }
+    return result;
 }
 
 int32_t PS5_SYSV_ABI agcCmdWaitGpuLabel(
@@ -7848,6 +7991,7 @@ int32_t PS5_SYSV_ABI agcCmdSignalGpuLabel(
     AgcCommandBuffer command_buffer, AgcGpuLabel label, uint32_t value)
 {
     AgcGfx1013EopFenceState state;
+    uint32_t scheduled_value;
     int32_t result;
 
     if (!command_buffer || command_buffer->magic != AGC_MAGIC_COMMAND_BUFFER ||
@@ -7859,7 +8003,8 @@ int32_t PS5_SYSV_ABI agcCmdSignalGpuLabel(
         return AGC_ERROR_INVALID_STATE;
     /* A wait compares an exact memory value. Strictly monotonic points avoid
      * stale observations; UINT32_MAX is terminal rather than wrapping. */
-    if (value <= label->last_signal_value)
+    scheduled_value = agcCommandLatestLabelSignalValue(command_buffer, label);
+    if (value <= scheduled_value)
         return AGC_ERROR_INVALID_STATE;
     if (command_buffer->recorded_label_signal_count >=
             AGC_RUNTIME_MAX_RECORDED_TRANSITIONS ||
@@ -8178,6 +8323,9 @@ static int32_t agcQueueSubmitBatch(
     }
     first = command_buffers[0];
     last = command_buffers[count - 1u];
+    result = agcValidateBatchLabelSignalOrder(command_buffers, count);
+    if (result != AGC_OK)
+        return result;
     result = agcValidateSubmissionTransitions(command_buffers, count);
     if (result != AGC_OK)
         return result;
@@ -8410,6 +8558,9 @@ int32_t PS5_SYSV_ABI agcQueueSubmit(
     if (command_buffer->state != AGC_COMMAND_BUFFER_STATE_EXECUTABLE)
         return AGC_ERROR_INVALID_STATE;
     result = agcValidateCommandLabelWaits(queue, command_buffer);
+    if (result != AGC_OK)
+        return result;
+    result = agcValidateBatchLabelSignalOrder(&command_buffer, 1u);
     if (result != AGC_OK)
         return result;
     result = agcValidateSubmissionTransitions(&command_buffer, 1u);

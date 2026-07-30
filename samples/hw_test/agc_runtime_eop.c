@@ -29,6 +29,10 @@
 #define AGC_IMAGE_HANDOFF 0
 #endif
 
+#ifndef AGC_TIMELINE_WAIT
+#define AGC_TIMELINE_WAIT 0
+#endif
+
 enum { kCompletionTimeoutNs = 200000000u };
 
 static void report_result(const char *operation, int32_t result)
@@ -53,6 +57,9 @@ int main(void)
     AgcResourceTransition transition = AGC_RESOURCE_TRANSITION_INIT;
     AgcResourceTransition handoff = AGC_RESOURCE_TRANSITION_V2_INIT;
     AgcRuntimeInfo runtime_info = AGC_RUNTIME_INFO_INIT;
+#if AGC_TIMELINE_WAIT
+    AgcGpuLabelInfo label_info = AGC_GPU_LABEL_INFO_INIT;
+#endif
     AgcDevice device = NULL;
     AgcQueue compute_queue = NULL;
     AgcQueue graphics_queue = NULL;
@@ -214,6 +221,25 @@ int main(void)
     if (result != AGC_OK)
         goto cleanup;
     signal_submitted = true;
+#if AGC_TIMELINE_WAIT
+    result = agcWaitGpuLabel(label, 1u, kCompletionTimeoutNs);
+    report_result("agcWaitGpuLabel(1)", result);
+    if (result != AGC_OK)
+        goto cleanup;
+    result = agcGetGpuLabelStatus(label, 1u);
+    report_result("agcGetGpuLabelStatus(1)", result);
+    if (result != AGC_OK)
+        goto cleanup;
+    result = agcGetGpuLabelInfo(label, &label_info);
+    report_result("agcGetGpuLabelInfo(timeline)", result);
+    if (result != AGC_OK || label_info.scheduled_value != 1u ||
+        label_info.observed_value < 1u || label_info.last_wait_value != 1u ||
+        label_info.last_wait_result != AGC_OK) {
+        puts("TIMELINE_WAIT FAIL");
+        goto cleanup;
+    }
+    puts("TIMELINE_WAIT PASS");
+#endif
     queue_desc.type = kAgcQueueGraphics;
     result = agcCreateQueue(device, &queue_desc, &graphics_queue);
     report_result("agcCreateQueue(graphics)", result);

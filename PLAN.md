@@ -470,8 +470,9 @@ The first synchronization step is implemented as runtime API v5:
 expected and observed marker, timeout count/deadline/result, and profile
 snapshot. Generic coverage exercises unsignaled and timeout cases; artifact
 `bd8545c05a7683bf4fb0c69e7c925317488ba7fd60e455ef7e1ecf715b477c9d` confirms
-the completed public-compute snapshot on exact FW 5.50. Submit wait/signal
-lists, timelines, and cross-queue work stay open.
+the completed public-compute snapshot on exact FW 5.50. Later entries add
+submit wait/signal lists, timeline-style labels, and qualified cross-queue
+handoffs.
 
 The first submit fan-in path is also established: graphics `AgcSubmitInfo`
 batches of 2–63 distinct nonempty command buffers use one recovered direct
@@ -650,8 +651,20 @@ image is fragmented. Partial queue-ownership handoffs and HTILE transitions
 remain open. See
 `analysis/runtime_image_subresource_states_host_20260731.md`.
 
-The pending FW 5.50 presentation ladder and retirement stress now have one
-shared fail-closed runner. All six Make targets pin the current artifact hash,
+Runtime API v19 completes the bounded host-facing timeline behavior of
+`AgcGpuLabel`. `agcGetGpuLabelStatus` and `agcWaitGpuLabel` use monotonic
+observed-value comparison, reject unscheduled future points, and never accept
+an infinite deadline. The v2 diagnostic snapshot adds the last wait point,
+result, timeout count, and deadline while preserving the 104-byte v1 prefix.
+Command-local and ordered-batch signal sequences are revalidated against the
+latest committed point before submission, and `UINT32_MAX` is terminal rather
+than wrapping. The generic suite covers transactional rejection and final
+publication; the cleanup-first FW 5.50 artifact is pinned pending reachable
+websrv. See `analysis/runtime_gpu_label_timeline_host_20260731.md`.
+
+The pending FW 5.50 presentation ladder, retirement stress, and timeline wait
+now have one shared fail-closed runner. All seven Make targets pin the current
+artifact hash,
 launch the process-cleanup ELF first, verify service recovery, require exact
 firmware/verdict/device-teardown lines, reject error text and transport
 timeouts, and recheck websrv afterward. Its host mock proves hash mismatch and

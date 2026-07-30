@@ -402,42 +402,42 @@ agc_runtime_present_stage4.elf: agc_runtime_present.c gpu_credentials.h $(OPENAG
 deploy_agc_runtime_present_stage0: agc_runtime_present.elf
 	PS5_HOST=$(PS5_HOST) RUNTIME_ARTIFACT=$(THIS_DIR)/$< \
 		EXPECTED_FW_ABI=0x0550 \
-		EXPECTED_ARTIFACT_SHA256=bbd76f6db486b68c38d9e95250e46bb9574bca80874c4491097851d049b0d589 \
+		EXPECTED_ARTIFACT_SHA256=f537aa1eebde8e876cef1a5db0c2247a5cd02e36e44cbb4c072f870f6cc1a999 \
 		EXPECTED_VERDICT='PRESENT_STAGE_0 PASS' REMOTE_NAME=openagc_present_stage0 \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_runtime_guarded.sh
 
 deploy_agc_runtime_present_stage1: agc_runtime_present_stage1.elf
 	PS5_HOST=$(PS5_HOST) RUNTIME_ARTIFACT=$(THIS_DIR)/$< \
 		EXPECTED_FW_ABI=0x0550 \
-		EXPECTED_ARTIFACT_SHA256=39e3c80223cbc1ef592965d0b7b9acaf1a833e2d56ba8eaa958d710628936d34 \
+		EXPECTED_ARTIFACT_SHA256=f49a68056a59d4a4f76226cf7fccedbc35f806ef42ee5b8b40dc635b450507d5 \
 		EXPECTED_VERDICT='PRESENT_STAGE_1 PASS' REMOTE_NAME=openagc_present_stage1 \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_runtime_guarded.sh
 
 deploy_agc_runtime_present_stage2: agc_runtime_present_stage2.elf
 	PS5_HOST=$(PS5_HOST) RUNTIME_ARTIFACT=$(THIS_DIR)/$< \
 		EXPECTED_FW_ABI=0x0550 \
-		EXPECTED_ARTIFACT_SHA256=c40b19666b6a46f5179461fc848b15cf95a5722d24e77bc073b3cbdea39fbbf3 \
+		EXPECTED_ARTIFACT_SHA256=aa1ef9d0ad56cec29d45281625f9bf866eb4e4e769c9eb16ea96f8da1d723c0a \
 		EXPECTED_VERDICT='PRESENT_STAGE_2 PASS' REMOTE_NAME=openagc_present_stage2 \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_runtime_guarded.sh
 
 deploy_agc_runtime_present_stage3: agc_runtime_present_stage3.elf
 	PS5_HOST=$(PS5_HOST) RUNTIME_ARTIFACT=$(THIS_DIR)/$< \
 		EXPECTED_FW_ABI=0x0550 \
-		EXPECTED_ARTIFACT_SHA256=f4d84087c66ac18b503c70e7cc142753c88dfce85d5bc35699999ded80845c93 \
+		EXPECTED_ARTIFACT_SHA256=c2c6505b6bdb801a81b923ddaceeae1313301782ade9bf2c2d32e44a7b0f22e3 \
 		EXPECTED_VERDICT='PRESENT_STAGE_3 PASS' REMOTE_NAME=openagc_present_stage3 \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_runtime_guarded.sh
 
 deploy_agc_runtime_present_stage4: agc_runtime_present_stage4.elf
 	PS5_HOST=$(PS5_HOST) RUNTIME_ARTIFACT=$(THIS_DIR)/$< \
 		EXPECTED_FW_ABI=0x0550 \
-		EXPECTED_ARTIFACT_SHA256=f32f21e7182d12c98d3a3733beb68bfddcb232409b86fbcb6a9d0248b5ca557b \
+		EXPECTED_ARTIFACT_SHA256=77894021978e59679b3f5d47ac7d17acdb79b2e019c9304fe9be96b84546e11c \
 		EXPECTED_VERDICT='PRESENT_STAGE_4 PASS' REMOTE_NAME=openagc_present_stage4 \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_runtime_guarded.sh
 
 deploy_agc_runtime_retirement_stress: agc_runtime_retirement_stress.elf
 	PS5_HOST=$(PS5_HOST) RUNTIME_ARTIFACT=$(THIS_DIR)/$< \
 		EXPECTED_FW_ABI=0x0550 \
-		EXPECTED_ARTIFACT_SHA256=a9556b6c53a80a65db620bac07d19904fc657b68408ea3850585efb39c338c97 \
+		EXPECTED_ARTIFACT_SHA256=228f3089699a4f1339b80c7942a7ef613708e83825edbf6264776f5a8c2cf509 \
 		EXPECTED_VERDICT='BATCH_RETIREMENT_STRESS PASS' \
 		REMOTE_NAME=openagc_retirement_stress \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_runtime_guarded.sh
@@ -446,6 +446,19 @@ deploy_agc_runtime_retirement_stress: agc_runtime_retirement_stress.elf
 # commands; agcQueueSubmit supplies the runtime-owned EOP fence packet.
 agc_runtime_eop.elf: agc_runtime_eop.c gpu_credentials.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -o $@ agc_runtime_eop.c $(AGC_LDFLAGS)
+
+agc_runtime_timeline_wait.elf: agc_runtime_eop.c gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_TIMELINE_WAIT=1 -DAGC_SELF_TERMINATE=1 \
+		-o $@ agc_runtime_eop.c $(AGC_LDFLAGS)
+
+.PHONY: deploy_agc_runtime_timeline_wait
+deploy_agc_runtime_timeline_wait: agc_runtime_timeline_wait.elf
+	PS5_HOST=$(PS5_HOST) RUNTIME_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_FW_ABI=0x0550 \
+		EXPECTED_ARTIFACT_SHA256=b4ab3e83b7a81ae220cfc0ccae5e652aa14b682ef30154d829f2d1e78cfca6ce \
+		EXPECTED_VERDICT='TIMELINE_WAIT PASS' \
+		REMOTE_NAME=openagc_timeline_wait \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_runtime_guarded.sh
 
 # Exact image-resource variant of the bounded cross-queue EOP handoff oracle.
 agc_runtime_image_handoff.elf: agc_runtime_eop.c gpu_credentials.h $(OPENAGC_LIB)

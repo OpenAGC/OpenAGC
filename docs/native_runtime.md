@@ -27,6 +27,9 @@ handoff protocol, carrying an explicit GPU-label dependency without exposing
 raw synchronization addresses or cache-control bits.
 Runtime API v9 adds version-2 `AgcSubmitInfo` wait/signal lists through typed
 `AgcGpuLabelPoint` entries while preserving the accepted 56-byte v1 prefix.
+Runtime API v19 adds bounded host status/wait operations for monotonic label
+points and a v2 `AgcGpuLabelInfo` diagnostic tail while preserving its
+104-byte v1 prefix.
 OpenAGC rejects unknown versions, nonzero flags, or nonzero reserved fields
 without partial object or command creation.
 
@@ -249,15 +252,27 @@ the graphics or compute queue; queue ownership still requires the explicit
 resource handoff described below.
 This avoids an unbounded wait from an unproved dependency. Signal values are
 strictly increasing 32-bit timeline points: `UINT32_MAX` is terminal and never
-wraps, while a repeated or lower value is rejected before PM4 mutation. This
-prevents a wait from passing on stale memory. The exact graphics/compute label
+wraps, while a repeated or lower value is rejected before PM4 mutation.
+Command-local tentative signals and ordered multi-DCB signals are revalidated
+against the latest submitted point, so stale recordings cannot publish a
+decreasing counter. This prevents a wait from passing on stale memory. The
+exact graphics/compute label
 carrier and single-command submit lists are hardware-qualified on FW 5.50;
 event objects remain unsupported.
 
-`agcGetGpuLabelInfo` snapshots its most recently submitted timeline point,
-the CPU-observed label word, producer queue/submission identity, and the
-selected firmware profile. It is intended for bounded diagnostics, not polling
-as a replacement for a fence wait.
+`agcGetGpuLabelStatus(label, value)` succeeds when the CPU-observed word is at
+or beyond an already-scheduled point. `agcWaitGpuLabel` applies the same
+monotonic comparison with a mandatory finite nanosecond deadline; waiting for
+an unscheduled future point or passing `AGC_RUNTIME_INFINITE_TIMEOUT` fails
+immediately. On PS5, the bounded wait uses the latest scheduled exact 32-bit
+word and then rechecks the monotonic target, so it does not change the
+hardware-qualified GPU equality-wait packet.
+
+`agcGetGpuLabelInfo` snapshots the most recently submitted timeline point, the
+CPU-observed label word, producer queue/submission identity, and selected
+firmware profile. Its v2 tail also reports the last host wait target/result,
+timeout count, and last finite deadline. The v1 104-byte prefix remains
+accepted.
 
 ## Fences and errors
 

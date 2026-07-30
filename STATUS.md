@@ -114,8 +114,10 @@ member batch is validated as one queue-owned frame and receives one bounded
 fence, with every member retained until that fence completes. Artifact
 `30564bfdd87de4c89e575a03b7456aad57a2ca72af174aa41d1598a20322142b` passed
 the two-DCB MRT/readback/reset/teardown oracle on exact FW 5.50. Empty members,
-timelines, and broader cross-queue transfer rows remain fail-closed or
-unqualified. Graphics-batch submit lists are hardware-qualified on exact FW
+and broader cross-queue transfer rows remain fail-closed or unqualified.
+Timeline-style label host waits are host-qualified and have a pinned FW 5.50
+gate pending reachable websrv. Graphics-batch submit lists are
+hardware-qualified on exact FW
 5.50 for a two-nonempty-DCB graphics batch with a first-DCB wait and final-DCB
 signal, artifact
 `32112756c2446146758409b1605fa8c55a6385d270f454af2cadcfb4262d054b`.
@@ -217,8 +219,18 @@ cross-queue ownership and HTILE transitions remain fail-closed. Clean generic
 coverage passes 16,680 assertions and CTest passes 7/7; Prospero compiles with
 no new warnings. See
 `analysis/runtime_image_subresource_states_host_20260731.md`.
-The pending FW 5.50 presentation stages and batch-retirement stress are now
-exposed only through six cleanup-first, SHA-256-pinned Make deployment targets.
+Runtime API v19 completes bounded host observation of monotonic GPU-label
+points. Status and finite waits succeed when the observed word reaches or
+passes an already-scheduled value; future unscheduled points and infinite
+deadlines fail closed. The v2 diagnostic tail preserves the 104-byte v1 prefix
+and reports the last wait target/result, timeout count, and deadline. Recording
+and ordered-batch submission reject repeat, decreasing, stale, and post-
+`UINT32_MAX` signals transactionally. Clean generic coverage passes 16,760
+assertions; the Prospero library and pinned timeline-wait artifact build with
+no new warnings. See `analysis/runtime_gpu_label_timeline_host_20260731.md`.
+The pending FW 5.50 presentation stages, batch-retirement stress, and timeline
+wait are now exposed only through seven cleanup-first, SHA-256-pinned Make
+deployment targets.
 The shared runner verifies firmware, exact verdict, error-free device teardown,
 transport completion, and post-run service health. A host mock locks successful
 flow plus hash/verdict failure paths; CTest passes 7/7 suites. See
