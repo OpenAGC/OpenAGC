@@ -7,8 +7,9 @@ compute helpers, and a direct PS5 `/dev/gc` backend without proprietary SDK
 headers.
 
 The project targets PS5's Oberon GPU (`gfx1013`, a custom RDNA2/GFX10 part).
-It is written in C, licensed under Apache 2.0, and keeps the generic host build
-dependent only on libc.
+It is written in C, licensed under Apache 2.0, and keeps the generic host
+validation harness dependent only on libc. The generic build validates the PS5
+contract using host memory; it is not a non-PS5 GPU backend.
 
 > [!IMPORTANT]
 > OpenAGC is an experimental homebrew GPU stack, not a complete official-SDK
@@ -20,7 +21,7 @@ dependent only on libc.
 | Area | Current state |
 | --- | --- |
 | Low-level AGC compatibility | Implemented for the mapped `sceAgc*`, driver, cursor, packet, shader, queue, and submit surfaces |
-| Host backend | Generic software backend with complete native-runtime and low-level regression tests across six CTest suites |
+| Host validation | Generic host-memory harness for native-runtime and low-level regression tests across six CTest suites; it is not a GPU backend |
 | PS5 backend | Native `/dev/gc` implementation built with ps5-payload-sdk |
 | Hardware evidence | Qualified subsets on standard PS5 FW 5.50 and FW 11.60 |
 | Firmware profiles | 39 exact active ABI keys from FW 3.20 through FW 12.70; untested profiles remain hardware-unverified |
@@ -124,15 +125,17 @@ records and hashes, and creates fail-closed graphics and compute pipelines.
 Applications query capabilities rather than branching on firmware.
 
 Heap suballocation and fence-keyed deferred retirement are implemented.
-Reflected Wave32 VS/PS and compute pipelines cache qualified gfx1013 bind and
-dispatch groups on the generic backend. Typed descriptor arrays, reflected
+Reflected Wave32 graphics/compute pipelines cache qualified gfx1013 bind and
+dispatch groups that the generic host harness validates. Typed descriptor arrays, reflected
 vertex tables, push constants, and declared viewport/scissor/blend/stencil-
 reference/depth-bias dynamic state are recorded through the command buffer;
 draw and dispatch fail until every reflected requirement is bound. Versioned
 depth/stencil state covers depth bounds and independent front/back stencil
 operations/masks; unqualified alpha-to-coverage and alpha-to-one fail closed.
-Broader graphics stages, transitions, capture, presentation, and Prospero queue
-submission remain ordered follow-on work. See
+Unsupported graphics forms, transitions, capture, and presentation remain
+ordered follow-on work. The native Prospero queue bridge is intentionally
+limited to the qualified direct carriers and a runtime completion fence; it
+does not make the host harness a hardware substitute. See
 [docs/native_runtime.md](docs/native_runtime.md) for lifecycle rules,
 [docs/shader_pipelines.md](docs/shader_pipelines.md) for the reflection and
 pipeline contract, and [PLAN.md](PLAN.md) for the remaining dependency order.
@@ -207,7 +210,7 @@ probes must not be rerun without new offline evidence.
 
 ## Build and Test
 
-### Generic host backend
+### Generic host validation harness
 
 Requirements: a C compiler, CMake 3.15 or newer, and libc.
 
@@ -223,7 +226,7 @@ ctest --test-dir build --output-on-failure
 Expected result:
 
 ```text
-13720 passed, 0 failed
+14214 passed, 0 failed
 ```
 
 The Make workflow is equivalent:
