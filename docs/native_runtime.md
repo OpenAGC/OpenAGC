@@ -10,10 +10,11 @@ compatibility API, which remains available for diagnostics and expert use.
 ## Versioning and validation
 
 Every input and output descriptor starts with `struct_size` and `version`.
-Initialize v1 structures with their `AGC_*_INIT` macro. OpenAGC accepts the
-exact v1 size and version and rejects unknown versions, nonzero flags, or
-nonzero reserved fields without partial object or command creation. Future
-versions can extend the contract without exposing private object layouts.
+Initialize structures with their `AGC_*_INIT` macro. Runtime API v2 extends
+shader and pipeline descriptors with the shared reflection contract while
+preserving the accepted v1 shader prefix for legacy host-only fixtures.
+OpenAGC rejects unknown versions, nonzero flags, or nonzero reserved fields
+without partial object or command creation.
 
 All public entry points use `PS5_SYSV_ABI`. Handles are opaque pointers; an
 application must not inspect, copy, allocate, or free their storage. Optional
@@ -103,17 +104,36 @@ exact-firmware hardware qualification. Unknown profiles fail during device
 creation through the existing exact firmware registry. Applications branch on
 capabilities, never on `firmware_version` or `firmware_abi_key`.
 
+## Shader and pipeline validation
+
+Runtime API v2 consumes pointer-free `AgcShaderReflection` records shared with
+`openagc-psbc` API v14. Shader creation checks the reflection version, compiler
+and shader-record versions, stage, entry point, FNV-1a hash, serialized record
+type, executable offsets, descriptor and push layouts, SGPR records, vertex
+inputs, color exports, wave size, scratch/LDS, and stage-specific limits before
+allocating a live shader object. `agcGetShaderReflection` returns the validated
+copy owned by the shader.
+
+Graphics pipeline creation currently supports reflected gfx1013 NGG vertex
+plus Wave32 pixel shaders. It validates stage linkage, exact vertex and
+resource layouts, color export count/class/width/write masks, integer blending,
+depth/stencil requirements, sample count, and supported fixed-function state.
+Compute pipelines validate Wave32, threadgroup size, descriptor/push layout,
+scratch, and LDS limits. Rejected objects are returned as `NULL`; failed binds
+leave the command cursor unchanged. Immutable qualified register groups are
+cached in the pipeline. See [shader_pipelines.md](shader_pipelines.md).
+
 ## Current qualification boundary
 
-The complete object lifecycle, validation, finite fence, compute recording,
-and indexed-graphics recording path is host-qualified through the generic
-backend. The same public header and implementation compile without warnings
-for Prospero, and device creation owns exact backend selection, caller default
-version, internal memory, and default-state initialization.
+The complete object lifecycle, validation, finite fence, memory/resource,
+reflected pipeline validation, compute dispatch recording, and indexed-graphics
+recording path is host-qualified through the generic backend. The same public
+header and implementation compile for Prospero, and device creation owns exact
+backend selection, caller default version, internal memory, and default-state
+initialization.
 
 Prospero `agcQueueSubmit` currently returns `AGC_ERROR_NOT_SUPPORTED` before
-GPU mutation. A native pipeline does not emit hardware shader/attachment binds
-until compiler reflection and pipeline compatibility validation land. This is
-intentional fail-closed behavior: submitting a draw or dispatch without that
-state would be unsafe. Hardware promotion belongs to the reflection/pipeline
-milestone, not to this host-qualified API-contract milestone.
+GPU mutation. Descriptor/push resource binding and the broader graphics-stage
+and dynamic-state surface also remain fail-closed. The reflected pipeline path
+is host-tested and is not hardware-qualified; hardware testing is a separate,
+explicit promotion gate.

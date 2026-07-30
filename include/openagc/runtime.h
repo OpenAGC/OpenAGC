@@ -13,13 +13,15 @@
 
 #include "agc_error.h"
 #include "agc_types.h"
+#include "openagc/shader_reflection.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define AGC_RUNTIME_API_VERSION 1u
+#define AGC_RUNTIME_API_VERSION 2u
 #define AGC_RUNTIME_STRUCTURE_VERSION_1 1u
+#define AGC_RUNTIME_STRUCTURE_VERSION_2 2u
 #define AGC_RUNTIME_PROFILE_NAME_SIZE 48u
 #define AGC_RUNTIME_INFINITE_TIMEOUT UINT64_MAX
 
@@ -252,11 +254,163 @@ typedef struct AgcShaderDesc {
     const void *code;
     uint64_t code_size;
     uint64_t reserved[4];
+    const AgcShaderReflection *reflection;
+    const void *front_code;
+    uint64_t front_code_size;
 } AgcShaderDesc;
 
 #define AGC_SHADER_DESC_INIT \
-    { sizeof(AgcShaderDesc), AGC_RUNTIME_STRUCTURE_VERSION_1, \
-      kAgcShaderStageCs, 0u, NULL, 0u, {0u, 0u, 0u, 0u} }
+    { sizeof(AgcShaderDesc), AGC_RUNTIME_STRUCTURE_VERSION_2, \
+      kAgcShaderStageCs, 0u, NULL, 0u, {0u, 0u, 0u, 0u}, NULL, NULL, 0u }
+
+typedef enum AgcBlendFactor {
+    AGC_BLEND_FACTOR_ZERO = 0,
+    AGC_BLEND_FACTOR_ONE,
+    AGC_BLEND_FACTOR_SRC_COLOR,
+    AGC_BLEND_FACTOR_ONE_MINUS_SRC_COLOR,
+    AGC_BLEND_FACTOR_SRC_ALPHA,
+    AGC_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+    AGC_BLEND_FACTOR_DST_COLOR,
+    AGC_BLEND_FACTOR_ONE_MINUS_DST_COLOR,
+    AGC_BLEND_FACTOR_DST_ALPHA,
+    AGC_BLEND_FACTOR_ONE_MINUS_DST_ALPHA,
+    AGC_BLEND_FACTOR_CONSTANT_COLOR,
+    AGC_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR,
+    AGC_BLEND_FACTOR_CONSTANT_ALPHA,
+    AGC_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA,
+    AGC_BLEND_FACTOR_SRC_ALPHA_SATURATE,
+    AGC_BLEND_FACTOR_SRC1_COLOR,
+    AGC_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR,
+    AGC_BLEND_FACTOR_SRC1_ALPHA,
+    AGC_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA,
+    AGC_BLEND_FACTOR_COUNT
+} AgcBlendFactor;
+
+typedef enum AgcBlendOperation {
+    AGC_BLEND_OPERATION_ADD = 0,
+    AGC_BLEND_OPERATION_SUBTRACT,
+    AGC_BLEND_OPERATION_REVERSE_SUBTRACT,
+    AGC_BLEND_OPERATION_MIN,
+    AGC_BLEND_OPERATION_MAX,
+    AGC_BLEND_OPERATION_COUNT
+} AgcBlendOperation;
+
+typedef struct AgcColorBlendAttachmentState {
+    uint32_t struct_size;
+    uint32_t version;
+    uint32_t format;
+    uint32_t blend_enable;
+    uint32_t write_mask;
+    AgcBlendFactor source_color_factor;
+    AgcBlendFactor destination_color_factor;
+    AgcBlendOperation color_operation;
+    AgcBlendFactor source_alpha_factor;
+    AgcBlendFactor destination_alpha_factor;
+    AgcBlendOperation alpha_operation;
+    uint32_t flags;
+    uint64_t reserved[2];
+} AgcColorBlendAttachmentState;
+
+#define AGC_COLOR_BLEND_ATTACHMENT_STATE_INIT \
+    { sizeof(AgcColorBlendAttachmentState), AGC_RUNTIME_STRUCTURE_VERSION_1, \
+      0u, 0u, 0xfu, AGC_BLEND_FACTOR_ONE, AGC_BLEND_FACTOR_ZERO, \
+      AGC_BLEND_OPERATION_ADD, AGC_BLEND_FACTOR_ONE, AGC_BLEND_FACTOR_ZERO, \
+      AGC_BLEND_OPERATION_ADD, 0u, {0u, 0u} }
+
+typedef enum AgcPolygonMode {
+    AGC_POLYGON_MODE_FILL = 0,
+    AGC_POLYGON_MODE_LINE = 1,
+    AGC_POLYGON_MODE_POINT = 2,
+    AGC_POLYGON_MODE_COUNT
+} AgcPolygonMode;
+
+typedef enum AgcCullModeFlagBits {
+    AGC_CULL_MODE_NONE = 0,
+    AGC_CULL_MODE_FRONT_BIT = 1u << 0,
+    AGC_CULL_MODE_BACK_BIT = 1u << 1
+} AgcCullModeFlagBits;
+typedef uint32_t AgcCullModeFlags;
+
+typedef enum AgcFrontFace {
+    AGC_FRONT_FACE_COUNTER_CLOCKWISE = 0,
+    AGC_FRONT_FACE_CLOCKWISE = 1
+} AgcFrontFace;
+
+typedef struct AgcRasterizationState {
+    uint32_t struct_size;
+    uint32_t version;
+    AgcPolygonMode polygon_mode;
+    AgcCullModeFlags cull_mode;
+    AgcFrontFace front_face;
+    uint32_t depth_clamp_enable;
+    uint32_t rasterizer_discard_enable;
+    uint32_t depth_bias_enable;
+    float line_width;
+    uint32_t flags;
+    uint64_t reserved[3];
+} AgcRasterizationState;
+
+#define AGC_RASTERIZATION_STATE_INIT \
+    { sizeof(AgcRasterizationState), AGC_RUNTIME_STRUCTURE_VERSION_1, \
+      AGC_POLYGON_MODE_FILL, AGC_CULL_MODE_NONE, \
+      AGC_FRONT_FACE_COUNTER_CLOCKWISE, 0u, 0u, 0u, 1.0f, 0u, \
+      {0u, 0u, 0u} }
+
+typedef enum AgcCompareOperation {
+    AGC_COMPARE_OPERATION_NEVER = 0,
+    AGC_COMPARE_OPERATION_LESS,
+    AGC_COMPARE_OPERATION_EQUAL,
+    AGC_COMPARE_OPERATION_LESS_OR_EQUAL,
+    AGC_COMPARE_OPERATION_GREATER,
+    AGC_COMPARE_OPERATION_NOT_EQUAL,
+    AGC_COMPARE_OPERATION_GREATER_OR_EQUAL,
+    AGC_COMPARE_OPERATION_ALWAYS,
+    AGC_COMPARE_OPERATION_COUNT
+} AgcCompareOperation;
+
+typedef struct AgcDepthStencilPipelineState {
+    uint32_t struct_size;
+    uint32_t version;
+    uint32_t format;
+    uint32_t depth_test_enable;
+    uint32_t depth_write_enable;
+    AgcCompareOperation depth_compare_operation;
+    uint32_t depth_bounds_enable;
+    uint32_t stencil_test_enable;
+    uint32_t flags;
+    uint32_t reserved0;
+    uint64_t reserved[3];
+} AgcDepthStencilPipelineState;
+
+#define AGC_DEPTH_STENCIL_PIPELINE_STATE_INIT \
+    { sizeof(AgcDepthStencilPipelineState), \
+      AGC_RUNTIME_STRUCTURE_VERSION_1, 0u, 0u, 0u, \
+      AGC_COMPARE_OPERATION_ALWAYS, 0u, 0u, 0u, 0u, {0u, 0u, 0u} }
+
+typedef struct AgcMultisampleState {
+    uint32_t struct_size;
+    uint32_t version;
+    uint32_t rasterization_samples;
+    uint32_t sample_shading_enable;
+    float minimum_sample_shading;
+    uint32_t alpha_to_coverage_enable;
+    uint32_t alpha_to_one_enable;
+    uint32_t flags;
+    uint64_t reserved[2];
+} AgcMultisampleState;
+
+#define AGC_MULTISAMPLE_STATE_INIT \
+    { sizeof(AgcMultisampleState), AGC_RUNTIME_STRUCTURE_VERSION_1, \
+      1u, 0u, 0.0f, 0u, 0u, 0u, {0u, 0u} }
+
+typedef enum AgcDynamicStateFlagBits {
+    AGC_DYNAMIC_STATE_VIEWPORT_BIT = 1u << 0,
+    AGC_DYNAMIC_STATE_SCISSOR_BIT = 1u << 1,
+    AGC_DYNAMIC_STATE_BLEND_CONSTANTS_BIT = 1u << 2,
+    AGC_DYNAMIC_STATE_STENCIL_REFERENCE_BIT = 1u << 3,
+    AGC_DYNAMIC_STATE_DEPTH_BIAS_BIT = 1u << 4
+} AgcDynamicStateFlagBits;
+typedef uint32_t AgcDynamicStateFlags;
 
 typedef struct AgcGraphicsPipelineDesc {
     uint32_t struct_size;
@@ -266,11 +420,30 @@ typedef struct AgcGraphicsPipelineDesc {
     uint32_t flags;
     uint32_t reserved0;
     uint64_t reserved[4];
+    AgcShader tessellation_control_shader;
+    AgcShader tessellation_evaluation_shader;
+    AgcShader geometry_shader;
+    const AgcShaderVertexInput *vertex_inputs;
+    uint32_t vertex_input_count;
+    uint32_t descriptor_mapping_count;
+    const AgcShaderDescriptorMapping *descriptor_mappings;
+    uint32_t push_constant_range_count;
+    uint32_t color_attachment_count;
+    const AgcShaderPushConstantRange *push_constant_ranges;
+    const AgcColorBlendAttachmentState *color_attachments;
+    const AgcRasterizationState *rasterization;
+    const AgcDepthStencilPipelineState *depth_stencil;
+    const AgcMultisampleState *multisample;
+    AgcDynamicStateFlags dynamic_state_mask;
+    uint32_t reserved1;
+    uint64_t reserved2[4];
 } AgcGraphicsPipelineDesc;
 
 #define AGC_GRAPHICS_PIPELINE_DESC_INIT \
-    { sizeof(AgcGraphicsPipelineDesc), AGC_RUNTIME_STRUCTURE_VERSION_1, \
-      NULL, NULL, 0u, 0u, {0u, 0u, 0u, 0u} }
+    { sizeof(AgcGraphicsPipelineDesc), AGC_RUNTIME_STRUCTURE_VERSION_2, \
+      NULL, NULL, 0u, 0u, {0u, 0u, 0u, 0u}, NULL, NULL, NULL, NULL, \
+      0u, 0u, NULL, 0u, 0u, NULL, NULL, NULL, NULL, NULL, 0u, 0u, \
+      {0u, 0u, 0u, 0u} }
 
 typedef struct AgcComputePipelineDesc {
     uint32_t struct_size;
@@ -281,11 +454,17 @@ typedef struct AgcComputePipelineDesc {
     uint32_t local_size_z;
     uint32_t flags;
     uint64_t reserved[4];
+    uint32_t descriptor_mapping_count;
+    uint32_t push_constant_range_count;
+    const AgcShaderDescriptorMapping *descriptor_mappings;
+    const AgcShaderPushConstantRange *push_constant_ranges;
+    uint64_t reserved2[4];
 } AgcComputePipelineDesc;
 
 #define AGC_COMPUTE_PIPELINE_DESC_INIT \
-    { sizeof(AgcComputePipelineDesc), AGC_RUNTIME_STRUCTURE_VERSION_1, NULL, \
-      1u, 1u, 1u, 0u, {0u, 0u, 0u, 0u} }
+    { sizeof(AgcComputePipelineDesc), AGC_RUNTIME_STRUCTURE_VERSION_2, NULL, \
+      1u, 1u, 1u, 0u, {0u, 0u, 0u, 0u}, 0u, 0u, NULL, NULL, \
+      {0u, 0u, 0u, 0u} }
 
 typedef enum AgcCommandBufferState {
     AGC_COMMAND_BUFFER_STATE_INITIAL = 0,
@@ -319,6 +498,8 @@ typedef struct AgcFenceDesc {
 typedef enum AgcFormat {
     AGC_FORMAT_UNDEFINED = 0,
     AGC_FORMAT_RGBA8_UNORM = 56,
+    AGC_FORMAT_BGRA8_UNORM = 57,
+    AGC_FORMAT_RGBA8_SRGB = 58,
     AGC_FORMAT_BC1_UNORM = 169,
     AGC_FORMAT_BC1_SRGB = 170,
     AGC_FORMAT_BC2_UNORM = 171,
@@ -337,7 +518,13 @@ typedef enum AgcFormat {
     AGC_FORMAT_D32_FLOAT = 257,
     AGC_FORMAT_S8_UINT = 258,
     AGC_FORMAT_D16_UNORM_S8_UINT = 259,
-    AGC_FORMAT_D32_FLOAT_S8_UINT = 260
+    AGC_FORMAT_D32_FLOAT_S8_UINT = 260,
+    AGC_FORMAT_RGBA16_FLOAT = 512,
+    AGC_FORMAT_RGBA32_FLOAT = 513,
+    AGC_FORMAT_RGBA16_UINT = 514,
+    AGC_FORMAT_RGBA16_SINT = 515,
+    AGC_FORMAT_RGBA32_UINT = 516,
+    AGC_FORMAT_RGBA32_SINT = 517
 } AgcFormat;
 
 typedef enum AgcMemoryHeap {
@@ -473,12 +660,20 @@ _Static_assert(sizeof(AgcImageViewDesc) == 72u,
     "AgcImageViewDesc v1 size mismatch");
 _Static_assert(sizeof(AgcSamplerDesc) == 64u,
     "AgcSamplerDesc v1 size mismatch");
-_Static_assert(sizeof(AgcShaderDesc) == 64u,
-    "AgcShaderDesc v1 size mismatch");
-_Static_assert(sizeof(AgcGraphicsPipelineDesc) == 64u,
-    "AgcGraphicsPipelineDesc v1 size mismatch");
-_Static_assert(sizeof(AgcComputePipelineDesc) == 64u,
-    "AgcComputePipelineDesc v1 size mismatch");
+_Static_assert(sizeof(AgcShaderDesc) == 88u,
+    "AgcShaderDesc v2 size mismatch");
+_Static_assert(sizeof(AgcColorBlendAttachmentState) == 64u,
+    "AgcColorBlendAttachmentState v1 size mismatch");
+_Static_assert(sizeof(AgcRasterizationState) == 64u,
+    "AgcRasterizationState v1 size mismatch");
+_Static_assert(sizeof(AgcDepthStencilPipelineState) == 64u,
+    "AgcDepthStencilPipelineState v1 size mismatch");
+_Static_assert(sizeof(AgcMultisampleState) == 48u,
+    "AgcMultisampleState v1 size mismatch");
+_Static_assert(sizeof(AgcGraphicsPipelineDesc) == 200u,
+    "AgcGraphicsPipelineDesc v2 size mismatch");
+_Static_assert(sizeof(AgcComputePipelineDesc) == 120u,
+    "AgcComputePipelineDesc v2 size mismatch");
 _Static_assert(sizeof(AgcCommandBufferDesc) == 48u,
     "AgcCommandBufferDesc v1 size mismatch");
 _Static_assert(sizeof(AgcFenceDesc) == 48u,
@@ -532,6 +727,8 @@ int32_t PS5_SYSV_ABI agcDestroySampler(AgcSampler sampler);
 int32_t PS5_SYSV_ABI agcCreateShader(
     AgcDevice device, const AgcShaderDesc *desc, AgcShader *shader_out);
 int32_t PS5_SYSV_ABI agcDestroyShader(AgcShader shader);
+int32_t PS5_SYSV_ABI agcGetShaderReflection(
+    AgcShader shader, AgcShaderReflection *reflection);
 int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
     const AgcGraphicsPipelineDesc *desc, AgcGraphicsPipeline *pipeline_out);
 int32_t PS5_SYSV_ABI agcDestroyGraphicsPipeline(AgcGraphicsPipeline pipeline);

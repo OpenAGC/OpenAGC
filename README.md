@@ -114,20 +114,23 @@ OpenAGC targets only the PS5 GPU. The API uses opaque:
 - `AgcShader`, `AgcGraphicsPipeline`, and `AgcComputePipeline`
 - `AgcCommandBuffer` and `AgcFence`
 
-The implemented first contract includes versioned descriptors, reserved-zero
+The implemented native contract includes versioned descriptors, reserved-zero
 validation, optional allocation callbacks, explicit parent/child ownership,
 command-buffer state validation, finite binary-fence waits, capability and
 qualification reporting through `agcGetRuntimeInfo`, and generic compute plus
-indexed-graphics submission recording. Applications query capabilities rather
-than branching on firmware.
+indexed-graphics submission recording. Version 2 also consumes the shared
+`AgcShaderReflection` emitted by `openagc-psbc`, verifies serialized shader
+records and hashes, and creates fail-closed graphics and compute pipelines.
+Applications query capabilities rather than branching on firmware.
 
-Heap suballocation, shader reflection, validated hardware pipeline binding,
-resource transitions, deferred retirement, capture, and presentation remain
-ordered follow-on milestones. Native Prospero submission fails closed until a
-pipeline can emit a complete reflected hardware bind; the object contract and
-public headers already build unchanged for generic and Prospero. See
-[docs/native_runtime.md](docs/native_runtime.md) for lifecycle rules and
-[PLAN.md](PLAN.md) for the remaining dependency order.
+Heap suballocation and fence-keyed deferred retirement are implemented.
+Reflected Wave32 VS/PS and compute pipelines cache qualified gfx1013 bind and
+dispatch groups on the generic backend. Descriptor/push binding, broader
+graphics stages and states, transitions, capture, presentation, and Prospero
+queue submission remain ordered follow-on work. See
+[docs/native_runtime.md](docs/native_runtime.md) for lifecycle rules,
+[docs/shader_pipelines.md](docs/shader_pipelines.md) for the reflection and
+pipeline contract, and [PLAN.md](PLAN.md) for the remaining dependency order.
 
 ### Sibling projects
 
@@ -178,9 +181,9 @@ The exact scope, exclusions, hashes, and per-firmware results are recorded in
 ### Portability gate
 
 Production code contains no compile-time expected-firmware selector. The
-pinned firmware-neutral portability ELF has passed twice on FW 11.60. Its
-hash-identical FW 5.50 replay remains the outstanding one-binary product gate.
-The FW 5.50 and FW 11.60 cleanup-stress prerequisites are complete.
+pinned firmware-neutral portability ELF passed twice as identical bytes on
+both FW 5.50 and FW 11.60 after their cleanup-stress prerequisites. Its exact
+hash remains the regression gate recorded in [STATUS.md](STATUS.md).
 
 The FW 11.60 workload operation remains fail-closed: all known packet forms
 returned from submission but stalled before ordered GPU markers. Closed failed
@@ -215,7 +218,7 @@ ctest --test-dir build --output-on-failure
 Expected result:
 
 ```text
-13614 passed, 0 failed
+13720 passed, 0 failed
 ```
 
 The Make workflow is equivalent:

@@ -249,6 +249,14 @@ passes 13,614 assertions. See `docs/memory_resources.md`.
 
 ### Milestone 3: reflection and validated pipeline objects
 
+Host slice implemented on 2026-07-30: shared reflection ABI/API v14,
+serialized-record and hash validation, reflected basic graphics/compute
+pipelines, cached qualified bind/dispatch groups, and a compatibility matrix
+with zero-command negative fixtures. The full generic suite reports 13,720
+passed. Descriptor/push binding, the remaining declared dynamic and fixed
+state, tessellation/geometry packaging, and any explicit PS5 hardware
+promotion remain open; do not label this milestone complete yet.
+
 Version `AgcShaderRecord` metadata as a contract shared by `openagc-psbc` and
 the runtime. Extend reflection only from compiler- or firmware-backed facts;
 do not infer layouts from application convention.

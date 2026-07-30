@@ -9,6 +9,7 @@
 #include "agc_driver_debug.h"
 #include "agc_graphics.h"
 #include "agc_pm4.h"
+#include "agc_registers.h"
 #include "agc_texture.h"
 #include "openagc/runtime.h"
 
@@ -23,18 +24,128 @@ static AgcDevice create_device(void)
     return device;
 }
 
-static AgcShader create_shader(AgcDevice device, AgcShaderStage stage)
+typedef struct RuntimeShaderFixture {
+    AgcShaderRecord record;
+    AgcShaderSpecials specials;
+    AgcRegisterValue sh_registers[3];
+    AgcRegisterValue cx_registers[1];
+    uint8_t code_padding[80];
+    uint32_t code[4];
+} RuntimeShaderFixture;
+
+_Static_assert(offsetof(RuntimeShaderFixture, code) == 256u,
+    "runtime shader fixture code must be program-aligned");
+
+static uint64_t shader_fixture_hash(const void *data, size_t size)
 {
-    static const uint32_t code[] = {0xBF810000u, 0u, 0u, 0u};
+    const uint8_t *bytes = data;
+    uint64_t hash = UINT64_C(14695981039346656037);
+
+    for (size_t i = 0u; i < size; ++i) {
+        hash ^= bytes[i];
+        hash *= UINT64_C(1099511628211);
+    }
+    return hash;
+}
+
+static AgcShader create_shader_with_reflection(AgcDevice device,
+    AgcShaderStage stage, const AgcShaderReflection *requirements)
+{
+    RuntimeShaderFixture binary = {0};
+    AgcShaderReflection reflection = AGC_SHADER_REFLECTION_INIT;
     AgcShaderDesc desc = AGC_SHADER_DESC_INIT;
     AgcShader shader = NULL;
 
+    if (requirements)
+        reflection = *requirements;
+    binary.record.magic = AGC_SHADER_RECORD_MAGIC;
+    binary.record.version = AGC_SHADER_RECORD_VERSION_GEN5;
+    binary.record.code = offsetof(RuntimeShaderFixture, code);
+    if (stage == kAgcShaderStageCs) {
+        binary.record.shader_type = kAgcShaderTypeCs;
+        binary.record.num_sh_registers = 3u;
+        binary.record.sh_registers =
+            offsetof(RuntimeShaderFixture, sh_registers);
+        binary.sh_registers[0] = (AgcRegisterValue){
+            AGC_REG_COMPUTE_PGM_RSRC1, 0u};
+        binary.sh_registers[1] = (AgcRegisterValue){
+            AGC_REG_COMPUTE_PGM_RSRC2, 0u};
+        binary.sh_registers[2] = (AgcRegisterValue){
+            AGC_REG_COMPUTE_PGM_RSRC3, 0u};
+    } else if (stage == kAgcShaderStagePs) {
+        binary.record.shader_type = kAgcShaderTypePs;
+        binary.record.num_sh_registers = 2u;
+        binary.record.sh_registers =
+            offsetof(RuntimeShaderFixture, sh_registers);
+        binary.record.num_cx_registers = 1u;
+        binary.record.cx_registers =
+            offsetof(RuntimeShaderFixture, cx_registers);
+        binary.sh_registers[0] = (AgcRegisterValue){
+            AGC_REG_SPI_SHADER_PGM_LO_PS, 0u};
+        binary.sh_registers[1] = (AgcRegisterValue){
+            AGC_REG_SPI_SHADER_PGM_HI_PS, 0u};
+        binary.cx_registers[0] = (AgcRegisterValue){
+            AGC_REG_SPI_PS_IN_CONTROL,
+            AGC_GFX1013_SPI_PS_IN_CONTROL_PS_W32_EN};
+    } else {
+        binary.record.shader_type = (uint8_t)kAgcShaderBinaryTypeGs;
+        binary.record.num_sh_registers = 2u;
+        binary.record.sh_registers =
+            offsetof(RuntimeShaderFixture, sh_registers);
+        binary.record.specials = offsetof(RuntimeShaderFixture, specials);
+        binary.sh_registers[0] = (AgcRegisterValue){
+            AGC_REG_SPI_SHADER_PGM_LO_GS, 0u};
+        binary.sh_registers[1] = (AgcRegisterValue){
+            AGC_REG_SPI_SHADER_PGM_HI_GS, 0u};
+        binary.specials.ge_cntl = (AgcShaderSpecialRegister){
+            AGC_REG_GE_CNTL, 0x10u};
+        binary.specials.vgt_shader_stages_en =
+            (AgcShaderSpecialRegister){
+                AGC_REG_VGT_SHADER_STAGES_EN,
+                AGC_GFX1013_VGT_SHADER_STAGES_EN_GS_W32_EN};
+        binary.specials.vgt_gs_out_prim_type =
+            (AgcShaderSpecialRegister){
+                AGC_REG_VGT_GS_OUT_PRIM_TYPE, 0u};
+        binary.specials.ge_user_vgpr_en = (AgcShaderSpecialRegister){
+            AGC_REG_GE_USER_VGPR_EN, 0u};
+    }
+    binary.code[0] = 0xBF810000u;
+    reflection.stage = stage;
+    reflection.shader_record_version = AGC_SHADER_RECORD_VERSION_GEN5;
+    reflection.compiler_api_version = AGC_SHADER_COMPILER_API_VERSION;
+    if (reflection.wave_size == 0u)
+        reflection.wave_size = 32u;
+    reflection.hash_algorithm = AGC_SHADER_HASH_FNV1A64;
+    reflection.code_offset = offsetof(RuntimeShaderFixture, code);
+    reflection.code_size = sizeof(binary.code);
+    reflection.code_hash = shader_fixture_hash(&binary, sizeof(binary));
+    if (reflection.entry_point[0] == '\0')
+        memcpy(reflection.entry_point, "main", sizeof("main"));
+    if (stage == kAgcShaderStageCs) {
+        if (reflection.local_size_x == 0u)
+            reflection.local_size_x = 64u;
+        if (reflection.local_size_y == 0u)
+            reflection.local_size_y = 1u;
+        if (reflection.local_size_z == 0u)
+            reflection.local_size_z = 1u;
+    } else if (stage == kAgcShaderStageVs) {
+        reflection.flags |= AGC_SHADER_REFLECTION_NGG_BIT;
+    } else if (stage == kAgcShaderStagePs) {
+        if (reflection.pixel_shader_sample_count == 0u)
+            reflection.pixel_shader_sample_count = 1u;
+    }
     desc.stage = stage;
-    desc.code = code;
-    desc.code_size = sizeof(code);
+    desc.code = &binary;
+    desc.code_size = sizeof(binary);
+    desc.reflection = &reflection;
     TEST_ASSERT_EQ(agcCreateShader(device, &desc, &shader), AGC_OK,
         "native shader creation succeeds");
     return shader;
+}
+
+static AgcShader create_shader(AgcDevice device, AgcShaderStage stage)
+{
+    return create_shader_with_reflection(device, stage, NULL);
 }
 
 static AgcQueue create_queue(AgcDevice device, AgcQueueType type)
@@ -341,7 +452,7 @@ static void test_runtime_compute_submission(void)
     pipeline_desc.shader = shader;
     pipeline_desc.local_size_x = 64u;
     command_desc.queue_type = kAgcQueueCompute;
-    command_desc.capacity_dwords = 5u;
+    command_desc.capacity_dwords = 64u;
     TEST_ASSERT_EQ(agcCreateComputePipeline(device, &pipeline_desc, &pipeline),
         AGC_OK, "compute pipeline creation succeeds");
     TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc,
@@ -366,9 +477,10 @@ static void test_runtime_compute_submission(void)
     TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
         "compute command buffer submits");
     captured = agcDriverDebugLastAcbSubmit(&owner);
-    TEST_ASSERT_EQ(captured->dword_count, 5u,
-        "compute submission captures five dwords");
+    TEST_ASSERT_EQ(captured->dword_count, 36u,
+        "compute submission captures validated pipeline state and dispatch");
     words = (const uint32_t *)(uintptr_t)captured->command_address;
+    words += captured->dword_count - 5u;
     TEST_ASSERT_EQ((words[0] >> 8) & 0xffu, AGC_PM4_OP_DISPATCH_DIRECT,
         "compute submission records DISPATCH_DIRECT");
     TEST_ASSERT_EQ(words[0] & 1u, 1u,
@@ -416,7 +528,7 @@ static void test_runtime_indexed_graphics_submission(void)
     pipeline_desc.pixel_shader = ps;
     buffer_desc.size = 64u;
     buffer_desc.usage = AGC_BUFFER_USAGE_INDEX_BIT;
-    command_desc.capacity_dwords = 11u;
+    command_desc.capacity_dwords = 94u;
     TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc, &pipeline),
         AGC_OK, "graphics pipeline creation succeeds");
     TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &index_buffer), AGC_OK,
@@ -443,9 +555,10 @@ static void test_runtime_indexed_graphics_submission(void)
     TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
         "indexed graphics command buffer submits");
     captured = agcDriverDebugLastDcbSubmit();
-    TEST_ASSERT_EQ(captured->dword_count, 11u,
-        "indexed graphics submission captures eleven dwords");
+    TEST_ASSERT_EQ(captured->dword_count, 94u,
+        "indexed graphics submission captures pipeline bind and draw");
     words = (const uint32_t *)(uintptr_t)captured->command_address;
+    words += captured->dword_count - 11u;
     TEST_ASSERT_EQ((words[0] >> 8) & 0xffu, AGC_PM4_OP_SET_INDEX_SIZE,
         "indexed submission records SET_INDEX_SIZE");
     TEST_ASSERT_EQ((words[3] >> 8) & 0xffu, AGC_PM4_OP_NUM_INSTANCES,
@@ -487,15 +600,16 @@ static void test_runtime_command_space_atomic_failure(void)
     pipeline_desc.pixel_shader = ps;
     buffer_desc.size = 64u;
     buffer_desc.usage = AGC_BUFFER_USAGE_INDEX_BIT;
-    command_desc.capacity_dwords = 10u;
+    command_desc.capacity_dwords = 93u;
     TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc, &pipeline),
         AGC_OK, "small-buffer graphics pipeline creation succeeds");
     TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &index_buffer), AGC_OK,
         "small-buffer index buffer creation succeeds");
     TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc,
-        &command_buffer), AGC_OK, "ten-dword command buffer creation succeeds");
+        &command_buffer), AGC_OK,
+        "bind-plus-ten-dword command buffer creation succeeds");
     TEST_ASSERT_EQ(agcBeginCommandBuffer(command_buffer), AGC_OK,
-        "ten-dword command buffer begins");
+        "bind-plus-ten-dword command buffer begins");
     TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(command_buffer, pipeline), AGC_OK,
         "small-buffer graphics pipeline binds");
     TEST_ASSERT_EQ(agcCmdBindIndexBuffer(command_buffer, index_buffer, 0u,
@@ -503,8 +617,8 @@ static void test_runtime_command_space_atomic_failure(void)
     TEST_ASSERT_EQ(agcCmdDrawIndexed(command_buffer, 3u, 1u, 0u, 0, 0u),
         AGC_ERROR_COMMAND_SPACE_EXHAUSTED,
         "indexed draw reports stable command-space exhaustion");
-    TEST_ASSERT_EQ(agcEndCommandBuffer(command_buffer), AGC_ERROR_INVALID_STATE,
-        "failed draw leaves command buffer empty atomically");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command_buffer), AGC_OK,
+        "failed draw preserves the already-recorded pipeline bind");
     TEST_ASSERT_EQ(agcResetCommandBuffer(command_buffer), AGC_OK,
         "failed recording resets cleanly");
 
@@ -518,6 +632,289 @@ static void test_runtime_command_space_atomic_failure(void)
     TEST_ASSERT_EQ(agcDestroyShader(vs), AGC_OK, "small-buffer VS destroys");
     TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
         "small-buffer device destroys");
+}
+
+static void test_runtime_shader_reflection_contract(void)
+{
+    AgcDevice device = create_device();
+    AgcShader shader = create_shader(device, kAgcShaderStageCs);
+    AgcShaderReflection reflection = AGC_SHADER_REFLECTION_INIT;
+
+    TEST_ASSERT_EQ(agcGetShaderReflection(shader, &reflection), AGC_OK,
+        "shader reflection query succeeds");
+    TEST_ASSERT_EQ(reflection.struct_size, sizeof(reflection),
+        "shader reflection reports its exact ABI size");
+    TEST_ASSERT_EQ(reflection.version, AGC_SHADER_REFLECTION_VERSION_1,
+        "shader reflection reports its contract version");
+    TEST_ASSERT_EQ(reflection.compiler_api_version,
+        AGC_SHADER_COMPILER_API_VERSION,
+        "shader reflection reports the supported compiler API");
+    TEST_ASSERT_EQ(reflection.stage, kAgcShaderStageCs,
+        "shader reflection preserves the compiler stage");
+    TEST_ASSERT_EQ(reflection.local_size_x, 64u,
+        "shader reflection preserves compute local size");
+    TEST_ASSERT_EQ(reflection.hash_algorithm, AGC_SHADER_HASH_FNV1A64,
+        "shader reflection names its deterministic hash algorithm");
+    TEST_ASSERT(reflection.code_hash != 0u,
+        "shader reflection preserves a nonzero code hash");
+
+    reflection = (AgcShaderReflection)AGC_SHADER_REFLECTION_INIT;
+    reflection.version++;
+    TEST_ASSERT_EQ(agcGetShaderReflection(shader, &reflection),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "shader reflection query rejects unknown output versions");
+    TEST_ASSERT_EQ(agcDestroyShader(shader), AGC_OK,
+        "reflected shader destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "reflection test device destroys");
+}
+
+typedef struct PipelineCompatibilityCase {
+    AgcShaderColorExportFormat export_format;
+    AgcShaderComponentClass component_class;
+    AgcFormat attachment_format;
+} PipelineCompatibilityCase;
+
+static void test_runtime_graphics_pipeline_compatibility_matrix(void)
+{
+    static const PipelineCompatibilityCase cases[] = {
+        {AGC_SHADER_COLOR_EXPORT_FP16_ABGR,
+         AGC_SHADER_COMPONENT_FLOAT_OR_NORMALIZED, AGC_FORMAT_RGBA8_UNORM},
+        {AGC_SHADER_COLOR_EXPORT_32_ABGR,
+         AGC_SHADER_COMPONENT_FLOAT_OR_NORMALIZED, AGC_FORMAT_RGBA32_FLOAT},
+        {AGC_SHADER_COLOR_EXPORT_UINT16_ABGR,
+         AGC_SHADER_COMPONENT_UINT, AGC_FORMAT_RGBA16_UINT},
+        {AGC_SHADER_COLOR_EXPORT_32_ABGR,
+         AGC_SHADER_COMPONENT_UINT, AGC_FORMAT_RGBA32_UINT},
+        {AGC_SHADER_COLOR_EXPORT_SINT16_ABGR,
+         AGC_SHADER_COMPONENT_SINT, AGC_FORMAT_RGBA16_SINT},
+        {AGC_SHADER_COLOR_EXPORT_32_ABGR,
+         AGC_SHADER_COMPONENT_SINT, AGC_FORMAT_RGBA32_SINT},
+    };
+    static const AgcFormat mismatched_formats[] = {
+        AGC_FORMAT_RGBA8_UNORM,
+        AGC_FORMAT_RGBA16_UINT,
+        AGC_FORMAT_RGBA16_SINT,
+    };
+    AgcDevice device = create_device();
+    AgcShader vs = create_shader(device, kAgcShaderStageVs);
+    uint32_t i;
+    uint32_t j;
+
+    for (i = 0u; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+        AgcShaderReflection requirements = AGC_SHADER_REFLECTION_INIT;
+        AgcGraphicsPipelineDesc desc = AGC_GRAPHICS_PIPELINE_DESC_INIT;
+        AgcColorBlendAttachmentState attachment =
+            AGC_COLOR_BLEND_ATTACHMENT_STATE_INIT;
+        AgcShader ps;
+        AgcGraphicsPipeline pipeline = NULL;
+
+        requirements.color_export_count = 1u;
+        requirements.color_exports[0].location = 0u;
+        requirements.color_exports[0].format = cases[i].export_format;
+        requirements.color_exports[0].component_class =
+            cases[i].component_class;
+        requirements.color_exports[0].write_mask = 0xfu;
+        ps = create_shader_with_reflection(
+            device, kAgcShaderStagePs, &requirements);
+        attachment.format = cases[i].attachment_format;
+        desc.vertex_shader = vs;
+        desc.pixel_shader = ps;
+        desc.color_attachment_count = 1u;
+        desc.color_attachments = &attachment;
+        TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &pipeline),
+            AGC_OK, "matching export and attachment class creates pipeline");
+        TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(pipeline), AGC_OK,
+            "compatible graphics pipeline destroys");
+
+        for (j = 0u; j < sizeof(mismatched_formats) /
+             sizeof(mismatched_formats[0]); ++j) {
+            AgcShaderComponentClass attachment_class =
+                j == 0u ? AGC_SHADER_COMPONENT_FLOAT_OR_NORMALIZED :
+                j == 1u ? AGC_SHADER_COMPONENT_UINT :
+                    AGC_SHADER_COMPONENT_SINT;
+            if (attachment_class == cases[i].component_class)
+                continue;
+            attachment.format = mismatched_formats[j];
+            pipeline = NULL;
+            TEST_ASSERT_EQ(agcCreateGraphicsPipeline(
+                device, &desc, &pipeline), AGC_ERROR_VALIDATION_FAILED,
+                "integer and non-integer attachment mismatch fails closed");
+            TEST_ASSERT(pipeline == NULL,
+                "rejected attachment mismatch leaves pipeline output null");
+        }
+
+        attachment.format = cases[i].attachment_format;
+        if (cases[i].component_class !=
+            AGC_SHADER_COMPONENT_FLOAT_OR_NORMALIZED) {
+            attachment.blend_enable = 1u;
+            pipeline = NULL;
+            TEST_ASSERT_EQ(agcCreateGraphicsPipeline(
+                device, &desc, &pipeline), AGC_ERROR_VALIDATION_FAILED,
+                "integer attachment rejects blending before recording");
+            TEST_ASSERT(pipeline == NULL,
+                "integer-blend rejection leaves pipeline output null");
+            attachment.blend_enable = 0u;
+        }
+        TEST_ASSERT_EQ(agcDestroyShader(ps), AGC_OK,
+            "matrix pixel shader destroys");
+    }
+
+    {
+        AgcShaderReflection requirements = AGC_SHADER_REFLECTION_INIT;
+        AgcGraphicsPipelineDesc desc = AGC_GRAPHICS_PIPELINE_DESC_INIT;
+        AgcColorBlendAttachmentState attachments[2] = {
+            AGC_COLOR_BLEND_ATTACHMENT_STATE_INIT,
+            AGC_COLOR_BLEND_ATTACHMENT_STATE_INIT,
+        };
+        AgcShader ps;
+        AgcGraphicsPipeline pipeline = NULL;
+
+        requirements.color_export_count = 1u;
+        requirements.color_exports[0] = (AgcShaderColorExport){
+            0u, AGC_SHADER_COLOR_EXPORT_FP16_ABGR,
+            AGC_SHADER_COMPONENT_FLOAT_OR_NORMALIZED, 0xfu, 0u};
+        ps = create_shader_with_reflection(
+            device, kAgcShaderStagePs, &requirements);
+        attachments[0].format = AGC_FORMAT_RGBA8_UNORM;
+        attachments[1].format = AGC_FORMAT_RGBA8_UNORM;
+        desc.vertex_shader = vs;
+        desc.pixel_shader = ps;
+        desc.color_attachments = attachments;
+        TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &pipeline),
+            AGC_ERROR_VALIDATION_FAILED,
+            "missing color attachment rejects required shader export");
+        desc.color_attachment_count = 2u;
+        TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &pipeline),
+            AGC_ERROR_VALIDATION_FAILED,
+            "extra color attachment rejects absent shader export");
+        desc.color_attachment_count = 1u;
+        attachments[0].format = AGC_FORMAT_BC7_UNORM;
+        TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &pipeline),
+            AGC_ERROR_VALIDATION_FAILED,
+            "unsupported attachment encoding fails closed");
+        TEST_ASSERT_EQ(agcDestroyShader(ps), AGC_OK,
+            "export-count pixel shader destroys");
+    }
+
+    TEST_ASSERT_EQ(agcDestroyShader(vs), AGC_OK,
+        "matrix vertex shader destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "graphics compatibility matrix device destroys");
+}
+
+static void test_runtime_pipeline_layout_and_stage_validation(void)
+{
+    AgcDevice device = create_device();
+    AgcShaderReflection vs_requirements = AGC_SHADER_REFLECTION_INIT;
+    AgcShaderReflection ps_requirements = AGC_SHADER_REFLECTION_INIT;
+    AgcGraphicsPipelineDesc graphics_desc = AGC_GRAPHICS_PIPELINE_DESC_INIT;
+    AgcShaderVertexInput vertex_input = {
+        0u, 0u, 0u, 16u, AGC_SHADER_VERTEX_FORMAT_R32G32B32A32_SFLOAT,
+        AGC_SHADER_VERTEX_INPUT_RATE_VERTEX, 0u, 0xfu};
+    AgcShader vs;
+    AgcShader ps;
+    AgcGraphicsPipeline graphics = NULL;
+
+    vs_requirements.stage_output_mask = UINT64_C(1) << 32;
+    vs_requirements.vertex_input_count = 1u;
+    vs_requirements.vertex_inputs[0] = vertex_input;
+    ps_requirements.stage_input_mask = UINT64_C(1) << 33;
+    vs = create_shader_with_reflection(
+        device, kAgcShaderStageVs, &vs_requirements);
+    ps = create_shader_with_reflection(
+        device, kAgcShaderStagePs, &ps_requirements);
+    graphics_desc.vertex_shader = vs;
+    graphics_desc.pixel_shader = ps;
+    TEST_ASSERT_EQ(agcCreateGraphicsPipeline(
+        device, &graphics_desc, &graphics), AGC_ERROR_VALIDATION_FAILED,
+        "missing producer output rejects stage-linkage mismatch");
+    TEST_ASSERT(graphics == NULL,
+        "stage-linkage rejection leaves pipeline output null");
+    TEST_ASSERT_EQ(agcDestroyShader(ps), AGC_OK,
+        "mismatched pixel shader destroys");
+
+    ps_requirements.stage_input_mask = UINT64_C(1) << 32;
+    ps = create_shader_with_reflection(
+        device, kAgcShaderStagePs, &ps_requirements);
+    graphics_desc.pixel_shader = ps;
+    TEST_ASSERT_EQ(agcCreateGraphicsPipeline(
+        device, &graphics_desc, &graphics), AGC_ERROR_VALIDATION_FAILED,
+        "missing vertex layout rejects reflected vertex input");
+    graphics_desc.vertex_inputs = &vertex_input;
+    graphics_desc.vertex_input_count = 1u;
+    TEST_ASSERT_EQ(agcCreateGraphicsPipeline(
+        device, &graphics_desc, &graphics), AGC_OK,
+        "matching linkage and vertex layout create pipeline");
+    TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(graphics), AGC_OK,
+        "matching stage-linkage pipeline destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(ps), AGC_OK,
+        "matching pixel shader destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(vs), AGC_OK,
+        "vertex-input shader destroys");
+
+    {
+        AgcShaderReflection cs_requirements = AGC_SHADER_REFLECTION_INIT;
+        AgcShaderDescriptorMapping mapping = {
+            1u, 3u, AGC_SHADER_DESCRIPTOR_STORAGE_BUFFER, 1u, 0u, 16u};
+        AgcShaderPushConstantRange push_range = {
+            0u, 16u, 4u, 1u << kAgcShaderStageCs};
+        AgcComputePipelineDesc compute_desc = AGC_COMPUTE_PIPELINE_DESC_INIT;
+        AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+        AgcComputePipeline compute = NULL;
+        AgcCommandBuffer command = NULL;
+        AgcShader cs;
+
+        cs_requirements.local_size_x = 64u;
+        cs_requirements.local_size_y = 1u;
+        cs_requirements.local_size_z = 1u;
+        cs_requirements.descriptor_mapping_count = 1u;
+        cs_requirements.descriptor_mappings[0] = mapping;
+        cs_requirements.push_constant_size = 16u;
+        cs_requirements.push_constant_alignment = 4u;
+        cs_requirements.push_constant_range_count = 1u;
+        cs_requirements.push_constant_ranges[0] = push_range;
+        cs = create_shader_with_reflection(
+            device, kAgcShaderStageCs, &cs_requirements);
+        compute_desc.shader = cs;
+        compute_desc.local_size_x = 64u;
+        compute_desc.descriptor_mapping_count = 1u;
+        compute_desc.descriptor_mappings = &mapping;
+        compute_desc.push_constant_range_count = 1u;
+        compute_desc.push_constant_ranges = &push_range;
+        TEST_ASSERT_EQ(agcCreateComputePipeline(device, &compute_desc,
+            &compute), AGC_OK,
+            "matching descriptor and push layouts create compute pipeline");
+
+        command_desc.queue_type = kAgcQueueCompute;
+        TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc,
+            &command), AGC_OK, "layout-negative command buffer creates");
+        TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+            "layout-negative command buffer begins");
+        TEST_ASSERT_EQ(agcCmdBindComputePipeline(command, compute),
+            AGC_ERROR_RESOURCE_NOT_BOUND,
+            "unbound reflected resources reject pipeline bind");
+        TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_ERROR_INVALID_STATE,
+            "rejected pipeline bind emits zero commands");
+        TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+            "zero-command rejection resets cleanly");
+        TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+            "layout-negative command buffer destroys");
+        TEST_ASSERT_EQ(agcDestroyComputePipeline(compute), AGC_OK,
+            "reflected-resource compute pipeline destroys");
+
+        mapping.byte_stride = 32u;
+        compute = NULL;
+        TEST_ASSERT_EQ(agcCreateComputePipeline(device, &compute_desc,
+            &compute), AGC_ERROR_VALIDATION_FAILED,
+            "descriptor stride mismatch rejects compute pipeline");
+        TEST_ASSERT(compute == NULL,
+            "descriptor mismatch leaves compute output null");
+        TEST_ASSERT_EQ(agcDestroyShader(cs), AGC_OK,
+            "descriptor-reflected compute shader destroys");
+    }
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "pipeline layout validation device destroys");
 }
 
 static void test_runtime_ps5_image_layouts(void)
@@ -1042,8 +1439,9 @@ static void test_runtime_fence_deferred_free(void)
     AgcAllocationInfo replacement_info = AGC_ALLOCATION_INFO_INIT;
 
     pipeline_desc.shader = shader;
+    pipeline_desc.local_size_x = 64u;
     command_desc.queue_type = kAgcQueueCompute;
-    command_desc.capacity_dwords = 32u;
+    command_desc.capacity_dwords = 64u;
     buffer_desc.size = 1024u;
     buffer_desc.usage = AGC_BUFFER_USAGE_STORAGE_BIT;
     TEST_ASSERT_EQ(agcCreateComputePipeline(device, &pipeline_desc, &pipeline),
@@ -1181,6 +1579,9 @@ void test_suite_runtime(void)
 {
     TEST_SUITE("Firmware-neutral Native Runtime");
     TEST_RUN(test_runtime_descriptor_and_info_contract);
+    TEST_RUN(test_runtime_shader_reflection_contract);
+    TEST_RUN(test_runtime_graphics_pipeline_compatibility_matrix);
+    TEST_RUN(test_runtime_pipeline_layout_and_stage_validation);
     TEST_RUN(test_runtime_allocation_callbacks);
     TEST_RUN(test_runtime_allocation_failure_rollback);
     TEST_RUN(test_runtime_all_object_lifecycle);

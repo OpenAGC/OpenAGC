@@ -21,12 +21,15 @@ and is not part of the baseline contract.
 The native C runtime contract and resource/memory milestone are complete. Its
 opaque objects, versioned descriptors, ownership/state validation, finite
 fences, stable errors, and runtime capability/qualification reporting are
-host-qualified. Prospero builds the same API but native queue submission
-remains fail-closed until reflected hardware pipeline binding is implemented.
+host-qualified. The first Milestone 3 host slice now consumes versioned
+`openagc-psbc` reflection and validates/caches basic graphics and compute
+pipelines. Prospero builds the same API, but native queue submission remains
+fail-closed pending an explicit hardware-promotion gate.
 
-1. **Add pipeline safety.** Implement reflection from `openagc-psbc`, and graphics
-   and compute pipelines that reject shader/export, attachment, blend,
-   descriptor, sample-count, and stage-linkage mismatches before PM4 emission.
+1. **Complete pipeline safety.** Extend the host-tested reflection/pipeline
+   slice with descriptor and push binding, remaining declared dynamic state,
+   and the required tessellation/geometry paths while preserving zero-command
+   failure for every unsupported combination.
 2. **Own transitions and synchronization.** Track explicit resource usage and
    derive qualified release/acquire/flush/invalidate actions internally. Add
    bounded fences, multi-command-buffer submission, waits/signals, deferred
@@ -75,8 +78,36 @@ stable offsets and bounded block counts. It also covers descriptor/shader/
 command backing, upload/readback bounds, scanout and oversized dedicated
 blocks, allocation-failure rollback, overflow rejection, and fence-delayed
 buffer/image reuse. Live allocation and byte counts return to baseline. The
-full generic result is 13,614 passed and 0 failed across all six CTest suites.
-See `docs/memory_resources.md`.
+resource milestone closed at 13,614 passed and 0 failed across all six CTest
+suites. See `docs/memory_resources.md`.
+
+## Versioned shader reflection and validated pipeline host slice (2026-07-30)
+
+`openagc/shader_reflection.h` is now the pointer-free, versioned ABI shared by
+OpenAGC and `openagc-psbc` API v14. It records compiler and shader-record
+versions, stage and entry point, FNV-1a code hash, wave size, descriptor and
+user/system-SGPR layouts, push ranges, vertex inputs, color exports, local
+size, scratch/LDS, sample behavior, NGG/fused-stage flags, and linkage masks.
+Shader creation verifies the serialized main/front records and retains a
+relocated, GPU-addressable copy; `agcGetShaderReflection` exposes the validated
+metadata.
+
+Runtime API v2 graphics pipelines validate reflected NGG VS + Wave32 PS stage
+linkage, vertex/resource layouts, exact MRT count, float/normalized versus
+UINT/SINT attachment classes and widths, write masks, integer blend rejection,
+depth/stencil requirements, multisampling, and the currently qualified fixed
+function subset. Compute pipelines validate reflected Wave32 local size,
+resource layout, scratch, and LDS limits. Successful no-resource pipelines
+cache qualified gfx1013 bind/dispatch groups; rejected pipelines return no
+object and failed command binds emit zero dwords.
+
+The compatibility matrix covers valid float, UINT, and SINT 16/32-bit pairs
+and rejects cross-class, missing/extra export, compressed attachment, blend,
+linkage, vertex-stride, descriptor, push-range, and unbound-resource cases.
+The full generic suite now reports 13,720 passed and 0 failed; the compiler's
+library, varying/export, NGG, and tessellation suites pass. This slice is
+host-tested only. No PS5 hardware test was run or claimed. See
+`docs/shader_pipelines.md`.
 
 ## Native runtime C API contract complete (2026-07-30)
 
