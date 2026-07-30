@@ -304,6 +304,27 @@ hardware-qualified on both FW 5.50 and FW 11.60. The remaining MSAA parity
 work is a separately bounded sample-rate-shading gate; historical Vulkan
 evidence must not be substituted for an OpenAGC endpoint result.
 
+The OpenAGC sample-rate gate is now prepared in two isolated variants. The
+full-4x pixel shader atomically counts each `gl_SampleID` plus a total; the
+partial-2x shader increments only the total so four untouched sample counters
+prove that the shader itself did not force full-rate execution. Both retain
+four `0xdeadbeef` guards, preserve the qualified D32+4x resolve oracle, and add
+an explicit GL2 shader-write-to-host-read transition. The runner fails closed
+on mode, positive/full per-sample counts, partial zero counters, guards, and
+optional exact counts, with accept/reject host fixtures.
+
+Two relinks reproduced these firmware-keyed artifacts exactly:
+
+- FW 5.50 full: `78dc73eddc0d2f114d64bd0c4e040d4a995c6d04571f5e6f545bbd0aafd6e6a6`
+- FW 5.50 partial: `2180da21a8aa7a945ce6e780b1dc878de66c7685cf523b1bab0da141203498f0`
+- FW 11.60 full: `d0d9ff1fb285f0dd903f17953e36276e24a4b3fbea6e0bfb2e3135fb249f913f`
+- FW 11.60 partial: `d7141fd5bf26c82c05111aa9a91e690c9c76debf065bfab586625591220e0fe9`
+
+They depend only on VideoOut, kernel, libc, and networking, are preserved by
+full hash outside the repository, and have cleanup-first, hash-pinned deploy
+targets. Launch FW 5.50 full first; freeze its exact counters before replay or
+advancing to partial-rate execution.
+
 That prerequisite sequence is now complete. Two relinks against the committed
 shader records reproduced all eight artifacts byte-for-byte, and dependency
 inspection found only VideoOut, kernel, libc, and networking. The exact FW

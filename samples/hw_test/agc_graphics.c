@@ -148,6 +148,14 @@
 #define AGC_MSAA_VALIDATION 0
 #endif
 
+#ifndef AGC_SAMPLE_RATE_VALIDATION
+#define AGC_SAMPLE_RATE_VALIDATION 0
+#endif
+
+#ifndef AGC_SAMPLE_RATE_PARTIAL
+#define AGC_SAMPLE_RATE_PARTIAL 0
+#endif
+
 #ifndef AGC_HTILE_VALIDATION
 #define AGC_HTILE_VALIDATION 0
 #endif
@@ -231,6 +239,15 @@
 
 #if AGC_MSAA_VALIDATION && AGC_STENCIL_VALIDATION
 #error "the isolated MSAA gate keeps stencil disabled"
+#endif
+
+#if AGC_SAMPLE_RATE_VALIDATION && \
+    (!AGC_DEPTH_VALIDATION || !AGC_MSAA_VALIDATION)
+#error "sample-rate validation requires the isolated 4x MSAA depth path"
+#endif
+
+#if AGC_SAMPLE_RATE_PARTIAL && !AGC_SAMPLE_RATE_VALIDATION
+#error "partial sample-rate validation requires the sample-rate gate"
 #endif
 
 #if AGC_HTILE_VALIDATION && !AGC_DEPTH_VALIDATION
@@ -375,7 +392,15 @@
 #define NGG_DRAW_VERTEX_COUNT 3u
 #define NGG_INPUT_PRIMITIVE_TYPE 4u
 #endif
-#if AGC_DEPTH_VALIDATION
+#if AGC_SAMPLE_RATE_VALIDATION
+#if AGC_SAMPLE_RATE_PARTIAL
+#include "shaders/sample_rate_partial_sb.h"
+#define FRAGMENT_DATA sample_rate_partial_data
+#else
+#include "shaders/sample_rate_full_sb.h"
+#define FRAGMENT_DATA sample_rate_full_data
+#endif
+#elif AGC_DEPTH_VALIDATION
 #include "shaders/depth_triangle_frag_sb.h"
 #define FRAGMENT_DATA depth_triangle_frag_data
 #elif defined(AGC_VALIDATE_RGBA16_UNORM) && AGC_VALIDATE_RGBA16_UNORM
@@ -519,6 +544,7 @@ int sceKernelDeleteEqueue(SceKernelEqueue equeue);
 #define INDEX_DATA_OFFSET  0xA000u
 #define TEXTURE_DATA_OFFSET 0xB000u
 #define TEXTURE_DESC_OFFSET 0xC000u
+#define SAMPLE_RESULTS_DESC_OFFSET (TEXTURE_DESC_OFFSET + 0x100u)
 #define DRAW_ARGS_OFFSET    0xD000u
 #define DRAW_COUNT_OFFSET   0xD100u
 #define INDEX_TYPE_16      0u
@@ -2962,6 +2988,26 @@ static bool dispatch_graphics(GraphicsTest *test,
     uint32_t *texture_desc = (uint32_t *)
         ((uint8_t *)test->compute_buffer + TEXTURE_DESC_OFFSET);
 #endif
+#if AGC_SAMPLE_RATE_VALIDATION
+    volatile uint32_t *sample_results = (volatile uint32_t *)
+        ((uint8_t *)test->compute_buffer + TEXTURE_DATA_OFFSET);
+    AgcGfx1013BufferDescriptor *sample_results_desc =
+        (AgcGfx1013BufferDescriptor *)
+        ((uint8_t *)test->compute_buffer + SAMPLE_RESULTS_DESC_OFFSET);
+    for (uint32_t i = 0u; i < 5u; ++i)
+        sample_results[i] = 0u;
+    for (uint32_t i = 5u; i < 9u; ++i)
+        sample_results[i] = 0xDEADBEEFu;
+    if (agcGfx1013RawBufferDescriptorEncode(
+            sample_results_desc, (uint64_t)(uintptr_t)sample_results,
+            9u * sizeof(uint32_t)) != AGC_OK) {
+        printf("[Sample Rate] result descriptor encode failed\n");
+        return false;
+    }
+    printf("[Sample Rate] mode=%s results=%p table=%p\n",
+           AGC_SAMPLE_RATE_PARTIAL ? "partial-2x" : "full-4x",
+           (const void *)sample_results, (void *)sample_results_desc);
+#endif
     memcpy(gpu_vertices, depth_vertices, sizeof(depth_vertices));
     for (uint32_t draw = 0u; draw < 4u; ++draw) {
         int32_t descriptor_error = agcGfx1013BufferDescriptorEncode(
@@ -3470,6 +3516,11 @@ static bool dispatch_graphics(GraphicsTest *test,
         OPENAGC_DESCRIPTOR_SET_PLACEHOLDER(0u),
         (uint64_t)(uintptr_t)texture_desc,
     };
+#elif AGC_SAMPLE_RATE_VALIDATION
+    const AgcGfx1013ResourceTableBinding pixel_resource_table = {
+        OPENAGC_DESCRIPTOR_SET_PLACEHOLDER(0u),
+        (uint64_t)(uintptr_t)sample_results_desc,
+    };
 #endif
 
     /* 6b. Post-bind depth and rasterizer overrides remain application state.
@@ -3497,11 +3548,21 @@ static bool dispatch_graphics(GraphicsTest *test,
         agcGfx1013BindResourceTables(
             &cb, &baseline_shaders.primitive,
             &primitive_resource_table, 1u) != AGC_OK ||
+#if AGC_SAMPLE_RATE_VALIDATION
+        agcGfx1013BindResourceTables(
+            &cb, &baseline_shaders.pixel,
+            &pixel_resource_table, 1u) != AGC_OK ||
+#endif
         agcGfx1013ApplyFramePostBind(&cb, &frame_state) != AGC_OK)
         return false;
 
 #if AGC_MSAA_VALIDATION
-    const AgcGfx1013SampleState sample_state_4x = {4u, 1u, 0xFu};
+    const AgcGfx1013SampleState sample_state_4x = {
+        4u,
+        AGC_SAMPLE_RATE_VALIDATION ?
+            (AGC_SAMPLE_RATE_PARTIAL ? 2u : 4u) : 1u,
+        0xFu,
+    };
     if (agcGfx1013SetSampleState(&cb, &sample_state_4x) != AGC_OK)
         return false;
 #endif
@@ -3675,6 +3736,17 @@ static bool dispatch_graphics(GraphicsTest *test,
            AGC_STENCIL_VALIDATION ? "+Stencil" : "",
            AGC_EXPCLEAR_VALIDATION ? "+Expclear" : "",
            AGC_EXPCLEAR_VALIDATION ? "metadata clear" : "init draw");
+#if AGC_SAMPLE_RATE_VALIDATION
+    /* Storage-buffer writes from a pixel shader use the same GL2 visibility
+     * requirements as compute writes. Complete them before CPU readback. */
+    const AgcGfx1013ResourceTransition sample_results_completion = {
+        .before = AGC_GFX1013_RESOURCE_USAGE_COMPUTE_WRITE,
+        .after = AGC_GFX1013_RESOURCE_USAGE_HOST_READ,
+    };
+    if (agcGfx1013TransitionResource(
+            &cb, &sample_results_completion) != AGC_OK)
+        return false;
+#endif
 #if AGC_MSAA_VALIDATION
     AgcGfx1013ImageDescriptor *msaa_descriptor =
         (AgcGfx1013ImageDescriptor *)texture_desc;
@@ -3949,6 +4021,28 @@ static bool dispatch_graphics(GraphicsTest *test,
         markers_pass &= depth_markers[i] == depth_marker_values[i];
     }
 #endif
+#if AGC_SAMPLE_RATE_VALIDATION
+    const uint64_t sample_sum =
+        (uint64_t)sample_results[0] + sample_results[1] +
+        sample_results[2] + sample_results[3];
+    bool sample_guards_pass = true;
+    for (uint32_t i = 5u; i < 9u; ++i)
+        sample_guards_pass &= sample_results[i] == 0xDEADBEEFu;
+    const bool sample_rate_pass = AGC_SAMPLE_RATE_PARTIAL ?
+        (sample_results[0] == 0u && sample_results[1] == 0u &&
+         sample_results[2] == 0u && sample_results[3] == 0u &&
+         sample_results[4] > 0u && sample_guards_pass) :
+        (sample_results[0] > 0u && sample_results[1] > 0u &&
+         sample_results[2] > 0u && sample_results[3] > 0u &&
+         sample_sum == sample_results[4] && sample_guards_pass);
+    printf("[Sample Rate] mode=%s samples=%u,%u,%u,%u total=%u "
+           "guards=%08x,%08x,%08x,%08x: %s\n",
+           AGC_SAMPLE_RATE_PARTIAL ? "partial-2x" : "full-4x",
+           sample_results[0], sample_results[1], sample_results[2],
+           sample_results[3], sample_results[4], sample_results[5],
+           sample_results[6], sample_results[7], sample_results[8],
+           sample_rate_pass ? "PASS" : "FAIL");
+#endif
 #if AGC_TESSELLATION
     uint32_t offchip_changed = 0;
     uint32_t factor_changed = 0;
@@ -4131,7 +4225,11 @@ static bool dispatch_graphics(GraphicsTest *test,
                (depth_pass ? "PASS" : "FAIL"),
            stencil_pass ? "PASS" : "FAIL");
     return markers_pass && color_pass && depth_pass && stencil_pass &&
-           htile_pass;
+           htile_pass
+#if AGC_SAMPLE_RATE_VALIDATION
+           && sample_rate_pass
+#endif
+           ;
 #endif
 
     if (target->native_component_bytes == 1u) {

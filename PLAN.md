@@ -685,6 +685,11 @@ the runner and shared teardown on FW 11.60 only.
   D32+4x RGBA8 resolve is qualified on both endpoints. Audit and prepare the
   remaining OpenAGC sample-rate-shading gate; do not promote historical Vulkan
   evidence as OpenAGC qualification.
+- Full-4x and partial-2x OpenAGC sample-rate gates are now host-covered,
+  warning-free, dependency-audited, reproducible across two relinks, preserved
+  under full hashes, and exposed only through cleanup-first pinned deploy
+  targets. Run FW 5.50 full first, freeze exact per-sample/total counts, replay,
+  then repeat that sequence for partial before moving to FW 11.60.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and

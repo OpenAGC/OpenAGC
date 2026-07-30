@@ -19,6 +19,7 @@ GPU completion fence reached
 [Depth Readback] green=228096 red=228096 left=ff00ff00 right=ffff0000
 [Depth Readback] raw D32: one=1755648 near=228096 far=228096
 [Stencil Readback] zero=2165248 replace-5a=456192 other=0
+[Sample Rate] mode=full-4x samples=10,11,12,13 total=46 guards=deadbeef,deadbeef,deadbeef,deadbeef: PASS
 [Depth+Stencil Result] markers=PASS color=PASS raw-depth=PASS stencil=PASS
 [Depth+4xMSAA Result] markers=PASS color=PASS raw-depth=PASS stencil=PASS
 Driver shutdown: PASS
@@ -96,6 +97,8 @@ run_msaa_gate()
         PROCESS_CLEANUP_ELF="$tmp/cleanup.elf" \
         RESULT_LOG_PATH=/data/homebrew/openagc_fw1160_depth/result.log \
         REQUIRE_MSAA_RESOLVE=1 \
+        REQUIRE_SAMPLE_RATE_MODE="${2:-}" \
+        EXPECTED_SAMPLE_RATE_COUNTS="${3:-}" \
         MOCK_RESULT="$1" \
         sh "$runner"
 }
@@ -133,5 +136,15 @@ fi
 
 grep -v '^\[Depth+Stencil Result\]' "$tmp/result.log" > "$tmp/msaa-only.log"
 run_msaa_gate "$tmp/msaa-only.log" > "$tmp/msaa-only-output"
+run_msaa_gate "$tmp/msaa-only.log" full-4x 10,11,12,13,46 > "$tmp/sample-rate-output"
+if run_msaa_gate "$tmp/msaa-only.log" full-4x 10,11,12,13,45 > "$tmp/sample-rate-count-fail-output" 2>&1; then
+    echo "depth runner accepted wrong exact sample-rate counts" >&2
+    exit 1
+fi
+grep -v '^\[Sample Rate\]' "$tmp/msaa-only.log" > "$tmp/no-sample-rate.log"
+if run_msaa_gate "$tmp/no-sample-rate.log" full-4x > "$tmp/sample-rate-fail-output" 2>&1; then
+    echo "depth runner accepted a missing sample-rate verdict" >&2
+    exit 1
+fi
 
 echo "PASS: depth runner enforces exact combined depth/stencil verdicts"

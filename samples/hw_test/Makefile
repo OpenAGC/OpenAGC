@@ -525,6 +525,24 @@ shaders/depth_resolve_frag.sb: shaders/depth_resolve_frag.spv
 shaders/depth_resolve_frag_sb.h: shaders/depth_resolve_frag.sb
 	xxd -i -n depth_resolve_frag_data $< $@
 
+shaders/sample_rate_full.spv: shaders/sample_rate_full.frag
+	$(GLSLANG) -V --target-env vulkan1.2 $< -o $@
+
+shaders/sample_rate_full.sb: shaders/sample_rate_full.spv
+	$(PSBC) -f $< -s fragment -o $@
+
+shaders/sample_rate_full_sb.h: shaders/sample_rate_full.sb
+	xxd -i -n sample_rate_full_data $< $@
+
+shaders/sample_rate_partial.spv: shaders/sample_rate_partial.frag
+	$(GLSLANG) -V --target-env vulkan1.2 $< -o $@
+
+shaders/sample_rate_partial.sb: shaders/sample_rate_partial.spv
+	$(PSBC) -f $< -s fragment -o $@
+
+shaders/sample_rate_partial_sb.h: shaders/sample_rate_partial.sb
+	xxd -i -n sample_rate_partial_data $< $@
+
 .PHONY: shaders_depth regen_shaders_depth
 # Normal hardware builds consume the committed, hardware-qualified records.
 # Regeneration is explicit because a sibling psbc revision can legitimately
@@ -1398,6 +1416,24 @@ agc_depth_msaa_fw1160_logged.elf: shaders_depth shaders/depth_resolve_frag_sb.h 
 
 agc_depth_msaa_fw550_headless.elf: shaders_depth shaders/depth_resolve_frag_sb.h agc_graphics.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) $(FW550_HEADLESS_DEPTH_FLAGS) -DAGC_MSAA_VALIDATION=1 \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_sample_rate_full_fw1160_logged.elf: shaders_depth shaders/depth_resolve_frag_sb.h shaders/sample_rate_full_sb.h agc_graphics.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW1160_DEPTH_LOG_FLAGS) -DAGC_MSAA_VALIDATION=1 \
+		-DAGC_SAMPLE_RATE_VALIDATION=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_sample_rate_partial_fw1160_logged.elf: shaders_depth shaders/depth_resolve_frag_sb.h shaders/sample_rate_partial_sb.h agc_graphics.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW1160_DEPTH_LOG_FLAGS) -DAGC_MSAA_VALIDATION=1 \
+		-DAGC_SAMPLE_RATE_VALIDATION=1 -DAGC_SAMPLE_RATE_PARTIAL=1 \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_sample_rate_full_fw550_headless.elf: shaders_depth shaders/depth_resolve_frag_sb.h shaders/sample_rate_full_sb.h agc_graphics.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW550_HEADLESS_DEPTH_FLAGS) -DAGC_MSAA_VALIDATION=1 \
+		-DAGC_SAMPLE_RATE_VALIDATION=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_sample_rate_partial_fw550_headless.elf: shaders_depth shaders/depth_resolve_frag_sb.h shaders/sample_rate_partial_sb.h agc_graphics.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW550_HEADLESS_DEPTH_FLAGS) -DAGC_MSAA_VALIDATION=1 \
+		-DAGC_SAMPLE_RATE_VALIDATION=1 -DAGC_SAMPLE_RATE_PARTIAL=1 \
 		-o $@ agc_graphics.c $(AGC_LDFLAGS)
 
 FW1160_COMBINED_HTILE_FLAGS := $(FW1160_DEPTH_LOG_FLAGS) \
@@ -2599,6 +2635,8 @@ deploy_agc_tess_geometry_rgba8_fw550_headless: agc_tess_geometry_rgba8_fw550_hea
 	deploy_agc_depth_htile_mip_fw1160_logged \
 	deploy_agc_depth_htile_array_fw1160_logged \
 	deploy_agc_depth_msaa_fw1160_logged \
+	deploy_agc_sample_rate_full_fw1160_logged \
+	deploy_agc_sample_rate_partial_fw1160_logged \
 	deploy_agc_depth_stencil_htile_fw1160_logged \
 	deploy_agc_depth_stencil_expclear_depth_fw1160_logged \
 	deploy_agc_depth_stencil_expclear_stencil_fw1160_logged \
@@ -2684,6 +2722,20 @@ deploy_agc_depth_msaa_fw1160_logged: agc_depth_msaa_fw1160_logged.elf
 		EXPECTED_ARTIFACT_SHA256=ccc18d9cb6fcccfd1d38cb825d6c2d256af523ffc781dc322aad01f35460688e \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_depth.sh
 
+deploy_agc_sample_rate_full_fw1160_logged: agc_sample_rate_full_fw1160_logged.elf
+	PS5_HOST=$(PS5_HOST) DEPTH_ARTIFACT=$(THIS_DIR)/$< \
+		RESULT_LOG_PATH=/data/homebrew/openagc_fw1160_depth/result.log \
+		REQUIRE_MSAA_RESOLVE=1 REQUIRE_SAMPLE_RATE_MODE=full-4x \
+		EXPECTED_ARTIFACT_SHA256=d0d9ff1fb285f0dd903f17953e36276e24a4b3fbea6e0bfb2e3135fb249f913f \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_depth.sh
+
+deploy_agc_sample_rate_partial_fw1160_logged: agc_sample_rate_partial_fw1160_logged.elf
+	PS5_HOST=$(PS5_HOST) DEPTH_ARTIFACT=$(THIS_DIR)/$< \
+		RESULT_LOG_PATH=/data/homebrew/openagc_fw1160_depth/result.log \
+		REQUIRE_MSAA_RESOLVE=1 REQUIRE_SAMPLE_RATE_MODE=partial-2x \
+		EXPECTED_ARTIFACT_SHA256=d7141fd5bf26c82c05111aa9a91e690c9c76debf065bfab586625591220e0fe9 \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_depth.sh
+
 deploy_agc_depth_stencil_htile_fw1160_logged: agc_depth_stencil_htile_fw1160_logged.elf
 	PS5_HOST=$(PS5_HOST) DEPTH_ARTIFACT=$(THIS_DIR)/$< \
 		RESULT_LOG_PATH=/data/homebrew/openagc_fw1160_depth/result.log \
@@ -2734,6 +2786,8 @@ deploy_agc_depth_stencil_expclear_both_fw1160_logged: agc_depth_stencil_expclear
 	deploy_agc_depth_htile_mip_fw550_headless \
 	deploy_agc_depth_htile_array_fw550_headless \
 	deploy_agc_depth_msaa_fw550_headless \
+	deploy_agc_sample_rate_full_fw550_headless \
+	deploy_agc_sample_rate_partial_fw550_headless \
 	deploy_agc_depth_stencil_htile_fw550_headless \
 	deploy_agc_depth_stencil_expclear_depth_fw550_headless \
 	deploy_agc_depth_stencil_expclear_stencil_fw550_headless \
@@ -2820,6 +2874,20 @@ deploy_agc_depth_msaa_fw550_headless: agc_depth_msaa_fw550_headless.elf
 		EXPECTED_D32_ONE_COUNT=6469632 EXPECTED_D32_NEAR_COUNT=912384 \
 		EXPECTED_D32_FAR_COUNT=912384 \
 		EXPECTED_ARTIFACT_SHA256=83088ff7f33df17b89668b9d058b447212891585bf3455bd6ac7033bbf633ab7 \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_depth.sh
+
+deploy_agc_sample_rate_full_fw550_headless: agc_sample_rate_full_fw550_headless.elf
+	PS5_HOST=$(PS5_HOST) DEPTH_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_FW_ABI=0x0550 REQUIRE_MSAA_RESOLVE=1 \
+		REQUIRE_SAMPLE_RATE_MODE=full-4x \
+		EXPECTED_ARTIFACT_SHA256=78dc73eddc0d2f114d64bd0c4e040d4a995c6d04571f5e6f545bbd0aafd6e6a6 \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_depth.sh
+
+deploy_agc_sample_rate_partial_fw550_headless: agc_sample_rate_partial_fw550_headless.elf
+	PS5_HOST=$(PS5_HOST) DEPTH_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_FW_ABI=0x0550 REQUIRE_MSAA_RESOLVE=1 \
+		REQUIRE_SAMPLE_RATE_MODE=partial-2x \
+		EXPECTED_ARTIFACT_SHA256=2180da21a8aa7a945ce6e780b1dc878de66c7685cf523b1bab0da141203498f0 \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_depth.sh
 
 deploy_agc_depth_stencil_htile_fw550_headless: agc_depth_stencil_htile_fw550_headless.elf

@@ -125,6 +125,32 @@ if [ "${REQUIRE_MSAA_RESOLVE:-0}" -eq 1 ]; then
     grep -q '^\[Depth+4xMSAA Result\] markers=PASS color=PASS raw-depth=PASS stencil=PASS$' \
         "$output_file" || exit 1
 fi
+if [ -n "${REQUIRE_SAMPLE_RATE_MODE:-}" ]; then
+    case "$REQUIRE_SAMPLE_RATE_MODE" in
+        full-4x)
+            grep -Eq '^\[Sample Rate\] mode=full-4x samples=[1-9][0-9]*,[1-9][0-9]*,[1-9][0-9]*,[1-9][0-9]* total=[1-9][0-9]* guards=deadbeef,deadbeef,deadbeef,deadbeef: PASS$' \
+                "$output_file" || exit 1
+            ;;
+        partial-2x)
+            grep -Eq '^\[Sample Rate\] mode=partial-2x samples=0,0,0,0 total=[1-9][0-9]* guards=deadbeef,deadbeef,deadbeef,deadbeef: PASS$' \
+                "$output_file" || exit 1
+            ;;
+        *)
+            echo "invalid REQUIRE_SAMPLE_RATE_MODE" >&2
+            exit 2
+            ;;
+    esac
+fi
+if [ -n "${EXPECTED_SAMPLE_RATE_COUNTS:-}" ]; then
+    case "$EXPECTED_SAMPLE_RATE_COUNTS" in
+        *[!0-9,]*|,*|*,|*,,*)
+            echo "invalid EXPECTED_SAMPLE_RATE_COUNTS" >&2
+            exit 2
+            ;;
+    esac
+    grep -Fq "[Sample Rate] mode=$REQUIRE_SAMPLE_RATE_MODE samples=${EXPECTED_SAMPLE_RATE_COUNTS%,*} total=${EXPECTED_SAMPLE_RATE_COUNTS##*,} guards=deadbeef,deadbeef,deadbeef,deadbeef: PASS" \
+        "$output_file" || exit 1
+fi
 if [ "${EXPECTED_D16_FULL_RECT:-0}" -eq 1 ]; then
     grep -q '^\[Depth Readback\] green=228096 red=228096 ' \
         "$output_file" || exit 1

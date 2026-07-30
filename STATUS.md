@@ -161,6 +161,15 @@ file-backed verdict, teardown, self-termination, and debugger absence.
 Isolated D32+4x RGBA8 MSAA resolve is now hardware-qualified on both FW 5.50
 and FW 11.60. A distinct OpenAGC sample-rate-shading gate remains pending.
 
+That remaining gate is now prepared as separate full-4x and partial-2x
+artifacts. Fragment atomics record per-sample and total invocation counts into
+a guarded raw buffer, followed by explicit GL2 visibility before CPU readback.
+The partial shader never reads `gl_SampleID`, so its four zero counters are an
+independent guard against accidentally qualifying forced full-rate execution.
+All four endpoint/mode ELFs reproduce across two relinks, avoid AGC SPRX
+dependencies, are preserved under full hashes, and have cleanup-first pinned
+deploy targets. Hardware execution has not started.
+
 All four subresource artifacts now reproduce across two relinks, avoid AGC
 SPRX dependencies, are preserved under full hashes, and have cleanup-first
 hash-pinned deploy targets with exact color and selected/outside metadata
