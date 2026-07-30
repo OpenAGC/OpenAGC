@@ -170,13 +170,14 @@ and Prospero submission remain fail-closed.
 ## Qualification
 
 The generic suite covers valid float/normalized, UINT, and SINT attachment
-pairs, negative compatibility/layout fixtures, successful descriptor/push and
-vertex-table execution paths, direct and indirect set-address emission,
-fused geometry continuation patching, resource lifetime, exact depth/stencil
-register encoding, v1 state normalization, multisample minimums, required
-dynamic-state gating, device-wide tessellation-ring reuse, reflected off-chip
-layout patching, whole-patch draw validation, TCS push binding, and isolated
-plus TES-to-geometry submission. An opt-in combined-tree test also compiles
+pairs, negative compatibility/layout fixtures, transactional two-target MRT
+binding and CB0/CB1 packet capture, successful descriptor/push and vertex-table
+execution paths, direct and indirect set-address emission, fused geometry
+continuation patching, resource lifetime, exact depth/stencil register encoding,
+v1 state normalization, multisample minimums, required dynamic-state gating,
+device-wide tessellation-ring reuse, reflected off-chip layout patching,
+whole-patch draw validation, TCS push binding, and isolated plus
+TES-to-geometry submission. An opt-in combined-tree test also compiles
 actual vertex, fragment, and compute SPIR-V through `openagc-psbc`, then
 creates reflected OpenAGC graphics and compute pipelines without application
 register assembly. It is deliberately outside the default libc-only build:

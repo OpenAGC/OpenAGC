@@ -264,7 +264,7 @@
 #define AGC_REG_CB_COLOR_CONTROL_ROP3_SHIFT          16u
 #define AGC_REG_CB_COLOR_CONTROL_ROP3_MASK           0xFFu
 
-/* CB_COLOR0 registers — slot 0 of 8 (stride = 9 per slot) */
+/* CB_COLOR0 registers — slot 0 of 8 (stride = 15 per slot) */
 #define AGC_REG_CB_COLOR0_BASE                      0x318u
 #define AGC_REG_CB_COLOR0_VIEW                      0x31Bu
 #define AGC_REG_CB_COLOR0_INFO                      0x31Cu

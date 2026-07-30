@@ -263,7 +263,7 @@ logical shader bundles. Reflection v2 adds compiler-derived front-stage
 interfaces and geometry topology/limit facts without changing its serialized
 size; v1/API-14 artifacts remain accepted. The runtime recomputes the
 compiler's FNV-1a stage-linkage hash over its four interface masks before
-accepting a reflected shader. The full generic suite reports 14,172 passed.
+accepting a reflected shader. The full generic suite reports 14,209 passed.
 The opt-in combined-tree contract test now compiles real `openagc-psbc`
 vertex/fragment/compute output and creates OpenAGC graphics/compute pipelines
 without sample-local register knowledge; its 256-byte code alignment and
@@ -281,11 +281,11 @@ Runtime API v3 now adds typed `AgcColorTargetBinding` command recording for
 reflected graphics exports. It validates exact image/attachment format and
 sample agreement, matching dimensions, qualified target-base alignment, and
 array/mip subresource layout before transactionally emitting the existing
-gfx1013 color-target packets; targets are retained until command reset. The
-same host test covers rejected format binding, required-target draw gating,
-packet capture, and lifetime release. This is not a render-pass abstraction:
-clear/load/store, transitions, and PS5 hardware execution remain open, and no
-hardware promotion is claimed.
+gfx1013 color-target packets; targets are retained until command reset. Host
+coverage rejects mismatched target counts and dimensions before retaining either
+image, then locks both MRT base-register packets and lifetime release. This is
+not a render-pass abstraction: clear/load/store, transitions, and PS5 hardware
+execution remain open, and no hardware promotion is claimed.
 The native graphics counterpart now compiles a position/color triangle into a
 real NGG main/front pair and fragment sidecar, consumes those exact artifacts
 in a generic pipeline/color-target/depth-target/vertex/index/dynamic-state

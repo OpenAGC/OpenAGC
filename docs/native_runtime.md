@@ -147,9 +147,11 @@ For a graphics pipeline with color exports, bind exactly one
 binding names an `AGC_IMAGE_USAGE_COLOR_TARGET_BIT` image plus a mip/layer
 subresource; the runtime validates device ownership, usage, exact attachment
 format, sample count, matching target dimensions, and the proven gfx1013 base
-alignment before emitting any packet. Bound targets cannot be replaced within a
-command buffer and remain retained until reset. Color target binds cover the
-qualified 1x linear and RGBA8 4x layouts.
+alignment before emitting any packet. Multi-render-target validation is
+transactional: a mismatched target count or extent retains no image and emits
+no target state. Bound targets cannot be replaced within a command buffer and
+remain retained until reset. Color target binds cover the qualified 1x linear
+and RGBA8 4x layouts.
 
 For a pipeline with a declared depth/stencil format, bind one matching
 `AgcDepthStencilTargetBinding` before drawing. The v4 path validates exact

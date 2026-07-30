@@ -165,11 +165,12 @@ linkage, vertex-stride, descriptor, push-range, and unbound-resource cases. It
 also exercises successful descriptor/push dispatch, vertex-table drawing,
 direct and indirect descriptor addressing, resource retention/reset, exact
 depth/stencil and fill/cull/front-face rasterization register state, legacy
-state normalization, multisample minimums, and required dynamic-state gating.
-Line and point polygon modes fail pipeline creation with the other unqualified
-rasterization options. Graphics scratch remains unsupported and
-fails during pipeline creation; reflected gfx1013 LDS requirements are bounded
-before bind generation. The full generic suite now reports 14,172
+state normalization, multisample minimums, two-target MRT recording and
+lifetime release, and required dynamic-state gating. Line and point polygon
+modes fail pipeline creation with the other unqualified rasterization options.
+Graphics scratch remains unsupported and fails during pipeline creation;
+reflected gfx1013 LDS requirements are bounded before bind generation. The full
+generic suite now reports 14,209
 passed and 0 failed; the compiler's
 library, varying/export, NGG, and tessellation suites pass. This slice is
 host-tested only. No PS5 hardware test was run or claimed. See
@@ -202,10 +203,10 @@ pipelines. `agcCmdBindColorTargets` validates image usage, exact attachment
 format/sample agreement, matching dimensions, subresource layout, and the
 qualified gfx1013 target-base alignment before packet emission; command buffers
 retain successful targets through reset. The generic suite covers failed format
-binding, target-required draw gating, captured color-target registers, and
-release behavior. This is host-only and does not claim PS5 execution; clears,
-load/store, depth attachment binding, and transitions remain future native
-runtime work.
+binding, target-required draw gating, atomic two-target dimension/count
+rejection, captured CB0/CB1 target registers, and release behavior. This is
+host-only and does not claim PS5 execution; clears, load/store, and transitions
+remain future native runtime work.
 
 The generated `runtime_triangle` NGG vertex main/front pair and fragment
 sidecar now drive a generic native graphics contract and the separate

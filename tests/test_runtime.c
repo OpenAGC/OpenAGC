@@ -1282,6 +1282,142 @@ static void test_runtime_color_target_binding(void)
         "color-target device destroys");
 }
 
+static void test_runtime_mrt_color_target_binding(void)
+{
+    AgcDevice device = create_device();
+    AgcQueue queue = create_queue(device, kAgcQueueGraphics);
+    AgcShader vertex = create_shader(device, kAgcShaderStageVs);
+    AgcShaderReflection pixel_requirements = AGC_SHADER_REFLECTION_INIT;
+    AgcGraphicsPipelineDesc pipeline_desc = AGC_GRAPHICS_PIPELINE_DESC_INIT;
+    AgcColorBlendAttachmentState attachments[2] = {
+        AGC_COLOR_BLEND_ATTACHMENT_STATE_INIT,
+        AGC_COLOR_BLEND_ATTACHMENT_STATE_INIT,
+    };
+    AgcImageDesc image_desc = AGC_IMAGE_DESC_INIT;
+    AgcBufferDesc buffer_desc = AGC_BUFFER_DESC_INIT;
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcColorTargetBinding targets[2] = {
+        AGC_COLOR_TARGET_BINDING_INIT,
+        AGC_COLOR_TARGET_BINDING_INIT,
+    };
+    AgcGraphicsPipeline pipeline = NULL;
+    AgcShader pixel = NULL;
+    AgcImage first_image = NULL;
+    AgcImage second_image = NULL;
+    AgcImage mismatched_image = NULL;
+    AgcBuffer index_buffer = NULL;
+    AgcCommandBuffer command = NULL;
+    AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    const AgcCommandBufferSubmit *captured;
+    const uint32_t *words;
+    uint32_t value;
+
+    pixel_requirements.color_export_count = 2u;
+    pixel_requirements.color_exports[0] = (AgcShaderColorExport){
+        0u, AGC_SHADER_COLOR_EXPORT_32_ABGR,
+        AGC_SHADER_COMPONENT_FLOAT_OR_NORMALIZED, 0xfu, 0u};
+    pixel_requirements.color_exports[1] = (AgcShaderColorExport){
+        1u, AGC_SHADER_COLOR_EXPORT_32_ABGR,
+        AGC_SHADER_COMPONENT_FLOAT_OR_NORMALIZED, 0xfu, 0u};
+    pixel = create_shader_with_reflection(
+        device, kAgcShaderStagePs, &pixel_requirements);
+    attachments[0].format = AGC_FORMAT_RGBA8_UNORM;
+    attachments[1].format = AGC_FORMAT_RGBA8_UNORM;
+    pipeline_desc.vertex_shader = vertex;
+    pipeline_desc.pixel_shader = pixel;
+    pipeline_desc.color_attachment_count = 2u;
+    pipeline_desc.color_attachments = attachments;
+    TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc, &pipeline),
+        AGC_OK, "two-target graphics pipeline creates");
+
+    image_desc.width = 64u;
+    image_desc.height = 32u;
+    image_desc.format = AGC_FORMAT_RGBA8_UNORM;
+    image_desc.usage = AGC_IMAGE_USAGE_COLOR_TARGET_BIT;
+    TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &first_image), AGC_OK,
+        "first native MRT target creates");
+    image_desc.width = 32u;
+    TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &mismatched_image),
+        AGC_OK, "mismatched MRT target creates for validation");
+    buffer_desc.size = 64u;
+    buffer_desc.usage = AGC_BUFFER_USAGE_INDEX_BIT;
+    TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &index_buffer), AGC_OK,
+        "MRT index buffer creates");
+    command_desc.capacity_dwords = 512u;
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
+        AGC_OK, "MRT command buffer creates");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+        "MRT command buffer begins");
+    TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(command, pipeline), AGC_OK,
+        "MRT graphics pipeline binds");
+    TEST_ASSERT_EQ(agcCmdBindIndexBuffer(command, index_buffer, 0u,
+        kAgcIndexSize16), AGC_OK, "MRT index buffer binds");
+    targets[0].image = first_image;
+    targets[1].image = mismatched_image;
+    TEST_ASSERT_EQ(agcCmdBindColorTargets(command, 2u, targets),
+        AGC_ERROR_VALIDATION_FAILED,
+        "dimension-mismatched MRT bind rejects atomically");
+    TEST_ASSERT_EQ(agcDestroyImage(first_image), AGC_OK,
+        "rejected first MRT target remains unretained");
+    first_image = NULL;
+    TEST_ASSERT_EQ(agcDestroyImage(mismatched_image), AGC_OK,
+        "rejected second MRT target remains unretained");
+    mismatched_image = NULL;
+
+    image_desc.width = 64u;
+    TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &first_image), AGC_OK,
+        "matching first MRT target creates");
+    TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &second_image), AGC_OK,
+        "matching second MRT target creates");
+    targets[0].image = first_image;
+    targets[1].image = second_image;
+    TEST_ASSERT_EQ(agcCmdBindColorTargets(command, 1u, targets),
+        AGC_ERROR_VALIDATION_FAILED,
+        "MRT target count must match reflected exports");
+    TEST_ASSERT_EQ(agcCmdBindColorTargets(command, 2u, targets), AGC_OK,
+        "matching MRT targets emit native binding state");
+    TEST_ASSERT_EQ(agcDestroyImage(first_image), AGC_ERROR_BUSY,
+        "first recorded MRT target remains retained");
+    TEST_ASSERT_EQ(agcDestroyImage(second_image), AGC_ERROR_BUSY,
+        "second recorded MRT target remains retained");
+    TEST_ASSERT_EQ(agcCmdDrawIndexed(command, 3u, 1u, 0u, 0, 0u), AGC_OK,
+        "MRT draw records after both targets bind");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+        "MRT command buffer becomes executable");
+    submit.command_buffer_count = 1u;
+    submit.command_buffers = &command;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, NULL), AGC_OK,
+        "MRT command buffer submits through the host carrier");
+    captured = agcDriverDebugLastDcbSubmit();
+    words = (const uint32_t *)(uintptr_t)captured->command_address;
+    TEST_ASSERT(runtime_find_context_register(words, captured->dword_count,
+        AGC_REG_CB_COLOR0_BASE, &value) && value != 0u,
+        "MRT binding records first color base");
+    TEST_ASSERT(runtime_find_context_register(words, captured->dword_count,
+        AGC_REG_CB_COLOR0_BASE + 15u, &value) && value != 0u,
+        "MRT binding records second color base");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+        "MRT reset releases recorded targets");
+    TEST_ASSERT_EQ(agcDestroyImage(second_image), AGC_OK,
+        "released second MRT target destroys after reset");
+    TEST_ASSERT_EQ(agcDestroyImage(first_image), AGC_OK,
+        "released first MRT target destroys after reset");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+        "MRT command buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyBuffer(index_buffer), AGC_OK,
+        "MRT index buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(pipeline), AGC_OK,
+        "MRT graphics pipeline destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(pixel), AGC_OK,
+        "MRT pixel shader destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(vertex), AGC_OK,
+        "MRT vertex shader destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
+        "MRT graphics queue destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "MRT device destroys");
+}
+
 static void test_runtime_depth_stencil_target_binding(void)
 {
     AgcDevice device = create_device();
@@ -3612,6 +3748,7 @@ void test_suite_runtime(void)
     TEST_RUN(test_runtime_compiler_graphics_sidecar);
     TEST_RUN(test_runtime_indexed_graphics_submission);
     TEST_RUN(test_runtime_color_target_binding);
+    TEST_RUN(test_runtime_mrt_color_target_binding);
     TEST_RUN(test_runtime_depth_stencil_target_binding);
     TEST_RUN(test_runtime_command_space_atomic_failure);
     TEST_RUN(test_runtime_dynamic_graphics_state);
