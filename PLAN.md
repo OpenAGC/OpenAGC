@@ -614,6 +614,13 @@ all six pinned artifacts for identical-byte FW 5.50 replay and proceed to the
   render-target allocation to the required 16 bytes per pixel. Do not pin or
   execute it until the FW 11.60 console has rebooted and RG32_UINT passes.
 
+- `R32_SINT` is host-qualified as append-only value 29 with gfx1013 `32`,
+  SINT, standard swap, four bytes per pixel, and `32_R` export 1. Exact PM4
+  (`CB_COLOR0_INFO=0x00070510`), all-profile selection, every short-buffer
+  boundary, invalid-enum behavior, and maximum 64-bit layout arithmetic pass.
+  Build its dedicated signed-integer shader and portable exact-value gate
+  offline; keep all new hardware runs behind the required clean reboot.
+
 These formats need dedicated integer-output pixel shaders. Do not qualify them
 using a floating-point shader and assume the conversion is correct. Their
 oracles must validate exact integer values rather than approximate
