@@ -249,7 +249,11 @@ diversity, independent hashes, and the packed hash, and passes
 firmware-neutral dependency verification. The final unexecuted ELF is pinned
 as SHA-256
 `6b91d8e21d8a47e4fd3a529c4f5637c46fab42ba22a62d8bbaed6c74befeaac0`.
-Two identical-byte FW 11.60 runs and exact FW 5.50 replay remain pending.
+Those identical bytes passed twice on FW `0x11600005`: both lanes spanned
+`-32768..32767` with zero exact mismatches, independent hashes, packed FNV64
+`0xd283b845c78ce483`, immediate fences, and clean teardown. Exact FW 5.50
+replay remains pending. See
+`analysis/fw1160_rg16_sint_portable_qualification_20260730.md`.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability

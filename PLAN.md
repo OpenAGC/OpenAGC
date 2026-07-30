@@ -357,8 +357,11 @@ the runner and shared teardown on FW 11.60 only.
   firmware-neutral dependency verification. The final unexecuted ELF is
   pinned as SHA-256
   `6b91d8e21d8a47e4fd3a529c4f5637c46fab42ba22a62d8bbaed6c74befeaac0`.
-  Run those identical bytes twice on FW 11.60; exact FW 5.50 replay remains
-  pending.
+  Those identical bytes passed twice on FW `0x11600005`: both lanes spanned
+  `-32768..32767` with zero exact mismatches, independent hashes, packed
+  FNV64 `0xd283b845c78ce483`, immediate fences, and clean teardown. Exact FW
+  5.50 replay remains pending. See
+  `analysis/fw1160_rg16_sint_portable_qualification_20260730.md`.
 - Seven additional offscreen format gates now build under the same exact
   profile and bounded runner: R8, RG8, RGB10A2, R11G11B10, R32, RG32, and
   RGBA32. All seven passed twice on FW 11.60; logged RG32 reproduced FNV64
@@ -553,7 +556,7 @@ After normalized formats pass, qualify:
 2. `RG16_UINT` — complete on FW 11.60; exact FW 5.50 replay pending.
 3. `RGBA16_UINT` — complete on FW 11.60; exact FW 5.50 replay pending.
 4. `R16_SINT` — complete on FW 11.60; exact FW 5.50 replay pending.
-5. `RG16_SINT` — host-qualified; portable two-lane gate pending.
+5. `RG16_SINT` — complete on FW 11.60; exact FW 5.50 replay pending.
 5. `RG16_SINT`.
 6. `RGBA16_SINT`.
 
