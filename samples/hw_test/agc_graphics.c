@@ -408,6 +408,9 @@
 #elif defined(AGC_VALIDATE_R32_SINT) && AGC_VALIDATE_R32_SINT
 #include "shaders/sint32_r_frag_sb.h"
 #define FRAGMENT_DATA sint32_r_frag_data
+#elif defined(AGC_VALIDATE_RG32_SINT) && AGC_VALIDATE_RG32_SINT
+#include "shaders/sint32_rg_frag_sb.h"
+#define FRAGMENT_DATA sint32_rg_frag_data
 #elif AGC_NGG_INPUT_LINES || AGC_TESS_GEOMETRY_LINES
 #include "shaders/triangle_line_frag_sb.h"
 #define FRAGMENT_DATA triangle_line_frag_data
@@ -593,6 +596,9 @@ int sceKernelDeleteEqueue(SceKernelEqueue equeue);
 #ifndef AGC_VALIDATE_R32_SINT
 #define AGC_VALIDATE_R32_SINT 0
 #endif
+#ifndef AGC_VALIDATE_RG32_SINT
+#define AGC_VALIDATE_RG32_SINT 0
+#endif
 #ifndef AGC_VALIDATE_R8_UNORM
 #define AGC_VALIDATE_R8_UNORM 0
 #endif
@@ -627,7 +633,7 @@ int sceKernelDeleteEqueue(SceKernelEqueue equeue);
      AGC_VALIDATE_RGBA16_SINT + \
      AGC_VALIDATE_R32_UINT + AGC_VALIDATE_RG32_UINT + \
      AGC_VALIDATE_RGBA32_UINT + \
-     AGC_VALIDATE_R32_SINT + \
+     AGC_VALIDATE_R32_SINT + AGC_VALIDATE_RG32_SINT + \
      AGC_VALIDATE_R8_UNORM + AGC_VALIDATE_RG8_UNORM + \
      AGC_VALIDATE_R32_FLOAT + AGC_VALIDATE_RG32_FLOAT + \
      AGC_VALIDATE_RGBA32_FLOAT) > 1
@@ -4054,21 +4060,24 @@ int main(void) {
 #elif AGC_VALIDATE_R32_FLOAT || AGC_VALIDATE_RG32_FLOAT || \
       AGC_VALIDATE_R32_UINT || AGC_VALIDATE_RG32_UINT || \
       AGC_VALIDATE_RGBA32_FLOAT || AGC_VALIDATE_RGBA32_UINT || \
-      AGC_VALIDATE_R32_SINT
+      AGC_VALIDATE_R32_SINT || AGC_VALIDATE_RG32_SINT
     const uint32_t components =
         (AGC_VALIDATE_RGBA32_FLOAT || AGC_VALIDATE_RGBA32_UINT) ? 4u :
-        ((AGC_VALIDATE_RG32_FLOAT || AGC_VALIDATE_RG32_UINT) ? 2u : 1u);
+        ((AGC_VALIDATE_RG32_FLOAT || AGC_VALIDATE_RG32_UINT ||
+          AGC_VALIDATE_RG32_SINT) ? 2u : 1u);
     RenderTargetConfig native_target = {
         test.render_target, FP16_TARGET_WIDTH, FP16_TARGET_HEIGHT,
         (AGC_VALIDATE_RGBA32_FLOAT || AGC_VALIDATE_RGBA32_UINT) ?
             AGC_GFX1013_COLOR_FORMAT_32_32_32_32 :
-        (AGC_VALIDATE_RG32_FLOAT || AGC_VALIDATE_RG32_UINT) ?
+        (AGC_VALIDATE_RG32_FLOAT || AGC_VALIDATE_RG32_UINT ||
+         AGC_VALIDATE_RG32_SINT) ?
             AGC_GFX1013_COLOR_FORMAT_32_32 :
             AGC_GFX1013_COLOR_FORMAT_32,
         (AGC_VALIDATE_R32_UINT || AGC_VALIDATE_RG32_UINT ||
          AGC_VALIDATE_RGBA32_UINT) ?
             AGC_GFX1013_SURFACE_NUMBER_UINT :
-        AGC_VALIDATE_R32_SINT ? AGC_GFX1013_SURFACE_NUMBER_SINT :
+        (AGC_VALIDATE_R32_SINT || AGC_VALIDATE_RG32_SINT) ?
+            AGC_GFX1013_SURFACE_NUMBER_SINT :
             AGC_GFX1013_SURFACE_NUMBER_FLOAT,
         AGC_GFX1013_SURFACE_SWAP_STD,
         components, 4u, AGC_VALIDATE_RGBA32_FLOAT ? "RGBA32_FLOAT" :
@@ -4077,7 +4086,8 @@ int main(void) {
                 (AGC_VALIDATE_RG32_UINT ? "RG32_UINT" :
                     (AGC_VALIDATE_R32_UINT ? "R32_UINT" :
                         (AGC_VALIDATE_R32_SINT ? "R32_SINT" :
-                            "R32_FLOAT")))))
+                            (AGC_VALIDATE_RG32_SINT ? "RG32_SINT" :
+                                "R32_FLOAT"))))))
     };
     printf("\n--- Step 4: %s offscreen draw ---\n", native_target.name);
     if (!dispatch_graphics(&test, &front, &back, &ps, &native_target)) {

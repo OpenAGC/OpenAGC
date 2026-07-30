@@ -225,6 +225,12 @@ case "$EXPECTED_TARGET" in
         grep -Eq '^\[SINT32\] changed=[1-9][0-9]*/[1-9][0-9]* .* independence=PASS: PASS$' \
             "$output_file" || exit 1
         ;;
+    RG32_SINT)
+        grep -Eq '^\[SINT32 Lane 0\].*: PASS$' "$output_file" || exit 1
+        grep -Eq '^\[SINT32 Lane 1\].*: PASS$' "$output_file" || exit 1
+        grep -Eq '^\[SINT32\] changed=[1-9][0-9]*/[1-9][0-9]* .* independence=PASS: PASS$' \
+            "$output_file" || exit 1
+        ;;
     'offscreen RGB10A2')
         grep -Eq '^\[RGB10A2\] Packed top2 histogram:.*: PASS$' \
             "$output_file" || exit 1

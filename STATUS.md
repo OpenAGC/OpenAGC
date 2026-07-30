@@ -333,7 +333,8 @@ hardware execution remains ordered behind the clean-boot UINT gates.
 `32_GR` export 2. Exact host coverage locks `CB_COLOR0_INFO=0x0007052c`, full
 PM4, all 39 profiles, every short command-buffer boundary, invalid enums, and
 maximum 64-bit surface arithmetic. The generic suite passes 11,699 assertions;
-portable-gate construction is next.
+its dedicated `32_GR` shader and exact two-lane signed oracle build as a
+firmware-neutral portable gate. Final-byte pinning remains pending.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability

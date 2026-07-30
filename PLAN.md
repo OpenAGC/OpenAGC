@@ -627,7 +627,8 @@ all six pinned artifacts for identical-byte FW 5.50 replay and proceed to the
   SINT, standard swap, eight bytes per pixel, and `32_GR` export 2. Exact PM4
   (`CB_COLOR0_INFO=0x0007052c`), all-profile selection, every short-buffer
   boundary, invalid-enum behavior, and maximum layout arithmetic pass. Build
-  and pin its two-lane signed gate offline.
+  and pin its two-lane signed gate offline. The firmware-neutral gate now
+  builds with `32_GR` and exact independent-lane checks.
 
 These formats need dedicated integer-output pixel shaders. Do not qualify them
 using a floating-point shader and assume the conversion is correct. Their
