@@ -214,6 +214,8 @@ def main() -> int:
             "cb,u32,u32,u32,ptr,u32,u64", "10", "64",
             "pre=tag:8/5,post=tag:0,driver-stub=0+0",
             "count_addr=align4,split32;stride=dword8",
+            ("legacy-bits5:7" if has(bodies["draw"], r"\$0xe0000020")
+             else "standard"),
         ))
 
     output = [
@@ -222,6 +224,7 @@ def main() -> int:
         "draw_index_multi_fingerprint\tsingle_signature\tsingle_core_dwords\t"
         "single_get_size_bytes\tmulti_signature\tmulti_core_dwords\t"
         "multi_get_size_bytes\tuser_data_wrappers\tmulti_count_fields"
+        "\tinitiator_modifier_family"
     ]
     output.extend("\t".join(row) for row in facts)
     text = "\n".join(output) + "\n"
