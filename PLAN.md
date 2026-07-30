@@ -327,7 +327,10 @@ the runner and shared teardown on FW 11.60 only.
   every short-buffer boundary, invalid-enum behavior, and maximum 64-bit
   layout arithmetic pass. Its isolated four-lane portable gate now builds
   with the integer fragment shader and passes firmware-neutral dependency
-  verification. Pin the final bytes before execution.
+  verification. The final unexecuted ELF is pinned as SHA-256
+  `22bd65d4b3f0aec4659685d01b100b4e83617710c6fb01c82f04cd13f0a89a84`.
+  Run those identical bytes twice on FW 11.60; exact FW 5.50 replay remains
+  pending.
 - Seven additional offscreen format gates now build under the same exact
   profile and bounded runner: R8, RG8, RGB10A2, R11G11B10, R32, RG32, and
   RGBA32. All seven passed twice on FW 11.60; logged RG32 reproduced FNV64

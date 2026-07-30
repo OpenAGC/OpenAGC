@@ -214,8 +214,10 @@ UINT16_ABGR export 7. Exact host coverage locks
 short command buffer, invalid enums, and maximum 64-bit layout arithmetic.
 The generic suite passes 8,635 assertions and the clean Prospero build passes.
 The isolated four-lane portable gate builds with the UINT16_ABGR shader and
-passes firmware-neutral dependency verification. Final-byte pinning and
-hardware execution remain pending.
+passes firmware-neutral dependency verification. The final unexecuted ELF is
+pinned as SHA-256
+`22bd65d4b3f0aec4659685d01b100b4e83617710c6fb01c82f04cd13f0a89a84`.
+Two identical-byte FW 11.60 runs and exact FW 5.50 replay remain pending.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability
