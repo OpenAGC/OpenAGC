@@ -1051,15 +1051,18 @@ texel, applies the SRGB transfer for the SRGB variant, requires zero mismatches,
 records a native FNV64, and fails unless all three selection regions execute.
 Both ELFs pass firmware-neutral dependency verification. Preserve and pin their
 final bytes before the first clean-boot FW 11.60 attempt. The preserved SHA-256
-values are `22834911ea4c75eb0dfdf445cc38c7d5a79dd4ec273a574d5dc1ab6a462e5a62`
+values are `b8ec09a3e15b33b20897e0526e93c6a0828931e358563cf3539d5b964e3a991c`
 for BC1 UNORM and
-`0fc555979b3657761fbace24586363bf186137d3acb454162f5e997af40fdab8` for
+`acf8b12e84ebf7fc07ffd502ff97b399583f4bdeddca0c477e903342504f0ff2` for
 BC1 SRGB. Their FW 11.60 and FW 5.50 targets have no build prerequisites.
 
 The first BC1 UNORM launch on the post-integer-test boot produced no fresh
-file-backed verdict. All services stayed live and no renderer remained, which
-matches the known stale websrv loader state rather than a BC decode failure.
-Reboot FW 11.60 and retry the same pinned bytes; do not advance on this boot.
+file-backed verdict. After a clean reboot, the identical old artifact executed
+and safely failed its CPU oracle: the GPU produced the fixed-point BC colors
+171/84 while the oracle expected ideal thirds 170/85. The oracle now uses the
+standard 43/21 six-bit BC weights for BC1, BC2, and BC3, and the runner surfaces
+a completed fatal log instead of waiting for `Graphics result:`. Retry the new
+pinned BC1 UNORM bytes twice before advancing.
 
 BC4 UNORM/SNORM portable gates now build with dedicated scalar sampling
 shaders. They reuse the 5x7, three-mip, two-layer direct-upload geometry but
@@ -1084,9 +1087,9 @@ alpha independently, applies SRGB conversion only to RGB, requires exact
 RGBA8 agreement, proves alpha endpoints 0 and 255, validates all mip/layer
 selection regions, and records a native hash. Preserve and pin the final
 firmware-neutral bytes before any hardware execution. The exact SHA-256 values
-are `2e35d86e76362a87cb48c34f14a9f03757d50129fb1fb114711da0253b4e5aad`
+are `0aa0a688aa337624847f054fc4d9e5a31e0eae67bf391a83c789a88aa885cfcf`
 for BC2 UNORM and
-`03391282ce0be28fea69991dfa3ab0a986bbc37423324790d6a5fc72c0407753`
+`2abdedf25437b2e8907aafef78ec7c45857abf390735ce790c34ef843762cf90`
 for BC2 SRGB. Their guarded endpoint targets have no build prerequisites;
 FW 11.60 execution and identical-byte FW 5.50 replay remain pending.
 
@@ -1099,9 +1102,9 @@ the qualified BC4 rounding rule for interpolated alpha, applies SRGB only to
 RGB, demands exact RGBA8 agreement and the full 0..255 alpha range, validates
 all selection regions, and records a native hash. Pin the final neutral bytes
 before any hardware attempt. The pinned SHA-256 values are
-`4e3d028c740037f6b3e5891cf3fe1d9b7c4be7b30a24e0a3d5d4174076b7a9e9`
+`f6b99e4db1e3a7342db0132a8466362aab8deb41365b7460439b7a145fbc69bf`
 for BC3 UNORM and
-`80d7fded2d9d0baeb14b859e0aeb2a3ce80d8358448711655622d13fceff1556`
+`c5019c536c32877595c10cc6eadab05774d6b41d671b672dd7edc6fc0ac3cc30`
 for BC3 SRGB. Their FW 11.60 and identical-byte FW 5.50 guarded targets have
 no build prerequisites.
 

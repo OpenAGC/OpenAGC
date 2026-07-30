@@ -845,12 +845,16 @@ static uint32_t bc1_decode_texel(const uint8_t *texture,
         uint32_t r1 = colors[1] & 0xffu;
         uint32_t g1 = (colors[1] >> 8u) & 0xffu;
         uint32_t b1 = (colors[1] >> 16u) & 0xffu;
-        colors[2] = ((2u * r0 + r1) / 3u) |
-            (((2u * g0 + g1) / 3u) << 8u) |
-            (((2u * b0 + b1) / 3u) << 16u) | 0xff000000u;
-        colors[3] = ((r0 + 2u * r1) / 3u) |
-            (((g0 + 2u * g1) / 3u) << 8u) |
-            (((b0 + 2u * b1) / 3u) << 16u) | 0xff000000u;
+        /* GFX10.3 uses the standard BC fixed-point weights 43/21 rather
+         * than ideal integer thirds. This yields 171/84 for 255/0. */
+        colors[2] = ((43u * r0 + 21u * r1 + 32u) >> 6u) |
+            (((43u * g0 + 21u * g1 + 32u) >> 6u) << 8u) |
+            (((43u * b0 + 21u * b1 + 32u) >> 6u) << 16u) |
+            0xff000000u;
+        colors[3] = ((21u * r0 + 43u * r1 + 32u) >> 6u) |
+            (((21u * g0 + 43u * g1 + 32u) >> 6u) << 8u) |
+            (((21u * b0 + 43u * b1 + 32u) >> 6u) << 16u) |
+            0xff000000u;
     } else {
         colors[2] = (((colors[0] & 0x00fefefeu) +
             (colors[1] & 0x00fefefeu)) >> 1u) | 0xff000000u;
@@ -864,10 +868,12 @@ static uint8_t bc1_srgb_to_unorm(uint8_t value)
 {
     if (value == 0u || value == 255u)
         return value;
-    if (value == 85u)
+    if (value == 84u || value == 85u)
         return 23u;
     if (value == 170u)
         return 103u;
+    if (value == 171u)
+        return 104u;
     return value;
 }
 
@@ -1056,10 +1062,12 @@ static uint8_t bc2_srgb_to_unorm(uint8_t value)
 {
     if (value == 0u || value == 255u)
         return value;
-    if (value == 85u)
+    if (value == 84u || value == 85u)
         return 23u;
     if (value == 170u)
         return 103u;
+    if (value == 171u)
+        return 104u;
     return value;
 }
 
@@ -1088,8 +1096,8 @@ static uint32_t bc2_decode_texel(const uint8_t *texture,
         uint32_t shift = channel * 8u;
         uint32_t value0 = (colors[0] >> shift) & 0xffu;
         uint32_t value1 = (colors[1] >> shift) & 0xffu;
-        colors[2] |= ((2u * value0 + value1) / 3u) << shift;
-        colors[3] |= ((value0 + 2u * value1) / 3u) << shift;
+        colors[2] |= ((43u * value0 + 21u * value1 + 32u) >> 6u) << shift;
+        colors[3] |= ((21u * value0 + 43u * value1 + 32u) >> 6u) << shift;
     }
     index = (indices >> (2u * position)) & 3u;
     color = colors[index];
@@ -1170,10 +1178,12 @@ static uint8_t bc3_srgb_to_unorm(uint8_t value)
 {
     if (value == 0u || value == 255u)
         return value;
-    if (value == 85u)
+    if (value == 84u || value == 85u)
         return 23u;
     if (value == 170u)
         return 103u;
+    if (value == 171u)
+        return 104u;
     return value;
 }
 
@@ -1213,8 +1223,8 @@ static uint32_t bc3_decode_texel(const uint8_t *texture,
         uint32_t shift = channel * 8u;
         uint32_t value0 = (colors[0] >> shift) & 0xffu;
         uint32_t value1 = (colors[1] >> shift) & 0xffu;
-        colors[2] |= ((2u * value0 + value1) / 3u) << shift;
-        colors[3] |= ((value0 + 2u * value1) / 3u) << shift;
+        colors[2] |= ((43u * value0 + 21u * value1 + 32u) >> 6u) << shift;
+        colors[3] |= ((21u * value0 + 43u * value1 + 32u) >> 6u) << shift;
     }
     color = colors[(color_indices >> (2u * position)) & 3u];
     if (srgb) {

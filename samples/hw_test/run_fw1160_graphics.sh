@@ -86,10 +86,13 @@ if [ -n "${RESULT_LOG_PATH:-}" ]; then
     attempts=0
     while [ "$attempts" -lt 30 ]; do
         if curl -sS --fail --max-time 3 "$result_ftp_url" \
-                -o "$output_file" 2>/dev/null &&
-           grep -q '^Graphics result:' "$output_file"; then
-            result_ready=1
-            break
+                -o "$output_file" 2>/dev/null; then
+            if grep -q '^Graphics result:' "$output_file" ||
+               { grep -q '^FATAL:' "$output_file" &&
+                 grep -q '^Graphics memory cleanup:' "$output_file"; }; then
+                result_ready=1
+                break
+            fi
         fi
         attempts=$((attempts + 1))
         sleep 1

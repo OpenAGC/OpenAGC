@@ -652,16 +652,20 @@ readback oracle independently decodes every covered BC1 texel, applies the SRGB
 transfer where required, demands zero mismatches and all selection regions,
 and records the native hash. Hardware execution and hash freezing remain
 pending a clean FW 11.60 reboot. Exact artifacts are pinned as SHA-256
-`22834911ea4c75eb0dfdf445cc38c7d5a79dd4ec273a574d5dc1ab6a462e5a62`
+`b8ec09a3e15b33b20897e0526e93c6a0828931e358563cf3539d5b964e3a991c`
 (UNORM) and
-`0fc555979b3657761fbace24586363bf186137d3acb454162f5e997af40fdab8`
+`acf8b12e84ebf7fc07ffd502ff97b399583f4bdeddca0c477e903342504f0ff2`
 (SRGB), with no-prerequisite guarded targets for FW 11.60 and identical-byte
 FW 5.50 replay.
 
 The first BC1 UNORM hardware attempt after the 32-bit integer sequence yielded
-no fresh file-backed verdict. Websrv, FTP, and ps5debug-NG remained reachable
-and no renderer process remained, matching the known stale loader symptom.
-This is inconclusive; reboot and retry the identical pinned bytes.
+no fresh file-backed verdict. A clean-reboot retry executed fully and isolated
+an oracle defect: GFX10.3 decoded the two intermediate colors with fixed-point
+43/21 weights (`171/84`), while the host oracle used ideal thirds (`170/85`).
+The BC1/BC2/BC3 color decoders and SRGB expectations now model the observed
+hardware rule. The guarded runner also recognizes a completed fatal log after
+cleanup, so it cannot mislabel this class of failure as a transport timeout.
+Hardware qualification of the corrected artifacts remains pending.
 
 BC4 UNORM and SNORM firmware-neutral sampling gates also build. Dedicated
 shaders sample the red channel from exact endpoint/index blocks across mip 0,
@@ -684,9 +688,9 @@ SPRX dependency. They reuse the BC array/mip shader while uploading independent
 applies SRGB conversion only to RGB, requires exact RGBA8 agreement, demands
 both alpha endpoints and all three mip/layer regions, and records the native
 hash. Exact artifacts are pinned as SHA-256
-`2e35d86e76362a87cb48c34f14a9f03757d50129fb1fb114711da0253b4e5aad`
+`0aa0a688aa337624847f054fc4d9e5a31e0eae67bf391a83c789a88aa885cfcf`
 (UNORM) and
-`03391282ce0be28fea69991dfa3ab0a986bbc37423324790d6a5fc72c0407753`
+`2abdedf25437b2e8907aafef78ec7c45857abf390735ce790c34ef843762cf90`
 (SRGB), with no-prerequisite FW 11.60 and FW 5.50 targets. Hardware execution
 remains pending a clean FW 11.60 boot.
 
@@ -698,9 +702,9 @@ storage. The independent oracle decodes both fields, uses nearest rounding for
 alpha interpolation, converts only RGB for SRGB, and requires exact RGBA8
 agreement plus alpha endpoints 0 and 255. Artifact pinning and hardware
 execution remain pending. Exact artifacts are now pinned as SHA-256
-`4e3d028c740037f6b3e5891cf3fe1d9b7c4be7b30a24e0a3d5d4174076b7a9e9`
+`f6b99e4db1e3a7342db0132a8466362aab8deb41365b7460439b7a145fbc69bf`
 (UNORM) and
-`80d7fded2d9d0baeb14b859e0aeb2a3ce80d8358448711655622d13fceff1556`
+`c5019c536c32877595c10cc6eadab05774d6b41d671b672dd7edc6fc0ac3cc30`
 (SRGB), with no-prerequisite FW 11.60 and FW 5.50 guarded targets. Hardware
 execution remains pending a clean FW 11.60 boot.
 
