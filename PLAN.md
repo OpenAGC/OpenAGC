@@ -354,7 +354,11 @@ the runner and shared teardown on FW 11.60 only.
   short-buffer boundary, invalid-enum behavior, and maximum 64-bit layout
   arithmetic pass. The portable gate now exercises two exact signed lanes,
   signed range/diversity, independent hashes, and the packed hash, and passes
-  firmware-neutral dependency verification. Pin its final bytes next.
+  firmware-neutral dependency verification. The final unexecuted ELF is
+  pinned as SHA-256
+  `6b91d8e21d8a47e4fd3a529c4f5637c46fab42ba22a62d8bbaed6c74befeaac0`.
+  Run those identical bytes twice on FW 11.60; exact FW 5.50 replay remains
+  pending.
 - Seven additional offscreen format gates now build under the same exact
   profile and bounded runner: R8, RG8, RGB10A2, R11G11B10, R32, RG32, and
   RGBA32. All seven passed twice on FW 11.60; logged RG32 reproduced FNV64
