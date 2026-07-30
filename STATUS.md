@@ -114,15 +114,28 @@ with hash `0x7cb38a81e7d27391`. Both lanes spanned `0x0000..0xffff`, had at
 least eight values, and passed the distinct-channel oracle. Host fixtures lock
 the tuple and exact selection for all 39 active profiles.
 
+`AGC_GFX1013_RT_FORMAT_RGBA16_UNORM` completes the regular 16-bit UNORM
+component-width group with tuple `(format=0x0c, number=UNORM,
+swap=standard)`, eight bytes per pixel, and the FP16_ABGR export. The
+firmware-neutral ELF SHA-256
+`13ca0dfaa743438301ecbe5d5255c0168bb89a80bf3ff0e68cdeae8a34908c88`
+passed twice on standard FW `0x11600005`. Both runs reproduced 255,744 pixels
+in `768x665` bounds, packed native FNV64 `0xbad47fbdb2e3991e`, and four
+pairwise-distinct lane hashes; every lane had at least eight values and
+approached both UNORM endpoints. Submission fences were immediate and driver
+plus memory teardown passed. The exact file is preserved for a no-rebuild FW
+5.50 replay. Other profiles remain hardware-unverified. See
+`analysis/fw1160_rgba16_unorm_portable_qualification_20260730.md`.
+
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability
 ELF, non-indexed and indexed 10-dword multi-draw, GPU count-buffer selection,
-R16_UNORM, and RG16_UNORM. All three newly neutral indirect artifacts passed
+R16_UNORM, RG16_UNORM, and RGBA16_UNORM. All three newly neutral indirect artifacts passed
 twice on FW 11.60 before pinning. FW 5.50 execution remains pending; none of
 these FW 11.60 results is labeled cross-firmware hardware qualification. See
 `analysis/fw1160_rg16_unorm_and_endpoint_replay_20260730.md`.
 
-Offline portability closure is complete. The clean generic suite passes 6,110
+Offline portability closure is complete. The clean generic suite passes 6,454
 assertions, including full raw-version normalization, exact profile selection,
 and common-V7 acceptance across all 39 active profiles; the clean Prospero
 cross-build also passes. Submission, queue, memory, suspend, workload, TF/HS,
@@ -2105,16 +2118,17 @@ CPU conversion to the registered RGBA8 display buffer was visually confirmed
 as a centered, smoothly color-textured triangle with equal sides on a
 dark-gray background.
 
-The public gfx1013 color-target layer now resolves 14 typed linear presets:
-R8, RG8, RGBA8, BGRA8, and RGB10A2 UNORM plus R16, RG16, RGBA16, R32, RG32,
-RGBA32, and R11G11B10 FLOAT, plus RGBA8 and BGRA8 SRGB.
+The public gfx1013 color-target layer now resolves 17 typed linear presets:
+R8, RG8, RGBA8, BGRA8, RGB10A2, R16, RG16, and RGBA16 UNORM; R16, RG16,
+RGBA16, R32, RG32, RGBA32, and R11G11B10 FLOAT; and RGBA8 and BGRA8 SRGB.
 `agcGfx1013GetColorTargetFormatInfo` exposes each preset's
 exact gfx103 CB format, number type, component swap, byte size, and compatible
 SPI shader-export format; `agcGfx1013InitColorTarget` converts it into the
 existing ABI-stable target state. The packet builder accepts only table-backed
 encodings and rejects linear rows that violate the gfx103 256-byte pitch
-alignment. All 14 encodings have exact 28-dword host fixtures. RGBA8/BGRA8
-UNORM and SRGB, RGB10A2, R16, RG16, RGBA16 FLOAT, and R11G11B10 FLOAT have
+alignment. All 17 encodings have exact 28-dword host fixtures. RGBA8/BGRA8
+UNORM and SRGB, RGB10A2, R16, RG16, RGBA16 FLOAT, R16, RG16, and RGBA16
+UNORM, and R11G11B10 FLOAT have
 PS5 hardware evidence; R8, RG8, R32, RG32, and RGBA32 await hardware
 qualification.
 
