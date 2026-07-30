@@ -42,13 +42,14 @@ and after shutdown.
 ## Firmware-keyed VideoOut linear registration (2026-07-30)
 
 The application-neutral Prospero VideoOut backend no longer writes the FW 5.50
-instruction at `libSceVideoOut+0x7e61` on every console. Exact local SPRX
-comparison recovered FW 11.60's corresponding branch at `+0x9922`; both
-profiles carry their full six-byte signatures. Runtime selection normalizes
+instruction at `libSceVideoOut+0x7e61` on every console. Reproducible local
+SPRX extraction now covers all 39 active exact keys from FW 3.20 through 12.70;
+each profile carries its full six-byte signature. Runtime selection normalizes
 the full system version to the four-digit ABI key, verifies the instruction
 before patching, restores it immediately after registration, and rejects
-unknown firmware layouts. Host fixtures lock both profiles and the Prospero
-library cross-builds without warnings. The pinned public-API payload passed
+unknown firmware layouts. Host fixtures lock all 39 profiles. Only FW 5.50 and
+FW 11.60 are hardware-qualified; the other 37 rows remain SPRX-qualified and
+hardware-unverified. The pinned public-API payload passed
 twice on standard FW `0x11600005`: both runs restored the verified instruction,
 completed the live GPU marker after 50 ms, performed two bounded flips, and
 returned zero from driver and memory teardown. The process-cleanup ELF ran
@@ -56,6 +57,12 @@ immediately before each launch, both payloads self-terminated, and ports 8080
 and 744 remained reachable. Actual graphics/compute scanout content remains a
 separate parity gate. See
 `analysis/videoout_linear_patch_versions_20260730.md`.
+
+The compile-time assumption audit found no expected-firmware build input in
+the production library. Firmware pins remain confined to hardware-test
+oracles. Exact register-default selection is still available only for FW 5.50
+V8 and FW 11.60 V12, making per-profile defaults recovery the next portability
+blocker. See `analysis/firmware_neutral_binary_audit_20260730.md`.
 
 ## Reusable driver and flexible-memory teardown (2026-07-29)
 

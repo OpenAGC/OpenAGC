@@ -957,7 +957,7 @@ int32_t agcProsperoRegisterStandardShadowProperties(void)
     cwsr_copy_base = (uintptr_t)g_prospero.cwsr.cpu_addr +
         g_prospero.profile.cwsr_work_offset;
 
-    if (!agcProsperoBuildFw1160RegisterShadowDescriptors(driver_base,
+    if (!agcProsperoBuildStandardRegisterShadowDescriptors(driver_base,
             descriptors)) {
         agcProsperoFreeDriverMemory();
         return AGC_ERROR_INTERNAL;

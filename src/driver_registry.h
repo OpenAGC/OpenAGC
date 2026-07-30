@@ -91,7 +91,7 @@ bool agcProsperoBuildRuntimeProfile(uint32_t raw_version, bool is_trinity,
     AgcProsperoRuntimeProfile *profile_out);
 bool agcProsperoBuildDirectProfile(uint32_t raw_version, bool is_trinity,
     AgcProsperoDirectProfile *profile_out);
-bool agcProsperoBuildFw1160RegisterShadowDescriptors(uint64_t driver_base,
+bool agcProsperoBuildStandardRegisterShadowDescriptors(uint64_t driver_base,
     AgcGcRegisterShadowDescriptor descriptors_out[2]);
 const AgcDriverRegistryEntry *agcDriverRegistryLookup(
     const AgcDriverRegistryEntry *entries, size_t entry_count,

@@ -216,7 +216,7 @@ static void test_direct_operation_profiles(void)
         0x11600000u, false, NULL), "NULL direct profile rejected");
 }
 
-static void test_fw1160_register_shadow_descriptors(void)
+static void test_standard_register_shadow_descriptors(void)
 {
     static const uint32_t expected_words[20] = {
         0xe0008000u, 0x0000000fu, 0x00019000u,
@@ -229,17 +229,17 @@ static void test_fw1160_register_shadow_descriptors(void)
     AgcGcRegisterShadowDescriptor descriptors[2];
 
     memset(descriptors, 0xa5, sizeof(descriptors));
-    TEST_ASSERT(agcProsperoBuildFw1160RegisterShadowDescriptors(
+    TEST_ASSERT(agcProsperoBuildStandardRegisterShadowDescriptors(
         AGC_GC_DRIVER_MEMORY_ADDRESS_HINT, descriptors),
-        "FW 11.60 register-shadow descriptors build");
+        "standard-profile register-shadow descriptors build");
     TEST_ASSERT(memcmp(descriptors, expected_words, sizeof(expected_words)) == 0,
-        "FW 11.60 register-shadow descriptor bytes match SPRX evidence");
-    TEST_ASSERT(!agcProsperoBuildFw1160RegisterShadowDescriptors(
+        "standard register-shadow descriptor bytes match SPRX evidence");
+    TEST_ASSERT(!agcProsperoBuildStandardRegisterShadowDescriptors(
         AGC_GC_DRIVER_MEMORY_ADDRESS_HINT, NULL),
-        "NULL FW 11.60 register-shadow output rejected");
-    TEST_ASSERT(!agcProsperoBuildFw1160RegisterShadowDescriptors(
+        "NULL standard register-shadow output rejected");
+    TEST_ASSERT(!agcProsperoBuildStandardRegisterShadowDescriptors(
         UINT64_MAX, descriptors),
-        "overflowing FW 11.60 register-shadow base rejected");
+        "overflowing standard register-shadow base rejected");
 }
 
 static void test_common_operation_carrier_profiles(void)
@@ -468,7 +468,7 @@ void test_suite_driver_registry(void)
     TEST_RUN(test_standard_direct_firmware_aliases);
     TEST_RUN(test_archival_and_fw320_firmware_profiles);
     TEST_RUN(test_direct_operation_profiles);
-    TEST_RUN(test_fw1160_register_shadow_descriptors);
+    TEST_RUN(test_standard_register_shadow_descriptors);
     TEST_RUN(test_common_operation_carrier_profiles);
     TEST_RUN(test_trinity_runtime_profile);
     TEST_RUN(test_runtime_profile_diagnostic_labels);

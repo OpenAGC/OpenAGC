@@ -280,7 +280,7 @@ bool agcProsperoBuildDirectProfile(uint32_t raw_version, bool is_trinity,
     return true;
 }
 
-bool agcProsperoBuildFw1160RegisterShadowDescriptors(uint64_t driver_base,
+bool agcProsperoBuildStandardRegisterShadowDescriptors(uint64_t driver_base,
     AgcGcRegisterShadowDescriptor descriptors_out[2])
 {
     static const uint32_t register_ranges[6] = {

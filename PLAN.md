@@ -61,22 +61,22 @@ The direct backend already recognizes 39 exact active ABI keys from FW 3.20
 through FW 12.70 and selects them from the runtime version; submit, memory,
 queue, primary suspend, TF-ring, HS-offchip, and async carriers have per-key
 SPRX evidence. That is necessary but not yet sufficient for a portable game.
-The current audit found two baseline blockers:
+The compile-time audit found no production expected-firmware build input. The
+39-profile VideoOut ledger and exact runtime table are complete. One baseline
+blocker remains:
 
 - register-default notification has a selected version only for FW 5.50 (V8)
-  and FW 11.60 (V12); other exact profiles currently fail closed;
-- linear VideoOut registration has verified patch signatures only for FW 5.50
-  (`+0x7e61`) and FW 11.60 (`+0x9922`); other profiles currently fail closed.
+  and FW 11.60 (V12); other exact profiles currently fail closed.
 
 Execute in this order:
 
-1. Audit all installed public-library and application-consumer code for
+1. **Complete:** audit all installed public-library and application-consumer code for
    compile-time firmware constants, exact-version branches, and hidden
    firmware-specific shader, packet, memory, or VideoOut assumptions.
 2. Recover a reproducible defaults-selection fact for every active exact
    firmware/GPU profile. Prefer the runtime hardware selector's real value;
    never substitute the dispatcher's maximum accepted version.
-3. Extract and verify the linear VideoOut registration branch offset and full
+3. **Complete:** extract and verify the linear VideoOut registration branch offset and full
    original instruction signature from every active profile's own
    `libSceVideoOut.sprx`, then generate the runtime table used by the core.
 4. Define the common baseline capability contract a normal game can require.
