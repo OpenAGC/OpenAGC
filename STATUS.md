@@ -673,6 +673,9 @@ pending. Corrected BC1 UNORM subsequently passed twice on FW 11.60 with
 identical `224640` changed pixels, all three regions at `74880`, zero
 mismatches, and FNV64 `0x611e681989bb483d`. BC1 UNORM is hardware-qualified
 on that exact firmware; BC1 SRGB remains next.
+BC1 SRGB pass 1 also succeeded with `224640` changed pixels, equal `74880`
+region counts, zero mismatches, and FNV64 `0x7ed831bc232c8da1`; pass 2 remains
+required.
 
 BC4 UNORM and SNORM firmware-neutral sampling gates also build. Dedicated
 shaders sample the red channel from exact endpoint/index blocks across mip 0,

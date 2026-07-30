@@ -1073,6 +1073,11 @@ samples, zero exact mismatches, and native FNV64 `0x611e681989bb483d`.
 Fence, shutdown, cleanup, and final verdict passed both times. BC1 UNORM is
 hardware-qualified on FW 11.60; qualify BC1 SRGB next.
 
+BC1 SRGB pass 1 succeeded on FW 11.60 with `224640` changed pixels,
+`{74880,74880,74880}` region samples, zero exact mismatches, and FNV64
+`0x7ed831bc232c8da1`. Repeat the identical artifact once before advancing to
+BC4.
+
 BC4 UNORM/SNORM portable gates now build with dedicated scalar sampling
 shaders. They reuse the 5x7, three-mip, two-layer direct-upload geometry but
 encode independent 8-bit endpoints and 48-bit 3-bit-index payloads, including

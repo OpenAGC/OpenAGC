@@ -89,3 +89,18 @@ The identical artifact reproduced every pass-1 value:
 
 BC1 UNORM is hardware-qualified on exact FW 11.60. BC1 SRGB is next; FW 5.50
 identical-byte replay remains a separate endpoint qualification.
+
+## BC1 SRGB corrected pass 1
+
+Artifact
+`1206fa93091cc0f12043617d9e3f83b4951ef5f727a3aca9a94af73c61d7353f`
+passed its first guarded FW 11.60 run:
+
+- changed pixels: `224640`
+- mip/layer regions: `{74880,74880,74880}`
+- exact mismatches: `0`
+- packed FNV64: `0x7ed831bc232c8da1`
+- completion fence, marker, shutdown, cleanup, verdict, and self-termination:
+  PASS
+
+Repeat the identical bytes once before qualifying BC1 SRGB.
