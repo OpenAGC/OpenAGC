@@ -529,6 +529,11 @@ the runner and shared teardown on FW 11.60 only.
   D32, fence, shutdown, and cleanup invariant. Run the pinned FW 5.50 mirror
   next with `49152` frozen. A pass completes the D32 HTILE tier and unlocks
   combined D32+S8 ordinary HTILE.
+- The pinned FW 5.50 D32 expclear mirror reproduced `49152`, exact D32
+  classes, bounded completion, clean shutdown, and no residual process. D32
+  HTILE ordinary/decompress/resummarize and expclear are qualified on both
+  endpoints. Pin and qualify combined D32+S8 ordinary HTILE next; run its
+  depth-only, stencil-only, and both-aspect expclear gates only afterward.
 - Combined D32+S8 HTILE is now prepared offline in the same endpoint-paired
   form. Ordinary HTILE plus depth-only, stencil-only, and both-aspect expclear
   produce eight warning-free ELFs. The guarded runner pins exact D32 and S8

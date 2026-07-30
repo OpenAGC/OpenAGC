@@ -63,7 +63,10 @@ expclear pass 1 then reproduced exact D32 classes and `49152` changed HTILE
 words from `0xfffffff0`, with immediate completion, clean shutdown, and no
 residual process. The guarded recipe now freezes that count; one identical
 replay reproduced every invariant. The pinned FW 5.50 expclear mirror now
-requires `49152` and is the active gate.
+requires `49152` and reproduced the exact count, D32 classes, bounded
+completion, clean shutdown, and no residual process. The complete D32 HTILE
+tier is hardware-qualified on both endpoints. Combined D32+S8 ordinary HTILE
+is now the active compressed-depth gate.
 
 Combined D32+S8 HTILE preparation now covers ordinary metadata and
 depth-only, stencil-only, and both-aspect expclear for both exact endpoint
