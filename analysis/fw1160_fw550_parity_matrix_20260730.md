@@ -103,9 +103,17 @@ ordinary `599fd135cac34e6e94c63cee18171e80c3eefc321b6da47c095789bd8196ed13`,
 and FW 5.50 expclear
 `a10eb1985e99822210102fc3a5eec3039fe79f5bf10a67d2c737a2fadf77fce3`.
 Each artifact is preserved under its full hash and every deploy recipe rejects
-changed bytes before network access. None has been run on hardware. The D16
-prerequisites are complete, so the pinned FW 5.50 ordinary D32 HTILE mirror is
-the next permitted launch.
+changed bytes before network access. The D16 prerequisites completed before
+the pinned FW 5.50 ordinary D32 HTILE mirror was launched.
+
+The pinned FW 5.50 ordinary mirror has now completed two cleanup-first passes.
+Both selected `0x0550`, reached the fence, reproduced exact native D32 classes
+(`1617408` clear-one, `228096` near, and `228096` far), changed exactly `7408`
+HTILE words from `0xfffc000f`, shut down cleanly, and returned final PASS. The
+first wrapper output was filtered before the numeric line could be retained;
+the identical count-capture replay recovered and reproduced `7408`. The recipe
+now freezes that value. Run one enforcement replay before promoting the FW
+5.50 ordinary tuple and moving to its exact FW 11.60 mirror.
 
 The combined D32+S8 tier is likewise prepared without a hardware claim. Eight
 artifacts cover ordinary HTILE and expclear of depth-only, stencil-only, or

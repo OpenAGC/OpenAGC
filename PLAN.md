@@ -504,6 +504,11 @@ the runner and shared teardown on FW 11.60 only.
   Run the pinned FW 5.50 ordinary D32 HTILE mirror next, establish and freeze
   its exact metadata count, and replay once before moving to FW 11.60. See
   `analysis/fw1160_fw550_parity_matrix_20260730.md`.
+- The pinned FW 5.50 ordinary D32 HTILE artifact passed twice with exact D32
+  classes and `7408` changed metadata words. The second run recovered the
+  numeric line hidden by the first run's filtered wrapper output. The recipe
+  now freezes `7408`; run one enforcement replay next, then advance to the
+  pinned FW 11.60 ordinary mirror if it remains exact and clean.
 - Combined D32+S8 HTILE is now prepared offline in the same endpoint-paired
   form. Ordinary HTILE plus depth-only, stencil-only, and both-aspect expclear
   produce eight warning-free ELFs. The guarded runner pins exact D32 and S8
