@@ -4397,6 +4397,30 @@ int32_t PS5_SYSV_ABI agcCmdBindColorTargets(
     return AGC_OK;
 }
 
+static int agcPipelineStencilFaceWrites(const AgcStencilFaceState *face)
+{
+    return face->write_mask != 0u &&
+        (face->fail_operation != AGC_STENCIL_OPERATION_KEEP ||
+         face->depth_fail_operation != AGC_STENCIL_OPERATION_KEEP ||
+         face->pass_operation != AGC_STENCIL_OPERATION_KEEP);
+}
+
+static int agcPipelineDepthStencilWrites(const AgcGraphicsPipeline pipeline)
+{
+    const AgcDepthStencilPipelineState *state = &pipeline->depth_stencil;
+
+    if ((pipeline->pixel_shader && (pipeline->pixel_shader->reflection.flags &
+            (AGC_SHADER_REFLECTION_WRITES_DEPTH_BIT |
+             AGC_SHADER_REFLECTION_WRITES_STENCIL_BIT)) != 0u) ||
+        state->depth_write_enable) {
+        return 1;
+    }
+    return state->stencil_test_enable &&
+        (agcPipelineStencilFaceWrites(&state->front) ||
+         (state->back_face_enable &&
+          agcPipelineStencilFaceWrites(&state->back)));
+}
+
 int32_t PS5_SYSV_ABI agcCmdBindDepthStencilTarget(
     AgcCommandBuffer command_buffer,
     const AgcDepthStencilTargetBinding *target)
@@ -4408,6 +4432,9 @@ int32_t PS5_SYSV_ABI agcCmdBindDepthStencilTarget(
     uint32_t words[AGC_GFX1013_DEPTH_SURFACE_DWORDS];
     SceAgcCb scratch;
     uint64_t address;
+    AgcResourceUsage usage;
+    AgcResourceUsage required_usage;
+    AgcResourceOwner owner;
     int has_depth;
     int has_stencil;
     int32_t result;
@@ -4462,6 +4489,14 @@ int32_t PS5_SYSV_ABI agcCmdBindDepthStencilTarget(
          layout.height != command_buffer->color_target_height)) {
         return AGC_ERROR_VALIDATION_FAILED;
     }
+    required_usage = agcPipelineDepthStencilWrites(
+        command_buffer->graphics_pipeline) ?
+        kAgcResourceUsageDepthStencilWrite :
+        kAgcResourceUsageDepthStencilRead;
+    agcCommandTransitionState(command_buffer, kAgcResourceTypeImage, image,
+        &usage, &owner);
+    if (usage != required_usage || owner != kAgcResourceOwnerGraphics)
+        return AGC_ERROR_INVALID_STATE;
     address = agcAllocationGpuAddress(image->allocation);
     state.width = layout.width;
     state.height = layout.height;

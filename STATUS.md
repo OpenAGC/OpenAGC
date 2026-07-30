@@ -385,8 +385,15 @@ qualified single-mip layouts. `agcCmdBindDepthStencilTarget` requires an exact
 pipeline/image format and sample match before a depth-enabled draw, emits the
 existing gfx1013 depth-surface state, and retains its image through command
 reset. Host coverage proves mismatch rejection, missing-target draw gating,
-captured depth registers, and release behavior. Packed depth mips,
-clears/load-store, transitions, and PS5 hardware qualification remain open.
+captured depth registers, and release behavior. The bind now derives an
+explicit required state from the pipeline: `depth-stencil-write` for a depth or
+stencil writer (including reflected fragment writes), otherwise
+`depth-stencil-read`; the image must be graphics-owned in that state before it
+binds. Artifact
+`39605323b4a2b5e15596fd3dd034680b97782e683df6b717e88d409edcfa8cc9` passed
+the public D16 depth-write row on exact FW 5.50; see
+`analysis/runtime_depth_stencil_state_gate_fw550_20260731.md`. Packed depth
+mips and clears/load-store remain open.
 
 ## Native runtime C API contract complete (2026-07-30)
 

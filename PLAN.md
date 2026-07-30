@@ -328,8 +328,13 @@ with declared depth/stencil state now fails before emission until a matching
 single-mip `AGC_IMAGE_USAGE_DEPTH_STENCIL_BIT` image binds; the runtime derives
 its qualified depth-surface packet and retains the image through reset. Generic
 coverage locks format rejection, required-target gating, captured depth
-registers, and release behavior. Clears/load/store, packed depth mips, and
-transitions remain later typed work; no hardware promotion is claimed.
+registers, and release behavior. The bind now requires an explicit graphics-
+owned typed state: `depth-stencil-write` for a pipeline that can write depth or
+stencil (including reflected fragment writes), otherwise `depth-stencil-read`.
+Artifact `39605323b4a2b5e15596fd3dd034680b97782e683df6b717e88d409edcfa8cc9`
+passed the public D16 depth-write row on exact FW 5.50; see
+`analysis/runtime_depth_stencil_state_gate_fw550_20260731.md`. Clears/load-
+store and packed depth mips remain later work.
 Compiler-fused VS-front/GS-back geometry pipelines are
 host-packaged for the already-qualified triangle and line inputs plus compiler
 invocation counts; redundant standalone VS handles, incomplete input

@@ -291,8 +291,15 @@ For a pipeline with a declared depth/stencil format, bind one matching
 format/sample agreement, image usage, layer extent, and retained ownership,
 then emits the existing gfx1013 depth-surface packet. It supports the
 directly-queryable single-mip depth layouts and one array layer per command
-binding; other depth mip layouts fail closed. Load/store operations, clears,
-and transitions remain explicit rather than implicit command-side policy.
+binding; other depth mip layouts fail closed. The required typed state is
+derived from the graphics pipeline: `depth-stencil-write` when depth/stencil
+or reflected fragment-shader writes are possible, otherwise
+`depth-stencil-read`. The whole image must have that state and be owned by the
+graphics queue before target binding. The exact FW 5.50 D16 depth-write row
+passed the public probe; see
+[`runtime_depth_stencil_state_gate_fw550_20260731.md`](../analysis/runtime_depth_stencil_state_gate_fw550_20260731.md).
+Load/store operations and clears remain explicit rather than implicit
+command-side policy.
 
 ## Explicit resource transitions
 

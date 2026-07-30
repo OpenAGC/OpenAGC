@@ -3076,6 +3076,7 @@ static void test_runtime_depth_stencil_target_binding(void)
     AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
     AgcDepthStencilTargetBinding target =
         AGC_DEPTH_STENCIL_TARGET_BINDING_INIT;
+    AgcResourceTransition target_transition = AGC_RESOURCE_TRANSITION_INIT;
     AgcGraphicsPipeline pipeline = NULL;
     AgcImage image = NULL;
     AgcImage incompatible_image = NULL;
@@ -3126,6 +3127,19 @@ static void test_runtime_depth_stencil_target_binding(void)
     TEST_ASSERT_EQ(agcDestroyImage(incompatible_image), AGC_OK,
         "rejected depth target remains destroyable");
     target.image = image;
+    TEST_ASSERT_EQ(agcCmdBindDepthStencilTarget(command, &target),
+        AGC_ERROR_INVALID_STATE,
+        "untransitioned writable depth target cannot bind on graphics");
+    target_transition.resource_type = kAgcResourceTypeImage;
+    target_transition.image = image;
+    target_transition.before = kAgcResourceUsageUndefined;
+    target_transition.after = kAgcResourceUsageDepthStencilWrite;
+    target_transition.before_owner = kAgcResourceOwnerHost;
+    target_transition.after_owner = kAgcResourceOwnerGraphics;
+    target_transition.image_range.aspect_mask = AGC_IMAGE_ASPECT_DEPTH_BIT;
+    TEST_ASSERT_EQ(agcCmdTransitionResources(command, 1u,
+        &target_transition), AGC_OK,
+        "writable depth target transitions to graphics ownership");
     TEST_ASSERT_EQ(agcCmdBindDepthStencilTarget(command, &target), AGC_OK,
         "matching depth target emits native surface state");
     TEST_ASSERT_EQ(agcDestroyImage(image), AGC_ERROR_BUSY,
@@ -3238,6 +3252,7 @@ static void test_runtime_dynamic_graphics_state(void)
     AgcDepthBias depth_bias = AGC_DEPTH_BIAS_INIT;
     AgcDepthStencilTargetBinding depth_target =
         AGC_DEPTH_STENCIL_TARGET_BINDING_INIT;
+    AgcResourceTransition depth_transition = AGC_RESOURCE_TRANSITION_INIT;
     AgcGraphicsPipeline pipeline = NULL;
     AgcBuffer index_buffer = NULL;
     AgcImage depth_image = NULL;
@@ -3289,6 +3304,20 @@ static void test_runtime_dynamic_graphics_state(void)
     TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(command, pipeline), AGC_OK,
         "dynamic-state graphics pipeline binds");
     depth_target.image = depth_image;
+    TEST_ASSERT_EQ(agcCmdBindDepthStencilTarget(command, &depth_target),
+        AGC_ERROR_INVALID_STATE,
+        "untransitioned read-only depth target cannot bind on graphics");
+    depth_transition.resource_type = kAgcResourceTypeImage;
+    depth_transition.image = depth_image;
+    depth_transition.before = kAgcResourceUsageUndefined;
+    depth_transition.after = kAgcResourceUsageDepthStencilRead;
+    depth_transition.before_owner = kAgcResourceOwnerHost;
+    depth_transition.after_owner = kAgcResourceOwnerGraphics;
+    depth_transition.image_range.aspect_mask = AGC_IMAGE_ASPECT_DEPTH_BIT |
+        AGC_IMAGE_ASPECT_STENCIL_BIT;
+    TEST_ASSERT_EQ(agcCmdTransitionResources(command, 1u,
+        &depth_transition), AGC_OK,
+        "read-only depth target transitions to graphics ownership");
     TEST_ASSERT_EQ(agcCmdBindDepthStencilTarget(command, &depth_target),
         AGC_OK, "dynamic-state depth/stencil target binds");
     TEST_ASSERT_EQ(agcCmdBindIndexBuffer(command, index_buffer, 0u,

@@ -79,7 +79,8 @@ int main(void)
     AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
     AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
     AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
-    AgcResourceTransition transitions[2] = {
+    AgcResourceTransition transitions[3] = {
+        AGC_RESOURCE_TRANSITION_INIT,
         AGC_RESOURCE_TRANSITION_INIT,
         AGC_RESOURCE_TRANSITION_INIT,
     };
@@ -185,6 +186,8 @@ int main(void)
     pipeline_desc.color_attachments = attachments;
     pipeline_desc.color_attachment_count = 2u;
     depth_stencil.format = AGC_FORMAT_D16_UNORM;
+    depth_stencil.depth_test_enable = 1u;
+    depth_stencil.depth_write_enable = 1u;
     pipeline_desc.depth_stencil = &depth_stencil;
     pipeline_desc.dynamic_state_mask = AGC_DYNAMIC_STATE_VIEWPORT_BIT |
         AGC_DYNAMIC_STATE_SCISSOR_BIT;
@@ -273,8 +276,12 @@ int main(void)
     transitions[0].after_owner = kAgcResourceOwnerGraphics;
     transitions[1] = transitions[0];
     transitions[1].image = second_target_image;
-    result = agcCmdTransitionResources(command_buffer, 2u, transitions);
-    report_result("agcCmdTransitionResources(undefined-to-color)", result);
+    transitions[2] = transitions[0];
+    transitions[2].image = depth_image;
+    transitions[2].after = kAgcResourceUsageDepthStencilWrite;
+    transitions[2].image_range.aspect_mask = AGC_IMAGE_ASPECT_DEPTH_BIT;
+    result = agcCmdTransitionResources(command_buffer, 3u, transitions);
+    report_result("agcCmdTransitionResources(undefined-to-targets)", result);
     if (result != AGC_OK)
         goto cleanup;
     result = agcCmdBindGraphicsPipeline(command_buffer, pipeline);
