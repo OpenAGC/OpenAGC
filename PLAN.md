@@ -622,6 +622,14 @@ invalidation. A public runtime `HostRead -> Undefined` command records,
 submits, commits, resets, and destroys cleanly. See
 `analysis/runtime_transition_matrix_host_20260731.md`.
 
+The pending FW 5.50 presentation ladder and retirement stress now have one
+shared fail-closed runner. All six Make targets pin the current artifact hash,
+launch the process-cleanup ELF first, verify service recovery, require exact
+firmware/verdict/device-teardown lines, reject error text and transport
+timeouts, and recheck websrv afterward. Its host mock proves hash mismatch and
+missing verdict fail before success; CTest now passes 7/7 suites. Manual direct
+launch of these artifacts is no longer part of the qualification procedure.
+
 Exit criteria: exact host fixtures cover the supported transition matrix and
 atomic short-buffer failure; FW 5.50 and FW 11.60 gates cover render-to-shader,
 compute-to-copy, copy-to-shader, host-read, and present-to-render; repeated

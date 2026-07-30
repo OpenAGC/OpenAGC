@@ -51,3 +51,11 @@ sequence and bounded waits.
 It has not been deployed because the FW 5.50 console services remained
 unreachable after the presentation incident. Hardware qualification is still
 open.
+
+After console recovery, deploy it only through the cleanup-first, hash-pinned
+target:
+
+```sh
+make -C samples/hw_test deploy_agc_runtime_retirement_stress \
+  PS5_HOST=10.0.1.41
+```

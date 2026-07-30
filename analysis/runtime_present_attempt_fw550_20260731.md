@@ -64,3 +64,17 @@ The post-failure staged artifact hashes are:
 After the console is rebooted, run each stage once in order. Stop immediately
 on a timeout, missing verdict, teardown error, or service loss. Presentation
 remains host-tested and hardware-unqualified until every boundary passes.
+Use only the hash-pinned cleanup-first Make targets:
+
+```sh
+make -C samples/hw_test deploy_agc_runtime_present_stage0 PS5_HOST=10.0.1.41
+make -C samples/hw_test deploy_agc_runtime_present_stage1 PS5_HOST=10.0.1.41
+make -C samples/hw_test deploy_agc_runtime_present_stage2 PS5_HOST=10.0.1.41
+make -C samples/hw_test deploy_agc_runtime_present_stage3 PS5_HOST=10.0.1.41
+make -C samples/hw_test deploy_agc_runtime_present_stage4 PS5_HOST=10.0.1.41
+```
+
+Each target verifies its exact SHA-256 before contacting the console, uploads
+and launches the process-cleanup ELF first, checks service recovery, requires
+the exact firmware line and stage verdict, rejects any AGC error/failure text,
+requires clean device teardown, and checks websrv again afterward.

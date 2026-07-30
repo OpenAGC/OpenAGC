@@ -395,6 +395,53 @@ agc_runtime_present_stage3.elf: agc_runtime_present.c gpu_credentials.h $(OPENAG
 agc_runtime_present_stage4.elf: agc_runtime_present.c gpu_credentials.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_PRESENT_STAGE=4 -o $@ agc_runtime_present.c $(AGC_LDFLAGS)
 
+.PHONY: deploy_agc_runtime_present_stage0 deploy_agc_runtime_present_stage1 \
+	deploy_agc_runtime_present_stage2 deploy_agc_runtime_present_stage3 \
+	deploy_agc_runtime_present_stage4 deploy_agc_runtime_retirement_stress
+
+deploy_agc_runtime_present_stage0: agc_runtime_present.elf
+	PS5_HOST=$(PS5_HOST) RUNTIME_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_FW_ABI=0x0550 \
+		EXPECTED_ARTIFACT_SHA256=b854e893dc71960a0a1437544029137a4021f66805c862fcc57b820240b30e80 \
+		EXPECTED_VERDICT='PRESENT_STAGE_0 PASS' REMOTE_NAME=openagc_present_stage0 \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_runtime_guarded.sh
+
+deploy_agc_runtime_present_stage1: agc_runtime_present_stage1.elf
+	PS5_HOST=$(PS5_HOST) RUNTIME_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_FW_ABI=0x0550 \
+		EXPECTED_ARTIFACT_SHA256=5e393865a26f3546d2e2c215016a13351b1f575787dc661fe1e454b7dcf83ad0 \
+		EXPECTED_VERDICT='PRESENT_STAGE_1 PASS' REMOTE_NAME=openagc_present_stage1 \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_runtime_guarded.sh
+
+deploy_agc_runtime_present_stage2: agc_runtime_present_stage2.elf
+	PS5_HOST=$(PS5_HOST) RUNTIME_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_FW_ABI=0x0550 \
+		EXPECTED_ARTIFACT_SHA256=1f875676672609696b5d0c8a160f67c6fe50bce42978be9326259e91542b7a18 \
+		EXPECTED_VERDICT='PRESENT_STAGE_2 PASS' REMOTE_NAME=openagc_present_stage2 \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_runtime_guarded.sh
+
+deploy_agc_runtime_present_stage3: agc_runtime_present_stage3.elf
+	PS5_HOST=$(PS5_HOST) RUNTIME_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_FW_ABI=0x0550 \
+		EXPECTED_ARTIFACT_SHA256=146da9bbaab98af25e52e5f8900e01e887ecc7dec2b943c73886552313b2e25b \
+		EXPECTED_VERDICT='PRESENT_STAGE_3 PASS' REMOTE_NAME=openagc_present_stage3 \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_runtime_guarded.sh
+
+deploy_agc_runtime_present_stage4: agc_runtime_present_stage4.elf
+	PS5_HOST=$(PS5_HOST) RUNTIME_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_FW_ABI=0x0550 \
+		EXPECTED_ARTIFACT_SHA256=db8fe65252ece4874c9179774898189b5e04db09dceb0109e70c2816df4616f7 \
+		EXPECTED_VERDICT='PRESENT_STAGE_4 PASS' REMOTE_NAME=openagc_present_stage4 \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_runtime_guarded.sh
+
+deploy_agc_runtime_retirement_stress: agc_runtime_retirement_stress.elf
+	PS5_HOST=$(PS5_HOST) RUNTIME_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_FW_ABI=0x0550 \
+		EXPECTED_ARTIFACT_SHA256=030fc66604db48d217eb7c4b140c16880516419ae82cd76ac829b9168fa47f1f \
+		EXPECTED_VERDICT='BATCH_RETIREMENT_STRESS PASS' \
+		REMOTE_NAME=openagc_retirement_stress \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_runtime_guarded.sh
+
 # Bounded public-runtime completion diagnostic. It records no application
 # commands; agcQueueSubmit supplies the runtime-owned EOP fence packet.
 agc_runtime_eop.elf: agc_runtime_eop.c gpu_credentials.h $(OPENAGC_LIB)

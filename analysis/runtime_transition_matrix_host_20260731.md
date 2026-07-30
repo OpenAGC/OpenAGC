@@ -42,7 +42,7 @@ destroys without stale ownership.
 ## Verification
 
 - Generic complete suite: 16,402 passed, 0 failed.
-- CTest: six of six suites pass.
+- CTest: seven of seven suites pass.
 - Generic and Prospero builds: no compiler warnings.
 
 This closes the exhaustive low-level host-matrix and public discard rows. Exact

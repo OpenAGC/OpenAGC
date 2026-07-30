@@ -141,6 +141,10 @@ add_test(NAME cleanup_stress_runner_paths
     COMMAND sh
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cleanup_stress_runner_paths.sh
         ${CMAKE_CURRENT_SOURCE_DIR}/samples/hw_test/run_flexible_cleanup_stress.sh)
+add_test(NAME runtime_guarded_runner_fail_closed
+    COMMAND sh
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_runtime_guarded_runner.sh
+        ${CMAKE_CURRENT_SOURCE_DIR}/samples/hw_test/run_runtime_guarded.sh)
 add_test(NAME firmware_neutral_elf_verifier
     COMMAND sh
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_firmware_neutral_elf_verifier.sh

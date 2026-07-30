@@ -191,6 +191,13 @@ NOP trailer, depth-metadata flush, and acquire rules are unchanged. The exact
 shape coverage, and a submitted public-runtime `HostRead -> Undefined` row
 proves state commit/reset. The complete host suite passes 16,402 assertions;
 see `analysis/runtime_transition_matrix_host_20260731.md`.
+The pending FW 5.50 presentation stages and batch-retirement stress are now
+exposed only through six cleanup-first, SHA-256-pinned Make deployment targets.
+The shared runner verifies firmware, exact verdict, error-free device teardown,
+transport completion, and post-run service health. A host mock locks successful
+flow plus hash/verdict failure paths; CTest passes 7/7 suites. See
+`analysis/runtime_present_attempt_fw550_20260731.md` and
+`analysis/runtime_batch_deferred_retirement_host_20260731.md`.
 Descriptor binds now fail closed without an explicit compatible typed state:
 read-only descriptors require `shader-read`; storage descriptors require
 `shader-read` or `shader-write` while reflection lacks per-binding access

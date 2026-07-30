@@ -213,6 +213,12 @@ word. The public runtime fixture also submits and resets a
 `HostRead -> Undefined` buffer discard. See
 [`runtime_transition_matrix_host_20260731.md`](../analysis/runtime_transition_matrix_host_20260731.md).
 
+Hardware qualification artifacts for presentation and deferred-retirement
+stress must be launched through their `deploy_agc_runtime_*` Make targets. The
+shared runner verifies the pinned ELF hash before network access, launches the
+process-cleanup ELF first, and fails closed on firmware mismatch, missing exact
+verdict, AGC error text, transport timeout, teardown failure, or lost websrv.
+
 Descriptor binding is also state-gated before descriptor-table mutation:
 sampled, uniform, and input descriptors require `ShaderRead`; storage
 descriptors require `ShaderRead` or `ShaderWrite` for legacy reflection. The
