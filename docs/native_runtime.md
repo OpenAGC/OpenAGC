@@ -235,6 +235,9 @@ vertex/fragment pipeline, two RGBA8 color-target images and a D16 depth-target
 image, a command buffer, and a fence; its compiler-derived fragment record
 exports both color locations, and it binds all typed attachments plus dynamic
 viewport/scissor state before its indexed triangle draw. The generic
-compiler-artifact contract and its Prospero cross-build pass. Its fence
-completion is not a pixel-output oracle, and the probe has not been deployed
+compiler-artifact contract and its Prospero cross-build pass. Both linear
+RGBA8 targets are prefilled through `agcWriteImage`, then read through
+`agcReadImage` after the bounded fence wait; the probe requires each MRT output
+to replace the sentinel over matching coverage and to differ from the other
+output. The probe has not been deployed
 or hardware-qualified.

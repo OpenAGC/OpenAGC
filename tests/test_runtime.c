@@ -1262,6 +1262,51 @@ static void test_runtime_indexed_graphics_submission(void)
     TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK, "graphics device destroys");
 }
 
+static void test_runtime_image_transfer(void)
+{
+    const uint32_t input[] = {0x11223344u, 0x55667788u, 0x99aabbccu};
+    uint32_t output[3] = {0u, 0u, 0u};
+    AgcDevice device = create_device();
+    AgcImageDesc desc = AGC_IMAGE_DESC_INIT;
+    AgcImageLayout layout = AGC_IMAGE_LAYOUT_INIT;
+    AgcImage image = NULL;
+
+    desc.width = 8u;
+    desc.height = 1u;
+    desc.format = AGC_FORMAT_RGBA8_UNORM;
+    desc.usage = AGC_IMAGE_USAGE_COLOR_TARGET_BIT;
+    TEST_ASSERT_EQ(agcCreateImage(device, &desc, &image), AGC_OK,
+        "non-transfer image creates");
+    TEST_ASSERT_EQ(agcWriteImage(image, 0u, input, sizeof(input)),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "write rejects missing transfer-dst usage");
+    TEST_ASSERT_EQ(agcReadImage(image, 0u, output, sizeof(output)),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "read rejects missing transfer-src usage");
+    TEST_ASSERT_EQ(agcDestroyImage(image), AGC_OK,
+        "non-transfer image destroys");
+
+    desc.usage = AGC_IMAGE_USAGE_COLOR_TARGET_BIT |
+        AGC_IMAGE_USAGE_TRANSFER_SRC_BIT | AGC_IMAGE_USAGE_TRANSFER_DST_BIT;
+    TEST_ASSERT_EQ(agcCreateImage(device, &desc, &image), AGC_OK,
+        "transfer image creates");
+    TEST_ASSERT_EQ(agcWriteImage(image, 4u, input, sizeof(input)), AGC_OK,
+        "image transfer write succeeds");
+    TEST_ASSERT_EQ(agcReadImage(image, 4u, output, sizeof(output)), AGC_OK,
+        "image transfer read succeeds");
+    TEST_ASSERT(memcmp(input, output, sizeof(input)) == 0,
+        "image transfer round trip preserves bytes");
+    TEST_ASSERT_EQ(agcGetImageLayout(device, &desc, &layout), AGC_OK,
+        "image transfer layout query succeeds");
+    TEST_ASSERT_EQ(agcReadImage(image,
+        layout.allocation_size - sizeof(output) + 1u, output,
+        sizeof(output)),
+        AGC_ERROR_INVALID_ARGUMENT, "image transfer bounds reject overflow");
+    TEST_ASSERT_EQ(agcDestroyImage(image), AGC_OK, "transfer image destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "image transfer device destroys");
+}
+
 static void test_runtime_color_target_binding(void)
 {
     AgcDevice device = create_device();
@@ -4002,6 +4047,7 @@ void test_suite_runtime(void)
     TEST_RUN(test_runtime_compiler_reflection_sidecar);
     TEST_RUN(test_runtime_compiler_graphics_sidecar);
     TEST_RUN(test_runtime_indexed_graphics_submission);
+    TEST_RUN(test_runtime_image_transfer);
     TEST_RUN(test_runtime_color_target_binding);
     TEST_RUN(test_runtime_mrt_color_target_binding);
     TEST_RUN(test_runtime_depth_stencil_target_binding);

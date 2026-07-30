@@ -44,6 +44,15 @@ operations fail without touching memory. An upload operation on a readback or
 garlic buffer, and a readback operation on an upload or garlic buffer, also
 fails closed.
 
+Images with `AGC_IMAGE_USAGE_TRANSFER_DST_BIT` or
+`AGC_IMAGE_USAGE_TRANSFER_SRC_BIT` use the equivalent bounded
+`agcWriteImage` and `agcReadImage` operations. They transfer raw allocation
+bytes and require the respective usage bit; callers obtain exact portable
+subresource ranges from `agcGetImageSubresourceLayout`. This lets a native
+application initialize or inspect a linear image without exposing a PS5 cache
+operation, while preserving tiled-layout handling as an explicit later
+transfer-path concern.
+
 Shader uploads and descriptor initialization are flushed when their objects
 are created. Executable command storage is flushed over its used byte range at
 submission. These publication operations use the same checked low-level cache

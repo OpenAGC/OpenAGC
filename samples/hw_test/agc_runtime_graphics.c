@@ -33,8 +33,12 @@
 enum {
     kTargetWidth = 64u,
     kTargetHeight = 64u,
+    kTargetPixelCount = kTargetWidth * kTargetHeight,
     kCompletionTimeoutNs = 200000000u,
 };
+
+static uint32_t g_target_pixels[kTargetPixelCount];
+static uint32_t g_aux_target_pixels[kTargetPixelCount];
 
 typedef struct RuntimeVertex {
     float position[3];
@@ -102,6 +106,9 @@ int main(void)
     bool submitted = false;
     bool completed = false;
     bool passed = false;
+    uint32_t first_changed = 0u;
+    uint32_t second_changed = 0u;
+    uint32_t distinct_outputs = 0u;
     int32_t result;
 
     puts("=== OpenAGC native-runtime graphics probe ===");
@@ -204,7 +211,8 @@ int main(void)
     image_desc.width = kTargetWidth;
     image_desc.height = kTargetHeight;
     image_desc.format = AGC_FORMAT_RGBA8_UNORM;
-    image_desc.usage = AGC_IMAGE_USAGE_COLOR_TARGET_BIT;
+    image_desc.usage = AGC_IMAGE_USAGE_COLOR_TARGET_BIT |
+        AGC_IMAGE_USAGE_TRANSFER_SRC_BIT | AGC_IMAGE_USAGE_TRANSFER_DST_BIT;
     result = agcCreateImage(device, &image_desc, &first_target_image);
     report_result("agcCreateImage(color target 0)", result);
     if (result != AGC_OK)
@@ -217,6 +225,18 @@ int main(void)
     image_desc.usage = AGC_IMAGE_USAGE_DEPTH_STENCIL_BIT;
     result = agcCreateImage(device, &image_desc, &depth_image);
     report_result("agcCreateImage(depth target)", result);
+    if (result != AGC_OK)
+        goto cleanup;
+
+    memset(g_target_pixels, 0xa5, sizeof(g_target_pixels));
+    result = agcWriteImage(first_target_image, 0u, g_target_pixels,
+        sizeof(g_target_pixels));
+    report_result("agcWriteImage(color target 0)", result);
+    if (result != AGC_OK)
+        goto cleanup;
+    result = agcWriteImage(second_target_image, 0u, g_target_pixels,
+        sizeof(g_target_pixels));
+    report_result("agcWriteImage(color target 1)", result);
     if (result != AGC_OK)
         goto cleanup;
 
@@ -292,7 +312,29 @@ int main(void)
     if (result != AGC_OK)
         goto cleanup;
     completed = true;
-    puts("Submission fence: PASS (no pixel-output oracle in this probe)");
+    result = agcReadImage(first_target_image, 0u, g_target_pixels,
+        sizeof(g_target_pixels));
+    report_result("agcReadImage(color target 0)", result);
+    if (result != AGC_OK)
+        goto cleanup;
+    result = agcReadImage(second_target_image, 0u, g_aux_target_pixels,
+        sizeof(g_aux_target_pixels));
+    report_result("agcReadImage(color target 1)", result);
+    if (result != AGC_OK)
+        goto cleanup;
+    for (uint32_t i = 0u; i < kTargetPixelCount; ++i) {
+        first_changed += g_target_pixels[i] != UINT32_C(0xa5a5a5a5);
+        second_changed += g_aux_target_pixels[i] != UINT32_C(0xa5a5a5a5);
+        distinct_outputs += g_target_pixels[i] != g_aux_target_pixels[i];
+    }
+    printf("MRT readback: target0=%u target1=%u distinct=%u\n",
+        first_changed, second_changed, distinct_outputs);
+    if (first_changed <= 256u || second_changed != first_changed ||
+        distinct_outputs <= 256u) {
+        puts("MRT readback: FAIL");
+        goto cleanup;
+    }
+    puts("MRT readback: PASS");
     passed = true;
 
 cleanup:

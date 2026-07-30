@@ -170,7 +170,7 @@ lifetime release, and required dynamic-state gating. Line and point polygon
 modes fail pipeline creation with the other unqualified rasterization options.
 Graphics scratch remains unsupported and fails during pipeline creation;
 reflected gfx1013 LDS requirements are bounded before bind generation. The full
-generic suite now reports 14,384
+generic suite now reports 14,419
 passed and 0 failed; the compiler's
 library, varying/export, NGG, and tessellation suites pass. This slice is
 host-tested only. No PS5 hardware test was run or claimed. See
@@ -252,9 +252,10 @@ sidecar now drive a generic native graphics contract and the separate
 MRT0/MRT1 epilogue formats, and it creates upload vertex/index buffers, a
 reflected graphics pipeline, two RGBA8 color targets and a D16 depth target,
 dynamic viewport/scissor state, and a bounded-fence submission without raw PM4
-assembly. The artifact cross-builds, but has not been deployed; fence
-completion is not a pixel-output oracle and no hardware qualification is
-claimed.
+assembly. The native probe initializes both targets with `agcWriteImage` and
+requires `agcReadImage` to observe matching overwritten coverage and distinct
+MRT0/MRT1 outputs after the fence. The artifact cross-builds, but has not been
+deployed and no hardware qualification is claimed.
 `agcGetRuntimeInfo` therefore keeps the native runtime capabilities
 host-tested: separate hardware evidence for an underlying direct carrier does
 not promote an unrun public runtime slice.

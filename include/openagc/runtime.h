@@ -881,6 +881,12 @@ int32_t PS5_SYSV_ABI agcCreateImage(
 int32_t PS5_SYSV_ABI agcDestroyImage(AgcImage image);
 int32_t PS5_SYSV_ABI agcDestroyImageDeferred(
     AgcImage image, AgcFence fence);
+/* Transfer raw image-allocation bytes. The caller obtains portable
+ * subresource ranges from agcGetImageSubresourceLayout. */
+int32_t PS5_SYSV_ABI agcWriteImage(
+    AgcImage image, uint64_t offset, const void *data, uint64_t size);
+int32_t PS5_SYSV_ABI agcReadImage(
+    AgcImage image, uint64_t offset, void *data, uint64_t size);
 int32_t PS5_SYSV_ABI agcGetImageLayout(
     AgcDevice device, const AgcImageDesc *desc, AgcImageLayout *layout);
 int32_t PS5_SYSV_ABI agcGetImageSubresourceLayout(AgcDevice device,

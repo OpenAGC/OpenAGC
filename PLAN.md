@@ -263,7 +263,7 @@ logical shader bundles. Reflection v2 adds compiler-derived front-stage
 interfaces and geometry topology/limit facts without changing its serialized
 size; v1/API-14 artifacts remain accepted. The runtime recomputes the
 compiler's FNV-1a stage-linkage hash over its four interface masks before
-accepting a reflected shader. The full generic suite reports 14,384 passed.
+accepting a reflected shader. The full generic suite reports 14,419 passed.
 The opt-in combined-tree contract test now compiles real `openagc-psbc`
 vertex/fragment/compute output and creates OpenAGC graphics/compute pipelines
 without sample-local register knowledge; its 256-byte code alignment and
@@ -290,8 +290,10 @@ The native graphics counterpart now compiles a position/color triangle into a
 real NGG main/front pair and a two-export fragment sidecar, consumes those
 exact artifacts in a generic two-color-target/depth-target/vertex/index/
 dynamic-state submission contract, and builds `agc_runtime_graphics.elf`.
-The standalone probe waits on a bounded fence only; it has no pixel-output
-oracle, has not been deployed, and is not a hardware qualification.
+The standalone probe prefills its two linear RGBA8 targets through the native
+image-transfer API, then requires post-fence MRT readback to replace the
+sentinel over matching coverage with distinct outputs. It has not been
+deployed and is not yet a hardware qualification.
 `agcGetRuntimeInfo` keeps native runtime capabilities host-tested until a
 public runtime artifact passes its own exact-firmware oracle; hardware evidence
 for an underlying direct carrier does not promote an unrun runtime slice.

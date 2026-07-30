@@ -5861,6 +5861,40 @@ int32_t PS5_SYSV_ABI agcReadBuffer(
     return result;
 }
 
+int32_t PS5_SYSV_ABI agcWriteImage(
+    AgcImage image, uint64_t offset, const void *data, uint64_t size)
+{
+    if (!image || image->magic != AGC_MAGIC_IMAGE ||
+        !agcDeviceValid(image->device) || image->deferred || !data ||
+        size == 0u || offset > image->layout.allocation_size ||
+        size > image->layout.allocation_size - offset ||
+        (image->desc.usage & AGC_IMAGE_USAGE_TRANSFER_DST_BIT) == 0u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    memcpy((uint8_t *)agcAllocationCpuAddress(image->allocation) + offset,
+        data, (size_t)size);
+    return agcGpuMemoryFlush(&image->allocation->block->memory,
+        (size_t)(image->allocation->offset + offset), (size_t)size);
+}
+
+int32_t PS5_SYSV_ABI agcReadImage(
+    AgcImage image, uint64_t offset, void *data, uint64_t size)
+{
+    int32_t result;
+
+    if (!image || image->magic != AGC_MAGIC_IMAGE ||
+        !agcDeviceValid(image->device) || image->deferred || !data ||
+        size == 0u || offset > image->layout.allocation_size ||
+        size > image->layout.allocation_size - offset ||
+        (image->desc.usage & AGC_IMAGE_USAGE_TRANSFER_SRC_BIT) == 0u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    result = agcGpuMemoryInvalidate(&image->allocation->block->memory,
+        (size_t)(image->allocation->offset + offset), (size_t)size);
+    if (result == AGC_OK)
+        memcpy(data, (uint8_t *)agcAllocationCpuAddress(image->allocation) +
+            offset, (size_t)size);
+    return result;
+}
+
 static int32_t agcQueueDeferredFree(AgcDevice device, uint32_t type,
     void *object, AgcFence fence)
 {
