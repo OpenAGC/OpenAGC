@@ -108,7 +108,9 @@ is hardware-qualified on both endpoints. Stencil-only FW 11.60 pass 1 is now
 active and reproduced aspect `0x2`, expected metadata `0xfffff0ff`, zero RMW
 mismatches/outside changes, `49152` changed words, exact allocation-aware D32
 and S8 values, clean shutdown, and no residual process. Its recipe now freezes
-that count; both-aspect remains blocked.
+that count; the identical replay reproduced every invariant. The pinned FW
+5.50 stencil-only mirror is now active with `49152` frozen; both-aspect remains
+blocked.
 
 Ordinary D16 HTILE is now hardware-qualified twice on each endpoint. The
 pinned current-source artifacts reproduced exact D16 classes, clean teardown,
