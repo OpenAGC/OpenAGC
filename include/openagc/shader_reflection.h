@@ -28,6 +28,20 @@ extern "C" {
 #define AGC_SHADER_MAX_VERTEX_INPUTS 32u
 #define AGC_SHADER_MAX_COLOR_EXPORTS 8u
 
+/* Descriptor mapping access is packed into the high bits of array_size so
+ * reflection v2 stays binary-compatible. Legacy artifacts leave these bits
+ * clear; their storage descriptors remain conservatively read-or-write. */
+#define AGC_SHADER_DESCRIPTOR_ARRAY_SIZE_MASK UINT32_C(0x0fffffff)
+#define AGC_SHADER_DESCRIPTOR_ACCESS_READ_BIT UINT32_C(0x40000000)
+#define AGC_SHADER_DESCRIPTOR_ACCESS_WRITE_BIT UINT32_C(0x80000000)
+#define AGC_SHADER_DESCRIPTOR_ACCESS_MASK \
+    (AGC_SHADER_DESCRIPTOR_ACCESS_READ_BIT | \
+     AGC_SHADER_DESCRIPTOR_ACCESS_WRITE_BIT)
+#define AGC_SHADER_DESCRIPTOR_ARRAY_SIZE(value) \
+    ((value) & AGC_SHADER_DESCRIPTOR_ARRAY_SIZE_MASK)
+#define AGC_SHADER_DESCRIPTOR_ACCESS(value) \
+    ((value) & AGC_SHADER_DESCRIPTOR_ACCESS_MASK)
+
 typedef enum AgcShaderReflectionFlagBits {
     AGC_SHADER_REFLECTION_NGG_BIT = 1u << 0,
     AGC_SHADER_REFLECTION_FUSED_STAGE_BIT = 1u << 1,

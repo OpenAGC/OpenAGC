@@ -2198,7 +2198,8 @@ static int agcShaderReflectionValid(
             &reflection->descriptor_mappings[i];
         if (mapping->set >= 8u ||
             mapping->type >= AGC_SHADER_DESCRIPTOR_TYPE_COUNT ||
-            mapping->array_size == 0u || mapping->byte_stride == 0u ||
+        AGC_SHADER_DESCRIPTOR_ARRAY_SIZE(mapping->array_size) == 0u ||
+        mapping->byte_stride == 0u ||
             (mapping->byte_offset & 3u) != 0u ||
             (mapping->byte_stride & 3u) != 0u) {
             return 0;
@@ -2739,15 +2740,18 @@ static int32_t agcPipelineBuildResourceLayout(
         uint64_t end;
         if (descriptor_size == 0u || mapping->byte_stride < descriptor_size ||
             layout->descriptor_element_count >
-                AGC_RUNTIME_MAX_DESCRIPTOR_WRITES - mapping->array_size ||
-            !agcMulU64(mapping->byte_stride, mapping->array_size, &end) ||
+        AGC_RUNTIME_MAX_DESCRIPTOR_WRITES -
+            AGC_SHADER_DESCRIPTOR_ARRAY_SIZE(mapping->array_size) ||
+        !agcMulU64(mapping->byte_stride,
+            AGC_SHADER_DESCRIPTOR_ARRAY_SIZE(mapping->array_size), &end) ||
             !agcAddU64(mapping->byte_offset, end, &end) ||
             end > AGC_RUNTIME_MAX_RESOURCE_ARENA_SIZE)
             return AGC_ERROR_VALIDATION_FAILED;
         if (end > layout->set_sizes[mapping->set])
             layout->set_sizes[mapping->set] = end;
         layout->set_mask |= 1u << mapping->set;
-        layout->descriptor_element_count += mapping->array_size;
+        layout->descriptor_element_count +=
+            AGC_SHADER_DESCRIPTOR_ARRAY_SIZE(mapping->array_size);
     }
     for (i = 0u; i < 8u; ++i) {
         if ((layout->set_mask & (1u << i)) == 0u)
@@ -3638,7 +3642,8 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
             &desc->descriptor_mappings[i];
         if (mapping->set >= 8u ||
             mapping->type >= AGC_SHADER_DESCRIPTOR_TYPE_COUNT ||
-            mapping->array_size == 0u || mapping->byte_stride == 0u ||
+        AGC_SHADER_DESCRIPTOR_ARRAY_SIZE(mapping->array_size) == 0u ||
+        mapping->byte_stride == 0u ||
             (mapping->byte_offset & 3u) != 0u ||
             (mapping->byte_stride & 3u) != 0u ||
             !agcPipelineLayoutEntryUsed(
@@ -3911,7 +3916,8 @@ int32_t PS5_SYSV_ABI agcCreateComputePipeline(AgcDevice device,
             &desc->descriptor_mappings[i];
         if (mapping->set >= 8u ||
             mapping->type >= AGC_SHADER_DESCRIPTOR_TYPE_COUNT ||
-            mapping->array_size == 0u || mapping->byte_stride == 0u ||
+        AGC_SHADER_DESCRIPTOR_ARRAY_SIZE(mapping->array_size) == 0u ||
+        mapping->byte_stride == 0u ||
             (mapping->byte_offset & 3u) != 0u ||
             (mapping->byte_stride & 3u) != 0u) {
             return AGC_ERROR_VALIDATION_FAILED;
@@ -5586,9 +5592,11 @@ static int agcCommandRetainGpuLabel(AgcCommandBuffer command_buffer,
 }
 
 static int agcRuntimeDescriptorUsageMatches(
-    AgcShaderDescriptorType descriptor_type, AgcResourceUsage usage)
+    const AgcShaderDescriptorMapping *mapping, AgcResourceUsage usage)
 {
-    switch (descriptor_type) {
+    const uint32_t access = AGC_SHADER_DESCRIPTOR_ACCESS(mapping->array_size);
+
+    switch (mapping->type) {
     case AGC_SHADER_DESCRIPTOR_SAMPLED_IMAGE:
     case AGC_SHADER_DESCRIPTOR_COMBINED_IMAGE_SAMPLER:
     case AGC_SHADER_DESCRIPTOR_INPUT_ATTACHMENT:
@@ -5601,6 +5609,10 @@ static int agcRuntimeDescriptorUsageMatches(
         /* Current reflection describes descriptor type but not per-binding
          * access qualifiers. Require an explicit shader-readable or writable
          * state; future read/write access metadata can narrow this safely. */
+        if (access == AGC_SHADER_DESCRIPTOR_ACCESS_READ_BIT)
+            return usage == kAgcResourceUsageShaderRead;
+        if (access == AGC_SHADER_DESCRIPTOR_ACCESS_WRITE_BIT)
+            return usage == kAgcResourceUsageShaderWrite;
         return usage == kAgcResourceUsageShaderRead ||
             usage == kAgcResourceUsageShaderWrite;
     default:
@@ -5610,7 +5622,7 @@ static int agcRuntimeDescriptorUsageMatches(
 
 static int32_t agcCommandValidateDescriptorBufferState(
     AgcCommandBuffer command_buffer, const AgcBuffer buffer,
-    AgcShaderDescriptorType descriptor_type)
+    const AgcShaderDescriptorMapping *mapping)
 {
     AgcResourceUsage usage;
     AgcResourceOwner owner;
@@ -5618,14 +5630,14 @@ static int32_t agcCommandValidateDescriptorBufferState(
     agcCommandTransitionState(command_buffer, kAgcResourceTypeBuffer,
         (void *)buffer, &usage, &owner);
     if (owner != agcRuntimeCommandOwner(command_buffer) ||
-        !agcRuntimeDescriptorUsageMatches(descriptor_type, usage))
+        !agcRuntimeDescriptorUsageMatches(mapping, usage))
         return AGC_ERROR_INVALID_STATE;
     return AGC_OK;
 }
 
 static int32_t agcCommandValidateDescriptorImageState(
     AgcCommandBuffer command_buffer, const AgcImage image,
-    AgcShaderDescriptorType descriptor_type)
+    const AgcShaderDescriptorMapping *mapping)
 {
     AgcResourceUsage usage;
     AgcResourceOwner owner;
@@ -5633,7 +5645,7 @@ static int32_t agcCommandValidateDescriptorImageState(
     agcCommandTransitionState(command_buffer, kAgcResourceTypeImage,
         (void *)image, &usage, &owner);
     if (owner != agcRuntimeCommandOwner(command_buffer) ||
-        !agcRuntimeDescriptorUsageMatches(descriptor_type, usage))
+        !agcRuntimeDescriptorUsageMatches(mapping, usage))
         return AGC_ERROR_INVALID_STATE;
     return AGC_OK;
 }
@@ -5679,7 +5691,7 @@ static int32_t agcCommandEncodeDescriptor(
              AGC_IMAGE_USAGE_SAMPLED_BIT) == 0u))
             return AGC_ERROR_RESOURCE_INVALID;
         result = agcCommandValidateDescriptorImageState(command_buffer,
-            write->image_view->image, mapping->type);
+            write->image_view->image, mapping);
         if (result != AGC_OK)
             return result;
         memcpy(encoded->bytes,
@@ -5696,7 +5708,7 @@ static int32_t agcCommandEncodeDescriptor(
              AGC_IMAGE_USAGE_SAMPLED_BIT) == 0u)
             return AGC_ERROR_RESOURCE_INVALID;
         result = agcCommandValidateDescriptorImageState(command_buffer,
-            write->image_view->image, mapping->type);
+            write->image_view->image, mapping);
         if (result != AGC_OK)
             return result;
         memcpy(encoded->bytes,
@@ -5732,7 +5744,7 @@ static int32_t agcCommandEncodeDescriptor(
             range > UINT32_MAX)
                 return AGC_ERROR_RESOURCE_INVALID;
         result = agcCommandValidateDescriptorBufferState(command_buffer,
-            write->buffer, mapping->type);
+            write->buffer, mapping);
         if (result != AGC_OK)
             return result;
         address = agcAllocationGpuAddress(write->buffer->allocation) +
@@ -5800,7 +5812,8 @@ int32_t PS5_SYSV_ABI agcCmdBindDescriptors(AgcCommandBuffer command_buffer,
             }
         }
         if (!mapping || mapping->type != writes[i].type ||
-            writes[i].array_element >= mapping->array_size)
+            writes[i].array_element >=
+                AGC_SHADER_DESCRIPTOR_ARRAY_SIZE(mapping->array_size))
             return AGC_ERROR_VALIDATION_FAILED;
         for (j = 0u; j < i; ++j) {
             if (writes[j].set == writes[i].set &&
