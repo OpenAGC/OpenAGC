@@ -145,10 +145,13 @@ partial ranges, and other firmware profiles remain unqualified.
 
 Descriptor binding is also state-gated before descriptor-table mutation:
 sampled, uniform, and input descriptors require `ShaderRead`; storage
-descriptors require `ShaderRead` or `ShaderWrite`. The latter remains broad
-until reflection carries access qualifiers. The FW 5.50 compute/copy/consumer
+descriptors require `ShaderRead` or `ShaderWrite` for legacy reflection. The
+FW 5.50 compute/copy/consumer
 oracle passes this gate; see
 [`runtime_descriptor_state_gate_fw550_20260731.md`](../analysis/runtime_descriptor_state_gate_fw550_20260731.md).
+New `openagc-psbc` reflection packs NIR-derived storage read/write access into
+the descriptor mapping, so new artifacts require the exact typed state while
+legacy artifacts retain the conservative storage fallback.
 
 `AgcGpuLabel` provides the first GPU-side dependency primitive. A producer
 records `agcCmdSignalGpuLabel`; it emits the qualified EOP release write. A

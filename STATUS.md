@@ -147,6 +147,8 @@ read-only descriptors require `shader-read`; storage descriptors require
 qualifiers. Generic negative coverage and the exact FW 5.50 reflected
 compute-copy-shader workload passed this gate; see
 `analysis/runtime_descriptor_state_gate_fw550_20260731.md`.
+Current psbc artifacts now carry NIR-derived storage read/write access, which
+tightens this gate while preserving legacy reflection compatibility.
 
 ## Native resource and memory management complete (2026-07-30)
 
