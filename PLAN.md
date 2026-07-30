@@ -255,6 +255,12 @@ the runner and shared teardown on FW 11.60 only.
   distinct lane hashes, packed FNV64 `0xbad47fbdb2e3991e`, immediate fences,
   and zero-valued teardown. Preserve those exact bytes for FW 5.50 replay.
   See `analysis/fw1160_rgba16_unorm_portable_qualification_20260730.md`.
+- `R16_SNORM` is now host-implemented as the next append-only tuple:
+  gfx1013 `16`, SNORM, standard swap, two bytes per pixel, and FP16_ABGR
+  export. Exact PM4, all-profile selection, 64-bit layout limits,
+  invalid-enum behavior, and every 0-27-dword short-buffer boundary pass on
+  the host. Its signed native oracle and FW 11.60 qualification remain next;
+  it is not yet hardware-qualified.
 - Seven additional offscreen format gates now build under the same exact
   profile and bounded runner: R8, RG8, RGB10A2, R11G11B10, R32, RG32, and
   RGBA32. All seven passed twice on FW 11.60; logged RG32 reproduced FNV64
