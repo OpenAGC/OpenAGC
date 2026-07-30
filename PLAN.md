@@ -307,6 +307,11 @@ the runner and shared teardown on FW 11.60 only.
   The retired first artifact proved GPU execution but exposed a stale psbc
   8-bit clamp; sibling commit `c624c5c` fixes it. See
   `analysis/fw1160_r16_uint_first_attempt_20260730.md`.
+- `RG16_UINT` is host-qualified as append-only value 21 with gfx1013 `16_16`,
+  UINT, standard swap, four bytes per pixel, and UINT16_ABGR export 7. Exact
+  PM4 (`CB_COLOR0_INFO=0x00070414`), all-profile selection, every short-buffer
+  boundary, invalid-enum behavior, and maximum 64-bit layout arithmetic pass.
+  The portable two-lane gate is the next artifact milestone.
 - Seven additional offscreen format gates now build under the same exact
   profile and bounded runner: R8, RG8, RGB10A2, R11G11B10, R32, RG32, and
   RGBA32. All seven passed twice on FW 11.60; logged RG32 reproduced FNV64
@@ -498,7 +503,7 @@ reproducible component hashes.
 After normalized formats pass, qualify:
 
 1. `R16_UINT` — complete on FW 11.60; exact FW 5.50 replay pending.
-2. `RG16_UINT`.
+2. `RG16_UINT` — host-qualified; portable two-lane gate pending.
 3. `RGBA16_UINT`.
 4. `R16_SINT`.
 5. `RG16_SINT`.
