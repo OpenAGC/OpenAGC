@@ -22,6 +22,9 @@ Runtime API v6 adds `AgcGpuLabel`, an explicit GPU-visible synchronization
 word for the qualified same-queue signal/wait path.
 Runtime API v7 adds `agcGetGpuLabelInfo` for scheduled-versus-observed label
 diagnostics without exposing a GPU address.
+Runtime API v8 adds the version-2 `AgcResourceTransition` release/acquire
+handoff protocol, carrying an explicit GPU-label dependency without exposing
+raw synchronization addresses or cache-control bits.
 OpenAGC rejects unknown versions, nonzero flags, or nonzero reserved fields
 without partial object or command creation.
 
@@ -92,13 +95,15 @@ wait/signal lists, and cross-queue submission remain fail-closed.
 records `agcCmdSignalGpuLabel`; it emits the qualified EOP release write. A
 consumer records `agcCmdWaitGpuLabel`; it emits a 32-bit `WAIT_REG_MEM` exact
 equality wait on that same runtime-owned word. The consumer submit is rejected
-unless a matching producer value has already submitted on the same queue.
+unless a matching producer value has already submitted. The producer may be on
+the graphics or compute queue; queue ownership still requires the explicit
+resource handoff described below.
 This avoids an unbounded wait from an unproved dependency. Signal values are
 strictly increasing 32-bit timeline points: `UINT32_MAX` is terminal and never
 wraps, while a repeated or lower value is rejected before PM4 mutation. This
-prevents a wait from passing on stale memory. Producer/consumer waits across
-graphics and compute queues, submit wait/signal lists, and event objects remain
-unsupported.
+prevents a wait from passing on stale memory. The exact graphics/compute label
+carrier is hardware-qualified on FW 5.50; submit wait/signal lists and event
+objects remain unsupported.
 
 `agcGetGpuLabelInfo` snapshots its most recently submitted timeline point,
 the CPU-observed label word, producer queue/submission identity, and the
@@ -241,8 +246,18 @@ Resetting or rejecting a command therefore never changes cross-command state.
 The supported usages are undefined/discard, copy source/destination, shader
 read/write, color target, depth/stencil read/write, VideoOut scanout, and host
 read/write. The command queue must own GPU destinations; host destinations use
-the host owner. This is explicit synchronization groundwork, not an automatic
-barrier system or a cross-queue handoff protocol.
+the host owner.
+
+Version 2 adds a narrowly-scoped GPU-to-GPU handoff. The source queue records
+`AGC_RESOURCE_TRANSITION_RELEASE_BIT` with a strictly increasing
+`dependency_label`/`dependency_value`; its resource release writes that word at
+EOP. Only after source submission may the destination queue record the matching
+`AGC_RESOURCE_TRANSITION_ACQUIRE_BIT`; it emits an exact `WAIT_REG_MEM` then
+the qualified all-cache invalidate. The source state remains committed until
+release submit and destination state publishes only after acquire submit. A
+pending handoff accepts one acquire command; reset releases that reservation.
+The current v2 scope is whole resources whose source usage writes GPU memory;
+partial ranges, HTILE, submit lists, and other handoff forms fail closed.
 
 ## Current qualification boundary
 
@@ -260,8 +275,11 @@ The exact FW 5.50 1x linear RGBA8 MRT row
 `undefined -> color-target -> host-read` is also hardware-qualified, with two
 resources in each transition batch, as recorded in
 [`runtime_graphics_transitions_fw550_20260731.md`](../analysis/runtime_graphics_transitions_fw550_20260731.md).
-Depth/stencil, copy, scanout, cross-queue, submit-list, and timeline
-synchronization rows remain host-only.
+The exact FW 5.50 standard-PS5 whole-buffer compute `shader-write` to graphics
+`shader-read` v2 handoff passed its no-CPU-wait release/acquire oracle, recorded
+in [`runtime_crossqueue_resource_handoff_fw550_20260731.md`](../analysis/runtime_crossqueue_resource_handoff_fw550_20260731.md).
+Depth/stencil, copy, scanout, remaining v2 handoff rows, submit-list, and
+timeline synchronization remain host-only.
 
 Prospero `agcQueueSubmit` submits both current graphics and compute command
 buffers through the direct DCB carrier only when the caller supplies an

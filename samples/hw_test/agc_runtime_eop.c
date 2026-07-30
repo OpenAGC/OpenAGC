@@ -1,10 +1,12 @@
 /*
  * Native-runtime EOP-only hardware diagnostic.
  *
- * Records no application commands. On Prospero, agcQueueSubmit appends the
- * runtime-owned EOP completion write, isolating its memory and fence path from
- * shader, descriptor, and dispatch state. Do not hardware-qualify this probe
- * until it is explicitly deployed and its fence completes.
+ * Uses no application shader or descriptor state. It first establishes a
+ * compute-owned storage-buffer state, then validates the v2 compute-to-
+ * graphics RELEASE/ACQUIRE protocol: the source EOP release writes a label,
+ * and the graphics queue waits for that label before its all-cache acquire.
+ * Do not hardware-qualify this probe until it is explicitly deployed and both
+ * fences complete.
  */
 
 #include <signal.h>
@@ -36,12 +38,16 @@ int main(void)
     AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
     AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
     AgcGpuLabelDesc label_desc = AGC_GPU_LABEL_DESC_INIT;
+    AgcBufferDesc buffer_desc = AGC_BUFFER_DESC_INIT;
     AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    AgcResourceTransition transition = AGC_RESOURCE_TRANSITION_INIT;
+    AgcResourceTransition handoff = AGC_RESOURCE_TRANSITION_V2_INIT;
     AgcRuntimeInfo runtime_info = AGC_RUNTIME_INFO_INIT;
     AgcDevice device = NULL;
     AgcQueue compute_queue = NULL;
     AgcQueue graphics_queue = NULL;
     AgcGpuLabel label = NULL;
+    AgcBuffer buffer = NULL;
     AgcCommandBuffer signal_command_buffer = NULL;
     AgcCommandBuffer command_buffer = NULL;
     AgcFence signal_fence = NULL;
@@ -53,7 +59,7 @@ int main(void)
     bool passed = false;
     int32_t result;
 
-    puts("=== OpenAGC native-runtime EOP-only sample ===");
+    puts("=== OpenAGC native-runtime cross-queue handoff sample ===");
     if (set_gpu_credentials() != 0) {
         puts("GPU credentials: FAIL");
         goto cleanup;
@@ -90,22 +96,82 @@ int main(void)
     report_result("agcCreateGpuLabel", result);
     if (result != AGC_OK)
         goto cleanup;
-    result = agcBeginCommandBuffer(signal_command_buffer);
-    report_result("agcBeginCommandBuffer(signal)", result);
+    buffer_desc.size = 64u;
+    buffer_desc.usage = AGC_BUFFER_USAGE_STORAGE_BIT |
+        AGC_BUFFER_USAGE_TRANSFER_SRC_BIT | AGC_BUFFER_USAGE_TRANSFER_DST_BIT;
+    buffer_desc.flags = AGC_BUFFER_CREATE_READBACK_BIT;
+    result = agcCreateBuffer(device, &buffer_desc, &buffer);
+    report_result("agcCreateBuffer", result);
     if (result != AGC_OK)
         goto cleanup;
-    result = agcCmdSignalGpuLabel(signal_command_buffer, label, 1u);
-    report_result("agcCmdSignalGpuLabel", result);
+
+    transition.resource_type = kAgcResourceTypeBuffer;
+    transition.buffer = buffer;
+    transition.buffer_size = buffer_desc.size;
+    transition.before = kAgcResourceUsageUndefined;
+    transition.after = kAgcResourceUsageShaderWrite;
+    transition.before_owner = kAgcResourceOwnerHost;
+    transition.after_owner = kAgcResourceOwnerCompute;
+    result = agcBeginCommandBuffer(signal_command_buffer);
+    report_result("agcBeginCommandBuffer(setup)", result);
+    if (result != AGC_OK)
+        goto cleanup;
+    result = agcCmdTransitionResources(signal_command_buffer, 1u, &transition);
+    report_result("agcCmdTransitionResources(setup)", result);
     if (result != AGC_OK)
         goto cleanup;
     result = agcEndCommandBuffer(signal_command_buffer);
-    report_result("agcEndCommandBuffer(signal)", result);
+    report_result("agcEndCommandBuffer(setup)", result);
     if (result != AGC_OK)
         goto cleanup;
     submit.command_buffer_count = 1u;
     submit.command_buffers = &signal_command_buffer;
     result = agcQueueSubmit(compute_queue, &submit, signal_fence);
-    report_result("agcQueueSubmit(compute signal)", result);
+    report_result("agcQueueSubmit(compute setup)", result);
+    if (result != AGC_OK)
+        goto cleanup;
+    signal_submitted = true;
+    result = agcWaitFence(signal_fence, kCompletionTimeoutNs);
+    report_result("agcWaitFence(setup)", result);
+    if (result != AGC_OK)
+        goto cleanup;
+    signal_completed = true;
+    result = agcResetCommandBuffer(signal_command_buffer);
+    report_result("agcResetCommandBuffer(setup)", result);
+    if (result != AGC_OK)
+        goto cleanup;
+    result = agcResetFence(signal_fence);
+    report_result("agcResetFence(setup)", result);
+    if (result != AGC_OK)
+        goto cleanup;
+    signal_submitted = false;
+    signal_completed = false;
+
+    handoff.resource_type = kAgcResourceTypeBuffer;
+    handoff.buffer = buffer;
+    handoff.buffer_size = buffer_desc.size;
+    handoff.before = kAgcResourceUsageShaderWrite;
+    handoff.after = kAgcResourceUsageShaderRead;
+    handoff.before_owner = kAgcResourceOwnerCompute;
+    handoff.after_owner = kAgcResourceOwnerGraphics;
+    handoff.flags = AGC_RESOURCE_TRANSITION_RELEASE_BIT;
+    handoff.dependency_label = label;
+    handoff.dependency_value = 1u;
+    result = agcBeginCommandBuffer(signal_command_buffer);
+    report_result("agcBeginCommandBuffer(release)", result);
+    if (result != AGC_OK)
+        goto cleanup;
+    result = agcCmdTransitionResources(signal_command_buffer, 1u, &handoff);
+    report_result("agcCmdTransitionResources(release)", result);
+    if (result != AGC_OK)
+        goto cleanup;
+    result = agcEndCommandBuffer(signal_command_buffer);
+    report_result("agcEndCommandBuffer(release)", result);
+    if (result != AGC_OK)
+        goto cleanup;
+    submit.command_buffers = &signal_command_buffer;
+    result = agcQueueSubmit(compute_queue, &submit, signal_fence);
+    report_result("agcQueueSubmit(compute release)", result);
     if (result != AGC_OK)
         goto cleanup;
     signal_submitted = true;
@@ -124,22 +190,23 @@ int main(void)
     if (result != AGC_OK)
         goto cleanup;
     result = agcBeginCommandBuffer(command_buffer);
-    report_result("agcBeginCommandBuffer(wait)", result);
+    report_result("agcBeginCommandBuffer(acquire)", result);
     if (result != AGC_OK)
         goto cleanup;
-    result = agcCmdWaitGpuLabel(command_buffer, label, 1u);
-    report_result("agcCmdWaitGpuLabel(graphics)", result);
+    handoff.flags = AGC_RESOURCE_TRANSITION_ACQUIRE_BIT;
+    result = agcCmdTransitionResources(command_buffer, 1u, &handoff);
+    report_result("agcCmdTransitionResources(acquire)", result);
     if (result != AGC_OK)
         goto cleanup;
     result = agcEndCommandBuffer(command_buffer);
-    report_result("agcEndCommandBuffer(wait)", result);
+    report_result("agcEndCommandBuffer(acquire)", result);
     if (result != AGC_OK)
         goto cleanup;
-    puts("Submitting compute signal then graphics GPU wait without CPU wait.");
+    puts("Submitting compute release then graphics acquire without CPU wait.");
     submit.command_buffer_count = 1u;
     submit.command_buffers = &command_buffer;
     result = agcQueueSubmit(graphics_queue, &submit, fence);
-    report_result("agcQueueSubmit(graphics wait)", result);
+    report_result("agcQueueSubmit(graphics acquire)", result);
     if (result != AGC_OK)
         goto cleanup;
     submitted = true;
@@ -186,6 +253,12 @@ cleanup:
         if (result != AGC_OK)
             passed = false;
     }
+    if (buffer) {
+        result = agcDestroyBuffer(buffer);
+        report_result("agcDestroyBuffer", result);
+        if (result != AGC_OK)
+            passed = false;
+    }
     if (signal_command_buffer) {
         result = agcDestroyCommandBuffer(signal_command_buffer);
         report_result("agcDestroyCommandBuffer(signal)", result);
@@ -216,7 +289,8 @@ cleanup:
         if (result != AGC_OK)
             passed = false;
     }
-    printf("Native runtime EOP-only result: %s\n", passed ? "PASS" : "FAIL");
+    printf("Native runtime cross-queue handoff result: %s\n",
+        passed ? "PASS" : "FAIL");
     fflush(stdout);
     fflush(stderr);
 #if AGC_SELF_TERMINATE

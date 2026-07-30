@@ -1628,6 +1628,7 @@ static void test_runtime_resource_transitions(void)
     AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
     AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
     AgcResourceTransition transition = AGC_RESOURCE_TRANSITION_INIT;
+    AgcResourceTransition handoff = AGC_RESOURCE_TRANSITION_V2_INIT;
     AgcResourceTransition duplicate[2];
     AgcResourceTransition image_transitions[2] = {
         AGC_RESOURCE_TRANSITION_INIT,
@@ -1639,6 +1640,8 @@ static void test_runtime_resource_transitions(void)
     AgcCommandBuffer compute_command = NULL;
     AgcCommandBuffer graphics_command = NULL;
     AgcFence fence = NULL;
+    AgcGpuLabel label = NULL;
+    AgcGpuLabelDesc label_desc = AGC_GPU_LABEL_DESC_INIT;
     const AgcCommandBufferSubmit *captured;
     const uint32_t *words;
     uint32_t owner = UINT32_MAX;
@@ -1707,6 +1710,114 @@ static void test_runtime_resource_transitions(void)
     TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
         "compute-to-host fence resets");
 
+    /* A v2 handoff must first submit the source-side release. The destination
+     * then records the exact label wait and publishes state only on submit. */
+    transition.before = kAgcResourceUsageHostRead;
+    transition.after = kAgcResourceUsageShaderWrite;
+    transition.before_owner = kAgcResourceOwnerHost;
+    transition.after_owner = kAgcResourceOwnerCompute;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(compute_command), AGC_OK,
+        "handoff setup command begins");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(compute_command, 1u,
+        &transition), AGC_OK, "handoff setup records compute ownership");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(compute_command), AGC_OK,
+        "handoff setup command ends");
+    TEST_ASSERT_EQ(agcQueueSubmit(compute_queue, &submit, fence), AGC_OK,
+        "handoff setup submits");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(compute_command), AGC_OK,
+        "handoff setup command resets");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "handoff setup fence resets");
+    TEST_ASSERT_EQ(agcCreateGpuLabel(device, &label_desc, &label), AGC_OK,
+        "handoff dependency label creates");
+    command_desc.queue_type = kAgcQueueGraphics;
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc,
+        &graphics_command), AGC_OK, "handoff graphics command creates");
+
+    handoff.resource_type = kAgcResourceTypeBuffer;
+    handoff.buffer = buffer;
+    handoff.buffer_size = buffer_desc.size;
+    handoff.before = kAgcResourceUsageShaderWrite;
+    handoff.after = kAgcResourceUsageShaderRead;
+    handoff.before_owner = kAgcResourceOwnerCompute;
+    handoff.after_owner = kAgcResourceOwnerGraphics;
+    handoff.flags = AGC_RESOURCE_TRANSITION_RELEASE_BIT;
+    handoff.dependency_label = label;
+    handoff.dependency_value = 1u;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(compute_command), AGC_OK,
+        "handoff release command begins");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(compute_command, 1u, &handoff),
+        AGC_OK, "handoff release records on source queue");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(compute_command), AGC_OK,
+        "handoff release command ends");
+
+    handoff.flags = AGC_RESOURCE_TRANSITION_ACQUIRE_BIT;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(graphics_command), AGC_OK,
+        "premature handoff acquire command begins");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(graphics_command, 1u, &handoff),
+        AGC_ERROR_INVALID_STATE,
+        "handoff acquire rejects before source submit commits release");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(graphics_command), AGC_OK,
+        "premature handoff acquire reset preserves resource state");
+    handoff.flags = AGC_RESOURCE_TRANSITION_RELEASE_BIT;
+    submit.command_buffers = &compute_command;
+    TEST_ASSERT_EQ(agcQueueSubmit(compute_queue, &submit, fence), AGC_OK,
+        "handoff release submits");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(compute_command), AGC_OK,
+        "handoff release command resets");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "handoff release fence resets");
+    TEST_ASSERT_EQ(agcDestroyBuffer(buffer), AGC_ERROR_BUSY,
+        "pending handoff retains resource until destination acquire submits");
+
+    handoff.flags = AGC_RESOURCE_TRANSITION_ACQUIRE_BIT;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(graphics_command), AGC_OK,
+        "handoff acquire command begins");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(graphics_command, 1u, &handoff),
+        AGC_OK, "handoff acquire records exact wait and invalidate");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(graphics_command), AGC_OK,
+        "handoff acquire command ends");
+    submit.command_buffers = &graphics_command;
+    TEST_ASSERT_EQ(agcQueueSubmit(graphics_queue, &submit, fence), AGC_OK,
+        "handoff acquire submits on destination queue");
+    TEST_ASSERT_EQ(agcGetFenceStatus(fence), AGC_OK,
+        "handoff acquire completion is observable on host");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(graphics_command), AGC_OK,
+        "handoff acquire command resets");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "handoff acquire fence resets");
+    TEST_ASSERT_EQ(agcDestroyGpuLabel(label), AGC_OK,
+        "handoff dependency label destroys after both command resets");
+    label = NULL;
+    transition.before = kAgcResourceUsageShaderRead;
+    transition.after = kAgcResourceUsageShaderWrite;
+    transition.before_owner = kAgcResourceOwnerGraphics;
+    transition.after_owner = kAgcResourceOwnerCompute;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(compute_command), AGC_OK,
+        "post-handoff source mismatch command begins");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(compute_command, 1u,
+        &transition), AGC_ERROR_NOT_SUPPORTED,
+        "post-handoff state publishes to destination ownership only");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(compute_command), AGC_OK,
+        "post-handoff source mismatch command resets");
+    transition.before = kAgcResourceUsageShaderRead;
+    transition.after = kAgcResourceUsageHostRead;
+    transition.before_owner = kAgcResourceOwnerGraphics;
+    transition.after_owner = kAgcResourceOwnerHost;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(graphics_command), AGC_OK,
+        "post-handoff host transition command begins");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(graphics_command, 1u,
+        &transition), AGC_OK, "post-handoff host transition records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(graphics_command), AGC_OK,
+        "post-handoff host transition command ends");
+    submit.command_buffers = &graphics_command;
+    TEST_ASSERT_EQ(agcQueueSubmit(graphics_queue, &submit, fence), AGC_OK,
+        "post-handoff host transition submits");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(graphics_command), AGC_OK,
+        "post-handoff host transition command resets");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "post-handoff host transition fence resets");
+
     transition.before = kAgcResourceUsageHostRead;
     transition.after = kAgcResourceUsageUndefined;
     transition.before_owner = kAgcResourceOwnerHost;
@@ -1744,9 +1855,6 @@ static void test_runtime_resource_transitions(void)
         "transition image creates");
     TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &second_image), AGC_OK,
         "second transition image creates");
-    command_desc.queue_type = kAgcQueueGraphics;
-    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc,
-        &graphics_command), AGC_OK, "transition graphics command creates");
     image_transitions[0].resource_type = kAgcResourceTypeImage;
     image_transitions[0].image = image;
     image_transitions[0].before = kAgcResourceUsageUndefined;

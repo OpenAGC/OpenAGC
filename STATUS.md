@@ -48,7 +48,8 @@ whole-resource transitions cover declared buffer/image usages and explicit
 host/graphics/compute ownership, derive the existing qualified gfx1013 barrier
 packets internally, retain resources while recorded, and commit state only on
 successful submit. Partial ranges, HTILE, duplicate resources in one batch,
-and cross-queue ownership handoffs fail closed. The slice is host-qualified
+and unrecognized cross-queue ownership handoffs fail closed. The v2 explicit
+release/acquire handoff is host-qualified. The slice is host-qualified
 except for the exact FW 5.50 public compute row
 `undefined -> shader-write -> host-read`: artifact
 `ab8852e9161c0f6ed1c373bc6de047bb9831df0d7cc7bc3df6d247baf549af31` passed
@@ -57,7 +58,7 @@ teardown. The matching 1x linear RGBA8 MRT row
 `undefined -> color-target -> host-read` also passed on exact FW 5.50 in
 artifact `8cd97b0b26d568c92870047d65698bd71fe31b72c162c7ca1a62c59d159bf643`:
 both targets produced 1,152 distinct post-fence pixels. Depth/stencil, copy,
-scanout, cross-queue, submit-list synchronization, and timeline semantics
+scanout, submit-list synchronization, and timeline semantics
 remain pending. The same-queue GPU-label signal/wait path is hardware-qualified
 on exact FW 5.50 by artifact
 `ffcddb444a677b15b0f2313bf3ed76e05f104400ae21767e342ff1b1cd12db9f`.
@@ -79,7 +80,11 @@ runtime signals with EOP release and waits on with a 32-bit `WAIT_REG_MEM`.
 Consumers require an already-submitted matching producer signal, retain the
 label while recorded, and require a changed signal value to avoid stale waits.
 The minimal compute-to-graphics label dependency is hardware-qualified on exact
-FW 5.50; resource ownership transfer remains unqualified. Artifact
+FW 5.50. The exact v2 whole-buffer compute `shader-write` to graphics
+`shader-read` ownership handoff is also hardware-qualified on FW 5.50 by
+artifact `a8becfe1cf68a988c997fe506849bf549365a7ff6c472efe7b2504e6e2c41797`,
+recorded in `analysis/runtime_crossqueue_resource_handoff_fw550_20260731.md`.
+Other resource-handoff rows remain host-qualified only. Artifact
 `1af09900242e5e0af40c12dfb68bd8ea4fb059bdb85654d969cfff88cb15d016` passed
 the producer/consumer no-CPU-wait compute oracle, bounded completion, readback,
 and full teardown on exact FW 5.50. Labels enforce strictly increasing 32-bit
@@ -91,8 +96,8 @@ member batch is validated as one queue-owned frame and receives one bounded
 fence, with every member retained until that fence completes. Artifact
 `30564bfdd87de4c89e575a03b7456aad57a2ca72af174aa41d1598a20322142b` passed
 the two-DCB MRT/readback/reset/teardown oracle on exact FW 5.50. Compute
-batches, empty members, submit wait/signal lists, timelines, and cross-queue
-transfers remain fail-closed or unqualified.
+batches, empty members, submit wait/signal lists, timelines, and broader
+cross-queue transfer rows remain fail-closed or unqualified.
 
 ## Native resource and memory management complete (2026-07-30)
 

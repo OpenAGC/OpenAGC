@@ -466,15 +466,26 @@ and wait/signal dependencies remain intentionally rejected.
 Runtime API v6 adds the first GPU-side label dependency. A producer records an
 EOP release write through `agcCmdSignalGpuLabel`; a consumer records an exact
 32-bit `WAIT_REG_MEM` through `agcCmdWaitGpuLabel`. Submission accepts the
-consumer only after the matching producer value has submitted on the same
-queue; labels retain their backing word until both command buffers reset.
+consumer only after the matching producer value has submitted; labels retain
+their backing word until both command buffers reset.
 Artifact `1af09900242e5e0af40c12dfb68bd8ea4fb059bdb85654d969cfff88cb15d016`
 passed a producer-then-consumer public compute oracle without a CPU wait
 between submissions, followed by bounded-fence readback and full teardown on
 exact FW 5.50. Labels now enforce strictly increasing 32-bit timeline points
 and reject repeat, decreasing, or wraparound values before PM4 mutation. Submit
-wait/signal lists and resource ownership transfers remain intentionally
-rejected.
+wait/signal lists remain intentionally rejected.
+
+Runtime API v8 adds the first typed queue-ownership handoff: a v2 transition
+releases a whole GPU-written resource on its source queue and writes the
+caller-provided monotonic label value, while the matching destination-side v2
+transition waits for that submitted value then emits the qualified acquire.
+The source state remains committed until release submit; destination state is
+published only by successful acquire submit. Generic fixtures cover premature
+acquire rejection, exact dependency, reset reservation, and final destination
+ownership. The exact FW 5.50 standard-PS5 whole-buffer compute `shader-write`
+to graphics `shader-read` row passed without a CPU wait, artifact
+`a8becfe1cf68a988c997fe506849bf549365a7ff6c472efe7b2504e6e2c41797`.
+FW 11.60 and all other resource-handoff rows remain open.
 
 Exit criteria: exact host fixtures cover the supported transition matrix and
 atomic short-buffer failure; FW 5.50 and FW 11.60 gates cover render-to-shader,

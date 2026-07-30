@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-#define AGC_RUNTIME_API_VERSION 7u
+#define AGC_RUNTIME_API_VERSION 8u
 #define AGC_RUNTIME_STRUCTURE_VERSION_1 1u
 #define AGC_RUNTIME_STRUCTURE_VERSION_2 2u
 #define AGC_RUNTIME_PROFILE_NAME_SIZE 48u
@@ -252,8 +252,17 @@ typedef struct AgcImageSubresourceRange {
 
 /* Exactly one of buffer or image is set according to resource_type. Buffer
  * ranges are byte ranges; image ranges name whole subresources. Source and
- * destination ownership must be explicit; cross-queue transfer is rejected
- * until a qualified GPU wait/signal path is available. */
+ * destination ownership must be explicit. v1 permits only same-owner and
+ * GPU/host transitions. v2 adds a two-command ownership handoff: record a
+ * RELEASE on the source queue, submit it, then record and submit the matching
+ * ACQUIRE on the destination queue. Both sides name the same label/value. */
+enum {
+    AGC_RESOURCE_TRANSITION_RELEASE_BIT = 1u << 0,
+    AGC_RESOURCE_TRANSITION_ACQUIRE_BIT = 1u << 1
+};
+
+#define AGC_RESOURCE_TRANSITION_V1_SIZE 128u
+
 typedef struct AgcResourceTransition {
     uint32_t struct_size;
     uint32_t version;
@@ -269,14 +278,28 @@ typedef struct AgcResourceTransition {
     uint64_t buffer_size;
     AgcImageSubresourceRange image_range;
     uint64_t reserved[5];
+    /* v2 tail. Ignored for a v1-sized record. */
+    AgcGpuLabel dependency_label;
+    uint32_t dependency_value;
+    uint32_t reserved_v2;
+    uint64_t reserved2[2];
 } AgcResourceTransition;
 
 #define AGC_RESOURCE_TRANSITION_INIT \
-    { sizeof(AgcResourceTransition), AGC_RUNTIME_STRUCTURE_VERSION_1, \
+    { AGC_RESOURCE_TRANSITION_V1_SIZE, AGC_RUNTIME_STRUCTURE_VERSION_1, \
       kAgcResourceTypeBuffer, 0u, kAgcResourceUsageUndefined, \
       kAgcResourceUsageUndefined, kAgcResourceOwnerHost, \
       kAgcResourceOwnerHost, NULL, NULL, 0u, 0u, \
-      AGC_IMAGE_SUBRESOURCE_RANGE_INIT, {0u, 0u, 0u, 0u, 0u} }
+      AGC_IMAGE_SUBRESOURCE_RANGE_INIT, {0u, 0u, 0u, 0u, 0u}, \
+      NULL, 0u, 0u, {0u, 0u} }
+
+#define AGC_RESOURCE_TRANSITION_V2_INIT \
+    { sizeof(AgcResourceTransition), AGC_RUNTIME_STRUCTURE_VERSION_2, \
+      kAgcResourceTypeBuffer, 0u, kAgcResourceUsageUndefined, \
+      kAgcResourceUsageUndefined, kAgcResourceOwnerHost, \
+      kAgcResourceOwnerHost, NULL, NULL, 0u, 0u, \
+      AGC_IMAGE_SUBRESOURCE_RANGE_INIT, {0u, 0u, 0u, 0u, 0u}, \
+      NULL, 0u, 0u, {0u, 0u} }
 
 typedef struct AgcImageViewDesc {
     uint32_t struct_size;
@@ -955,8 +978,11 @@ _Static_assert(sizeof(AgcImageDesc) == 72u,
     "AgcImageDesc v1 size mismatch");
 _Static_assert(sizeof(AgcImageSubresourceRange) == 24u,
     "AgcImageSubresourceRange v1 size mismatch");
-_Static_assert(sizeof(AgcResourceTransition) == 128u,
-    "AgcResourceTransition v1 size mismatch");
+_Static_assert(offsetof(AgcResourceTransition, dependency_label) ==
+    AGC_RESOURCE_TRANSITION_V1_SIZE,
+    "AgcResourceTransition v1 prefix size mismatch");
+_Static_assert(sizeof(AgcResourceTransition) == 160u,
+    "AgcResourceTransition v2 size mismatch");
 _Static_assert(sizeof(AgcImageViewDesc) == 72u,
     "AgcImageViewDesc v1 size mismatch");
 _Static_assert(sizeof(AgcColorTargetBinding) == 64u,
