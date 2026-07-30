@@ -284,6 +284,12 @@ artifact and matched every frozen count exactly. The GPU fence completed,
 markers and resolve passed, driver and memory teardown passed, the process
 self-terminated, and ps5debug-NG confirmed no residual `eboot.bin`.
 
+FW 5.50 corrected-gate pass 2 reproduced the same pinned bytes, exact color
+and D32 counts, fence, markers, teardown, self-termination, and debugger
+absence. Isolated D32+4x RGBA8 MSAA resolve is therefore hardware-qualified on
+FW 5.50. Proceed to the distinct pinned FW 11.60 build without changing the
+test source or shaders.
+
 That prerequisite sequence is now complete. Two relinks against the committed
 shader records reproduced all eight artifacts byte-for-byte, and dependency
 inspection found only VideoOut, kernel, libc, and networking. The exact FW

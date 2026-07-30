@@ -675,6 +675,9 @@ the runner and shared teardown on FW 11.60 only.
 - FW 5.50 corrected-gate pass 1 matched the frozen oracle and left no residual
   process. Replay the identical pinned bytes once more before moving to FW
   11.60.
+- FW 5.50 pass 2 reproduced all exact 4x MSAA evidence and clean teardown, so
+  that endpoint is qualified. Run the pinned FW 11.60 artifact, freeze its
+  exact counts, and replay it once.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and

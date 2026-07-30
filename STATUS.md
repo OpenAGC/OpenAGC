@@ -147,6 +147,10 @@ FW 5.50 corrected-gate pass 1 now matches every frozen 4x MSAA color and D32
 count, with fence, teardown, self-termination, and debugger absence checks all
 passing. One identical-byte replay remains before endpoint promotion.
 
+FW 5.50 pass 2 reproduced the exact artifact, resolved-color and D32 counts,
+fence, teardown, self-termination, and debugger absence. Isolated D32+4x RGBA8
+MSAA resolve is hardware-qualified on FW 5.50; FW 11.60 parity remains pending.
+
 All four subresource artifacts now reproduce across two relinks, avoid AGC
 SPRX dependencies, are preserved under full hashes, and have cleanup-first
 hash-pinned deploy targets with exact color and selected/outside metadata
