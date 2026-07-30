@@ -90,8 +90,9 @@
 #if (AGC_DRAW_INDEXED + AGC_DRAW_INDIRECT + AGC_DRAW_INDEXED_INDIRECT) > 1
 #error "select only one isolated application draw mode"
 #endif
-#if AGC_AUDIT_SONY_MULTI_INDIRECT && !AGC_DRAW_INDIRECT
-#error "Sony multi-indirect audit requires the ordinary indirect draw path"
+#if AGC_AUDIT_SONY_MULTI_INDIRECT && \
+    !(AGC_DRAW_INDIRECT || AGC_DRAW_INDEXED_INDIRECT)
+#error "Sony multi-indirect audit requires an indirect draw path"
 #endif
 
 #ifndef AGC_INDIRECT_DRAW_COUNT
@@ -2427,8 +2428,10 @@ static bool dispatch_graphics(GraphicsTest *test,
 #if AGC_AUDIT_SONY_MULTI_INDIRECT
     if (state_error == AGC_OK) {
         static const uint32_t expected_packet[10] = {
-            0xc0082c00u, 0u, 0x08fu, 0x090u, 0x280u,
-            AGC_INDIRECT_DRAW_COUNT, 0u, 0u, 16u, 2u,
+            AGC_DRAW_INDEXED_INDIRECT ? 0xc0083800u : 0xc0082c00u,
+            0u, 0x08fu, 0x090u, 0x280u,
+            AGC_INDIRECT_DRAW_COUNT, 0u, 0u,
+            AGC_DRAW_INDEXED_INDIRECT ? 20u : 16u, 2u,
         };
         uint32_t used = agcCbUsedDwords(&cb);
         uint32_t *sony_packet;
