@@ -531,6 +531,15 @@ all runs changed 24 offchip words and four valid factors, shutdown passed, and
 no residual process remained. The exact FW 5.50 mirrors remain pending; see
 `analysis/fw1160_tess_geometry_gate_plan_20260730.md`.
 
+A standalone buffer-copy gate now provides the exact payload oracle missing
+from the FW 5.50 SDL consumer run. It allocates separate 8,294,400-byte
+flexible mappings, emits the four proven seven-dword raw `DMA_DATA` packets,
+signals a bounded EOP fence, invalidates the destination, and requires
+byte-for-byte equality through zero word mismatches and identical native
+FNV64 hashes. Exact logged FW 11.60 and current-source headless FW 5.50
+artifacts cross-build without warnings; hardware execution is pending. See
+`analysis/fw1160_buffer_copy_gate_plan_20260730.md`.
+
 Exact next-tier ordinary D16/HTILE and D16 HTILE expclear artifacts now build
 for logged FW 11.60 and mirrored headless FW 5.50 profiles. The shared depth
 runner has detached cleanup, optional stale-proof file verdicts, gate-specific

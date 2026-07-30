@@ -149,6 +149,13 @@ AMD PM4 packet ancestry overlap in useful ways.
   fences, offchip mutation `24`, four valid factors, clean shutdowns, and no
   residual process. Keep the current-source FW 5.50 mirrors pending. See
   `analysis/fw1160_tess_geometry_gate_plan_20260730.md`.
+- A standalone buffer-copy parity gate now removes the prior SDL consumer's
+  non-exact image oracle. It copies the same 8,294,400 bytes through four raw
+  gfx1013 `DMA_DATA` packets, waits on an EOP fence, invalidates the
+  destination, and requires zero word mismatches plus identical native FNV64
+  hashes. Exact logged FW 11.60 and headless FW 5.50 artifacts build without
+  warnings; run FW 11.60 twice. See
+  `analysis/fw1160_buffer_copy_gate_plan_20260730.md`.
 - The first uncompressed depth/stencil tier is also built for exact FW 11.60:
   D32, D16, S8-only, then D16+S8. All four passed twice on standard FW
   `0x11600005`, with exact native distributions, immediate-to-3 ms fences,

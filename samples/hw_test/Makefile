@@ -182,6 +182,16 @@ agc_compute_fw1160.elf: agc_compute.c ps5_video_out.h gpu_credentials.h shaders/
 		-DAGC_COMPUTE_HEADLESS=1 -DAGC_SELF_TERMINATE=1 \
 		-o $@ agc_compute.c $(AGC_LDFLAGS)
 
+agc_copy_fw1160_logged.elf: agc_copy.c gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_EXPECT_FIRMWARE_ABI_KEY=0x1160u \
+		-DAGC_SELF_TERMINATE=1 \
+		-DAGC_RESULT_LOG_PATH='"/data/homebrew/openagc_fw1160_copy/result.log"' \
+		-o $@ agc_copy.c $(AGC_LDFLAGS)
+
+agc_copy_fw550_headless.elf: agc_copy.c gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_EXPECT_FIRMWARE_ABI_KEY=0x0550u \
+		-DAGC_SELF_TERMINATE=1 -o $@ agc_copy.c $(AGC_LDFLAGS)
+
 shaders/htile_rmw.spv: shaders/htile_rmw.comp
 	$(GLSLANG) -V --target-env vulkan1.2 $< -o $@
 
@@ -1025,6 +1035,17 @@ deploy_agc_compute: agc_compute.elf
 deploy_agc_compute_fw1160: agc_compute_fw1160.elf
 	PS5_HOST=$(PS5_HOST) COMPUTE_ARTIFACT=$(THIS_DIR)/$< \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_compute.sh
+
+.PHONY: deploy_agc_copy_fw1160_logged deploy_agc_copy_fw550_headless
+deploy_agc_copy_fw1160_logged: agc_copy_fw1160_logged.elf
+	PS5_HOST=$(PS5_HOST) COPY_ARTIFACT=$(THIS_DIR)/$< \
+		RESULT_LOG_PATH=/data/homebrew/openagc_fw1160_copy/result.log \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_copy.sh
+
+deploy_agc_copy_fw550_headless: agc_copy_fw550_headless.elf
+	PS5_HOST=$(PS5_HOST) COPY_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_FW_ABI=0x0550 PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) \
+		sh ./run_fw1160_copy.sh
 
 deploy_agc_graphics: agc_graphics.elf
 	PS5_HOST=$(PS5_HOST) ./run_fw550_conformance.sh --sample agc_graphics
