@@ -432,6 +432,14 @@ execution remain pending. Exact artifacts are now pinned as SHA-256
 (SRGB), with no-prerequisite FW 11.60 and FW 5.50 guarded targets. Hardware
 execution remains pending a clean FW 11.60 boot.
 
+BC5 UNORM and SNORM firmware-neutral gates now build with dedicated RG
+sampling shaders and no AGC SPRX dependency. Their 16-byte fixtures contain
+two independently patterned BC4 streams. The bounded oracle decodes R and G
+separately, covers both endpoint-order interpolation modes and terminal
+values, demands full ranges and channel independence, validates every
+mip/layer region, and permits only the established one-byte SNORM rounding
+tolerance. Artifact pinning and hardware execution remain pending.
+
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability
 ELF, non-indexed and indexed 10-dword multi-draw, GPU count-buffer selection,

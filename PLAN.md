@@ -822,6 +822,15 @@ for BC3 UNORM and
 for BC3 SRGB. Their FW 11.60 and identical-byte FW 5.50 guarded targets have
 no build prerequisites.
 
+BC5 UNORM/SNORM portable gates now build with dedicated two-channel shaders.
+Each 16-byte block is treated as two independent BC4 streams, with distinct
+endpoint ordering and index patterns in R and G. The SNORM shader remaps both
+channels from `[-1,1]` to `[0,1]`. The CPU oracle independently decodes each
+stream, covers both interpolation modes and terminal values, requires the full
+0..255 range in both channels, proves channel independence and all mip/layer
+regions, allows only the established one-byte SNORM rounding tolerance, and
+records a native hash. Pin the final neutral bytes before hardware execution.
+
 Use dedicated, deterministic source blocks containing endpoint, index,
 alpha, signed-range, and edge-block cases appropriate to each format. A
 hardware gate must sample the compressed texture into an already-qualified
