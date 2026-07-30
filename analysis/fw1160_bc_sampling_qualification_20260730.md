@@ -186,6 +186,13 @@ channel independence, and FNV64 `0x6d3c92b92851ab4a`. All lifecycle gates
 passed again. BC6 UFLOAT is hardware-qualified on exact FW 11.60; BC6 SFLOAT
 is next.
 
+## BC6 SFLOAT pass 1
+
+The pinned SFLOAT artifact passed with `224640` changed pixels, fixture counts
+`{74880,74880,18760,56120}`, decoded range `1..213`, zero decode
+mismatches/error, channel independence, and FNV64 `0x6a278a1c5abd3bfc`.
+All lifecycle gates passed. Repeat the identical bytes once.
+
 ## BC2 corrected artifacts
 
 After the shared valid-mip and compressed-diversity corrections, both BC2

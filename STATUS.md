@@ -777,6 +777,9 @@ BC6 UFLOAT passed twice on FW 11.60 with identical `224640` changed pixels,
 all four fixture counts `{74880,74880,18760,56120}`, range `0..220`, zero
 decode mismatches/error, channel independence, and FNV64
 `0x6d3c92b92851ab4a`. BC6 UFLOAT is hardware-qualified on exact FW 11.60.
+BC6 SFLOAT pass 1 also succeeded with identical fixture counts, range `1..213`,
+zero decode mismatches/error, channel independence, and FNV64
+`0x6a278a1c5abd3bfc`; pass 2 remains required.
 BC7 UNORM passed twice on FW 11.60 with identical `224640` changed pixels,
 mode counts `{4:205880,6:18760}`, alpha range `0..255`, zero exact mismatches,
 channel independence, and FNV64 `0xf46729633292d01b`. BC7 UNORM is
