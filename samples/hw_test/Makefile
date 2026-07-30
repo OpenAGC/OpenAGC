@@ -363,6 +363,10 @@ agc_runtime_copy.elf: agc_runtime_copy.c gpu_credentials.h $(OPENAGC_LIB)
 agc_runtime_eop.elf: agc_runtime_eop.c gpu_credentials.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -o $@ agc_runtime_eop.c $(AGC_LDFLAGS)
 
+# Exact image-resource variant of the bounded cross-queue EOP handoff oracle.
+agc_runtime_image_handoff.elf: agc_runtime_eop.c gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_IMAGE_HANDOFF=1 -o $@ agc_runtime_eop.c $(AGC_LDFLAGS)
+
 agc_runtime_submit_lists.elf: agc_runtime_submit_lists.c gpu_credentials.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -o $@ agc_runtime_submit_lists.c $(AGC_LDFLAGS)
 

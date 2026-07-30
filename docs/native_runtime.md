@@ -366,6 +366,10 @@ host-qualified: the generic fixture locks the source EOP release, destination
 exact-value wait and cache invalidate, pending destruction guard, and final
 compute-owned state. See
 [`runtime_image_handoff_host_20260731.md`](../analysis/runtime_image_handoff_host_20260731.md).
+The complementary whole-image compute `shader-write` to graphics `shader-read`
+carrier passed without a CPU wait on exact standard-PS5 FW 5.50, including both
+bounded fences and full teardown. See
+[`runtime_image_handoff_fw550_20260731.md`](../analysis/runtime_image_handoff_fw550_20260731.md).
 The same public graphics probe qualified upload vertex/index buffers in
 `shader-read`/Graphics state; see
 [`runtime_graphics_input_state_gate_fw550_20260731.md`](../analysis/runtime_graphics_input_state_gate_fw550_20260731.md).

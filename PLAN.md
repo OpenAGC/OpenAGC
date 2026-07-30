@@ -561,8 +561,11 @@ to graphics `shader-read` row passed without a CPU wait, artifact
 Generic coverage also passes a whole-image graphics `color-target` to compute
 `shader-read` handoff, including the source EOP signal, destination wait plus
 invalidate, pending-resource destruction guard, and final compute ownership.
-That image row is host-qualified only; FW 11.60 and the remaining hardware
-resource-handoff rows remain open.
+The complementary whole-image compute `shader-write` to graphics `shader-read`
+carrier passed without a CPU wait on exact FW 5.50, artifact
+`70f15e0a5687e431f532d384f5ffb1062b4883bb99746dcaf3857e3dfc5cf7fd`.
+The graphics-to-compute image row remains host-only; FW 11.60 and the remaining
+hardware resource-handoff rows remain open.
 
 Exit criteria: exact host fixtures cover the supported transition matrix and
 atomic short-buffer failure; FW 5.50 and FW 11.60 gates cover render-to-shader,

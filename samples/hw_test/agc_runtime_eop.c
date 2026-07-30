@@ -2,9 +2,11 @@
  * Native-runtime EOP-only hardware diagnostic.
  *
  * Uses no application shader or descriptor state. It first establishes a
- * compute-owned storage-buffer state, then validates the v2 compute-to-
+ * compute-owned writable-resource state, then validates the v2 compute-to-
  * graphics RELEASE/ACQUIRE protocol: the source EOP release writes a label,
  * and the graphics queue waits for that label before its all-cache acquire.
+ * AGC_IMAGE_HANDOFF selects a whole RGBA8 storage image; the default remains
+ * the historically qualified storage-buffer oracle.
  * Do not hardware-qualify this probe until it is explicitly deployed and both
  * fences complete.
  */
@@ -23,6 +25,10 @@
 #define AGC_SELF_TERMINATE 0
 #endif
 
+#ifndef AGC_IMAGE_HANDOFF
+#define AGC_IMAGE_HANDOFF 0
+#endif
+
 enum { kCompletionTimeoutNs = 200000000u };
 
 static void report_result(const char *operation, int32_t result)
@@ -38,7 +44,11 @@ int main(void)
     AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
     AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
     AgcGpuLabelDesc label_desc = AGC_GPU_LABEL_DESC_INIT;
+#if AGC_IMAGE_HANDOFF
+    AgcImageDesc image_desc = AGC_IMAGE_DESC_INIT;
+#else
     AgcBufferDesc buffer_desc = AGC_BUFFER_DESC_INIT;
+#endif
     AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
     AgcResourceTransition transition = AGC_RESOURCE_TRANSITION_INIT;
     AgcResourceTransition handoff = AGC_RESOURCE_TRANSITION_V2_INIT;
@@ -48,6 +58,7 @@ int main(void)
     AgcQueue graphics_queue = NULL;
     AgcGpuLabel label = NULL;
     AgcBuffer buffer = NULL;
+    AgcImage image = NULL;
     AgcCommandBuffer signal_command_buffer = NULL;
     AgcCommandBuffer command_buffer = NULL;
     AgcFence signal_fence = NULL;
@@ -59,7 +70,9 @@ int main(void)
     bool passed = false;
     int32_t result;
 
-    puts("=== OpenAGC native-runtime cross-queue handoff sample ===");
+    puts(AGC_IMAGE_HANDOFF ?
+        "=== OpenAGC native-runtime image handoff sample ===" :
+        "=== OpenAGC native-runtime buffer handoff sample ===");
     if (set_gpu_credentials() != 0) {
         puts("GPU credentials: FAIL");
         goto cleanup;
@@ -96,18 +109,36 @@ int main(void)
     report_result("agcCreateGpuLabel", result);
     if (result != AGC_OK)
         goto cleanup;
+#if AGC_IMAGE_HANDOFF
+    image_desc.width = 8u;
+    image_desc.height = 8u;
+    image_desc.format = AGC_FORMAT_RGBA8_UNORM;
+    image_desc.usage = AGC_IMAGE_USAGE_STORAGE_BIT |
+        AGC_IMAGE_USAGE_SAMPLED_BIT;
+    result = agcCreateImage(device, &image_desc, &image);
+    report_result("agcCreateImage", result);
+#else
     buffer_desc.size = 64u;
     buffer_desc.usage = AGC_BUFFER_USAGE_STORAGE_BIT |
         AGC_BUFFER_USAGE_TRANSFER_SRC_BIT | AGC_BUFFER_USAGE_TRANSFER_DST_BIT;
     buffer_desc.flags = AGC_BUFFER_CREATE_READBACK_BIT;
     result = agcCreateBuffer(device, &buffer_desc, &buffer);
     report_result("agcCreateBuffer", result);
+#endif
     if (result != AGC_OK)
         goto cleanup;
 
+#if AGC_IMAGE_HANDOFF
+    transition.resource_type = kAgcResourceTypeImage;
+    transition.image = image;
+    transition.image_range.aspect_mask = AGC_IMAGE_ASPECT_COLOR_BIT;
+    transition.image_range.mip_level_count = image_desc.mip_levels;
+    transition.image_range.array_layer_count = image_desc.array_layers;
+#else
     transition.resource_type = kAgcResourceTypeBuffer;
     transition.buffer = buffer;
     transition.buffer_size = buffer_desc.size;
+#endif
     transition.before = kAgcResourceUsageUndefined;
     transition.after = kAgcResourceUsageShaderWrite;
     transition.before_owner = kAgcResourceOwnerHost;
@@ -147,9 +178,17 @@ int main(void)
     signal_submitted = false;
     signal_completed = false;
 
+#if AGC_IMAGE_HANDOFF
+    handoff.resource_type = kAgcResourceTypeImage;
+    handoff.image = image;
+    handoff.image_range.aspect_mask = AGC_IMAGE_ASPECT_COLOR_BIT;
+    handoff.image_range.mip_level_count = image_desc.mip_levels;
+    handoff.image_range.array_layer_count = image_desc.array_layers;
+#else
     handoff.resource_type = kAgcResourceTypeBuffer;
     handoff.buffer = buffer;
     handoff.buffer_size = buffer_desc.size;
+#endif
     handoff.before = kAgcResourceUsageShaderWrite;
     handoff.after = kAgcResourceUsageShaderRead;
     handoff.before_owner = kAgcResourceOwnerCompute;
@@ -259,6 +298,12 @@ cleanup:
         if (result != AGC_OK)
             passed = false;
     }
+    if (image) {
+        result = agcDestroyImage(image);
+        report_result("agcDestroyImage", result);
+        if (result != AGC_OK)
+            passed = false;
+    }
     if (signal_command_buffer) {
         result = agcDestroyCommandBuffer(signal_command_buffer);
         report_result("agcDestroyCommandBuffer(signal)", result);
@@ -289,8 +334,8 @@ cleanup:
         if (result != AGC_OK)
             passed = false;
     }
-    printf("Native runtime cross-queue handoff result: %s\n",
-        passed ? "PASS" : "FAIL");
+    printf("Native runtime %s handoff result: %s\n",
+        AGC_IMAGE_HANDOFF ? "image" : "buffer", passed ? "PASS" : "FAIL");
     fflush(stdout);
     fflush(stderr);
 #if AGC_SELF_TERMINATE

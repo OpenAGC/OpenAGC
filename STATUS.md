@@ -86,8 +86,12 @@ artifact `a8becfe1cf68a988c997fe506849bf549365a7ff6c472efe7b2504e6e2c41797`,
 recorded in `analysis/runtime_crossqueue_resource_handoff_fw550_20260731.md`.
 The whole-image graphics `color-target` to compute `shader-read` row is now
 host-qualified through an exact release/acquire stream and state-publication
-fixture; see `analysis/runtime_image_handoff_host_20260731.md`. Other
-resource-handoff rows remain host-qualified only. Artifact
+fixture; see `analysis/runtime_image_handoff_host_20260731.md`. The complementary
+whole-image compute `shader-write` to graphics `shader-read` carrier is
+hardware-qualified on exact FW 5.50 by artifact
+`70f15e0a5687e431f532d384f5ffb1062b4883bb99746dcaf3857e3dfc5cf7fd`;
+see `analysis/runtime_image_handoff_fw550_20260731.md`. Other resource-handoff
+rows remain host-qualified only. Artifact
 `1af09900242e5e0af40c12dfb68bd8ea4fb059bdb85654d969cfff88cb15d016` passed
 the producer/consumer no-CPU-wait compute oracle, bounded completion, readback,
 and full teardown on exact FW 5.50. Labels enforce strictly increasing 32-bit
