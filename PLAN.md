@@ -75,11 +75,11 @@ expert use, but make the native API the recommended application surface.
 
 ### Roadmap corrections and ordering rules
 
-1. **Close the one-binary portability gate first.** The pinned neutral ELF has
-   passed FW 11.60, but its identical-byte FW 5.50 replay remains the primary
-   product gate. Complete the FW 5.50 cleanup stress prerequisite before that
-   replay. Do not describe profile selection as fully portable until the same
-   bytes pass both endpoint consoles.
+1. **The one-binary portability gate is closed.** The pinned neutral ELF with
+   SHA-256 `e04004fee2254e6169805f153ce4812197726ed5f53a9295a4493f0d8ac9a9ce`
+   passed twice as identical bytes on both FW 5.50 and FW 11.60 after their
+   cleanup stress prerequisites. Preserve this exact artifact as regression
+   evidence; Milestone 1 is now the active product task.
 2. **Do not reopen completed format work.** All R/RG/RGBA16
    UNORM/SNORM/UINT/SINT tuples, all six 32-bit UINT/SINT color tuples, all 14
    BC1-BC7 sampling encodings, the planned D16/D32/S8/HTILE progression, and
@@ -105,7 +105,7 @@ expert use, but make the native API the recommended application surface.
    public API reference material, negative tests, or capability labels to the
    final release phase.
 
-### Milestone 0: close portability and regression debt
+### Milestone 0: close portability and regression debt — complete
 
 1. Run `cleanup_stress_fw550` from a fresh boot and require every launch and
    release result to pass with no residual process or kernel fault.
@@ -470,9 +470,9 @@ Execute in this order:
 5. **Complete:** build one unpinned portability payload. It prints the detected full
    version and selected four-digit key, but it must not be compiled with
    `AGC_EXPECT_FIRMWARE_ABI_KEY` or link a firmware SPRX.
-6. **FW11.60 complete; FW5.50 pending:** the pinned ELF passed twice on
-   FW11.60. Run the exact same bytes on FW5.50 when available, with the cleanup
-   payload immediately before every launch and file-backed bounded verdicts.
+6. **Complete:** the pinned ELF passed twice on FW11.60 and the exact same
+   bytes passed twice on FW5.50, with the authenticated cleanup payload
+   immediately before every launch and file-backed bounded verdicts.
 7. **Complete:** preserve the same artifact for future intermediate-firmware testing. Until
    matching hardware exists, run corpus verifiers and host fixtures for every
    exact profile and report those rows as SPRX-qualified/hardware-unverified.
@@ -499,8 +499,8 @@ The neutral target is now `samples/hw_test/agc_portability.elf`, pinned as
 SHA-256 `e04004fee2254e6169805f153ce4812197726ed5f53a9295a4493f0d8ac9a9ce`
 before hardware execution. It contains no expected-firmware macro or AGC SPRX
 dependency and uses the common V7 caller ABI. The exact bytes passed 2/2 on
-standard FW `0x11600005`, including live GPU execution, two flips, teardown,
-and relaunch. The FW5.50 identical-byte run remains pending. See
+standard FW `0x11600005` and 2/2 on standard FW `0x05500008`, including live
+GPU execution, two flips, teardown, and relaunch on both endpoints. See
 `analysis/firmware_neutral_portability_elf_20260730.md`.
 
 The offline endpoint audit is complete. Full nonzero-suffix raw versions now

@@ -11,27 +11,29 @@ closes.
 
 Current execution order:
 
-1. **Close the one-binary portability gate.** The FW 5.50 and FW 11.60 cleanup
-   stress gates are complete. The pinned firmware-neutral portability ELF has
-   passed twice on FW 11.60; its hash-identical FW 5.50 replay remains the
-   product gate. The FW 11.60 workload operation remains fail-closed after all
-   known packet forms stalled, and is not part of the baseline contract.
-2. **Define the native C runtime.** Add opaque `AgcDevice`, `AgcQueue`, resource,
+The one-binary portability gate is complete. The FW 5.50 and FW 11.60 cleanup
+stress gates passed, and the pinned firmware-neutral portability ELF with
+SHA-256 `e04004fee2254e6169805f153ce4812197726ed5f53a9295a4493f0d8ac9a9ce`
+passed twice as identical bytes on both endpoint consoles. The FW 11.60
+workload operation remains fail-closed after all known packet forms stalled
+and is not part of the baseline contract.
+
+1. **Define the native C runtime.** Add opaque `AgcDevice`, `AgcQueue`, resource,
    shader, pipeline, command-buffer, and fence objects above the compatible
    exports. Add `agcGetRuntimeInfo` so applications query capabilities and
    qualification state rather than firmware numbers.
-3. **Add resource and pipeline safety.** Implement heap suballocation,
+2. **Add resource and pipeline safety.** Implement heap suballocation,
    overflow-safe layouts, staging, reflection from `openagc-psbc`, and graphics
    and compute pipelines that reject shader/export, attachment, blend,
    descriptor, sample-count, and stage-linkage mismatches before PM4 emission.
-4. **Own transitions and synchronization.** Track explicit resource usage and
+3. **Own transitions and synchronization.** Track explicit resource usage and
    derive qualified release/acquire/flush/invalidate actions internally. Add
    bounded fences, multi-command-buffer submission, waits/signals, deferred
    retirement, validation diagnostics, and capture/command-stream inspection.
-5. **Document and integrate.** Publish lifecycle, memory, shader, pipeline,
+4. **Document and integrate.** Publish lifecycle, memory, shader, pipeline,
    synchronization, capability, error, and capture documentation. Qualify one
    long-running reference-game ELF unchanged on FW 5.50 and FW 11.60.
-6. **Rehabilitate `../Vulkan-PS5` last.** Make it a constrained translation
+5. **Rehabilitate `../Vulkan-PS5` last.** Make it a constrained translation
    layer above native OpenAGC objects. It must not retain a second PM4 backend,
    allocator, firmware selector, or synchronization model.
 
@@ -373,7 +375,10 @@ either AGC SPRX. It exercises authorization, `/dev/gc`, V7 defaults, async,
 real GPU execution, bounded public VideoOut, full teardown, and relaunch. The
 exact bytes passed twice on standard FW `0x11600005`: V7 defaults and async,
 the GPU `0x504f5254` marker, two bounded flips, zero-valued teardown, and
-relaunch all passed. The same preserved bytes remain reserved for FW5.50.
+relaunch all passed. The same preserved bytes then passed twice on standard
+FW `0x05500008` with the same V7 defaults/async, GPU marker, bounded flips,
+zero-valued teardown, final verdict, and relaunch invariants. Websrv, FTP, and
+ps5debug-NG remained responsive after the FW 5.50 gate.
 All other active exact profiles remain SPRX-qualified/hardware-unverified.
 
 The first additional 16-bit color tuple is now firmware-neutral rather than

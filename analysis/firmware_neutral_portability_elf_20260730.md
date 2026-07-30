@@ -10,8 +10,8 @@
 
 The preserved ELF is a local hardware artifact and is intentionally ignored by
 Git. The digest in this document and the runner is the identity used for every
-endpoint launch. Rebuilding does not produce a substitute for the FW5.50 run;
-that future run must use these preserved bytes and this digest.
+endpoint launch. Rebuilding does not substitute for either endpoint result;
+both endpoint qualifications use these preserved bytes and this digest.
 
 The no-rebuild runner also pins and authenticates:
 
@@ -61,7 +61,7 @@ the same pinned bytes.
 | Firmware | Artifact status | Hardware status |
 |---|---|---|
 | FW11.60 standard PS5 | exact pinned digest | 2/2 PASS |
-| FW5.50 standard PS5 | same pinned bytes preserved | hardware unavailable |
+| FW5.50 standard PS5 | exact same pinned digest | 2/2 PASS |
 | Other active exact profiles | same binary contract | SPRX-qualified, hardware-unverified |
 
 No intermediate firmware is promoted by this artifact until the identical
@@ -88,3 +88,25 @@ immediately before the portability payload and produced:
 The second launch independently repeated the same results, proving teardown
 and relaunch on FW11.60 with the same artifact. Port 8080 and the result-log FTP
 path remained responsive afterward.
+
+## FW5.50 execution evidence
+
+The guarded `portability_fw550` runner authenticated the local and uploaded
+payload, firmware probe, and cleanup artifacts before GPU execution. The probe
+reported raw system version `0x05500008`, normalized key `0x0550`, and `PASS`.
+Both payload iterations ran the authenticated cleanup ELF immediately before
+the same pinned portability bytes and independently produced:
+
+- the exact standard-PS5 FW5.50 runtime profile;
+- common V7 defaults and async setup `PASS/PASS`;
+- exact-profile VideoOut registration patch and restoration `PASS`;
+- real GPU marker `0x504f5254` observed after 50 ms;
+- two bounded flips `PASS`;
+- driver shutdown, submission storage release, display unmap, and direct-memory
+  release all returned zero;
+- final file-backed `Portability result: PASS` and self-termination.
+
+The second launch repeated every result, proving teardown and relaunch. The
+runner ended with `Portability FW 0x0550: 2/2 PASS`; websrv HTTP, FTP, and
+ps5debug-NG ports remained responsive afterward. This closes the identical-byte
+FW5.50/FW11.60 portability gate.

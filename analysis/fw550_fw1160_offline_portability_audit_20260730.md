@@ -3,9 +3,9 @@
 ## Result boundary
 
 The offline evidence supports one baseline `/dev/gc` binary across the exact
-FW 5.50 and standard-PS5 FW 11.60 profiles. It does not replace the pending
-same-byte FW 5.50 hardware run: GPU execution, VideoOut, teardown, relaunch,
-and absence of a kernel panic remain hardware-only claims.
+FW 5.50 and standard-PS5 FW 11.60 profiles. The subsequent same-byte FW 5.50
+hardware run passed twice, so GPU execution, VideoOut, teardown, and relaunch
+are now hardware-qualified on both endpoints for the pinned artifact.
 
 `tools/verify_fw550_fw1160_compatibility.py` mechanically locks every
 non-provenance difference listed below. The underlying extractors reproduced
@@ -94,5 +94,10 @@ payload iterations—and two payload launches.
 7. Stop on any hash mismatch, wrong console key, missing file-backed verdict,
    timeout, failure marker, unclean teardown, unresponsive UI, or kernel panic.
 
-This checklist requires no source or binary rebuild. Its eventual two-pass FW
-5.50 log is the only remaining endpoint portability gate.
+This checklist required no source or binary rebuild. On 2026-07-30 the guarded
+target authenticated all three inputs, identified raw FW `0x05500008` and key
+`0x0550`, and completed both cleanup-first payload launches. Each launch passed
+profile selection, V7 defaults/async, marker `0x504f5254`, bounded flips,
+zero-valued teardown, and its final file-backed verdict. The runner reported
+`Portability FW 0x0550: 2/2 PASS`, and ports 8080, 2121, and 744 remained
+responsive afterward. The endpoint portability gate is closed.
