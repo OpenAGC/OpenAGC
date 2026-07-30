@@ -484,27 +484,62 @@ static void test_gfx1013_indexed_indirect_draw_wrappers(void)
     indirect.argument_buffer_address = UINT64_C(0x200020000);
     indirect.argument_offset = 0x20u;
     indirect.draw_count = 1u;
-    indirect.base_vertex_location = 5u;
-    indirect.start_instance_location = 6u;
+    indirect.base_vertex_location = 0x08fu;
+    indirect.start_instance_location = 0x090u;
     indirect.draw_initiator = 2u;
     agcCbInit(&cb, buffer, sizeof(buffer));
     TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndirect(&cb, &indirect), AGC_OK,
         "gfx1013 non-indexed indirect wrapper succeeds");
-    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 45u,
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 50u,
         "gfx1013 non-indexed indirect exact dword count");
     TEST_ASSERT_EQ(agcPm4Opcode(buffer[36]), AGC_PM4_OP_SET_BASE,
         "gfx1013 indirect argument base opcode");
     TEST_ASSERT_EQ(buffer[36],
         agcPm4Header3(AGC_PM4_OP_SET_BASE, 4u),
         "gfx1013 indirect argument base uses canonical header controls");
-    TEST_ASSERT_EQ(agcPm4Opcode(buffer[40]), AGC_PM4_OP_DRAW_INDIRECT,
-        "gfx1013 indirect draw opcode");
+    TEST_ASSERT_EQ(agcPm4Opcode(buffer[40]),
+        AGC_PM4_OP_DRAW_INDIRECT_MULTI,
+        "gfx1013 indirect uses Sony multi draw opcode by default");
+    TEST_ASSERT_EQ(agcPm4Length(buffer[40]), 10u,
+        "gfx1013 indirect uses Sony ten-dword packet");
     TEST_ASSERT_EQ(buffer[41], 0x20u,
         "gfx1013 indirect argument offset");
-    TEST_ASSERT_EQ(buffer[42], 5u,
+    TEST_ASSERT_EQ(buffer[42], 0x08fu,
         "gfx1013 indirect base-vertex register location");
-    TEST_ASSERT_EQ(buffer[43], 6u,
+    TEST_ASSERT_EQ(buffer[43], 0x090u,
         "gfx1013 indirect start-instance register location");
+    TEST_ASSERT_EQ(buffer[44], 0x280u,
+        "gfx1013 indirect disables draw-index/count-buffer control");
+    TEST_ASSERT_EQ(buffer[45], 1u,
+        "gfx1013 indirect fixed draw count");
+    TEST_ASSERT_EQ(buffer[48], 16u,
+        "gfx1013 indirect single-draw minimum stride");
+    TEST_ASSERT_EQ(buffer[49], 2u,
+        "gfx1013 indirect Sony initiator");
+
+    agcCbInit(&cb, buffer, 55u * sizeof(uint32_t));
+    TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndirect(&cb, &indirect),
+        AGC_ERROR_BUFFER_TOO_SMALL,
+        "gfx1013 indirect preserves Sony GetSize reservation");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "gfx1013 indirect GetSize rejection is atomic");
+
+    indirect.base_vertex_location = 0x10fu;
+    indirect.start_instance_location = 0x110u;
+    indirect.draw_initiator = 0x22u;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndirect(&cb, &indirect), AGC_OK,
+        "gfx1013 indirect accepts Sony alternate register window");
+    TEST_ASSERT_EQ(buffer[42], 0x10fu,
+        "gfx1013 indirect alternate base-vertex location");
+    TEST_ASSERT_EQ(buffer[43], 0x110u,
+        "gfx1013 indirect alternate start-instance location");
+    TEST_ASSERT_EQ(buffer[49], 0x22u,
+        "gfx1013 indirect optional initiator bit");
+
+    indirect.base_vertex_location = 0x08fu;
+    indirect.start_instance_location = 0x090u;
+    indirect.draw_initiator = 2u;
 
     indirect.indexed = 1u;
     indirect.index_buffer_address = UINT64_C(0x200030000);
@@ -514,7 +549,7 @@ static void test_gfx1013_indexed_indirect_draw_wrappers(void)
     agcCbInit(&cb, buffer, sizeof(buffer));
     TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndirect(&cb, &indirect), AGC_OK,
         "gfx1013 indexed multi-indirect wrapper succeeds");
-    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 55u,
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 58u,
         "gfx1013 indexed multi-indirect exact dword count");
     TEST_ASSERT_EQ(agcPm4Opcode(buffer[36]), AGC_PM4_OP_SET_INDEX_SIZE,
         "gfx1013 indexed indirect index type precedes buffer");
@@ -525,12 +560,18 @@ static void test_gfx1013_indexed_indirect_draw_wrappers(void)
     TEST_ASSERT_EQ(agcPm4Opcode(buffer[48]),
         AGC_PM4_OP_DRAW_INDEX_INDIRECT_MULTI,
         "gfx1013 indexed multi-indirect draw opcode");
-    TEST_ASSERT_EQ(buffer[52], 3u,
+    TEST_ASSERT_EQ(agcPm4Length(buffer[48]), 10u,
+        "gfx1013 indexed multi-indirect uses Sony ten-dword packet");
+    TEST_ASSERT_EQ(buffer[52], 0x280u,
+        "gfx1013 indexed multi-indirect control");
+    TEST_ASSERT_EQ(buffer[53], 3u,
         "gfx1013 indexed multi-indirect draw count");
-    TEST_ASSERT_EQ(buffer[53], 20u,
+    TEST_ASSERT_EQ(buffer[56], 20u,
         "gfx1013 indexed multi-indirect stride");
+    TEST_ASSERT_EQ(buffer[57], 2u,
+        "gfx1013 indexed multi-indirect Sony initiator");
 
-    agcCbInit(&cb, buffer, 54u * sizeof(uint32_t));
+    agcCbInit(&cb, buffer, 63u * sizeof(uint32_t));
     TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndirect(&cb, &indirect),
         AGC_ERROR_BUFFER_TOO_SMALL,
         "gfx1013 indexed multi-indirect short buffer rejects");
@@ -548,6 +589,19 @@ static void test_gfx1013_indexed_indirect_draw_wrappers(void)
     TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndirect(&cb, &indirect),
         AGC_ERROR_INVALID_ARGUMENT,
         "gfx1013 indirect rejects unqualified draw-index packet control");
+    indirect.draw_index_location = 0u;
+    indirect.draw_index_enable = 0u;
+    indirect.base_vertex_location = 5u;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndirect(&cb, &indirect),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "gfx1013 indirect rejects locations outside Sony modifier windows");
+    indirect.base_vertex_location = 0x08fu;
+    indirect.draw_initiator = 0u;
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndirect(&cb, &indirect),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "gfx1013 indirect rejects unsupported Sony initiator");
 }
 
 static void test_gfx1013_wave32_rejects_but_generic_accepts_wave64(void)

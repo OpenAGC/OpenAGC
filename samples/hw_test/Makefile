@@ -610,7 +610,7 @@ agc_graphics_indirect_fw1160_logged.elf: agc_graphics.c ps5_video_out.h gpu_cred
 
 agc_graphics_sony_multi_indirect_fw1160_logged.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) $(FW1160_GRAPHICS_LOG_FLAGS) \
-		-DAGC_DRAW_SONY_MULTI_INDIRECT=1 \
+		-DAGC_DRAW_INDIRECT=1 -DAGC_AUDIT_SONY_MULTI_INDIRECT=1 \
 		-o $@ agc_graphics.c $(AGC_LDFLAGS)
 
 agc_graphics_indexed_indirect_fw1160_logged.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)

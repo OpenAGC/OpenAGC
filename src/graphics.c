@@ -19,30 +19,37 @@ static int32_t agcGfx1013ValidateTessellationState(
 static int32_t agcGfx1013ValidateFrameState(
     const AgcGfx1013FrameState *state);
 
-/* Preserve the application-facing raw packet ABI that was independently
- * hardware-qualified before the Sony export signatures were recovered. */
-static uint32_t *agcGfx1013EmitQualifiedIndirect(
-    SceAgcCb *cb, uint32_t opcode, uint32_t data_offset,
+static bool agcGfx1013IndirectModifier(
     uint32_t base_vertex_location, uint32_t start_instance_location,
-    uint32_t draw_count, uint32_t stride, uint32_t draw_initiator)
+    uint32_t draw_initiator, uint64_t *modifier)
 {
-    uint32_t dwords = draw_count == 1u ? 5u : 7u;
-    uint32_t *cmd = agcCbAllocDwords(cb, dwords);
+    uint32_t register_base;
+    uint64_t value;
 
-    if (!cmd)
-        return NULL;
-    cmd[0] = agcPm4Header3(opcode, dwords);
-    cmd[1] = data_offset;
-    cmd[2] = base_vertex_location & 0xffffu;
-    cmd[3] = start_instance_location & 0xffffu;
-    if (draw_count == 1u) {
-        cmd[4] = draw_initiator;
+    if (base_vertex_location >= 0x08cu &&
+        base_vertex_location <= 0x0abu &&
+        start_instance_location >= 0x08cu &&
+        start_instance_location <= 0x0abu) {
+        register_base = 0x08cu;
+        value = 0u;
+    } else if (base_vertex_location >= 0x10cu &&
+               base_vertex_location <= 0x12bu &&
+               start_instance_location >= 0x10cu &&
+               start_instance_location <= 0x12bu) {
+        register_base = 0x10cu;
+        value = UINT64_C(3) << 29u;
     } else {
-        cmd[4] = draw_count;
-        cmd[5] = stride;
-        cmd[6] = draw_initiator;
+        return false;
     }
-    return cmd;
+    if (draw_initiator != 2u && draw_initiator != 0x22u)
+        return false;
+    value |= UINT64_C(1) | UINT64_C(1) << 2u;
+    value |= (uint64_t)(base_vertex_location - register_base) << 9u;
+    value |= (uint64_t)(start_instance_location - register_base) << 19u;
+    if (draw_initiator == 0x22u)
+        value |= UINT64_C(1) << 8u;
+    *modifier = value;
+    return true;
 }
 
 static bool agcGfx1013AddressIsProgramCompatible(uint64_t address)
@@ -651,17 +658,20 @@ int32_t PS5_SYSV_ABI agcGfx1013DrawBaselineIndirect(
     uint32_t tail_dwords;
     uint32_t minimum_stride;
     uint32_t element_size;
+    uint64_t modifier;
     int32_t error;
 
     if (!cb || !state || state->argument_buffer_address == 0u ||
         state->draw_count == 0u || state->indexed > 1u ||
         state->draw_index_enable != 0u ||
-        state->base_vertex_location > 0xffffu ||
-        state->start_instance_location > 0xffffu ||
         state->draw_index_location != 0u ||
         (state->argument_buffer_address & 7u) != 0u ||
         (state->argument_buffer_address >> 48) != 0u ||
         (state->argument_offset & 3u) != 0u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (!agcGfx1013IndirectModifier(
+            state->base_vertex_location, state->start_instance_location,
+            state->draw_initiator, &modifier))
         return AGC_ERROR_INVALID_ARGUMENT;
     minimum_stride = state->indexed ? 20u : 16u;
     if (state->draw_count > 1u &&
@@ -686,7 +696,9 @@ int32_t PS5_SYSV_ABI agcGfx1013DrawBaselineIndirect(
         &validation, &required_dwords);
     if (error != AGC_OK)
         return error;
-    tail_dwords = 4u + (state->draw_count == 1u ? 5u : 7u);
+    /* The Sony multi builders emit ten dwords but require their full
+     * 16-dword GetSize reservation to remain available at the call site. */
+    tail_dwords = 4u + 16u;
     if (state->indexed)
         tail_dwords += 8u;
     required_dwords = required_dwords - 8u + tail_dwords;
@@ -704,20 +716,14 @@ int32_t PS5_SYSV_ABI agcGfx1013DrawBaselineIndirect(
     if (!sceAgcDcbSetBaseIndirectArgs(
             cb, 0u, state->argument_buffer_address))
         return AGC_ERROR_INTERNAL;
-    if (state->draw_count == 1u) {
-        if (!agcGfx1013EmitQualifiedIndirect(
-                cb, state->indexed ? AGC_PM4_OP_DRAW_INDEX_INDIRECT :
-                                     AGC_PM4_OP_DRAW_INDIRECT,
-                state->argument_offset, state->base_vertex_location,
-                state->start_instance_location, 1u, 0u,
-                state->draw_initiator))
-            return AGC_ERROR_INTERNAL;
-    } else if (!agcGfx1013EmitQualifiedIndirect(
-                   cb, state->indexed ? AGC_PM4_OP_DRAW_INDEX_INDIRECT_MULTI :
-                                        AGC_PM4_OP_DRAW_INDIRECT_MULTI,
-                   state->argument_offset, state->base_vertex_location,
-                   state->start_instance_location, state->draw_count,
-                   state->stride, state->draw_initiator))
+    if (!(state->indexed ? sceAgcDcbDrawIndexIndirectMulti(
+              cb, state->argument_offset, 0u, state->draw_count, NULL,
+              state->draw_count > 1u ? state->stride : minimum_stride,
+              modifier) :
+          sceAgcDcbDrawIndirectMulti(
+              cb, state->argument_offset, 0u, state->draw_count, NULL,
+              state->draw_count > 1u ? state->stride : minimum_stride,
+              modifier)))
         return AGC_ERROR_INTERNAL;
     return AGC_OK;
 }

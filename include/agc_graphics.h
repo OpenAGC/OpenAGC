@@ -718,11 +718,15 @@ typedef struct AgcGfx1013IndirectDrawState {
     uint32_t index_buffer_count;
     uint32_t draw_count;
     uint32_t stride;
+    /* Sony's modifier ABI represents locations 0x08c-0x0ab or
+     * 0x10c-0x12b. Both fields must use the same window. */
     uint32_t base_vertex_location;
     uint32_t start_instance_location;
     /* Reserved until a PS5 DrawIndex packet encoding is hardware-qualified. */
     uint32_t draw_index_location;
     uint32_t draw_index_enable;
+    /* The Sony builder supports the standard initiator 2 and optional bit-5
+     * form 0x22. */
     uint32_t draw_initiator;
     uint32_t indexed;
 } AgcGfx1013IndirectDrawState;
