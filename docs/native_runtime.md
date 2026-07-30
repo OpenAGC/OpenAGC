@@ -371,6 +371,11 @@ image/sampler descriptor fails while the image is merely released, succeeds
 after the destination acquire, and records dispatch only after the exact wait
 and invalidate. See
 [`runtime_sampled_image_handoff_host_20260731.md`](../analysis/runtime_sampled_image_handoff_host_20260731.md).
+The identical application-facing row is hardware-qualified on exact standard-
+PS5 FW 5.50: a real indexed MRT draw releases one target to compute, the
+reflected sampled-image consumer submits without an intervening CPU wait, and
+all 4,096 packed RGBA8 results match direct image readback. See
+[`runtime_render_to_shader_fw550_20260731.md`](../analysis/runtime_render_to_shader_fw550_20260731.md).
 The complementary whole-image compute `shader-write` to graphics `shader-read`
 carrier passed without a CPU wait on exact standard-PS5 FW 5.50, including both
 bounded fences and full teardown. See

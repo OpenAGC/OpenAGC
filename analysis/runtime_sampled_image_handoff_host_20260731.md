@@ -28,5 +28,6 @@ Verification:
 openagc_tests: 15010 passed, 0 failed
 ```
 
-This is host qualification. Endpoint promotion still requires a real graphics
-producer, no-CPU-wait queue handoff, shader dispatch, and exact readback match.
+This host contract was promoted with a real graphics producer, no-CPU-wait
+queue handoff, shader dispatch, and exact readback match on FW 5.50; see
+`runtime_render_to_shader_fw550_20260731.md`.

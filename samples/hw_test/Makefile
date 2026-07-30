@@ -430,6 +430,14 @@ agc_runtime_graphics.elf: shaders_runtime_graphics agc_runtime_graphics.c \
 		gpu_credentials.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -o $@ agc_runtime_graphics.c $(AGC_LDFLAGS)
 
+# Real MRT draw followed by a no-CPU-wait graphics-to-compute image handoff,
+# reflected sampled-image dispatch, and byte-for-byte image/buffer readback.
+agc_runtime_render_to_shader.elf: shaders_runtime_graphics \
+		shaders_runtime_image_consume agc_runtime_render_to_shader.c \
+		agc_runtime_graphics.c gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_SELF_TERMINATE=1 -o $@ \
+		agc_runtime_render_to_shader.c $(AGC_LDFLAGS)
+
 agc_copy_fw1160_logged.elf: agc_copy.c gpu_credentials.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_EXPECT_FIRMWARE_ABI_KEY=0x1160u \
 		-DAGC_SELF_TERMINATE=1 \

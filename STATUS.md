@@ -94,8 +94,13 @@ see `analysis/runtime_image_handoff_fw550_20260731.md`. The graphics-to-compute
 image row now has a reflected combined image/sampler consumer fixture: binding
 fails before acquire and succeeds only after the exact wait/invalidate stream,
 then dispatch records. See
-`analysis/runtime_sampled_image_handoff_host_20260731.md`. Other
-resource-handoff rows remain host-qualified only. Artifact
+`analysis/runtime_sampled_image_handoff_host_20260731.md`. Exact artifact
+`48a6bd30c5fdcf417be79859e9e3549ec3f3d495b2ec78b97ea192f487e96ea1`
+then passed twice on standard PS5 FW 5.50 with a real MRT producer, no-CPU-wait
+graphics-to-compute handoff, 4,096/4,096 matching consumer pixels, bounded
+fences, and full teardown; see
+`analysis/runtime_render_to_shader_fw550_20260731.md`. Other resource-handoff
+rows remain host-qualified only. Artifact
 `1af09900242e5e0af40c12dfb68bd8ea4fb059bdb85654d969cfff88cb15d016` passed
 the producer/consumer no-CPU-wait compute oracle, bounded completion, readback,
 and full teardown on exact FW 5.50. Labels enforce strictly increasing 32-bit

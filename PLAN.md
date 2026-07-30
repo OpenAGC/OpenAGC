@@ -564,16 +564,20 @@ invalidate, pending-resource destruction guard, and final compute ownership.
 The complementary whole-image compute `shader-write` to graphics `shader-read`
 carrier passed without a CPU wait on exact FW 5.50, artifact
 `70f15e0a5687e431f532d384f5ffb1062b4883bb99746dcaf3857e3dfc5cf7fd`.
-The graphics-to-compute image row remains host-only; FW 11.60 and the remaining
-hardware resource-handoff rows remain open.
+The graphics-to-compute image carrier is now endpoint-qualified by the real
+consumer row below; FW 11.60 and the remaining hardware resource-handoff rows
+remain open.
 
 The graphics-to-compute row now reaches an actual reflected consumer in the
 generic contract. A combined image/sampler descriptor rejects the released but
 unacquired image, accepts it only after the exact destination acquire, and
 records the compute dispatch after the wait/invalidate stream. The compiler-
-produced consumer artifact copies a 64x64 RGBA8 image into a storage buffer and
-is ready for endpoint promotion; see
-`analysis/runtime_sampled_image_handoff_host_20260731.md`.
+produced consumer copies a 64x64 RGBA8 image into a storage buffer. Exact
+artifact `48a6bd30c5fdcf417be79859e9e3549ec3f3d495b2ec78b97ea192f487e96ea1`
+passed twice on standard PS5 FW 5.50: a real MRT draw released its first target
+to compute without a CPU wait, the reflected consumer copied all 4,096 pixels,
+readback matched byte-for-byte, and teardown completed. See
+`analysis/runtime_render_to_shader_fw550_20260731.md`.
 
 Exit criteria: exact host fixtures cover the supported transition matrix and
 atomic short-buffer failure; FW 5.50 and FW 11.60 gates cover render-to-shader,

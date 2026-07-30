@@ -113,7 +113,9 @@ also require the underlying whole image to have a compatible typed state on
 the recording queue. Cross-queue release alone is insufficient: the descriptor
 remains unavailable until the matching acquire records on the consumer command
 buffer. The generic render-to-shader fixture locks this ordering before its
-reflected compute dispatch.
+reflected compute dispatch. The exact FW 5.50 endpoint oracle additionally
+renders an MRT triangle, hands one target to compute without a CPU wait, and
+matches all 4,096 sampled results against direct image readback.
 
 A graphics pipeline whose reflected pixel shader exports color must bind one
 `AgcColorTargetBinding` per declared attachment with
