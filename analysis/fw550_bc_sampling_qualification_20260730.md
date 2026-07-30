@@ -39,3 +39,13 @@ The guarded run produced `224640` changed pixels, regions
 `0x7ed831bc232c8da1`. The completion fence, marker, driver shutdown, memory
 cleanup, final verdict, self-termination, and residual-process check passed.
 Repeat the identical artifact once.
+
+## BC1 SRGB pass 2
+
+The identical artifact reproduced `224640` changed pixels, regions
+`{74880,74880,74880}`, zero exact mismatches, and FNV64
+`0x7ed831bc232c8da1`. Every lifecycle gate and the post-run residual-process
+check passed again.
+
+BC1 UNORM and SRGB are hardware-qualified on exact FW 5.50 and FW 11.60.
+Proceed to BC4 UNORM/SNORM in the established risk order.

@@ -791,9 +791,10 @@ That endpoint replay is now active. BC1 UNORM on FW 5.50 used the exact FW
 process exit all passed. BC1 UNORM is hardware-qualified on both endpoints;
 BC1 SRGB is next.
 
-BC1 SRGB pass 1 on FW 5.50 then reproduced the exact FW 11.60-qualified
+BC1 SRGB on FW 5.50 then twice reproduced the exact FW 11.60-qualified
 coverage, regions, zero-mismatch oracle, and FNV64 `0x7ed831bc232c8da1`.
-All lifecycle and residual-process gates passed; one identical replay remains.
+All lifecycle and residual-process gates passed. Both BC1 variants are now
+hardware-qualified on exact FW 5.50 and FW 11.60.
 BC7 UNORM passed twice on FW 11.60 with identical `224640` changed pixels,
 mode counts `{4:205880,6:18760}`, alpha range `0..255`, zero exact mismatches,
 channel independence, and FNV64 `0xf46729633292d01b`. BC7 UNORM is
