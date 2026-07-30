@@ -76,4 +76,16 @@ passed its first guarded FW 11.60 run:
 - completion fence, marker, driver shutdown, memory cleanup, final verdict,
   and self-termination: PASS
 
-Repeat the identical bytes once before qualifying BC1 UNORM.
+## BC1 UNORM corrected pass 2
+
+The identical artifact reproduced every pass-1 value:
+
+- changed pixels: `224640`
+- mip/layer regions: `{74880,74880,74880}`
+- exact mismatches: `0`
+- packed FNV64: `0x611e681989bb483d`
+- completion fence, marker, driver shutdown, memory cleanup, final verdict,
+  and self-termination: PASS
+
+BC1 UNORM is hardware-qualified on exact FW 11.60. BC1 SRGB is next; FW 5.50
+identical-byte replay remains a separate endpoint qualification.

@@ -1067,10 +1067,11 @@ shader fetched coordinates through 2x3 inclusive. All mip-1 shader fetches and
 CPU expectations are now clamped to the valid `x=0..1`, `y=0..2` extent.
 Retry the newly pinned BC1 UNORM bytes twice before advancing.
 
-The first corrected BC1 UNORM run on FW 11.60 passed with `224640` changed
-pixels, `{74880,74880,74880}` mip/layer-region samples, zero exact mismatches,
-and native FNV64 `0x611e681989bb483d`. Fence, shutdown, cleanup, and final
-verdict passed. Repeat the identical bytes once more before BC1 SRGB.
+The corrected BC1 UNORM artifact passed twice on FW 11.60 with identical
+results: `224640` changed pixels, `{74880,74880,74880}` mip/layer-region
+samples, zero exact mismatches, and native FNV64 `0x611e681989bb483d`.
+Fence, shutdown, cleanup, and final verdict passed both times. BC1 UNORM is
+hardware-qualified on FW 11.60; qualify BC1 SRGB next.
 
 BC4 UNORM/SNORM portable gates now build with dedicated scalar sampling
 shaders. They reuse the 5x7, three-mip, two-layer direct-upload geometry but
