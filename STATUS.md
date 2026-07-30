@@ -53,8 +53,12 @@ except for the exact FW 5.50 public compute row
 `undefined -> shader-write -> host-read`: artifact
 `ab8852e9161c0f6ed1c373bc6de047bb9831df0d7cc7bc3df6d247baf549af31` passed
 the real 64-word dispatch, derived flush, bounded fence, readback, reset, and
-teardown. Image/graphics/copy/scanout, cross-queue, multi-command-buffer
-waits/signals, and timeline semantics remain pending.
+teardown. The matching 1x linear RGBA8 MRT row
+`undefined -> color-target -> host-read` also passed on exact FW 5.50 in
+artifact `8cd97b0b26d568c92870047d65698bd71fe31b72c162c7ca1a62c59d159bf643`:
+both targets produced 1,152 distinct post-fence pixels. Depth/stencil, copy,
+scanout, cross-queue, multi-command-buffer waits/signals, and timeline
+semantics remain pending.
 
 ## Native resource and memory management complete (2026-07-30)
 

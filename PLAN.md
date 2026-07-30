@@ -458,7 +458,10 @@ The initial whole-buffer compute row is established on exact FW 5.50: public
 runtime artifact `ab8852e9161c0f6ed1c373bc6de047bb9831df0d7cc7bc3df6d247baf549af31`
 records `undefined -> shader-write -> host-read` around real shader execution,
 then passes bounded-fence readback and teardown. This is only one row of the
-exit matrix; image/graphics/copy/scanout, FW 11.60, and multi-command
+exit matrix. Artifact
+`8cd97b0b26d568c92870047d65698bd71fe31b72c162c7ca1a62c59d159bf643` also
+passes the two-image `undefined -> color-target -> host-read` MRT row on exact
+FW 5.50. Depth/stencil, copy/scanout, FW 11.60, and multi-command
 synchronization remain open.
 
 ### Milestone 5: validation, diagnostics, capture, and documentation

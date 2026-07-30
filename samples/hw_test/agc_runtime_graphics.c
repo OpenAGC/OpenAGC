@@ -79,6 +79,10 @@ int main(void)
     AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
     AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
     AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    AgcResourceTransition transitions[2] = {
+        AGC_RESOURCE_TRANSITION_INIT,
+        AGC_RESOURCE_TRANSITION_INIT,
+    };
     AgcVertexBufferBinding vertex_binding = AGC_VERTEX_BUFFER_BINDING_INIT;
     AgcColorTargetBinding targets[2] = {
         AGC_COLOR_TARGET_BINDING_INIT,
@@ -254,6 +258,18 @@ int main(void)
     report_result("agcBeginCommandBuffer", result);
     if (result != AGC_OK)
         goto cleanup;
+    transitions[0].resource_type = kAgcResourceTypeImage;
+    transitions[0].image = first_target_image;
+    transitions[0].before = kAgcResourceUsageUndefined;
+    transitions[0].after = kAgcResourceUsageColorTarget;
+    transitions[0].before_owner = kAgcResourceOwnerHost;
+    transitions[0].after_owner = kAgcResourceOwnerGraphics;
+    transitions[1] = transitions[0];
+    transitions[1].image = second_target_image;
+    result = agcCmdTransitionResources(command_buffer, 2u, transitions);
+    report_result("agcCmdTransitionResources(undefined-to-color)", result);
+    if (result != AGC_OK)
+        goto cleanup;
     result = agcCmdBindGraphicsPipeline(command_buffer, pipeline);
     report_result("agcCmdBindGraphicsPipeline", result);
     if (result != AGC_OK)
@@ -294,6 +310,16 @@ int main(void)
         goto cleanup;
     result = agcCmdDrawIndexed(command_buffer, 3u, 1u, 0u, 0, 0u);
     report_result("agcCmdDrawIndexed", result);
+    if (result != AGC_OK)
+        goto cleanup;
+    transitions[0].before = kAgcResourceUsageColorTarget;
+    transitions[0].after = kAgcResourceUsageHostRead;
+    transitions[0].before_owner = kAgcResourceOwnerGraphics;
+    transitions[0].after_owner = kAgcResourceOwnerHost;
+    transitions[1] = transitions[0];
+    transitions[1].image = second_target_image;
+    result = agcCmdTransitionResources(command_buffer, 2u, transitions);
+    report_result("agcCmdTransitionResources(color-to-host-read)", result);
     if (result != AGC_OK)
         goto cleanup;
     result = agcEndCommandBuffer(command_buffer);

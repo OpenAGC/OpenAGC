@@ -206,7 +206,11 @@ default-state initialization. The exact FW 5.50 compute row
 `undefined -> shader-write -> host-read` is hardware-qualified by the
 public-runtime artifact recorded in
 [`runtime_transitions_fw550_20260731.md`](../analysis/runtime_transitions_fw550_20260731.md).
-Image, graphics, copy, scanout, cross-queue, and multi-command synchronization
+The exact FW 5.50 1x linear RGBA8 MRT row
+`undefined -> color-target -> host-read` is also hardware-qualified, with two
+resources in each transition batch, as recorded in
+[`runtime_graphics_transitions_fw550_20260731.md`](../analysis/runtime_graphics_transitions_fw550_20260731.md).
+Depth/stencil, copy, scanout, cross-queue, and multi-command synchronization
 rows remain host-only.
 
 Prospero `agcQueueSubmit` submits both current graphics and compute command

@@ -1328,8 +1328,13 @@ static void test_runtime_resource_transitions(void)
     AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
     AgcResourceTransition transition = AGC_RESOURCE_TRANSITION_INIT;
     AgcResourceTransition duplicate[2];
+    AgcResourceTransition image_transitions[2] = {
+        AGC_RESOURCE_TRANSITION_INIT,
+        AGC_RESOURCE_TRANSITION_INIT,
+    };
     AgcBuffer buffer = NULL;
     AgcImage image = NULL;
+    AgcImage second_image = NULL;
     AgcCommandBuffer compute_command = NULL;
     AgcCommandBuffer graphics_command = NULL;
     AgcFence fence = NULL;
@@ -1436,20 +1441,24 @@ static void test_runtime_resource_transitions(void)
         AGC_IMAGE_USAGE_TRANSFER_SRC_BIT | AGC_IMAGE_USAGE_TRANSFER_DST_BIT;
     TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &image), AGC_OK,
         "transition image creates");
+    TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &second_image), AGC_OK,
+        "second transition image creates");
     command_desc.queue_type = kAgcQueueGraphics;
     TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc,
         &graphics_command), AGC_OK, "transition graphics command creates");
-    transition = (AgcResourceTransition)AGC_RESOURCE_TRANSITION_INIT;
-    transition.resource_type = kAgcResourceTypeImage;
-    transition.image = image;
-    transition.before = kAgcResourceUsageUndefined;
-    transition.after = kAgcResourceUsageColorTarget;
-    transition.before_owner = kAgcResourceOwnerHost;
-    transition.after_owner = kAgcResourceOwnerGraphics;
+    image_transitions[0].resource_type = kAgcResourceTypeImage;
+    image_transitions[0].image = image;
+    image_transitions[0].before = kAgcResourceUsageUndefined;
+    image_transitions[0].after = kAgcResourceUsageColorTarget;
+    image_transitions[0].before_owner = kAgcResourceOwnerHost;
+    image_transitions[0].after_owner = kAgcResourceOwnerGraphics;
+    image_transitions[1] = image_transitions[0];
+    image_transitions[1].image = second_image;
     TEST_ASSERT_EQ(agcBeginCommandBuffer(graphics_command), AGC_OK,
         "image transition command begins");
-    TEST_ASSERT_EQ(agcCmdTransitionResources(graphics_command, 1u,
-        &transition), AGC_OK, "undefined-to-color transition records");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(graphics_command, 2u,
+        image_transitions), AGC_OK,
+        "distinct undefined-to-color transitions record atomically");
     TEST_ASSERT_EQ(agcEndCommandBuffer(graphics_command), AGC_OK,
         "image transition command ends");
     submit.command_buffers = &graphics_command;
@@ -1462,14 +1471,17 @@ static void test_runtime_resource_transitions(void)
     TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
         "image transition fence resets");
 
-    transition.before = kAgcResourceUsageColorTarget;
-    transition.after = kAgcResourceUsageHostRead;
-    transition.before_owner = kAgcResourceOwnerGraphics;
-    transition.after_owner = kAgcResourceOwnerHost;
+    image_transitions[0].before = kAgcResourceUsageColorTarget;
+    image_transitions[0].after = kAgcResourceUsageHostRead;
+    image_transitions[0].before_owner = kAgcResourceOwnerGraphics;
+    image_transitions[0].after_owner = kAgcResourceOwnerHost;
+    image_transitions[1] = image_transitions[0];
+    image_transitions[1].image = second_image;
     TEST_ASSERT_EQ(agcBeginCommandBuffer(graphics_command), AGC_OK,
         "color-to-host transition command begins");
-    TEST_ASSERT_EQ(agcCmdTransitionResources(graphics_command, 1u,
-        &transition), AGC_OK, "color-to-host transition records");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(graphics_command, 2u,
+        image_transitions), AGC_OK,
+        "distinct color-to-host transitions record atomically");
     TEST_ASSERT_EQ(agcEndCommandBuffer(graphics_command), AGC_OK,
         "color-to-host transition command ends");
     TEST_ASSERT_EQ(agcQueueSubmit(graphics_queue, &submit, fence), AGC_OK,
@@ -1478,6 +1490,9 @@ static void test_runtime_resource_transitions(void)
     words = (const uint32_t *)(uintptr_t)captured->command_address;
     TEST_ASSERT_EQ(agcPm4Opcode(words[0]), AGC_PM4_OP_RELEASE_MEM,
         "color-to-host transition emits qualified release");
+    TEST_ASSERT_EQ(captured->dword_count,
+        2u * AGC_GFX1013_EOP_FENCE_DWORDS,
+        "two color transitions emit two qualified releases");
     TEST_ASSERT_EQ(agcGetFenceStatus(fence), AGC_OK,
         "color-to-host transition completes on host");
     TEST_ASSERT_EQ(agcResetCommandBuffer(graphics_command), AGC_OK,
@@ -1487,6 +1502,8 @@ static void test_runtime_resource_transitions(void)
         "transition graphics command destroys");
     TEST_ASSERT_EQ(agcDestroyCommandBuffer(compute_command), AGC_OK,
         "transition compute command destroys");
+    TEST_ASSERT_EQ(agcDestroyImage(second_image), AGC_OK,
+        "second transition image destroys");
     TEST_ASSERT_EQ(agcDestroyImage(image), AGC_OK, "transition image destroys");
     TEST_ASSERT_EQ(agcDestroyBuffer(buffer), AGC_OK, "transition buffer destroys");
     TEST_ASSERT_EQ(agcDestroyQueue(graphics_queue), AGC_OK,
