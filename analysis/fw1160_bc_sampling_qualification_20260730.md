@@ -171,6 +171,13 @@ firmware-neutral dependency verification, and were preserved before execution:
 - UFLOAT: `37c1159701d9615fc015c3f5b887f88f00fe12e694df7ff92f442fb7165c072c`
 - SFLOAT: `5bdffd1510c11ac7b334d630782fe931b9ca8b3f19ee31ab0b14b861eec32578`
 
+## BC6 UFLOAT pass 1
+
+The pinned UFLOAT artifact passed with `224640` changed pixels, fixture counts
+`{74880,74880,18760,56120}`, decoded range `0..220`, zero decode
+mismatches/error, channel independence, and FNV64 `0x6d3c92b92851ab4a`.
+All lifecycle gates passed. Repeat the identical bytes once.
+
 ## BC2 corrected artifacts
 
 After the shared valid-mip and compressed-diversity corrections, both BC2

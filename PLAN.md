@@ -1145,6 +1145,11 @@ BC7 SRGB passed twice on FW 11.60 with identical `224640` changed pixels,
 `0..255`, zero exact mismatches, channel independence, and FNV64
 `0x74a3526f9a3eef65`. Both BC7 variants are hardware-qualified on FW 11.60.
 Rebuild and freeze BC6 UFLOAT/SFLOAT next.
+
+BC6 UFLOAT pass 1 succeeded on FW 11.60 with `224640` changed pixels, fixture
+counts `{74880,74880,18760,56120}`, decoded range `0..220`, zero decode
+mismatches/error, channel independence, and FNV64 `0x6d3c92b92851ab4a`.
+Repeat the identical artifact once.
 The final firmware-neutral bytes are pinned as SHA-256
 `f74c393112fc465eace431a3fe288095ae4b3bf5ee993e8147ed0e9a2f22f2a4`
 for BC4 UNORM and
