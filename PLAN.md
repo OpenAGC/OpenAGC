@@ -1194,11 +1194,12 @@ alpha range `0..255`, zero exact mismatches, and FNV64
 `0xf3b07b5935bb483d` on both runs. BC2 UNORM is hardware-qualified on both
 endpoints; qualify BC2 SRGB next.
 
-BC2 SRGB pass 1 on FW 5.50 used pinned SHA-256
+BC2 SRGB on FW 5.50 used pinned SHA-256
 `d182824d912f7473f25beeba80ffc58e3ceb31d8a5b7bff678d2237b24c9c5b8`
-and reproduced `224640` changed pixels, regions `{74880,74880,74880}`, alpha
-range `0..255`, zero exact mismatches, and FNV64 `0x0a8a977e6f2c8da1`.
-Repeat the identical artifact once.
+twice and reproduced `224640` changed pixels, regions `{74880,74880,74880}`,
+alpha range `0..255`, zero exact mismatches, and FNV64
+`0x0a8a977e6f2c8da1` on both runs. Both BC2 variants are hardware-qualified on
+both endpoints; qualify BC3 next.
 The final firmware-neutral bytes are pinned as SHA-256
 `f74c393112fc465eace431a3fe288095ae4b3bf5ee993e8147ed0e9a2f22f2a4`
 for BC4 UNORM and

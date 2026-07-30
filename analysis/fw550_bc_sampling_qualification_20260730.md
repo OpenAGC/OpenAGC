@@ -122,3 +122,13 @@ The guarded run produced `224640` changed pixels, regions
 `{74880,74880,74880}`, alpha range `0..255`, zero exact mismatches, and FNV64
 `0x0a8a977e6f2c8da1`. All format and lifecycle gates passed, including the
 post-run residual-process check. Repeat the identical artifact once.
+
+## BC2 SRGB pass 2
+
+The identical artifact reproduced `224640` changed pixels, regions
+`{74880,74880,74880}`, alpha range `0..255`, zero exact mismatches, and FNV64
+`0x0a8a977e6f2c8da1`. Every lifecycle gate and the post-run residual-process
+check passed again.
+
+BC2 UNORM and SRGB are hardware-qualified on exact FW 5.50 and FW 11.60.
+Proceed to BC3 UNORM/SRGB.
