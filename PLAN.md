@@ -1192,9 +1192,9 @@ agreement, full alpha range, channel independence, and all mip/layer regions,
 and records a native hash. Other BC7 modes remain separate coverage expansion,
 not a prerequisite for proving the native BC7 resource path. The pinned
 SHA-256 values are
-`a57288aca33e8111fe0d6c624b65d90324b64c08486a5b9bccdeded85e724028`
+`a98adaa1125c6ab1590d5c3cb1d65e19b0573ccf4f5e5a1ec0b40ad93bb17db6`
 for BC7 UNORM and
-`bf55e34fa8c26e1396fa942ace79bddaa97b87d8dbdef5597bc076de3fce1b0c`
+`f6a97569f854ddad7080247c44bec6dd1edccc0b7c248a8b1f8701b276c8eb27`
 for BC7 SRGB. Their FW 11.60 and identical-byte FW 5.50 guarded targets have
 no build prerequisites.
 

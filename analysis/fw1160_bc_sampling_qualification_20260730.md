@@ -224,6 +224,14 @@ mismatches/error, channel independence, and FNV64 `0xf1464077ada8ce8d`.
 All lifecycle gates passed again. BC5 UNORM and SNORM are hardware-qualified
 on exact FW 11.60.
 
+## BC7 corrected artifacts
+
+After the shared oracle corrections, both BC7 variants were rebuilt, passed
+firmware-neutral dependency verification, and were preserved before execution:
+
+- UNORM: `a98adaa1125c6ab1590d5c3cb1d65e19b0573ccf4f5e5a1ec0b40ad93bb17db6`
+- SRGB: `f6a97569f854ddad7080247c44bec6dd1edccc0b7c248a8b1f8701b276c8eb27`
+
 ## BC3 UNORM pass 2
 
 The identical artifact reproduced `224640` changed pixels,

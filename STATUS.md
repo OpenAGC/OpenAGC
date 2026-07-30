@@ -764,9 +764,9 @@ endpoint and interpolation results. The bounded oracle recognizes both modes,
 requires exact decoded RGBA8 values, full alpha range, channel independence,
 and every mip/layer region, and records a native hash. Exact artifacts are
 now pinned as SHA-256
-`a57288aca33e8111fe0d6c624b65d90324b64c08486a5b9bccdeded85e724028`
+`a98adaa1125c6ab1590d5c3cb1d65e19b0573ccf4f5e5a1ec0b40ad93bb17db6`
 (UNORM) and
-`bf55e34fa8c26e1396fa942ace79bddaa97b87d8dbdef5597bc076de3fce1b0c`
+`f6a97569f854ddad7080247c44bec6dd1edccc0b7c248a8b1f8701b276c8eb27`
 (SRGB), with no-prerequisite FW 11.60 and FW 5.50 guarded targets. Hardware
 execution remains pending a clean FW 11.60 boot.
 
