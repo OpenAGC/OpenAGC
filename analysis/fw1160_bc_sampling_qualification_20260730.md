@@ -62,3 +62,18 @@ All shared and dedicated BC sampling shaders now clamp mip 1 to `x=0..1` and
 All 14 affected firmware-neutral ELFs were rebuilt, dependency-checked,
 hash-named, and preserved before any further execution. Retry the newly pinned
 BC1 UNORM artifact twice before advancing.
+
+## BC1 UNORM corrected pass 1
+
+The newly pinned artifact
+`db3965f2c8da26273b9683794595612c5b2c216b06a6b05ab05bb579a4842aa5`
+passed its first guarded FW 11.60 run:
+
+- changed pixels: `224640`
+- mip/layer regions: `{74880,74880,74880}`
+- exact mismatches: `0`
+- packed FNV64: `0x611e681989bb483d`
+- completion fence, marker, driver shutdown, memory cleanup, final verdict,
+  and self-termination: PASS
+
+Repeat the identical bytes once before qualifying BC1 UNORM.

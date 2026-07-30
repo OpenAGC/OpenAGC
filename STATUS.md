@@ -669,7 +669,9 @@ The next corrected run reduced mismatches to `46779`, exactly exposing invalid
 mip-1 `texelFetch` coordinates: the 5x7 base mip shrinks to 2x3, but the fixture
 requested `x=2` and `y=3`. Every BC shader and CPU oracle now clamps mip 1 to
 its valid extent. Hardware qualification of the newly pinned artifacts remains
-pending.
+pending. Corrected BC1 UNORM pass 1 subsequently succeeded on FW 11.60 with
+`224640` changed pixels, all three regions at `74880`, zero mismatches, and
+FNV64 `0x611e681989bb483d`; identical-byte pass 2 remains required.
 
 BC4 UNORM and SNORM firmware-neutral sampling gates also build. Dedicated
 shaders sample the red channel from exact endpoint/index blocks across mip 0,
