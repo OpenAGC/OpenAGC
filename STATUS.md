@@ -158,7 +158,9 @@ process. The recipe now freezes `32281`; one enforcement replay remains.
 That frozen replay reproduced `32281`, zero outside change, exact
 `228096/228096` color, clean shutdown, and no residual process. Array-layer-1
 HTILE isolation is hardware-qualified on FW 5.50; its pinned FW 11.60 mirror
-is now active.
+is now active. FW 11.60 pass 1 reproduced `32281`, zero outside change, exact
+`228096/228096` color, immediate completion, clean shutdown, and no residual
+process; the recipe now freezes that count.
 
 Ordinary D16 HTILE is now hardware-qualified twice on each endpoint. The
 pinned current-source artifacts reproduced exact D16 classes, clean teardown,

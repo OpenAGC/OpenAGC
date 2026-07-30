@@ -2661,6 +2661,7 @@ deploy_agc_depth_htile_array_fw1160_logged: agc_depth_htile_array_fw1160_logged.
 		RESULT_LOG_PATH=/data/homebrew/openagc_fw1160_depth/result.log \
 		EXPECTED_HTILE_INITIAL=fffc000f REQUIRE_HTILE_SUBRESOURCE=1 \
 		EXPECTED_COLOR_GREEN_RED=228096 \
+		EXPECTED_HTILE_SELECTED_CHANGED=32281 \
 		EXPECTED_ARTIFACT_SHA256=bbde10976bd64f2a56d81ac0fc0fb01f9000c7e0680835edd5f1ed85b4fa49cf \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_depth.sh
 

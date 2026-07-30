@@ -646,6 +646,10 @@ the runner and shared teardown on FW 11.60 only.
   exact `228096/228096` color, clean shutdown, and no residual process. Array-
   layer-1 isolation is qualified on FW 5.50. Run the pinned FW 11.60 array
   artifact next and freeze its selected count before replay.
+- FW 11.60 array pass 1 reproduced `32281`, zero outside change, exact
+  `228096/228096` color, immediate completion, clean shutdown, and no residual
+  process. Its guarded recipe now freezes `32281`; replay once to complete the
+  HTILE subresource tier.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and

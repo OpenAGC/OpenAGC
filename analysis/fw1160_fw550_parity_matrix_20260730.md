@@ -232,6 +232,11 @@ shutdown, final PASS, and no residual process. Current-source array-layer-1
 HTILE isolation is hardware-qualified on FW 5.50. Run the pinned FW 11.60
 array artifact next, freeze its selected count, and replay.
 
+FW 11.60 array pass 1 reproduced `32281` selected words, zero outside change,
+exact `228096/228096` color, immediate completion, clean shutdown, final PASS,
+and no residual process. Its logged recipe now freezes `32281`; one identical
+replay remains before the HTILE subresource tier is complete.
+
 That prerequisite sequence is now complete. Two relinks against the committed
 shader records reproduced all eight artifacts byte-for-byte, and dependency
 inspection found only VideoOut, kernel, libc, and networking. The exact FW
