@@ -170,6 +170,11 @@ All four endpoint/mode ELFs reproduce across two relinks, avoid AGC SPRX
 dependencies, are preserved under full hashes, and have cleanup-first pinned
 deploy targets. Hardware execution has not started.
 
+FW 5.50 full-rate pass 1 observed all four sample IDs with exact counts
+`2529216,2530368,2529984,2529600` and total `10119168`. Guards, the existing
+color/D32 oracle, fence, teardown, self-termination, and debugger absence all
+passed. The exact counts are frozen for replay.
+
 All four subresource artifacts now reproduce across two relinks, avoid AGC
 SPRX dependencies, are preserved under full hashes, and have cleanup-first
 hash-pinned deploy targets with exact color and selected/outside metadata

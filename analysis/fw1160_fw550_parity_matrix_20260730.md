@@ -325,6 +325,13 @@ full hash outside the repository, and have cleanup-first, hash-pinned deploy
 targets. Launch FW 5.50 full first; freeze its exact counters before replay or
 advancing to partial-rate execution.
 
+FW 5.50 full-rate pass 1 observed exact sample counts
+`2529216,2530368,2529984,2529600`, total `10119168`, all guards intact, and the
+unchanged qualified color/D32 oracle. Fence, teardown, self-termination, and
+debugger absence passed. Those counts are frozen for the identical-byte replay;
+all four sample-rate targets now also enforce the qualified `227610/227610`
+color and `6469632/912384/912384` D32 baseline.
+
 That prerequisite sequence is now complete. Two relinks against the committed
 shader records reproduced all eight artifacts byte-for-byte, and dependency
 inspection found only VideoOut, kernel, libc, and networking. The exact FW
