@@ -65,6 +65,7 @@ FNV64 `0x4a40c2eb4f12bc26`, and shut down cleanly. Its artifact SHA-256 was
 
 The Sony ten-dword multi packet is now the application default for single and
 multiple, indexed and non-indexed indirect draws. Hardware evidence currently
-qualifies fixed-count non-indexed and indexed forms on FW 11.60 only. Repeat
-those exact current artifacts on FW 5.50 when available. Indirect count-buffer
-control and draw counts greater than one remain separate hardware gates.
+qualifies fixed-count non-indexed and indexed forms on FW 11.60. The subsequent
+`draw_count=2` and count-buffer gates are recorded in
+`fw1160_multi_indirect_qualification_20260730.md`. Repeat all exact current
+artifacts on FW 5.50 when available.

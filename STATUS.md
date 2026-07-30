@@ -738,9 +738,17 @@ The Sony packet is now the application default. The ordinary
 `agcGfx1013DrawBaselineIndirect` path emitted the exact non-indexed bytes on
 two further cleanup-first passes, and its fixed-count indexed ten-dword path
 also passed twice with the same pixel oracle and clean teardown. FW 5.50 still
-needs both current default gates; count-buffer and draw-count-greater-than-one
-forms remain untested on hardware. See `analysis/agc_indirect_draw_abi.md` and
-`analysis/fw1160_sony_multi_indirect_qualification_20260730.md`.
+needs all current default gates.
+
+True multi-draw is also qualified on FW 11.60. Non-indexed and indexed
+`draw_count=2` each passed twice with exact ten-dword packet audits. A distinct
+second argument record shifted the triangle right, increasing coverage from
+255,744 to 463,430 pixels and extending the bound to `x=1535`; all four runs
+matched FNV64 `0x4352dc6d19dc690f`. The isolated GPU count-buffer form then
+passed twice with control `0x40000280`, an exact 48-bit count address, GPU count
+value two, and the same second-geometry oracle. Every run reached its fence
+immediately and shut down cleanly. See `analysis/agc_indirect_draw_abi.md` and
+`analysis/fw1160_multi_indirect_qualification_20260730.md`.
 
 ## Application-facing indexed/indirect draw composition (2026-07-27)
 
@@ -753,8 +761,9 @@ instance count, and the complete shader/frame/resource prefix before emitting
 
 `agcGfx1013DrawBaselineIndirect` validates the indirect argument base and
 offset, single/multi stride, Sony-representable base-vertex and start-instance
-register locations, supported initiators, and optional index-buffer state
-before emitting `SET_BASE` plus the Sony ten-dword multi packet. Exact host
+register locations, supported initiators, optional index-buffer state, and an
+optional aligned 48-bit GPU count address before emitting `SET_BASE` plus the
+Sony ten-dword multi packet. Exact host
 fixtures lock the 47-dword direct indexed, 50-dword non-indexed indirect, and
 58-dword indexed multi-indirect streams. The compositor also preserves the
 builder's full 16-dword GetSize reservation. Short buffers, invalid ranges,

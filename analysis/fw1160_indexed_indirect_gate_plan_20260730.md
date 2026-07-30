@@ -66,9 +66,10 @@ ps5debug-NG found no residual `eboot` between or after the runs; ports 744 and
 
 This independently hardware-qualifies the three current draw-composition
 variants on the tested FW 11.60 console. The indirect rows now use the
-recovered, byte-distinct Sony 10-dword default. This does not qualify
-count-buffer multi-draw, draw counts greater than one, or the rejected
-Mesa-style 10-dword packet form.
+recovered, byte-distinct Sony 10-dword default. Later isolated gates qualified
+non-indexed and indexed `draw_count=2` plus GPU count-buffer selection; see
+`fw1160_multi_indirect_qualification_20260730.md`. None of this validates the
+rejected Mesa-style 10-dword packet form.
 
 ## Execution policy
 

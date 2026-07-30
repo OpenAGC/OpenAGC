@@ -101,9 +101,10 @@ Execute in this order:
    short-buffer behavior with fixtures. The application-facing indirect
    compositor now defaults to the Sony 10-dword multi form for both single and
    multiple draws. Fixed-count non-indexed and indexed forms each passed twice
-   on FW11.60 through cleanup-first bounded gates. Repeat both exact current
-   paths on FW5.50 when that console is available; count-buffer and draw-count
-   greater than one remain separate hardware gates.
+   on FW11.60 through cleanup-first bounded gates. Non-indexed and indexed
+   `draw_count=2` plus GPU count-buffer selection each subsequently passed
+   twice with distinct second-draw geometry. Repeat all current paths on
+   FW5.50 when that console is available.
 9. Resume higher-level parity work only with firmware-neutral artifacts so
    each new game-facing capability strengthens the one-binary contract.
 

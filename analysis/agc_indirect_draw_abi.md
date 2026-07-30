@@ -88,7 +88,10 @@ modifier register windows and initiators that Sony can represent, reserves the
 full 16-dword GetSize maximum atomically, and emits a ten-dword core. Exact
 50/58-dword stream fixtures protect the non-indexed/indexed composition.
 
-Both fixed-count default forms passed twice on FW 11.60. The exact current
-paths remain pending on FW 5.50, and count-buffer plus draw-count-greater-than-
-one forms remain hardware-unverified. See
-`fw1160_sony_multi_indirect_qualification_20260730.md` for the hardware record.
+Both fixed-count default forms passed twice on FW 11.60. Non-indexed and
+indexed `draw_count=2` forms then passed twice with a distinct second-geometry
+oracle, followed by two passing GPU count-buffer runs. The application state
+uses `draw_count` as the fixed count or maximum and exposes an optional aligned
+48-bit `count_address` selected by `count_indirect`. All current paths remain
+pending on FW 5.50. See `fw1160_sony_multi_indirect_qualification_20260730.md`
+and `fw1160_multi_indirect_qualification_20260730.md`.
