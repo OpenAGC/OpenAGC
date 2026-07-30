@@ -331,13 +331,13 @@ compute buffers through the direct DCB carrier and appends a runtime-owned EOP
 completion fence before retaining recorded resources as pending. The first
 public-runtime FW 5.50 compute attempt used its former user-special-queue ACB
 route: submission returned `AGC_OK`, but the EOP fence timed out. The changed
-direct-DCB route also returned `AGC_OK` and timed out at that fence. It matches
-the separately hardware-qualified compute carrier and has generic coverage and
-a clean Prospero cross-build, but it is not a runtime hardware promotion. The
-next hardware attempt must be a changed EOP-only runtime diagnostic that
-separates completion visibility from the shader command stream.
-`agc_runtime_eop.elf` is the resulting public-only, no-application-command
-probe; it awaits explicit exact-firmware deployment.
+direct-DCB route also returned `AGC_OK` and timed out at that fence.
+`agc_runtime_eop.elf` then passed submit, its bounded wait, reset, and complete
+teardown on exact FW 5.50. That isolates the remaining failure to the emitted
+compute workload state rather than the direct carrier, command allocation,
+EOP packet, fence allocation, or CPU visibility. It is not a reflected
+compute-pipeline promotion; the next changed diagnostic must isolate the
+state emitted before `DISPATCH_DIRECT`.
 Remaining unqualified geometry forms, remaining
 unqualified fixed options, and any explicit PS5 hardware promotion remain
 open; do not label this milestone complete yet.

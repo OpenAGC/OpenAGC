@@ -202,11 +202,13 @@ runtime fence, appends an EOP completion write, and retains command ownership
 until a bounded status poll or wait observes that write. Its first public
 runtime FW 5.50 compute attempt used the former user-special-queue ACB route:
 submission returned `AGC_OK`, but the EOP fence timed out. The changed direct
-DCB artifact also returned `AGC_OK` and timed out at that fence. The DCB route
-matches the separately qualified compute carrier and is covered by generic
-carrier checks and the Prospero cross-build, but it has not resolved the
-public-runtime oracle; no runtime hardware claim is made. A changed EOP-only
-runtime diagnostic is required before another hardware attempt.
+DCB artifact also returned `AGC_OK` and timed out at that fence. The changed
+EOP-only native-runtime diagnostic then passed direct submission, its bounded
+wait, reset, and complete teardown on exact FW 5.50. This proves the runtime
+direct carrier, command allocation, EOP completion packet, fence memory, and
+CPU visibility path; it does not qualify a reflected compute workload. The
+next changed diagnostic must isolate compute state emitted before
+`DISPATCH_DIRECT`.
 
 An opt-in combined-tree integration target compiles real `openagc-psbc`
 vertex, fragment, and compute artifacts, then creates OpenAGC graphics and

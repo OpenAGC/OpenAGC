@@ -14,6 +14,7 @@ recording, and `agcQueueSubmit` all returned `AGC_OK` in both attempts.
 | --- | --- | --- |
 | pre-`4938c8b` | user-special queue plus ACB | `agcWaitFence` timed out after 200 ms |
 | `4938c8b` (`64304148af2ff77c7155eb2f3e705a8d993cf856bb95318efb7f3f9fe2a071dd`) | `SetupAsyncGraphics(1)` plus direct DCB | `agcWaitFence` timed out after 200 ms |
+| `dc9ab11` (`27b2018483ad520a4ab18b1bb642e78250124dfc17e154e7bdb25fd7f634681a`) | direct DCB, no application commands plus runtime EOP | submit, 200 ms wait, reset, and teardown passed |
 
 Both failing artifacts then correctly refused to destroy the pending fence,
 command buffer, resources, queue, and device with `AGC_ERROR_BUSY`. After the
@@ -22,16 +23,12 @@ reachable, so this did not leave the console unresponsive.
 
 ## Consequence
 
-Successful submission is not evidence that the public runtime stream executes
-or that its completion write becomes CPU-visible. Direct DCB routing alone did
-not resolve the timeout and does not promote any native runtime capability.
+The EOP-only pass proves the public runtime's command allocation, direct DCB
+carrier, EOP completion packet, fence allocation, and CPU visibility path on
+exact FW 5.50. The failing workload artifacts therefore point to the emitted
+compute state, rather than submission or completion. This does not promote the
+broader reflected compute-pipeline capability.
 
-Do not rerun either artifact unchanged. The next diagnostic must be a changed
-public-runtime EOP-only submission using the same command-buffer and fence
-allocation path. Its result will distinguish completion visibility from the
-shader command stream before another workload test.
-
-The resulting `agc_runtime_eop.elf` artifact is built from the native object
-API only and records no application commands. Its current SHA-256 is
-`27b2018483ad520a4ab18b1bb642e78250124dfc17e154e7bdb25fd7f634681a`; it has
-not yet been deployed.
+Do not rerun either workload artifact unchanged. The next diagnostic must
+retain this proven completion path while isolating the compute state emitted
+before `DISPATCH_DIRECT`.

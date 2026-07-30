@@ -186,15 +186,16 @@ buffers through the direct DCB carrier only when the caller supplies an
 unsignaled runtime fence. Compute-queue creation establishes the qualified
 async setup state, but it does not create a user-special queue: the native
 runtime's first FW 5.50 ACB submission was accepted yet its EOP fence timed
-out. The changed direct-DCB artifact also reached submission and timed out at
-the same fence. The runtime appends an EOP completion write, keeps the command
-buffer and its recorded resources pending, and releases them only after status
-polling or a finite fence wait observes the GPU-written value. The generic host
-harness continues to use its ACB compute carrier for host carrier coverage.
-The Prospero DCB policy has generic coverage and a clean cross-build, but it
-does not resolve the public-runtime oracle and no hardware qualification is
-implied. Broader graphics stages and unqualified fixed options such as
-alpha-to-coverage and alpha-to-one remain fail-closed.
+out. The changed direct-DCB workload artifact also reached submission and
+timed out at the same fence. The dedicated EOP-only FW 5.50 oracle then passed
+submit, bounded wait, reset, and full teardown, proving this runtime's direct
+carrier, command allocation, completion packet, fence memory, and CPU
+visibility path. The remaining compute failure is therefore in the emitted
+workload state, not completion. The generic host harness continues to use its
+ACB compute carrier for host carrier coverage. This exact fence-only result
+does not hardware-qualify a reflected shader/pipeline/dispatch workload.
+Broader graphics stages and unqualified fixed options such as alpha-to-coverage
+and alpha-to-one remain fail-closed.
 
 `samples/hw_test/agc_runtime_compute.elf` is the dedicated public-runtime
 compute probe. It creates a device, compute queue, readback storage buffer,
@@ -204,16 +205,18 @@ and push constants before dispatch. The first FW 5.50 deployment reached
 `agcQueueSubmit` successfully but timed out at the runtime EOP fence while
 using the former ACB route. The changed direct-DCB artifact reached the same
 timeout. Its generic artifact-contract test and revised Prospero cross-build
-pass, but neither artifact is hardware-qualified. The next hardware attempt
-must use a changed EOP-only diagnostic to isolate completion visibility from
-the shader command stream.
+pass, but neither artifact is hardware-qualified. The EOP-only oracle passed,
+so the next changed workload diagnostic must isolate the emitted compute state
+that precedes `DISPATCH_DIRECT`.
 
 `samples/hw_test/agc_runtime_eop.elf` is that bounded public-runtime
 diagnostic. It creates the same device, compute queue, command buffer, and
 fence path, but records no application commands; `agcQueueSubmit` supplies the
 runtime-owned EOP completion packet. The generic suite verifies the equivalent
-two-dword runtime NOP carrier and the complete fence lifecycle. Its Prospero
-artifact cross-builds cleanly, but it has not been deployed or qualified.
+two-dword runtime NOP carrier and the complete fence lifecycle. On exact FW
+5.50 it passed `agcQueueSubmit`, its 200 ms bounded wait, reset, and complete
+object teardown. This qualifies only the fence-only native-runtime slice, not
+the broader reflected compute pipeline.
 
 `samples/hw_test/agc_runtime_graphics.elf` is the corresponding native graphics
 submission probe. It creates upload vertex/index buffers, a reflected NGG
