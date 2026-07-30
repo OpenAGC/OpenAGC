@@ -468,7 +468,7 @@ EOP release write through `agcCmdSignalGpuLabel`; a consumer records an exact
 32-bit `WAIT_REG_MEM` through `agcCmdWaitGpuLabel`. Submission accepts the
 consumer only after the matching producer value has submitted on the same
 queue; labels retain their backing word until both command buffers reset.
-Artifact `ffcddb444a677b15b0f2313bf3ed76e05f104400ae21767e342ff1b1cd12db9f`
+Artifact `1af09900242e5e0af40c12dfb68bd8ea4fb059bdb85654d969cfff88cb15d016`
 passed a producer-then-consumer public compute oracle without a CPU wait
 between submissions, followed by bounded-fence readback and full teardown on
 exact FW 5.50. Labels now enforce strictly increasing 32-bit timeline points

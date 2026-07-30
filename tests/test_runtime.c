@@ -1429,6 +1429,7 @@ static void test_runtime_gpu_labels(void)
     AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
     AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
     AgcGpuLabelDesc label_desc = AGC_GPU_LABEL_DESC_INIT;
+    AgcGpuLabelInfo label_info = AGC_GPU_LABEL_INFO_INIT;
     AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
     AgcQueue compute_queue = NULL;
     AgcQueue graphics_queue = NULL;
@@ -1480,6 +1481,14 @@ static void test_runtime_gpu_labels(void)
         AGC_OK, "label producer submits");
     TEST_ASSERT_EQ(agcDestroyQueue(compute_queue), AGC_ERROR_BUSY,
         "submitted label retains its exact producer queue");
+    TEST_ASSERT_EQ(agcGetGpuLabelInfo(label, &label_info), AGC_OK,
+        "label diagnostics query succeeds");
+    TEST_ASSERT_EQ(label_info.scheduled_value, UINT32_C(0x1234),
+        "label diagnostics report the scheduled timeline point");
+    TEST_ASSERT_EQ(label_info.observed_value, UINT32_C(0x1234),
+        "generic label diagnostics report the completed point");
+    TEST_ASSERT_EQ(label_info.last_signal_submission_id, 1u,
+        "label diagnostics report the producer submission identity");
     TEST_ASSERT_EQ(agcResetCommandBuffer(producer), AGC_OK,
         "completed label producer resets before stale-value check");
     TEST_ASSERT_EQ(agcBeginCommandBuffer(producer), AGC_OK,

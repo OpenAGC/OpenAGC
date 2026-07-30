@@ -7,7 +7,7 @@ raw system software `0x05500008` (FW ABI key `0x0550`). The exact
 `agc_runtime_compute.elf` artifact SHA-256 was:
 
 ```
-ffcddb444a677b15b0f2313bf3ed76e05f104400ae21767e342ff1b1cd12db9f
+1af09900242e5e0af40c12dfb68bd8ea4fb059bdb85654d969cfff88cb15d016
 ```
 
 The first public command buffer only records `agcCmdSignalGpuLabel`, which
@@ -20,7 +20,8 @@ the process does not wait on the producer fence before submitting the consumer.
 ## Result
 
 The producer signal, consumer wait, both submissions, and both bounded 200 ms
-fence waits returned `AGC_OK`. The consumer's 64-word GPU output read back as
+fence waits returned `AGC_OK`. `agcGetGpuLabelInfo` observed the expected
+`0x4c414245` word and producer submission ID `1`. The consumer's 64-word GPU output read back as
 the expected solid `0xff00ff00` value. Both command buffers reset, both fences
 destroyed, the label destroyed, and all remaining objects/device tore down with
 `AGC_OK`. The websrv HTTP and FTP ports remained reachable afterward.

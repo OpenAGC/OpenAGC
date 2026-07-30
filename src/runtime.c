@@ -6015,6 +6015,39 @@ int32_t PS5_SYSV_ABI agcDestroyGpuLabel(AgcGpuLabel label)
     return AGC_OK;
 }
 
+int32_t PS5_SYSV_ABI agcGetGpuLabelInfo(
+    AgcGpuLabel label, AgcGpuLabelInfo *info)
+{
+    uint32_t observed;
+#ifdef OPENAGC_PROSPERO
+    int32_t result;
+#endif
+
+    if (!label || label->magic != AGC_MAGIC_GPU_LABEL ||
+        !agcDeviceValid(label->device) || !info ||
+        !agcHeaderValid(info->struct_size, sizeof(*info), info->version) ||
+        !agcReservedZero(info->reserved, 2u))
+        return AGC_ERROR_INVALID_ARGUMENT;
+#ifdef OPENAGC_PROSPERO
+    result = agcGpuMemoryInvalidate(&label->allocation->block->memory,
+        (size_t)label->allocation->offset, sizeof(observed));
+    if (result != AGC_OK)
+        return result;
+#endif
+    observed = *(const volatile uint32_t *)
+        agcAllocationCpuAddress(label->allocation);
+    *info = (AgcGpuLabelInfo)AGC_GPU_LABEL_INFO_INIT;
+    info->scheduled_value = label->last_signal_value;
+    info->observed_value = observed;
+    info->queue_type = label->last_signal_queue_type;
+    info->last_signal_submission_id = label->last_signal_submission_id;
+    info->firmware_abi_key = label->device->runtime_info.firmware_abi_key;
+    info->hardware_family = label->device->runtime_info.hardware_family;
+    memcpy(info->profile_name, label->device->runtime_info.profile_name,
+        sizeof(info->profile_name));
+    return AGC_OK;
+}
+
 int32_t PS5_SYSV_ABI agcCmdWaitGpuLabel(
     AgcCommandBuffer command_buffer, AgcGpuLabel label, uint32_t value)
 {

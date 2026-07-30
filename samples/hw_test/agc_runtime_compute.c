@@ -52,6 +52,7 @@ int main(void)
     AgcDescriptorWrite descriptor = AGC_DESCRIPTOR_WRITE_INIT;
     AgcResourceTransition transition = AGC_RESOURCE_TRANSITION_INIT;
     AgcFenceInfo fence_info = AGC_FENCE_INFO_INIT;
+    AgcGpuLabelInfo label_info = AGC_GPU_LABEL_INFO_INIT;
     AgcRuntimeInfo runtime_info = AGC_RUNTIME_INFO_INIT;
     AgcShaderReflection reflection;
     AgcDevice device = NULL;
@@ -259,6 +260,18 @@ int main(void)
     if (result != AGC_OK)
         goto cleanup;
     signal_completed = true;
+    result = agcGetGpuLabelInfo(label, &label_info);
+    report_result("agcGetGpuLabelInfo", result);
+    if (result != AGC_OK ||
+        label_info.scheduled_value != UINT32_C(0x4c414245) ||
+        label_info.observed_value != UINT32_C(0x4c414245) ||
+        label_info.last_signal_submission_id == 0u) {
+        puts("GPU label diagnostics: FAIL");
+        goto cleanup;
+    }
+    printf("GPU label diagnostics: value=0x%08x submission=%llu\n",
+        label_info.observed_value,
+        (unsigned long long)label_info.last_signal_submission_id);
     result = agcGetFenceInfo(fence, &fence_info);
     report_result("agcGetFenceInfo", result);
     if (result != AGC_OK || fence_info.state != AGC_FENCE_STATE_SIGNALED ||

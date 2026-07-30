@@ -20,6 +20,8 @@ Runtime API v4 adds `AgcDepthStencilTargetBinding` and
 Runtime API v5 adds `AgcFenceInfo` for versioned bounded-wait diagnostics.
 Runtime API v6 adds `AgcGpuLabel`, an explicit GPU-visible synchronization
 word for the qualified same-queue signal/wait path.
+Runtime API v7 adds `agcGetGpuLabelInfo` for scheduled-versus-observed label
+diagnostics without exposing a GPU address.
 OpenAGC rejects unknown versions, nonzero flags, or nonzero reserved fields
 without partial object or command creation.
 
@@ -98,6 +100,11 @@ prevents a wait from passing on stale memory. Producer/consumer waits across
 graphics and compute queues, submit wait/signal lists, and event objects remain
 unsupported.
 
+`agcGetGpuLabelInfo` snapshots its most recently submitted timeline point,
+the CPU-observed label word, producer queue/submission identity, and the
+selected firmware profile. It is intended for bounded diagnostics, not polling
+as a replacement for a fence wait.
+
 ## Fences and errors
 
 `AgcFence` is a binary fence. A successful generic submission signals its
@@ -129,7 +136,7 @@ The two-DCB graphics batch is hardware-qualified on exact FW 5.50 by artifact
 
 The same-queue GPU-label signal/wait path is hardware-qualified on exact FW
 5.50 by artifact
-`ffcddb444a677b15b0f2313bf3ed76e05f104400ae21767e342ff1b1cd12db9f`; see
+`1af09900242e5e0af40c12dfb68bd8ea4fb059bdb85654d969cfff88cb15d016`; see
 [`runtime_gpu_labels_fw550_20260731.md`](../analysis/runtime_gpu_labels_fw550_20260731.md).
 
 Stable native errors include invalid argument/state, busy ownership,

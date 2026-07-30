@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-#define AGC_RUNTIME_API_VERSION 6u
+#define AGC_RUNTIME_API_VERSION 7u
 #define AGC_RUNTIME_STRUCTURE_VERSION_1 1u
 #define AGC_RUNTIME_STRUCTURE_VERSION_2 2u
 #define AGC_RUNTIME_PROFILE_NAME_SIZE 48u
@@ -762,6 +762,20 @@ typedef struct AgcFenceInfo {
     uint64_t reserved[3];
 } AgcFenceInfo;
 
+typedef struct AgcGpuLabelInfo {
+    uint32_t struct_size;
+    uint32_t version;
+    uint32_t scheduled_value;
+    uint32_t observed_value;
+    uint32_t queue_type;
+    uint32_t reserved0;
+    uint64_t last_signal_submission_id;
+    uint16_t firmware_abi_key;
+    uint16_t hardware_family;
+    char profile_name[AGC_RUNTIME_PROFILE_NAME_SIZE];
+    uint64_t reserved[2];
+} AgcGpuLabelInfo;
+
 /* Native PS5 resource formats. Values shared with gfx1013 image descriptors
  * deliberately retain their hardware encoding. */
 typedef enum AgcFormat {
@@ -907,6 +921,10 @@ typedef struct AgcImageSubresourceLayout {
       AGC_COMMAND_BUFFER_STATE_INITIAL, 0u, 0u, AGC_ERROR_BUSY, 0u, 0u, \
       0u, 0u, 0u, 0u, {0}, {0u, 0u, 0u} }
 
+#define AGC_GPU_LABEL_INFO_INIT \
+    { sizeof(AgcGpuLabelInfo), AGC_RUNTIME_STRUCTURE_VERSION_1, 0u, 0u, \
+      UINT32_MAX, 0u, 0u, 0u, 0u, {0}, {0u, 0u} }
+
 typedef struct AgcSubmitInfo {
     uint32_t struct_size;
     uint32_t version;
@@ -991,6 +1009,8 @@ _Static_assert(sizeof(AgcImageSubresourceLayout) == 96u,
     "AgcImageSubresourceLayout v1 size mismatch");
 _Static_assert(sizeof(AgcFenceInfo) == 144u,
     "AgcFenceInfo v1 size mismatch");
+_Static_assert(sizeof(AgcGpuLabelInfo) == 104u,
+    "AgcGpuLabelInfo v1 size mismatch");
 
 int32_t PS5_SYSV_ABI agcCreateDevice(
     const AgcDeviceDesc *desc, AgcDevice *device_out);
@@ -1100,6 +1120,8 @@ int32_t PS5_SYSV_ABI agcWaitFence(AgcFence fence, uint64_t timeout_ns);
 int32_t PS5_SYSV_ABI agcCreateGpuLabel(
     AgcDevice device, const AgcGpuLabelDesc *desc, AgcGpuLabel *label_out);
 int32_t PS5_SYSV_ABI agcDestroyGpuLabel(AgcGpuLabel label);
+int32_t PS5_SYSV_ABI agcGetGpuLabelInfo(
+    AgcGpuLabel label, AgcGpuLabelInfo *info);
 int32_t PS5_SYSV_ABI agcCmdWaitGpuLabel(
     AgcCommandBuffer command_buffer, AgcGpuLabel label, uint32_t value);
 int32_t PS5_SYSV_ABI agcCmdSignalGpuLabel(

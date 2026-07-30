@@ -70,12 +70,16 @@ behavior. Artifact `bd8545c05a7683bf4fb0c69e7c925317488ba7fd60e455ef7e1ecf715b47
 also passed the completed-fence query after a real public compute dispatch on
 exact FW 5.50. Pending timeout reporting remains host-tested.
 
+Runtime API v7 adds `AgcGpuLabelInfo`, a snapshot of its scheduled and
+observed point, producer identity, and selected profile. The exact FW 5.50
+oracle read back `0x4c414245` after its consumer completed.
+
 Runtime API v6 adds `AgcGpuLabel`: an owned flexible-memory word that the
 runtime signals with EOP release and waits on with a 32-bit `WAIT_REG_MEM`.
 Consumers require an already-submitted matching producer signal on the same
 queue, retain the label while recorded, require a changed signal value to avoid
 stale waits, and reject cross-queue use. Artifact
-`ffcddb444a677b15b0f2313bf3ed76e05f104400ae21767e342ff1b1cd12db9f` passed
+`1af09900242e5e0af40c12dfb68bd8ea4fb059bdb85654d969cfff88cb15d016` passed
 the producer/consumer no-CPU-wait compute oracle, bounded completion, readback,
 and full teardown on exact FW 5.50. Labels enforce strictly increasing 32-bit
 timeline points and reject repeat, decreasing, or wrapping values; submit
