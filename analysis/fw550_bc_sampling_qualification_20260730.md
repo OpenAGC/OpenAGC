@@ -102,3 +102,13 @@ The guarded run produced `224640` changed pixels, regions
 `0xf3b07b5935bb483d`. The format oracle, fence, marker, shutdown, cleanup,
 verdict, self-termination, and residual-process checks passed. Repeat the
 identical artifact once.
+
+## BC2 UNORM pass 2
+
+The identical artifact reproduced `224640` changed pixels, regions
+`{74880,74880,74880}`, alpha range `0..255`, zero exact mismatches, and FNV64
+`0xf3b07b5935bb483d`. Every lifecycle gate and the post-run residual-process
+check passed again.
+
+BC2 UNORM is hardware-qualified on exact FW 5.50 and FW 11.60. BC2 SRGB is
+next.
