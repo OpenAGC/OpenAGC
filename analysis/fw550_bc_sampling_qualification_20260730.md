@@ -49,3 +49,14 @@ check passed again.
 
 BC1 UNORM and SRGB are hardware-qualified on exact FW 5.50 and FW 11.60.
 Proceed to BC4 UNORM/SNORM in the established risk order.
+
+## BC4 UNORM pass 1
+
+Artifact SHA-256:
+`f74c393112fc465eace431a3fe288095ae4b3bf5ee993e8147ed0e9a2f22f2a4`
+
+The guarded run reproduced `224640` changed pixels, regions
+`{74880,74880,74880}`, zero decode mismatches, zero maximum error, and FNV64
+`0x5327e8ad53b3a455`. The fence, marker, shutdown, memory cleanup, verdict,
+self-termination, and residual-process check all passed. Repeat the identical
+artifact once.
