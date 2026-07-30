@@ -378,6 +378,9 @@
 #if AGC_DEPTH_VALIDATION
 #include "shaders/depth_triangle_frag_sb.h"
 #define FRAGMENT_DATA depth_triangle_frag_data
+#elif defined(AGC_VALIDATE_RGBA16_UNORM) && AGC_VALIDATE_RGBA16_UNORM
+#include "shaders/rgba16_unorm_frag_sb.h"
+#define FRAGMENT_DATA rgba16_unorm_frag_data
 #elif AGC_NGG_INPUT_LINES || AGC_TESS_GEOMETRY_LINES
 #include "shaders/triangle_line_frag_sb.h"
 #define FRAGMENT_DATA triangle_line_frag_data
@@ -1929,19 +1932,10 @@ static bool dispatch_graphics(GraphicsTest *test,
 #endif
     /* RGBA8 texels: red, green / blue, white. Bilinear sampling produces a
      * visibly distinct two-dimensional gradient inside the triangle. */
-#if AGC_VALIDATE_RGBA16_UNORM
-    /* Exercise all four stored lanes independently, including alpha's full
-     * UNORM range, while retaining the RGB endpoint/diversity oracle. */
-    static const uint32_t texture_pixels[4] = {
-        0x000000FFu, 0xFF00FF00u,
-        0x55FF0000u, 0xAAFFFFFFu,
-    };
-#else
     static const uint32_t texture_pixels[4] = {
         0xFF0000FFu, 0xFF00FF00u,
         0xFFFF0000u, 0xFFFFFFFFu,
     };
-#endif
     memcpy(gpu_texture, texture_pixels, sizeof(texture_pixels));
     int32_t resource_error = agcGfx1013BufferDescriptorEncode(
         (AgcGfx1013BufferDescriptor *)vertex_desc,

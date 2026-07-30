@@ -63,7 +63,7 @@ PINNED_R16_UNORM_SHA256 := c0a5ad4732bf13c41f96560cb2dbfa3c39dffb9a47958ccbd2bef
 PINNED_R16_UNORM_ELF := $(THIS_DIR)/pinned/agc_graphics_r16_unorm-$(PINNED_R16_UNORM_SHA256).elf
 PINNED_RG16_UNORM_SHA256 := d004a33d1d1245964b08ee22b577948d36537c68d9d8c5241ba9e78e4a39f2fd
 PINNED_RG16_UNORM_ELF := $(THIS_DIR)/pinned/agc_graphics_rg16_unorm-$(PINNED_RG16_UNORM_SHA256).elf
-PINNED_RGBA16_UNORM_SHA256 := a27e0243663a87a42619f12a019cba4671216f770fd9cdcae8101fb153273588
+PINNED_RGBA16_UNORM_SHA256 := 13ca0dfaa743438301ecbe5d5255c0168bb89a80bf3ff0e68cdeae8a34908c88
 PINNED_RGBA16_UNORM_ELF := $(THIS_DIR)/pinned/agc_graphics_rgba16_unorm-$(PINNED_RGBA16_UNORM_SHA256).elf
 PINNED_MULTI_INDIRECT_SHA256 := 230809ee6ba03cc10cd136fc269d4c9e08f9ccfcec356f23d6d2b31b98df826c
 PINNED_MULTI_INDIRECT_ELF := $(THIS_DIR)/pinned/agc_graphics_multi_indirect-$(PINNED_MULTI_INDIRECT_SHA256).elf
@@ -298,6 +298,15 @@ shaders/triangle_frag.sb: shaders/triangle_frag.spv
 
 shaders/triangle_frag_sb.h: shaders/triangle_frag.sb
 	xxd -i -n triangle_frag_data $< $@
+
+shaders/rgba16_unorm_frag.spv: shaders/rgba16_unorm_frag.frag
+	$(GLSLANG) -V --target-env vulkan1.2 $< -o $@
+
+shaders/rgba16_unorm_frag.sb: shaders/rgba16_unorm_frag.spv
+	$(PSBC) -f $< -s fragment -o $@
+
+shaders/rgba16_unorm_frag_sb.h: shaders/rgba16_unorm_frag.sb
+	xxd -i -n rgba16_unorm_frag_data $< $@
 
 shaders/triangle_line_frag.sb: shaders/triangle_line_frag.spv
 	$(PSBC) -f $< -s fragment -o $@
@@ -552,7 +561,7 @@ agc_graphics_rg16_unorm_portable.elf: agc_graphics.c ps5_video_out.h gpu_credent
 	../../tools/verify_firmware_neutral_elf.sh $@ \
 		/data/homebrew/openagc_portable_graphics/result.log
 
-agc_graphics_rgba16_unorm_portable.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+agc_graphics_rgba16_unorm_portable.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/rgba16_unorm_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) $(PORTABLE_GRAPHICS_FLAGS) -DAGC_VALIDATE_RGBA16_UNORM=1 \
 		-o $@ agc_graphics.c $(AGC_LDFLAGS)
 	../../tools/verify_firmware_neutral_elf.sh $@ \
