@@ -381,7 +381,8 @@
 #elif defined(AGC_VALIDATE_RGBA16_UNORM) && AGC_VALIDATE_RGBA16_UNORM
 #include "shaders/rgba16_unorm_frag_sb.h"
 #define FRAGMENT_DATA rgba16_unorm_frag_data
-#elif defined(AGC_VALIDATE_R16_SNORM) && AGC_VALIDATE_R16_SNORM
+#elif (defined(AGC_VALIDATE_R16_SNORM) && AGC_VALIDATE_R16_SNORM) || \
+      (defined(AGC_VALIDATE_RG16_SNORM) && AGC_VALIDATE_RG16_SNORM)
 #include "shaders/snorm16_frag_sb.h"
 #define FRAGMENT_DATA snorm16_frag_data
 #elif AGC_NGG_INPUT_LINES || AGC_TESS_GEOMETRY_LINES
@@ -533,6 +534,9 @@ int sceKernelDeleteEqueue(SceKernelEqueue equeue);
 #ifndef AGC_VALIDATE_R16_SNORM
 #define AGC_VALIDATE_R16_SNORM 0
 #endif
+#ifndef AGC_VALIDATE_RG16_SNORM
+#define AGC_VALIDATE_RG16_SNORM 0
+#endif
 #ifndef AGC_VALIDATE_R8_UNORM
 #define AGC_VALIDATE_R8_UNORM 0
 #endif
@@ -560,6 +564,7 @@ int sceKernelDeleteEqueue(SceKernelEqueue equeue);
      AGC_VALIDATE_R16_FLOAT + AGC_VALIDATE_RG16_FLOAT + \
      AGC_VALIDATE_R16_UNORM + AGC_VALIDATE_RG16_UNORM + \
      AGC_VALIDATE_RGBA16_UNORM + AGC_VALIDATE_R16_SNORM + \
+     AGC_VALIDATE_RG16_SNORM + \
      AGC_VALIDATE_R8_UNORM + AGC_VALIDATE_RG8_UNORM + \
      AGC_VALIDATE_R32_FLOAT + AGC_VALIDATE_RG32_FLOAT + \
      AGC_VALIDATE_RGBA32_FLOAT) > 1
@@ -3293,7 +3298,8 @@ static void visualize_fp16(GraphicsTest *test, uint32_t components) {
 }
 
 #if AGC_VALIDATE_R16_UNORM || AGC_VALIDATE_RG16_UNORM || \
-    AGC_VALIDATE_RGBA16_UNORM || AGC_VALIDATE_R16_SNORM
+    AGC_VALIDATE_RGBA16_UNORM || AGC_VALIDATE_R16_SNORM || \
+    AGC_VALIDATE_RG16_SNORM
 static void visualize_normalized16(GraphicsTest *test, uint32_t components,
         bool signed_normalized) {
     const uint16_t *source = (const uint16_t *)test->render_target;
@@ -3822,18 +3828,21 @@ int main(void) {
 #endif
 #elif AGC_VALIDATE_R16_FLOAT || AGC_VALIDATE_RG16_FLOAT || \
       AGC_VALIDATE_R16_UNORM || AGC_VALIDATE_RG16_UNORM || \
-      AGC_VALIDATE_RGBA16_UNORM || AGC_VALIDATE_R16_SNORM
+      AGC_VALIDATE_RGBA16_UNORM || AGC_VALIDATE_R16_SNORM || \
+      AGC_VALIDATE_RG16_SNORM
     const uint32_t components =
         AGC_VALIDATE_RGBA16_UNORM ? 4u :
-        ((AGC_VALIDATE_RG16_FLOAT || AGC_VALIDATE_RG16_UNORM) ? 2u : 1u);
+        ((AGC_VALIDATE_RG16_FLOAT || AGC_VALIDATE_RG16_UNORM ||
+          AGC_VALIDATE_RG16_SNORM) ? 2u : 1u);
     RenderTargetConfig narrow_16_target = {
         test.render_target, FP16_TARGET_WIDTH, FP16_TARGET_HEIGHT,
         AGC_VALIDATE_RGBA16_UNORM ?
             AGC_GFX1013_COLOR_FORMAT_16_16_16_16 :
-        (AGC_VALIDATE_RG16_FLOAT || AGC_VALIDATE_RG16_UNORM) ?
+        (AGC_VALIDATE_RG16_FLOAT || AGC_VALIDATE_RG16_UNORM ||
+         AGC_VALIDATE_RG16_SNORM) ?
             AGC_GFX1013_COLOR_FORMAT_16_16 :
             AGC_GFX1013_COLOR_FORMAT_16,
-        AGC_VALIDATE_R16_SNORM ?
+        (AGC_VALIDATE_R16_SNORM || AGC_VALIDATE_RG16_SNORM) ?
             AGC_GFX1013_SURFACE_NUMBER_SNORM :
         (AGC_VALIDATE_R16_UNORM || AGC_VALIDATE_RG16_UNORM ||
          AGC_VALIDATE_RGBA16_UNORM) ?
@@ -3843,9 +3852,10 @@ int main(void) {
         components, 2u, AGC_VALIDATE_RG16_FLOAT ?
             "RG16_FLOAT" : (AGC_VALIDATE_RG16_UNORM ?
                 "RG16_UNORM" : (AGC_VALIDATE_RGBA16_UNORM ?
-                    "RGBA16_UNORM" : (AGC_VALIDATE_R16_SNORM ?
-                        "R16_SNORM" : (AGC_VALIDATE_R16_UNORM ?
-                            "R16_UNORM" : "R16_FLOAT"))))
+                    "RGBA16_UNORM" : (AGC_VALIDATE_RG16_SNORM ?
+                        "RG16_SNORM" : (AGC_VALIDATE_R16_SNORM ?
+                            "R16_SNORM" : (AGC_VALIDATE_R16_UNORM ?
+                                "R16_UNORM" : "R16_FLOAT")))))
     };
     printf("\n--- Step 4: %s offscreen draw ---\n",
            narrow_16_target.name);
@@ -3857,8 +3867,10 @@ int main(void) {
     }
 #if !AGC_GRAPHICS_HEADLESS
 #if AGC_VALIDATE_R16_UNORM || AGC_VALIDATE_RG16_UNORM || \
-    AGC_VALIDATE_RGBA16_UNORM || AGC_VALIDATE_R16_SNORM
-    visualize_normalized16(&test, components, AGC_VALIDATE_R16_SNORM != 0);
+    AGC_VALIDATE_RGBA16_UNORM || AGC_VALIDATE_R16_SNORM || \
+    AGC_VALIDATE_RG16_SNORM
+    visualize_normalized16(&test, components,
+        (AGC_VALIDATE_R16_SNORM || AGC_VALIDATE_RG16_SNORM) != 0);
 #else
     visualize_fp16(&test, components);
 #endif

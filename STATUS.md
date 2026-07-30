@@ -147,6 +147,13 @@ renderer or kernel fault was observed. FW 5.50 replay remains pending; other
 profiles remain hardware-unverified. See
 `analysis/fw1160_r16_snorm_portable_qualification_20260730.md`.
 
+`AGC_GFX1013_RT_FORMAT_RG16_SNORM` is appended at value 18 and maps to
+`(format=0x05, number=SNORM, swap=standard)`, four bytes per pixel, and
+FP16_ABGR export. Host coverage locks its exact PM4 stream, all 39 profiles,
+all capacities through 28 dwords, and large 64-bit layout arithmetic. The
+portable two-lane artifact builds and passes the firmware-neutral verifier,
+but is not yet hash-pinned or hardware-qualified.
+
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability
 ELF, non-indexed and indexed 10-dword multi-draw, GPU count-buffer selection,
@@ -155,7 +162,7 @@ twice on FW 11.60 before pinning. FW 5.50 execution remains pending; none of
 these FW 11.60 results is labeled cross-firmware hardware qualification. See
 `analysis/fw1160_rg16_unorm_and_endpoint_replay_20260730.md`.
 
-Offline portability closure is complete. The generic suite passes 6,798
+Offline portability closure is complete. The generic suite passes 7,142
 assertions, including full raw-version normalization, exact profile selection,
 and common-V7 acceptance across all 39 active profiles; the clean Prospero
 cross-build also passes. Submission, queue, memory, suspend, workload, TF/HS,
@@ -2138,16 +2145,16 @@ CPU conversion to the registered RGBA8 display buffer was visually confirmed
 as a centered, smoothly color-textured triangle with equal sides on a
 dark-gray background.
 
-The public gfx1013 color-target layer now resolves 18 typed linear presets:
+The public gfx1013 color-target layer now resolves 19 typed linear presets:
 R8, RG8, RGBA8, BGRA8, RGB10A2, R16, RG16, and RGBA16 UNORM; R16, RG16,
-RGBA16, R32, RG32, RGBA32, and R11G11B10 FLOAT; R16 SNORM; and RGBA8 and
+RGBA16, R32, RG32, RGBA32, and R11G11B10 FLOAT; R16 and RG16 SNORM; and RGBA8 and
 BGRA8 SRGB.
 `agcGfx1013GetColorTargetFormatInfo` exposes each preset's
 exact gfx103 CB format, number type, component swap, byte size, and compatible
 SPI shader-export format; `agcGfx1013InitColorTarget` converts it into the
 existing ABI-stable target state. The packet builder accepts only table-backed
 encodings and rejects linear rows that violate the gfx103 256-byte pitch
-alignment. All 18 encodings have exact 28-dword host fixtures. RGBA8/BGRA8
+alignment. All 19 encodings have exact 28-dword host fixtures. RGBA8/BGRA8
 UNORM and SRGB, RGB10A2, R16, RG16, RGBA16 FLOAT, R16, RG16, and RGBA16
 UNORM, and R11G11B10 FLOAT have
 PS5 hardware evidence; R8, RG8, R32, RG32, and RGBA32 await hardware

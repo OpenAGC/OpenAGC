@@ -269,6 +269,12 @@ the runner and shared teardown on FW 11.60 only.
   `0x3908f13005165ed7`, immediate fences, and zero-valued teardown. FW 5.50
   replay remains pending. See
   `analysis/fw1160_r16_snorm_portable_qualification_20260730.md`.
+- `RG16_SNORM` is now host-implemented as append-only value 18 with gfx1013
+  `16_16`, SNORM, standard swap, four bytes per pixel, and FP16_ABGR export.
+  Exact PM4, all-profile selection, every short-buffer boundary, and 64-bit
+  layout limits pass. Its firmware-neutral two-lane gate builds with the
+  already-qualified signed shader/oracle; hash pinning and FW 11.60 execution
+  remain next.
 - Seven additional offscreen format gates now build under the same exact
   profile and bounded runner: R8, RG8, RGB10A2, R11G11B10, R32, RG32, and
   RGBA32. All seven passed twice on FW 11.60; logged RG32 reproduced FNV64
