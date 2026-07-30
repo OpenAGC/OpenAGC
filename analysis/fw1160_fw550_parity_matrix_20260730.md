@@ -232,6 +232,12 @@ distributions, completed immediately, shut down cleanly, returned final PASS,
 and left no residual process. The recipe now freezes `49152`; one identical
 replay remains before the FW 5.50 depth-only mirror.
 
+The identical FW 11.60 depth-only replay reproduced the aspect-`0x1` RMW,
+`49152` changed words, allocation-aware D32 and exact S8 distributions,
+immediate completion, clean shutdown, final PASS, and no residual process. The
+pinned FW 5.50 depth-only mirror now requires `49152` and is the next permitted
+launch.
+
 ## Higher-level consumers
 
 The following FW 5.50-qualified application-facing paths still need bounded

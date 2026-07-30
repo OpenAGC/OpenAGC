@@ -574,6 +574,9 @@ the runner and shared teardown on FW 11.60 only.
   zero RMW mismatches/outside changes, reserved bits preserved, `49152`
   changed words, exact allocation-aware D32 and S8 distributions, clean
   shutdown, and no residual process. Freeze `49152` and replay once.
+- The identical FW 11.60 depth-only replay reproduced every exact invariant.
+  Run the pinned FW 5.50 depth-only mirror next with `49152` frozen; a pass
+  promotes depth-only expclear and unlocks stencil-only FW 11.60 pass 1.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and
