@@ -45,6 +45,19 @@ counts, independent lane hashes, packed hash, fence, teardown,
 self-termination, and debugger absence. RG32_SINT is hardware-qualified on FW
 11.60.
 
+## RGBA32_SINT pass 1
+
+- Artifact SHA-256:
+  `126c9920f8ea85c2d149c62150f40bbed695ef9f102f8ef3ab430df8f09e8f18`
+- All four lanes contain 255,744 exact samples spanning
+  `-2147483648..2147483647`, eight distinct values, and zero mismatches.
+- Lane hashes: `0x74b09081b2bde483`, `0x90e728de39b5c3c3`,
+  `0x753f78ce0dace26f`, `0x80392c32a248b923`.
+- Packed FNV64: `0x7bd3db10d1b3e617`; independence passed.
+- Fence, teardown, self-termination, and debugger absence passed.
+
+One identical-byte replay remains.
+
 ## R32_SINT pass 2
 
 The identical pinned bytes reproduced the full signed range, exact sample and

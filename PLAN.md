@@ -914,6 +914,10 @@ all six pinned artifacts for identical-byte FW 5.50 replay and proceed to the
   `126c9920f8ea85c2d149c62150f40bbed695ef9f102f8ef3ab430df8f09e8f18`.
   Keep endpoint execution behind the clean-boot UINT qualification order.
 
+  The prerequisites are complete and pinned RGBA32_SINT pass 1 succeeds with
+  four exact full-range lanes, zero mismatches, independent hashes, packed
+  FNV64 `0x7bd3db10d1b3e617`, and a clean lifecycle. Replay once.
+
 These formats need dedicated integer-output pixel shaders. Do not qualify them
 using a floating-point shader and assume the conversion is correct. Their
 oracles must validate exact integer values rather than approximate

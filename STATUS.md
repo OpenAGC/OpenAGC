@@ -607,6 +607,11 @@ portable gate also build successfully. Its final bytes are pinned as SHA-256
 `126c9920f8ea85c2d149c62150f40bbed695ef9f102f8ef3ab430df8f09e8f18`;
 hardware execution remains gated on a clean FW 11.60 reboot.
 
+The clean-boot prerequisites are complete and pinned RGBA32_SINT pass 1
+succeeds with four 255,744-sample full-range lanes, zero mismatches,
+independent hashes, packed FNV64 `0x7bd3db10d1b3e617`, clean teardown, and no
+residual process. One replay remains.
+
 The first BC1-BC7 descriptor blocker is fixed. Gfx10.3 SQ image descriptors
 carry a 9-bit resource-format field, while OpenAGC previously rejected values
 above `0x3f`; that made every native BC encoding (`169..182`) unreachable even
