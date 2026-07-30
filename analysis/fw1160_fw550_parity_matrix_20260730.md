@@ -290,6 +290,13 @@ absence. Isolated D32+4x RGBA8 MSAA resolve is therefore hardware-qualified on
 FW 5.50. Proceed to the distinct pinned FW 11.60 build without changing the
 test source or shaders.
 
+FW 11.60 pass 1 used pinned artifact
+`ccc18d9cb6fcccfd1d38cb825d6c2d256af523ffc781dc322aad01f35460688e`
+and independently produced the same exact color `227610/227610` and D32
+`6469632/912384/912384` counts as FW 5.50. Its file-backed verdict, fence,
+teardown, self-termination, and debugger absence all passed. Those exact counts
+are frozen for the identical-byte FW 11.60 replay.
+
 That prerequisite sequence is now complete. Two relinks against the committed
 shader records reproduced all eight artifacts byte-for-byte, and dependency
 inspection found only VideoOut, kernel, libc, and networking. The exact FW

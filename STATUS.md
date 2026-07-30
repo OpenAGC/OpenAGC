@@ -151,6 +151,11 @@ FW 5.50 pass 2 reproduced the exact artifact, resolved-color and D32 counts,
 fence, teardown, self-termination, and debugger absence. Isolated D32+4x RGBA8
 MSAA resolve is hardware-qualified on FW 5.50; FW 11.60 parity remains pending.
 
+FW 11.60 pass 1 produced the same exact `227610/227610` resolved color and
+`6469632/912384/912384` D32 counts as FW 5.50, with a clean file-backed verdict,
+teardown, self-termination, and debugger absence. One exact-oracle replay
+remains for endpoint parity.
+
 All four subresource artifacts now reproduce across two relinks, avoid AGC
 SPRX dependencies, are preserved under full hashes, and have cleanup-first
 hash-pinned deploy targets with exact color and selected/outside metadata

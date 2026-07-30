@@ -678,6 +678,9 @@ the runner and shared teardown on FW 11.60 only.
 - FW 5.50 pass 2 reproduced all exact 4x MSAA evidence and clean teardown, so
   that endpoint is qualified. Run the pinned FW 11.60 artifact, freeze its
   exact counts, and replay it once.
+- FW 11.60 pass 1 matched FW 5.50's exact color and D32 counts and left no
+  residual process. Replay its identical pinned bytes with those counts now
+  frozen in the gate.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and
