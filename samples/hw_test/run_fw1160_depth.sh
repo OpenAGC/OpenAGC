@@ -79,6 +79,10 @@ if [ -n "${EXPECTED_HTILE_INITIAL:-}" ]; then
     grep -Eq "^\[HTILE Readback\] changed=[1-9][0-9]* other=[0-9]+ initial=$EXPECTED_HTILE_INITIAL$" \
         "$output_file" || exit 1
 fi
+if [ -n "${EXPECTED_HTILE_CHANGED:-}" ]; then
+    grep -Eq "^\[HTILE Readback\] changed=$EXPECTED_HTILE_CHANGED other=[0-9]+ initial=$EXPECTED_HTILE_INITIAL$" \
+        "$output_file" || exit 1
+fi
 if [ "${EXPECTED_D16_FULL_RECT:-0}" -eq 1 ]; then
     grep -q '^\[Depth Readback\] green=228096 red=228096 ' \
         "$output_file" || exit 1

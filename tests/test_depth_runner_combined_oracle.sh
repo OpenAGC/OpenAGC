@@ -62,6 +62,7 @@ run_gate()
         PROCESS_CLEANUP_ELF="$tmp/cleanup.elf" \
         RESULT_LOG_PATH=/data/homebrew/openagc_fw1160_depth/result.log \
         EXPECTED_HTILE_INITIAL=fffff30f EXPECTED_D32_FULL_RECT=1 \
+        EXPECTED_HTILE_CHANGED=1024 \
         EXPECTED_STENCIL_FULL_RECT=1 \
         EXPECTED_COMBINED_EXPCLEAR_ASPECTS="$1" \
         sh "$runner"

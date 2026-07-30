@@ -82,3 +82,10 @@ D16/HTILE ELF was then rebuilt twice with identical SHA-256
 verified to avoid both AGC SPRX dependencies, and preserved under its full hash
 before execution. Its deploy recipe rejects changed bytes before network
 access. This artifact is the next and only permitted compressed-depth launch.
+
+The pinned ordinary artifact then passed twice on FW `0x0550`. Both runs
+reproduced the exact D16 classes, clean completion and teardown, and
+`7408` changed HTILE words from `0xfffc000f`. The runner and FW 5.50 recipe now
+freeze that count. Ordinary D16 HTILE is hardware-qualified on FW 5.50; the
+exact logged FW 11.60 mirror is the next hardware gate, followed by expclear
+only after two identical ordinary passes there.

@@ -59,6 +59,11 @@ reserved bits. A host oracle accepts the correct aspect and rejects a mismatch.
 This is preparation only; no new combined-depth hardware qualification is
 claimed.
 
+Ordinary D16 HTILE is now hardware-qualified twice on FW 5.50. The pinned
+current-source artifact reproduced exact D16 classes, clean teardown, and
+`7408` changed HTILE words from `0xfffc000f` on both runs; the guarded recipe
+now freezes that count. FW 11.60 replay remains pending before expclear.
+
 ## Regression safety fixes (2026-07-29)
 
 Default context-state construction now bounds register offsets in dwords,

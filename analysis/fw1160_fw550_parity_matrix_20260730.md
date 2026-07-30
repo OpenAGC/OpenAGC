@@ -53,7 +53,7 @@ reached its completion fence, shut the driver down, and returned PASS.
 | Capability | FW 11.60 status | Remaining gap |
 |---|---|---|
 | Uncompressed D32, D16, S8, and D16+S8 | Qualified | Qualified on both endpoints |
-| Ordinary D16 HTILE | Prepared | Hardware qualification missing |
+| Ordinary D16 HTILE | FW 5.50 qualified | FW 11.60 qualification pending |
 | D16 HTILE expclear | Prepared | Hardware qualification missing |
 | D32 HTILE ordinary/decompress/resummarize/expclear | Prepared | Hardware qualification missing |
 | Combined D32+S8 HTILE and aspect masks | Prepared | Hardware qualification missing |

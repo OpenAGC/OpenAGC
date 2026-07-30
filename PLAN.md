@@ -472,6 +472,10 @@ the runner and shared teardown on FW 11.60 only.
   process. This closes the endpoint replay for the first depth/stencil tier.
   Advance to ordinary D16 HTILE on FW 5.50; only after it passes may the
   corresponding FW 11.60 ordinary and expclear artifacts run twice.
+- The pinned ordinary D16 HTILE artifact passed twice on FW 5.50 with exact
+  D16 values and `7408` changed metadata words on both runs. That count is now
+  frozen in the runner. Run the exact FW 11.60 ordinary mirror twice next;
+  proceed to D16 expclear only if both passes reproduce one another.
 - The next isolated compressed-depth artifacts are prepared but hardware
   gated: ordinary D16/HTILE first, then D16 HTILE expclear. Exact logged
   `0x1160` artifacts and exact headless `0x0550` mirrors build without
