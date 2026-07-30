@@ -68,7 +68,8 @@ Command buffers have four public states:
 | `PENDING` | status inspection only |
 
 `agcBeginCommandBuffer` starts recording only from `INITIAL`.
-`agcEndCommandBuffer` rejects an empty recording. `agcResetCommandBuffer`
+`agcEndCommandBuffer` permits an empty recording for fence-only submissions;
+the runtime supplies the carrier packet internally. `agcResetCommandBuffer`
 releases recorded object references and returns a non-pending command buffer
 to `INITIAL`; it also provides recovery after validation or capacity failure.
 No command call emits partial packets. Insufficient capacity returns
@@ -206,6 +207,13 @@ timeout. Its generic artifact-contract test and revised Prospero cross-build
 pass, but neither artifact is hardware-qualified. The next hardware attempt
 must use a changed EOP-only diagnostic to isolate completion visibility from
 the shader command stream.
+
+`samples/hw_test/agc_runtime_eop.elf` is that bounded public-runtime
+diagnostic. It creates the same device, compute queue, command buffer, and
+fence path, but records no application commands; `agcQueueSubmit` supplies the
+runtime-owned EOP completion packet. The generic suite verifies the equivalent
+two-dword runtime NOP carrier and the complete fence lifecycle. Its Prospero
+artifact cross-builds cleanly, but it has not been deployed or qualified.
 
 `samples/hw_test/agc_runtime_graphics.elf` is the corresponding native graphics
 submission probe. It creates upload vertex/index buffers, a reflected NGG

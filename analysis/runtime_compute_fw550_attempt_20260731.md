@@ -27,6 +27,11 @@ or that its completion write becomes CPU-visible. Direct DCB routing alone did
 not resolve the timeout and does not promote any native runtime capability.
 
 Do not rerun either artifact unchanged. The next diagnostic must be a changed
-public-runtime EOP-only command submission using the same command-buffer and
-fence allocation path. Its result will distinguish completion visibility from
-the reflected shader/descriptor/dispatch stream before another workload test.
+public-runtime EOP-only submission using the same command-buffer and fence
+allocation path. Its result will distinguish completion visibility from the
+shader command stream before another workload test.
+
+The resulting `agc_runtime_eop.elf` artifact is built from the native object
+API only and records no application commands. Its current SHA-256 is
+`27b2018483ad520a4ab18b1bb642e78250124dfc17e154e7bdb25fd7f634681a`; it has
+not yet been deployed.

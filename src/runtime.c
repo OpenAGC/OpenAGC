@@ -4066,8 +4066,6 @@ int32_t PS5_SYSV_ABI agcEndCommandBuffer(AgcCommandBuffer command_buffer)
     }
     if (command_buffer->state != AGC_COMMAND_BUFFER_STATE_RECORDING)
         return AGC_ERROR_INVALID_STATE;
-    if (agcCbUsedDwords(&command_buffer->cursor) == 0u)
-        return AGC_ERROR_INVALID_STATE;
     command_buffer->state = AGC_COMMAND_BUFFER_STATE_EXECUTABLE;
     return AGC_OK;
 }
@@ -5628,6 +5626,14 @@ int32_t PS5_SYSV_ABI agcQueueSubmit(
         return AGC_ERROR_INVALID_ARGUMENT;
     if (command_buffer->state != AGC_COMMAND_BUFFER_STATE_EXECUTABLE)
         return AGC_ERROR_INVALID_STATE;
+#ifndef OPENAGC_PROSPERO
+    /* The generic carrier rejects a zero-dword packet. Preserve the native
+     * fence-only submission contract with a runtime-owned no-op carrier. */
+    if (agcCbUsedDwords(&command_buffer->cursor) == 0u &&
+        !sceAgcCbNop(&command_buffer->cursor, 2u)) {
+        return AGC_ERROR_COMMAND_SPACE_EXHAUSTED;
+    }
+#endif
 #ifdef OPENAGC_PROSPERO
     /* Native submission needs an observable GPU completion point so recorded
      * resources cannot be reset or freed while the kernel-owned queue runs. */

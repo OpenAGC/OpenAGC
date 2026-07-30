@@ -335,7 +335,9 @@ direct-DCB route also returned `AGC_OK` and timed out at that fence. It matches
 the separately hardware-qualified compute carrier and has generic coverage and
 a clean Prospero cross-build, but it is not a runtime hardware promotion. The
 next hardware attempt must be a changed EOP-only runtime diagnostic that
-separates completion visibility from shader-stream execution.
+separates completion visibility from the shader command stream.
+`agc_runtime_eop.elf` is the resulting public-only, no-application-command
+probe; it awaits explicit exact-firmware deployment.
 Remaining unqualified geometry forms, remaining
 unqualified fixed options, and any explicit PS5 hardware promotion remain
 open; do not label this milestone complete yet.

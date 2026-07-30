@@ -109,6 +109,22 @@ static int runtime_find_shader_register(const uint32_t *commands,
     return found;
 }
 
+static int runtime_has_opcode(const uint32_t *commands, uint32_t used,
+    uint32_t opcode)
+{
+    uint32_t cursor = 0u;
+
+    while (cursor < used) {
+        uint32_t length = agcPm4Length(commands[cursor]);
+        if (length < 2u || length > used - cursor)
+            return 0;
+        if (agcPm4Opcode(commands[cursor]) == opcode)
+            return 1;
+        cursor += length;
+    }
+    return 0;
+}
+
 static int runtime_find_uconfig_register(const uint32_t *commands,
     uint32_t used, uint32_t offset, uint32_t *value)
 {
@@ -731,8 +747,8 @@ static void test_runtime_fence_and_command_states(void)
         "double begin is rejected");
     TEST_ASSERT_EQ(agcDestroyCommandBuffer(command_buffer), AGC_ERROR_BUSY,
         "recording command buffer cannot be destroyed");
-    TEST_ASSERT_EQ(agcEndCommandBuffer(command_buffer), AGC_ERROR_INVALID_STATE,
-        "empty command buffer cannot become executable");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command_buffer), AGC_OK,
+        "empty command buffer becomes executable for fence-only submission");
     TEST_ASSERT_EQ(agcResetCommandBuffer(command_buffer), AGC_OK,
         "recording command buffer can recover through reset");
     TEST_ASSERT_EQ(agcDestroyCommandBuffer(command_buffer), AGC_OK,
@@ -814,6 +830,58 @@ static void test_runtime_compute_submission(void)
     TEST_ASSERT_EQ(agcDestroyShader(shader), AGC_OK, "compute shader destroys");
     TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK, "compute queue destroys");
     TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK, "compute device destroys");
+}
+
+static void test_runtime_empty_submission_eop_diagnostic(void)
+{
+    AgcDevice device = create_device();
+    AgcQueue queue = create_queue(device, kAgcQueueCompute);
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
+    AgcCommandBuffer command_buffer = NULL;
+    AgcFence fence = NULL;
+    AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    const AgcCommandBufferSubmit *captured;
+    const uint32_t *words;
+    uint32_t owner = UINT32_MAX;
+
+    command_desc.queue_type = kAgcQueueCompute;
+    command_desc.capacity_dwords = 2u;
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc,
+        &command_buffer), AGC_OK, "EOP-only diagnostic command buffer creates");
+    TEST_ASSERT_EQ(agcCreateFence(device, &fence_desc, &fence), AGC_OK,
+        "EOP-only diagnostic fence creates");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command_buffer), AGC_OK,
+        "EOP-only diagnostic command buffer begins");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command_buffer), AGC_OK,
+        "empty EOP-only diagnostic command buffer becomes executable");
+    submit.command_buffer_count = 1u;
+    submit.command_buffers = &command_buffer;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
+        "EOP-only diagnostic submits");
+    captured = agcDriverDebugLastAcbSubmit(&owner);
+    TEST_ASSERT(captured != NULL && owner != UINT32_MAX,
+        "EOP-only diagnostic captures the generic compute carrier");
+    words = (const uint32_t *)(uintptr_t)captured->command_address;
+    TEST_ASSERT_EQ(captured->dword_count, 2u,
+        "EOP-only diagnostic uses the generic two-dword no-op carrier");
+    TEST_ASSERT_EQ(agcPm4Opcode(words[0]), AGC_PM4_OP_NOP,
+        "EOP-only diagnostic generic carrier is a no-op");
+    TEST_ASSERT(!runtime_has_opcode(words, captured->dword_count,
+        AGC_PM4_OP_DISPATCH_DIRECT),
+        "EOP-only diagnostic contains no workload dispatch");
+    TEST_ASSERT_EQ(agcGetFenceStatus(fence), AGC_OK,
+        "EOP-only diagnostic host fence signals");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command_buffer), AGC_OK,
+        "EOP-only diagnostic command buffer resets");
+    TEST_ASSERT_EQ(agcDestroyFence(fence), AGC_OK,
+        "EOP-only diagnostic fence destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(command_buffer), AGC_OK,
+        "EOP-only diagnostic command buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
+        "EOP-only diagnostic queue destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "EOP-only diagnostic device destroys");
 }
 
 static void test_runtime_compiler_reflection_sidecar(void)
@@ -3918,6 +3986,7 @@ void test_suite_runtime(void)
     TEST_RUN(test_runtime_all_object_lifecycle);
     TEST_RUN(test_runtime_fence_and_command_states);
     TEST_RUN(test_runtime_compute_submission);
+    TEST_RUN(test_runtime_empty_submission_eop_diagnostic);
     TEST_RUN(test_runtime_compiler_reflection_sidecar);
     TEST_RUN(test_runtime_compiler_graphics_sidecar);
     TEST_RUN(test_runtime_indexed_graphics_submission);

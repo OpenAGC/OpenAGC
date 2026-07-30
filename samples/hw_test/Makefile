@@ -322,6 +322,11 @@ agc_runtime_compute.elf: shaders_runtime_compute agc_runtime_compute.c \
 		gpu_credentials.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -o $@ agc_runtime_compute.c $(AGC_LDFLAGS)
 
+# Bounded public-runtime completion diagnostic. It records no application
+# commands; agcQueueSubmit supplies the runtime-owned EOP fence packet.
+agc_runtime_eop.elf: agc_runtime_eop.c gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -o $@ agc_runtime_eop.c $(AGC_LDFLAGS)
+
 # Public native-runtime graphics probe. It intentionally builds an isolated
 # compiler/runtime artifact pair rather than changing the qualified manual
 # agc_graphics.elf baseline.
