@@ -71,6 +71,13 @@ builds consume committed qualified shader records. Fresh-boot teardown stress
 qualification is required before the uncompressed-depth mirror resumes. See
 `analysis/fw550_headless_flexible_memory_panic_20260730.md`.
 
+The reproducible gate is `make cleanup_stress_fw550`: it runs 14 file-backed
+baseline launches, calls the cleanup ELF immediately before every payload, and
+requires all four sample cleanup results plus driver shutdown to pass on every
+iteration. Its FW 11.60 twin can validate the runner and shared teardown, but
+does not close the FW 5.50 regression. FW 5.50 hardware is currently
+unavailable.
+
 ## Higher-level consumers
 
 The following FW 5.50-qualified application-facing paths still need bounded

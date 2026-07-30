@@ -31,7 +31,10 @@ sample never released its command and graphics-pool flexible mappings before
 gate on a release error; depth shader regeneration is explicit rather than an
 implicit build side effect. Start with the fresh-boot cleanup stress gate in
 `analysis/fw550_headless_flexible_memory_panic_20260730.md`. Do not run depth,
-HTILE, or MSAA until it passes.
+HTILE, or MSAA until it passes. The committed `cleanup_stress_fw550` target
+runs 14 file-backed launches and checks every release result; FW 5.50 hardware
+is currently unavailable, so this gate and all dependent work remain pending.
+The `cleanup_stress_fw1160` twin is only a runner/shared-teardown safety check.
 
 ### FW 11.60 workload parity gate
 

@@ -438,6 +438,33 @@ agc_graphics_fw1160.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shader
 		-DAGC_GRAPHICS_HEADLESS=1 -DAGC_SELF_TERMINATE=1 \
 		-o $@ agc_graphics.c $(AGC_LDFLAGS)
 
+agc_graphics_cleanup_fw1160_logged.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_EXPECT_FIRMWARE_ABI_KEY=0x1160u \
+		-DAGC_GRAPHICS_HEADLESS=1 -DAGC_SELF_TERMINATE=1 \
+		-DAGC_RESULT_LOG_PATH='"/data/homebrew/openagc_fw1160_cleanup_stress/result.log"' \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_graphics_cleanup_fw550_logged.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_EXPECT_FIRMWARE_ABI_KEY=0x0550u \
+		-DAGC_GRAPHICS_HEADLESS=1 -DAGC_SELF_TERMINATE=1 \
+		-DAGC_RESULT_LOG_PATH='"/data/homebrew/openagc_fw550_cleanup_stress/result.log"' \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+.PHONY: cleanup_stress_fw1160 cleanup_stress_fw550
+cleanup_stress_fw1160: agc_graphics_cleanup_fw1160_logged.elf run_flexible_cleanup_stress.sh
+	PS5_HOST=$(PS5_HOST) STRESS_ARTIFACT=$(THIS_DIR)/$< \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) EXPECTED_FW_ABI=0x1160 \
+		EXPECTED_ARTIFACT_SHA256=55478106b4cdbef50c5d37d15e5a327b3b5dc0b6e2da9f6dc2b48953ea2b8d2e \
+		RESULT_LOG_PATH=/data/homebrew/openagc_fw1160_cleanup_stress/result.log \
+		STRESS_ITERATIONS=$(or $(STRESS_ITERATIONS),14) sh ./run_flexible_cleanup_stress.sh
+
+cleanup_stress_fw550: agc_graphics_cleanup_fw550_logged.elf run_flexible_cleanup_stress.sh
+	PS5_HOST=$(PS5_HOST) STRESS_ARTIFACT=$(THIS_DIR)/$< \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) EXPECTED_FW_ABI=0x0550 \
+		EXPECTED_ARTIFACT_SHA256=141bac67b58ae42e713ea0a080fb6602e5969feadfe1ca7e355a5f3a38cef972 \
+		RESULT_LOG_PATH=/data/homebrew/openagc_fw550_cleanup_stress/result.log \
+		STRESS_ITERATIONS=$(or $(STRESS_ITERATIONS),14) sh ./run_flexible_cleanup_stress.sh
+
 FW1160_GRAPHICS_FLAGS := -DAGC_EXPECT_FIRMWARE_ABI_KEY=0x1160u \
 	-DAGC_GRAPHICS_HEADLESS=1 -DAGC_SELF_TERMINATE=1
 FW1160_GRAPHICS_LOG_FLAGS := $(FW1160_GRAPHICS_FLAGS) \

@@ -61,8 +61,18 @@ Prospero cross-builds complete without warnings, the committed depth record is
 restored, and the host CTest suite passes. The panic powered the FW 5.50
 console down, so hardware proof of the teardown must start from a fresh boot:
 
-1. inject ps5debug-NG and run one cleaned-up baseline graphics payload;
-2. require `Graphics memory cleanup: pool=0x00000000 cb=0x00000000`;
-3. repeat the baseline enough times to exceed the old cumulative threshold;
+1. inject ps5debug-NG and run `make cleanup_stress_fw550`;
+2. require the file-backed verdict to report zero results for pool release,
+   command-buffer release, direct unmap, and direct-memory release;
+3. complete all 14 launches, exceeding the old 11-launch cumulative threshold;
 4. only then run the uncompressed D32/D16/S8/D16+S8 mirrors;
 5. keep HTILE and MSAA blocked until that sequence passes.
+
+The committed runner invokes the process-cleanup ELF immediately before each
+payload and pins the FW 5.50 artifact SHA-256 to
+`141bac67b58ae42e713ea0a080fb6602e5969feadfe1ca7e355a5f3a38cef972`.
+The matching FW 11.60 artifact is pinned to
+`55478106b4cdbef50c5d37d15e5a327b3b5dc0b6e2da9f6dc2b48953ea2b8d2e`.
+FW 11.60 is a useful runner and teardown safety check, but cannot replace the
+FW 5.50 regression because the incident occurred on FW 5.50. That console is
+currently unavailable, so the FW 5.50 verdict remains pending.
