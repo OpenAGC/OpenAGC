@@ -4881,9 +4881,6 @@ static int32_t agcValidateCommandLabelWaits(const AgcQueue queue,
             return AGC_ERROR_INVALID_ARGUMENT;
         if (label->last_signal_submission_id == 0u)
             return AGC_ERROR_INVALID_STATE;
-        if (label->last_signal_queue != queue ||
-            label->last_signal_queue_type != (uint32_t)queue->type)
-            return AGC_ERROR_NOT_SUPPORTED;
         if (label->last_signal_value != wait->value)
             return AGC_ERROR_INVALID_STATE;
     }

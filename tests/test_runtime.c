@@ -1545,10 +1545,11 @@ static void test_runtime_gpu_labels(void)
         "cross-queue consumer fence resets");
     submit.command_buffers = &cross_consumer;
     TEST_ASSERT_EQ(agcQueueSubmit(graphics_queue, &submit, consumer_fence),
-        AGC_ERROR_NOT_SUPPORTED,
-        "cross-queue label wait stays fail-closed");
+        AGC_OK, "cross-queue label consumer submits");
+    TEST_ASSERT_EQ(agcGetFenceStatus(consumer_fence), AGC_OK,
+        "generic cross-queue label consumer completes");
     TEST_ASSERT_EQ(agcResetCommandBuffer(cross_consumer), AGC_OK,
-        "cross-queue consumer resets after rejection");
+        "cross-queue consumer resets after completion");
     TEST_ASSERT_EQ(agcResetCommandBuffer(producer), AGC_OK,
         "cross-queue producer resets");
     TEST_ASSERT_EQ(agcDestroyGpuLabel(cross_label), AGC_OK,
