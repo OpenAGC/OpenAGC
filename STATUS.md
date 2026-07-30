@@ -686,7 +686,9 @@ hash. The first UNORM run reached the fence with zero decode mismatches and
 zero error, but the generic eight-color smoke threshold rejected its intended
 six-color scalar fixture. Compressed gates now use a three-color baseline
 floor and retain the exact format-specific oracle. Corrected execution remains
-pending.
+pending. Corrected BC4 UNORM pass 1 then succeeded with `224640` changed
+pixels, equal `74880` region counts, zero decode mismatches/error, and FNV64
+`0x5327e8ad53b3a455`; identical-byte pass 2 remains required.
 The exact artifacts are pinned as SHA-256
 `f74c393112fc465eace431a3fe288095ae4b3bf5ee993e8147ed0e9a2f22f2a4`
 (UNORM) and
