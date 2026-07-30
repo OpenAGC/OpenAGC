@@ -59,6 +59,10 @@ PINNED_PORTABILITY_ELF := $(THIS_DIR)/pinned/agc_portability-$(PINNED_PORTABILIT
 PINNED_PROBE_SHA256 := b88790c948a98810cf2fb4799a3ea529cc07e1e18532047e8780e72bde0ce7a7
 PINNED_PROBE_ELF := $(THIS_DIR)/pinned/agc_firmware_probe-$(PINNED_PROBE_SHA256).elf
 PINNED_CLEANUP_SHA256 := 9fd6b41cf2ea87989c4217234c6f34c96a1ca5dc482355af1258539db77d4d76
+PINNED_R16_UNORM_SHA256 := c0a5ad4732bf13c41f96560cb2dbfa3c39dffb9a47958ccbd2bef5754523220a
+PINNED_R16_UNORM_ELF := $(THIS_DIR)/pinned/agc_graphics_r16_unorm-$(PINNED_R16_UNORM_SHA256).elf
+PINNED_RG16_UNORM_SHA256 := d004a33d1d1245964b08ee22b577948d36537c68d9d8c5241ba9e78e4a39f2fd
+PINNED_RG16_UNORM_ELF := $(THIS_DIR)/pinned/agc_graphics_rg16_unorm-$(PINNED_RG16_UNORM_SHA256).elf
 
 # === Targets ===
 
@@ -647,6 +651,32 @@ agc_graphics_count_indirect_fw1160_logged.elf: agc_graphics.c ps5_video_out.h gp
 		-DAGC_INDIRECT_COUNT_BUFFER=1 -DAGC_AUDIT_SONY_MULTI_INDIRECT=1 \
 		-o $@ agc_graphics.c $(AGC_LDFLAGS)
 
+# Firmware-neutral 10-dword indirect gates. These are pinned after build and
+# replayed unchanged on endpoint firmware; do not add a firmware expectation.
+agc_graphics_multi_indirect_portable.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(PORTABLE_GRAPHICS_FLAGS) \
+		-DAGC_DRAW_INDIRECT=1 -DAGC_INDIRECT_DRAW_COUNT=2 \
+		-DAGC_AUDIT_SONY_MULTI_INDIRECT=1 \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+	../../tools/verify_firmware_neutral_elf.sh $@ \
+		/data/homebrew/openagc_portable_graphics/result.log
+
+agc_graphics_multi_indexed_indirect_portable.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(PORTABLE_GRAPHICS_FLAGS) \
+		-DAGC_DRAW_INDEXED_INDIRECT=1 -DAGC_INDIRECT_DRAW_COUNT=2 \
+		-DAGC_AUDIT_SONY_MULTI_INDIRECT=1 \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+	../../tools/verify_firmware_neutral_elf.sh $@ \
+		/data/homebrew/openagc_portable_graphics/result.log
+
+agc_graphics_count_indirect_portable.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(PORTABLE_GRAPHICS_FLAGS) \
+		-DAGC_DRAW_INDIRECT=1 -DAGC_INDIRECT_DRAW_COUNT=2 \
+		-DAGC_INDIRECT_COUNT_BUFFER=1 -DAGC_AUDIT_SONY_MULTI_INDIRECT=1 \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+	../../tools/verify_firmware_neutral_elf.sh $@ \
+		/data/homebrew/openagc_portable_graphics/result.log
+
 agc_graphics_indexed_indirect_fw1160_logged.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) $(FW1160_GRAPHICS_LOG_FLAGS) \
 		-DAGC_DRAW_INDEXED_INDIRECT=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
@@ -1179,6 +1209,10 @@ deploy_agc_graphics: agc_graphics.elf
 	deploy_agc_graphics_r16_unorm_portable_fw1160 \
 	deploy_agc_graphics_r16_unorm_portable_fw550 \
 	deploy_agc_graphics_rg16_unorm_portable_fw1160 \
+	deploy_agc_graphics_rg16_unorm_portable_fw550 \
+	deploy_agc_graphics_multi_indirect_portable_fw1160 \
+	deploy_agc_graphics_multi_indexed_indirect_portable_fw1160 \
+	deploy_agc_graphics_count_indirect_portable_fw1160 \
 	deploy_agc_graphics_r16_float_fw1160 \
 	deploy_agc_graphics_rg16_float_fw1160 \
 	deploy_agc_graphics_rgb10a2_fw1160 \
@@ -1213,24 +1247,31 @@ deploy_agc_graphics_fw1160: agc_graphics_fw1160.elf
 	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
 
-deploy_agc_graphics_r16_unorm_portable_fw1160: agc_graphics_r16_unorm_portable.elf
-	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
+deploy_agc_graphics_r16_unorm_portable_fw1160:
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(PINNED_R16_UNORM_ELF) \
 		EXPECTED_FW_ABI=0x1160 EXPECTED_TARGET=R16_UNORM \
-		EXPECTED_ARTIFACT_SHA256=c0a5ad4732bf13c41f96560cb2dbfa3c39dffb9a47958ccbd2bef5754523220a \
+		EXPECTED_ARTIFACT_SHA256=$(PINNED_R16_UNORM_SHA256) \
 		RESULT_LOG_PATH=/data/homebrew/openagc_portable_graphics/result.log \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
 
-deploy_agc_graphics_r16_unorm_portable_fw550: agc_graphics_r16_unorm_portable.elf
-	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
+deploy_agc_graphics_r16_unorm_portable_fw550:
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(PINNED_R16_UNORM_ELF) \
 		EXPECTED_FW_ABI=0x0550 EXPECTED_TARGET=R16_UNORM \
-		EXPECTED_ARTIFACT_SHA256=c0a5ad4732bf13c41f96560cb2dbfa3c39dffb9a47958ccbd2bef5754523220a \
+		EXPECTED_ARTIFACT_SHA256=$(PINNED_R16_UNORM_SHA256) \
 		RESULT_LOG_PATH=/data/homebrew/openagc_portable_graphics/result.log \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
 
-deploy_agc_graphics_rg16_unorm_portable_fw1160: agc_graphics_rg16_unorm_portable.elf
-	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
+deploy_agc_graphics_rg16_unorm_portable_fw1160:
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(PINNED_RG16_UNORM_ELF) \
 		EXPECTED_FW_ABI=0x1160 EXPECTED_TARGET=RG16_UNORM \
-		EXPECTED_ARTIFACT_SHA256=d004a33d1d1245964b08ee22b577948d36537c68d9d8c5241ba9e78e4a39f2fd \
+		EXPECTED_ARTIFACT_SHA256=$(PINNED_RG16_UNORM_SHA256) \
+		RESULT_LOG_PATH=/data/homebrew/openagc_portable_graphics/result.log \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
+
+deploy_agc_graphics_rg16_unorm_portable_fw550:
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(PINNED_RG16_UNORM_ELF) \
+		EXPECTED_FW_ABI=0x0550 EXPECTED_TARGET=RG16_UNORM \
+		EXPECTED_ARTIFACT_SHA256=$(PINNED_RG16_UNORM_SHA256) \
 		RESULT_LOG_PATH=/data/homebrew/openagc_portable_graphics/result.log \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
 
@@ -1376,6 +1417,36 @@ deploy_agc_graphics_count_indirect_fw1160_logged: agc_graphics_count_indirect_fw
 		EXPECTED_PACKET_AUDIT='[Sony Multi Indirect] exact 10-dword packet: PASS' \
 		REQUIRE_MULTI_DRAW_ORACLE=1 REQUIRE_COUNT_BUFFER_ORACLE=1 \
 		RESULT_LOG_PATH=/data/homebrew/openagc_fw1160_graphics/result.log \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
+
+deploy_agc_graphics_multi_indirect_portable_fw1160: agc_graphics_multi_indirect_portable.elf
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_FW_ABI=0x1160 EXPECTED_TARGET='offscreen FP16' \
+		EXPECTED_ARTIFACT_SHA256=230809ee6ba03cc10cd136fc269d4c9e08f9ccfcec356f23d6d2b31b98df826c \
+		EXPECTED_DRAW_MODE='reusable baseline non-indexed indirect' \
+		EXPECTED_PACKET_AUDIT='[Sony Multi Indirect] exact 10-dword packet: PASS' \
+		REQUIRE_MULTI_DRAW_ORACLE=1 \
+		RESULT_LOG_PATH=/data/homebrew/openagc_portable_graphics/result.log \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
+
+deploy_agc_graphics_multi_indexed_indirect_portable_fw1160: agc_graphics_multi_indexed_indirect_portable.elf
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_FW_ABI=0x1160 EXPECTED_TARGET='offscreen FP16' \
+		EXPECTED_ARTIFACT_SHA256=afea810a97e36dfae517866acc21889202dbb9c63da04746801382442874f5a6 \
+		EXPECTED_DRAW_MODE='reusable baseline u16 indexed indirect' \
+		EXPECTED_PACKET_AUDIT='[Sony Multi Indirect] exact 10-dword packet: PASS' \
+		REQUIRE_MULTI_DRAW_ORACLE=1 \
+		RESULT_LOG_PATH=/data/homebrew/openagc_portable_graphics/result.log \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
+
+deploy_agc_graphics_count_indirect_portable_fw1160: agc_graphics_count_indirect_portable.elf
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_FW_ABI=0x1160 EXPECTED_TARGET='offscreen FP16' \
+		EXPECTED_ARTIFACT_SHA256=78d4a3d3377cc6458e257f9e213b973f7e1c57954d2c4be254af3f0fe19d4227 \
+		EXPECTED_DRAW_MODE='reusable baseline non-indexed indirect' \
+		EXPECTED_PACKET_AUDIT='[Sony Multi Indirect] exact 10-dword packet: PASS' \
+		REQUIRE_MULTI_DRAW_ORACLE=1 REQUIRE_COUNT_BUFFER_ORACLE=1 \
+		RESULT_LOG_PATH=/data/homebrew/openagc_portable_graphics/result.log \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
 
 deploy_agc_graphics_indexed_indirect_fw1160_logged: agc_graphics_indexed_indirect_fw1160_logged.elf
