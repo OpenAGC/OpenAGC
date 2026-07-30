@@ -160,7 +160,10 @@ That frozen replay reproduced `32281`, zero outside change, exact
 HTILE isolation is hardware-qualified on FW 5.50; its pinned FW 11.60 mirror
 is now active. FW 11.60 pass 1 reproduced `32281`, zero outside change, exact
 `228096/228096` color, immediate completion, clean shutdown, and no residual
-process; the recipe now freezes that count.
+process; the recipe now freezes that count. The identical replay reproduced
+every invariant. Current-source mip-1 and array-layer-1 HTILE isolation are
+hardware-qualified on both endpoints. Current-source 4x MSAA parity is now the
+active depth tier.
 
 Ordinary D16 HTILE is now hardware-qualified twice on each endpoint. The
 pinned current-source artifacts reproduced exact D16 classes, clean teardown,

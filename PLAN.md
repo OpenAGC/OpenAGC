@@ -650,6 +650,11 @@ the runner and shared teardown on FW 11.60 only.
   `228096/228096` color, immediate completion, clean shutdown, and no residual
   process. Its guarded recipe now freezes `32281`; replay once to complete the
   HTILE subresource tier.
+- The identical FW 11.60 array replay reproduced every exact invariant.
+  Current-source mip-1 and array-layer-1 isolation are qualified on both
+  endpoints. Audit the historical 4x MSAA path, then build current-source
+  exact-key headless endpoint gates with sample, resolve, fence, and cleanup
+  oracles before hardware execution.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and

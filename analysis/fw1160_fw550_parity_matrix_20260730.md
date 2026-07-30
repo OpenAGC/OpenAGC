@@ -57,7 +57,7 @@ reached its completion fence, shut the driver down, and returned PASS.
 | D16 HTILE expclear | Qualified | Qualified on both endpoints |
 | D32 HTILE ordinary/decompress/resummarize/expclear | Qualified | Qualified on both endpoints |
 | Combined D32+S8 HTILE and aspect masks | Qualified | Qualified on both endpoints |
-| HTILE mip and array subresources | Current-source endpoint artifacts build | Pin and hardware-qualify both mirrors |
+| HTILE mip and array subresources | Qualified | Qualified on both endpoints |
 | 4x MSAA | Missing | Wait for the FW 5.50 baseline regression |
 | Sample-rate shading | Missing | Add an exact invocation-count gate |
 
@@ -236,6 +236,13 @@ FW 11.60 array pass 1 reproduced `32281` selected words, zero outside change,
 exact `228096/228096` color, immediate completion, clean shutdown, final PASS,
 and no residual process. Its logged recipe now freezes `32281`; one identical
 replay remains before the HTILE subresource tier is complete.
+
+The identical FW 11.60 array replay reproduced `32281` selected words, zero
+outside change, exact `228096/228096` color, immediate completion, clean
+shutdown, final PASS, and no residual process. Current-source mip-1 and array-
+layer-1 HTILE isolation are hardware-qualified on both endpoints. Proceed to
+4x MSAA parity; do not rely on the older FW 5.50 VideoOut fixture as a current-
+source endpoint gate.
 
 That prerequisite sequence is now complete. Two relinks against the committed
 shader records reproduced all eight artifacts byte-for-byte, and dependency
