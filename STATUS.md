@@ -151,7 +151,10 @@ now active. FW 11.60 pass 1 reproduced `7982`, zero outside change, exact
 `56832/56832` color, immediate completion, clean shutdown, and no residual
 process; the recipe now freezes that count. The identical replay reproduced
 every invariant. Mip-1 isolation is hardware-qualified on both endpoints;
-FW 5.50 array-layer-1 is now active.
+FW 5.50 array-layer-1 is now active. Its first guarded run passed, and an
+identical cleanup-first count capture reported `32281` selected words, zero
+outside change, exact `228096/228096` color, clean shutdown, and no residual
+process. The recipe now freezes `32281`; one enforcement replay remains.
 
 Ordinary D16 HTILE is now hardware-qualified twice on each endpoint. The
 pinned current-source artifacts reproduced exact D16 classes, clean teardown,

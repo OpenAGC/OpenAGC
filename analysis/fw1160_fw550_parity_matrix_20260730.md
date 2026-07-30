@@ -219,6 +219,13 @@ shutdown, final PASS, and no residual process. Current-source mip-1 HTILE
 isolation is hardware-qualified on both endpoints. Run the pinned FW 5.50
 array-layer-1 gate next and freeze its selected count before replay.
 
+The pinned FW 5.50 array artifact passed its first guarded run. Because the
+filtered wrapper output hid the selected count, one identical cleanup-first
+count-capture replay was used before freezing. It reported `32281` selected
+words, zero outside change, exact `228096/228096` color, bounded completion,
+clean shutdown, final PASS, and no residual process. The recipe now freezes
+`32281`; run one enforcement replay before the FW 11.60 array mirror.
+
 That prerequisite sequence is now complete. Two relinks against the committed
 shader records reproduced all eight artifacts byte-for-byte, and dependency
 inspection found only VideoOut, kernel, libc, and networking. The exact FW

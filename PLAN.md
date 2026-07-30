@@ -638,6 +638,10 @@ the runner and shared teardown on FW 11.60 only.
 - The identical FW 11.60 mip replay reproduced every exact invariant. Mip-1
   HTILE isolation is qualified on both endpoints. Run the pinned FW 5.50
   array-layer-1 artifact next and freeze its selected count before replay.
+- The pinned FW 5.50 array artifact passed; an identical cleanup-first count
+  capture reported `32281` selected words, zero outside change, exact
+  `228096/228096` color, clean shutdown, and no residual process. Its recipe
+  now freezes `32281`; run one enforcement replay before FW 11.60.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and
