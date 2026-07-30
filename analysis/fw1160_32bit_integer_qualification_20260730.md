@@ -43,3 +43,15 @@ One identical-byte replay remains.
 The identical pinned bytes reproduced the full signed range, exact sample and
 mismatch counts, lane and packed hashes, fence, teardown, self-termination,
 and debugger absence. R32_SINT is hardware-qualified on FW 11.60.
+
+## RG32_SINT pass 1
+
+- Artifact SHA-256:
+  `ef3871f19d6e706fe428eb5ac5df1af0b5796beb4fd47ff42c9e1a66a02327c4`
+- Both lanes contain 255,744 exact samples spanning
+  `-2147483648..2147483647`, eight distinct values, and zero mismatches.
+- Lane hashes: `0x74b09081b2bde483`, `0x90e728de39b5c3c3`; packed FNV64:
+  `0x88da0ec4716fa113`; independence passed.
+- Fence, teardown, self-termination, and debugger absence passed.
+
+One identical-byte replay remains.

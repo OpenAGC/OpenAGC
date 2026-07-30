@@ -589,6 +589,10 @@ firmware-neutral portable gate. Its final bytes are pinned as SHA-256
 `ef3871f19d6e706fe428eb5ac5df1af0b5796beb4fd47ff42c9e1a66a02327c4`;
 hardware execution remains ordered behind the clean-boot UINT gates.
 
+Pinned RG32_SINT pass 1 succeeds with two 255,744-sample full-range lanes,
+zero mismatches, independent hashes, packed FNV64 `0x88da0ec4716fa113`, clean
+teardown, and no residual process. One replay remains.
+
 `AGC_GFX1013_RT_FORMAT_RGBA32_SINT` is appended at value 31 and maps to
 `(format=0x0e, number=SINT, swap=standard)`, 16 bytes per pixel, and
 `32_ABGR` export 9. Exact host coverage locks `CB_COLOR0_INFO=0x00070538`, full

@@ -897,6 +897,10 @@ all six pinned artifacts for identical-byte FW 5.50 replay and proceed to the
   pinned as SHA-256
   `ef3871f19d6e706fe428eb5ac5df1af0b5796beb4fd47ff42c9e1a66a02327c4`.
 
+  Pinned RG32_SINT pass 1 succeeds with two exact full-range lanes, zero
+  mismatches, independent hashes, packed FNV64 `0x88da0ec4716fa113`, and a
+  clean lifecycle. Replay once.
+
 - `RGBA32_SINT` is host-qualified as append-only value 31 with gfx1013
   `32_32_32_32`, SINT, standard swap, 16 bytes per pixel, and `32_ABGR`
   export 9. Exact PM4 (`CB_COLOR0_INFO=0x00070538`), all-profile selection,
