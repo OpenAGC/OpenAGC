@@ -39,7 +39,11 @@ curl -sS --fail --ftp-create-dirs -T "$PROCESS_CLEANUP_ELF" \
 # detached, then require websrv to respond before uploading the graphics ELF.
 curl -sS --fail --max-time 10 \
     "http://$PS5_HOST:8080/hbldr?pipe=0&daemon=1&path=/data/homebrew/process_cleanup/eboot.elf" \
-    >/dev/null || exit 1
+    >/dev/null
+cleanup_status=$?
+if [ "$cleanup_status" -ne 0 ] && [ "$cleanup_status" -ne 28 ]; then
+    exit 1
+fi
 sleep 2
 curl -sS --fail --max-time 5 "http://$PS5_HOST:8080/" >/dev/null || exit 1
 
