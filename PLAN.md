@@ -859,8 +859,13 @@ encoder/decoder; the ELFs contain only fixed blocks and bounded tables, not a
 Mesa dependency. UFLOAT clamps positive RGB directly, while SFLOAT remaps
 `[-1,1]` to `[0,1]`. The oracle requires all fixture classes, mip/layer and
 partial-edge selection, broad range, channel independence, alpha one, a native
-hash, and no RGB error above two stored-byte units. Preserve and pin the final
-neutral bytes before hardware execution. See
+hash, and no RGB error above two stored-byte units. The pinned SHA-256 values
+are
+`941c75f87619718878ac10ed1039aeb879f97a0a77a73262ce45b86deaf567ff`
+for BC6 UFLOAT and
+`25feb569d98eab0ff8d1d51c2a450b68dbaf55843e0cb0b860c7115b2a7c7544`
+for BC6 SFLOAT. Their FW 11.60 and identical-byte FW 5.50 guarded targets have
+no build prerequisites. See
 `analysis/bc6_fixture_generation_20260730.md`.
 
 Use dedicated, deterministic source blocks containing endpoint, index,
