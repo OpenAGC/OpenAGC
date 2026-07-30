@@ -213,6 +213,17 @@ word. The public runtime fixture also submits and resets a
 `HostRead -> Undefined` buffer discard. See
 [`runtime_transition_matrix_host_20260731.md`](../analysis/runtime_transition_matrix_host_20260731.md).
 
+Runtime API v16 adds read-only `AgcResourceStateInfo` diagnostics through
+`agcGetBufferStateInfo` and `agcGetImageStateInfo`. A snapshot distinguishes
+the committed usage/owner from a pending ownership-transfer destination and
+its label point. It also reports whether the matching acquire is merely
+recorded, the command/dependent-object reference counts that make destruction
+busy, and fence-keyed deferred-retirement status. Recording never appears as
+committed state: usage and ownership change only after successful submission.
+The snapshot exposes no GPU address, allocation pointer, PM4 control, or
+backend object. See
+[`runtime_resource_state_info_host_20260731.md`](../analysis/runtime_resource_state_info_host_20260731.md).
+
 Hardware qualification artifacts for presentation and deferred-retirement
 stress must be launched through their `deploy_agc_runtime_*` Make targets. The
 shared runner verifies the pinned ELF hash before network access, launches the

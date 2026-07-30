@@ -2670,6 +2670,7 @@ static void test_runtime_resource_transitions(void)
     AgcGpuLabel label = NULL;
     AgcGpuLabel image_label = NULL;
     AgcGpuLabelDesc label_desc = AGC_GPU_LABEL_DESC_INIT;
+    AgcResourceStateInfo state_info = AGC_RESOURCE_STATE_INFO_INIT;
     const AgcCommandBufferSubmit *captured;
     const uint32_t *words;
     uint32_t owner = UINT32_MAX;
@@ -2680,6 +2681,21 @@ static void test_runtime_resource_transitions(void)
     buffer_desc.flags = AGC_BUFFER_CREATE_READBACK_BIT;
     TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &buffer), AGC_OK,
         "transition buffer creates");
+    TEST_ASSERT_EQ(agcGetBufferStateInfo(buffer, &state_info), AGC_OK,
+        "new buffer state snapshot succeeds");
+    TEST_ASSERT_EQ(state_info.resource_type, kAgcResourceTypeBuffer,
+        "buffer state snapshot identifies resource type");
+    TEST_ASSERT_EQ(state_info.usage, kAgcResourceUsageUndefined,
+        "new buffer state is undefined");
+    TEST_ASSERT_EQ(state_info.owner, kAgcResourceOwnerHost,
+        "new buffer state is host-owned");
+    TEST_ASSERT_EQ(state_info.flags, 0u,
+        "new buffer state has no pending synchronization");
+    state_info.reserved[0] = 1u;
+    TEST_ASSERT_EQ(agcGetBufferStateInfo(buffer, &state_info),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "buffer state snapshot rejects nonzero reserved input");
+    state_info = (AgcResourceStateInfo)AGC_RESOURCE_STATE_INFO_INIT;
     command_desc.queue_type = kAgcQueueCompute;
     command_desc.capacity_dwords = 64u;
     TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc,
@@ -2698,6 +2714,12 @@ static void test_runtime_resource_transitions(void)
         "transition compute command begins");
     TEST_ASSERT_EQ(agcCmdTransitionResources(compute_command, 1u,
         &transition), AGC_OK, "undefined-to-compute transition records");
+    TEST_ASSERT_EQ(agcGetBufferStateInfo(buffer, &state_info), AGC_OK,
+        "recorded buffer state snapshot succeeds");
+    TEST_ASSERT_EQ(state_info.usage, kAgcResourceUsageUndefined,
+        "recording does not publish buffer state before submit");
+    TEST_ASSERT_EQ(state_info.recorded_reference_count, 1u,
+        "recorded buffer state exposes command retention");
     TEST_ASSERT_EQ(agcDestroyBuffer(buffer), AGC_ERROR_BUSY,
         "recorded transition retains its buffer");
     TEST_ASSERT_EQ(agcEndCommandBuffer(compute_command), AGC_OK,
@@ -2708,6 +2730,12 @@ static void test_runtime_resource_transitions(void)
         "undefined-to-compute transition submits");
     TEST_ASSERT_EQ(agcGetFenceStatus(fence), AGC_OK,
         "transition submit completes on host");
+    TEST_ASSERT_EQ(agcGetBufferStateInfo(buffer, &state_info), AGC_OK,
+        "submitted buffer state snapshot succeeds");
+    TEST_ASSERT_EQ(state_info.usage, kAgcResourceUsageShaderWrite,
+        "successful submit publishes buffer usage");
+    TEST_ASSERT_EQ(state_info.owner, kAgcResourceOwnerCompute,
+        "successful submit publishes buffer ownership");
     TEST_ASSERT_EQ(agcResetCommandBuffer(compute_command), AGC_OK,
         "submitted transition command resets");
     TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
@@ -2791,6 +2819,25 @@ static void test_runtime_resource_transitions(void)
     submit.command_buffers = &compute_command;
     TEST_ASSERT_EQ(agcQueueSubmit(compute_queue, &submit, fence), AGC_OK,
         "handoff release submits");
+    TEST_ASSERT_EQ(agcGetBufferStateInfo(buffer, &state_info), AGC_OK,
+        "released buffer state snapshot succeeds");
+    TEST_ASSERT_EQ(state_info.usage, kAgcResourceUsageShaderWrite,
+        "release preserves committed source usage");
+    TEST_ASSERT_EQ(state_info.owner, kAgcResourceOwnerCompute,
+        "release preserves committed source owner");
+    TEST_ASSERT_EQ(state_info.flags,
+        AGC_RESOURCE_STATE_TRANSFER_PENDING_BIT,
+        "release snapshot exposes pending ownership transfer");
+    TEST_ASSERT_EQ(state_info.transfer_usage, kAgcResourceUsageShaderRead,
+        "release snapshot exposes destination usage");
+    TEST_ASSERT_EQ(state_info.transfer_owner, kAgcResourceOwnerGraphics,
+        "release snapshot exposes destination owner");
+    TEST_ASSERT(state_info.transfer_label == label,
+        "release snapshot exposes dependency label");
+    TEST_ASSERT_EQ(state_info.transfer_value, 1u,
+        "release snapshot exposes dependency point");
+    TEST_ASSERT_EQ(state_info.recorded_reference_count, 1u,
+        "submitted release remains retained until reset");
     TEST_ASSERT_EQ(agcResetCommandBuffer(compute_command), AGC_OK,
         "handoff release command resets");
     TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
@@ -2803,11 +2850,27 @@ static void test_runtime_resource_transitions(void)
         "handoff acquire command begins");
     TEST_ASSERT_EQ(agcCmdTransitionResources(graphics_command, 1u, &handoff),
         AGC_OK, "handoff acquire records exact wait and invalidate");
+    TEST_ASSERT_EQ(agcGetBufferStateInfo(buffer, &state_info), AGC_OK,
+        "recorded acquire state snapshot succeeds");
+    TEST_ASSERT_EQ(state_info.flags,
+        AGC_RESOURCE_STATE_TRANSFER_PENDING_BIT |
+            AGC_RESOURCE_STATE_ACQUIRE_RECORDED_BIT,
+        "acquire snapshot distinguishes reservation from publication");
+    TEST_ASSERT_EQ(state_info.recorded_reference_count, 1u,
+        "recorded acquire retains its buffer");
     TEST_ASSERT_EQ(agcEndCommandBuffer(graphics_command), AGC_OK,
         "handoff acquire command ends");
     submit.command_buffers = &graphics_command;
     TEST_ASSERT_EQ(agcQueueSubmit(graphics_queue, &submit, fence), AGC_OK,
         "handoff acquire submits on destination queue");
+    TEST_ASSERT_EQ(agcGetBufferStateInfo(buffer, &state_info), AGC_OK,
+        "submitted acquire state snapshot succeeds");
+    TEST_ASSERT_EQ(state_info.flags, 0u,
+        "successful acquire clears pending transfer diagnostics");
+    TEST_ASSERT_EQ(state_info.usage, kAgcResourceUsageShaderRead,
+        "successful acquire publishes destination usage");
+    TEST_ASSERT_EQ(state_info.owner, kAgcResourceOwnerGraphics,
+        "successful acquire publishes destination owner");
     TEST_ASSERT_EQ(agcGetFenceStatus(fence), AGC_OK,
         "handoff acquire completion is observable on host");
     TEST_ASSERT_EQ(agcResetCommandBuffer(graphics_command), AGC_OK,
@@ -2901,6 +2964,19 @@ static void test_runtime_resource_transitions(void)
         AGC_IMAGE_USAGE_TRANSFER_SRC_BIT | AGC_IMAGE_USAGE_TRANSFER_DST_BIT;
     TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &image), AGC_OK,
         "transition image creates");
+    state_info = (AgcResourceStateInfo)AGC_RESOURCE_STATE_INFO_INIT;
+    TEST_ASSERT_EQ(agcGetImageStateInfo(image, &state_info), AGC_OK,
+        "new image state snapshot succeeds");
+    TEST_ASSERT_EQ(state_info.resource_type, kAgcResourceTypeImage,
+        "image state snapshot identifies resource type");
+    TEST_ASSERT_EQ(state_info.usage, kAgcResourceUsageUndefined,
+        "new image state is undefined");
+    TEST_ASSERT_EQ(state_info.owner, kAgcResourceOwnerHost,
+        "new image state is host-owned");
+    TEST_ASSERT_EQ(state_info.recorded_reference_count, 0u,
+        "new image state has no command references");
+    TEST_ASSERT_EQ(state_info.dependency_reference_count, 0u,
+        "new image state has no dependent objects");
     TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &second_image), AGC_OK,
         "second transition image creates");
     image_transitions[0].resource_type = kAgcResourceTypeImage;
@@ -2921,6 +2997,14 @@ static void test_runtime_resource_transitions(void)
     submit.command_buffers = &graphics_command;
     TEST_ASSERT_EQ(agcQueueSubmit(graphics_queue, &submit, fence), AGC_OK,
         "undefined-to-color transition submits");
+    TEST_ASSERT_EQ(agcGetImageStateInfo(image, &state_info), AGC_OK,
+        "submitted image state snapshot succeeds");
+    TEST_ASSERT_EQ(state_info.usage, kAgcResourceUsageColorTarget,
+        "successful submit publishes image usage");
+    TEST_ASSERT_EQ(state_info.owner, kAgcResourceOwnerGraphics,
+        "successful submit publishes image ownership");
+    TEST_ASSERT_EQ(state_info.recorded_reference_count, 1u,
+        "submitted image remains retained until command reset");
     TEST_ASSERT_EQ(agcGetFenceStatus(fence), AGC_OK,
         "image transition completes on host");
     TEST_ASSERT_EQ(agcResetCommandBuffer(graphics_command), AGC_OK,
@@ -6006,6 +6090,7 @@ static void test_runtime_fence_deferred_free(void)
     AgcMemoryStats stats = AGC_MEMORY_STATS_INIT;
     AgcAllocationInfo retired_info = AGC_ALLOCATION_INFO_INIT;
     AgcAllocationInfo replacement_info = AGC_ALLOCATION_INFO_INIT;
+    AgcResourceStateInfo state_info = AGC_RESOURCE_STATE_INFO_INIT;
 
     pipeline_desc.shader = shader;
     pipeline_desc.local_size_x = 64u;
@@ -6034,6 +6119,10 @@ static void test_runtime_fence_deferred_free(void)
         "retiring buffer allocation is queryable");
     TEST_ASSERT_EQ(agcDestroyBufferDeferred(buffer, fence), AGC_OK,
         "resource retirement queues against unsignaled fence");
+    TEST_ASSERT_EQ(agcGetBufferStateInfo(buffer, &state_info), AGC_OK,
+        "deferred buffer state remains queryable before collection");
+    TEST_ASSERT_EQ(state_info.flags, AGC_RESOURCE_STATE_DEFERRED_BIT,
+        "deferred buffer state exposes retirement status");
     TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &replacement), AGC_OK,
         "replacement buffer creation succeeds before retirement fence");
     TEST_ASSERT_EQ(agcGetObjectAllocationInfo(device, AGC_OBJECT_TYPE_BUFFER,
@@ -6089,6 +6178,11 @@ static void test_runtime_fence_deferred_free(void)
         "retiring image allocation is queryable");
     TEST_ASSERT_EQ(agcDestroyImageDeferred(image, fence), AGC_OK,
         "image retirement queues against unsignaled fence");
+    state_info = (AgcResourceStateInfo)AGC_RESOURCE_STATE_INFO_INIT;
+    TEST_ASSERT_EQ(agcGetImageStateInfo(image, &state_info), AGC_OK,
+        "deferred image state remains queryable before collection");
+    TEST_ASSERT_EQ(state_info.flags, AGC_RESOURCE_STATE_DEFERRED_BIT,
+        "deferred image state exposes retirement status");
     view_desc.image = image;
     view_desc.format = image_desc.format;
     TEST_ASSERT_EQ(agcCreateImageView(device, &view_desc, &view),

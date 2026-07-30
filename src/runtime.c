@@ -1677,6 +1677,33 @@ int32_t PS5_SYSV_ABI agcDestroyBuffer(AgcBuffer buffer)
     return AGC_OK;
 }
 
+int32_t PS5_SYSV_ABI agcGetBufferStateInfo(
+    AgcBuffer buffer, AgcResourceStateInfo *info)
+{
+    if (!buffer || buffer->magic != AGC_MAGIC_BUFFER ||
+        !agcDeviceValid(buffer->device) || !info ||
+        !agcHeaderValid(info->struct_size, sizeof(*info), info->version) ||
+        info->reserved0 != 0u || !agcReservedZero(info->reserved, 4u))
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    *info = (AgcResourceStateInfo)AGC_RESOURCE_STATE_INFO_INIT;
+    info->resource_type = kAgcResourceTypeBuffer;
+    info->usage = buffer->usage_state;
+    info->owner = buffer->owner_state;
+    info->transfer_usage = buffer->transfer_usage;
+    info->transfer_owner = buffer->transfer_owner;
+    info->transfer_label = buffer->transfer_label;
+    info->transfer_value = buffer->transfer_value;
+    info->recorded_reference_count = buffer->recorded_refs;
+    if (buffer->transfer_pending)
+        info->flags |= AGC_RESOURCE_STATE_TRANSFER_PENDING_BIT;
+    if (buffer->transfer_acquire_command)
+        info->flags |= AGC_RESOURCE_STATE_ACQUIRE_RECORDED_BIT;
+    if (buffer->deferred)
+        info->flags |= AGC_RESOURCE_STATE_DEFERRED_BIT;
+    return AGC_OK;
+}
+
 int32_t PS5_SYSV_ABI agcCreateImage(
     AgcDevice device, const AgcImageDesc *desc, AgcImage *image_out)
 {
@@ -1729,6 +1756,34 @@ int32_t PS5_SYSV_ABI agcDestroyImage(AgcImage image)
     agcRuntimeFree(device, image->allocation);
     image->magic = 0u;
     agcDestroyChild(device, image);
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGetImageStateInfo(
+    AgcImage image, AgcResourceStateInfo *info)
+{
+    if (!image || image->magic != AGC_MAGIC_IMAGE ||
+        !agcDeviceValid(image->device) || !info ||
+        !agcHeaderValid(info->struct_size, sizeof(*info), info->version) ||
+        info->reserved0 != 0u || !agcReservedZero(info->reserved, 4u))
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    *info = (AgcResourceStateInfo)AGC_RESOURCE_STATE_INFO_INIT;
+    info->resource_type = kAgcResourceTypeImage;
+    info->usage = image->usage_state;
+    info->owner = image->owner_state;
+    info->transfer_usage = image->transfer_usage;
+    info->transfer_owner = image->transfer_owner;
+    info->transfer_label = image->transfer_label;
+    info->transfer_value = image->transfer_value;
+    info->recorded_reference_count = image->recorded_refs;
+    info->dependency_reference_count = image->dependency_refs;
+    if (image->transfer_pending)
+        info->flags |= AGC_RESOURCE_STATE_TRANSFER_PENDING_BIT;
+    if (image->transfer_acquire_command)
+        info->flags |= AGC_RESOURCE_STATE_ACQUIRE_RECORDED_BIT;
+    if (image->deferred)
+        info->flags |= AGC_RESOURCE_STATE_DEFERRED_BIT;
     return AGC_OK;
 }
 

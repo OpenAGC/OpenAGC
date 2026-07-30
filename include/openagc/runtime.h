@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-#define AGC_RUNTIME_API_VERSION 15u
+#define AGC_RUNTIME_API_VERSION 16u
 #define AGC_RUNTIME_STRUCTURE_VERSION_1 1u
 #define AGC_RUNTIME_STRUCTURE_VERSION_2 2u
 #define AGC_RUNTIME_PROFILE_NAME_SIZE 48u
@@ -323,6 +323,41 @@ typedef struct AgcResourceTransition {
       kAgcResourceOwnerHost, NULL, NULL, 0u, 0u, \
       AGC_IMAGE_SUBRESOURCE_RANGE_INIT, {0u, 0u, 0u, 0u, 0u}, \
       NULL, 0u, 0u, {0u, 0u} }
+
+/* Read-only snapshot of the state committed by successful queue submission.
+ * A pending ownership transfer reports its destination state and dependency;
+ * the committed usage/owner remain unchanged until the matching acquire is
+ * submitted. Reference counts explain a BUSY destruction result without
+ * exposing allocation addresses or backend objects. */
+enum {
+    AGC_RESOURCE_STATE_TRANSFER_PENDING_BIT = 1u << 0,
+    AGC_RESOURCE_STATE_ACQUIRE_RECORDED_BIT = 1u << 1,
+    AGC_RESOURCE_STATE_DEFERRED_BIT = 1u << 2
+};
+
+typedef struct AgcResourceStateInfo {
+    uint32_t struct_size;
+    uint32_t version;
+    AgcResourceType resource_type;
+    uint32_t flags;
+    AgcResourceUsage usage;
+    AgcResourceOwner owner;
+    AgcResourceUsage transfer_usage;
+    AgcResourceOwner transfer_owner;
+    AgcGpuLabel transfer_label;
+    uint32_t transfer_value;
+    uint32_t recorded_reference_count;
+    uint32_t dependency_reference_count;
+    uint32_t reserved0;
+    uint64_t reserved[4];
+} AgcResourceStateInfo;
+
+#define AGC_RESOURCE_STATE_INFO_INIT \
+    { sizeof(AgcResourceStateInfo), AGC_RUNTIME_STRUCTURE_VERSION_1, \
+      kAgcResourceTypeBuffer, 0u, kAgcResourceUsageUndefined, \
+      kAgcResourceOwnerHost, kAgcResourceUsageUndefined, \
+      kAgcResourceOwnerHost, NULL, 0u, 0u, 0u, 0u, \
+      {0u, 0u, 0u, 0u} }
 
 typedef struct AgcImageViewDesc {
     uint32_t struct_size;
@@ -1085,6 +1120,8 @@ _Static_assert(sizeof(AgcFenceInfo) == 144u,
     "AgcFenceInfo v1 size mismatch");
 _Static_assert(sizeof(AgcGpuLabelInfo) == 104u,
     "AgcGpuLabelInfo v1 size mismatch");
+_Static_assert(sizeof(AgcResourceStateInfo) == 88u,
+    "AgcResourceStateInfo v1 size mismatch");
 
 int32_t PS5_SYSV_ABI agcCreateDevice(
     const AgcDeviceDesc *desc, AgcDevice *device_out);
@@ -1099,6 +1136,8 @@ int32_t PS5_SYSV_ABI agcDestroyQueue(AgcQueue queue);
 int32_t PS5_SYSV_ABI agcCreateBuffer(
     AgcDevice device, const AgcBufferDesc *desc, AgcBuffer *buffer_out);
 int32_t PS5_SYSV_ABI agcDestroyBuffer(AgcBuffer buffer);
+int32_t PS5_SYSV_ABI agcGetBufferStateInfo(
+    AgcBuffer buffer, AgcResourceStateInfo *info);
 /* Queues retirement against a finite-wait fence. Existing command references
  * may remain, but allocation reuse waits for both fence completion and release
  * of those references by command reset/destruction. */
@@ -1111,6 +1150,8 @@ int32_t PS5_SYSV_ABI agcReadBuffer(
 int32_t PS5_SYSV_ABI agcCreateImage(
     AgcDevice device, const AgcImageDesc *desc, AgcImage *image_out);
 int32_t PS5_SYSV_ABI agcDestroyImage(AgcImage image);
+int32_t PS5_SYSV_ABI agcGetImageStateInfo(
+    AgcImage image, AgcResourceStateInfo *info);
 /* Existing view/present-chain/command references delay collection safely. */
 int32_t PS5_SYSV_ABI agcDestroyImageDeferred(
     AgcImage image, AgcFence fence);

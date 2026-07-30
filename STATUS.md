@@ -181,7 +181,7 @@ recycling storage. Generic coverage passes 32 two-command batch cycles with
 buffer and image retirement, pre-reset busy collection, command reset, and
 exact deferred/live-count/live-byte baselines; present-chain retention is also
 covered. Prospero builds the identical stress artifact with SHA-256
-`030fc66604db48d217eb7c4b140c16880516419ae82cd76ac829b9168fa47f1f`,
+`9c0de7db18c4b27b6286d2d3091c9281df702f63aae6308cd0a534870803d939`,
 but it remains hardware-unqualified while the FW 5.50 console is offline. See
 `analysis/runtime_batch_deferred_retirement_host_20260731.md`.
 Runtime API v15 accepts `Undefined` as the documented discard destination.
@@ -191,6 +191,12 @@ NOP trailer, depth-metadata flush, and acquire rules are unchanged. The exact
 shape coverage, and a submitted public-runtime `HostRead -> Undefined` row
 proves state commit/reset. The complete host suite passes 16,402 assertions;
 see `analysis/runtime_transition_matrix_host_20260731.md`.
+Runtime API v16 adds `AgcResourceStateInfo` plus buffer/image query entry
+points. Host coverage locks initial state, record-versus-submit publication,
+pending release destination/label diagnostics, acquire reservation, reference
+counts, final ownership, and deferred-retirement visibility. These are
+diagnostic snapshots only and expose no raw GPU address or backend state. See
+`analysis/runtime_resource_state_info_host_20260731.md`.
 The pending FW 5.50 presentation stages and batch-retirement stress are now
 exposed only through six cleanup-first, SHA-256-pinned Make deployment targets.
 The shared runner verifies firmware, exact verdict, error-free device teardown,

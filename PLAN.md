@@ -609,7 +609,7 @@ and command/dependency release. A 32-cycle generic stress test submits two
 typed DCBs per cycle, queues both referenced resources, verifies collection is
 busy before command reset, then proves deferred count, allocation count, and
 live bytes return exactly to baseline. The matching Prospero artifact
-`030fc66604db48d217eb7c4b140c16880516419ae82cd76ac829b9168fa47f1f`
+`9c0de7db18c4b27b6286d2d3091c9281df702f63aae6308cd0a534870803d939`
 is ready but hardware qualification awaits console recovery. See
 `analysis/runtime_batch_deferred_retirement_host_20260731.md`.
 
@@ -621,6 +621,15 @@ prior writer, because discarded contents require neither writeback nor
 invalidation. A public runtime `HostRead -> Undefined` command records,
 submits, commits, resets, and destroys cleanly. See
 `analysis/runtime_transition_matrix_host_20260731.md`.
+
+Runtime API v16 adds a versioned resource-state diagnostic snapshot for both
+buffers and images. It reports committed usage/owner, pending ownership
+destination and label point, acquire reservation, command/dependent-object
+references, and deferred-retirement state without exposing backend handles or
+GPU addresses. Generic fixtures prove recording does not publish state,
+successful submission does, release/acquire diagnostics track their exact
+transaction phases, and deferred objects remain inspectable until collection.
+See `analysis/runtime_resource_state_info_host_20260731.md`.
 
 The pending FW 5.50 presentation ladder and retirement stress now have one
 shared fail-closed runner. All six Make targets pin the current artifact hash,
