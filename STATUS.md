@@ -147,7 +147,9 @@ artifact's observed `7982` selected words with zero outside change. One
 enforcement replay reproduced `7982`, zero outside change, exact
 `56832/56832` color, clean shutdown, and no residual process. Current-source
 mip isolation is hardware-qualified on FW 5.50; its pinned FW 11.60 mirror is
-now active.
+now active. FW 11.60 pass 1 reproduced `7982`, zero outside change, exact
+`56832/56832` color, immediate completion, clean shutdown, and no residual
+process; the recipe now freezes that count.
 
 Ordinary D16 HTILE is now hardware-qualified twice on each endpoint. The
 pinned current-source artifacts reproduced exact D16 classes, clean teardown,

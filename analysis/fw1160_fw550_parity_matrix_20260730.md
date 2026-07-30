@@ -208,6 +208,11 @@ PASS, and no residual process. Current-source mip-1 HTILE isolation is
 hardware-qualified on FW 5.50. Run the pinned FW 11.60 mip artifact next,
 establish and freeze its selected count, and replay before array-layer work.
 
+FW 11.60 mip pass 1 reproduced `7982` selected words, zero outside change,
+exact `56832/56832` color, immediate completion, clean shutdown, final PASS,
+and no residual process. Its logged recipe now freezes `7982`; one identical
+replay remains before mip isolation can be promoted across endpoints.
+
 That prerequisite sequence is now complete. Two relinks against the committed
 shader records reproduced all eight artifacts byte-for-byte, and dependency
 inspection found only VideoOut, kernel, libc, and networking. The exact FW

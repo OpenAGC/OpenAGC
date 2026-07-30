@@ -631,6 +631,10 @@ the runner and shared teardown on FW 11.60 only.
   `56832/56832` color, clean shutdown, and no residual process. Current-source
   mip isolation is qualified on FW 5.50. Run the pinned FW 11.60 mip artifact
   next and freeze its selected count before replay.
+- FW 11.60 mip pass 1 reproduced `7982`, zero outside change, exact
+  `56832/56832` color, immediate completion, clean shutdown, and no residual
+  process. Its guarded recipe now freezes `7982`; replay once before array
+  isolation.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and
