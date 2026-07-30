@@ -76,14 +76,15 @@ oracle read back `0x4c414245` after its consumer completed.
 
 Runtime API v6 adds `AgcGpuLabel`: an owned flexible-memory word that the
 runtime signals with EOP release and waits on with a 32-bit `WAIT_REG_MEM`.
-Consumers require an already-submitted matching producer signal on the same
-queue, retain the label while recorded, require a changed signal value to avoid
-stale waits, and reject cross-queue use. Artifact
+Consumers require an already-submitted matching producer signal, retain the
+label while recorded, and require a changed signal value to avoid stale waits.
+The minimal compute-to-graphics label dependency is hardware-qualified on exact
+FW 5.50; resource ownership transfer remains unqualified. Artifact
 `1af09900242e5e0af40c12dfb68bd8ea4fb059bdb85654d969cfff88cb15d016` passed
 the producer/consumer no-CPU-wait compute oracle, bounded completion, readback,
 and full teardown on exact FW 5.50. Labels enforce strictly increasing 32-bit
 timeline points and reject repeat, decreasing, or wrapping values; submit
-wait/signal lists and cross-queue labels remain unqualified.
+wait/signal lists and cross-queue resource ownership remain unqualified.
 
 The first multi-command submission path is now active for graphics: a 2–63
 member batch is validated as one queue-owned frame and receives one bounded

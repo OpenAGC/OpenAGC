@@ -473,8 +473,8 @@ passed a producer-then-consumer public compute oracle without a CPU wait
 between submissions, followed by bounded-fence readback and full teardown on
 exact FW 5.50. Labels now enforce strictly increasing 32-bit timeline points
 and reject repeat, decreasing, or wraparound values before PM4 mutation. Submit
-wait/signal lists, cross-queue labels, and ownership transfers remain
-intentionally rejected.
+wait/signal lists and resource ownership transfers remain intentionally
+rejected.
 
 Exit criteria: exact host fixtures cover the supported transition matrix and
 atomic short-buffer failure; FW 5.50 and FW 11.60 gates cover render-to-shader,
