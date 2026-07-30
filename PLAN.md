@@ -334,6 +334,11 @@ the runner and shared teardown on FW 11.60 only.
   hashes, packed FNV64 `0x2aab55d32909e483`, immediate fences, and clean
   teardown. Exact FW 5.50 replay remains pending. See
   `analysis/fw1160_rgba16_uint_portable_qualification_20260730.md`.
+- `R16_SINT` is host-qualified as append-only value 23 with gfx1013 `16`,
+  SINT, standard swap, two bytes per pixel, and SINT16_ABGR export 8. Exact
+  PM4 (`CB_COLOR0_INFO=0x00070508`), all-profile selection, every
+  short-buffer boundary, invalid-enum behavior, and maximum 64-bit layout
+  arithmetic pass. Its dedicated signed-integer portable shader gate is next.
 - Seven additional offscreen format gates now build under the same exact
   profile and bounded runner: R8, RG8, RGB10A2, R11G11B10, R32, RG32, and
   RGBA32. All seven passed twice on FW 11.60; logged RG32 reproduced FNV64
@@ -527,7 +532,7 @@ After normalized formats pass, qualify:
 1. `R16_UINT` — complete on FW 11.60; exact FW 5.50 replay pending.
 2. `RG16_UINT` — complete on FW 11.60; exact FW 5.50 replay pending.
 3. `RGBA16_UINT` — complete on FW 11.60; exact FW 5.50 replay pending.
-4. `R16_SINT`.
+4. `R16_SINT` — host-qualified; dedicated signed-integer gate pending.
 5. `RG16_SINT`.
 6. `RGBA16_SINT`.
 
