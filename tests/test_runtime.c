@@ -6124,6 +6124,164 @@ static void test_runtime_fence_deferred_free(void)
         "deferred-free device destruction succeeds");
 }
 
+static void test_runtime_batch_deferred_retirement_stress(void)
+{
+    enum { kCycles = 32u };
+    AgcDevice device = create_device();
+    AgcQueue queue = create_queue(device, kAgcQueueCompute);
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
+    AgcGpuLabelDesc label_desc = AGC_GPU_LABEL_DESC_INIT;
+    AgcBufferDesc buffer_desc = AGC_BUFFER_DESC_INIT;
+    AgcImageDesc image_desc = AGC_IMAGE_DESC_INIT;
+    AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    AgcCommandBuffer commands[2] = {NULL, NULL};
+    AgcFence fence = NULL;
+    AgcGpuLabel body_labels[2] = {NULL, NULL};
+    AgcMemoryStats baseline = AGC_MEMORY_STATS_INIT;
+    uint32_t cycle;
+
+    command_desc.queue_type = kAgcQueueCompute;
+    command_desc.capacity_dwords = 256u;
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc,
+        &commands[0]), AGC_OK, "stress first batch command creates");
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc,
+        &commands[1]), AGC_OK, "stress second batch command creates");
+    TEST_ASSERT_EQ(agcCreateFence(device, &fence_desc, &fence), AGC_OK,
+        "stress batch fence creates");
+    TEST_ASSERT_EQ(agcCreateGpuLabel(device, &label_desc, &body_labels[0]),
+        AGC_OK, "stress first body label creates");
+    TEST_ASSERT_EQ(agcCreateGpuLabel(device, &label_desc, &body_labels[1]),
+        AGC_OK, "stress second body label creates");
+    TEST_ASSERT_EQ(agcGetMemoryStats(device, &baseline), AGC_OK,
+        "stress baseline memory statistics query succeeds");
+    submit.command_buffer_count = 2u;
+    submit.command_buffers = commands;
+    buffer_desc.size = 4096u;
+    buffer_desc.usage = AGC_BUFFER_USAGE_TRANSFER_DST_BIT;
+    buffer_desc.flags = AGC_BUFFER_CREATE_READBACK_BIT;
+    image_desc.width = 64u;
+    image_desc.height = 64u;
+    image_desc.format = AGC_FORMAT_RGBA8_UNORM;
+    image_desc.usage = AGC_IMAGE_USAGE_TRANSFER_SRC_BIT |
+        AGC_IMAGE_USAGE_TRANSFER_DST_BIT;
+
+    for (cycle = 0u; cycle < kCycles; ++cycle) {
+        AgcResourceTransition first[2] = {
+            AGC_RESOURCE_TRANSITION_INIT,
+            AGC_RESOURCE_TRANSITION_INIT,
+        };
+        AgcResourceTransition second[2] = {
+            AGC_RESOURCE_TRANSITION_V2_INIT,
+            AGC_RESOURCE_TRANSITION_V2_INIT,
+        };
+        AgcMemoryStats pending = AGC_MEMORY_STATS_INIT;
+        AgcMemoryStats collected = AGC_MEMORY_STATS_INIT;
+        AgcBuffer buffer = NULL;
+        AgcImage image = NULL;
+
+        TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &buffer), AGC_OK,
+            "stress batch buffer creates");
+        TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &image), AGC_OK,
+            "stress batch image creates");
+        first[0].resource_type = kAgcResourceTypeBuffer;
+        first[0].buffer = buffer;
+        first[0].buffer_size = buffer_desc.size;
+        first[0].before = kAgcResourceUsageUndefined;
+        first[0].after = kAgcResourceUsageCopyDestination;
+        first[0].before_owner = kAgcResourceOwnerHost;
+        first[0].after_owner = kAgcResourceOwnerCompute;
+        first[1].resource_type = kAgcResourceTypeImage;
+        first[1].image = image;
+        first[1].image_range =
+            (AgcImageSubresourceRange)AGC_IMAGE_SUBRESOURCE_RANGE_INIT;
+        first[1].before = kAgcResourceUsageUndefined;
+        first[1].after = kAgcResourceUsageCopyDestination;
+        first[1].before_owner = kAgcResourceOwnerHost;
+        first[1].after_owner = kAgcResourceOwnerCompute;
+        second[0].resource_type = kAgcResourceTypeBuffer;
+        second[0].buffer = buffer;
+        second[0].buffer_size = buffer_desc.size;
+        second[0].before = kAgcResourceUsageCopyDestination;
+        second[0].after = kAgcResourceUsageHostRead;
+        second[0].before_owner = kAgcResourceOwnerCompute;
+        second[0].after_owner = kAgcResourceOwnerHost;
+        second[0].flags = AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT;
+        second[1].resource_type = kAgcResourceTypeImage;
+        second[1].image = image;
+        second[1].image_range =
+            (AgcImageSubresourceRange)AGC_IMAGE_SUBRESOURCE_RANGE_INIT;
+        second[1].before = kAgcResourceUsageCopyDestination;
+        second[1].after = kAgcResourceUsageHostRead;
+        second[1].before_owner = kAgcResourceOwnerCompute;
+        second[1].after_owner = kAgcResourceOwnerHost;
+        second[1].flags = AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT;
+
+        TEST_ASSERT_EQ(agcBeginCommandBuffer(commands[0]), AGC_OK,
+            "stress first batch command begins");
+        TEST_ASSERT_EQ(agcCmdTransitionResources(commands[0], 2u, first),
+            AGC_OK, "stress first batch transitions record");
+        TEST_ASSERT_EQ(agcCmdSignalGpuLabel(commands[0], body_labels[0],
+            cycle + 1u), AGC_OK, "stress first batch body signal records");
+        TEST_ASSERT_EQ(agcEndCommandBuffer(commands[0]), AGC_OK,
+            "stress first batch command ends");
+        TEST_ASSERT_EQ(agcBeginCommandBuffer(commands[1]), AGC_OK,
+            "stress second batch command begins");
+        TEST_ASSERT_EQ(agcCmdTransitionResources(commands[1], 2u, second),
+            AGC_OK, "stress dependent batch transitions record");
+        TEST_ASSERT_EQ(agcCmdSignalGpuLabel(commands[1], body_labels[1],
+            cycle + 1u), AGC_OK, "stress second batch body signal records");
+        TEST_ASSERT_EQ(agcEndCommandBuffer(commands[1]), AGC_OK,
+            "stress second batch command ends");
+        TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
+            "stress two-command batch submits");
+        TEST_ASSERT_EQ(agcDestroyBufferDeferred(buffer, fence), AGC_OK,
+            "submitted batch buffer enters deferred retirement");
+        TEST_ASSERT_EQ(agcDestroyImageDeferred(image, fence), AGC_OK,
+            "submitted batch image enters deferred retirement");
+        TEST_ASSERT_EQ(agcGetMemoryStats(device, &pending), AGC_OK,
+            "stress pending memory statistics query succeeds");
+        TEST_ASSERT_EQ(pending.deferred_free_count, 2u,
+            "both submitted resources remain queued before command reset");
+        TEST_ASSERT_EQ(agcWaitFence(fence, UINT64_C(200000000)), AGC_OK,
+            "stress batch fence completes within finite timeout");
+        TEST_ASSERT_EQ(agcCollectDeferredFrees(device), AGC_ERROR_BUSY,
+            "completed fence cannot bypass live command references");
+        TEST_ASSERT_EQ(agcResetCommandBuffer(commands[1]), AGC_OK,
+            "stress second batch command releases resources");
+        TEST_ASSERT_EQ(agcResetCommandBuffer(commands[0]), AGC_OK,
+            "stress first batch command releases resources");
+        TEST_ASSERT_EQ(agcCollectDeferredFrees(device), AGC_OK,
+            "stress retired batch resources collect after reset");
+        TEST_ASSERT_EQ(agcGetMemoryStats(device, &collected), AGC_OK,
+            "stress collected memory statistics query succeeds");
+        TEST_ASSERT_EQ(collected.deferred_free_count, 0u,
+            "stress deferred queue returns to baseline each cycle");
+        TEST_ASSERT_EQ(collected.live_allocation_count,
+            baseline.live_allocation_count,
+            "stress live allocation count returns to baseline each cycle");
+        TEST_ASSERT_EQ(collected.live_bytes, baseline.live_bytes,
+            "stress live bytes return to baseline each cycle");
+        TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+            "stress batch fence resets for next cycle");
+    }
+
+    TEST_ASSERT_EQ(agcDestroyFence(fence), AGC_OK,
+        "stress batch fence destroys");
+    TEST_ASSERT_EQ(agcDestroyGpuLabel(body_labels[1]), AGC_OK,
+        "stress second body label destroys");
+    TEST_ASSERT_EQ(agcDestroyGpuLabel(body_labels[0]), AGC_OK,
+        "stress first body label destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(commands[1]), AGC_OK,
+        "stress second batch command destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(commands[0]), AGC_OK,
+        "stress first batch command destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
+        "stress batch queue destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "stress batch device destroys without leaks");
+}
+
 static void test_runtime_present_chain(void)
 {
     AgcDevice device = create_device();
@@ -6218,16 +6376,21 @@ static void test_runtime_present_chain(void)
 
     TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
         "present-to-render command resets");
+    TEST_ASSERT_EQ(agcDestroyImageDeferred(images[0], fence), AGC_OK,
+        "present-owned image enters deferred retirement");
+    TEST_ASSERT_EQ(agcPresent(present_chain, 0u, 3u, fence,
+        UINT64_C(1000000)), AGC_ERROR_INVALID_STATE,
+        "retiring present image rejects new flips");
     TEST_ASSERT_EQ(agcDestroyPresentChain(present_chain), AGC_OK,
         "present chain releases registered image");
+    TEST_ASSERT_EQ(agcCollectDeferredFrees(device), AGC_OK,
+        "present image collects after dependency release");
     TEST_ASSERT_EQ(agcDestroyFence(fence), AGC_OK,
         "present readiness fence destroys");
     TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
         "present command destroys");
     TEST_ASSERT_EQ(agcDestroyImage(images[1]), AGC_OK,
         "released second present image destroys");
-    TEST_ASSERT_EQ(agcDestroyImage(images[0]), AGC_OK,
-        "released first present image destroys");
     TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
         "present queue destroys");
     TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
@@ -6275,5 +6438,6 @@ void test_suite_runtime(void)
     TEST_RUN(test_runtime_all_backing_categories);
     TEST_RUN(test_runtime_heap_staging_and_stats);
     TEST_RUN(test_runtime_fence_deferred_free);
+    TEST_RUN(test_runtime_batch_deferred_retirement_stress);
     TEST_RUN(test_runtime_present_chain);
 }

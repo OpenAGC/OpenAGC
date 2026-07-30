@@ -602,6 +602,17 @@ unreachable, so it is not qualification evidence and must not be rerun.
 Resume only through the replacement five-stage guarded ladder after reboot;
 see `analysis/runtime_present_attempt_fw550_20260731.md`.
 
+Runtime API v14 closes the deferred-retirement contract gap exposed by the
+exit audit. Submitted buffer/image references may now enter fence-keyed
+retirement, while actual allocation reuse still waits for both fence completion
+and command/dependency release. A 32-cycle generic stress test submits two
+typed DCBs per cycle, queues both referenced resources, verifies collection is
+busy before command reset, then proves deferred count, allocation count, and
+live bytes return exactly to baseline. The matching Prospero artifact
+`333a0f82a29f4535cf87bc741860d1a32c748b09449f4aaa463f677a835206d2`
+is ready but hardware qualification awaits console recovery. See
+`analysis/runtime_batch_deferred_retirement_host_20260731.md`.
+
 Exit criteria: exact host fixtures cover the supported transition matrix and
 atomic short-buffer failure; FW 5.50 and FW 11.60 gates cover render-to-shader,
 compute-to-copy, copy-to-shader, host-read, and present-to-render; repeated

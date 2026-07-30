@@ -174,6 +174,16 @@ open: one-buffer FW 5.50 registration rejected safely, while the first
 two-buffer combined attempt stopped returning and left console services
 unreachable. That artifact must not be rerun; use only the staged replacement
 after reboot. See `analysis/runtime_present_attempt_fw550_20260731.md`.
+Runtime API v14 permits buffer/image retirement while submitted command or
+dependent-object references remain. Objects reject new use immediately, but
+the collector requires both the finite-wait fence and reference release before
+recycling storage. Generic coverage passes 32 two-command batch cycles with
+buffer and image retirement, pre-reset busy collection, command reset, and
+exact deferred/live-count/live-byte baselines; present-chain retention is also
+covered. Prospero builds the identical stress artifact with SHA-256
+`333a0f82a29f4535cf87bc741860d1a32c748b09449f4aaa463f677a835206d2`,
+but it remains hardware-unqualified while the FW 5.50 console is offline. See
+`analysis/runtime_batch_deferred_retirement_host_20260731.md`.
 Descriptor binds now fail closed without an explicit compatible typed state:
 read-only descriptors require `shader-read`; storage descriptors require
 `shader-read` or `shader-write` while reflection lacks per-binding access

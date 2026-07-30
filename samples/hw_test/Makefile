@@ -419,6 +419,12 @@ agc_runtime_compute_batch_submit_lists.elf: agc_runtime_batch_submit_lists.c gpu
 		-DAGC_BATCH_QUEUE_NAME='"compute"' -o $@ \
 		agc_runtime_batch_submit_lists.c $(AGC_LDFLAGS)
 
+# Repeated two-DCB typed transition batches retire their referenced buffer and
+# image against the batch fence, then prove exact memory-stat baselines.
+agc_runtime_retirement_stress.elf: agc_runtime_retirement_stress.c \
+		gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -o $@ agc_runtime_retirement_stress.c $(AGC_LDFLAGS)
+
 # Public native-runtime graphics probe. It intentionally builds an isolated
 # compiler/runtime artifact pair rather than changing the qualified manual
 # agc_graphics.elf baseline.

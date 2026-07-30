@@ -7971,9 +7971,9 @@ int32_t PS5_SYSV_ABI agcDestroyBufferDeferred(
     if (!buffer || buffer->magic != AGC_MAGIC_BUFFER ||
         !agcDeviceValid(buffer->device) || buffer->deferred)
         return AGC_ERROR_INVALID_ARGUMENT;
-    if (buffer->recorded_refs != 0u || buffer->transfer_pending)
+    if (buffer->transfer_pending)
         return AGC_ERROR_BUSY;
-    if (fence && fence->signaled)
+    if (fence && fence->signaled && buffer->recorded_refs == 0u)
         return agcDestroyBuffer(buffer);
     result = agcQueueDeferredFree(buffer->device, AGC_OBJECT_TYPE_BUFFER,
         buffer, fence);
@@ -7990,10 +7990,10 @@ int32_t PS5_SYSV_ABI agcDestroyImageDeferred(
     if (!image || image->magic != AGC_MAGIC_IMAGE ||
         !agcDeviceValid(image->device) || image->deferred)
         return AGC_ERROR_INVALID_ARGUMENT;
-    if (image->dependency_refs != 0u || image->recorded_refs != 0u ||
-        image->transfer_pending)
+    if (image->transfer_pending)
         return AGC_ERROR_BUSY;
-    if (fence && fence->signaled)
+    if (fence && fence->signaled && image->dependency_refs == 0u &&
+        image->recorded_refs == 0u)
         return agcDestroyImage(image);
     result = agcQueueDeferredFree(image->device, AGC_OBJECT_TYPE_IMAGE,
         image, fence);

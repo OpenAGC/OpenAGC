@@ -180,6 +180,25 @@ transition-only, first-flip, round-trip-transition, and final-flip stages after
 a console reboot. See
 [`runtime_present_attempt_fw550_20260731.md`](../analysis/runtime_present_attempt_fw550_20260731.md).
 
+Runtime API v14 makes fence-keyed retirement usable for resources referenced
+by submitted command buffers. `agcDestroyBufferDeferred` and
+`agcDestroyImageDeferred` immediately reject new resource use, but an existing
+command, image view, or present chain may continue to retain the object. The
+collector releases allocation storage only after the named fence has completed
+and all retained references have been released by command reset/destruction or
+dependent-object destruction. A completed fence alone cannot recycle live
+command storage.
+
+The generic stress fixture runs 32 two-command compute batches. Each batch
+transitions one buffer and one image through a v2 batch dependency, retires
+both objects against the batch fence while four command references remain,
+uses a 200 ms finite wait, proves pre-reset collection returns
+`AGC_ERROR_BUSY`, resets both commands, and returns deferred count, live
+allocation count, and live bytes to the exact baseline. It also proves a
+present-chain dependency delays image collection. The identical Prospero
+artifact is built but not yet deployed; see
+[`runtime_batch_deferred_retirement_host_20260731.md`](../analysis/runtime_batch_deferred_retirement_host_20260731.md).
+
 Descriptor binding is also state-gated before descriptor-table mutation:
 sampled, uniform, and input descriptors require `ShaderRead`; storage
 descriptors require `ShaderRead` or `ShaderWrite` for legacy reflection. The

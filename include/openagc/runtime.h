@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-#define AGC_RUNTIME_API_VERSION 13u
+#define AGC_RUNTIME_API_VERSION 14u
 #define AGC_RUNTIME_STRUCTURE_VERSION_1 1u
 #define AGC_RUNTIME_STRUCTURE_VERSION_2 2u
 #define AGC_RUNTIME_PROFILE_NAME_SIZE 48u
@@ -1099,6 +1099,9 @@ int32_t PS5_SYSV_ABI agcDestroyQueue(AgcQueue queue);
 int32_t PS5_SYSV_ABI agcCreateBuffer(
     AgcDevice device, const AgcBufferDesc *desc, AgcBuffer *buffer_out);
 int32_t PS5_SYSV_ABI agcDestroyBuffer(AgcBuffer buffer);
+/* Queues retirement against a finite-wait fence. Existing command references
+ * may remain, but allocation reuse waits for both fence completion and release
+ * of those references by command reset/destruction. */
 int32_t PS5_SYSV_ABI agcDestroyBufferDeferred(
     AgcBuffer buffer, AgcFence fence);
 int32_t PS5_SYSV_ABI agcWriteBuffer(
@@ -1108,6 +1111,7 @@ int32_t PS5_SYSV_ABI agcReadBuffer(
 int32_t PS5_SYSV_ABI agcCreateImage(
     AgcDevice device, const AgcImageDesc *desc, AgcImage *image_out);
 int32_t PS5_SYSV_ABI agcDestroyImage(AgcImage image);
+/* Existing view/present-chain/command references delay collection safely. */
 int32_t PS5_SYSV_ABI agcDestroyImageDeferred(
     AgcImage image, AgcFence fence);
 /* Creates a main-display chain from dedicated runtime images. Images must use
