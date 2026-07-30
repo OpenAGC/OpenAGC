@@ -597,7 +597,9 @@ all six pinned artifacts for identical-byte FW 5.50 replay and proceed to the
   (`CB_COLOR0_INFO=0x0007042c`), all-profile selection, every short-buffer
   boundary, invalid-enum behavior, and maximum 64-bit layout arithmetic pass.
   Its dedicated `32_GR` shader and two-lane exact-value oracle build as a
-  firmware-neutral portable gate. Pin its final bytes before execution.
+  firmware-neutral portable gate. The final bytes are pinned as SHA-256
+  `da7c0203a288d994986ff37100e3eac5f8cb962fca00a4821c53f54fc9cb9511`.
+  Run those exact bytes twice on FW 11.60; preserve FW 5.50 replay as pending.
 
 These formats need dedicated integer-output pixel shaders. Do not qualify them
 using a floating-point shader and assume the conversion is correct. Their

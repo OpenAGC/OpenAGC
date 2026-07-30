@@ -298,8 +298,10 @@ identical-byte FW 5.50 replay remains pending. See
 PM4 stream, all 39 profiles, every short command-buffer boundary, invalid
 enums, and maximum 64-bit surface arithmetic. The generic suite now passes
 10,550 assertions. Its dedicated `32_GR` shader, two-lane exact oracle, and
-fail-closed runner checks build as a firmware-neutral portable gate; final-byte
-pinning and hardware execution remain pending.
+fail-closed runner checks build as a firmware-neutral portable gate. Its final
+bytes are pinned as SHA-256
+`da7c0203a288d994986ff37100e3eac5f8cb962fca00a4821c53f54fc9cb9511`;
+two FW 11.60 runs and the identical-byte FW 5.50 replay remain pending.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability
