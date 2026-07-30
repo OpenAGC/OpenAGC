@@ -1338,12 +1338,20 @@ static void test_runtime_multi_graphics_submission(void)
     AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
     AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
     AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    AgcSubmitInfo single_submit = AGC_SUBMIT_INFO_INIT;
+    AgcSubmitInfo list_submit = AGC_SUBMIT_INFO_V2_INIT;
+    AgcGpuLabelDesc label_desc = AGC_GPU_LABEL_DESC_INIT;
+    AgcGpuLabelInfo label_info = AGC_GPU_LABEL_INFO_INIT;
+    AgcGpuLabelPoint waits[1] = { AGC_GPU_LABEL_POINT_INIT };
+    AgcGpuLabelPoint signals[1] = { AGC_GPU_LABEL_POINT_INIT };
     AgcGraphicsPipeline pipeline = NULL;
     AgcBuffer index_buffer = NULL;
     AgcCommandBuffer first = NULL;
     AgcCommandBuffer second = NULL;
     AgcCommandBuffer commands[2];
     AgcFence fence = NULL;
+    AgcGpuLabel source_label = NULL;
+    AgcGpuLabel destination_label = NULL;
     AgcFenceInfo fence_info = AGC_FENCE_INFO_INIT;
     AgcCommandBufferState state;
 
@@ -1398,12 +1406,69 @@ static void test_runtime_multi_graphics_submission(void)
     }
     TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
         "completed multi-submit fence resets");
+    TEST_ASSERT_EQ(agcCreateGpuLabel(device, &label_desc, &source_label),
+        AGC_OK, "multi-submit source label creates");
+    TEST_ASSERT_EQ(agcCreateGpuLabel(device, &label_desc, &destination_label),
+        AGC_OK, "multi-submit destination label creates");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(first), AGC_OK,
+        "multi-submit list producer begins");
+    TEST_ASSERT_EQ(agcCmdSignalGpuLabel(first, source_label, 1u), AGC_OK,
+        "multi-submit list producer signal records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(first), AGC_OK,
+        "multi-submit list producer ends");
+    single_submit.command_buffer_count = 1u;
+    single_submit.command_buffers = &first;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &single_submit, fence), AGC_OK,
+        "multi-submit list producer submits");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(first), AGC_OK,
+        "multi-submit list producer resets");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "multi-submit list producer fence resets");
+    for (uint32_t i = 0u; i < 2u; ++i) {
+        TEST_ASSERT_EQ(agcBeginCommandBuffer(commands[i]), AGC_OK,
+            "multi-submit list command begins");
+        TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(commands[i], pipeline), AGC_OK,
+            "multi-submit list graphics pipeline binds");
+        TEST_ASSERT_EQ(agcCmdBindIndexBuffer(commands[i], index_buffer, 0u,
+            kAgcIndexSize16), AGC_OK,
+            "multi-submit list index buffer binds");
+        TEST_ASSERT_EQ(agcCmdDrawIndexed(commands[i], 3u, 1u, 0u, 0, 0u),
+            AGC_OK, "multi-submit list indexed draw records");
+        TEST_ASSERT_EQ(agcEndCommandBuffer(commands[i]), AGC_OK,
+            "multi-submit list command ends");
+    }
+    waits[0].label = source_label;
+    waits[0].value = 1u;
+    signals[0].label = destination_label;
+    signals[0].value = 2u;
+    list_submit.command_buffer_count = 2u;
+    list_submit.command_buffers = commands;
+    list_submit.wait_count = 1u;
+    list_submit.waits = waits;
+    list_submit.signal_count = 1u;
+    list_submit.signals = signals;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &list_submit, fence), AGC_OK,
+        "multi-submit list atomically injects first wait and final signal");
+    TEST_ASSERT_EQ(agcGetGpuLabelInfo(destination_label, &label_info), AGC_OK,
+        "multi-submit list destination label diagnostics query succeeds");
+    TEST_ASSERT_EQ(label_info.scheduled_value, 2u,
+        "multi-submit list commits final signal only after batch submit");
+    for (uint32_t i = 0u; i < 2u; ++i) {
+        TEST_ASSERT_EQ(agcResetCommandBuffer(commands[i]), AGC_OK,
+            "multi-submit list command resets");
+    }
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "multi-submit list fence resets");
     commands[1] = commands[0];
     TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence),
         AGC_ERROR_INVALID_ARGUMENT,
         "duplicate multi-submit command buffer rejects before mutation");
     TEST_ASSERT_EQ(agcDestroyFence(fence), AGC_OK,
         "multi-submit fence destroys");
+    TEST_ASSERT_EQ(agcDestroyGpuLabel(destination_label), AGC_OK,
+        "multi-submit destination label destroys");
+    TEST_ASSERT_EQ(agcDestroyGpuLabel(source_label), AGC_OK,
+        "multi-submit source label destroys");
     TEST_ASSERT_EQ(agcDestroyCommandBuffer(second), AGC_OK,
         "second multi-submit command destroys");
     TEST_ASSERT_EQ(agcDestroyCommandBuffer(first), AGC_OK,

@@ -101,7 +101,9 @@ producer point before mutation, inserts waits before the command body and EOP
 signals after it, and snapshots full command storage. Validation, capacity,
 flush, or driver-submit failure restores bytes and cursor exactly and releases
 temporary label retains. Signal points publish only after successful submit.
-Lists on graphics multi-command batches remain fail-closed.
+For graphics batches, the first command receives the wait preamble and the
+last receives the signal tail; both endpoint storages are restored together on
+rejection. That path is host-qualified; its hardware row remains open.
 
 `AgcGpuLabel` provides the first GPU-side dependency primitive. A producer
 records `agcCmdSignalGpuLabel`; it emits the qualified EOP release write. A

@@ -481,7 +481,10 @@ with a full command-storage snapshot restoring bytes/cursor on every rejected
 path. The exact FW 5.50 standard-PS5 producer → wait/signal bridge → consumer
 chain passed without CPU waits, artifact
 `4e3f0e5996e9912a24ac476862c15901c3e4512b3e2fa19ec78df2bebef9d4e2`.
-Graphics multi-command submit lists and FW 11.60 qualification remain open.
+The same transaction now applies to graphics batches: waits prepend the first
+DCB and signals append to the final DCB, with both endpoint storages rolling
+back together. Generic coverage is complete; FW 5.50/FW 11.60 batch-list
+qualification remains open.
 
 Runtime API v8 adds the first typed queue-ownership handoff: a v2 transition
 releases a whole GPU-written resource on its source queue and writes the
