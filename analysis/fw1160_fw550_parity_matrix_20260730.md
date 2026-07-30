@@ -22,7 +22,7 @@ matching current-source FW 5.50 mirror still needs to run.
 | HS-offchip carrier | Zero-entry form qualified | Non-empty patch-list execution is missing |
 | Workload packets | Fail closed | Every known direct and inline form stalls; recover a new prerequisite before another gate |
 | EOP flip | Disabled | FW 11.60 hardware qualification is missing |
-| Linear VideoOut registration patch | Prepared | FW 11.60 SPRX branch recovered at `+0x9922`; bounded presentation gate pending |
+| Linear VideoOut registration patch | Prepared | FW 11.60 SPRX branch recovered at `+0x9922`; exact two-run public presentation gate built |
 
 Suspend-point query is a disabled permission export on both profiles and is
 not a parity gap.

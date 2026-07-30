@@ -32,3 +32,18 @@ and rejection of an unevidenced firmware key.
 
 Hardware qualification on FW 11.60 remains required before presentation is
 advertised as parity-complete.
+
+## Bounded hardware gate
+
+`agc_videoout_public_fw1160_logged.elf` uses only the public OpenAGC VideoOut
+lifecycle. While the direct AGC context is active it requires V12 defaults and
+async setup, registers two caller-owned linear scanout buffers through the
+firmware-keyed patch, executes a GPU `WRITE_DATA` marker, performs two bounded
+VSYNC flips, closes VideoOut, shuts down the driver, and releases its flexible
+and direct memory before self-termination.
+
+The file-backed runner executes the process-cleanup ELF immediately before
+each payload and defaults to two repetitions. It pins artifact SHA-256
+`43927ea5dfb6d6f8253cf109cfa2b817f766918757979a22cdf419aa89e556e7` and
+requires exact profile, registration/restoration, marker, flip, teardown, and
+final PASS lines. This gate is prepared but not yet hardware-run.

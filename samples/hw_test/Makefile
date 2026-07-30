@@ -173,6 +173,18 @@ fw1160_sony_workload_check: agc_fw1160_sony_workload.elf
 agc_videoout.elf: agc_videoout.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -o $@ agc_videoout.c $(AGC_LDFLAGS)
 
+agc_videoout_public_fw1160_logged.elf: agc_videoout_public.c gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_EXPECT_FIRMWARE_ABI_KEY=0x1160u \
+		-DAGC_RESULT_LOG_PATH='"/data/homebrew/openagc_fw1160_videoout/result.log"' \
+		-o $@ agc_videoout_public.c $(AGC_LDFLAGS)
+
+.PHONY: videoout_public_fw1160
+videoout_public_fw1160: agc_videoout_public_fw1160_logged.elf run_fw1160_videoout.sh
+	PS5_HOST=$(PS5_HOST) VIDEOOUT_ARTIFACT=$(THIS_DIR)/$< \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) \
+		EXPECTED_ARTIFACT_SHA256=43927ea5dfb6d6f8253cf109cfa2b817f766918757979a22cdf419aa89e556e7 \
+		VIDEOOUT_ITERATIONS=$(or $(VIDEOOUT_ITERATIONS),2) sh ./run_fw1160_videoout.sh
+
 # Compute dispatch test (AGC + compute shader + VideoOut)
 agc_compute.elf: agc_compute.c ps5_video_out.h gpu_credentials.h shaders/fill_color_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -o $@ agc_compute.c $(AGC_LDFLAGS)

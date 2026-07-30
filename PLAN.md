@@ -2091,8 +2091,10 @@ Acceptance criteria:
 - FW 11.60 VideoOut preparation no longer reuses the unsafe FW 5.50
   `+0x7e61` patch. Exact SPRX comparison recovered the evolved branch at
   `+0x9922`; the core verifies a firmware-keyed six-byte signature and fails
-  closed for other layouts. Run a bounded public VideoOut presentation gate
-  next; see `analysis/videoout_linear_patch_versions_20260730.md`.
+  closed for other layouts. The pinned public gate now combines live V12
+  defaults/async state, a GPU marker, two bounded flips, complete teardown,
+  file-backed verdicts, and self-termination. Run it twice next; see
+  `analysis/videoout_linear_patch_versions_20260730.md`.
 - The public `sceAgcDriverIsSuspendPointInFlightDirect` gap is closed: all 39
   active drivers return userspace permission error `0x8a6d0001` without an
   ioctl. OpenAGC preserves the 32-bit return ABI instead of truncating it to

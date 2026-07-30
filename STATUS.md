@@ -49,7 +49,10 @@ the full system version to the four-digit ABI key, verifies the instruction
 before patching, restores it immediately after registration, and rejects
 unknown firmware layouts. Host fixtures lock both profiles and the Prospero
 library cross-builds without warnings. FW 11.60 presentation hardware
-qualification is still pending. See
+qualification is still pending. A pinned public-API payload and two-run
+file-backed runner are prepared with a live GPU marker, bounded flips, complete
+memory teardown, and the process-cleanup ELF immediately before each launch.
+See
 `analysis/videoout_linear_patch_versions_20260730.md`.
 
 ## Reusable driver and flexible-memory teardown (2026-07-29)
