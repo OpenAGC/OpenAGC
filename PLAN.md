@@ -1229,11 +1229,12 @@ full remapped R/G ranges, zero decode mismatches/error, channel independence,
 and FNV64 `0xf1464077ada8ce8d` on both runs. Both BC5 variants are
 hardware-qualified on both endpoints; qualify BC7 next.
 
-BC7 UNORM pass 1 on FW 5.50 used pinned SHA-256
+BC7 UNORM on FW 5.50 used pinned SHA-256
 `a98adaa1125c6ab1590d5c3cb1d65e19b0573ccf4f5e5a1ec0b40ad93bb17db6`
-and reproduced `224640` changed pixels, mode counts `{4:205880,6:18760}`, alpha
-range `0..255`, zero exact mismatches, channel independence, and FNV64
-`0xf46729633292d01b`. Repeat the identical artifact once.
+twice and reproduced `224640` changed pixels, mode counts
+`{4:205880,6:18760}`, alpha range `0..255`, zero exact mismatches, channel
+independence, and FNV64 `0xf46729633292d01b` on both runs. BC7 UNORM is
+hardware-qualified on both endpoints; qualify BC7 SRGB next.
 The final firmware-neutral bytes are pinned as SHA-256
 `f74c393112fc465eace431a3fe288095ae4b3bf5ee993e8147ed0e9a2f22f2a4`
 for BC4 UNORM and
