@@ -807,6 +807,16 @@ for BC2 UNORM and
 for BC2 SRGB. Their guarded endpoint targets have no build prerequisites;
 FW 11.60 execution and identical-byte FW 5.50 replay remain pending.
 
+BC3 UNORM/SRGB portable gates now build using the same bounded array/mip
+sampling path. Each 16-byte block independently covers two 8-bit alpha
+endpoints, the 48-bit 3-bit alpha-index stream, RGB565 color endpoints, and
+the 2-bit color-index stream. Fixtures exercise both eight-alpha and
+six-alpha-plus-terminal interpolation modes. The independent CPU oracle uses
+the qualified BC4 rounding rule for interpolated alpha, applies SRGB only to
+RGB, demands exact RGBA8 agreement and the full 0..255 alpha range, validates
+all selection regions, and records a native hash. Pin the final neutral bytes
+before any hardware attempt.
+
 Use dedicated, deterministic source blocks containing endpoint, index,
 alpha, signed-range, and edge-block cases appropriate to each format. A
 hardware gate must sample the compressed texture into an already-qualified

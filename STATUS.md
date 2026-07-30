@@ -418,6 +418,15 @@ hash. Exact artifacts are pinned as SHA-256
 (SRGB), with no-prerequisite FW 11.60 and FW 5.50 targets. Hardware execution
 remains pending a clean FW 11.60 boot.
 
+BC3 UNORM and SRGB firmware-neutral gates now build and pass dependency
+verification. Their 16-byte fixtures combine the BC1-style RGB565 color field
+with BC4-style interpolated alpha, covering both alpha endpoint-order modes,
+terminal 0/255 entries, mip selection, a second array layer, and partial edge
+storage. The independent oracle decodes both fields, uses nearest rounding for
+alpha interpolation, converts only RGB for SRGB, and requires exact RGBA8
+agreement plus alpha endpoints 0 and 255. Artifact pinning and hardware
+execution remain pending.
+
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability
 ELF, non-indexed and indexed 10-dword multi-draw, GPU count-buffer selection,
