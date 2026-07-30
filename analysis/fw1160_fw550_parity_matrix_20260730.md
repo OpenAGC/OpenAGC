@@ -297,6 +297,13 @@ and independently produced the same exact color `227610/227610` and D32
 teardown, self-termination, and debugger absence all passed. Those exact counts
 are frozen for the identical-byte FW 11.60 replay.
 
+FW 11.60 pass 2 reproduced the pinned artifact and all exact color and D32
+counts, with successful fence, file-backed verdict, teardown,
+self-termination, and debugger absence. Isolated D32+4x RGBA8 MSAA resolve is
+hardware-qualified on both FW 5.50 and FW 11.60. The remaining MSAA parity
+work is a separately bounded sample-rate-shading gate; historical Vulkan
+evidence must not be substituted for an OpenAGC endpoint result.
+
 That prerequisite sequence is now complete. Two relinks against the committed
 shader records reproduced all eight artifacts byte-for-byte, and dependency
 inspection found only VideoOut, kernel, libc, and networking. The exact FW

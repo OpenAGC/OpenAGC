@@ -156,6 +156,11 @@ FW 11.60 pass 1 produced the same exact `227610/227610` resolved color and
 teardown, self-termination, and debugger absence. One exact-oracle replay
 remains for endpoint parity.
 
+FW 11.60 pass 2 reproduced the exact artifact, color and D32 counts, fence,
+file-backed verdict, teardown, self-termination, and debugger absence.
+Isolated D32+4x RGBA8 MSAA resolve is now hardware-qualified on both FW 5.50
+and FW 11.60. A distinct OpenAGC sample-rate-shading gate remains pending.
+
 All four subresource artifacts now reproduce across two relinks, avoid AGC
 SPRX dependencies, are preserved under full hashes, and have cleanup-first
 hash-pinned deploy targets with exact color and selected/outside metadata

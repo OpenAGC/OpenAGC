@@ -681,6 +681,10 @@ the runner and shared teardown on FW 11.60 only.
 - FW 11.60 pass 1 matched FW 5.50's exact color and D32 counts and left no
   residual process. Replay its identical pinned bytes with those counts now
   frozen in the gate.
+- FW 11.60 pass 2 reproduced every frozen oracle and clean teardown. Isolated
+  D32+4x RGBA8 resolve is qualified on both endpoints. Audit and prepare the
+  remaining OpenAGC sample-rate-shading gate; do not promote historical Vulkan
+  evidence as OpenAGC qualification.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and
