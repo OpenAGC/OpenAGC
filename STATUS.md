@@ -801,6 +801,10 @@ reproduced `224640` changed pixels, equal regions, alpha range `0..255`, zero
 exact mismatches, and FNV64 `0xae513a67c9bb483d` on both runs. All lifecycle
 gates passed. BC3 UNORM is hardware-qualified on both endpoints; SRGB is next.
 
+BC3 SRGB pass 1 on FW 5.50 reproduced the exact FW 11.60-qualified coverage,
+equal regions, alpha range `0..255`, zero exact mismatches, and FNV64
+`0x4cef62aedf2c8da1`. All lifecycle gates passed; one identical replay remains.
+
 BC2 UNORM on FW 5.50 used the exact FW 11.60-qualified bytes twice and
 reproduced `224640` changed pixels, equal regions, alpha range `0..255`, zero
 exact mismatches, and FNV64 `0xf3b07b5935bb483d` on both runs. All lifecycle
