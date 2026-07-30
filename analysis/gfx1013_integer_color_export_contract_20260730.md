@@ -58,5 +58,6 @@ The FW 11.60 and FW 5.50 guarded targets have no build prerequisites and
 authenticate the local and uploaded bytes. The previous SHA
 `8136a9a22005e1f9087b9d24402bac47ee66463a13c351500652276e34fa34b4`
 was retired after its single diagnostic run exposed psbc's stale 8-bit clamp.
-See `analysis/fw1160_r16_uint_first_attempt_20260730.md`. Hardware execution of
-the corrected bytes remains pending.
+See `analysis/fw1160_r16_uint_first_attempt_20260730.md`. The corrected bytes
+subsequently passed twice on exact FW 11.60; see
+`analysis/fw1160_r16_uint_portable_qualification_20260730.md`.

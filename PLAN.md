@@ -300,8 +300,10 @@ the runner and shared teardown on FW 11.60 only.
   oracle build as a firmware-neutral R16_UINT ELF. The unexecuted final bytes
   are pinned as SHA-256
   `aabefd4d05f8d7ea7f56f917ae79c23f60eccf801627f06a053451e74ae8bf18`;
-  run that artifact twice through the guarded FW 11.60 target next. See
-  `analysis/gfx1013_integer_color_export_contract_20260730.md`.
+  those identical bytes passed twice on FW `0x11600005`, reproducing exact
+  `0x0000..0xffff`, zero mismatches, FNV64 `0x95703f620261e483`, immediate
+  fences, and clean teardown. Exact FW 5.50 replay remains pending. See
+  `analysis/fw1160_r16_uint_portable_qualification_20260730.md`.
   The retired first artifact proved GPU execution but exposed a stale psbc
   8-bit clamp; sibling commit `c624c5c` fixes it. See
   `analysis/fw1160_r16_uint_first_attempt_20260730.md`.
@@ -495,8 +497,7 @@ reproducible component hashes.
 
 After normalized formats pass, qualify:
 
-1. `R16_UINT` — host-qualified; dedicated integer shader, portable native
-   oracle, and pinned neutral ELF complete; FW 11.60 execution pending.
+1. `R16_UINT` — complete on FW 11.60; exact FW 5.50 replay pending.
 2. `RG16_UINT`.
 3. `RGBA16_UINT`.
 4. `R16_SINT`.
