@@ -75,3 +75,10 @@ display-backed FW 5.50 counts (4,226 and 49,152) survive the viewport change.
 
 Stop on the first stall, mismatch, fault signature, or residual process. A GPU
 stall requires a full reboot before any further gate.
+
+The FW 5.50 uncompressed prerequisite has passed. The current-source ordinary
+D16/HTILE ELF was then rebuilt twice with identical SHA-256
+`a3f85b521571cd5249f00daffb94e4b5e1d3f32334fe48339694cb469c4c58df`,
+verified to avoid both AGC SPRX dependencies, and preserved under its full hash
+before execution. Its deploy recipe rejects changed bytes before network
+access. This artifact is the next and only permitted compressed-depth launch.
