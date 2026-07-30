@@ -58,7 +58,7 @@ reached its completion fence, shut the driver down, and returned PASS.
 | D32 HTILE ordinary/decompress/resummarize/expclear | Qualified | Qualified on both endpoints |
 | Combined D32+S8 HTILE and aspect masks | Qualified | Qualified on both endpoints |
 | HTILE mip and array subresources | Qualified | Qualified on both endpoints |
-| 4x MSAA | Missing | Wait for the FW 5.50 baseline regression |
+| 4x MSAA | Current-source endpoint artifacts build | Pin and hardware-qualify both mirrors |
 | Sample-rate shading | Missing | Add an exact invocation-count gate |
 
 The first 2026-07-30 D32 mirror followed 11 successful graphics payloads and
@@ -243,6 +243,19 @@ shutdown, final PASS, and no residual process. Current-source mip-1 and array-
 layer-1 HTILE isolation are hardware-qualified on both endpoints. Proceed to
 4x MSAA parity; do not rely on the older FW 5.50 VideoOut fixture as a current-
 source endpoint gate.
+
+Current-source exact-key headless 4x MSAA artifacts now build for FW `0x1160`
+and FW `0x0550`. They retain isolated RGBA8 `64KB_R_X` color, D32
+`64KB_Z_X`, four-sample raster state, and shader resolve into the bounded
+headless 1x target while keeping stencil, HTILE, expclear, CMASK, FMASK, and
+DCC disabled. The runner now requires the explicit 4x resolve verdict, exact
+MSAA result line, positive resolved color and native D32 classes, and optional
+frozen color/one/near/far counts. Its host fixture rejects a missing resolve
+verdict and wrong exact D32 class. The resolve diagnostic now identifies the
+headless destination, and the resolve viewport explicitly specifies negative-
+one-to-one clip space; both artifacts build without warnings. No deploy target
+exists until the artifacts reproduce, pass dependency inspection, and are
+preserved and hash-pinned.
 
 That prerequisite sequence is now complete. Two relinks against the committed
 shader records reproduced all eight artifacts byte-for-byte, and dependency

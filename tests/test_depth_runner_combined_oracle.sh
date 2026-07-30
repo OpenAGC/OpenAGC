@@ -12,6 +12,7 @@ printf 'cleanup bytes\n' > "$tmp/cleanup.elf"
 cat > "$tmp/result.log" <<'RESULT'
 Runtime profile FW ABI 0x1160: PASS
 GPU completion fence reached
+[MSAA] shader-resolved 4x RGBA8 to 1x headless target
 [Combined Expclear RMW] aspects=0x1 gate=ON offset=0x0 size=0x1000 selected=1024 expected=fffffff0 mismatch=0 outside-changed=0 reserved=PASS fence=48544c45: PASS
 [HTILE Readback] changed=1024 other=0 initial=fffff30f
 [HTILE Subresource Readback] selected-changed=1024 outside-changed=0
@@ -19,6 +20,7 @@ GPU completion fence reached
 [Depth Readback] raw D32: one=1755648 near=228096 far=228096
 [Stencil Readback] zero=2165248 replace-5a=456192 other=0
 [Depth+Stencil Result] markers=PASS color=PASS raw-depth=PASS stencil=PASS
+[Depth+4xMSAA Result] markers=PASS color=PASS raw-depth=PASS stencil=PASS
 Driver shutdown: PASS
 Graphics result: PASS
 RESULT
@@ -65,42 +67,55 @@ grep -q '^depth artifact SHA-256 mismatch$' "$tmp/hash-output"
 
 run_gate()
 {
-    PATH="$tmp/bin:$PATH" MOCK_RESULT="$tmp/result.log" \
+    PATH="$tmp/bin:$PATH" \
         MOCK_CLEANUP_TIMEOUT=1 PS5_HOST=mock \
         DEPTH_ARTIFACT="$tmp/depth.elf" \
         PROCESS_CLEANUP_ELF="$tmp/cleanup.elf" \
         RESULT_LOG_PATH=/data/homebrew/openagc_fw1160_depth/result.log \
         EXPECTED_HTILE_INITIAL=fffff30f EXPECTED_D32_FULL_RECT=1 \
         EXPECTED_D32_ONE_COUNT="$2" \
+        EXPECTED_D32_NEAR_COUNT="$6" \
+        EXPECTED_D32_FAR_COUNT="$7" \
         EXPECTED_HTILE_CHANGED=1024 \
         REQUIRE_HTILE_SUBRESOURCE=1 \
         EXPECTED_HTILE_SELECTED_CHANGED="$3" \
         EXPECTED_HTILE_OUTSIDE_CHANGED="$4" \
         EXPECTED_COLOR_GREEN_RED="$5" \
+        REQUIRE_MSAA_RESOLVE=1 \
+        MOCK_RESULT="$8" \
         EXPECTED_STENCIL_FULL_RECT=1 \
         EXPECTED_COMBINED_EXPCLEAR_ASPECTS="$1" \
         sh "$runner"
 }
 
-run_gate 1 1755648 1024 0 228096 > "$tmp/pass-output"
-if run_gate 1 1617408 1024 0 228096 > "$tmp/count-fail-output" 2>&1; then
+run_gate 1 1755648 1024 0 228096 228096 228096 "$tmp/result.log" > "$tmp/pass-output"
+if run_gate 1 1617408 1024 0 228096 228096 228096 "$tmp/result.log" > "$tmp/count-fail-output" 2>&1; then
     echo "depth runner accepted the wrong allocation-aware D32 count" >&2
     exit 1
 fi
-if run_gate 2 1755648 1024 0 228096 > "$tmp/fail-output" 2>&1; then
+if run_gate 2 1755648 1024 0 228096 228096 228096 "$tmp/result.log" > "$tmp/fail-output" 2>&1; then
     echo "depth runner accepted the wrong combined expclear aspect" >&2
     exit 1
 fi
-if run_gate 1 1755648 1023 0 228096 > "$tmp/selected-fail-output" 2>&1; then
+if run_gate 1 1755648 1023 0 228096 228096 228096 "$tmp/result.log" > "$tmp/selected-fail-output" 2>&1; then
     echo "depth runner accepted the wrong selected HTILE count" >&2
     exit 1
 fi
-if run_gate 1 1755648 1024 1 228096 > "$tmp/outside-fail-output" 2>&1; then
+if run_gate 1 1755648 1024 1 228096 228096 228096 "$tmp/result.log" > "$tmp/outside-fail-output" 2>&1; then
     echo "depth runner accepted the wrong outside HTILE count" >&2
     exit 1
 fi
-if run_gate 1 1755648 1024 0 31968 > "$tmp/color-fail-output" 2>&1; then
+if run_gate 1 1755648 1024 0 31968 228096 228096 "$tmp/result.log" > "$tmp/color-fail-output" 2>&1; then
     echo "depth runner accepted the wrong depth color count" >&2
+    exit 1
+fi
+if run_gate 1 1755648 1024 0 228096 228095 228096 "$tmp/result.log" > "$tmp/depth-fail-output" 2>&1; then
+    echo "depth runner accepted the wrong exact D32 class count" >&2
+    exit 1
+fi
+grep -v '^\[MSAA\]' "$tmp/result.log" > "$tmp/no-msaa.log"
+if run_gate 1 1755648 1024 0 228096 228096 228096 "$tmp/no-msaa.log" > "$tmp/msaa-fail-output" 2>&1; then
+    echo "depth runner accepted a missing MSAA resolve verdict" >&2
     exit 1
 fi
 

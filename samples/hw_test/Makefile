@@ -1392,6 +1392,14 @@ agc_depth_htile_array_fw550_headless.elf: shaders_depth agc_graphics.c ps5_video
 		-DAGC_HTILE_VALIDATION=1 -DAGC_HTILE_ARRAY_VALIDATION=1 \
 		-o $@ agc_graphics.c $(AGC_LDFLAGS)
 
+agc_depth_msaa_fw1160_logged.elf: shaders_depth shaders/depth_resolve_frag_sb.h agc_graphics.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW1160_DEPTH_LOG_FLAGS) -DAGC_MSAA_VALIDATION=1 \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_depth_msaa_fw550_headless.elf: shaders_depth shaders/depth_resolve_frag_sb.h agc_graphics.c ps5_video_out.h gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW550_HEADLESS_DEPTH_FLAGS) -DAGC_MSAA_VALIDATION=1 \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
 FW1160_COMBINED_HTILE_FLAGS := $(FW1160_DEPTH_LOG_FLAGS) \
 	-DAGC_STENCIL_VALIDATION=1 -DAGC_HTILE_VALIDATION=1 \
 	-DAGC_HTILE_OPERATION_VALIDATION=1 \

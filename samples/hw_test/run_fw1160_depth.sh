@@ -113,6 +113,16 @@ if [ -n "${EXPECTED_COLOR_GREEN_RED:-}" ]; then
     grep -Fq "[Depth Readback] green=$EXPECTED_COLOR_GREEN_RED red=$EXPECTED_COLOR_GREEN_RED " \
         "$output_file" || exit 1
 fi
+if [ "${REQUIRE_MSAA_RESOLVE:-0}" -eq 1 ]; then
+    grep -Eq '^\[MSAA\] shader-resolved 4x RGBA8 to 1x (headless|VideoOut) target$' \
+        "$output_file" || exit 1
+    grep -Eq '^\[Depth Readback\] green=[1-9][0-9]* red=[1-9][0-9]* ' \
+        "$output_file" || exit 1
+    grep -Eq '^\[Depth Readback\] raw D32: one=[1-9][0-9]* near=[1-9][0-9]* far=[1-9][0-9]*$' \
+        "$output_file" || exit 1
+    grep -q '^\[Depth+4xMSAA Result\] markers=PASS color=PASS raw-depth=PASS stencil=PASS$' \
+        "$output_file" || exit 1
+fi
 if [ "${EXPECTED_D16_FULL_RECT:-0}" -eq 1 ]; then
     grep -q '^\[Depth Readback\] green=228096 red=228096 ' \
         "$output_file" || exit 1
@@ -120,16 +130,23 @@ if [ "${EXPECTED_D16_FULL_RECT:-0}" -eq 1 ]; then
         "$output_file" || exit 1
 fi
 if [ "${EXPECTED_D32_FULL_RECT:-0}" -eq 1 ]; then
+    grep -q '^\[Depth Readback\] green=228096 red=228096 ' \
+        "$output_file" || exit 1
+fi
+if [ "${EXPECTED_D32_FULL_RECT:-0}" -eq 1 ] ||
+   [ -n "${EXPECTED_D32_ONE_COUNT:-}" ] ||
+   [ -n "${EXPECTED_D32_NEAR_COUNT:-}" ] ||
+   [ -n "${EXPECTED_D32_FAR_COUNT:-}" ]; then
     expected_d32_one=${EXPECTED_D32_ONE_COUNT:-1617408}
-    case "$expected_d32_one" in
-        ''|*[!0-9]*)
-            echo "invalid EXPECTED_D32_ONE_COUNT" >&2
+    expected_d32_near=${EXPECTED_D32_NEAR_COUNT:-228096}
+    expected_d32_far=${EXPECTED_D32_FAR_COUNT:-228096}
+    case "$expected_d32_one:$expected_d32_near:$expected_d32_far" in
+        *[!0-9:]*|:*|*:|*::* )
+            echo "invalid expected D32 count" >&2
             exit 2
             ;;
     esac
-    grep -q '^\[Depth Readback\] green=228096 red=228096 ' \
-        "$output_file" || exit 1
-    grep -Fqx "[Depth Readback] raw D32: one=$expected_d32_one near=228096 far=228096" \
+    grep -Fqx "[Depth Readback] raw D32: one=$expected_d32_one near=$expected_d32_near far=$expected_d32_far" \
         "$output_file" || exit 1
 fi
 if [ "${EXPECTED_STENCIL_FULL_RECT:-0}" -eq 1 ]; then

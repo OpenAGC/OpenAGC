@@ -655,6 +655,12 @@ the runner and shared teardown on FW 11.60 only.
   endpoints. Audit the historical 4x MSAA path, then build current-source
   exact-key headless endpoint gates with sample, resolve, fence, and cleanup
   oracles before hardware execution.
+- Exact-key headless 4x MSAA artifacts now build warning-free for both
+  endpoints. The runner requires a 4x shader-resolve verdict, the exact MSAA
+  result line, positive resolved color/native D32 classes, and supports frozen
+  exact color and D32 class counts; host coverage rejects missing resolve and
+  wrong class counts. Relink both artifacts twice, audit dependencies,
+  preserve and hash-pin them, then add guarded deploy targets before hardware.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and

@@ -3711,7 +3711,12 @@ static bool dispatch_graphics(GraphicsTest *test,
             .sample_count = 1u,
             .fragment_count = 1u,
         },
-        .viewport = {target->width, target->height},
+        .viewport = {
+            .width = target->width,
+            .height = target->height,
+            .depth_clip_space =
+                AGC_GFX1013_CLIP_SPACE_NEGATIVE_ONE_TO_ONE,
+        },
         .scissor = {0u, 0u, target->width, target->height},
         .target_mask = AGC_GFX1013_TARGET_MASK_RGBA0,
         .context_load_control = AGC_GFX1013_CONTEXT_CONTROL_ENABLE,
@@ -3746,7 +3751,8 @@ static bool dispatch_graphics(GraphicsTest *test,
                (unsigned)resolve_error, errstr(resolve_error));
         return false;
     }
-    printf("[MSAA] shader-resolved 4x RGBA8 to 1x VideoOut target\n");
+    printf("[MSAA] shader-resolved 4x RGBA8 to 1x %s target\n",
+           AGC_GRAPHICS_HEADLESS ? "headless" : "VideoOut");
 #endif
 #elif AGC_TESSELLATION
     const AgcGfx1013TessDrawState tess_draw = {

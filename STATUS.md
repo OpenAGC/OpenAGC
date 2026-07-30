@@ -165,6 +165,14 @@ every invariant. Current-source mip-1 and array-layer-1 HTILE isolation are
 hardware-qualified on both endpoints. Current-source 4x MSAA parity is now the
 active depth tier.
 
+Exact-key headless 4x MSAA artifacts now build warning-free for FW `0x1160`
+and FW `0x0550`. The resolve diagnostic correctly labels its headless target,
+the resolve viewport explicitly fixes clip space, and the guarded runner
+requires the resolve/result lines plus positive color and D32 classes with
+optional frozen exact counts. Host coverage rejects missing resolve and wrong
+D32 values. No hardware claim or deploy target exists until reproducible
+hashes and dependency audits are complete.
+
 Ordinary D16 HTILE is now hardware-qualified twice on each endpoint. The
 pinned current-source artifacts reproduced exact D16 classes, clean teardown,
 no residual process, and `7408` changed HTILE words from `0xfffc000f` on all
