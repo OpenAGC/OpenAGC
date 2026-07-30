@@ -881,6 +881,10 @@ all six pinned artifacts for identical-byte FW 5.50 replay and proceed to the
   `048b903713ce1a0b82e0d3dc5c01b37f2ea068da5e2ce6164bc5ae938c02f32f`.
   Keep execution behind the required clean reboot and UINT qualification order.
 
+  The UINT prerequisites are complete and pinned R32_SINT pass 1 succeeds with
+  255,744 exact samples spanning the full signed range, zero mismatches, packed
+  FNV64 `0x7e0438a1fbf7bf83`, and a clean lifecycle. Replay once.
+
 - `RG32_SINT` is host-qualified as append-only value 30 with gfx1013 `32_32`,
   SINT, standard swap, eight bytes per pixel, and `32_GR` export 2. Exact PM4
   (`CB_COLOR0_INFO=0x0007052c`), all-profile selection, every short-buffer

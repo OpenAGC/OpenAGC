@@ -25,3 +25,15 @@ The identical pinned bytes reproduced every sample count, full-range lane,
 zero mismatch count, lane hash, packed hash, fence, teardown,
 self-termination, and debugger absence. RGBA32_UINT is hardware-qualified on
 FW 11.60.
+
+## R32_SINT pass 1
+
+- Artifact SHA-256:
+  `048b903713ce1a0b82e0d3dc5c01b37f2ea068da5e2ce6164bc5ae938c02f32f`
+- 255,744 exact samples span `-2147483648..2147483647`, contain eight
+  distinct values, and have zero mismatches.
+- Lane FNV64: `0x74b09081b2bde483`; packed FNV64:
+  `0x7e0438a1fbf7bf83`.
+- Fence, teardown, self-termination, and debugger absence passed.
+
+One identical-byte replay remains.
