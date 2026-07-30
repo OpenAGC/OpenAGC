@@ -100,16 +100,22 @@ static int runtime_find_shader_register(const uint32_t *commands,
     return found;
 }
 
-static uint64_t shader_fixture_hash(const void *data, size_t size)
+static uint64_t shader_fixture_hash_update(
+    uint64_t hash, const void *data, size_t size)
 {
     const uint8_t *bytes = data;
-    uint64_t hash = UINT64_C(14695981039346656037);
 
     for (size_t i = 0u; i < size; ++i) {
         hash ^= bytes[i];
         hash *= UINT64_C(1099511628211);
     }
     return hash;
+}
+
+static uint64_t shader_fixture_hash(const void *data, size_t size)
+{
+    return shader_fixture_hash_update(
+        UINT64_C(14695981039346656037), data, size);
 }
 
 static AgcShader create_shader_with_reflection(AgcDevice device,
@@ -210,6 +216,79 @@ static AgcShader create_shader_with_reflection(AgcDevice device,
 static AgcShader create_shader(AgcDevice device, AgcShaderStage stage)
 {
     return create_shader_with_reflection(device, stage, NULL);
+}
+
+static AgcShader create_ngg_shader_bundle(AgcDevice device,
+    AgcShaderStage stage, const AgcShaderReflection *requirements)
+{
+    RuntimeShaderFixture binary = {0};
+    RuntimeShaderFixture front_binary = {0};
+    AgcShaderReflection reflection = AGC_SHADER_REFLECTION_INIT;
+    AgcShaderDesc desc = AGC_SHADER_DESC_INIT;
+    AgcShader shader = NULL;
+
+    if (requirements)
+        reflection = *requirements;
+    binary.record.magic = AGC_SHADER_RECORD_MAGIC;
+    binary.record.version = AGC_SHADER_RECORD_VERSION_GEN5;
+    binary.record.code = offsetof(RuntimeShaderFixture, code);
+    binary.record.shader_type = (uint8_t)kAgcShaderBinaryTypeGsBack;
+    binary.record.num_sh_registers = 2u;
+    binary.record.sh_registers = offsetof(RuntimeShaderFixture, sh_registers);
+    binary.record.num_cx_registers = 1u;
+    binary.record.cx_registers = offsetof(RuntimeShaderFixture, cx_registers);
+    binary.record.specials = offsetof(RuntimeShaderFixture, specials);
+    binary.sh_registers[0] = (AgcRegisterValue){
+        AGC_REG_SPI_SHADER_PGM_LO_GS, 0u};
+    binary.sh_registers[1] = (AgcRegisterValue){
+        AGC_REG_SPI_SHADER_PGM_HI_GS, 0u};
+    binary.cx_registers[0] = (AgcRegisterValue){
+        AGC_REG_SPI_PS_IN_CONTROL, 0u};
+    binary.specials.ge_cntl = (AgcShaderSpecialRegister){
+        AGC_REG_GE_CNTL, 0x10u};
+    binary.specials.vgt_shader_stages_en = (AgcShaderSpecialRegister){
+        AGC_REG_VGT_SHADER_STAGES_EN,
+        AGC_GFX1013_VGT_SHADER_STAGES_EN_GS_W32_EN};
+    binary.specials.vgt_gs_out_prim_type = (AgcShaderSpecialRegister){
+        AGC_REG_VGT_GS_OUT_PRIM_TYPE, 0u};
+    binary.specials.ge_user_vgpr_en = (AgcShaderSpecialRegister){
+        AGC_REG_GE_USER_VGPR_EN, 0u};
+    binary.code[0] = 0xBF810000u;
+
+    front_binary.record.magic = AGC_SHADER_RECORD_MAGIC;
+    front_binary.record.version = AGC_SHADER_RECORD_VERSION_GEN5;
+    front_binary.record.code = offsetof(RuntimeShaderFixture, code);
+    front_binary.record.shader_type =
+        (uint8_t)kAgcShaderBinaryTypeGsFront;
+    front_binary.code[0] = 0xBF810000u;
+
+    reflection.stage = stage;
+    reflection.flags |= AGC_SHADER_REFLECTION_NGG_BIT;
+    if (stage != kAgcShaderStageVs)
+        reflection.flags |= AGC_SHADER_REFLECTION_FUSED_STAGE_BIT;
+    reflection.shader_record_version = AGC_SHADER_RECORD_VERSION_GEN5;
+    reflection.compiler_api_version = AGC_SHADER_COMPILER_API_VERSION;
+    reflection.wave_size = 32u;
+    reflection.hash_algorithm = AGC_SHADER_HASH_FNV1A64;
+    reflection.code_offset = offsetof(RuntimeShaderFixture, code);
+    reflection.code_size = sizeof(binary.code);
+    reflection.front_code_offset = offsetof(RuntimeShaderFixture, code);
+    reflection.front_code_size = sizeof(front_binary.code);
+    reflection.code_hash = shader_fixture_hash(&binary, sizeof(binary));
+    reflection.code_hash = shader_fixture_hash_update(reflection.code_hash,
+        &front_binary, sizeof(front_binary));
+    if (reflection.entry_point[0] == '\0')
+        memcpy(reflection.entry_point, "main", sizeof("main"));
+
+    desc.stage = stage;
+    desc.code = &binary;
+    desc.code_size = sizeof(binary);
+    desc.front_code = &front_binary;
+    desc.front_code_size = sizeof(front_binary);
+    desc.reflection = &reflection;
+    TEST_ASSERT_EQ(agcCreateShader(device, &desc, &shader), AGC_OK,
+        "native NGG shader bundle creation succeeds");
+    return shader;
 }
 
 static AgcQueue create_queue(AgcDevice device, AgcQueueType type)
@@ -1054,6 +1133,7 @@ static void test_runtime_shader_reflection_contract(void)
 {
     AgcDevice device = create_device();
     AgcShader shader = create_shader(device, kAgcShaderStageCs);
+    AgcShader ngg_shader = NULL;
     AgcShaderReflection reflection = AGC_SHADER_REFLECTION_INIT;
 
     TEST_ASSERT_EQ(agcGetShaderReflection(shader, &reflection), AGC_OK,
@@ -1081,6 +1161,50 @@ static void test_runtime_shader_reflection_contract(void)
         "shader reflection query rejects unknown output versions");
     TEST_ASSERT_EQ(agcDestroyShader(shader), AGC_OK,
         "reflected shader destroys");
+
+    ngg_shader = create_ngg_shader_bundle(
+        device, kAgcShaderStageVs, NULL);
+    reflection = (AgcShaderReflection)AGC_SHADER_REFLECTION_INIT;
+    TEST_ASSERT_EQ(agcGetShaderReflection(ngg_shader, &reflection), AGC_OK,
+        "compiler-style NGG front/back reflection is queryable");
+    TEST_ASSERT(reflection.front_code_size != 0u,
+        "compiler-style NGG bundle retains its front program range");
+    TEST_ASSERT_EQ(agcDestroyShader(ngg_shader), AGC_OK,
+        "compiler-style NGG shader bundle destroys");
+
+    {
+        RuntimeShaderFixture back_only = {0};
+        AgcShaderDesc desc = AGC_SHADER_DESC_INIT;
+        AgcShader invalid = NULL;
+
+        back_only.record.magic = AGC_SHADER_RECORD_MAGIC;
+        back_only.record.version = AGC_SHADER_RECORD_VERSION_GEN5;
+        back_only.record.shader_type =
+            (uint8_t)kAgcShaderBinaryTypeGsBack;
+        back_only.record.code = offsetof(RuntimeShaderFixture, code);
+        back_only.code[0] = 0xBF810000u;
+        reflection = (AgcShaderReflection)AGC_SHADER_REFLECTION_INIT;
+        reflection.stage = kAgcShaderStageVs;
+        reflection.flags = AGC_SHADER_REFLECTION_NGG_BIT;
+        reflection.shader_record_version = AGC_SHADER_RECORD_VERSION_GEN5;
+        reflection.compiler_api_version = AGC_SHADER_COMPILER_API_VERSION;
+        reflection.wave_size = 32u;
+        reflection.hash_algorithm = AGC_SHADER_HASH_FNV1A64;
+        reflection.code_offset = offsetof(RuntimeShaderFixture, code);
+        reflection.code_size = sizeof(back_only.code);
+        reflection.code_hash = shader_fixture_hash(
+            &back_only, sizeof(back_only));
+        memcpy(reflection.entry_point, "main", sizeof("main"));
+        desc.stage = kAgcShaderStageVs;
+        desc.code = &back_only;
+        desc.code_size = sizeof(back_only);
+        desc.reflection = &reflection;
+        TEST_ASSERT_EQ(agcCreateShader(device, &desc, &invalid),
+            AGC_ERROR_SHADER_INVALID_TYPE,
+            "NGG back record without its front program fails closed");
+        TEST_ASSERT(invalid == NULL,
+            "incomplete NGG bundle leaves shader output null");
+    }
     TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
         "reflection test device destroys");
 }

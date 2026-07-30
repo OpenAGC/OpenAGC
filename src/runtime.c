@@ -1691,28 +1691,49 @@ static uint64_t agcShaderHashBytes(
 
 static int agcShaderRecordMatchesStage(
     AgcShaderStage stage, AgcShaderReflectionFlags flags,
-    AgcShaderType type)
+    uint8_t type)
 {
     switch (stage) {
     case kAgcShaderStageCs:
-        return type == kAgcShaderTypeCs;
+        return type == (uint8_t)kAgcShaderTypeCs;
     case kAgcShaderStagePs:
-        return type == kAgcShaderTypePs;
+        return type == (uint8_t)kAgcShaderTypePs;
     case kAgcShaderStageVs:
-        return type == kAgcShaderTypeVs ||
+        return type == (uint8_t)kAgcShaderTypeVs ||
             ((flags & AGC_SHADER_REFLECTION_NGG_BIT) != 0u &&
-             (type == kAgcShaderTypeGs || type == kAgcShaderTypeEs));
+             (type == (uint8_t)kAgcShaderTypeGs ||
+              type == (uint8_t)kAgcShaderTypeEs ||
+              type == (uint8_t)kAgcShaderBinaryTypeGsBack));
     case kAgcShaderStageGs:
-        return type == kAgcShaderTypeGs;
+        return type == (uint8_t)kAgcShaderTypeGs ||
+            type == (uint8_t)kAgcShaderBinaryTypeGsBack;
     case kAgcShaderStageHs:
-        return type == kAgcShaderTypeHs;
+        return type == (uint8_t)kAgcShaderTypeHs ||
+            type == (uint8_t)kAgcShaderBinaryTypeHsBack;
     case kAgcShaderStageDs:
-        return type == kAgcShaderTypeEs || type == kAgcShaderTypeEsAlt ||
+        return type == (uint8_t)kAgcShaderTypeEs ||
+            type == (uint8_t)kAgcShaderTypeEsAlt ||
             ((flags & AGC_SHADER_REFLECTION_NGG_BIT) != 0u &&
-             type == kAgcShaderTypeGs);
+             (type == (uint8_t)kAgcShaderTypeGs ||
+              type == (uint8_t)kAgcShaderBinaryTypeGsBack));
     default:
         return 0;
     }
+}
+
+static int agcShaderFrontRecordMatchesStage(AgcShaderStage stage,
+    AgcShaderReflectionFlags flags, uint8_t main_type, uint8_t front_type)
+{
+    if (stage == kAgcShaderStageHs)
+        return main_type == (uint8_t)kAgcShaderBinaryTypeHsBack &&
+            front_type == (uint8_t)kAgcShaderBinaryTypeHsFront;
+    if ((flags & AGC_SHADER_REFLECTION_NGG_BIT) != 0u &&
+        (stage == kAgcShaderStageVs || stage == kAgcShaderStageDs ||
+         stage == kAgcShaderStageGs)) {
+        return main_type == (uint8_t)kAgcShaderBinaryTypeGsBack &&
+            front_type == (uint8_t)kAgcShaderBinaryTypeGsFront;
+    }
+    return 0;
 }
 
 static int agcShaderColorExportFormatValid(
@@ -1980,7 +2001,15 @@ int32_t PS5_SYSV_ABI agcCreateShader(
         if (result != AGC_OK ||
             !agcShaderRecordMatchesStage(desc->stage,
                 desc->reflection->flags,
-                agcShaderRecordGetType(&shader->record))) {
+                shader->record.shader_type) ||
+            (desc->front_code_size == 0u &&
+             ((desc->stage == kAgcShaderStageHs &&
+               shader->record.shader_type ==
+                   (uint8_t)kAgcShaderBinaryTypeHsBack) ||
+              ((desc->reflection->flags &
+                AGC_SHADER_REFLECTION_NGG_BIT) != 0u &&
+               shader->record.shader_type ==
+                   (uint8_t)kAgcShaderBinaryTypeGsBack)))) {
             agcRuntimeFree(device, shader->allocation);
             agcDestroyChild(device, shader);
             return result != AGC_OK ? result : AGC_ERROR_SHADER_INVALID_TYPE;
@@ -1994,10 +2023,14 @@ int32_t PS5_SYSV_ABI agcCreateShader(
             result = agcShaderRecordRelocateBinary(&shader->front_record,
                 (uint8_t *)shader->code + front_offset,
                 (size_t)desc->front_code_size);
-            if (result != AGC_OK) {
+            if (result != AGC_OK ||
+                !agcShaderFrontRecordMatchesStage(desc->stage,
+                    desc->reflection->flags, shader->record.shader_type,
+                    shader->front_record.shader_type)) {
                 agcRuntimeFree(device, shader->allocation);
                 agcDestroyChild(device, shader);
-                return result;
+                return result != AGC_OK ? result :
+                    AGC_ERROR_SHADER_INVALID_TYPE;
             }
             shader->front_binary_offset = front_offset;
             shader->front_program_gpu_address =

@@ -90,7 +90,9 @@ user/system-SGPR layouts, push ranges, vertex inputs, color exports, local
 size, scratch/LDS, sample behavior, NGG/fused-stage flags, and linkage masks.
 Shader creation verifies the serialized main/front records and retains a
 relocated, GPU-addressable copy; `agcGetShaderReflection` exposes the validated
-metadata.
+metadata. The validator now accepts the compiler's actual gfx1013
+`GsBack`/`GsFront` and `HsBack`/`HsFront` binary subtype pairs, checks both
+halves against the reflected logical stage, and rejects an orphan back record.
 
 Runtime API v2 graphics pipelines validate reflected NGG VS + Wave32 PS stage
 linkage, vertex/resource layouts, exact MRT count, float/normalized versus
@@ -134,7 +136,7 @@ linkage, vertex-stride, descriptor, push-range, and unbound-resource cases. It
 also exercises successful descriptor/push dispatch, vertex-table drawing,
 direct and indirect descriptor addressing, resource retention/reset, exact
 depth/stencil register state, legacy state normalization, multisample minimums,
-and required dynamic-state gating. The full generic suite now reports 13,876
+and required dynamic-state gating. The full generic suite now reports 13,882
 passed and 0 failed; the compiler's
 library, varying/export, NGG, and tessellation suites pass. This slice is
 host-tested only. No PS5 hardware test was run or claimed. See

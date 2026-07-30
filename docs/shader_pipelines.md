@@ -21,7 +21,11 @@ Create a reflected shader with `AGC_SHADER_DESC_INIT`, setting `code`,
 `code_size`, and `reflection`; fused records also set `front_code` and
 `front_code_size`. `agcCreateShader` validates the complete contract before the
 handle becomes visible. `agcGetShaderReflection` returns the runtime-owned
-validated copy.
+validated copy. Compiler-emitted gfx1013 NGG bundles use a `GsBack` main record
+and a `GsFront` front record (and tessellation control uses the analogous
+`HsBack`/`HsFront` pair). The runtime validates both halves and rejects an
+orphan back record rather than treating its binary-subtype byte as a standalone
+shader stage.
 
 ## Pipeline validation
 
