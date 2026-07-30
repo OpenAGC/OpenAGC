@@ -811,9 +811,10 @@ reproduced `224640` changed pixels, mode counts `{4:205880,6:18760}`, alpha
 range `0..255`, zero exact mismatches, channel independence, and FNV64
 `0xf46729633292d01b` on both runs. All lifecycle gates passed; SRGB is next.
 
-BC7 SRGB pass 1 on FW 5.50 reproduced the exact FW 11.60-qualified mode
-counts, coverage, full alpha range, zero exact mismatches, channel independence,
-and FNV64 `0x74a3526f9a3eef65`. All lifecycle gates passed; one replay remains.
+BC7 SRGB on FW 5.50 twice reproduced the exact FW 11.60-qualified mode counts,
+coverage, full alpha range, zero exact mismatches, channel independence, and
+FNV64 `0x74a3526f9a3eef65`. All lifecycle gates passed. Both BC7 variants are
+hardware-qualified on exact FW 5.50 and FW 11.60.
 
 BC3 UNORM on FW 5.50 used the exact FW 11.60-qualified bytes twice and
 reproduced `224640` changed pixels, equal regions, alpha range `0..255`, zero

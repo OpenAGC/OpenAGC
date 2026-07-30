@@ -60,6 +60,16 @@ The guarded run produced `224640` changed pixels, regions
 channel independence, and FNV64 `0xf1464077ada8ce8d`. All format, lifecycle,
 and residual-process gates passed. Repeat the identical artifact once.
 
+## BC7 SRGB pass 2
+
+The identical artifact reproduced `224640` changed pixels, mode counts
+`{4:205880,6:18760}`, alpha range `0..255`, zero exact mismatches, channel
+independence, and FNV64 `0x74a3526f9a3eef65`. Every lifecycle gate and the
+post-run residual-process check passed again.
+
+BC7 UNORM and SRGB are hardware-qualified on exact FW 5.50 and FW 11.60.
+Proceed to BC6 UFLOAT/SFLOAT.
+
 ## BC7 UNORM pass 2
 
 The identical artifact reproduced `224640` changed pixels, mode counts
