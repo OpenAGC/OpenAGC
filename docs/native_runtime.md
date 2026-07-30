@@ -92,8 +92,8 @@ No command call emits partial packets. Insufficient capacity returns
 The synchronization milestone supports a bounded 2–63 command-buffer batch on
 the graphics queue. Every member must be executable, nonempty, distinct, and
 owned by the same queue; one fence tracks the complete batch and releases all
-members after completion. The current compute route, empty batch members,
-wait/signal lists, and cross-queue submission remain fail-closed.
+members after completion. The current compute route, empty batch members, and
+cross-queue submission remain fail-closed.
 
 For one command buffer, v2 `AgcSubmitInfo` can name bounded lists of
 `AgcGpuLabelPoint` waits and signals. The runtime validates every exact prior
@@ -103,7 +103,11 @@ flush, or driver-submit failure restores bytes and cursor exactly and releases
 temporary label retains. Signal points publish only after successful submit.
 For graphics batches, the first command receives the wait preamble and the
 last receives the signal tail; both endpoint storages are restored together on
-rejection. That path is host-qualified; its hardware row remains open.
+rejection. The exact FW 5.50 standard-PS5 oracle passed the two-nonempty-DCB
+graphics-batch form with a first-DCB wait and final-DCB signal, without CPU
+waits; see
+[`runtime_batch_submit_label_lists_fw550_20260731.md`](../analysis/runtime_batch_submit_label_lists_fw550_20260731.md).
+Other batch forms and FW 11.60 remain hardware-unqualified.
 
 `AgcGpuLabel` provides the first GPU-side dependency primitive. A producer
 records `agcCmdSignalGpuLabel`; it emits the qualified EOP release write. A
@@ -292,8 +296,8 @@ resources in each transition batch, as recorded in
 The exact FW 5.50 standard-PS5 whole-buffer compute `shader-write` to graphics
 `shader-read` v2 handoff passed its no-CPU-wait release/acquire oracle, recorded
 in [`runtime_crossqueue_resource_handoff_fw550_20260731.md`](../analysis/runtime_crossqueue_resource_handoff_fw550_20260731.md).
-Depth/stencil, copy, scanout, remaining v2 handoff rows, submit-list, and
-timeline synchronization remain host-only.
+Depth/stencil, copy, scanout, remaining v2 handoff rows, non-batch submit-list
+rows, and timeline synchronization remain host-only.
 
 Prospero `agcQueueSubmit` submits both current graphics and compute command
 buffers through the direct DCB carrier only when the caller supplies an

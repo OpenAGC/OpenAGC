@@ -97,8 +97,10 @@ fence, with every member retained until that fence completes. Artifact
 `30564bfdd87de4c89e575a03b7456aad57a2ca72af174aa41d1598a20322142b` passed
 the two-DCB MRT/readback/reset/teardown oracle on exact FW 5.50. Compute
 batches, empty members, timelines, and broader cross-queue transfer rows remain
-fail-closed or unqualified. Graphics-batch submit lists are host-qualified but
-remain hardware-unqualified.
+fail-closed or unqualified. Graphics-batch submit lists are hardware-qualified
+on exact FW 5.50 for a two-nonempty-DCB graphics batch with a first-DCB wait
+and final-DCB signal, artifact
+`32112756c2446146758409b1605fa8c55a6385d270f454af2cadcfb4262d054b`.
 
 Runtime API v9 adds a v2 `AgcSubmitInfo` list of typed `AgcGpuLabelPoint`
 waits/signals. The runtime transactionally inserts exact `WAIT_REG_MEM` points
@@ -108,7 +110,10 @@ commits signal diagnostics only after driver submit succeeds. Artifact
 `4e3f0e5996e9912a24ac476862c15901c3e4512b3e2fa19ec78df2bebef9d4e2` passed a
 producer → submit-list bridge → submit-list consumer chain without CPU waits on
 exact FW 5.50; see `analysis/runtime_submit_label_lists_fw550_20260731.md`.
-Graphics-batch lists and FW 11.60 remain hardware-unqualified.
+Artifact `32112756c2446146758409b1605fa8c55a6385d270f454af2cadcfb4262d054b`
+also passed the bounded two-DCB graphics-batch wait/signal-list oracle on exact
+FW 5.50; see `analysis/runtime_batch_submit_label_lists_fw550_20260731.md`.
+FW 11.60 remains hardware-unqualified.
 
 ## Native resource and memory management complete (2026-07-30)
 
