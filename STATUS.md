@@ -796,6 +796,11 @@ coverage, regions, zero-mismatch oracle, and FNV64 `0x7ed831bc232c8da1`.
 All lifecycle and residual-process gates passed. Both BC1 variants are now
 hardware-qualified on exact FW 5.50 and FW 11.60.
 
+BC2 UNORM pass 1 on FW 5.50 used the exact FW 11.60-qualified bytes and
+reproduced `224640` changed pixels, equal regions, alpha range `0..255`, zero
+exact mismatches, and FNV64 `0xf3b07b5935bb483d`. All lifecycle gates passed;
+one identical replay remains.
+
 BC4 UNORM on FW 5.50 used the exact FW 11.60-qualified bytes twice and
 reproduced `224640` changed pixels, equal regions, zero decode mismatches/error,
 and FNV64 `0x5327e8ad53b3a455` on both runs. All lifecycle gates passed. BC4
