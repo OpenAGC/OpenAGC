@@ -89,3 +89,9 @@ reproduced the exact D16 classes, clean completion and teardown, and
 freeze that count. Ordinary D16 HTILE is hardware-qualified on FW 5.50; the
 exact logged FW 11.60 mirror is the next hardware gate, followed by expclear
 only after two identical ordinary passes there.
+
+The exact FW 11.60 ordinary mirror was rebuilt twice with identical SHA-256
+`1f730666c8b39b3b2bdc1d18ee05b0228e4df8c842ff9e49590138134c2d9ed1`,
+dependency-audited, and preserved under its full hash before execution. Its
+guarded recipe now enforces those bytes. FW 11.60 websrv, FTP, and ps5debug-NG
+are reachable; the first logged ordinary pass may proceed cleanup-first.
