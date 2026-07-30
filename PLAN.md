@@ -261,9 +261,10 @@ the runner and shared teardown on FW 11.60 only.
   invalid-enum behavior, and every 0-27-dword short-buffer boundary pass on
   the host. Its firmware-neutral hardware gate now uses a reusable signed
   four-lane fragment fixture and a sentinel-safe `int16_t` oracle with signed
-  endpoint, diversity, coverage, independence, and raw-hash checks. Hash-pin
-  the final ELF before its first FW 11.60 run; it is not yet
-  hardware-qualified.
+  endpoint, diversity, coverage, independence, and raw-hash checks. The final
+  firmware-neutral ELF is pinned before execution as SHA-256
+  `e6aea5164b215d401244ebec13ace8e8ab95fe9e15a8e82d9a59310cfc09e1ef`;
+  it is not yet hardware-qualified.
 - Seven additional offscreen format gates now build under the same exact
   profile and bounded runner: R8, RG8, RGB10A2, R11G11B10, R32, RG32, and
   RGBA32. All seven passed twice on FW 11.60; logged RG32 reproduced FNV64

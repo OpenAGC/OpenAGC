@@ -137,9 +137,10 @@ all command capacities from zero through the 28-dword requirement. Hardware
 qualification tooling now includes a reusable signed-output shader and an
 `int16_t` native oracle that checks bounded coverage, negative and positive
 near-endpoint ranges, diversity, sentinel collisions, per-lane hashes, and
-channel independence. The firmware-neutral ELF still needs to be hash-pinned
-and executed twice on FW 11.60; no firmware has a hardware-qualified label
-yet.
+channel independence. The firmware-neutral ELF is pinned before execution as
+SHA-256 `e6aea5164b215d401244ebec13ace8e8ab95fe9e15a8e82d9a59310cfc09e1ef`
+and has no firmware expectation or AGC SPRX dependency. It still needs two
+FW 11.60 executions; no firmware has a hardware-qualified label yet.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability
