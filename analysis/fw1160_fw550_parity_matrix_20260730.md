@@ -181,10 +181,19 @@ and FW 5.50 array
 `ef1936c6399e77261b5eacb68c02bd41c795113b88a45b3b3f4a7eedd584b2f8`.
 All four depend only on VideoOut, kernel, libc, and networking, are preserved
 under their full hashes, and now have cleanup-first deploy targets that reject
-byte drift before network access. Mip requires exact `31968/31968` color
+byte drift before network access. Mip requires exact `56832/56832` color
 coverage; array requires `228096/228096`; both require positive selected and
 zero outside metadata mutation. Run the pinned FW 5.50 mip gate first and
 freeze its selected count before replay.
+
+The first current-source FW 5.50 mip attempt executed successfully but was
+rejected by that inherited color count. It changed `7982` selected metadata
+words and zero outside, reached its fence, returned application PASS, shut down
+cleanly, and left no residual process. The current headless full-rectangle
+viewport produces `56832/56832`, not the historical retained-VideoOut
+`31968/31968`. Both mip recipes now require the current exact count. The
+attempt is not promoted because its pre-launch wrapper contract was wrong;
+rerun the same pinned FW 5.50 artifact before freezing the selected count.
 
 That prerequisite sequence is now complete. Two relinks against the committed
 shader records reproduced all eight artifacts byte-for-byte, and dependency

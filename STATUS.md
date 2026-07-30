@@ -136,6 +136,13 @@ SPRX dependencies, are preserved under full hashes, and have cleanup-first
 hash-pinned deploy targets with exact color and selected/outside metadata
 oracles. The FW 5.50 mip artifact is the first permitted hardware gate.
 
+Its first attempt passed the GPU and subresource checks (`7982` selected,
+zero outside), shut down cleanly, and left no process, but the wrapper rejected
+the historical VideoOut `31968/31968` color count. The current headless full-
+rectangle mip viewport produces `56832/56832`; both endpoint recipes now
+require that exact value. The same pinned FW 5.50 artifact must be rerun before
+the metadata count is frozen.
+
 Ordinary D16 HTILE is now hardware-qualified twice on each endpoint. The
 pinned current-source artifacts reproduced exact D16 classes, clean teardown,
 no residual process, and `7408` changed HTILE words from `0xfffc000f` on all

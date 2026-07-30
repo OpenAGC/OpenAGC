@@ -613,10 +613,16 @@ the runner and shared teardown on FW 11.60 only.
   then add guarded deploy targets before hardware execution.
 - All four subresource artifacts reproduce across two relinks, avoid both AGC
   SPRX dependencies, are preserved under full hashes, and have cleanup-first
-  hash-pinned deploy targets. Mip requires exact `31968/31968` color coverage;
+  hash-pinned deploy targets. Mip requires exact `56832/56832` color coverage;
   array requires `228096/228096`; both require positive selected and zero
   outside metadata mutation. Run FW 5.50 mip first and freeze its selected
   count before replay.
+- The first FW 5.50 mip attempt passed GPU execution, changed `7982` selected
+  words and zero outside, shut down cleanly, and left no process, but the
+  wrapper rejected the historical VideoOut color count. Current headless
+  full-rectangle coverage is exactly `56832/56832`. Both endpoint recipes now
+  require that value. Rerun the same pinned FW 5.50 artifact before freezing
+  its selected count.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and
