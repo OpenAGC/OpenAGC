@@ -94,6 +94,17 @@
 #error "Sony multi-indirect audit requires the ordinary indirect draw path"
 #endif
 
+#ifndef AGC_INDIRECT_DRAW_COUNT
+#define AGC_INDIRECT_DRAW_COUNT 1
+#endif
+#if AGC_INDIRECT_DRAW_COUNT < 1 || AGC_INDIRECT_DRAW_COUNT > 2
+#error "hardware sample supports one or two indirect argument records"
+#endif
+#if AGC_INDIRECT_DRAW_COUNT > 1 && \
+    !(AGC_DRAW_INDIRECT || AGC_DRAW_INDEXED_INDIRECT)
+#error "multiple indirect records require an indirect draw mode"
+#endif
+
 #ifndef AGC_DEPTH_VALIDATION
 #define AGC_DEPTH_VALIDATION 0
 #endif
@@ -1830,9 +1841,9 @@ static bool dispatch_graphics(GraphicsTest *test,
         {{-0.5f, -0.4330127f}, {1.0f, 0.0f, 0.0f}},
         {{ 0.5f, -0.4330127f}, {0.0f, 1.0f, 0.0f}},
         {{ 0.0f,  0.4330127f}, {0.0f, 0.0f, 1.0f}},
-        {{ 0.0f,  0.4330127f}, {0.0f, 0.0f, 1.0f}},
-        {{ 0.0f,  0.4330127f}, {0.0f, 0.0f, 1.0f}},
-        {{ 0.0f,  0.4330127f}, {0.0f, 0.0f, 1.0f}},
+        {{ 0.25f, -0.4330127f}, {1.0f, 0.0f, 0.0f}},
+        {{ 1.25f, -0.4330127f}, {0.0f, 1.0f, 0.0f}},
+        {{ 0.75f,  0.4330127f}, {0.0f, 0.0f, 1.0f}},
         {{ 0.0f,  0.4330127f}, {0.0f, 0.0f, 1.0f}},
         {{ 0.0f,  0.4330127f}, {0.0f, 0.0f, 1.0f}},
     };
@@ -1853,16 +1864,31 @@ static bool dispatch_graphics(GraphicsTest *test,
     uint32_t *draw_args = (uint32_t *)
         ((uint8_t *)test->compute_buffer + DRAW_ARGS_OFFSET);
 #if AGC_DRAW_INDEXED_INDIRECT
+#if AGC_INDIRECT_DRAW_COUNT == 2
+    static const uint32_t indexed_indirect_args[10] = {
+        3u, 1u, 0u, 0u, 0u,
+        3u, 1u, 0u, 3u, 0u,
+    };
+#else
     static const uint32_t indexed_indirect_args[5] = {
         3u, 1u, 0u, 0u, 0u,
     };
+#endif
     memcpy(draw_args, indexed_indirect_args, sizeof(indexed_indirect_args));
 #else
+#if AGC_INDIRECT_DRAW_COUNT == 2
+    static const uint32_t indirect_args[8] = {
+        3u, 1u, 0u, 0u,
+        3u, 1u, 3u, 0u,
+    };
+#else
     static const uint32_t indirect_args[4] = {3u, 1u, 0u, 0u};
+#endif
     memcpy(draw_args, indirect_args, sizeof(indirect_args));
 #endif
-    printf("[Indirect] args=%p count=3 instances=1 first=0 base=0\n",
-           draw_args);
+    printf("[Indirect] args=%p records=%u count=3 instances=1 "
+           "second-base=%u\n", draw_args, AGC_INDIRECT_DRAW_COUNT,
+           AGC_INDIRECT_DRAW_COUNT == 2 ? 3u : 0u);
 #endif
     /* RGBA8 texels: red, green / blue, white. Bilinear sampling produces a
      * visibly distinct two-dimensional gradient inside the triangle. */
@@ -2387,8 +2413,9 @@ static bool dispatch_graphics(GraphicsTest *test,
             (uint64_t)(uintptr_t)gpu_indices : 0u,
         .argument_offset = 0u,
         .index_buffer_count = AGC_DRAW_INDEXED_INDIRECT ? 3u : 0u,
-        .draw_count = 1u,
-        .stride = 0u,
+        .draw_count = AGC_INDIRECT_DRAW_COUNT,
+        .stride = AGC_INDIRECT_DRAW_COUNT > 1u ?
+            (AGC_DRAW_INDEXED_INDIRECT ? 20u : 16u) : 0u,
         .base_vertex_location =
             AGC_REG_SPI_SHADER_USER_DATA_GS_0 + 3u,
         .start_instance_location =
@@ -2401,7 +2428,7 @@ static bool dispatch_graphics(GraphicsTest *test,
     if (state_error == AGC_OK) {
         static const uint32_t expected_packet[10] = {
             0xc0082c00u, 0u, 0x08fu, 0x090u, 0x280u,
-            1u, 0u, 0u, 16u, 2u,
+            AGC_INDIRECT_DRAW_COUNT, 0u, 0u, 16u, 2u,
         };
         uint32_t used = agcCbUsedDwords(&cb);
         uint32_t *sony_packet;
@@ -2888,9 +2915,23 @@ static bool dispatch_graphics(GraphicsTest *test,
 #else
         const bool color_pass = unique_color_count >= 8u;
 #endif
+#if AGC_INDIRECT_DRAW_COUNT > 1
+        const bool multi_draw_pass =
+            changed > expected_changed + coverage_tolerance &&
+            max_x > (target->width * 3u) / 4u;
+        printf("[Multi Draw] distinct second geometry: %s "
+               "(changed=%u max_x=%u)\n",
+               multi_draw_pass ? "PASS" : "FAIL", changed, max_x);
+#else
+        const bool multi_draw_pass = true;
+#endif
         const bool fp16_pass =
+#if AGC_INDIRECT_DRAW_COUNT > 1
+                               multi_draw_pass &&
+#else
                                changed + coverage_tolerance >= expected_changed &&
                                changed <= expected_changed + coverage_tolerance &&
+#endif
                                color_pass &&
                                complete_samples == changed &&
                                out_of_range_components == 0u;
