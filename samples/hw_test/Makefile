@@ -322,6 +322,39 @@ agc_runtime_compute.elf: shaders_runtime_compute agc_runtime_compute.c \
 		gpu_credentials.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -o $@ agc_runtime_compute.c $(AGC_LDFLAGS)
 
+# Public native-runtime graphics probe. It intentionally builds an isolated
+# compiler/runtime artifact pair rather than changing the qualified manual
+# agc_graphics.elf baseline.
+.PHONY: shaders_runtime_graphics
+shaders_runtime_graphics: shaders/runtime_triangle.vert shaders/runtime_triangle.frag
+	$(GLSLANG) -V --target-env vulkan1.2 shaders/runtime_triangle.vert \
+		-o shaders/runtime_triangle_vert.spv
+	$(PSBC) -f shaders/runtime_triangle_vert.spv -s vertex \
+		-o shaders/runtime_triangle_vert_back.sb \
+		--ngg-front shaders/runtime_triangle_vert_front.sb --wave32 \
+		--vertex-attribute 0:0:0:24:r32g32b32_float \
+		--vertex-attribute 1:0:12:24:r32g32b32_float \
+		--reflection-header shaders/runtime_triangle_vert_reflection.h \
+		--reflection-symbol runtime_triangle_vert_reflection
+	xxd -i -n runtime_triangle_vert_back_data \
+		shaders/runtime_triangle_vert_back.sb \
+		shaders/runtime_triangle_vert_back_sb.h
+	xxd -i -n runtime_triangle_vert_front_data \
+		shaders/runtime_triangle_vert_front.sb \
+		shaders/runtime_triangle_vert_front_sb.h
+	$(GLSLANG) -V --target-env vulkan1.2 shaders/runtime_triangle.frag \
+		-o shaders/runtime_triangle_frag.spv
+	$(PSBC) -f shaders/runtime_triangle_frag.spv -s fragment \
+		-o shaders/runtime_triangle_frag.sb \
+		--reflection-header shaders/runtime_triangle_frag_reflection.h \
+		--reflection-symbol runtime_triangle_frag_reflection
+	xxd -i -n runtime_triangle_frag_data shaders/runtime_triangle_frag.sb \
+		shaders/runtime_triangle_frag_sb.h
+
+agc_runtime_graphics.elf: shaders_runtime_graphics agc_runtime_graphics.c \
+		gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -o $@ agc_runtime_graphics.c $(AGC_LDFLAGS)
+
 agc_copy_fw1160_logged.elf: agc_copy.c gpu_credentials.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_EXPECT_FIRMWARE_ABI_KEY=0x1160u \
 		-DAGC_SELF_TERMINATE=1 \

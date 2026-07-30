@@ -263,7 +263,7 @@ logical shader bundles. Reflection v2 adds compiler-derived front-stage
 interfaces and geometry topology/limit facts without changing its serialized
 size; v1/API-14 artifacts remain accepted. The runtime recomputes the
 compiler's FNV-1a stage-linkage hash over its four interface masks before
-accepting a reflected shader. The full generic suite reports 14,096 passed.
+accepting a reflected shader. The full generic suite reports 14,136 passed.
 The opt-in combined-tree contract test now compiles real `openagc-psbc`
 vertex/fragment/compute output and creates OpenAGC graphics/compute pipelines
 without sample-local register knowledge; its 256-byte code alignment and
@@ -286,6 +286,12 @@ same host test covers rejected format binding, required-target draw gating,
 packet capture, and lifetime release. This is not a render-pass abstraction:
 clear/load/store, depth attachment, transitions, and PS5 hardware execution
 remain open, and no hardware promotion is claimed.
+The native graphics counterpart now compiles a position/color triangle into a
+real NGG main/front pair and fragment sidecar, consumes those exact artifacts
+in a generic pipeline/target/vertex/index/dynamic-state submission contract,
+and builds `agc_runtime_graphics.elf`. The standalone probe waits on a bounded
+fence only; it has no pixel-output oracle, has not been deployed, and is not a
+hardware qualification.
 Compiler-fused VS-front/GS-back geometry pipelines are
 host-packaged for the already-qualified triangle and line inputs plus compiler
 invocation counts; redundant standalone VS handles, incomplete input

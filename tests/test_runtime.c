@@ -16,6 +16,11 @@
 
 #include "../samples/hw_test/shaders/fill_color_native_reflection.h"
 #include "../samples/hw_test/shaders/fill_color_native_sb.h"
+#include "../samples/hw_test/shaders/runtime_triangle_frag_reflection.h"
+#include "../samples/hw_test/shaders/runtime_triangle_frag_sb.h"
+#include "../samples/hw_test/shaders/runtime_triangle_vert_back_sb.h"
+#include "../samples/hw_test/shaders/runtime_triangle_vert_front_sb.h"
+#include "../samples/hw_test/shaders/runtime_triangle_vert_reflection.h"
 
 static AgcDevice create_device(void)
 {
@@ -915,6 +920,168 @@ static void test_runtime_compiler_reflection_sidecar(void)
         "native compute sidecar queue destroys");
     TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
         "native compute sidecar device destroys");
+}
+
+static void test_runtime_compiler_graphics_sidecar(void)
+{
+    static const float vertices[] = {
+        -0.75f, -0.75f, 0.0f, 1.0f, 0.0f, 0.0f,
+         0.75f, -0.75f, 0.0f, 0.0f, 1.0f, 0.0f,
+         0.00f,  0.75f, 0.0f, 0.0f, 0.0f, 1.0f,
+    };
+    static const uint16_t indices[] = {0u, 1u, 2u};
+    AgcDevice device = create_device();
+    AgcQueue queue = create_queue(device, kAgcQueueGraphics);
+    AgcShaderDesc vertex_desc = AGC_SHADER_DESC_INIT;
+    AgcShaderDesc pixel_desc = AGC_SHADER_DESC_INIT;
+    AgcGraphicsPipelineDesc pipeline_desc = AGC_GRAPHICS_PIPELINE_DESC_INIT;
+    AgcColorBlendAttachmentState attachment =
+        AGC_COLOR_BLEND_ATTACHMENT_STATE_INIT;
+    AgcBufferDesc buffer_desc = AGC_BUFFER_DESC_INIT;
+    AgcImageDesc image_desc = AGC_IMAGE_DESC_INIT;
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcVertexBufferBinding vertex_binding = AGC_VERTEX_BUFFER_BINDING_INIT;
+    AgcColorTargetBinding target = AGC_COLOR_TARGET_BINDING_INIT;
+    AgcViewport viewport = AGC_VIEWPORT_INIT;
+    AgcScissor scissor = AGC_SCISSOR_INIT;
+    AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    AgcShaderReflection vertex_reflection;
+    AgcShaderReflection pixel_reflection;
+    AgcShader vertex = NULL;
+    AgcShader pixel = NULL;
+    AgcGraphicsPipeline pipeline = NULL;
+    AgcBuffer vertex_buffer = NULL;
+    AgcBuffer index_buffer = NULL;
+    AgcImage image = NULL;
+    AgcCommandBuffer command = NULL;
+    const AgcCommandBufferSubmit *captured;
+    const uint32_t *words;
+    uint32_t value;
+
+    TEST_ASSERT_EQ(runtime_triangle_vert_reflection_bytes_size,
+        sizeof(vertex_reflection),
+        "native graphics vertex reflection sidecar retains ABI size");
+    TEST_ASSERT_EQ(runtime_triangle_frag_reflection_bytes_size,
+        sizeof(pixel_reflection),
+        "native graphics fragment reflection sidecar retains ABI size");
+    memcpy(&vertex_reflection, runtime_triangle_vert_reflection_bytes,
+        sizeof(vertex_reflection));
+    memcpy(&pixel_reflection, runtime_triangle_frag_reflection_bytes,
+        sizeof(pixel_reflection));
+    TEST_ASSERT_EQ(vertex_reflection.stage, kAgcShaderStageVs,
+        "native graphics vertex reflection identifies VS");
+    TEST_ASSERT_EQ(pixel_reflection.stage, kAgcShaderStagePs,
+        "native graphics fragment reflection identifies PS");
+    TEST_ASSERT_EQ(vertex_reflection.vertex_input_count, 2u,
+        "native graphics vertex reflection carries both attributes");
+    TEST_ASSERT_EQ(pixel_reflection.color_export_count, 1u,
+        "native graphics fragment reflection carries its color export");
+
+    vertex_desc.stage = vertex_reflection.stage;
+    vertex_desc.code = runtime_triangle_vert_back_data;
+    vertex_desc.code_size = runtime_triangle_vert_back_data_len;
+    vertex_desc.front_code = runtime_triangle_vert_front_data;
+    vertex_desc.front_code_size = runtime_triangle_vert_front_data_len;
+    vertex_desc.reflection = &vertex_reflection;
+    TEST_ASSERT_EQ(agcCreateShader(device, &vertex_desc, &vertex), AGC_OK,
+        "compiler-sidecar NGG vertex shader creates");
+    pixel_desc.stage = pixel_reflection.stage;
+    pixel_desc.code = runtime_triangle_frag_data;
+    pixel_desc.code_size = runtime_triangle_frag_data_len;
+    pixel_desc.reflection = &pixel_reflection;
+    TEST_ASSERT_EQ(agcCreateShader(device, &pixel_desc, &pixel), AGC_OK,
+        "compiler-sidecar fragment shader creates");
+    attachment.format = AGC_FORMAT_RGBA8_UNORM;
+    pipeline_desc.vertex_shader = vertex;
+    pipeline_desc.pixel_shader = pixel;
+    pipeline_desc.vertex_inputs = vertex_reflection.vertex_inputs;
+    pipeline_desc.vertex_input_count = vertex_reflection.vertex_input_count;
+    pipeline_desc.color_attachments = &attachment;
+    pipeline_desc.color_attachment_count = 1u;
+    pipeline_desc.dynamic_state_mask = AGC_DYNAMIC_STATE_VIEWPORT_BIT |
+        AGC_DYNAMIC_STATE_SCISSOR_BIT;
+    TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc, &pipeline),
+        AGC_OK, "compiler-sidecar graphics pipeline creates");
+
+    buffer_desc.size = sizeof(vertices);
+    buffer_desc.usage = AGC_BUFFER_USAGE_VERTEX_BIT;
+    buffer_desc.flags = AGC_BUFFER_CREATE_UPLOAD_BIT;
+    TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &vertex_buffer), AGC_OK,
+        "compiler-sidecar vertex buffer creates");
+    TEST_ASSERT_EQ(agcWriteBuffer(vertex_buffer, 0u, vertices,
+        sizeof(vertices)), AGC_OK, "compiler-sidecar vertex data uploads");
+    buffer_desc.size = sizeof(indices);
+    buffer_desc.usage = AGC_BUFFER_USAGE_INDEX_BIT;
+    TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &index_buffer), AGC_OK,
+        "compiler-sidecar index buffer creates");
+    TEST_ASSERT_EQ(agcWriteBuffer(index_buffer, 0u, indices, sizeof(indices)),
+        AGC_OK, "compiler-sidecar index data uploads");
+    image_desc.width = 64u;
+    image_desc.height = 64u;
+    image_desc.format = AGC_FORMAT_RGBA8_UNORM;
+    image_desc.usage = AGC_IMAGE_USAGE_COLOR_TARGET_BIT;
+    TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &image), AGC_OK,
+        "compiler-sidecar color target creates");
+    command_desc.capacity_dwords = 512u;
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
+        AGC_OK, "compiler-sidecar graphics command buffer creates");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+        "compiler-sidecar graphics command buffer begins");
+    TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(command, pipeline), AGC_OK,
+        "compiler-sidecar graphics pipeline binds");
+    vertex_binding.buffer = vertex_buffer;
+    vertex_binding.stride = 24u;
+    TEST_ASSERT_EQ(agcCmdBindVertexBuffers(command, 1u, &vertex_binding),
+        AGC_OK, "compiler-sidecar vertex table binds");
+    target.image = image;
+    TEST_ASSERT_EQ(agcCmdBindColorTargets(command, 1u, &target), AGC_OK,
+        "compiler-sidecar color target binds");
+    viewport.width = 64.0f;
+    viewport.height = 64.0f;
+    scissor.width = 64u;
+    scissor.height = 64u;
+    TEST_ASSERT_EQ(agcCmdSetViewport(command, &viewport), AGC_OK,
+        "compiler-sidecar viewport binds");
+    TEST_ASSERT_EQ(agcCmdSetScissor(command, &scissor), AGC_OK,
+        "compiler-sidecar scissor binds");
+    TEST_ASSERT_EQ(agcCmdBindIndexBuffer(command, index_buffer, 0u,
+        kAgcIndexSize16), AGC_OK, "compiler-sidecar index buffer binds");
+    TEST_ASSERT_EQ(agcCmdDrawIndexed(command, 3u, 1u, 0u, 0, 0u), AGC_OK,
+        "compiler-sidecar indexed draw records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+        "compiler-sidecar graphics command buffer becomes executable");
+    submit.command_buffer_count = 1u;
+    submit.command_buffers = &command;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, NULL), AGC_OK,
+        "compiler-sidecar graphics command buffer submits on host");
+    captured = agcDriverDebugLastDcbSubmit();
+    words = (const uint32_t *)(uintptr_t)captured->command_address;
+    TEST_ASSERT(runtime_find_context_register(words, captured->dword_count,
+        AGC_REG_CB_COLOR0_BASE, &value) && value != 0u,
+        "compiler-sidecar submission includes a color target");
+    TEST_ASSERT(runtime_find_shader_register(words, captured->dword_count,
+        AGC_REG_SPI_SHADER_USER_DATA_GS_0, &value) && value != 0u,
+        "compiler-sidecar submission publishes its vertex table address");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+        "compiler-sidecar command reset releases recorded objects");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+        "compiler-sidecar command buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyImage(image), AGC_OK,
+        "compiler-sidecar color target destroys");
+    TEST_ASSERT_EQ(agcDestroyBuffer(index_buffer), AGC_OK,
+        "compiler-sidecar index buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyBuffer(vertex_buffer), AGC_OK,
+        "compiler-sidecar vertex buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(pipeline), AGC_OK,
+        "compiler-sidecar graphics pipeline destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(pixel), AGC_OK,
+        "compiler-sidecar fragment shader destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(vertex), AGC_OK,
+        "compiler-sidecar vertex shader destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
+        "compiler-sidecar graphics queue destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "compiler-sidecar graphics device destroys");
 }
 
 static void test_runtime_indexed_graphics_submission(void)
@@ -3320,6 +3487,7 @@ void test_suite_runtime(void)
     TEST_RUN(test_runtime_fence_and_command_states);
     TEST_RUN(test_runtime_compute_submission);
     TEST_RUN(test_runtime_compiler_reflection_sidecar);
+    TEST_RUN(test_runtime_compiler_graphics_sidecar);
     TEST_RUN(test_runtime_indexed_graphics_submission);
     TEST_RUN(test_runtime_color_target_binding);
     TEST_RUN(test_runtime_command_space_atomic_failure);
