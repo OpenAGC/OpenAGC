@@ -1159,6 +1159,13 @@ decode mismatches/error, channel independence, and FNV64
 sampling matrix, are hardware-qualified on exact FW 11.60. Identical-byte FW
 5.50 replay remains a separate endpoint qualification; do not infer it from
 the FW 11.60 results.
+
+FW 5.50 identical-byte endpoint replay has begun. BC1 UNORM pass 1 used the
+same SHA-256 `db3965f2c8da26273b9683794595612c5b2c216b06a6b05ab05bb579a4842aa5`
+artifact and reproduced `224640` changed pixels, regions
+`{74880,74880,74880}`, zero exact mismatches, and FNV64
+`0x611e681989bb483d`, with clean fence, shutdown, memory cleanup, and process
+exit. Repeat those exact bytes once before advancing to BC1 SRGB.
 The final firmware-neutral bytes are pinned as SHA-256
 `f74c393112fc465eace431a3fe288095ae4b3bf5ee993e8147ed0e9a2f22f2a4`
 for BC4 UNORM and
