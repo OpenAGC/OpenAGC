@@ -27,9 +27,9 @@ pipelines. Prospero builds the same API, but native queue submission remains
 fail-closed pending an explicit hardware-promotion gate.
 
 1. **Complete pipeline safety.** Extend the host-tested reflection/pipeline
-   slice with descriptor and push binding, remaining declared dynamic state,
-   and the required tessellation/geometry paths while preserving zero-command
-   failure for every unsupported combination.
+   slice with complete stencil/depth and remaining fixed state plus the
+   required tessellation/geometry paths while preserving transactional failure
+   for every unsupported combination.
 2. **Own transitions and synchronization.** Track explicit resource usage and
    derive qualified release/acquire/flush/invalidate actions internally. Add
    bounded fences, multi-command-buffer submission, waits/signals, deferred
@@ -97,14 +97,27 @@ linkage, vertex/resource layouts, exact MRT count, float/normalized versus
 UINT/SINT attachment classes and widths, write masks, integer blend rejection,
 depth/stencil requirements, multisampling, and the currently qualified fixed
 function subset. Compute pipelines validate reflected Wave32 local size,
-resource layout, scratch, and LDS limits. Successful no-resource pipelines
-cache qualified gfx1013 bind/dispatch groups; rejected pipelines return no
-object and failed command binds emit zero dwords.
+resource layout, scratch, and LDS limits. Successful pipelines cache immutable
+qualified gfx1013 bind/dispatch groups. Command buffers allocate one
+GPU-visible resource arena per bound pipeline and populate it through typed
+descriptor, vertex-table, and push-constant APIs. Reflected user-SGPR mappings
+receive only validated runtime-owned GPU addresses or declared built-ins.
+
+Descriptor arrays require exact, duplicate-free coverage and validate resource
+class, usage, range, stride, and ownership before retention. Vertex tables
+validate exact reflected bindings and strides. Push writes validate stage,
+range, alignment, and complete coverage before draw or dispatch. Viewport,
+scissor, blend constants, stencil reference, and depth bias are command-buffer
+dynamic state and are required before a draw when declared by the pipeline.
+Failed resource/dynamic validation does not advance the command cursor or
+retain application objects; reset releases successful bindings.
 
 The compatibility matrix covers valid float, UINT, and SINT 16/32-bit pairs
 and rejects cross-class, missing/extra export, compressed attachment, blend,
-linkage, vertex-stride, descriptor, push-range, and unbound-resource cases.
-The full generic suite now reports 13,720 passed and 0 failed; the compiler's
+linkage, vertex-stride, descriptor, push-range, and unbound-resource cases. It
+also exercises successful descriptor/push dispatch, vertex-table drawing,
+resource retention/reset, and required dynamic-state gating. The full generic
+suite now reports 13,779 passed and 0 failed; the compiler's
 library, varying/export, NGG, and tessellation suites pass. This slice is
 host-tested only. No PS5 hardware test was run or claimed. See
 `docs/shader_pipelines.md`.

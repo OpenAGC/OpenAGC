@@ -40,17 +40,43 @@ unsupported state returns an error and leaves the output handle `NULL`.
 Command binding preflights capacity and required resources; failure leaves the
 command cursor unchanged.
 
+## Resource and dynamic binding
+
+After binding a pipeline, use `agcCmdBindDescriptors` for exact reflected
+descriptor-array coverage, `agcCmdBindVertexBuffers` for every reflected vertex
+binding, and `agcCmdPushConstants` for declared stage ranges. The runtime owns
+the GPU-visible resource-table arena and derives descriptor bytes and user-SGPR
+addresses; applications never supply raw table addresses or user-data
+registers. Indirect descriptor-set tables remain unsupported and fail during
+pipeline creation.
+
+Each v1 descriptor write names one set, binding, and array element. A bind must
+cover every declared element exactly once. Buffer/image/sampler type, usage,
+device ownership, offset, range, and stride are validated as a transaction.
+Successful bindings retain their resources until command-buffer reset or
+destruction; rejected bindings retain nothing. Push-constant coverage is
+tracked per stage, so draw or dispatch fails with
+`AGC_ERROR_RESOURCE_NOT_BOUND` until every reflected dword is initialized.
+
+Pipelines declare dynamic state through `dynamic_state_mask`. Viewport,
+scissor, blend constants, stencil reference, and depth bias setters emit the
+qualified command state and satisfy their corresponding bit. A draw fails with
+`AGC_ERROR_INVALID_STATE` while any declared bit is unset. Dynamic values and
+resource bindings are command-buffer state and are cleared by reset.
+
 The currently host-tested graphics subset is an NGG vertex shader plus a
-Wave32 pixel shader, fill/no-cull rasterization, supported color/depth formats,
-no stencil test, and the qualified gfx1013 bind groups. Compute supports
-Wave32, at most 1,024 invocations per group, no scratch, and at most 64 KiB
-LDS. Descriptor/push binding, tessellation and geometry pipeline packaging,
-additional fixed/dynamic state, and Prospero submission remain fail-closed.
+Wave32 pixel shader, supported fill/cull/front-face rasterization, supported
+color/depth formats, no stencil test, the declared dynamic states above, and
+the qualified gfx1013 bind groups. Compute supports Wave32, at most 1,024
+invocations per group, no scratch, and at most 64 KiB LDS. Complete stencil
+state, tessellation and geometry pipeline packaging, additional fixed state,
+and Prospero submission remain fail-closed.
 
 ## Qualification
 
 The generic suite covers valid float/normalized, UINT, and SINT attachment
-pairs and negative compatibility/layout fixtures. These results are
-host-tested only. A future explicit PS5 promotion gate will qualify exact
-firmware artifacts; no hardware qualification is implied by pipeline creation
-or a successful host command recording.
+pairs, negative compatibility/layout fixtures, successful descriptor/push and
+vertex-table execution paths, resource lifetime, and required dynamic-state
+gating. These results are host-tested only. A future explicit PS5 promotion
+gate will qualify exact firmware artifacts; no hardware qualification is
+implied by pipeline creation or a successful host command recording.

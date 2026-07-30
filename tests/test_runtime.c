@@ -528,7 +528,7 @@ static void test_runtime_indexed_graphics_submission(void)
     pipeline_desc.pixel_shader = ps;
     buffer_desc.size = 64u;
     buffer_desc.usage = AGC_BUFFER_USAGE_INDEX_BIT;
-    command_desc.capacity_dwords = 94u;
+    command_desc.capacity_dwords = 97u;
     TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc, &pipeline),
         AGC_OK, "graphics pipeline creation succeeds");
     TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &index_buffer), AGC_OK,
@@ -555,7 +555,7 @@ static void test_runtime_indexed_graphics_submission(void)
     TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
         "indexed graphics command buffer submits");
     captured = agcDriverDebugLastDcbSubmit();
-    TEST_ASSERT_EQ(captured->dword_count, 94u,
+    TEST_ASSERT_EQ(captured->dword_count, 97u,
         "indexed graphics submission captures pipeline bind and draw");
     words = (const uint32_t *)(uintptr_t)captured->command_address;
     words += captured->dword_count - 11u;
@@ -632,6 +632,83 @@ static void test_runtime_command_space_atomic_failure(void)
     TEST_ASSERT_EQ(agcDestroyShader(vs), AGC_OK, "small-buffer VS destroys");
     TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
         "small-buffer device destroys");
+}
+
+static void test_runtime_dynamic_graphics_state(void)
+{
+    AgcDevice device = create_device();
+    AgcShader vs = create_shader(device, kAgcShaderStageVs);
+    AgcShader ps = create_shader(device, kAgcShaderStagePs);
+    AgcGraphicsPipelineDesc pipeline_desc = AGC_GRAPHICS_PIPELINE_DESC_INIT;
+    AgcBufferDesc buffer_desc = AGC_BUFFER_DESC_INIT;
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcViewport viewport = AGC_VIEWPORT_INIT;
+    AgcScissor scissor = AGC_SCISSOR_INIT;
+    AgcGraphicsPipeline pipeline = NULL;
+    AgcBuffer index_buffer = NULL;
+    AgcCommandBuffer command = NULL;
+    const float blend_constants[4] = {0.25f, 0.5f, 0.75f, 1.0f};
+
+    pipeline_desc.vertex_shader = vs;
+    pipeline_desc.pixel_shader = ps;
+    pipeline_desc.dynamic_state_mask = AGC_DYNAMIC_STATE_VIEWPORT_BIT |
+        AGC_DYNAMIC_STATE_SCISSOR_BIT |
+        AGC_DYNAMIC_STATE_BLEND_CONSTANTS_BIT |
+        AGC_DYNAMIC_STATE_STENCIL_REFERENCE_BIT;
+    TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc,
+        &pipeline), AGC_OK, "dynamic-state graphics pipeline creates");
+    buffer_desc.size = 64u;
+    buffer_desc.usage = AGC_BUFFER_USAGE_INDEX_BIT;
+    TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &index_buffer),
+        AGC_OK, "dynamic-state index buffer creates");
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
+        AGC_OK, "dynamic-state command buffer creates");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+        "dynamic-state command buffer begins");
+    TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(command, pipeline), AGC_OK,
+        "dynamic-state graphics pipeline binds");
+    TEST_ASSERT_EQ(agcCmdBindIndexBuffer(command, index_buffer, 0u,
+        kAgcIndexSize16), AGC_OK, "dynamic-state index buffer binds");
+    TEST_ASSERT_EQ(agcCmdDrawIndexed(command, 3u, 1u, 0u, 0, 0u),
+        AGC_ERROR_INVALID_STATE,
+        "draw rejects unset required dynamic state");
+    viewport.width = 0.0f;
+    TEST_ASSERT_EQ(agcCmdSetViewport(command, &viewport),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "invalid viewport fails before satisfying dynamic state");
+    viewport.width = 1280.0f;
+    viewport.height = 720.0f;
+    scissor.width = 1280u;
+    scissor.height = 720u;
+    TEST_ASSERT_EQ(agcCmdSetViewport(command, &viewport), AGC_OK,
+        "valid viewport records");
+    TEST_ASSERT_EQ(agcCmdSetScissor(command, &scissor), AGC_OK,
+        "valid scissor records");
+    TEST_ASSERT_EQ(agcCmdSetBlendConstants(command, blend_constants), AGC_OK,
+        "valid blend constants record");
+    TEST_ASSERT_EQ(agcCmdSetStencilReference(command, 3u, 7u), AGC_OK,
+        "valid stencil references record");
+    TEST_ASSERT_EQ(agcCmdSetDepthBias(command, NULL),
+        AGC_ERROR_VALIDATION_FAILED,
+        "undeclared dynamic depth bias fails before argument access");
+    TEST_ASSERT_EQ(agcCmdDrawIndexed(command, 3u, 1u, 0u, 0, 0u), AGC_OK,
+        "draw records after all required dynamic state");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+        "dynamic-state command buffer becomes executable");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+        "dynamic-state command buffer resets");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+        "dynamic-state command buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyBuffer(index_buffer), AGC_OK,
+        "dynamic-state index buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(pipeline), AGC_OK,
+        "dynamic-state pipeline destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(ps), AGC_OK,
+        "dynamic-state pixel shader destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(vs), AGC_OK,
+        "dynamic-state vertex shader destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "dynamic-state device destroys");
 }
 
 static void test_runtime_shader_reflection_contract(void)
@@ -819,6 +896,10 @@ static void test_runtime_pipeline_layout_and_stage_validation(void)
     vs_requirements.stage_output_mask = UINT64_C(1) << 32;
     vs_requirements.vertex_input_count = 1u;
     vs_requirements.vertex_inputs[0] = vertex_input;
+    vs_requirements.user_sgpr_count = 1u;
+    vs_requirements.user_sgprs[0] = (AgcShaderUserSgpr){
+        AGC_SHADER_USER_SGPR_VERTEX_BUFFER_TABLE, 0u,
+        AGC_REG_SPI_SHADER_USER_DATA_GS_0, 1u};
     ps_requirements.stage_input_mask = UINT64_C(1) << 33;
     vs = create_shader_with_reflection(
         device, kAgcShaderStageVs, &vs_requirements);
@@ -846,6 +927,61 @@ static void test_runtime_pipeline_layout_and_stage_validation(void)
     TEST_ASSERT_EQ(agcCreateGraphicsPipeline(
         device, &graphics_desc, &graphics), AGC_OK,
         "matching linkage and vertex layout create pipeline");
+    {
+        AgcBufferDesc buffer_desc = AGC_BUFFER_DESC_INIT;
+        AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+        AgcVertexBufferBinding binding = AGC_VERTEX_BUFFER_BINDING_INIT;
+        AgcBuffer vertex_buffer = NULL;
+        AgcBuffer index_buffer = NULL;
+        AgcCommandBuffer command = NULL;
+
+        buffer_desc.size = 256u;
+        buffer_desc.usage = AGC_BUFFER_USAGE_VERTEX_BIT;
+        TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &vertex_buffer),
+            AGC_OK, "reflected vertex buffer creates");
+        buffer_desc.usage = AGC_BUFFER_USAGE_INDEX_BIT;
+        TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &index_buffer),
+            AGC_OK, "reflected index buffer creates");
+        TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc,
+            &command), AGC_OK, "reflected graphics command buffer creates");
+        TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+            "reflected graphics command buffer begins");
+        TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(command, graphics), AGC_OK,
+            "reflected graphics pipeline binds");
+        TEST_ASSERT_EQ(agcCmdBindIndexBuffer(command, index_buffer, 0u,
+            kAgcIndexSize16), AGC_OK, "reflected index buffer binds");
+        TEST_ASSERT_EQ(agcCmdDrawIndexed(command, 3u, 1u, 0u, 0, 0u),
+            AGC_ERROR_RESOURCE_NOT_BOUND,
+            "missing reflected vertex table rejects draw");
+        binding.buffer = vertex_buffer;
+        binding.stride = 32u;
+        TEST_ASSERT_EQ(agcCmdBindVertexBuffers(command, 1u, &binding),
+            AGC_ERROR_VALIDATION_FAILED,
+            "reflected vertex stride mismatch fails before retention");
+        TEST_ASSERT_EQ(agcDestroyBuffer(vertex_buffer), AGC_OK,
+            "failed vertex bind does not retain its buffer");
+        buffer_desc.usage = AGC_BUFFER_USAGE_VERTEX_BIT;
+        TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &vertex_buffer),
+            AGC_OK, "replacement reflected vertex buffer creates");
+        binding.buffer = vertex_buffer;
+        binding.stride = 16u;
+        TEST_ASSERT_EQ(agcCmdBindVertexBuffers(command, 1u, &binding), AGC_OK,
+            "matching reflected vertex table binds");
+        TEST_ASSERT_EQ(agcCmdDrawIndexed(command, 3u, 1u, 0u, 0, 0u),
+            AGC_OK, "fully bound reflected graphics draw records");
+        TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+            "reflected graphics command buffer becomes executable");
+        TEST_ASSERT_EQ(agcDestroyBuffer(vertex_buffer), AGC_ERROR_BUSY,
+            "successful vertex bind retains its buffer");
+        TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+            "reflected graphics command buffer resets");
+        TEST_ASSERT_EQ(agcDestroyBuffer(vertex_buffer), AGC_OK,
+            "command reset releases reflected vertex buffer");
+        TEST_ASSERT_EQ(agcDestroyBuffer(index_buffer), AGC_OK,
+            "reflected index buffer destroys after reset");
+        TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+            "reflected graphics command buffer destroys");
+    }
     TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(graphics), AGC_OK,
         "matching stage-linkage pipeline destroys");
     TEST_ASSERT_EQ(agcDestroyShader(ps), AGC_OK,
@@ -861,8 +997,12 @@ static void test_runtime_pipeline_layout_and_stage_validation(void)
             0u, 16u, 4u, 1u << kAgcShaderStageCs};
         AgcComputePipelineDesc compute_desc = AGC_COMPUTE_PIPELINE_DESC_INIT;
         AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+        AgcBufferDesc buffer_desc = AGC_BUFFER_DESC_INIT;
+        AgcDescriptorWrite write = AGC_DESCRIPTOR_WRITE_INIT;
         AgcComputePipeline compute = NULL;
         AgcCommandBuffer command = NULL;
+        AgcBuffer storage = NULL;
+        uint32_t push_data[4] = {1u, 2u, 3u, 4u};
         AgcShader cs;
 
         cs_requirements.local_size_x = 64u;
@@ -874,6 +1014,13 @@ static void test_runtime_pipeline_layout_and_stage_validation(void)
         cs_requirements.push_constant_alignment = 4u;
         cs_requirements.push_constant_range_count = 1u;
         cs_requirements.push_constant_ranges[0] = push_range;
+        cs_requirements.user_sgpr_count = 2u;
+        cs_requirements.user_sgprs[0] = (AgcShaderUserSgpr){
+            AGC_SHADER_USER_SGPR_DESCRIPTOR_SET, 1u,
+            AGC_REG_COMPUTE_USER_DATA_0, 1u};
+        cs_requirements.user_sgprs[1] = (AgcShaderUserSgpr){
+            AGC_SHADER_USER_SGPR_PUSH_CONSTANT_POINTER, 0u,
+            AGC_REG_COMPUTE_USER_DATA_0 + 1u, 1u};
         cs = create_shader_with_reflection(
             device, kAgcShaderStageCs, &cs_requirements);
         compute_desc.shader = cs;
@@ -892,12 +1039,45 @@ static void test_runtime_pipeline_layout_and_stage_validation(void)
         TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
             "layout-negative command buffer begins");
         TEST_ASSERT_EQ(agcCmdBindComputePipeline(command, compute),
+            AGC_OK, "reflected-resource compute pipeline binds");
+        TEST_ASSERT_EQ(agcCmdDispatch(command, 1u, 1u, 1u),
             AGC_ERROR_RESOURCE_NOT_BOUND,
-            "unbound reflected resources reject pipeline bind");
-        TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_ERROR_INVALID_STATE,
-            "rejected pipeline bind emits zero commands");
+            "unbound reflected resources reject dispatch");
+        buffer_desc.size = 256u;
+        buffer_desc.usage = AGC_BUFFER_USAGE_STORAGE_BIT;
+        TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &storage),
+            AGC_OK, "reflected storage buffer creates");
+        write.set = 1u;
+        write.binding = 3u;
+        write.type = AGC_SHADER_DESCRIPTOR_UNIFORM_BUFFER;
+        write.buffer = storage;
+        TEST_ASSERT_EQ(agcCmdBindDescriptors(command, 1u, &write),
+            AGC_ERROR_VALIDATION_FAILED,
+            "descriptor type mismatch fails before resource retention");
+        TEST_ASSERT_EQ(agcDestroyBuffer(storage), AGC_OK,
+            "failed descriptor bind does not retain its buffer");
+        TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &storage),
+            AGC_OK, "replacement reflected storage buffer creates");
+        write.type = AGC_SHADER_DESCRIPTOR_STORAGE_BUFFER;
+        write.buffer = storage;
+        TEST_ASSERT_EQ(agcCmdBindDescriptors(command, 1u, &write), AGC_OK,
+            "matching reflected descriptor binds");
+        TEST_ASSERT_EQ(agcCmdDispatch(command, 1u, 1u, 1u),
+            AGC_ERROR_RESOURCE_NOT_BOUND,
+            "missing reflected push constants reject dispatch");
+        TEST_ASSERT_EQ(agcCmdPushConstants(command,
+            1u << kAgcShaderStageCs, 0u, sizeof(push_data), push_data),
+            AGC_OK, "matching reflected push constants bind");
+        TEST_ASSERT_EQ(agcCmdDispatch(command, 1u, 1u, 1u), AGC_OK,
+            "fully bound reflected compute dispatch records");
+        TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+            "reflected compute command buffer becomes executable");
+        TEST_ASSERT_EQ(agcDestroyBuffer(storage), AGC_ERROR_BUSY,
+            "successful descriptor bind retains its buffer");
         TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
-            "zero-command rejection resets cleanly");
+            "reflected compute command buffer resets cleanly");
+        TEST_ASSERT_EQ(agcDestroyBuffer(storage), AGC_OK,
+            "command reset releases reflected storage buffer");
         TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
             "layout-negative command buffer destroys");
         TEST_ASSERT_EQ(agcDestroyComputePipeline(compute), AGC_OK,
@@ -912,6 +1092,20 @@ static void test_runtime_pipeline_layout_and_stage_validation(void)
             "descriptor mismatch leaves compute output null");
         TEST_ASSERT_EQ(agcDestroyShader(cs), AGC_OK,
             "descriptor-reflected compute shader destroys");
+
+        mapping.byte_stride = 16u;
+        cs_requirements.user_sgprs[0].register_offset =
+            AGC_REG_SPI_SHADER_USER_DATA_GS_0;
+        cs = create_shader_with_reflection(
+            device, kAgcShaderStageCs, &cs_requirements);
+        compute_desc.shader = cs;
+        TEST_ASSERT_EQ(agcCreateComputePipeline(device, &compute_desc,
+            &compute), AGC_ERROR_NOT_SUPPORTED,
+            "cross-stage user-SGPR register fails pipeline creation");
+        TEST_ASSERT(compute == NULL,
+            "invalid user-SGPR register leaves compute pipeline null");
+        TEST_ASSERT_EQ(agcDestroyShader(cs), AGC_OK,
+            "invalid user-SGPR compute shader destroys");
     }
     TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
         "pipeline layout validation device destroys");
@@ -1589,6 +1783,7 @@ void test_suite_runtime(void)
     TEST_RUN(test_runtime_compute_submission);
     TEST_RUN(test_runtime_indexed_graphics_submission);
     TEST_RUN(test_runtime_command_space_atomic_failure);
+    TEST_RUN(test_runtime_dynamic_graphics_state);
     TEST_RUN(test_runtime_ps5_image_layouts);
     TEST_RUN(test_runtime_all_backing_categories);
     TEST_RUN(test_runtime_heap_staging_and_stats);

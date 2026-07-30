@@ -33,8 +33,9 @@ Ownership dependencies are explicit:
 - an image view retains its image;
 - a graphics pipeline retains its vertex and pixel shaders;
 - a compute pipeline retains its compute shader;
-- an executable command buffer retains every pipeline and index buffer it
-  references until reset or destruction;
+- an executable command buffer retains every pipeline, index/vertex/descriptor
+  resource, and command-owned resource-table allocation it references until
+  reset or destruction;
 - a device retains all child objects.
 
 Destroying an object with a live dependent, recorded reference, or pending
@@ -123,6 +124,12 @@ scratch, and LDS limits. Rejected objects are returned as `NULL`; failed binds
 leave the command cursor unchanged. Immutable qualified register groups are
 cached in the pipeline. See [shader_pipelines.md](shader_pipelines.md).
 
+Command recording binds exact reflected descriptor arrays, vertex tables, and
+push ranges into a runtime-owned GPU-visible arena. Draw and dispatch validate
+complete binding before emitting work. Declared viewport, scissor, blend-
+constant, stencil-reference, and depth-bias state is recorded dynamically and
+must be set before a graphics draw.
+
 ## Current qualification boundary
 
 The complete object lifecycle, validation, finite fence, memory/resource,
@@ -133,7 +140,7 @@ backend selection, caller default version, internal memory, and default-state
 initialization.
 
 Prospero `agcQueueSubmit` currently returns `AGC_ERROR_NOT_SUPPORTED` before
-GPU mutation. Descriptor/push resource binding and the broader graphics-stage
-and dynamic-state surface also remain fail-closed. The reflected pipeline path
+GPU mutation. Complete stencil/depth state, broader graphics stages, and
+remaining fixed state remain fail-closed. The reflected pipeline/resource path
 is host-tested and is not hardware-qualified; hardware testing is a separate,
 explicit promotion gate.

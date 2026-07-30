@@ -466,6 +466,88 @@ typedef struct AgcComputePipelineDesc {
       1u, 1u, 1u, 0u, {0u, 0u, 0u, 0u}, 0u, 0u, NULL, NULL, \
       {0u, 0u, 0u, 0u} }
 
+typedef struct AgcDescriptorWrite {
+    uint32_t struct_size;
+    uint32_t version;
+    uint32_t set;
+    uint32_t binding;
+    uint32_t array_element;
+    AgcShaderDescriptorType type;
+    AgcBuffer buffer;
+    uint64_t buffer_offset;
+    uint64_t buffer_range;
+    uint32_t buffer_stride;
+    uint32_t reserved0;
+    AgcImageView image_view;
+    AgcSampler sampler;
+    uint64_t reserved[3];
+} AgcDescriptorWrite;
+
+#define AGC_DESCRIPTOR_WRITE_INIT \
+    { sizeof(AgcDescriptorWrite), AGC_RUNTIME_STRUCTURE_VERSION_1, \
+      0u, 0u, 0u, AGC_SHADER_DESCRIPTOR_SAMPLER, NULL, 0u, 0u, 0u, 0u, \
+      NULL, NULL, {0u, 0u, 0u} }
+
+typedef struct AgcVertexBufferBinding {
+    uint32_t struct_size;
+    uint32_t version;
+    uint32_t binding;
+    uint32_t reserved0;
+    AgcBuffer buffer;
+    uint64_t offset;
+    uint32_t stride;
+    uint32_t reserved1;
+    uint64_t reserved[3];
+} AgcVertexBufferBinding;
+
+#define AGC_VERTEX_BUFFER_BINDING_INIT \
+    { sizeof(AgcVertexBufferBinding), AGC_RUNTIME_STRUCTURE_VERSION_1, \
+      0u, 0u, NULL, 0u, 0u, 0u, {0u, 0u, 0u} }
+
+typedef struct AgcViewport {
+    uint32_t struct_size;
+    uint32_t version;
+    float x;
+    float y;
+    float width;
+    float height;
+    float min_depth;
+    float max_depth;
+    uint64_t reserved[2];
+} AgcViewport;
+
+#define AGC_VIEWPORT_INIT \
+    { sizeof(AgcViewport), AGC_RUNTIME_STRUCTURE_VERSION_1, \
+      0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, {0u, 0u} }
+
+typedef struct AgcScissor {
+    uint32_t struct_size;
+    uint32_t version;
+    int32_t x;
+    int32_t y;
+    uint32_t width;
+    uint32_t height;
+    uint64_t reserved[2];
+} AgcScissor;
+
+#define AGC_SCISSOR_INIT \
+    { sizeof(AgcScissor), AGC_RUNTIME_STRUCTURE_VERSION_1, \
+      0, 0, 1u, 1u, {0u, 0u} }
+
+typedef struct AgcDepthBias {
+    uint32_t struct_size;
+    uint32_t version;
+    float constant_factor;
+    float clamp;
+    float slope_factor;
+    uint32_t flags;
+    uint64_t reserved[2];
+} AgcDepthBias;
+
+#define AGC_DEPTH_BIAS_INIT \
+    { sizeof(AgcDepthBias), AGC_RUNTIME_STRUCTURE_VERSION_1, \
+      0.0f, 0.0f, 0.0f, 0u, {0u, 0u} }
+
 typedef enum AgcCommandBufferState {
     AGC_COMMAND_BUFFER_STATE_INITIAL = 0,
     AGC_COMMAND_BUFFER_STATE_RECORDING = 1,
@@ -674,6 +756,16 @@ _Static_assert(sizeof(AgcGraphicsPipelineDesc) == 200u,
     "AgcGraphicsPipelineDesc v2 size mismatch");
 _Static_assert(sizeof(AgcComputePipelineDesc) == 120u,
     "AgcComputePipelineDesc v2 size mismatch");
+_Static_assert(sizeof(AgcDescriptorWrite) == 96u,
+    "AgcDescriptorWrite v1 size mismatch");
+_Static_assert(sizeof(AgcVertexBufferBinding) == 64u,
+    "AgcVertexBufferBinding v1 size mismatch");
+_Static_assert(sizeof(AgcViewport) == 48u,
+    "AgcViewport v1 size mismatch");
+_Static_assert(sizeof(AgcScissor) == 40u,
+    "AgcScissor v1 size mismatch");
+_Static_assert(sizeof(AgcDepthBias) == 40u,
+    "AgcDepthBias v1 size mismatch");
 _Static_assert(sizeof(AgcCommandBufferDesc) == 48u,
     "AgcCommandBufferDesc v1 size mismatch");
 _Static_assert(sizeof(AgcFenceDesc) == 48u,
@@ -748,6 +840,22 @@ int32_t PS5_SYSV_ABI agcCmdBindGraphicsPipeline(
     AgcCommandBuffer command_buffer, AgcGraphicsPipeline pipeline);
 int32_t PS5_SYSV_ABI agcCmdBindComputePipeline(
     AgcCommandBuffer command_buffer, AgcComputePipeline pipeline);
+int32_t PS5_SYSV_ABI agcCmdBindDescriptors(AgcCommandBuffer command_buffer,
+    uint32_t write_count, const AgcDescriptorWrite *writes);
+int32_t PS5_SYSV_ABI agcCmdBindVertexBuffers(AgcCommandBuffer command_buffer,
+    uint32_t binding_count, const AgcVertexBufferBinding *bindings);
+int32_t PS5_SYSV_ABI agcCmdPushConstants(AgcCommandBuffer command_buffer,
+    uint32_t stage_mask, uint32_t offset, uint32_t size, const void *data);
+int32_t PS5_SYSV_ABI agcCmdSetViewport(
+    AgcCommandBuffer command_buffer, const AgcViewport *viewport);
+int32_t PS5_SYSV_ABI agcCmdSetScissor(
+    AgcCommandBuffer command_buffer, const AgcScissor *scissor);
+int32_t PS5_SYSV_ABI agcCmdSetBlendConstants(
+    AgcCommandBuffer command_buffer, const float constants[4]);
+int32_t PS5_SYSV_ABI agcCmdSetStencilReference(
+    AgcCommandBuffer command_buffer, uint32_t front, uint32_t back);
+int32_t PS5_SYSV_ABI agcCmdSetDepthBias(
+    AgcCommandBuffer command_buffer, const AgcDepthBias *depth_bias);
 int32_t PS5_SYSV_ABI agcCmdBindIndexBuffer(AgcCommandBuffer command_buffer,
     AgcBuffer buffer, uint64_t offset, AgcIndexSize index_size);
 int32_t PS5_SYSV_ABI agcCmdDrawIndexed(AgcCommandBuffer command_buffer,
