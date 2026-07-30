@@ -176,7 +176,15 @@ firmware-neutral dependency verification, and were preserved before execution:
 The pinned UFLOAT artifact passed with `224640` changed pixels, fixture counts
 `{74880,74880,18760,56120}`, decoded range `0..220`, zero decode
 mismatches/error, channel independence, and FNV64 `0x6d3c92b92851ab4a`.
-All lifecycle gates passed. Repeat the identical bytes once.
+All lifecycle gates passed.
+
+## BC6 UFLOAT pass 2
+
+The identical artifact reproduced `224640` changed pixels, fixture counts
+`{74880,74880,18760,56120}`, range `0..220`, zero decode mismatches/error,
+channel independence, and FNV64 `0x6d3c92b92851ab4a`. All lifecycle gates
+passed again. BC6 UFLOAT is hardware-qualified on exact FW 11.60; BC6 SFLOAT
+is next.
 
 ## BC2 corrected artifacts
 

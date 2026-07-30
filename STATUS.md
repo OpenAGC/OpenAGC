@@ -773,10 +773,10 @@ now pinned as SHA-256
 `f6a97569f854ddad7080247c44bec6dd1edccc0b7c248a8b1f8701b276c8eb27`
 (SRGB), with no-prerequisite FW 11.60 and FW 5.50 guarded targets. Hardware
 execution remains pending a clean FW 11.60 boot.
-BC6 UFLOAT pass 1 succeeded on FW 11.60 with `224640` changed pixels, all four
-fixture counts `{74880,74880,18760,56120}`, range `0..220`, zero decode
-mismatches/error, channel independence, and FNV64 `0x6d3c92b92851ab4a`;
-pass 2 remains required.
+BC6 UFLOAT passed twice on FW 11.60 with identical `224640` changed pixels,
+all four fixture counts `{74880,74880,18760,56120}`, range `0..220`, zero
+decode mismatches/error, channel independence, and FNV64
+`0x6d3c92b92851ab4a`. BC6 UFLOAT is hardware-qualified on exact FW 11.60.
 BC7 UNORM passed twice on FW 11.60 with identical `224640` changed pixels,
 mode counts `{4:205880,6:18760}`, alpha range `0..255`, zero exact mismatches,
 channel independence, and FNV64 `0xf46729633292d01b`. BC7 UNORM is
