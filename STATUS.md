@@ -405,6 +405,15 @@ The exact artifacts are pinned as SHA-256
 `ade37660a18fc1e28481afd543f326e684d02297527cd13f5077234d049b705e`
 (SNORM), with no-prerequisite FW 11.60 and FW 5.50 targets.
 
+BC2 UNORM and SRGB firmware-neutral sampling gates now build without an AGC
+SPRX dependency. They reuse the BC array/mip shader while uploading independent
+16-byte BC2 blocks containing explicit 4-bit alpha, RGB565 endpoints, and
+2-bit color indices. The CPU oracle separately decodes every selected texel,
+applies SRGB conversion only to RGB, requires exact RGBA8 agreement, demands
+both alpha endpoints and all three mip/layer regions, and records the native
+hash. Hardware execution remains pending a clean FW 11.60 boot; artifact
+pinning is the next required step before execution.
+
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability
 ELF, non-indexed and indexed 10-dword multi-draw, GPU count-buffer selection,

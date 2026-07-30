@@ -793,6 +793,16 @@ for BC4 UNORM and
 `ade37660a18fc1e28481afd543f326e684d02297527cd13f5077234d049b705e`
 for BC4 SNORM. Both endpoint targets are no-build guarded replays.
 
+BC2 UNORM/SRGB portable gates now build by reusing the qualified
+`sampler2DArray` shader and 5x7, three-mip, two-layer upload geometry. Their
+16-byte blocks independently encode the 64-bit explicit-alpha field, RGB565
+endpoints, and 2-bit color indices. The bounded CPU oracle decodes color and
+alpha independently, applies SRGB conversion only to RGB, requires exact
+RGBA8 agreement, proves alpha endpoints 0 and 255, validates all mip/layer
+selection regions, and records a native hash. Preserve and pin the final
+firmware-neutral bytes before any hardware execution; FW 11.60 execution and
+identical-byte FW 5.50 replay remain pending.
+
 Use dedicated, deterministic source blocks containing endpoint, index,
 alpha, signed-range, and edge-block cases appropriate to each format. A
 hardware gate must sample the compressed texture into an already-qualified
