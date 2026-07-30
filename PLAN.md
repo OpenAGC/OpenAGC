@@ -346,6 +346,154 @@ the runner and shared teardown on FW 11.60 only.
   FW 5.50 mirrors for all nine color formats are built and recorded in
   `analysis/fw550_headless_color_regression_matrix_20260730.md`.
 
+### Render-target format expansion through the 128-bit ceiling
+
+Treat 128 bits per sample (`RGBA32`) as OpenAGC's fixed ceiling, then complete
+the useful format matrix in increasing hardware-risk order.
+
+#### 1. Establish the format contract
+
+Keep formats represented by four independent properties:
+
+- Component layout: `16`, `16_16`, `16_16_16_16`, and so on.
+- Number type: UNORM, SNORM, UINT, SINT, FLOAT, or SRGB.
+- Component swap.
+- Pixel size and matching pixel-shader export format.
+
+Public enum values must only be appended so existing binaries retain their
+ABI. Add a compile-time assertion ensuring every public format has exactly one
+format-table entry.
+
+#### 2. Complete 16-bit normalized formats
+
+These are the best next targets because they reuse the already-qualified
+16-bit layouts and FP16 pixel-shader export path. Qualify them in this order:
+
+1. `R16_UNORM` — complete on FW 11.60; exact FW 5.50 replay pending.
+2. `RG16_UNORM` — complete on FW 11.60; exact FW 5.50 replay pending.
+3. `RGBA16_UNORM` — next implementation and FW 11.60 qualification gate.
+4. `R16_SNORM`.
+5. `RG16_SNORM`.
+6. `RGBA16_SNORM`.
+
+For every format, test:
+
+- Exact CB format and number-type fields.
+- Correct bytes per pixel.
+- Correct shader-export selection.
+- Surface pitch, padding, size, and alignment.
+- Integer-overflow rejection.
+- Short command-buffer behavior.
+- Exact emitted PM4 stream.
+- Invalid enum rejection.
+
+UNORM hardware readback must prove:
+
+- Expected triangle coverage.
+- Multiple distinct values.
+- Values approaching both `0x0000` and `0xffff`.
+- No untouched sentinel components.
+- A reproducible native-memory hash.
+
+SNORM must similarly demonstrate both negative and positive ranges.
+
+#### 3. Add 16-bit integer formats
+
+After normalized formats pass, qualify:
+
+1. `R16_UINT`.
+2. `RG16_UINT`.
+3. `RGBA16_UINT`.
+4. `R16_SINT`.
+5. `RG16_SINT`.
+6. `RGBA16_SINT`.
+
+These formats need dedicated integer-output pixel shaders. Do not qualify them
+using a floating-point shader and assume the conversion is correct. Their
+oracles must validate exact integer values rather than approximate
+interpolation.
+
+#### 4. Complete 32-bit integer formats
+
+The float forms already reach the maximum widths. Add:
+
+- `R32_UINT`, `RG32_UINT`, and `RGBA32_UINT`.
+- `R32_SINT`, `RG32_SINT`, and `RGBA32_SINT`.
+
+`RGBA32_*` remains the maximum:
+
+| Format | Bits per sample |
+| --- | ---: |
+| `R32` | 32 |
+| `RG32` | 64 |
+| `RGBA32` | 128 |
+
+Surface-layout arithmetic must safely handle 16 bytes per pixel and MSAA
+multiplication without overflow.
+
+#### 5. Consider packed formats separately
+
+After the regular matrix is stable, evaluate evidence and homebrew demand for:
+
+- `RGB10A2_UINT`.
+- Additional packed 16-bit formats such as `RGB565` or `RGBA5551`.
+- Alternate component swaps.
+- Any firmware-observed special-purpose formats.
+
+Do not add obscure hardware encodings merely to make the enum larger.
+
+#### 6. Use firmware-neutral qualification artifacts
+
+Every new hardware gate must:
+
+- Contain no `AGC_EXPECT_FIRMWARE_ABI_KEY`.
+- Have no `libSceAgcDriver.sprx` dependency.
+- Detect and normalize the full runtime version.
+- Use the selected `/dev/gc` profile.
+- Write a bounded, file-backed verdict.
+- Shut down and self-terminate.
+- Be hashed and preserved before its first run.
+
+Use the identical ELF twice on FW 11.60. Later, run those exact bytes on FW
+5.50; never rebuild between endpoint tests.
+
+#### 7. Qualification labels
+
+Track three states independently:
+
+- Host-tested.
+- SPRX/profile-qualified, hardware-unverified.
+- Hardware-qualified on an exact firmware.
+
+A format passing FW 11.60 must not automatically be advertised as
+hardware-qualified on FW 5.50 or the other 37 profiles.
+
+#### 8. Guarded hardware sequence
+
+For each new tuple:
+
+1. Confirm websrv and debugger connectivity.
+2. Run the process-cleanup ELF.
+3. Verify no stale renderer remains.
+4. Launch one bounded format gate.
+5. Require fence, readback, shutdown, and final verdict.
+6. Check for residual processes and kernel faults.
+7. Repeat once using the identical ELF.
+8. Stop immediately on a timeout, UI stall, reset, or unexpected hash.
+
+#### Recommended immediate milestone
+
+Complete and qualify this first group:
+
+1. `R16_UNORM` — FW 11.60 complete.
+2. `RG16_UNORM` — FW 11.60 complete.
+3. `RGBA16_UNORM` — next.
+
+Only after all three are stable should work proceed to SNORM. This gives
+OpenAGC the most useful missing 16-bit coverage while reusing the already-proven
+16-bit layouts and floating-point shader path. Exact FW 5.50 replay remains a
+separate endpoint gate for all three artifacts.
+
 ### Gfx1013 multi-viewport state
 
 - Provide one application-neutral typed array for up to 16 Vulkan-style
