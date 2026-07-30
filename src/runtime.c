@@ -42,11 +42,19 @@
 #define AGC_RUNTIME_GRAPHICS_DEFAULT_DWORDS 2184u
 #define AGC_RUNTIME_MAX_DESCRIPTOR_WRITES 256u
 #define AGC_RUNTIME_MAX_RECORDED_RESOURCES 512u
+#define AGC_RUNTIME_MAX_RECORDED_TRANSITIONS 512u
 #define AGC_RUNTIME_MAX_RESOURCE_ARENA_SIZE UINT64_C(0x100000)
 
 typedef struct AgcRuntimeBlock AgcRuntimeBlock;
 typedef struct AgcRuntimeAllocation AgcRuntimeAllocation;
 typedef struct AgcDeferredFree AgcDeferredFree;
+
+typedef struct AgcRuntimeRecordedTransition {
+    AgcResourceType resource_type;
+    void *resource;
+    AgcResourceUsage after;
+    AgcResourceOwner after_owner;
+} AgcRuntimeRecordedTransition;
 
 typedef struct AgcRuntimePipelineResourceLayout {
     uint64_t set_offsets[8];
@@ -125,6 +133,8 @@ struct AgcBufferImpl {
     uint32_t create_flags;
     void *storage;
     AgcRuntimeAllocation *allocation;
+    AgcResourceUsage usage_state;
+    AgcResourceOwner owner_state;
     uint32_t deferred;
 };
 
@@ -136,6 +146,8 @@ struct AgcImageImpl {
     AgcImageDesc desc;
     AgcImageLayout layout;
     AgcRuntimeAllocation *allocation;
+    AgcResourceUsage usage_state;
+    AgcResourceOwner owner_state;
     uint32_t deferred;
 };
 
@@ -251,11 +263,14 @@ struct AgcCommandBufferImpl {
     uint32_t recorded_image_count;
     uint32_t recorded_view_count;
     uint32_t recorded_sampler_count;
+    uint32_t recorded_transition_count;
     uint64_t push_constant_masks[kAgcShaderStageCount];
     AgcBuffer recorded_buffers[AGC_RUNTIME_MAX_RECORDED_RESOURCES];
     AgcImage recorded_images[AGC_RUNTIME_MAX_RECORDED_RESOURCES];
     AgcImageView recorded_views[AGC_RUNTIME_MAX_RECORDED_RESOURCES];
     AgcSampler recorded_samplers[AGC_RUNTIME_MAX_RECORDED_RESOURCES];
+    AgcRuntimeRecordedTransition
+        recorded_transitions[AGC_RUNTIME_MAX_RECORDED_TRANSITIONS];
 };
 
 struct AgcFenceImpl {
@@ -3925,6 +3940,7 @@ static void agcReleaseCommandReferences(AgcCommandBuffer command_buffer)
     command_buffer->recorded_image_count = 0u;
     command_buffer->recorded_view_count = 0u;
     command_buffer->recorded_sampler_count = 0u;
+    command_buffer->recorded_transition_count = 0u;
     command_buffer->descriptors_bound = 0u;
     command_buffer->vertex_binding_mask = 0u;
     command_buffer->dynamic_state_set_mask = 0u;
@@ -4473,6 +4489,385 @@ static int agcCommandRetainBuffer(AgcCommandBuffer command_buffer,
         command_buffer->recorded_buffer_count++] = buffer;
     buffer->recorded_refs++;
     return 1;
+}
+
+static int agcCommandRetainImage(AgcCommandBuffer command_buffer,
+    AgcImage image)
+{
+    uint32_t i;
+
+    for (i = 0u; i < command_buffer->recorded_image_count; ++i) {
+        if (command_buffer->recorded_images[i] == image)
+            return 1;
+    }
+    if (command_buffer->recorded_image_count >=
+        AGC_RUNTIME_MAX_RECORDED_RESOURCES)
+        return 0;
+    command_buffer->recorded_images[
+        command_buffer->recorded_image_count++] = image;
+    image->recorded_refs++;
+    return 1;
+}
+
+static int agcRuntimeUsageIsHost(AgcResourceUsage usage)
+{
+    return usage == kAgcResourceUsageHostRead ||
+        usage == kAgcResourceUsageHostWrite;
+}
+
+static int agcRuntimeUsageIsGpu(AgcResourceUsage usage)
+{
+    return usage != kAgcResourceUsageUndefined &&
+        !agcRuntimeUsageIsHost(usage);
+}
+
+static AgcResourceOwner agcRuntimeCommandOwner(
+    const AgcCommandBuffer command_buffer)
+{
+    return command_buffer->queue_type == kAgcQueueGraphics ?
+        kAgcResourceOwnerGraphics : kAgcResourceOwnerCompute;
+}
+
+static int agcRuntimeUsageSupportsQueue(AgcResourceUsage usage,
+    AgcQueueType queue_type)
+{
+    if (usage == kAgcResourceUsageShaderWrite)
+        return queue_type == kAgcQueueCompute;
+    if (usage == kAgcResourceUsageColorTarget ||
+        usage == kAgcResourceUsageDepthStencilRead ||
+        usage == kAgcResourceUsageDepthStencilWrite ||
+        usage == kAgcResourceUsageVideoOutScanout)
+        return queue_type == kAgcQueueGraphics;
+    return 1;
+}
+
+static int agcRuntimeBufferUsageSupports(const AgcBuffer buffer,
+    AgcResourceUsage usage)
+{
+    switch (usage) {
+    case kAgcResourceUsageUndefined:
+        return 1;
+    case kAgcResourceUsageCopySource:
+        return (buffer->usage & AGC_BUFFER_USAGE_TRANSFER_SRC_BIT) != 0u;
+    case kAgcResourceUsageCopyDestination:
+        return (buffer->usage & AGC_BUFFER_USAGE_TRANSFER_DST_BIT) != 0u;
+    case kAgcResourceUsageShaderRead:
+        return (buffer->usage & (AGC_BUFFER_USAGE_UNIFORM_BIT |
+            AGC_BUFFER_USAGE_STORAGE_BIT)) != 0u;
+    case kAgcResourceUsageShaderWrite:
+        return (buffer->usage & AGC_BUFFER_USAGE_STORAGE_BIT) != 0u;
+    case kAgcResourceUsageHostRead:
+        return (buffer->create_flags & AGC_BUFFER_CREATE_READBACK_BIT) != 0u;
+    case kAgcResourceUsageHostWrite:
+        return (buffer->create_flags & AGC_BUFFER_CREATE_UPLOAD_BIT) != 0u;
+    default:
+        return 0;
+    }
+}
+
+static int agcRuntimeImageUsageSupports(const AgcImage image,
+    AgcResourceUsage usage)
+{
+    switch (usage) {
+    case kAgcResourceUsageUndefined:
+        return 1;
+    case kAgcResourceUsageCopySource:
+        return (image->desc.usage & AGC_IMAGE_USAGE_TRANSFER_SRC_BIT) != 0u;
+    case kAgcResourceUsageCopyDestination:
+        return (image->desc.usage & AGC_IMAGE_USAGE_TRANSFER_DST_BIT) != 0u;
+    case kAgcResourceUsageShaderRead:
+        return (image->desc.usage & (AGC_IMAGE_USAGE_SAMPLED_BIT |
+            AGC_IMAGE_USAGE_STORAGE_BIT)) != 0u;
+    case kAgcResourceUsageShaderWrite:
+        return (image->desc.usage & AGC_IMAGE_USAGE_STORAGE_BIT) != 0u;
+    case kAgcResourceUsageColorTarget:
+        return (image->desc.usage & AGC_IMAGE_USAGE_COLOR_TARGET_BIT) != 0u;
+    case kAgcResourceUsageDepthStencilRead:
+    case kAgcResourceUsageDepthStencilWrite:
+        return (image->desc.usage & AGC_IMAGE_USAGE_DEPTH_STENCIL_BIT) != 0u;
+    case kAgcResourceUsageVideoOutScanout:
+        return (image->desc.usage & AGC_IMAGE_USAGE_SCANOUT_BIT) != 0u;
+    case kAgcResourceUsageHostRead:
+        return (image->desc.usage & AGC_IMAGE_USAGE_TRANSFER_SRC_BIT) != 0u;
+    case kAgcResourceUsageHostWrite:
+        return (image->desc.usage & AGC_IMAGE_USAGE_TRANSFER_DST_BIT) != 0u;
+    default:
+        return 0;
+    }
+}
+
+static AgcImageAspectFlags agcRuntimeImageAspectMask(const AgcImage image)
+{
+    switch (image->desc.format) {
+    case AGC_FORMAT_D16_UNORM:
+    case AGC_FORMAT_D32_FLOAT:
+        return AGC_IMAGE_ASPECT_DEPTH_BIT;
+    case AGC_FORMAT_S8_UINT:
+        return AGC_IMAGE_ASPECT_STENCIL_BIT;
+    case AGC_FORMAT_D16_UNORM_S8_UINT:
+    case AGC_FORMAT_D32_FLOAT_S8_UINT:
+        return AGC_IMAGE_ASPECT_DEPTH_BIT | AGC_IMAGE_ASPECT_STENCIL_BIT;
+    default:
+        return AGC_IMAGE_ASPECT_COLOR_BIT;
+    }
+}
+
+static int32_t agcRuntimeMapLowUsage(AgcResourceUsage usage,
+    AgcGfx1013ResourceUsage *low_usage)
+{
+    switch (usage) {
+    case kAgcResourceUsageUndefined:
+    case kAgcResourceUsageHostWrite:
+        *low_usage = AGC_GFX1013_RESOURCE_USAGE_UNDEFINED;
+        return AGC_OK;
+    case kAgcResourceUsageCopySource:
+        *low_usage = AGC_GFX1013_RESOURCE_USAGE_COPY_SOURCE;
+        return AGC_OK;
+    case kAgcResourceUsageCopyDestination:
+        *low_usage = AGC_GFX1013_RESOURCE_USAGE_COPY_DESTINATION;
+        return AGC_OK;
+    case kAgcResourceUsageShaderRead:
+        *low_usage = AGC_GFX1013_RESOURCE_USAGE_SHADER_READ;
+        return AGC_OK;
+    case kAgcResourceUsageShaderWrite:
+        *low_usage = AGC_GFX1013_RESOURCE_USAGE_COMPUTE_WRITE;
+        return AGC_OK;
+    case kAgcResourceUsageColorTarget:
+        *low_usage = AGC_GFX1013_RESOURCE_USAGE_RENDER_TARGET;
+        return AGC_OK;
+    case kAgcResourceUsageDepthStencilRead:
+        *low_usage = AGC_GFX1013_RESOURCE_USAGE_DEPTH_STENCIL_READ;
+        return AGC_OK;
+    case kAgcResourceUsageDepthStencilWrite:
+        *low_usage = AGC_GFX1013_RESOURCE_USAGE_DEPTH_STENCIL_WRITE;
+        return AGC_OK;
+    case kAgcResourceUsageVideoOutScanout:
+        *low_usage = AGC_GFX1013_RESOURCE_USAGE_PRESENT;
+        return AGC_OK;
+    case kAgcResourceUsageHostRead:
+        *low_usage = AGC_GFX1013_RESOURCE_USAGE_HOST_READ;
+        return AGC_OK;
+    default:
+        return AGC_ERROR_NOT_SUPPORTED;
+    }
+}
+
+static void agcCommandTransitionState(AgcCommandBuffer command_buffer,
+    AgcResourceType resource_type, void *resource, AgcResourceUsage *usage,
+    AgcResourceOwner *owner)
+{
+    uint32_t i;
+
+    for (i = command_buffer->recorded_transition_count; i > 0u; --i) {
+        const AgcRuntimeRecordedTransition *record =
+            &command_buffer->recorded_transitions[i - 1u];
+        if (record->resource_type == resource_type &&
+            record->resource == resource) {
+            *usage = record->after;
+            *owner = record->after_owner;
+            return;
+        }
+    }
+    if (resource_type == kAgcResourceTypeBuffer) {
+        const AgcBuffer buffer = (const AgcBuffer)resource;
+        *usage = buffer->usage_state;
+        *owner = buffer->owner_state;
+    } else {
+        const AgcImage image = (const AgcImage)resource;
+        *usage = image->usage_state;
+        *owner = image->owner_state;
+    }
+}
+
+static int32_t agcRuntimeValidateTransition(
+    AgcCommandBuffer command_buffer, const AgcResourceTransition *transition,
+    void **resource_out, AgcGfx1013ResourceTransition *low_transition,
+    uint32_t *emit_low_transition)
+{
+    AgcResourceUsage current_usage;
+    AgcResourceOwner current_owner;
+    AgcGfx1013ResourceUsage before;
+    AgcGfx1013ResourceUsage after;
+    void *resource;
+    int32_t result;
+
+    if (!transition || !resource_out || !low_transition ||
+        !emit_low_transition ||
+        !agcHeaderValid(transition->struct_size, sizeof(*transition),
+            transition->version) || transition->flags != 0u ||
+        !agcReservedZero(transition->reserved, 5u) ||
+        transition->resource_type > kAgcResourceTypeImage ||
+        transition->before >= kAgcResourceUsageCount ||
+        transition->after >= kAgcResourceUsageCount ||
+        transition->before_owner >= kAgcResourceOwnerCount ||
+        transition->after_owner >= kAgcResourceOwnerCount) {
+        return AGC_ERROR_INVALID_ARGUMENT;
+    }
+    if (transition->resource_type == kAgcResourceTypeBuffer) {
+        AgcBuffer buffer = transition->buffer;
+        if (!buffer || transition->image ||
+            buffer->magic != AGC_MAGIC_BUFFER ||
+            buffer->device != command_buffer->device || buffer->deferred ||
+            transition->buffer_offset != 0u ||
+            transition->buffer_size != buffer->size ||
+            !agcRuntimeBufferUsageSupports(buffer, transition->before) ||
+            !agcRuntimeBufferUsageSupports(buffer, transition->after))
+            return AGC_ERROR_INVALID_ARGUMENT;
+        resource = buffer;
+    } else {
+        AgcImage image = transition->image;
+        AgcImageAspectFlags aspects;
+        if (!image || transition->buffer || image->magic != AGC_MAGIC_IMAGE ||
+            image->device != command_buffer->device || image->deferred ||
+            image->desc.usage & AGC_IMAGE_USAGE_HTILE_BIT ||
+            transition->buffer_offset != 0u || transition->buffer_size != 0u ||
+            !agcRuntimeImageUsageSupports(image, transition->before) ||
+            !agcRuntimeImageUsageSupports(image, transition->after))
+            return AGC_ERROR_INVALID_ARGUMENT;
+        aspects = agcRuntimeImageAspectMask(image);
+        if (transition->image_range.aspect_mask != aspects ||
+            transition->image_range.base_mip_level != 0u ||
+            transition->image_range.mip_level_count != image->desc.mip_levels ||
+            transition->image_range.base_array_layer != 0u ||
+            transition->image_range.array_layer_count != image->desc.array_layers ||
+            transition->image_range.reserved0 != 0u)
+            return AGC_ERROR_NOT_SUPPORTED;
+        resource = image;
+    }
+    if (agcRuntimeUsageIsGpu(transition->after) &&
+        transition->after_owner != agcRuntimeCommandOwner(command_buffer))
+        return AGC_ERROR_VALIDATION_FAILED;
+    if (!agcRuntimeUsageIsGpu(transition->after) &&
+        transition->after_owner != kAgcResourceOwnerHost)
+        return AGC_ERROR_VALIDATION_FAILED;
+    if (!agcRuntimeUsageSupportsQueue(transition->after,
+            command_buffer->queue_type))
+        return AGC_ERROR_NOT_SUPPORTED;
+    agcCommandTransitionState(command_buffer, transition->resource_type,
+        resource, &current_usage, &current_owner);
+    if (current_usage != transition->before ||
+        current_owner != transition->before_owner)
+        return AGC_ERROR_INVALID_STATE;
+    if (agcRuntimeUsageIsGpu(transition->before) &&
+        transition->before_owner != agcRuntimeCommandOwner(command_buffer))
+        return AGC_ERROR_NOT_SUPPORTED;
+    if (agcRuntimeUsageIsGpu(transition->before) &&
+        agcRuntimeUsageIsGpu(transition->after) &&
+        transition->before_owner != transition->after_owner)
+        return AGC_ERROR_NOT_SUPPORTED;
+    result = agcRuntimeMapLowUsage(transition->before, &before);
+    if (result != AGC_OK)
+        return result;
+    result = agcRuntimeMapLowUsage(transition->after, &after);
+    if (result != AGC_OK)
+        return result;
+    *emit_low_transition = transition->after != kAgcResourceUsageUndefined &&
+        !(transition->before == kAgcResourceUsageHostRead &&
+          transition->after == kAgcResourceUsageHostWrite);
+    low_transition->before = before;
+    low_transition->after = transition->after == kAgcResourceUsageHostWrite ?
+        AGC_GFX1013_RESOURCE_USAGE_HOST_READ : after;
+    low_transition->completion_address = 0u;
+    low_transition->completion_value = 0u;
+    *resource_out = resource;
+    return AGC_OK;
+}
+
+static void agcCommitCommandTransitions(AgcCommandBuffer command_buffer)
+{
+    uint32_t i;
+
+    for (i = 0u; i < command_buffer->recorded_transition_count; ++i) {
+        const AgcRuntimeRecordedTransition *record =
+            &command_buffer->recorded_transitions[i];
+        if (record->resource_type == kAgcResourceTypeBuffer) {
+            AgcBuffer buffer = (AgcBuffer)record->resource;
+            buffer->usage_state = record->after;
+            buffer->owner_state = record->after_owner;
+        } else {
+            AgcImage image = (AgcImage)record->resource;
+            image->usage_state = record->after;
+            image->owner_state = record->after_owner;
+        }
+    }
+}
+
+int32_t PS5_SYSV_ABI agcCmdTransitionResources(
+    AgcCommandBuffer command_buffer, uint32_t transition_count,
+    const AgcResourceTransition *transitions)
+{
+    uint32_t dword_count = 0u;
+    uint32_t i;
+
+    if (!command_buffer || command_buffer->magic != AGC_MAGIC_COMMAND_BUFFER ||
+        !agcDeviceValid(command_buffer->device) || !transitions ||
+        transition_count == 0u || transition_count >
+            AGC_RUNTIME_MAX_RECORDED_TRANSITIONS ||
+        command_buffer->state != AGC_COMMAND_BUFFER_STATE_RECORDING ||
+        command_buffer->recorded_transition_count >
+            AGC_RUNTIME_MAX_RECORDED_TRANSITIONS - transition_count)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    for (i = 0u; i < transition_count; ++i) {
+        AgcGfx1013ResourceTransition low_transition;
+        uint32_t transition_dwords = 0u;
+        uint32_t emit_low_transition;
+        void *resource;
+        uint32_t j;
+        int32_t result = agcRuntimeValidateTransition(command_buffer,
+            &transitions[i], &resource, &low_transition, &emit_low_transition);
+        if (result != AGC_OK)
+            return result;
+        /* The v1 state record is whole-resource only.  Reject a duplicate
+         * rather than accepting a batch whose second source state would be
+         * ambiguous until the first record is committed at submit. */
+        for (j = 0u; j < i; ++j) {
+            if (transitions[j].resource_type == transitions[i].resource_type &&
+                ((transitions[i].resource_type == kAgcResourceTypeBuffer &&
+                  transitions[j].buffer == transitions[i].buffer) ||
+                 (transitions[i].resource_type == kAgcResourceTypeImage &&
+                  transitions[j].image == transitions[i].image)))
+                return AGC_ERROR_NOT_SUPPORTED;
+        }
+        if (emit_low_transition) {
+            result = agcGfx1013GetResourceTransitionDwords(&low_transition,
+                &transition_dwords);
+            if (result != AGC_OK || transition_dwords > UINT32_MAX - dword_count)
+                return result != AGC_OK ? result : AGC_ERROR_COMMAND_SPACE_EXHAUSTED;
+            dword_count += transition_dwords;
+        }
+        (void)resource;
+    }
+    if (agcCbRemainingDwords(&command_buffer->cursor) < dword_count)
+        return AGC_ERROR_COMMAND_SPACE_EXHAUSTED;
+    if (command_buffer->recorded_buffer_count + transition_count >
+            AGC_RUNTIME_MAX_RECORDED_RESOURCES ||
+        command_buffer->recorded_image_count + transition_count >
+            AGC_RUNTIME_MAX_RECORDED_RESOURCES)
+        return AGC_ERROR_OUT_OF_MEMORY;
+    for (i = 0u; i < transition_count; ++i) {
+        AgcGfx1013ResourceTransition low_transition;
+        uint32_t emit_low_transition;
+        void *resource;
+        int32_t result = agcRuntimeValidateTransition(command_buffer,
+            &transitions[i], &resource, &low_transition, &emit_low_transition);
+        if (result != AGC_OK)
+            return AGC_ERROR_INTERNAL;
+        if (emit_low_transition &&
+            (result = agcGfx1013TransitionResource(
+                &command_buffer->cursor, &low_transition)) != AGC_OK)
+            return AGC_ERROR_INTERNAL;
+        if (transitions[i].resource_type == kAgcResourceTypeBuffer) {
+            if (!agcCommandRetainBuffer(command_buffer, (AgcBuffer)resource))
+                return AGC_ERROR_INTERNAL;
+        } else if (!agcCommandRetainImage(command_buffer, (AgcImage)resource)) {
+            return AGC_ERROR_INTERNAL;
+        }
+        command_buffer->recorded_transitions[
+            command_buffer->recorded_transition_count++] =
+            (AgcRuntimeRecordedTransition){ transitions[i].resource_type,
+                resource, transitions[i].after, transitions[i].after_owner };
+    }
+    return AGC_OK;
 }
 
 static int agcCommandRetainView(AgcCommandBuffer command_buffer,
@@ -5717,6 +6112,8 @@ int32_t PS5_SYSV_ABI agcQueueSubmit(
     }
     if (result == AGC_ERROR_NOT_INITIALIZED)
         result = AGC_ERROR_DEVICE_LOST;
+    if (result == AGC_OK)
+        agcCommitCommandTransitions(command_buffer);
 #ifdef OPENAGC_PROSPERO
     if (result == AGC_OK) {
         fence->command_buffer = command_buffer;

@@ -202,6 +202,81 @@ typedef struct AgcImageDesc {
     { sizeof(AgcImageDesc), AGC_RUNTIME_STRUCTURE_VERSION_1, 1u, 1u, 1u, \
       1u, 1u, 0u, 1u, 0u, {0u, 0u, 0u, 0u} }
 
+typedef enum AgcResourceType {
+    kAgcResourceTypeBuffer = 0,
+    kAgcResourceTypeImage = 1
+} AgcResourceType;
+
+typedef enum AgcResourceUsage {
+    kAgcResourceUsageUndefined = 0,
+    kAgcResourceUsageCopySource = 1,
+    kAgcResourceUsageCopyDestination = 2,
+    kAgcResourceUsageShaderRead = 3,
+    kAgcResourceUsageShaderWrite = 4,
+    kAgcResourceUsageColorTarget = 5,
+    kAgcResourceUsageDepthStencilRead = 6,
+    kAgcResourceUsageDepthStencilWrite = 7,
+    kAgcResourceUsageVideoOutScanout = 8,
+    kAgcResourceUsageHostRead = 9,
+    kAgcResourceUsageHostWrite = 10,
+    kAgcResourceUsageCount
+} AgcResourceUsage;
+
+typedef enum AgcResourceOwner {
+    kAgcResourceOwnerHost = 0,
+    kAgcResourceOwnerGraphics = 1,
+    kAgcResourceOwnerCompute = 2,
+    kAgcResourceOwnerCount
+} AgcResourceOwner;
+
+typedef enum AgcImageAspectFlagBits {
+    AGC_IMAGE_ASPECT_COLOR_BIT = 1u << 0,
+    AGC_IMAGE_ASPECT_DEPTH_BIT = 1u << 1,
+    AGC_IMAGE_ASPECT_STENCIL_BIT = 1u << 2,
+    AGC_IMAGE_ASPECT_METADATA_BIT = 1u << 3
+} AgcImageAspectFlagBits;
+typedef uint32_t AgcImageAspectFlags;
+
+typedef struct AgcImageSubresourceRange {
+    AgcImageAspectFlags aspect_mask;
+    uint32_t base_mip_level;
+    uint32_t mip_level_count;
+    uint32_t base_array_layer;
+    uint32_t array_layer_count;
+    uint32_t reserved0;
+} AgcImageSubresourceRange;
+
+#define AGC_IMAGE_SUBRESOURCE_RANGE_INIT \
+    { AGC_IMAGE_ASPECT_COLOR_BIT, 0u, 1u, 0u, 1u, 0u }
+
+/* Exactly one of buffer or image is set according to resource_type. Buffer
+ * ranges are byte ranges; image ranges name whole subresources. Source and
+ * destination ownership must be explicit; cross-queue transfer is rejected
+ * until a qualified GPU wait/signal path is available. */
+typedef struct AgcResourceTransition {
+    uint32_t struct_size;
+    uint32_t version;
+    AgcResourceType resource_type;
+    uint32_t flags;
+    AgcResourceUsage before;
+    AgcResourceUsage after;
+    AgcResourceOwner before_owner;
+    AgcResourceOwner after_owner;
+    AgcBuffer buffer;
+    AgcImage image;
+    uint64_t buffer_offset;
+    uint64_t buffer_size;
+    AgcImageSubresourceRange image_range;
+    uint64_t reserved[5];
+} AgcResourceTransition;
+
+#define AGC_RESOURCE_TRANSITION_INIT \
+    { sizeof(AgcResourceTransition), AGC_RUNTIME_STRUCTURE_VERSION_1, \
+      kAgcResourceTypeBuffer, 0u, kAgcResourceUsageUndefined, \
+      kAgcResourceUsageUndefined, kAgcResourceOwnerHost, \
+      kAgcResourceOwnerHost, NULL, NULL, 0u, 0u, \
+      AGC_IMAGE_SUBRESOURCE_RANGE_INIT, {0u, 0u, 0u, 0u, 0u} }
+
 typedef struct AgcImageViewDesc {
     uint32_t struct_size;
     uint32_t version;
@@ -808,6 +883,10 @@ _Static_assert(sizeof(AgcBufferDesc) == 56u,
     "AgcBufferDesc v1 size mismatch");
 _Static_assert(sizeof(AgcImageDesc) == 72u,
     "AgcImageDesc v1 size mismatch");
+_Static_assert(sizeof(AgcImageSubresourceRange) == 24u,
+    "AgcImageSubresourceRange v1 size mismatch");
+_Static_assert(sizeof(AgcResourceTransition) == 128u,
+    "AgcResourceTransition v1 size mismatch");
 _Static_assert(sizeof(AgcImageViewDesc) == 72u,
     "AgcImageViewDesc v1 size mismatch");
 _Static_assert(sizeof(AgcColorTargetBinding) == 64u,
@@ -928,6 +1007,9 @@ int32_t PS5_SYSV_ABI agcCmdBindColorTargets(
 int32_t PS5_SYSV_ABI agcCmdBindDepthStencilTarget(
     AgcCommandBuffer command_buffer,
     const AgcDepthStencilTargetBinding *target);
+int32_t PS5_SYSV_ABI agcCmdTransitionResources(
+    AgcCommandBuffer command_buffer, uint32_t transition_count,
+    const AgcResourceTransition *transitions);
 int32_t PS5_SYSV_ABI agcCmdBindDescriptors(AgcCommandBuffer command_buffer,
     uint32_t write_count, const AgcDescriptorWrite *writes);
 int32_t PS5_SYSV_ABI agcCmdBindVertexBuffers(AgcCommandBuffer command_buffer,

@@ -1316,6 +1316,187 @@ static void test_runtime_image_transfer(void)
         "image transfer device destroys");
 }
 
+static void test_runtime_resource_transitions(void)
+{
+    AgcDevice device = create_device();
+    AgcQueue compute_queue = create_queue(device, kAgcQueueCompute);
+    AgcQueue graphics_queue = create_queue(device, kAgcQueueGraphics);
+    AgcBufferDesc buffer_desc = AGC_BUFFER_DESC_INIT;
+    AgcImageDesc image_desc = AGC_IMAGE_DESC_INIT;
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
+    AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    AgcResourceTransition transition = AGC_RESOURCE_TRANSITION_INIT;
+    AgcResourceTransition duplicate[2];
+    AgcBuffer buffer = NULL;
+    AgcImage image = NULL;
+    AgcCommandBuffer compute_command = NULL;
+    AgcCommandBuffer graphics_command = NULL;
+    AgcFence fence = NULL;
+    const AgcCommandBufferSubmit *captured;
+    const uint32_t *words;
+    uint32_t owner = UINT32_MAX;
+
+    buffer_desc.size = 64u;
+    buffer_desc.usage = AGC_BUFFER_USAGE_STORAGE_BIT |
+        AGC_BUFFER_USAGE_TRANSFER_SRC_BIT | AGC_BUFFER_USAGE_TRANSFER_DST_BIT;
+    buffer_desc.flags = AGC_BUFFER_CREATE_READBACK_BIT;
+    TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &buffer), AGC_OK,
+        "transition buffer creates");
+    command_desc.queue_type = kAgcQueueCompute;
+    command_desc.capacity_dwords = 64u;
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc,
+        &compute_command), AGC_OK, "transition compute command creates");
+    TEST_ASSERT_EQ(agcCreateFence(device, &fence_desc, &fence), AGC_OK,
+        "transition fence creates");
+
+    transition.resource_type = kAgcResourceTypeBuffer;
+    transition.buffer = buffer;
+    transition.buffer_size = buffer_desc.size;
+    transition.before = kAgcResourceUsageUndefined;
+    transition.after = kAgcResourceUsageShaderWrite;
+    transition.before_owner = kAgcResourceOwnerHost;
+    transition.after_owner = kAgcResourceOwnerCompute;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(compute_command), AGC_OK,
+        "transition compute command begins");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(compute_command, 1u,
+        &transition), AGC_OK, "undefined-to-compute transition records");
+    TEST_ASSERT_EQ(agcDestroyBuffer(buffer), AGC_ERROR_BUSY,
+        "recorded transition retains its buffer");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(compute_command), AGC_OK,
+        "transition compute command ends");
+    submit.command_buffer_count = 1u;
+    submit.command_buffers = &compute_command;
+    TEST_ASSERT_EQ(agcQueueSubmit(compute_queue, &submit, fence), AGC_OK,
+        "undefined-to-compute transition submits");
+    TEST_ASSERT_EQ(agcGetFenceStatus(fence), AGC_OK,
+        "transition submit completes on host");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(compute_command), AGC_OK,
+        "submitted transition command resets");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "submitted transition fence resets");
+
+    transition.before = kAgcResourceUsageShaderWrite;
+    transition.after = kAgcResourceUsageHostRead;
+    transition.before_owner = kAgcResourceOwnerCompute;
+    transition.after_owner = kAgcResourceOwnerHost;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(compute_command), AGC_OK,
+        "compute-to-host transition command begins");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(compute_command, 1u,
+        &transition), AGC_OK, "compute-to-host transition records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(compute_command), AGC_OK,
+        "compute-to-host transition command ends");
+    TEST_ASSERT_EQ(agcQueueSubmit(compute_queue, &submit, fence), AGC_OK,
+        "compute-to-host transition submits");
+    captured = agcDriverDebugLastAcbSubmit(&owner);
+    TEST_ASSERT(captured != NULL && owner != UINT32_MAX,
+        "compute transition uses the qualified generic ACB carrier");
+    words = (const uint32_t *)(uintptr_t)captured->command_address;
+    TEST_ASSERT_EQ(agcPm4Opcode(words[0]), AGC_PM4_OP_RELEASE_MEM,
+        "compute-to-host transition emits qualified release");
+    TEST_ASSERT_EQ(agcGetFenceStatus(fence), AGC_OK,
+        "compute-to-host transition completes on host");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(compute_command), AGC_OK,
+        "compute-to-host command resets");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "compute-to-host fence resets");
+
+    transition.before = kAgcResourceUsageHostRead;
+    transition.after = kAgcResourceUsageUndefined;
+    transition.before_owner = kAgcResourceOwnerHost;
+    transition.after_owner = kAgcResourceOwnerHost;
+    duplicate[0] = transition;
+    duplicate[1] = transition;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(compute_command), AGC_OK,
+        "duplicate transition command begins");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(compute_command, 2u, duplicate),
+        AGC_ERROR_NOT_SUPPORTED,
+        "duplicate whole-resource transitions reject atomically");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(compute_command), AGC_OK,
+        "rejected duplicate transition command resets");
+
+    transition.buffer_size = buffer_desc.size - 1u;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(compute_command), AGC_OK,
+        "partial transition command begins");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(compute_command, 1u,
+        &transition), AGC_ERROR_INVALID_ARGUMENT,
+        "partial buffer transition fails closed");
+    transition.buffer_size = buffer_desc.size;
+    transition.before_owner = kAgcResourceOwnerGraphics;
+    TEST_ASSERT_EQ(agcCmdTransitionResources(compute_command, 1u,
+        &transition), AGC_ERROR_INVALID_STATE,
+        "transition source owner must match committed state");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(compute_command), AGC_OK,
+        "failed transition command resets without state commit");
+
+    image_desc.width = 8u;
+    image_desc.height = 8u;
+    image_desc.format = AGC_FORMAT_RGBA8_UNORM;
+    image_desc.usage = AGC_IMAGE_USAGE_COLOR_TARGET_BIT |
+        AGC_IMAGE_USAGE_TRANSFER_SRC_BIT | AGC_IMAGE_USAGE_TRANSFER_DST_BIT;
+    TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &image), AGC_OK,
+        "transition image creates");
+    command_desc.queue_type = kAgcQueueGraphics;
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc,
+        &graphics_command), AGC_OK, "transition graphics command creates");
+    transition = (AgcResourceTransition)AGC_RESOURCE_TRANSITION_INIT;
+    transition.resource_type = kAgcResourceTypeImage;
+    transition.image = image;
+    transition.before = kAgcResourceUsageUndefined;
+    transition.after = kAgcResourceUsageColorTarget;
+    transition.before_owner = kAgcResourceOwnerHost;
+    transition.after_owner = kAgcResourceOwnerGraphics;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(graphics_command), AGC_OK,
+        "image transition command begins");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(graphics_command, 1u,
+        &transition), AGC_OK, "undefined-to-color transition records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(graphics_command), AGC_OK,
+        "image transition command ends");
+    submit.command_buffers = &graphics_command;
+    TEST_ASSERT_EQ(agcQueueSubmit(graphics_queue, &submit, fence), AGC_OK,
+        "undefined-to-color transition submits");
+    TEST_ASSERT_EQ(agcGetFenceStatus(fence), AGC_OK,
+        "image transition completes on host");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(graphics_command), AGC_OK,
+        "image transition command resets");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "image transition fence resets");
+
+    transition.before = kAgcResourceUsageColorTarget;
+    transition.after = kAgcResourceUsageHostRead;
+    transition.before_owner = kAgcResourceOwnerGraphics;
+    transition.after_owner = kAgcResourceOwnerHost;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(graphics_command), AGC_OK,
+        "color-to-host transition command begins");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(graphics_command, 1u,
+        &transition), AGC_OK, "color-to-host transition records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(graphics_command), AGC_OK,
+        "color-to-host transition command ends");
+    TEST_ASSERT_EQ(agcQueueSubmit(graphics_queue, &submit, fence), AGC_OK,
+        "color-to-host transition submits");
+    captured = agcDriverDebugLastDcbSubmit();
+    words = (const uint32_t *)(uintptr_t)captured->command_address;
+    TEST_ASSERT_EQ(agcPm4Opcode(words[0]), AGC_PM4_OP_RELEASE_MEM,
+        "color-to-host transition emits qualified release");
+    TEST_ASSERT_EQ(agcGetFenceStatus(fence), AGC_OK,
+        "color-to-host transition completes on host");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(graphics_command), AGC_OK,
+        "color-to-host command resets");
+    TEST_ASSERT_EQ(agcDestroyFence(fence), AGC_OK, "transition fence destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(graphics_command), AGC_OK,
+        "transition graphics command destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(compute_command), AGC_OK,
+        "transition compute command destroys");
+    TEST_ASSERT_EQ(agcDestroyImage(image), AGC_OK, "transition image destroys");
+    TEST_ASSERT_EQ(agcDestroyBuffer(buffer), AGC_OK, "transition buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(graphics_queue), AGC_OK,
+        "transition graphics queue destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(compute_queue), AGC_OK,
+        "transition compute queue destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "transition device destroys");
+}
+
 static void test_runtime_color_target_binding(void)
 {
     AgcDevice device = create_device();
@@ -4057,6 +4238,7 @@ void test_suite_runtime(void)
     TEST_RUN(test_runtime_compiler_graphics_sidecar);
     TEST_RUN(test_runtime_indexed_graphics_submission);
     TEST_RUN(test_runtime_image_transfer);
+    TEST_RUN(test_runtime_resource_transitions);
     TEST_RUN(test_runtime_color_target_binding);
     TEST_RUN(test_runtime_mrt_color_target_binding);
     TEST_RUN(test_runtime_depth_stencil_target_binding);

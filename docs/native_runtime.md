@@ -169,17 +169,40 @@ format/sample agreement, image usage, layer extent, and retained ownership,
 then emits the existing gfx1013 depth-surface packet. It supports the
 directly-queryable single-mip depth layouts and one array layer per command
 binding; other depth mip layouts fail closed. Load/store operations, clears,
-and transitions remain explicit future runtime work rather than implicit
-command-side policy.
+and transitions remain explicit rather than implicit command-side policy.
+
+## Explicit resource transitions
+
+`agcCmdTransitionResources` records versioned `AgcResourceTransition` entries;
+each names one buffer or image, its source and destination `AgcResourceUsage`,
+and explicit host/graphics/compute ownership. Applications never supply cache
+control words. The runtime maps supported requests to the qualified gfx1013
+release/flush and acquire/invalidate sequence.
+
+The initial v1 implementation deliberately has a narrow, deterministic scope:
+it accepts whole buffers and complete image mip/layer/aspect ranges only.
+HTILE images, partial ranges, graphics-to-compute ownership transfers, and
+unqualified usage combinations fail closed. A resource may appear only once in
+one transition batch; applications record a later state change in a separate
+call. Command buffers retain transitioned resources, track their requested
+state while recording, and publish that state only after a successful submit.
+Resetting or rejecting a command therefore never changes cross-command state.
+
+The supported usages are undefined/discard, copy source/destination, shader
+read/write, color target, depth/stencil read/write, VideoOut scanout, and host
+read/write. The command queue must own GPU destinations; host destinations use
+the host owner. This is explicit synchronization groundwork, not an automatic
+barrier system or a cross-queue handoff protocol.
 
 ## Current qualification boundary
 
 The complete object lifecycle, validation, finite fence, memory/resource,
 reflected pipeline validation, compute dispatch recording, indexed-graphics
-recording, and typed color-target binding path is host-qualified through the
-generic backend. The same public header and implementation compile for
-Prospero, and device creation owns exact backend selection, caller default
-version, internal memory, and default-state initialization.
+recording, typed color-target binding, and the initial explicit whole-resource
+transition matrix are host-qualified through the generic backend. The same
+public header and implementation compile for Prospero, and device creation owns
+exact backend selection, caller default version, internal memory, and
+default-state initialization. The transition API is not hardware-qualified yet.
 
 Prospero `agcQueueSubmit` submits both current graphics and compute command
 buffers through the direct DCB carrier only when the caller supplies an

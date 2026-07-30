@@ -43,6 +43,15 @@ implementation priorities. Remaining tiled BC, packed/alternate-swap, color-
 metadata, HDR, and depth/MSAA combinations are demand-driven and retain the
 existing host/SPRX/exact-firmware qualification labels.
 
+The first Milestone 4 runtime slice is host-tested: versioned typed
+whole-resource transitions cover declared buffer/image usages and explicit
+host/graphics/compute ownership, derive the existing qualified gfx1013 barrier
+packets internally, retain resources while recorded, and commit state only on
+successful submit. Partial ranges, HTILE, duplicate resources in one batch,
+and cross-queue ownership handoffs fail closed. This is not PS5 hardware
+qualification; multi-command-buffer waits/signals and timeline semantics remain
+pending.
+
 ## Native resource and memory management complete (2026-07-30)
 
 The PS5-only native runtime now suballocates buffers, images, shader code,

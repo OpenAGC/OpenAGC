@@ -49,6 +49,7 @@ int main(void)
     AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
     AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
     AgcDescriptorWrite descriptor = AGC_DESCRIPTOR_WRITE_INIT;
+    AgcResourceTransition transition = AGC_RESOURCE_TRANSITION_INIT;
     AgcRuntimeInfo runtime_info = AGC_RUNTIME_INFO_INIT;
     AgcShaderReflection reflection;
     AgcDevice device = NULL;
@@ -148,6 +149,18 @@ int main(void)
     report_result("agcBeginCommandBuffer", result);
     if (result != AGC_OK)
         goto cleanup;
+    transition.resource_type = kAgcResourceTypeBuffer;
+    transition.buffer = output;
+    transition.buffer_size = sizeof(output_words);
+    transition.before = kAgcResourceUsageUndefined;
+    transition.after = kAgcResourceUsageShaderWrite;
+    transition.before_owner = kAgcResourceOwnerHost;
+    transition.after_owner = kAgcResourceOwnerCompute;
+    result = agcCmdTransitionResources(command_buffer, 1u, &transition);
+    report_result("agcCmdTransitionResources(undefined-to-shader-write)",
+        result);
+    if (result != AGC_OK)
+        goto cleanup;
     result = agcCmdBindComputePipeline(command_buffer, pipeline);
     report_result("agcCmdBindComputePipeline", result);
     if (result != AGC_OK)
@@ -168,6 +181,15 @@ int main(void)
         goto cleanup;
     result = agcCmdDispatch(command_buffer, 1u, 1u, 1u);
     report_result("agcCmdDispatch", result);
+    if (result != AGC_OK)
+        goto cleanup;
+    transition.before = kAgcResourceUsageShaderWrite;
+    transition.after = kAgcResourceUsageHostRead;
+    transition.before_owner = kAgcResourceOwnerCompute;
+    transition.after_owner = kAgcResourceOwnerHost;
+    result = agcCmdTransitionResources(command_buffer, 1u, &transition);
+    report_result("agcCmdTransitionResources(shader-write-to-host-read)",
+        result);
     if (result != AGC_OK)
         goto cleanup;
     result = agcEndCommandBuffer(command_buffer);

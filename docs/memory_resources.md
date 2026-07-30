@@ -59,8 +59,11 @@ submission. These publication operations use the same checked low-level cache
 API as staging.
 
 These calls provide the CPU visibility half of staging. GPU resource-use
-transitions remain owned by the later synchronization milestone; applications
-must not infer or emit cache-control packets themselves.
+transitions are recorded through `agcCmdTransitionResources`; applications must
+not infer or emit cache-control packets themselves. The initial transition
+contract accepts complete buffers and complete image ranges only, and publishes
+their new state only after submit succeeds. See `native_runtime.md` for the
+supported usage/ownership matrix and current fail-closed limits.
 
 ## Image layouts
 
