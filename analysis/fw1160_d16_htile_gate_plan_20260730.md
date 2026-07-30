@@ -130,3 +130,8 @@ FW 11.60 D16 expclear pass 1 then succeeded with exact D16 classes, clean
 teardown, no residual process, and `49152` changed HTILE words from
 `0xfffffff0`. The guarded FW 11.60 recipe now freezes `49152`; one identical
 replay remains before the FW 5.50 endpoint mirror is permitted.
+
+FW 11.60 pass 2 reproduced `49152`, the exact D16 classes, clean shutdown, and
+no residual process. The pinned FW 5.50 mirror is now permitted and its recipe
+requires the same `49152` count before D16 expclear can be promoted across
+endpoints.

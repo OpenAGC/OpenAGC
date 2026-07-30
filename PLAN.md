@@ -480,6 +480,9 @@ the runner and shared teardown on FW 11.60 only.
   metadata count and exact D16 values. The ordinary tuple is qualified on both
   endpoints. Run pinned FW 11.60 D16 expclear pass 1 next, freeze its exact
   metadata count, replay once, then run the pinned FW 5.50 mirror.
+- FW 11.60 D16 expclear passed twice with exact D16 values and `49152` changed
+  HTILE words. Run the pinned FW 5.50 mirror with `49152` frozen. If it passes,
+  promote D16 expclear and advance to the already prepared D32 HTILE tier.
 - The next isolated compressed-depth artifacts are prepared but hardware
   gated: ordinary D16/HTILE first, then D16 HTILE expclear. Exact logged
   `0x1160` artifacts and exact headless `0x0550` mirrors build without
