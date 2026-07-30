@@ -28,3 +28,14 @@ check passed again.
 
 BC1 UNORM is hardware-qualified on exact FW 5.50 and FW 11.60. BC1 SRGB is
 next.
+
+## BC1 SRGB pass 1
+
+Artifact SHA-256:
+`1206fa93091cc0f12043617d9e3f83b4951ef5f727a3aca9a94af73c61d7353f`
+
+The guarded run produced `224640` changed pixels, regions
+`{74880,74880,74880}`, zero exact mismatches, and FNV64
+`0x7ed831bc232c8da1`. The completion fence, marker, driver shutdown, memory
+cleanup, final verdict, self-termination, and residual-process check passed.
+Repeat the identical artifact once.
