@@ -52,7 +52,13 @@ VIDEOOUT_LDFLAGS := -lSceVideoOut -lkernel
 AGC_LDFLAGS := $(OPENAGC_LIB) -lSceVideoOut -lkernel
 FW_STAGE_LDFLAGS := $(OPENAGC_LIB) -lSceVideoOut -lkernel
 FW_SONY_ORACLE_LDFLAGS := $(OPENAGC_LIB) -lkernel
+FIRMWARE_PROBE_LDFLAGS := -lkernel
 PROCESS_CLEANUP_ELF ?= $(OPENAGC_ROOT)/../Vulkan-PS5/build-prospero-m2/vulkan_ps5_process_cleanup.elf
+PINNED_PORTABILITY_SHA256 := e04004fee2254e6169805f153ce4812197726ed5f53a9295a4493f0d8ac9a9ce
+PINNED_PORTABILITY_ELF := $(THIS_DIR)/pinned/agc_portability-$(PINNED_PORTABILITY_SHA256).elf
+PINNED_PROBE_SHA256 := b88790c948a98810cf2fb4799a3ea529cc07e1e18532047e8780e72bde0ce7a7
+PINNED_PROBE_ELF := $(THIS_DIR)/pinned/agc_firmware_probe-$(PINNED_PROBE_SHA256).elf
+PINNED_CLEANUP_SHA256 := 9fd6b41cf2ea87989c4217234c6f34c96a1ca5dc482355af1258539db77d4d76
 
 # === Targets ===
 
@@ -186,11 +192,29 @@ agc_portability.elf: agc_videoout_public.c gpu_credentials.h agc_test_defaults.h
 		-o $@ agc_videoout_public.c $(AGC_LDFLAGS)
 	../../tools/verify_portability_elf.sh $@
 
-.PHONY: portability_fw1160
-portability_fw1160: agc_portability.elf run_portability.sh
-	PS5_HOST=$(PS5_HOST) PORTABILITY_ARTIFACT=$(THIS_DIR)/$< \
+# Read-only preflight used to reject a wrong console before the pinned
+# portability payload opens /dev/gc. It performs no GPU authorization or IO.
+agc_firmware_probe.elf: agc_firmware_probe.c
+	$(CC) $(CFLAGS) -o $@ agc_firmware_probe.c $(FIRMWARE_PROBE_LDFLAGS)
+
+.PHONY: portability_fw550 portability_fw1160
+portability_fw550: run_portability.sh
+	PS5_HOST=$(PS5_HOST) PORTABILITY_ARTIFACT=$(PINNED_PORTABILITY_ELF) \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) \
-		EXPECTED_ARTIFACT_SHA256=e04004fee2254e6169805f153ce4812197726ed5f53a9295a4493f0d8ac9a9ce \
+		FIRMWARE_PROBE_ELF=$(PINNED_PROBE_ELF) \
+		EXPECTED_ARTIFACT_SHA256=$(PINNED_PORTABILITY_SHA256) \
+		EXPECTED_CLEANUP_SHA256=$(PINNED_CLEANUP_SHA256) \
+		EXPECTED_PROBE_SHA256=$(PINNED_PROBE_SHA256) \
+		EXPECTED_FIRMWARE_ABI_KEY=0550 PORTABILITY_ITERATIONS=2 \
+		sh ./run_portability.sh
+
+portability_fw1160: run_portability.sh
+	PS5_HOST=$(PS5_HOST) PORTABILITY_ARTIFACT=$(PINNED_PORTABILITY_ELF) \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) \
+		FIRMWARE_PROBE_ELF=$(PINNED_PROBE_ELF) \
+		EXPECTED_ARTIFACT_SHA256=$(PINNED_PORTABILITY_SHA256) \
+		EXPECTED_CLEANUP_SHA256=$(PINNED_CLEANUP_SHA256) \
+		EXPECTED_PROBE_SHA256=$(PINNED_PROBE_SHA256) \
 		EXPECTED_FIRMWARE_ABI_KEY=1160 PORTABILITY_ITERATIONS=2 \
 		sh ./run_portability.sh
 
