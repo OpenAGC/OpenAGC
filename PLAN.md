@@ -672,6 +672,9 @@ the runner and shared teardown on FW 11.60 only.
   5.50 artifact with its observed exact color `227610/227610` and D32
   `6469632/912384/912384` counts frozen to establish the first qualification
   pass.
+- FW 5.50 corrected-gate pass 1 matched the frozen oracle and left no residual
+  process. Replay the identical pinned bytes once more before moving to FW
+  11.60.
 - Require two identical passes per capability, then rerun the corresponding FW
   5.50 paths before promotion. See
   `analysis/fw1160_graphics_compute_gate_audit_20260729.md` and

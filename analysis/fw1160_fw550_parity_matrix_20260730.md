@@ -278,6 +278,12 @@ green=`227610`, red=`227610`, D32 one=`6469632`, near=`912384`, and
 far=`912384`. These values are frozen in the corrected gate for both credited
 replays.
 
+FW 5.50 corrected-gate pass 1 used the pinned
+`83088ff7f33df17b89668b9d058b447212891585bf3455bd6ac7033bbf633ab7`
+artifact and matched every frozen count exactly. The GPU fence completed,
+markers and resolve passed, driver and memory teardown passed, the process
+self-terminated, and ps5debug-NG confirmed no residual `eboot.bin`.
+
 That prerequisite sequence is now complete. Two relinks against the committed
 shader records reproduced all eight artifacts byte-for-byte, and dependency
 inspection found only VideoOut, kernel, libc, and networking. The exact FW

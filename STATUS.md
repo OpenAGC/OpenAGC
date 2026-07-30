@@ -143,6 +143,10 @@ and covered by a standalone-label fixture. Its exact color `227610/227610` and
 D32 `6469632/912384/912384` counts are frozen for the corrected replays; no
 hardware pass is credited until the pinned artifact passes that gate.
 
+FW 5.50 corrected-gate pass 1 now matches every frozen 4x MSAA color and D32
+count, with fence, teardown, self-termination, and debugger absence checks all
+passing. One identical-byte replay remains before endpoint promotion.
+
 All four subresource artifacts now reproduce across two relinks, avoid AGC
 SPRX dependencies, are preserved under full hashes, and have cleanup-first
 hash-pinned deploy targets with exact color and selected/outside metadata
