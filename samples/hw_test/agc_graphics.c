@@ -518,6 +518,9 @@ int sceKernelDeleteEqueue(SceKernelEqueue equeue);
 #ifndef AGC_VALIDATE_R16_UNORM
 #define AGC_VALIDATE_R16_UNORM 0
 #endif
+#ifndef AGC_VALIDATE_RG16_UNORM
+#define AGC_VALIDATE_RG16_UNORM 0
+#endif
 #ifndef AGC_VALIDATE_R8_UNORM
 #define AGC_VALIDATE_R8_UNORM 0
 #endif
@@ -543,7 +546,7 @@ int sceKernelDeleteEqueue(SceKernelEqueue equeue);
      AGC_VALIDATE_RGB10A2 + AGC_VALIDATE_R11G11B10 + \
      AGC_VALIDATE_RGBA8_SRGB + AGC_VALIDATE_BGRA8_SRGB + \
      AGC_VALIDATE_R16_FLOAT + AGC_VALIDATE_RG16_FLOAT + \
-     AGC_VALIDATE_R16_UNORM + \
+     AGC_VALIDATE_R16_UNORM + AGC_VALIDATE_RG16_UNORM + \
      AGC_VALIDATE_R8_UNORM + AGC_VALIDATE_RG8_UNORM + \
      AGC_VALIDATE_R32_FLOAT + AGC_VALIDATE_RG32_FLOAT + \
      AGC_VALIDATE_RGBA32_FLOAT) > 1
@@ -2866,6 +2869,17 @@ static bool dispatch_graphics(GraphicsTest *test,
         uint32_t out_of_range_components = 0;
         uint16_t min_component = UINT16_MAX;
         uint16_t max_component = 0u;
+        uint16_t lane_min[4] = {
+            UINT16_MAX, UINT16_MAX, UINT16_MAX, UINT16_MAX};
+        uint16_t lane_max[4] = {0u, 0u, 0u, 0u};
+        uint16_t lane_unique[4][8] = {{0}};
+        uint32_t lane_unique_count[4] = {0u, 0u, 0u, 0u};
+        uint64_t lane_hash[4] = {
+            UINT64_C(1469598103934665603),
+            UINT64_C(1469598103934665603),
+            UINT64_C(1469598103934665603),
+            UINT64_C(1469598103934665603),
+        };
         uint64_t packed_hash = UINT64_C(1469598103934665603);
         uint32_t min_x = target->width;
         uint32_t min_y = target->height;
@@ -2897,6 +2911,18 @@ static bool dispatch_graphics(GraphicsTest *test,
                     out_of_range_components++;
                 if (component < min_component) min_component = component;
                 if (component > max_component) max_component = component;
+                if (component < lane_min[lane]) lane_min[lane] = component;
+                if (component > lane_max[lane]) lane_max[lane] = component;
+                lane_hash[lane] = (lane_hash[lane] ^ component) *
+                    UINT64_C(1099511628211);
+                if (lane_unique_count[lane] < 8u) {
+                    bool seen = false;
+                    for (uint32_t j = 0u; j < lane_unique_count[lane]; ++j)
+                        seen |= lane_unique[lane][j] == component;
+                    if (!seen)
+                        lane_unique[lane][lane_unique_count[lane]++] =
+                            component;
+                }
             }
             if (unique_color_count < 8) {
                 bool seen = false;
@@ -2963,14 +2989,33 @@ static bool dispatch_graphics(GraphicsTest *test,
         printf("[%s] Native packed FNV64: 0x%016llx\n",
                unorm16 ? "UNORM16" : "FP16",
                (unsigned long long)packed_hash);
+        bool lane_encoding_pass = true;
+        if (unorm16) {
+            for (uint32_t lane = 0u; lane < components; ++lane) {
+                const bool lane_pass = lane_min[lane] <= 0x1000u &&
+                    lane_max[lane] >= 0xefffu &&
+                    lane_unique_count[lane] >= 8u;
+                lane_encoding_pass &= lane_pass;
+                printf("[UNORM16 Lane %u] range=0x%04x..0x%04x "
+                       "distinct=%u fnv64=0x%016llx: %s\n",
+                       lane, lane_min[lane], lane_max[lane],
+                       lane_unique_count[lane],
+                       (unsigned long long)lane_hash[lane],
+                       lane_pass ? "PASS" : "FAIL");
+            }
+            const bool independent = components < 2u ||
+                lane_hash[0] != lane_hash[1];
+            lane_encoding_pass &= independent;
+            printf("[UNORM16] Channel independence: %s\n",
+                   independent ? "PASS" : "FAIL");
+        }
 #if AGC_NGG_INPUT_LINES || AGC_TESS_GEOMETRY_LINES
         const bool color_pass = unique_color_count == 1u &&
                                 unique_colors[0] == 0x3c003c003c003c00ull;
 #else
         const bool color_pass = unique_color_count >= 8u;
 #endif
-        const bool encoding_pass = !unorm16 ||
-            (min_component <= 0x1000u && max_component >= 0xefffu);
+        const bool encoding_pass = !unorm16 || lane_encoding_pass;
 #if AGC_INDIRECT_DRAW_COUNT > 1
         const bool multi_draw_pass =
             changed > expected_changed + coverage_tolerance &&
@@ -3184,8 +3229,8 @@ static void visualize_fp16(GraphicsTest *test, uint32_t components) {
            components, preview_width, preview_height);
 }
 
-#if AGC_VALIDATE_R16_UNORM
-static void visualize_unorm16(GraphicsTest *test) {
+#if AGC_VALIDATE_R16_UNORM || AGC_VALIDATE_RG16_UNORM
+static void visualize_unorm16(GraphicsTest *test, uint32_t components) {
     const uint16_t *source = (const uint16_t *)test->render_target;
     uint32_t *display = (uint32_t *)test->buffers[0];
     const uint32_t preview_width = FP16_TARGET_WIDTH / FP16_PREVIEW_DIVISOR;
@@ -3198,20 +3243,26 @@ static void visualize_unorm16(GraphicsTest *test) {
     for (uint32_t y = 0u; y < preview_height; ++y) {
         const uint32_t source_y = y * FP16_PREVIEW_DIVISOR;
         for (uint32_t x = 0u; x < preview_width; ++x) {
-            const uint16_t value = source[
-                source_y * FP16_TARGET_WIDTH +
-                x * FP16_PREVIEW_DIVISOR];
-            if (value == (uint16_t)FP16_CLEAR_SENTINEL)
+            const size_t source_index =
+                (source_y * FP16_TARGET_WIDTH +
+                 x * FP16_PREVIEW_DIVISOR) * components;
+            const uint16_t red16 = source[source_index];
+            const uint16_t green16 = components > 1u ?
+                source[source_index + 1u] : 0u;
+            if (red16 == (uint16_t)FP16_CLEAR_SENTINEL &&
+                (components == 1u ||
+                 green16 == (uint16_t)FP16_CLEAR_SENTINEL))
                 continue;
-            const uint8_t red = (uint8_t)(value >> 8u);
+            const uint8_t red = (uint8_t)(red16 >> 8u);
+            const uint8_t green = (uint8_t)(green16 >> 8u);
             display[(origin_y + y) * test->width + origin_x + x] =
-                UINT32_C(0xff000000) | red;
+                UINT32_C(0xff000000) | ((uint32_t)green << 8u) | red;
         }
     }
     memcpy(test->buffers[1], test->buffers[0],
            (size_t)test->width * test->height * BYTES_PER_PIXEL);
-    printf("[UNORM16] CPU preview: %ux%u centered on RGBA8 display\n",
-           preview_width, preview_height);
+    printf("[UNORM16] %u-channel CPU preview: %ux%u centered on RGBA8 display\n",
+           components, preview_width, preview_height);
 }
 #endif
 #endif
@@ -3684,18 +3735,22 @@ int main(void) {
     visualize_native(&test, components, 4u);
 #endif
 #elif AGC_VALIDATE_R16_FLOAT || AGC_VALIDATE_RG16_FLOAT || \
-      AGC_VALIDATE_R16_UNORM
-    const uint32_t components = AGC_VALIDATE_RG16_FLOAT ? 2u : 1u;
+      AGC_VALIDATE_R16_UNORM || AGC_VALIDATE_RG16_UNORM
+    const uint32_t components =
+        (AGC_VALIDATE_RG16_FLOAT || AGC_VALIDATE_RG16_UNORM) ? 2u : 1u;
     RenderTargetConfig narrow_16_target = {
         test.render_target, FP16_TARGET_WIDTH, FP16_TARGET_HEIGHT,
-        AGC_VALIDATE_RG16_FLOAT ? AGC_GFX1013_COLOR_FORMAT_16_16 :
+        (AGC_VALIDATE_RG16_FLOAT || AGC_VALIDATE_RG16_UNORM) ?
+            AGC_GFX1013_COLOR_FORMAT_16_16 :
             AGC_GFX1013_COLOR_FORMAT_16,
-        AGC_VALIDATE_R16_UNORM ? AGC_GFX1013_SURFACE_NUMBER_UNORM :
+        (AGC_VALIDATE_R16_UNORM || AGC_VALIDATE_RG16_UNORM) ?
+            AGC_GFX1013_SURFACE_NUMBER_UNORM :
             AGC_GFX1013_SURFACE_NUMBER_FLOAT,
         AGC_GFX1013_SURFACE_SWAP_STD,
         components, 2u, AGC_VALIDATE_RG16_FLOAT ?
-            "RG16_FLOAT" : (AGC_VALIDATE_R16_UNORM ?
-                "R16_UNORM" : "R16_FLOAT")
+            "RG16_FLOAT" : (AGC_VALIDATE_RG16_UNORM ?
+                "RG16_UNORM" : (AGC_VALIDATE_R16_UNORM ?
+                    "R16_UNORM" : "R16_FLOAT"))
     };
     printf("\n--- Step 4: %s offscreen draw ---\n",
            narrow_16_target.name);
@@ -3706,8 +3761,8 @@ int main(void) {
         return 1;
     }
 #if !AGC_GRAPHICS_HEADLESS
-#if AGC_VALIDATE_R16_UNORM
-    visualize_unorm16(&test);
+#if AGC_VALIDATE_R16_UNORM || AGC_VALIDATE_RG16_UNORM
+    visualize_unorm16(&test, components);
 #else
     visualize_fp16(&test, components);
 #endif

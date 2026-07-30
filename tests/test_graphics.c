@@ -1549,6 +1549,8 @@ static void test_gfx1013_fixed_function_packets(void)
          0x00028e28u},
         {AGC_GFX1013_RT_FORMAT_R16_UNORM, 0x02u, 0u, 0u, 2u, 4u,
          0x00028008u},
+        {AGC_GFX1013_RT_FORMAT_RG16_UNORM, 0x05u, 0u, 0u, 4u, 4u,
+         0x00028014u},
     };
     uint32_t buffer[64] = {0};
     uint32_t expected_format[28];
@@ -1640,6 +1642,8 @@ static void test_gfx1013_fixed_function_packets(void)
         13u, "gfx1013 BGRA8 SRGB enum is appended");
     TEST_ASSERT_EQ((uint32_t)AGC_GFX1013_RT_FORMAT_R16_UNORM,
         14u, "gfx1013 R16 UNORM enum is appended");
+    TEST_ASSERT_EQ((uint32_t)AGC_GFX1013_RT_FORMAT_RG16_UNORM,
+        15u, "gfx1013 RG16 UNORM enum is appended");
 
     agcCbInit(&cb, buffer, sizeof(buffer));
     TEST_ASSERT_EQ(agcGfx1013SetColorTarget(&cb, &color), AGC_OK,
@@ -1705,6 +1709,16 @@ static void test_gfx1013_fixed_function_packets(void)
         "gfx1013 one-past-last color format rejects");
     TEST_ASSERT_EQ(format_info.color_format, 0xa5a5a5a5u,
         "invalid color format preserves caller output");
+
+    TEST_ASSERT_EQ(agcGfx1013InitColorTarget(&typed_color, color.address,
+        2048u, color.height, AGC_GFX1013_RT_FORMAT_RG16_UNORM), AGC_OK,
+        "gfx1013 RG16 UNORM boundary target initializes");
+    agcCbReset(&cb, buffer, 27u * sizeof(uint32_t));
+    TEST_ASSERT_EQ(agcGfx1013SetColorTarget(&cb, &typed_color),
+        AGC_ERROR_BUFFER_TOO_SMALL,
+        "gfx1013 RG16 UNORM rejects a one-dword-short buffer");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "gfx1013 short RG16 UNORM emission is atomic");
 
     agcCbReset(&cb, buffer, sizeof(buffer));
     TEST_ASSERT_EQ(agcGfx1013SetViewport(&cb, &viewport), AGC_OK,

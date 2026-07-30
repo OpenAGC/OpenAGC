@@ -534,6 +534,12 @@ agc_graphics_r16_unorm_portable.elf: agc_graphics.c ps5_video_out.h gpu_credenti
 	../../tools/verify_firmware_neutral_elf.sh $@ \
 		/data/homebrew/openagc_portable_graphics/result.log
 
+agc_graphics_rg16_unorm_portable.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(PORTABLE_GRAPHICS_FLAGS) -DAGC_VALIDATE_RG16_UNORM=1 \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+	../../tools/verify_firmware_neutral_elf.sh $@ \
+		/data/homebrew/openagc_portable_graphics/result.log
+
 agc_graphics_r16_float_fw1160.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) $(FW1160_GRAPHICS_FLAGS) -DAGC_VALIDATE_R16_FLOAT=1 \
 		-o $@ agc_graphics.c $(AGC_LDFLAGS)
@@ -1172,6 +1178,7 @@ deploy_agc_graphics: agc_graphics.elf
 .PHONY: deploy_agc_graphics_fw1160 \
 	deploy_agc_graphics_r16_unorm_portable_fw1160 \
 	deploy_agc_graphics_r16_unorm_portable_fw550 \
+	deploy_agc_graphics_rg16_unorm_portable_fw1160 \
 	deploy_agc_graphics_r16_float_fw1160 \
 	deploy_agc_graphics_rg16_float_fw1160 \
 	deploy_agc_graphics_rgb10a2_fw1160 \
@@ -1217,6 +1224,13 @@ deploy_agc_graphics_r16_unorm_portable_fw550: agc_graphics_r16_unorm_portable.el
 	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
 		EXPECTED_FW_ABI=0x0550 EXPECTED_TARGET=R16_UNORM \
 		EXPECTED_ARTIFACT_SHA256=c0a5ad4732bf13c41f96560cb2dbfa3c39dffb9a47958ccbd2bef5754523220a \
+		RESULT_LOG_PATH=/data/homebrew/openagc_portable_graphics/result.log \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
+
+deploy_agc_graphics_rg16_unorm_portable_fw1160: agc_graphics_rg16_unorm_portable.elf
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_FW_ABI=0x1160 EXPECTED_TARGET=RG16_UNORM \
+		EXPECTED_ARTIFACT_SHA256=e2d53bcb2392314ee0992bf888ff13e297ff939e223ee9a3e787982c4bfe351c \
 		RESULT_LOG_PATH=/data/homebrew/openagc_portable_graphics/result.log \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
 

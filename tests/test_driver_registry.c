@@ -315,6 +315,8 @@ static void test_common_operation_carrier_profiles(void)
         AgcProsperoDirectProfile profile;
         AgcGfx1013ColorTargetFormatInfo r16_unorm_info;
         AgcGfx1013ColorTargetState r16_unorm_target;
+        AgcGfx1013ColorTargetFormatInfo rg16_unorm_info;
+        AgcGfx1013ColorTargetState rg16_unorm_target;
         uint32_t raw = active_raw_versions[i];
         uint16_t key = (uint16_t)(raw >> 16);
         uint8_t major_bcd = (uint8_t)(key >> 8);
@@ -349,6 +351,22 @@ static void test_common_operation_carrier_profiles(void)
         TEST_ASSERT_EQ(r16_unorm_target.number_type,
             AGC_GFX1013_SURFACE_NUMBER_UNORM,
             "active profile receives the same typed R16 UNORM state");
+        TEST_ASSERT_EQ(agcGfx1013GetColorTargetFormatInfo(
+            AGC_GFX1013_RT_FORMAT_RG16_UNORM, &rg16_unorm_info), AGC_OK,
+            "firmware-neutral RG16 UNORM tuple resolves for active profile");
+        TEST_ASSERT_EQ(rg16_unorm_info.color_format,
+            AGC_GFX1013_COLOR_FORMAT_16_16,
+            "active profile shares the gfx1013 16+16 color encoding");
+        TEST_ASSERT_EQ(rg16_unorm_info.number_type,
+            AGC_GFX1013_SURFACE_NUMBER_UNORM,
+            "active profile shares the two-channel UNORM number encoding");
+        TEST_ASSERT_EQ(agcGfx1013InitColorTarget(&rg16_unorm_target,
+            UINT64_C(0x0000000201000000), 1536u, 1536u,
+            AGC_GFX1013_RT_FORMAT_RG16_UNORM), AGC_OK,
+            "firmware-neutral RG16 UNORM target initializes");
+        TEST_ASSERT_EQ(rg16_unorm_target.number_type,
+            AGC_GFX1013_SURFACE_NUMBER_UNORM,
+            "active profile receives the same typed RG16 UNORM state");
         TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_TF_RING) != 0,
             "active profile exposes exact public TF-ring carrier");
         TEST_ASSERT((profile.capabilities & AGC_DIRECT_CAP_MEMORY) != 0,
