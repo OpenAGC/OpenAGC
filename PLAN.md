@@ -8,7 +8,10 @@ Build a clean open-source PS5 AGC implementation in stages:
 2. Make that model host-testable before touching hardware.
 3. Implement a native PS5 `/dev/gc` backend once ioctl and memory ownership are
    understood.
-4. Expand from basic packet submission into native PS5 graphics features.
+4. Preserve that Sony-compatible low-level layer as the firmware and ABI
+   foundation.
+5. Build a safe, documented, firmware-neutral OpenAGC device, resource,
+   pipeline, command, synchronization, and presentation API above it.
 
 The project target is native PS5 AGC behavior, not PS4 GNM compatibility. GNM
 is still a valuable reference because PS5 backward compatibility, GNM, AGC, and
@@ -53,9 +56,387 @@ The active support floor remains FW 3.20. FW 1.x, FW 2.x, and FW 3.00 remain
 archival unless that policy is explicitly changed with matching evidence and
 hardware need.
 
-## Current Execution Order
+## Authoritative Product Roadmap
 
-### Firmware-neutral binary portability (highest priority)
+This section is the authoritative forward plan. The detailed qualification,
+reverse-engineering, and historical phase records below remain evidence, but
+they do not override this order when an older paragraph names a different
+"next" task.
+
+The product direction is:
+
+> Keep `sceAgc*` and `sceAgcDriver*` compatibility as the low-level
+> foundation, and add a safe native OpenAGC device and pipeline API above it.
+
+Do not require ordinary applications to assemble PM4, select cache-control
+bits, allocate one direct-memory object per resource, or branch on firmware.
+Keep the low-level builders public for ABI compatibility, diagnostics, and
+expert use, but make the native API the recommended application surface.
+
+### Roadmap corrections and ordering rules
+
+1. **Close the one-binary portability gate first.** The pinned neutral ELF has
+   passed FW 11.60, but its identical-byte FW 5.50 replay remains the primary
+   product gate. Complete the FW 5.50 cleanup stress prerequisite before that
+   replay. Do not describe profile selection as fully portable until the same
+   bytes pass both endpoint consoles.
+2. **Do not reopen completed format work.** All R/RG/RGBA16
+   UNORM/SNORM/UINT/SINT tuples, all six 32-bit UINT/SINT color tuples, all 14
+   BC1-BC7 sampling encodings, the planned D16/D32/S8/HTILE progression, and
+   the planned 4x MSAA endpoint matrix are already host- and endpoint-qualified
+   as recorded below. Preserve them in regression coverage. The remaining
+   format track is tiled BC layout and copies, additional packed/alternate-swap
+   formats, color metadata such as DCC/CMASK/FMASK, and further depth/MSAA
+   combinations driven by an application requirement.
+3. **Build vertical runtime slices before obscure packet breadth.** A resource
+   that can be created, bound through a validated pipeline, transitioned,
+   submitted, waited, presented, and destroyed safely is more valuable than an
+   isolated builder with no application-facing owner. Add a packet builder
+   early only when a native-runtime slice, hardware safety fix, or observed
+   title import requires it.
+4. **Make shader and attachment compatibility an early hard gate.** Reflection
+   and pipeline validation must reject incompatible exports, formats, blend
+   state, descriptor layouts, sample counts, and stage linkage before command
+   emission. This precedes broad state-object or Vulkan feature expansion.
+5. **Stabilize the native API before repairing `../Vulkan-PS5`.** Vulkan must
+   translate into OpenAGC objects and capabilities; it must not grow a second
+   PM4 backend, allocator, firmware selector, or synchronization model.
+6. **Documentation and validation are part of every milestone.** Do not defer
+   public API reference material, negative tests, or capability labels to the
+   final release phase.
+
+### Milestone 0: close portability and regression debt
+
+1. Run `cleanup_stress_fw550` from a fresh boot and require every launch and
+   release result to pass with no residual process or kernel fault.
+2. Run the already pinned `agc_portability.elf` bytes twice on FW 5.50. Verify
+   the local and uploaded SHA-256 digest, normalized firmware key, selected
+   profile, real GPU work, bounded presentation, teardown, and relaunch.
+3. Keep the same artifact passing on FW 11.60. Any later runtime change must
+   rebuild one new firmware-neutral artifact and qualify those exact bytes on
+   both endpoints.
+4. Preserve the completed color, BC sampling, depth/HTILE, MSAA, indexed, and
+   indirect artifacts as a regression matrix. Re-run an exact artifact when a
+   runtime change touches its allocator, transition, shader, queue, or submit
+   path; do not rebuild merely to claim endpoint parity.
+5. Keep unknown profiles and profile-specific optional capabilities fail
+   closed. The FW 11.60 workload carrier remains disabled until new offline
+   evidence establishes the missing GPU-side prerequisite.
+
+Exit criteria: one hash-identical application-neutral ELF passes twice on FW
+5.50 and FW 11.60, the FW 5.50 cleanup stress gate passes, and the support
+matrix distinguishes exact-profile evidence from hardware qualification.
+
+### Milestone 1: freeze the native C API contract
+
+Introduce an installable, C99, firmware-neutral API in a distinct public
+header family. Use opaque handles and versioned descriptor structs so internal
+layouts can evolve without breaking application ABI. The initial object model
+is:
+
+- `AgcDevice` and `AgcQueue`.
+- `AgcBuffer`, `AgcImage`, `AgcImageView`, and `AgcSampler`.
+- `AgcShader`, `AgcGraphicsPipeline`, and `AgcComputePipeline`.
+- `AgcCommandBuffer` and `AgcFence`.
+
+The minimum coherent path must support calls equivalent to:
+
+```c
+agcCreateDevice(&device_info, &device);
+agcCreateBuffer(device, &buffer_info, &buffer);
+agcCreateGraphicsPipeline(device, &pipeline_info, &pipeline);
+agcCmdBindPipeline(command_buffer, pipeline);
+agcCmdDrawIndexed(command_buffer, index_count, 1, 0, 0, 0);
+agcQueueSubmit(queue, &submit_info, fence);
+```
+
+Define lifecycle and ownership rules before adding convenience functions:
+
+- Parent/child ownership and destroy order.
+- Thread-safety and external-synchronization requirements.
+- Command-buffer states: initial, recording, executable, pending, and reset.
+- Resource use while pending and destruction/deferred-destruction behavior.
+- Stable error results for invalid state, unsupported capability, exhausted
+  command space, device loss, and timeout.
+- A base binary-fence path with create/destroy, status, reset, and finite
+  timeout wait operations; waits never default to an infinite deadline.
+- Explicit structure-size/version fields and reserved-zero rules.
+- Optional application allocation callbacks without adding a dependency.
+
+Add `AgcRuntimeInfo` and `agcGetRuntimeInfo(device, &runtime_info)`. It reports
+the full runtime version, normalized ABI key, exact selected profile, caller
+AGC version/default-table choice, standard or Trinity hardware family,
+capability bits, and a per-capability qualification class. Qualification must
+distinguish host-tested, SPRX/profile-qualified hardware-unverified, and exact-
+firmware hardware-qualified. Applications branch on capabilities, never on a
+firmware number.
+
+Internally, device creation owns selection of the submit and queue ABIs,
+suspend/workload carriers, register defaults, register-shadow policy, VideoOut
+patch policy, memory-region configuration, and optional features. Unknown keys
+or unavailable required capabilities fail before mutating GPU or process
+state.
+
+Exit criteria: generic tests create and destroy every object, reject invalid
+lifecycle transitions, and record one compute plus one indexed graphics
+submission; the same public headers build unchanged for generic and Prospero;
+the existing low-level ABI remains source- and binary-compatible.
+
+### Milestone 2: resource creation and memory management
+
+Build reusable allocators above flexible/onion and garlic/direct memory while
+retaining explicit heap properties. Do not expose raw allocation policy as a
+firmware choice to the application.
+
+1. Add heap blocks and alignment-aware suballocation for buffers, images,
+   shader code, descriptors, command storage, render targets, depth/stencil,
+   and scanout-capable images.
+2. Centralize overflow-safe buffer and image layout computation, including
+   mip chains, arrays, cube faces, BC block dimensions, sample counts,
+   metadata planes, row/slice pitch, padding, and alignment.
+3. Add persistently mapped upload staging and bounded readback staging with
+   explicit cache/visibility rules.
+4. Track allocation size, heap, GPU virtual address range, CPU mapping,
+   residency, resource owner, and an optional debug name.
+5. Add leak and high-water reporting in debug builds.
+6. Add fence-keyed deferred frees after the base fence path exists. A pending
+   resource must never be returned to a heap early.
+7. Keep dedicated allocations available for scanout, unusual alignment,
+   oversized resources, diagnostics, and future residency constraints.
+
+Exit criteria: a stress test creates, streams, reuses, and destroys many
+buffers and images from a bounded number of direct-memory blocks, reloads the
+same asset set repeatedly, detects arithmetic overflow, and returns to the
+original allocation count after all fences complete.
+
+### Milestone 3: reflection and validated pipeline objects
+
+Version `AgcShaderRecord` metadata as a contract shared by `openagc-psbc` and
+the runtime. Extend reflection only from compiler- or firmware-backed facts;
+do not infer layouts from application convention.
+
+Reflection must describe, where applicable:
+
+- Shader stage, entry point, record version, code hash, and wave size.
+- User-SGPR placement and system-SGPR requirements.
+- Descriptor/resource table layout and resource classes.
+- Push-constant ranges and alignment.
+- Vertex inputs and interpolation requirements.
+- Pixel-shader color exports, component types, write masks, and required MRTs.
+- Scratch, LDS, tessellation, geometry/NGG, and stage-linkage requirements.
+
+`AgcGraphicsPipeline` packages validated shader records, render-target and
+depth/stencil formats, blend/raster/depth/stencil state, multisampling, vertex
+layout, descriptor layout, dynamic-state mask, and required register state.
+`AgcComputePipeline` packages its shader, descriptor/push layout, threadgroup
+contract, resource limits, scratch/LDS, and dispatch constraints.
+
+Pipeline creation must fail before PM4 emission for at least:
+
+- FP/UNORM/SNORM export versus UINT/SINT attachment mismatches.
+- Missing or extra color exports and unsupported component swaps.
+- Blending on integer render targets.
+- Depth/stencil or sample-count incompatibility.
+- Vertex input, descriptor-table, push-constant, user-SGPR, wave-size, or
+  stage-linkage mismatches.
+- Unsupported firmware/profile capabilities.
+
+Cache immutable register groups in the pipeline while keeping viewport,
+scissor, blend constants, stencil reference, and other declared dynamic state
+in the command buffer. Do not make an opaque pipeline hide an unqualified
+register sequence.
+
+Exit criteria: host tests cover a compatibility cross-product of shader
+exports and attachment types, negative pipeline fixtures emit zero commands,
+and hardware samples bind pipelines without sample-local register assembly.
+
+### Milestone 4: command recording, resource states, and synchronization
+
+Give every buffer and image subresource an explicit usage state:
+
+- Undefined/discard.
+- Copy source or destination.
+- Shader read or shader write.
+- Color-render target.
+- Depth/stencil read or write.
+- VideoOut scanout.
+- Host read or host write.
+
+Expose a typed transition request using source/destination usage, queue owner,
+and subresource range. The implementation derives the qualified gfx1013
+`RELEASE_MEM`, `ACQUIRE_MEM`, flush, invalidate, event, and metadata actions.
+Applications must not pass raw cache-control words through the native API.
+Reject unsupported transitions and ambiguous ownership instead of issuing a
+conservative packet sequence whose safety has not been hardware-qualified.
+
+Start with explicit transitions. Optional automatic state tracking may infer
+same-command-buffer prior state, but it must remain deterministic and provide
+an escape hatch for imported/external resources. Cross-command-buffer state is
+committed only after successful submit validation.
+
+Synchronization grows in this order:
+
+1. Harden the base binary fences with structured timeout diagnostics and
+   submission ownership.
+2. Multiple command buffers and wait/signal lists per submission.
+3. GPU waits and signals backed by qualified memory labels/events.
+4. Monotonic timeline-style counters with overflow rules.
+5. Graphics/compute queue ownership transfers where genuinely distinct queue
+   behavior is supported.
+6. Fence-driven command allocator reuse and resource retirement.
+
+Never convert a timeout into success or wait forever. Diagnostics should name
+the queue, last submission, fence value, firmware profile, and most recent
+completed marker without pretending to recover a lost device.
+
+Exit criteria: exact host fixtures cover the supported transition matrix and
+atomic short-buffer failure; FW 5.50 and FW 11.60 gates cover render-to-shader,
+compute-to-copy, copy-to-shader, host-read, and present-to-render; repeated
+multi-command-buffer submission and deferred destruction complete without
+leaks, stale ownership, or unbounded waits.
+
+### Milestone 5: validation, diagnostics, capture, and documentation
+
+Validation begins with Milestone 1 and becomes a separately selectable debug
+layer here. It must detect invalid enums and object states, misaligned or out-
+of-range GPU addresses, descriptor/reflection mismatches, shader-export and
+attachment incompatibility, missing transitions, buffer/image overruns,
+integer-target blending, unsupported capabilities, command-buffer exhaustion,
+use-after-submit, and premature destruction.
+
+Validation must be deterministic, allocation-aware, and independent of
+assertions. It may be compiled out or disabled for release performance, but
+public calls must still preserve required safety checks.
+
+Add an optional capture stream with a versioned, endian-defined format. A
+capture records:
+
+- Runtime/profile and capability information.
+- Object creation records and debug names.
+- Resource descriptions and stable capture-local IDs, not raw host pointers.
+- Shader record versions and hashes; include shader bytes only with an
+  explicit application opt-in.
+- Pipeline descriptions, transitions, command-buffer boundaries, PM4 dwords,
+  submission order, waits/signals, fence results, and selected readback hashes.
+
+Build a host decoder that prints named packets, fields, register names,
+resource references, and validation warnings. Redact or omit process-specific
+addresses by default. Captures are diagnostic records, not automatically safe
+hardware replays; a future replay tool needs a separate address-remapping and
+security design.
+
+Create and maintain application documentation alongside the API:
+
+- A native API overview and object-lifecycle guide.
+- Installation/CMake and first-triangle/first-compute tutorials.
+- Resource-memory and synchronization guides.
+- Shader compilation, reflection, descriptor, and pipeline guides.
+- Firmware-neutral capability/qualification semantics.
+- Error, timeout, capture, and hardware-debugging guides.
+- Generated or manually indexed reference pages for every public native type
+  and function, including ownership, thread-safety, return values, and examples.
+
+Exit criteria: intentionally invalid programs produce actionable diagnostics,
+a captured reference frame decodes deterministically on the host, public API
+examples build from the installed package, and documentation contains no
+firmware branch in ordinary application code.
+
+### Milestone 6: build a firmware-neutral reference game
+
+Build a small source-available game-like workload with the native API rather
+than another one-feature probe. Keep focused hardware samples for isolation,
+but use this program as the integration and longevity gate.
+
+It must exercise:
+
+- Multiple textured meshes with vertex and index buffers.
+- BC texture assets, image views, samplers, mip levels, and streaming.
+- Depth buffering, alpha blending, and at least two graphics pipelines.
+- Uniform/push data and storage buffers.
+- A compute pass whose output is consumed by graphics.
+- Explicit resource transitions, multiple command buffers, and fences.
+- VideoOut acquisition/presentation and a bounded lifecycle reset.
+- Repeated level reloads and long-running allocator stability.
+- A capture mode and deterministic screenshot/readback hash at known frames.
+
+Pin one ELF and run the identical bytes on FW 5.50 and FW 11.60. The workload
+must select behavior only through native capability queries. Optional features
+may degrade through documented capability paths, but the baseline scene and
+all required validation results must remain the same.
+
+Exit criteria: the same hash-identical ELF completes cold boot, a bounded
+long-run test, repeated level reloads, teardown, and relaunch on both endpoint
+firmwares with stable memory high-water marks and deterministic frame oracles.
+
+### Milestone 7: rehabilitate `../Vulkan-PS5` above the native runtime
+
+Begin only after Milestones 1-5 are stable and the reference game has exercised
+the runtime contracts. First audit `../Vulkan-PS5`; retain useful API-facing
+code, but remove or replace duplicated PM4 emission, firmware checks, memory
+allocation, transition logic, shader metadata interpretation, and queue/fence
+ownership.
+
+Implement and publish an explicit constrained feature profile for common
+homebrew needs:
+
+- Instances, physical/logical device discovery, queues, and capability mapping.
+- Buffers, images, views, samplers, memory requirements, and binding.
+- Shader modules plus graphics and compute pipelines.
+- Descriptor set layouts, pools, sets, push constants, and updates.
+- Command pools/buffers, render passes or dynamic rendering, and barriers.
+- Indexed/indirect draws, dispatch, copies, BC sampling, depth/stencil, and the
+  hardware-qualified MSAA subset.
+- Fences, semaphores, bounded waits, and swapchain/VideoOut integration.
+
+Map Vulkan formats and access/layout transitions to native OpenAGC validation;
+do not accept a Vulkan format merely because an enum value can be translated.
+Add focused Vulkan Conformance Test coverage where feasible, but do not claim
+Vulkan conformance or a version level until the corresponding required suite
+passes and unsupported requirements are reported accurately.
+
+Exit criteria: selected unmodified Vulkan homebrew samples run through the
+OpenAGC native runtime on both endpoint firmwares, the Vulkan layer contains no
+second hardware backend, and its advertised feature/format matrix is backed by
+host and hardware evidence.
+
+### Milestone 8: demand-driven feature and format expansion
+
+Continue the format and packet tracks only where they unlock the reference
+game, Vulkan profile, a real homebrew port, or a safety fix. Candidate work is:
+
+1. Tiled BC1-BC7 layout, mip chains, array/cube use, copy, and mip-copy.
+2. Additional packed/alternate-swap formats such as RGB10A2 UINT, RGB565,
+   RGBA5551, and R9G9B9E5 FLOAT after primary evidence and demand.
+3. Remaining depth/stencil sample-count and compressed combinations, each
+   isolated before enabling combined modes.
+4. Color metadata/compression and MSAA combinations as independent DCC, CMASK,
+   and FMASK capabilities rather than implications of a base-format pass.
+5. HDR render targets and VideoOut HDR signaling as separate qualifications.
+6. Additional packet builders only for a native vertical slice or an observed
+   compatibility import with a proven signature and behavior.
+
+Every new tuple or packet retains the existing host, firmware-neutral pinned-
+artifact, bounded hardware, two-pass, exact-hash, teardown, and qualification-
+label requirements.
+
+### Release gate
+
+The first native-runtime release is ready when a third-party project can use
+the installed C headers and CMake targets to compile shaders, create and stream
+resources, build validated graphics and compute pipelines, record commands,
+transition resources, submit with bounded synchronization, present, capture a
+failure, and tear down without private headers or firmware checks. The generic
+backend must exercise the same API for deterministic tests, and the same
+reference-game ELF must pass on FW 5.50 and FW 11.60.
+
+Publish a versioned native API/ABI policy, shader-record compatibility policy,
+feature/format/firmware qualification matrix, migration guide, and semantic
+release notes. Keep unsupported behavior explicit; symbol presence, SPRX
+evidence, or one successful frame is not a release-quality support claim.
+
+## Qualification and Reverse-Engineering Evidence Ledger
+
+### Firmware-neutral binary portability gate
 
 The direct backend already recognizes 39 exact active ABI keys from FW 3.20
 through FW 12.70 and selects them from the runtime version; submit, memory,
@@ -1427,20 +1808,18 @@ For each new tuple:
 7. Repeat once using the identical ELF.
 8. Stop immediately on a timeout, UI stall, reset, or unexpected hash.
 
-#### Recommended immediate milestone
+#### Completed format milestone and remaining work
 
-Complete and qualify this first group:
+The planned regular-color, BC sampling, depth/HTILE, and 4x MSAA milestone is
+complete on both endpoint firmwares as summarized at the start of this section.
+R16/RG16/RGBA16 UNORM, SNORM, UINT, and SINT and all R32/RG32/RGBA32 UINT/SINT
+tuples are regression coverage, not the next implementation goal.
 
-1. `R16_UNORM` — FW 11.60 complete.
-2. `RG16_UNORM` — FW 11.60 complete.
-3. `RGBA16_UNORM` — FW 11.60 complete.
-
-The complete 16-bit UNORM and SNORM groups are stable on FW 11.60. The next
-implementation milestone is `R16_UINT`, beginning with evidence for the
-integer pixel-shader export contract and a dedicated unsigned-integer output
-shader. Continue through RG16_UINT and RGBA16_UINT before beginning the signed
-integer group. Exact FW 5.50 replay remains a separate endpoint gate for every
-pinned normalized artifact.
+Continue only with the demand-driven gaps named in the authoritative product
+roadmap: tiled BC layout/copy/mips, useful packed or alternate-swap formats,
+unqualified depth/sample/compression combinations, and independent color
+metadata capabilities. Keep exact pinned endpoint artifacts available when a
+native runtime change touches these proven paths.
 
 ### Gfx1013 multi-viewport state
 
@@ -2295,7 +2674,7 @@ Implemented and host-tested:
 Current expected host test result:
 
 ```text
-5137 passed, 0 failed
+12240 passed, 0 failed
 ```
 
 ## Phase 0: RE Groundwork
@@ -3584,9 +3963,10 @@ Completed (Phase 5-6, hardware validation):
 - Separate raw recovered APIs from convenience wrappers.
 - Treat PS5 hardware validation as a separate milestone with explicit smoke
   tests.
-# Product Roadmap: OpenAGC as a PS5 Homebrew GPU API
 
-## Current FW 5.50 conformance checkpoint (2026-07-27)
+## Prior Product-Roadmap Checkpoint (Superseded)
+
+### Historical FW 5.50 conformance checkpoint (2026-07-27)
 
 The sample completion path now uses a gfx1013 `RELEASE_MEM` EOP fence rather
 than treating a later `WRITE_DATA` marker as proof that shader writes are
@@ -3643,13 +4023,12 @@ lock the full streams and atomic failures. This completes control-state
 encoding only: depth-surface allocation/binding and FW `0x0550` execution must
 be qualified before depth or stencil support is advertised as hardware-ready.
 
-This is the authoritative execution order for OpenAGC. The product goal is a
-clean, redistributable GPU API that lets homebrew applications and game ports
-compile shaders, allocate GPU resources, build command buffers, submit work,
-and present frames on a jailbroken PS5 without proprietary SDK headers. FW
-5.50 and the available gfx1013 hardware are the primary implementation and
-validation target. Older roadmap sections remain as technical history; when
-their ordering conflicts with this section, this section wins.
+The section below is the prior SDK and FW 5.50 release-plan snapshot. It is
+retained to preserve completed milestone context, but the authoritative product
+roadmap at the top of this file now governs ordering. In particular, native
+device/pipeline objects, shader/attachment validation, resource ownership,
+firmware-neutral endpoint qualification, and the reference game take priority
+over speculative low-level breadth.
 
 Keep implementation and validation work narrowly focused on GPU ABI
 compatibility, shader compilation, PM4 state, resource management, submission,
@@ -3657,7 +4036,7 @@ and display integration. Exploit setup and security-bypass mechanics belong to
 the launcher environment and hardware-test scaffolding, not the public OpenAGC
 API.
 
-## Definition of done
+## Prior Release Definition (Superseded)
 
 OpenAGC reaches its first usable release when a third-party homebrew project
 can install the SDK, use documented public headers and CMake targets, compile
@@ -3667,7 +4046,11 @@ FW 5.50. The same application must build against the generic host backend for
 packet and ABI tests. Failures must return documented errors rather than hang
 the GPU, freeze the UI, or panic the kernel.
 
-## Execution plan
+## Prior Execution Plan (Superseded)
+
+This snapshot remains useful as a record of the consumable-SDK and low-level
+builder program. Do not use its phase numbers to choose new work; use the
+authoritative product roadmap near the top of this file.
 
 ### Phase 1: Ship a consumable SDK (complete)
 
