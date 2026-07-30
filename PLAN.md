@@ -456,6 +456,13 @@ snapshot. Generic coverage exercises unsignaled and timeout cases; artifact
 the completed public-compute snapshot on exact FW 5.50. The remaining submit
 fan-in/out, GPU labels, timelines, and cross-queue work stays open.
 
+The first submit fan-in path is also established: graphics `AgcSubmitInfo`
+batches of 2–63 distinct nonempty command buffers use one recovered direct
+kernel frame and one runtime-owned fence. Artifact
+`30564bfdd87de4c89e575a03b7456aad57a2ca72af174aa41d1598a20322142b` passed a
+two-DCB MRT/readback/reset/teardown oracle on exact FW 5.50. Compute batches
+and wait/signal dependencies remain intentionally rejected.
+
 Exit criteria: exact host fixtures cover the supported transition matrix and
 atomic short-buffer failure; FW 5.50 and FW 11.60 gates cover render-to-shader,
 compute-to-copy, copy-to-shader, host-read, and present-to-render; repeated

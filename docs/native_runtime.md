@@ -75,9 +75,11 @@ to `INITIAL`; it also provides recovery after validation or capacity failure.
 No command call emits partial packets. Insufficient capacity returns
 `AGC_ERROR_COMMAND_SPACE_EXHAUSTED` with the cursor unchanged.
 
-Milestone 1 permits a single command buffer per `AgcSubmitInfo`. Multiple
-command buffers and wait/signal lists are part of the synchronization
-milestone and currently fail closed.
+The synchronization milestone supports a bounded 2–63 command-buffer batch on
+the graphics queue. Every member must be executable, nonempty, distinct, and
+owned by the same queue; one fence tracks the complete batch and releases all
+members after completion. The current compute route, empty batch members,
+wait/signal lists, and cross-queue submission remain fail-closed.
 
 ## Fences and errors
 
@@ -103,6 +105,10 @@ compute path by artifact
 [`runtime_fence_diagnostics_fw550_20260731.md`](../analysis/runtime_fence_diagnostics_fw550_20260731.md).
 Pending timeout diagnostics remain host-tested until a bounded on-console
 timeout oracle is safe and useful.
+
+The two-DCB graphics batch is hardware-qualified on exact FW 5.50 by artifact
+`30564bfdd87de4c89e575a03b7456aad57a2ca72af174aa41d1598a20322142b`; see
+[`runtime_multi_graphics_fw550_20260731.md`](../analysis/runtime_multi_graphics_fw550_20260731.md).
 
 Stable native errors include invalid argument/state, busy ownership,
 unsupported capability, command-space exhaustion, timeout, out of memory,

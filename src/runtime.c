@@ -43,6 +43,7 @@
 #define AGC_RUNTIME_MAX_DESCRIPTOR_WRITES 256u
 #define AGC_RUNTIME_MAX_RECORDED_RESOURCES 512u
 #define AGC_RUNTIME_MAX_RECORDED_TRANSITIONS 512u
+#define AGC_RUNTIME_MAX_SUBMIT_COMMAND_BUFFERS 63u
 #define AGC_RUNTIME_MAX_RESOURCE_ARENA_SIZE UINT64_C(0x100000)
 
 typedef struct AgcRuntimeBlock AgcRuntimeBlock;
@@ -281,7 +282,9 @@ struct AgcFenceImpl {
     AgcDevice device;
     AgcRuntimeAllocation *allocation;
     AgcQueue queue;
-    AgcCommandBuffer command_buffer;
+    uint32_t pending_command_buffer_count;
+    AgcCommandBuffer pending_command_buffers[
+        AGC_RUNTIME_MAX_SUBMIT_COMMAND_BUFFERS];
     uint32_t completion_value;
     uint32_t observed_completion_value;
     uint32_t signaled;
@@ -5944,17 +5947,22 @@ static int32_t agcFencePollCompletion(AgcFence fence)
     return AGC_ERROR_BUSY;
 #endif
     fence->signaled = 1u;
-    if (fence->command_buffer) {
-        AgcCommandBuffer command_buffer = fence->command_buffer;
+    if (fence->pending_command_buffer_count != 0u) {
         AgcQueue queue = fence->queue;
+        uint32_t i;
 
-        command_buffer->pending_refs--;
-        command_buffer->state = AGC_COMMAND_BUFFER_STATE_EXECUTABLE;
-        command_buffer->completion_fence = NULL;
-        queue->pending_count--;
+        for (i = 0u; i < fence->pending_command_buffer_count; ++i) {
+            AgcCommandBuffer command_buffer =
+                fence->pending_command_buffers[i];
+
+            command_buffer->pending_refs--;
+            command_buffer->state = AGC_COMMAND_BUFFER_STATE_EXECUTABLE;
+            command_buffer->completion_fence = NULL;
+            queue->pending_count--;
+        }
         queue->last_completed_submission_id = fence->submission_id;
         fence->pending_refs--;
-        fence->command_buffer = NULL;
+        fence->pending_command_buffer_count = 0u;
         fence->queue = NULL;
         fence->last_completed_submission_id = fence->submission_id;
         fence->last_command_buffer_state = AGC_COMMAND_BUFFER_STATE_EXECUTABLE;
@@ -6088,6 +6096,129 @@ int32_t PS5_SYSV_ABI agcWaitFence(AgcFence fence, uint64_t timeout_ns)
 #endif
 }
 
+static int32_t agcQueueSubmitGraphicsBatch(
+    AgcQueue queue, const AgcSubmitInfo *submit_info, AgcFence fence)
+{
+    AgcCommandBuffer command_buffers[AGC_RUNTIME_MAX_SUBMIT_COMMAND_BUFFERS];
+    void *addresses[AGC_RUNTIME_MAX_SUBMIT_COMMAND_BUFFERS];
+    uint32_t sizes[AGC_RUNTIME_MAX_SUBMIT_COMMAND_BUFFERS];
+    uint32_t count = submit_info->command_buffer_count;
+    uint32_t i;
+    int32_t result;
+#ifdef OPENAGC_PROSPERO
+    AgcGfx1013EopFenceState completion;
+    uintptr_t original_last_cursor;
+#endif
+
+    if (queue->type != kAgcQueueGraphics || count < 2u ||
+        count > AGC_RUNTIME_MAX_SUBMIT_COMMAND_BUFFERS || !fence ||
+        fence->pending_command_buffer_count != 0u)
+        return AGC_ERROR_NOT_SUPPORTED;
+#ifdef OPENAGC_PROSPERO
+    if (!fence->allocation)
+        return AGC_ERROR_NOT_SUPPORTED;
+#endif
+    for (i = 0u; i < count; ++i) {
+        AgcCommandBuffer command_buffer = submit_info->command_buffers[i];
+        uint32_t j;
+
+        if (!command_buffer || command_buffer->magic != AGC_MAGIC_COMMAND_BUFFER ||
+            command_buffer->device != queue->device ||
+            command_buffer->queue_type != queue->type ||
+            command_buffer->state != AGC_COMMAND_BUFFER_STATE_EXECUTABLE ||
+            agcCbUsedDwords(&command_buffer->cursor) == 0u)
+            return AGC_ERROR_INVALID_ARGUMENT;
+        for (j = 0u; j < i; ++j) {
+            if (command_buffers[j] == command_buffer)
+                return AGC_ERROR_INVALID_ARGUMENT;
+        }
+        command_buffers[i] = command_buffer;
+    }
+#ifdef OPENAGC_PROSPERO
+    *(uint32_t *)agcAllocationCpuAddress(fence->allocation) = 0u;
+    result = agcFlushRuntimeAllocation(fence->allocation, 0u,
+        sizeof(uint32_t));
+    if (result != AGC_OK)
+        return result;
+    completion.address = agcAllocationGpuAddress(fence->allocation);
+    completion.value = fence->completion_value;
+    original_last_cursor = command_buffers[count - 1u]->cursor.cursor_up;
+    result = agcGfx1013SignalEopFence(
+        &command_buffers[count - 1u]->cursor, &completion);
+    if (result != AGC_OK)
+        return result == AGC_ERROR_BUFFER_TOO_SMALL ?
+            AGC_ERROR_COMMAND_SPACE_EXHAUSTED : result;
+#endif
+    for (i = 0u; i < count; ++i) {
+        uint64_t command_size = (uint64_t)
+            agcCbUsedDwords(&command_buffers[i]->cursor) * sizeof(uint32_t);
+
+        result = agcFlushRuntimeAllocation(command_buffers[i]->allocation,
+            0u, command_size);
+        if (result != AGC_OK) {
+#ifdef OPENAGC_PROSPERO
+            command_buffers[count - 1u]->cursor.cursor_up =
+                original_last_cursor;
+#endif
+            return result;
+        }
+        addresses[i] = (void *)(uintptr_t)agcAllocationGpuAddress(
+            command_buffers[i]->allocation);
+        sizes[i] = (uint32_t)command_size;
+    }
+    for (i = 0u; i < count; ++i) {
+        command_buffers[i]->state = AGC_COMMAND_BUFFER_STATE_PENDING;
+        command_buffers[i]->pending_refs++;
+#ifdef OPENAGC_PROSPERO
+        command_buffers[i]->completion_fence = fence;
+#endif
+        queue->pending_count++;
+    }
+    fence->pending_refs++;
+    result = sceAgcDriverSubmitMultiCommandBuffersDirect(
+        count, addresses, sizes, NULL, NULL);
+    if (result == AGC_ERROR_NOT_INITIALIZED)
+        result = AGC_ERROR_DEVICE_LOST;
+    if (result == AGC_OK) {
+        uint64_t submission_id = ++queue->next_submission_id;
+
+        for (i = 0u; i < count; ++i)
+            agcCommitCommandTransitions(command_buffers[i]);
+        fence->submission_id = submission_id;
+        fence->last_queue_type = (uint32_t)queue->type;
+        fence->last_command_buffer_state = AGC_COMMAND_BUFFER_STATE_PENDING;
+        fence->observed_completion_value = 0u;
+        fence->last_wait_result = AGC_ERROR_BUSY;
+    }
+#ifdef OPENAGC_PROSPERO
+    if (result == AGC_OK) {
+        fence->pending_command_buffer_count = count;
+        for (i = 0u; i < count; ++i)
+            fence->pending_command_buffers[i] = command_buffers[i];
+        fence->queue = queue;
+        return AGC_OK;
+    }
+    command_buffers[count - 1u]->cursor.cursor_up = original_last_cursor;
+#endif
+    for (i = 0u; i < count; ++i) {
+        command_buffers[i]->pending_refs--;
+        command_buffers[i]->state = AGC_COMMAND_BUFFER_STATE_EXECUTABLE;
+#ifdef OPENAGC_PROSPERO
+        command_buffers[i]->completion_fence = NULL;
+#endif
+        queue->pending_count--;
+    }
+    fence->pending_refs--;
+    if (result == AGC_OK) {
+        fence->signaled = 1u;
+        fence->observed_completion_value = fence->completion_value;
+        fence->last_completed_submission_id = fence->submission_id;
+        fence->last_command_buffer_state = AGC_COMMAND_BUFFER_STATE_EXECUTABLE;
+        queue->last_completed_submission_id = queue->next_submission_id;
+    }
+    return result;
+}
+
 int32_t PS5_SYSV_ABI agcQueueSubmit(
     AgcQueue queue, const AgcSubmitInfo *submit_info, AgcFence fence)
 {
@@ -6104,7 +6235,9 @@ int32_t PS5_SYSV_ABI agcQueueSubmit(
         !agcHeaderValid(submit_info->struct_size, sizeof(*submit_info),
             submit_info->version) || submit_info->flags != 0u ||
         !agcReservedZero(submit_info->reserved, 4u) ||
-        submit_info->command_buffer_count != 1u ||
+        submit_info->command_buffer_count == 0u ||
+        submit_info->command_buffer_count >
+            AGC_RUNTIME_MAX_SUBMIT_COMMAND_BUFFERS ||
         !submit_info->command_buffers) {
         return AGC_ERROR_INVALID_ARGUMENT;
     }
@@ -6115,6 +6248,8 @@ int32_t PS5_SYSV_ABI agcQueueSubmit(
         return AGC_ERROR_INVALID_STATE;
     if (queue->next_submission_id == UINT64_MAX)
         return AGC_ERROR_NOT_SUPPORTED;
+    if (submit_info->command_buffer_count > 1u)
+        return agcQueueSubmitGraphicsBatch(queue, submit_info, fence);
     command_buffer = submit_info->command_buffers[0];
     if (!command_buffer || command_buffer->magic != AGC_MAGIC_COMMAND_BUFFER ||
         command_buffer->device != queue->device ||
@@ -6135,7 +6270,8 @@ int32_t PS5_SYSV_ABI agcQueueSubmit(
      * resources cannot be reset or freed while the kernel-owned queue runs. */
     if (!fence)
         return AGC_ERROR_NOT_SUPPORTED;
-    if (fence->command_buffer || command_buffer->completion_fence ||
+    if (fence->pending_command_buffer_count != 0u ||
+        command_buffer->completion_fence ||
         !fence->allocation)
         return AGC_ERROR_INVALID_STATE;
     *(uint32_t *)agcAllocationCpuAddress(fence->allocation) = 0u;
@@ -6203,7 +6339,8 @@ int32_t PS5_SYSV_ABI agcQueueSubmit(
     }
 #ifdef OPENAGC_PROSPERO
     if (result == AGC_OK) {
-        fence->command_buffer = command_buffer;
+        fence->pending_command_buffer_count = 1u;
+        fence->pending_command_buffers[0] = command_buffer;
         fence->queue = queue;
         return AGC_OK;
     }

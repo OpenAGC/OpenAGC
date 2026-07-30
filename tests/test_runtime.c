@@ -1327,6 +1327,101 @@ static void test_runtime_indexed_graphics_submission(void)
     TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK, "graphics device destroys");
 }
 
+static void test_runtime_multi_graphics_submission(void)
+{
+    AgcDevice device = create_device();
+    AgcQueue queue = create_queue(device, kAgcQueueGraphics);
+    AgcShader vertex = create_shader(device, kAgcShaderStageVs);
+    AgcShader pixel = create_shader(device, kAgcShaderStagePs);
+    AgcGraphicsPipelineDesc pipeline_desc = AGC_GRAPHICS_PIPELINE_DESC_INIT;
+    AgcBufferDesc buffer_desc = AGC_BUFFER_DESC_INIT;
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
+    AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    AgcGraphicsPipeline pipeline = NULL;
+    AgcBuffer index_buffer = NULL;
+    AgcCommandBuffer first = NULL;
+    AgcCommandBuffer second = NULL;
+    AgcCommandBuffer commands[2];
+    AgcFence fence = NULL;
+    AgcFenceInfo fence_info = AGC_FENCE_INFO_INIT;
+    AgcCommandBufferState state;
+
+    pipeline_desc.vertex_shader = vertex;
+    pipeline_desc.pixel_shader = pixel;
+    buffer_desc.size = 64u;
+    buffer_desc.usage = AGC_BUFFER_USAGE_INDEX_BIT;
+    command_desc.capacity_dwords = 4096u;
+    TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc, &pipeline),
+        AGC_OK, "multi-submit graphics pipeline creates");
+    TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &index_buffer), AGC_OK,
+        "multi-submit index buffer creates");
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &first), AGC_OK,
+        "first multi-submit command creates");
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &second), AGC_OK,
+        "second multi-submit command creates");
+    TEST_ASSERT_EQ(agcCreateFence(device, &fence_desc, &fence), AGC_OK,
+        "multi-submit fence creates");
+    commands[0] = first;
+    commands[1] = second;
+    for (uint32_t i = 0u; i < 2u; ++i) {
+        TEST_ASSERT_EQ(agcBeginCommandBuffer(commands[i]), AGC_OK,
+            "multi-submit command begins");
+        TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(commands[i], pipeline), AGC_OK,
+            "multi-submit graphics pipeline binds");
+        TEST_ASSERT_EQ(agcCmdBindIndexBuffer(commands[i], index_buffer, 0u,
+            kAgcIndexSize16), AGC_OK, "multi-submit index buffer binds");
+        TEST_ASSERT_EQ(agcCmdDrawIndexed(commands[i], 3u, 1u, 0u, 0, 0u),
+            AGC_OK, "multi-submit indexed draw records");
+        TEST_ASSERT_EQ(agcEndCommandBuffer(commands[i]), AGC_OK,
+            "multi-submit command ends");
+    }
+    submit.command_buffer_count = 2u;
+    submit.command_buffers = commands;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
+        "two graphics command buffers submit as one frame");
+    TEST_ASSERT_EQ(agcGetFenceInfo(fence, &fence_info), AGC_OK,
+        "multi-submit fence diagnostics query succeeds");
+    TEST_ASSERT_EQ(fence_info.state, AGC_FENCE_STATE_SIGNALED,
+        "generic multi-submit fence completes");
+    TEST_ASSERT_EQ(fence_info.submission_id, 1u,
+        "multi-submit consumes one queue submission identity");
+    TEST_ASSERT_EQ(fence_info.last_completed_submission_id, 1u,
+        "multi-submit reports completed batch identity");
+    for (uint32_t i = 0u; i < 2u; ++i) {
+        TEST_ASSERT_EQ(agcGetCommandBufferState(commands[i], &state), AGC_OK,
+            "completed multi-submit command state queries");
+        TEST_ASSERT_EQ(state, AGC_COMMAND_BUFFER_STATE_EXECUTABLE,
+            "completed multi-submit command is released");
+        TEST_ASSERT_EQ(agcResetCommandBuffer(commands[i]), AGC_OK,
+            "completed multi-submit command resets");
+    }
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "completed multi-submit fence resets");
+    commands[1] = commands[0];
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "duplicate multi-submit command buffer rejects before mutation");
+    TEST_ASSERT_EQ(agcDestroyFence(fence), AGC_OK,
+        "multi-submit fence destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(second), AGC_OK,
+        "second multi-submit command destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(first), AGC_OK,
+        "first multi-submit command destroys");
+    TEST_ASSERT_EQ(agcDestroyBuffer(index_buffer), AGC_OK,
+        "multi-submit index buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(pipeline), AGC_OK,
+        "multi-submit graphics pipeline destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(pixel), AGC_OK,
+        "multi-submit pixel shader destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(vertex), AGC_OK,
+        "multi-submit vertex shader destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
+        "multi-submit graphics queue destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "multi-submit device destroys");
+}
+
 static void test_runtime_image_transfer(void)
 {
     const uint32_t input[] = {0x11223344u, 0x55667788u, 0x99aabbccu};
@@ -4310,6 +4405,7 @@ void test_suite_runtime(void)
     TEST_RUN(test_runtime_compiler_reflection_sidecar);
     TEST_RUN(test_runtime_compiler_graphics_sidecar);
     TEST_RUN(test_runtime_indexed_graphics_submission);
+    TEST_RUN(test_runtime_multi_graphics_submission);
     TEST_RUN(test_runtime_image_transfer);
     TEST_RUN(test_runtime_resource_transitions);
     TEST_RUN(test_runtime_color_target_binding);

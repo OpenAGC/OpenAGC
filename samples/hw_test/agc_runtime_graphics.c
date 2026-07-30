@@ -106,6 +106,8 @@ int main(void)
     AgcImage second_target_image = NULL;
     AgcImage depth_image = NULL;
     AgcCommandBuffer command_buffer = NULL;
+    AgcCommandBuffer completion_command_buffer = NULL;
+    AgcCommandBuffer command_buffers[2];
     AgcFence fence = NULL;
     bool submitted = false;
     bool completed = false;
@@ -250,6 +252,11 @@ int main(void)
     report_result("agcCreateCommandBuffer", result);
     if (result != AGC_OK)
         goto cleanup;
+    result = agcCreateCommandBuffer(device, &command_desc,
+        &completion_command_buffer);
+    report_result("agcCreateCommandBuffer(completion)", result);
+    if (result != AGC_OK)
+        goto cleanup;
     result = agcCreateFence(device, &fence_desc, &fence);
     report_result("agcCreateFence", result);
     if (result != AGC_OK)
@@ -326,8 +333,22 @@ int main(void)
     report_result("agcEndCommandBuffer", result);
     if (result != AGC_OK)
         goto cleanup;
-    submit.command_buffer_count = 1u;
-    submit.command_buffers = &command_buffer;
+    result = agcBeginCommandBuffer(completion_command_buffer);
+    report_result("agcBeginCommandBuffer(completion)", result);
+    if (result != AGC_OK)
+        goto cleanup;
+    result = agcCmdBindGraphicsPipeline(completion_command_buffer, pipeline);
+    report_result("agcCmdBindGraphicsPipeline(completion)", result);
+    if (result != AGC_OK)
+        goto cleanup;
+    result = agcEndCommandBuffer(completion_command_buffer);
+    report_result("agcEndCommandBuffer(completion)", result);
+    if (result != AGC_OK)
+        goto cleanup;
+    command_buffers[0] = command_buffer;
+    command_buffers[1] = completion_command_buffer;
+    submit.command_buffer_count = 2u;
+    submit.command_buffers = command_buffers;
     result = agcQueueSubmit(queue, &submit, fence);
     report_result("agcQueueSubmit", result);
     if (result != AGC_OK)
@@ -370,6 +391,12 @@ cleanup:
         if (result != AGC_OK)
             passed = false;
     }
+    if (completion_command_buffer && (!submitted || completed)) {
+        result = agcResetCommandBuffer(completion_command_buffer);
+        report_result("agcResetCommandBuffer(completion)", result);
+        if (result != AGC_OK)
+            passed = false;
+    }
     if (fence) {
         result = agcDestroyFence(fence);
         report_result("agcDestroyFence", result);
@@ -379,6 +406,12 @@ cleanup:
     if (command_buffer) {
         result = agcDestroyCommandBuffer(command_buffer);
         report_result("agcDestroyCommandBuffer", result);
+        if (result != AGC_OK)
+            passed = false;
+    }
+    if (completion_command_buffer) {
+        result = agcDestroyCommandBuffer(completion_command_buffer);
+        report_result("agcDestroyCommandBuffer(completion)", result);
         if (result != AGC_OK)
             passed = false;
     }

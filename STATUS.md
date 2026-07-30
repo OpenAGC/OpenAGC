@@ -68,6 +68,14 @@ behavior. Artifact `bd8545c05a7683bf4fb0c69e7c925317488ba7fd60e455ef7e1ecf715b47
 also passed the completed-fence query after a real public compute dispatch on
 exact FW 5.50. Pending timeout reporting remains host-tested.
 
+The first multi-command submission path is now active for graphics: a 2–63
+member batch is validated as one queue-owned frame and receives one bounded
+fence, with every member retained until that fence completes. Artifact
+`30564bfdd87de4c89e575a03b7456aad57a2ca72af174aa41d1598a20322142b` passed
+the two-DCB MRT/readback/reset/teardown oracle on exact FW 5.50. Compute
+batches, empty members, waits/signals, timelines, and cross-queue transfers
+remain fail-closed or unqualified.
+
 ## Native resource and memory management complete (2026-07-30)
 
 The PS5-only native runtime now suballocates buffers, images, shader code,
