@@ -62,7 +62,8 @@ HTILE is now hardware-qualified on both endpoints. Pinned FW 11.60 D32
 expclear pass 1 then reproduced exact D32 classes and `49152` changed HTILE
 words from `0xfffffff0`, with immediate completion, clean shutdown, and no
 residual process. The guarded recipe now freezes that count; one identical
-replay remains before the FW 5.50 expclear mirror.
+replay reproduced every invariant. The pinned FW 5.50 expclear mirror now
+requires `49152` and is the active gate.
 
 Combined D32+S8 HTILE preparation now covers ordinary metadata and
 depth-only, stencil-only, and both-aspect expclear for both exact endpoint

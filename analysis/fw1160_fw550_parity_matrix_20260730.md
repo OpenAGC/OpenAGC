@@ -140,6 +140,11 @@ fence immediately, shut down cleanly, returned final PASS, and left no
 residual `eboot.bin`. The logged recipe now freezes `49152`; run its identical
 replay before permitting the FW 5.50 expclear mirror.
 
+The identical FW 11.60 expclear replay reproduced `49152`, exact D32 classes,
+immediate completion, clean shutdown, final PASS, and no residual process. The
+pinned FW 5.50 expclear recipe now requires the same exact count and is the
+next permitted hardware launch.
+
 The combined D32+S8 tier is likewise prepared without a hardware claim. Eight
 artifacts cover ordinary HTILE and expclear of depth-only, stencil-only, or
 both aspects for exact FW `0x1160` and matching headless FW `0x0550`. The
