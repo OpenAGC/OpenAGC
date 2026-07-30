@@ -692,6 +692,9 @@ pixels, equal `74880` region counts, zero decode mismatches/error, and FNV64
 BC4 SNORM also passed twice with equal coverage/region counts, zero decode
 mismatches/error, and FNV64 `0x16b22a8b52c7ce8d`. Both BC4 variants are
 hardware-qualified on exact FW 11.60.
+BC2 SRGB pass 1 also succeeded with equal coverage/region counts, alpha range
+`0..255`, zero exact mismatches, and FNV64 `0x0a8a977e6f2c8da1`; pass 2
+remains required.
 The exact artifacts are pinned as SHA-256
 `f74c393112fc465eace431a3fe288095ae4b3bf5ee993e8147ed0e9a2f22f2a4`
 (UNORM) and
