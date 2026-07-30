@@ -233,7 +233,11 @@ coordinate-derived values spanning `-32768..32767`. Its isolated portable
 gate builds and passes firmware-neutral dependency verification. The final
 unexecuted ELF is pinned as SHA-256
 `3083e2f6ce3ff30d22508c93e51b58bb73f7a36e9ba5e2d255c3c32be7e79652`.
-Two identical-byte FW 11.60 runs and exact FW 5.50 replay remain pending.
+Those identical bytes passed twice on FW `0x11600005`: 255,744 exact samples
+spanned the signed range with zero mismatches, deterministic FNV64
+`0x055e15e74e22e483`, immediate fences, and clean teardown. Exact FW 5.50
+replay remains pending. See
+`analysis/fw1160_r16_sint_portable_qualification_20260730.md`.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability
