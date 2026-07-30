@@ -151,8 +151,9 @@ profiles remain hardware-unverified. See
 `(format=0x05, number=SNORM, swap=standard)`, four bytes per pixel, and
 FP16_ABGR export. Host coverage locks its exact PM4 stream, all 39 profiles,
 all capacities through 28 dwords, and large 64-bit layout arithmetic. The
-portable two-lane artifact builds and passes the firmware-neutral verifier,
-but is not yet hash-pinned or hardware-qualified.
+portable two-lane artifact is pinned before execution as SHA-256
+`cc545a61e7b6689f63a905651acbee900acb52306ea0e732a664f8fe5e662352` and
+passes the firmware-neutral verifier, but is not yet hardware-qualified.
 
 Endpoint replay no longer depends on mutable sample targets. Hash-named local
 pinned files and no-prerequisite FW 5.50 targets cover the base portability

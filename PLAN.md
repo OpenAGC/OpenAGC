@@ -273,8 +273,10 @@ the runner and shared teardown on FW 11.60 only.
   `16_16`, SNORM, standard swap, four bytes per pixel, and FP16_ABGR export.
   Exact PM4, all-profile selection, every short-buffer boundary, and 64-bit
   layout limits pass. Its firmware-neutral two-lane gate builds with the
-  already-qualified signed shader/oracle; hash pinning and FW 11.60 execution
-  remain next.
+  already-qualified signed shader/oracle. The final firmware-neutral ELF is
+  pinned before execution as SHA-256
+  `cc545a61e7b6689f63a905651acbee900acb52306ea0e732a664f8fe5e662352`;
+  FW 11.60 execution remains next.
 - Seven additional offscreen format gates now build under the same exact
   profile and bounded runner: R8, RG8, RGB10A2, R11G11B10, R32, RG32, and
   RGBA32. All seven passed twice on FW 11.60; logged RG32 reproduced FNV64
