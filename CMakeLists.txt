@@ -122,7 +122,11 @@ if(OPENAGC_BUILD_TESTS)
         ${CMAKE_CURRENT_SOURCE_DIR}/src
     )
 
-    add_test(NAME openagc_all_tests COMMAND openagc_tests)
+add_test(NAME openagc_all_tests COMMAND openagc_tests)
+add_test(NAME portability_runner_fail_closed
+    COMMAND sh
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_portability_runner.sh
+        ${CMAKE_CURRENT_SOURCE_DIR}/samples/hw_test/run_portability.sh)
 endif()
 
 # === Host shader compiler packaging ===
