@@ -6124,6 +6124,116 @@ static void test_runtime_fence_deferred_free(void)
         "deferred-free device destruction succeeds");
 }
 
+static void test_runtime_present_chain(void)
+{
+    AgcDevice device = create_device();
+    AgcQueue queue = create_queue(device, kAgcQueueGraphics);
+    AgcImageDesc image_desc = AGC_IMAGE_DESC_INIT;
+    AgcPresentChainDesc present_desc = AGC_PRESENT_CHAIN_DESC_INIT;
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
+    AgcResourceTransition transition = AGC_RESOURCE_TRANSITION_INIT;
+    AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    AgcImage images[2] = {NULL, NULL};
+    AgcPresentChain present_chain = NULL;
+    AgcCommandBuffer command = NULL;
+    AgcFence fence = NULL;
+
+    image_desc.width = 1920u;
+    image_desc.height = 1080u;
+    image_desc.format = AGC_FORMAT_RGBA8_UNORM;
+    image_desc.usage = AGC_IMAGE_USAGE_SCANOUT_BIT |
+        AGC_IMAGE_USAGE_COLOR_TARGET_BIT;
+    TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &images[0]), AGC_OK,
+        "first present image creates");
+    TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &images[1]), AGC_OK,
+        "second present image creates");
+    present_desc.image_count = 2u;
+    present_desc.images = images;
+    TEST_ASSERT_EQ(agcCreatePresentChain(device, &present_desc,
+        &present_chain), AGC_OK, "present chain registers opaque image");
+    TEST_ASSERT_EQ(agcDestroyImage(images[0]), AGC_ERROR_BUSY,
+        "present chain retains registered image");
+
+    command_desc.queue_type = kAgcQueueGraphics;
+    command_desc.capacity_dwords = 256u;
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
+        AGC_OK, "present transition command creates");
+    TEST_ASSERT_EQ(agcCreateFence(device, &fence_desc, &fence), AGC_OK,
+        "present readiness fence creates");
+    TEST_ASSERT_EQ(agcPresent(present_chain, 0u, 1u, fence,
+        UINT64_C(1000000)), AGC_ERROR_INVALID_STATE,
+        "present rejects image before scanout transition");
+
+    transition.resource_type = kAgcResourceTypeImage;
+    transition.image = images[0];
+    transition.image_range =
+        (AgcImageSubresourceRange)AGC_IMAGE_SUBRESOURCE_RANGE_INIT;
+    transition.before = kAgcResourceUsageUndefined;
+    transition.after = kAgcResourceUsageVideoOutScanout;
+    transition.before_owner = kAgcResourceOwnerHost;
+    transition.after_owner = kAgcResourceOwnerGraphics;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+        "initial present command begins");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(command, 1u, &transition), AGC_OK,
+        "undefined-to-scanout transition records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+        "initial present command ends");
+    submit.command_buffer_count = 1u;
+    submit.command_buffers = &command;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
+        "initial scanout transition submits");
+    TEST_ASSERT_EQ(agcPresent(present_chain, 0u, 1u, fence,
+        AGC_RUNTIME_INFINITE_TIMEOUT), AGC_ERROR_INVALID_ARGUMENT,
+        "present rejects an unbounded wait");
+    TEST_ASSERT_EQ(agcPresent(present_chain, 0u, 1u, fence, 0u),
+        AGC_ERROR_TIMEOUT, "present rejects a zero wait budget");
+    TEST_ASSERT_EQ(agcPresent(present_chain, 0u, 1u, fence,
+        UINT64_C(1000000)), AGC_OK,
+        "scanout-state image presents after readiness fence");
+
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+        "initial present command resets");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "present readiness fence resets");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+        "present-to-render command begins");
+    transition.before = kAgcResourceUsageVideoOutScanout;
+    transition.after = kAgcResourceUsageColorTarget;
+    transition.before_owner = kAgcResourceOwnerGraphics;
+    transition.after_owner = kAgcResourceOwnerGraphics;
+    TEST_ASSERT_EQ(agcCmdTransitionResources(command, 1u, &transition), AGC_OK,
+        "scanout-to-color-target transition records");
+    transition.before = kAgcResourceUsageColorTarget;
+    transition.after = kAgcResourceUsageVideoOutScanout;
+    TEST_ASSERT_EQ(agcCmdTransitionResources(command, 1u, &transition), AGC_OK,
+        "color-target-to-scanout transition records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+        "present-to-render command ends");
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
+        "present-to-render transition chain submits");
+    TEST_ASSERT_EQ(agcPresent(present_chain, 0u, 2u, fence,
+        UINT64_C(1000000)), AGC_OK,
+        "rendered image returns to bounded presentation");
+
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+        "present-to-render command resets");
+    TEST_ASSERT_EQ(agcDestroyPresentChain(present_chain), AGC_OK,
+        "present chain releases registered image");
+    TEST_ASSERT_EQ(agcDestroyFence(fence), AGC_OK,
+        "present readiness fence destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+        "present command destroys");
+    TEST_ASSERT_EQ(agcDestroyImage(images[1]), AGC_OK,
+        "released second present image destroys");
+    TEST_ASSERT_EQ(agcDestroyImage(images[0]), AGC_OK,
+        "released first present image destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
+        "present queue destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "present device destroys");
+}
+
 void test_suite_runtime(void)
 {
     TEST_SUITE("Firmware-neutral Native Runtime");
@@ -6165,4 +6275,5 @@ void test_suite_runtime(void)
     TEST_RUN(test_runtime_all_backing_categories);
     TEST_RUN(test_runtime_heap_staging_and_stats);
     TEST_RUN(test_runtime_fence_deferred_free);
+    TEST_RUN(test_runtime_present_chain);
 }

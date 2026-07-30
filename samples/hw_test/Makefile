@@ -377,6 +377,24 @@ agc_runtime_image_copy.elf: agc_runtime_image_copy.c agc_runtime_copy.c \
 	$(CC) $(CFLAGS) -DAGC_SELF_TERMINATE=1 -o $@ \
 		agc_runtime_image_copy.c $(AGC_LDFLAGS)
 
+# Guarded opaque runtime scanout ladder. The default artifact performs only
+# registration and teardown; later stages add initial transition, first flip,
+# present-to-render transition, then the final flip one boundary at a time.
+agc_runtime_present.elf: agc_runtime_present.c gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -o $@ agc_runtime_present.c $(AGC_LDFLAGS)
+
+agc_runtime_present_stage1.elf: agc_runtime_present.c gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_PRESENT_STAGE=1 -o $@ agc_runtime_present.c $(AGC_LDFLAGS)
+
+agc_runtime_present_stage2.elf: agc_runtime_present.c gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_PRESENT_STAGE=2 -o $@ agc_runtime_present.c $(AGC_LDFLAGS)
+
+agc_runtime_present_stage3.elf: agc_runtime_present.c gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_PRESENT_STAGE=3 -o $@ agc_runtime_present.c $(AGC_LDFLAGS)
+
+agc_runtime_present_stage4.elf: agc_runtime_present.c gpu_credentials.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_PRESENT_STAGE=4 -o $@ agc_runtime_present.c $(AGC_LDFLAGS)
+
 # Bounded public-runtime completion diagnostic. It records no application
 # commands; agcQueueSubmit supplies the runtime-owned EOP fence packet.
 agc_runtime_eop.elf: agc_runtime_eop.c gpu_credentials.h $(OPENAGC_LIB)

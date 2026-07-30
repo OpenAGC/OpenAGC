@@ -164,6 +164,16 @@ four-megabyte allocation into three DMA packets. Exact FW 5.50 artifact
 `29110963a218ac7e5de2fc5073c23d5373e7eaa1365ccb3e2b6cf26fe1f85046`
 passed twice with identical 256-word source/destination hashes and clean
 teardown; see `analysis/runtime_image_copy_fw550_20260731.md`.
+Runtime API v13 adds the opaque `AgcPresentChain` bridge. It accepts two to 16
+distinct default-mode scanout images, registers their dedicated direct-memory
+mappings without exposing pointers, retains them, and allows only a finite
+readiness-fence wait followed by a bounded flip from committed Graphics-owned
+`VideoOutScanout` state. Generic coverage passes the complete
+scanout-to-color-target-to-scanout lifecycle. Hardware qualification remains
+open: one-buffer FW 5.50 registration rejected safely, while the first
+two-buffer combined attempt stopped returning and left console services
+unreachable. That artifact must not be rerun; use only the staged replacement
+after reboot. See `analysis/runtime_present_attempt_fw550_20260731.md`.
 Descriptor binds now fail closed without an explicit compatible typed state:
 read-only descriptors require `shader-read`; storage descriptors require
 `shader-read` or `shader-write` while reflection lacks per-binding access

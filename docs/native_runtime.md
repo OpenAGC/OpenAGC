@@ -45,6 +45,7 @@ synchronization.
 Ownership dependencies are explicit:
 
 - an image view retains its image;
+- a present chain retains every registered scanout image;
 - a graphics pipeline retains its vertex and pixel shaders;
 - a compute pipeline retains its compute shader;
 - an executable command buffer retains every pipeline, index/vertex/descriptor
@@ -154,6 +155,30 @@ four-megabyte host fixture locks three-packet splitting; exact standard-PS5 FW
 `29110963a218ac7e5de2fc5073c23d5373e7eaa1365ccb3e2b6cf26fe1f85046`
 passed twice with exact 256-word readback. See
 [`runtime_image_copy_fw550_20260731.md`](../analysis/runtime_image_copy_fw550_20260731.md).
+
+Runtime API v13 adds an opaque `AgcPresentChain`. Creation accepts two to 16
+distinct, device-owned 1920x1080 linear `RGBA8_UNORM` images carrying
+`AGC_IMAGE_USAGE_SCANOUT_BIT`; the runtime validates their common pitch,
+registers their dedicated direct-memory mappings internally, and retains them
+until chain destruction. Applications never receive a scanout pointer or
+choose a VideoOut format, tiling mode, firmware patch, or user ID.
+
+`agcPresent` requires the selected image to have committed
+`VideoOutScanout` usage with Graphics ownership. It rejects infinite and zero
+wait budgets, waits for the caller's readiness fence, then performs one
+bounded FIFO/VSYNC flip. The readiness fence must cover the final submission
+that writes or transitions the image. Each fence and flip wait has the supplied
+finite ceiling. To render an image again, record a Graphics-owned
+`VideoOutScanout -> ColorTarget` transition; return it to
+`VideoOutScanout` before the next present.
+
+This contract is host-tested only. The first FW 5.50 one-buffer registration
+failed safely; a two-buffer combined registration/transition/flip attempt did
+not return and left console services unavailable. Do not rerun that combined
+artifact. The replacement carrier advances through registration-only,
+transition-only, first-flip, round-trip-transition, and final-flip stages after
+a console reboot. See
+[`runtime_present_attempt_fw550_20260731.md`](../analysis/runtime_present_attempt_fw550_20260731.md).
 
 Descriptor binding is also state-gated before descriptor-table mutation:
 sampled, uniform, and input descriptors require `ShaderRead`; storage

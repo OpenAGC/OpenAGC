@@ -590,6 +590,18 @@ to compute without a CPU wait, the reflected consumer copied all 4,096 pixels,
 readback matched byte-for-byte, and teardown completed. See
 `analysis/runtime_render_to_shader_fw550_20260731.md`.
 
+Runtime API v13 now provides the host-tested opaque presentation boundary:
+two to 16 dedicated scanout images are validated and retained by an
+`AgcPresentChain`, and `agcPresent` requires Graphics-owned
+`VideoOutScanout` state plus a finite readiness fence before the bounded flip.
+Generic coverage locks registration ownership, wait rejection, initial
+scanout, and `scanout -> color-target -> scanout -> present`. The first exact
+FW 5.50 one-buffer registration rejected safely. A two-buffer combined probe
+then stopped returning and made the console services
+unreachable, so it is not qualification evidence and must not be rerun.
+Resume only through the replacement five-stage guarded ladder after reboot;
+see `analysis/runtime_present_attempt_fw550_20260731.md`.
+
 Exit criteria: exact host fixtures cover the supported transition matrix and
 atomic short-buffer failure; FW 5.50 and FW 11.60 gates cover render-to-shader,
 compute-to-copy, copy-to-shader, host-read, and present-to-render; repeated

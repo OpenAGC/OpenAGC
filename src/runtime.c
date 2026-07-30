@@ -18,6 +18,7 @@
 #include "agc_registers.h"
 #include "agc_runtime_diag.h"
 #include "agc_texture.h"
+#include "agc_videoout.h"
 #include "agcdriver.h"
 
 #define AGC_MAGIC_DEVICE UINT32_C(0x44475641)
@@ -32,6 +33,7 @@
 #define AGC_MAGIC_COMMAND_BUFFER UINT32_C(0x43425641)
 #define AGC_MAGIC_FENCE UINT32_C(0x464e5641)
 #define AGC_MAGIC_GPU_LABEL UINT32_C(0x4c425641)
+#define AGC_MAGIC_PRESENT_CHAIN UINT32_C(0x50435641)
 
 #define AGC_FLEXIBLE_HEAP_BLOCK_SIZE UINT64_C(0x01000000)
 #define AGC_GARLIC_HEAP_BLOCK_SIZE UINT64_C(0x02000000)
@@ -192,6 +194,14 @@ struct AgcImageImpl {
     uint32_t transfer_value;
     uint32_t transfer_pending;
     uint32_t deferred;
+};
+
+struct AgcPresentChainImpl {
+    uint32_t magic;
+    uint32_t image_count;
+    AgcDevice device;
+    AgcVideoOut *video_out;
+    AgcImage images[AGC_PRESENT_CHAIN_MAX_IMAGES];
 };
 
 struct AgcImageViewImpl {
@@ -1720,6 +1730,138 @@ int32_t PS5_SYSV_ABI agcDestroyImage(AgcImage image)
     image->magic = 0u;
     agcDestroyChild(device, image);
     return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcCreatePresentChain(AgcDevice device,
+    const AgcPresentChainDesc *desc, AgcPresentChain *present_chain_out)
+{
+    AgcPresentChain present_chain;
+    AgcVideoOutMode mode;
+    AgcVideoOutCreateInfo video_desc;
+    void *buffers[AGC_PRESENT_CHAIN_MAX_IMAGES];
+    uint32_t pitch_pixels = 0u;
+    uint32_t i;
+    int32_t result;
+
+    if (!present_chain_out)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    *present_chain_out = NULL;
+    if (!agcDeviceValid(device) || !desc ||
+        !agcHeaderValid(desc->struct_size, sizeof(*desc), desc->version) ||
+        desc->flags != 0u || !agcReservedZero(desc->reserved, 4u) ||
+        desc->image_count < AGC_PRESENT_CHAIN_MIN_IMAGES ||
+        desc->image_count > AGC_PRESENT_CHAIN_MAX_IMAGES || !desc->images)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    result = agcVideoOutGetDefaultMode(&mode);
+    if (result != AGC_OK)
+        return result;
+    for (i = 0u; i < desc->image_count; ++i) {
+        AgcImage image = desc->images[i];
+        AgcImageSubresourceLayout layout =
+            AGC_IMAGE_SUBRESOURCE_LAYOUT_INIT;
+        uint32_t j;
+
+        if (!image || image->magic != AGC_MAGIC_IMAGE ||
+            image->device != device || image->deferred ||
+            image->desc.width != mode.width ||
+            image->desc.height != mode.height || image->desc.depth != 1u ||
+            image->desc.mip_levels != 1u || image->desc.array_layers != 1u ||
+            image->desc.sample_count != 1u ||
+            image->desc.format != AGC_FORMAT_RGBA8_UNORM ||
+            (image->desc.usage & AGC_IMAGE_USAGE_SCANOUT_BIT) == 0u)
+            return AGC_ERROR_NOT_SUPPORTED;
+        for (j = 0u; j < i; ++j)
+            if (desc->images[j] == image)
+                return AGC_ERROR_INVALID_ARGUMENT;
+        result = agcGetImageSubresourceLayout(device, &image->desc,
+            0u, 0u, 0u, &layout);
+        if (result != AGC_OK)
+            return result;
+        if (layout.offset != 0u || layout.row_pitch % 4u != 0u ||
+            layout.row_pitch / 4u > UINT32_MAX)
+            return AGC_ERROR_NOT_SUPPORTED;
+        if (i == 0u)
+            pitch_pixels = (uint32_t)(layout.row_pitch / 4u);
+        else if (pitch_pixels != layout.row_pitch / 4u)
+            return AGC_ERROR_NOT_SUPPORTED;
+        buffers[i] = (uint8_t *)agcAllocationCpuAddress(image->allocation) +
+            layout.offset;
+    }
+    present_chain = agcCreateChild(device, sizeof(*present_chain));
+    if (!present_chain)
+        return AGC_ERROR_OUT_OF_MEMORY;
+    video_desc.width = mode.width;
+    video_desc.height = mode.height;
+    video_desc.pitch_pixels = pitch_pixels;
+    video_desc.buffer_count = desc->image_count;
+    video_desc.buffers = buffers;
+    video_desc.format = AGC_VIDEO_OUT_FORMAT_BGRA8_SRGB;
+    result = agcVideoOutOpen(&video_desc, &present_chain->video_out);
+    if (result != AGC_OK) {
+        agcDestroyChild(device, present_chain);
+        return result;
+    }
+    present_chain->magic = AGC_MAGIC_PRESENT_CHAIN;
+    present_chain->device = device;
+    present_chain->image_count = desc->image_count;
+    for (i = 0u; i < desc->image_count; ++i) {
+        present_chain->images[i] = desc->images[i];
+        desc->images[i]->dependency_refs++;
+    }
+    *present_chain_out = present_chain;
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcDestroyPresentChain(
+    AgcPresentChain present_chain)
+{
+    AgcDevice device;
+    uint32_t i;
+
+    if (!present_chain || present_chain->magic != AGC_MAGIC_PRESENT_CHAIN ||
+        !agcDeviceValid(present_chain->device))
+        return AGC_ERROR_INVALID_ARGUMENT;
+    device = present_chain->device;
+    agcVideoOutClose(present_chain->video_out);
+    for (i = 0u; i < present_chain->image_count; ++i)
+        present_chain->images[i]->dependency_refs--;
+    present_chain->magic = 0u;
+    agcDestroyChild(device, present_chain);
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcPresent(AgcPresentChain present_chain,
+    uint32_t image_index, uint64_t frame_id, AgcFence ready_fence,
+    uint64_t timeout_ns)
+{
+    AgcImage image;
+    uint64_t timeout_us;
+    int32_t result;
+
+    if (!present_chain || present_chain->magic != AGC_MAGIC_PRESENT_CHAIN ||
+        !agcDeviceValid(present_chain->device) ||
+        image_index >= present_chain->image_count || !ready_fence ||
+        ready_fence->magic != AGC_MAGIC_FENCE ||
+        ready_fence->device != present_chain->device)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (timeout_ns == AGC_RUNTIME_INFINITE_TIMEOUT)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (timeout_ns == 0u)
+        return AGC_ERROR_TIMEOUT;
+    image = present_chain->images[image_index];
+    if (image->magic != AGC_MAGIC_IMAGE || image->deferred ||
+        image->transfer_pending ||
+        image->usage_state != kAgcResourceUsageVideoOutScanout ||
+        image->owner_state != kAgcResourceOwnerGraphics)
+        return AGC_ERROR_INVALID_STATE;
+    result = agcWaitFence(ready_fence, timeout_ns);
+    if (result != AGC_OK)
+        return result;
+    timeout_us = timeout_ns / 1000u + (timeout_ns % 1000u != 0u);
+    if (timeout_us > UINT32_MAX)
+        timeout_us = UINT32_MAX;
+    return agcVideoOutPresent(present_chain->video_out, image_index,
+        frame_id, timeout_us);
 }
 
 static int32_t agcRuntimeEncodeImageView(

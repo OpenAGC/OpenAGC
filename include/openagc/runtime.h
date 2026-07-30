@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-#define AGC_RUNTIME_API_VERSION 12u
+#define AGC_RUNTIME_API_VERSION 13u
 #define AGC_RUNTIME_STRUCTURE_VERSION_1 1u
 #define AGC_RUNTIME_STRUCTURE_VERSION_2 2u
 #define AGC_RUNTIME_PROFILE_NAME_SIZE 48u
@@ -37,6 +37,7 @@ typedef struct AgcComputePipelineImpl *AgcComputePipeline;
 typedef struct AgcCommandBufferImpl *AgcCommandBuffer;
 typedef struct AgcFenceImpl *AgcFence;
 typedef struct AgcGpuLabelImpl *AgcGpuLabel;
+typedef struct AgcPresentChainImpl *AgcPresentChain;
 
 typedef void *(PS5_SYSV_ABI *AgcAllocationFunction)(
     void *user_data, size_t size, size_t alignment);
@@ -202,6 +203,22 @@ typedef struct AgcImageDesc {
 #define AGC_IMAGE_DESC_INIT \
     { sizeof(AgcImageDesc), AGC_RUNTIME_STRUCTURE_VERSION_1, 1u, 1u, 1u, \
       1u, 1u, 0u, 1u, 0u, {0u, 0u, 0u, 0u} }
+
+#define AGC_PRESENT_CHAIN_MAX_IMAGES 16u
+#define AGC_PRESENT_CHAIN_MIN_IMAGES 2u
+
+typedef struct AgcPresentChainDesc {
+    uint32_t struct_size;
+    uint32_t version;
+    uint32_t flags;
+    uint32_t image_count;
+    const AgcImage *images;
+    uint64_t reserved[4];
+} AgcPresentChainDesc;
+
+#define AGC_PRESENT_CHAIN_DESC_INIT \
+    { sizeof(AgcPresentChainDesc), AGC_RUNTIME_STRUCTURE_VERSION_1, 0u, 0u, \
+      NULL, {0u, 0u, 0u, 0u} }
 
 typedef enum AgcResourceType {
     kAgcResourceTypeBuffer = 0,
@@ -1093,6 +1110,18 @@ int32_t PS5_SYSV_ABI agcCreateImage(
 int32_t PS5_SYSV_ABI agcDestroyImage(AgcImage image);
 int32_t PS5_SYSV_ABI agcDestroyImageDeferred(
     AgcImage image, AgcFence fence);
+/* Creates a main-display chain from dedicated runtime images. Images must use
+ * AGC_IMAGE_USAGE_SCANOUT_BIT; dimensions and pitch are validated against the
+ * firmware-neutral default VideoOut mode. The chain retains every image. */
+int32_t PS5_SYSV_ABI agcCreatePresentChain(AgcDevice device,
+    const AgcPresentChainDesc *desc, AgcPresentChain *present_chain_out);
+int32_t PS5_SYSV_ABI agcDestroyPresentChain(
+    AgcPresentChain present_chain);
+/* Waits for a finite readiness fence, then presents one image with a bounded
+ * VSYNC wait. The image must be in graphics-owned VideoOutScanout state. */
+int32_t PS5_SYSV_ABI agcPresent(AgcPresentChain present_chain,
+    uint32_t image_index, uint64_t frame_id, AgcFence ready_fence,
+    uint64_t timeout_ns);
 /* Transfer raw image-allocation bytes. The caller obtains portable
  * subresource ranges from agcGetImageSubresourceLayout. */
 int32_t PS5_SYSV_ABI agcWriteImage(
