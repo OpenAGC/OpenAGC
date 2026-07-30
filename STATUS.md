@@ -89,6 +89,19 @@ the GPU `0x504f5254` marker, two bounded flips, zero-valued teardown, and
 relaunch all passed. The same preserved bytes remain reserved for FW5.50.
 All other active exact profiles remain SPRX-qualified/hardware-unverified.
 
+Offline portability closure is complete. The clean generic suite passes 5,650
+assertions, including full raw-version normalization, exact profile selection,
+and common-V7 acceptance across all 39 active profiles; the clean Prospero
+cross-build also passes. Submission, queue, memory, suspend, workload, TF/HS,
+defaults, command-carrier, and shadow ledgers all reproduce from the complete
+SPRX corpus. The FW5.50/FW11.60 mechanical audit locks their shared baseline
+ABI and every classified difference. The remaining FW5.50 runner now pins and
+authenticates the cleanup and read-only firmware probe as well as the payload,
+rejects a non-`0x0550` console before the GPU payload is uploaded, and requires
+no rebuild. A simulated websrv/FTP test locks every hash/version rejection and
+the cleanup-before-probe/payload ordering. Hardware execution of the preserved
+payload remains pending.
+
 ## Reusable driver and flexible-memory teardown (2026-07-29)
 
 `agcDriverShutdown` now provides a public, backend-neutral teardown boundary.

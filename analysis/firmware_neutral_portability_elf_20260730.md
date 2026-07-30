@@ -13,6 +13,19 @@ Git. The digest in this document and the runner is the identity used for every
 endpoint launch. Rebuilding does not produce a substitute for the FW5.50 run;
 that future run must use these preserved bytes and this digest.
 
+The no-rebuild runner also pins and authenticates:
+
+- firmware probe SHA-256
+  `b88790c948a98810cf2fb4799a3ea529cc07e1e18532047e8780e72bde0ce7a7`;
+- renderer-cleanup SHA-256
+  `9fd6b41cf2ea87989c4217234c6f34c96a1ca5dc482355af1258539db77d4d76`.
+
+Before uploading the portability payload, the runner executes the authenticated
+cleanup, then the kernel-only read-only probe, and requires the probe's full raw
+version to normalize to the requested exact four-digit key. Uploaded copies of
+all three ELFs are downloaded and hash-verified. See
+`analysis/fw550_fw1160_offline_portability_audit_20260730.md`.
+
 ## Build and dependency contract
 
 The Make target defines only `AGC_PORTABILITY_GATE` and the neutral result-log
@@ -39,9 +52,9 @@ One bounded launch covers:
 7. driver shutdown plus flexible/direct-memory release;
 8. self-termination with a file-backed verdict.
 
-The runner performs two launches, with the renderer cleanup ELF launched
-immediately before each payload, to prove teardown and relaunch using the same
-pinned bytes.
+The runner performs two launches, with the authenticated renderer cleanup ELF
+launched immediately before each payload, to prove teardown and relaunch using
+the same pinned bytes.
 
 ## Qualification status
 

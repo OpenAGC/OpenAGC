@@ -112,6 +112,17 @@ standard FW `0x11600005`, including live GPU execution, two flips, teardown,
 and relaunch. The FW5.50 identical-byte run remains pending. See
 `analysis/firmware_neutral_portability_elf_20260730.md`.
 
+The offline endpoint audit is complete. Full nonzero-suffix raw versions now
+exercise normalization, exact selection, and common-V7 acceptance for all 39
+profiles; the clean host suite passes 5,650 assertions. All relevant SPRX
+ledgers reproduce from `/Volumes/Untitled/unp`, and
+`tools/verify_fw550_fw1160_compatibility.py` locks every shared layout and
+classified endpoint difference. The FW5.50 target now uses only preserved
+inputs: it authenticates the payload, cleanup, and kernel-only firmware probe,
+kills a stale renderer, rejects any console key other than `0x0550`, then runs
+cleanup immediately before each payload. No rebuild is part of the remaining
+gate. See `analysis/fw550_fw1160_offline_portability_audit_20260730.md`.
+
 ### Existing FW 11.60 versus FW 5.50 capability work
 
 The complete FW 11.60-versus-FW 5.50 capability inventory and required gate
