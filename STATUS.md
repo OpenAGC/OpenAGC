@@ -802,10 +802,17 @@ reproduced `224640` changed pixels, fixture counts
 channel independence, and FNV64 `0x6d3c92b92851ab4a` on both runs. All
 lifecycle gates passed; BC6 SFLOAT is next.
 
-BC6 SFLOAT pass 1 on FW 5.50 used the exact FW 11.60-qualified bytes and
+BC6 SFLOAT on FW 5.50 used the exact FW 11.60-qualified bytes twice and
 reproduced `224640` changed pixels, fixture counts
 `{74880,74880,18760,56120}`, range `1..213`, zero decode mismatches/error,
-channel independence, and FNV64 `0x6a278a1c5abd3bfc`. One replay remains.
+channel independence, and FNV64 `0x6a278a1c5abd3bfc` on both runs. All
+lifecycle gates passed.
+
+The complete 14-encoding BC1-BC7 sampling matrix is now hardware-qualified
+twice on exact FW 5.50 and FW 11.60 using identical hash-pinned,
+firmware-neutral ELFs. This proves endpoint parity for the tested layout,
+descriptor, direct-upload, shader-sampling, mip, and array-layer paths; it does
+not by itself qualify every intermediate firmware or tiled/copy paths.
 
 BC5 UNORM on FW 5.50 used the exact FW 11.60-qualified bytes twice and
 reproduced `224640` changed pixels, equal regions, full R/G ranges, zero decode

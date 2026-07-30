@@ -81,6 +81,33 @@ mismatches/error, channel independence, and FNV64 `0x6d3c92b92851ab4a`.
 All fixture, format, lifecycle, and residual-process gates passed. Repeat the
 identical artifact once.
 
+## BC6 SFLOAT pass 2
+
+The identical artifact reproduced `224640` changed pixels, fixture counts
+`{74880,74880,18760,56120}`, decoded range `1..213`, zero decode
+mismatches/error, channel independence, and FNV64 `0x6a278a1c5abd3bfc`.
+Every lifecycle gate and the post-run residual-process check passed again.
+
+## Endpoint result
+
+All 14 planned BC1-BC7 sampling encodings passed twice on exact FW 5.50 using
+the identical hash-pinned ELFs that previously passed twice on exact FW 11.60:
+
+- BC1 UNORM/SRGB
+- BC2 UNORM/SRGB
+- BC3 UNORM/SRGB
+- BC4 UNORM/SNORM
+- BC5 UNORM/SNORM
+- BC6 UFLOAT/SFLOAT
+- BC7 UNORM/SRGB
+
+Every run required the exact runtime profile, format-specific readback oracle,
+bounded completion, clean driver shutdown and memory release, final PASS,
+self-termination, and no residual `eboot.bin`. This establishes hardware
+endpoint parity for these exact linear-layout direct-upload sampling paths. It
+does not automatically hardware-qualify intermediate firmware versions,
+tiled BC layout, or BC image-copy/mip-copy paths.
+
 ## BC6 UFLOAT pass 2
 
 The identical artifact reproduced `224640` changed pixels, fixture counts

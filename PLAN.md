@@ -1250,11 +1250,13 @@ twice and reproduced `224640` changed pixels, fixture counts
 channel independence, and FNV64 `0x6d3c92b92851ab4a` on both runs. BC6 UFLOAT
 is hardware-qualified on both endpoints; qualify BC6 SFLOAT next.
 
-BC6 SFLOAT pass 1 on FW 5.50 used pinned SHA-256
+BC6 SFLOAT on FW 5.50 used pinned SHA-256
 `5bdffd1510c11ac7b334d630782fe931b9ca8b3f19ee31ab0b14b861eec32578`
-and reproduced `224640` changed pixels, fixture counts
+twice and reproduced `224640` changed pixels, fixture counts
 `{74880,74880,18760,56120}`, range `1..213`, zero decode mismatches/error,
-channel independence, and FNV64 `0x6a278a1c5abd3bfc`. Repeat once.
+channel independence, and FNV64 `0x6a278a1c5abd3bfc` on both runs. All 14
+planned BC1-BC7 sampling encodings are hardware-qualified twice on exact FW
+5.50 and FW 11.60 using identical hash-pinned firmware-neutral ELFs.
 The final firmware-neutral bytes are pinned as SHA-256
 `f74c393112fc465eace431a3fe288095ae4b3bf5ee993e8147ed0e9a2f22f2a4`
 for BC4 UNORM and
