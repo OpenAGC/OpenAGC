@@ -43,6 +43,8 @@
 #define AGC_ERROR_NOT_FOUND             ((int32_t)0x80890009)
 #define AGC_ERROR_INTERNAL              ((int32_t)0x8089000A)
 #define AGC_ERROR_NOT_SUPPORTED         ((int32_t)0x8089000B)
+#define AGC_ERROR_COMMAND_SPACE_EXHAUSTED ((int32_t)0x8089000C)
+#define AGC_ERROR_DEVICE_LOST           ((int32_t)0x8089000D)
 
 /* Command buffer errors */
 #define AGC_ERROR_CB_INVALID_SIZE       ((int32_t)0x80890101)
@@ -85,6 +87,9 @@ static inline const char* agcErrorString(int32_t err) {
     case AGC_ERROR_NOT_FOUND:           return "AGC_ERROR_NOT_FOUND";
     case AGC_ERROR_INTERNAL:            return "AGC_ERROR_INTERNAL";
     case AGC_ERROR_NOT_SUPPORTED:       return "AGC_ERROR_NOT_SUPPORTED";
+    case AGC_ERROR_COMMAND_SPACE_EXHAUSTED:
+                                        return "AGC_ERROR_COMMAND_SPACE_EXHAUSTED";
+    case AGC_ERROR_DEVICE_LOST:         return "AGC_ERROR_DEVICE_LOST";
     case AGC_ERROR_CB_INVALID_SIZE:     return "AGC_ERROR_CB_INVALID_SIZE";
     case AGC_ERROR_CB_OVERFLOW:         return "AGC_ERROR_CB_OVERFLOW";
     case AGC_ERROR_CB_INVALID_QUEUE:    return "AGC_ERROR_CB_INVALID_QUEUE";

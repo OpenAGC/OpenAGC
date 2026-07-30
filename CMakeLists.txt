@@ -24,6 +24,7 @@ endif()
 
 # Core AGC sources
 set(OPENAGC_SOURCES
+    src/runtime.c
     src/capabilities.c
     src/memory.c
     src/cb.c
@@ -97,6 +98,7 @@ if(OPENAGC_BUILD_TESTS)
 
     add_executable(openagc_tests
         tests/test_main.c
+        tests/test_runtime.c
         tests/test_capabilities.c
         tests/test_memory.c
         tests/test_types.c
@@ -198,7 +200,7 @@ if(OPENAGC_PACKAGE_PSBC)
         DESTINATION ${CMAKE_INSTALL_BINDIR}
         RENAME openagc-psbc)
 endif()
-install(FILES LICENSE README.md
+install(FILES LICENSE README.md docs/native_runtime.md
     DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/doc/OpenAGC)
 
 set(OPENAGC_CMAKE_INSTALL_DIR

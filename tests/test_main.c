@@ -9,6 +9,7 @@ int g_test_fail = 0;
 
 /* Test suite declarations */
 void test_suite_types(void);
+void test_suite_runtime(void);
 void test_suite_capabilities(void);
 void test_suite_memory(void);
 void test_suite_acb(void);
@@ -30,6 +31,7 @@ int main(void) {
     printf("openagc test suite\n");
 
     test_suite_types();
+    test_suite_runtime();
     test_suite_capabilities();
     test_suite_memory();
     test_suite_acb();

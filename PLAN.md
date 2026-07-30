@@ -79,7 +79,8 @@ expert use, but make the native API the recommended application surface.
    SHA-256 `e04004fee2254e6169805f153ce4812197726ed5f53a9295a4493f0d8ac9a9ce`
    passed twice as identical bytes on both FW 5.50 and FW 11.60 after their
    cleanup stress prerequisites. Preserve this exact artifact as regression
-   evidence; Milestone 1 is now the active product task.
+   evidence. Milestone 1 is complete; Milestone 2 resource creation and memory
+   management is now the active product task.
 2. **Do not reopen completed format work.** All R/RG/RGBA16
    UNORM/SNORM/UINT/SINT tuples, all six 32-bit UINT/SINT color tuples, all 14
    BC1-BC7 sampling encodings, the planned D16/D32/S8/HTILE progression, and
@@ -127,7 +128,7 @@ Exit criteria: one hash-identical application-neutral ELF passes twice on FW
 5.50 and FW 11.60, the FW 5.50 cleanup stress gate passes, and the support
 matrix distinguishes exact-profile evidence from hardware qualification.
 
-### Milestone 1: freeze the native C API contract
+### Milestone 1: freeze the native C API contract — complete
 
 Introduce an installable, C99, firmware-neutral API in a distinct public
 header family. Use opaque handles and versioned descriptor structs so internal
@@ -181,6 +182,24 @@ Exit criteria: generic tests create and destroy every object, reject invalid
 lifecycle transitions, and record one compute plus one indexed graphics
 submission; the same public headers build unchanged for generic and Prospero;
 the existing low-level ABI remains source- and binary-compatible.
+
+Completed on 2026-07-30. `include/openagc/runtime.h` freezes the 64-bit v1
+descriptor ABI with opaque handles, exact structure-size/version checks,
+reserved-zero rules, optional allocation callbacks, explicit ownership, four
+command-buffer states, finite-only binary-fence waits, stable native errors,
+and capability plus qualification reporting. Device creation owns exact
+backend/profile/default selection and fails unknown profiles closed.
+
+The generic suite creates and destroys every object, covers invalid lifecycle
+and dependency order, records and submits a compute ACB plus indexed graphics
+DCB, and locks atomic command-space failure. The complete suite passes 12,398
+assertions and all six CTest suites; ASan/UBSan also pass. Generic and Prospero
+build the same headers and source without warnings, an installed-package
+consumer compiles and runs, and symbol comparison removes no pre-existing
+low-level public symbol. Native Prospero queue submission remains deliberately
+fail-closed until Milestone 3 reflection can emit a complete validated hardware
+pipeline bind; that hardware promotion is not part of this host-qualified
+contract exit criterion. See `docs/native_runtime.md`.
 
 ### Milestone 2: resource creation and memory management
 

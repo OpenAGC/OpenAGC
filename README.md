@@ -20,7 +20,7 @@ dependent only on libc.
 | Area | Current state |
 | --- | --- |
 | Low-level AGC compatibility | Implemented for the mapped `sceAgc*`, driver, cursor, packet, shader, queue, and submit surfaces |
-| Host backend | Generic software backend with `12240 passed, 0 failed` across six CTest suites |
+| Host backend | Generic software backend with complete native-runtime and low-level regression tests across six CTest suites |
 | PS5 backend | Native `/dev/gc` implementation built with ps5-payload-sdk |
 | Hardware evidence | Qualified subsets on standard PS5 FW 5.50 and FW 11.60 |
 | Firmware profiles | 39 exact active ABI keys from FW 3.20 through FW 12.70; untested profiles remain hardware-unverified |
@@ -103,23 +103,31 @@ The current public headers expose:
 These APIs are used by the hardware samples, the standalone cube, and the
 current Vulkan-PS5 implementation.
 
-### Planned: native application runtime
+### Available today: native application runtime contract
 
-The next product layer is a firmware-neutral C API with opaque:
+`openagc/runtime.h` provides a C99 API that is firmware-neutral across
+supported PS5 firmware and PS5 hardware variants. It is not a portable GPU API;
+OpenAGC targets only the PS5 GPU. The API uses opaque:
 
 - `AgcDevice` and `AgcQueue`
 - `AgcBuffer`, `AgcImage`, `AgcImageView`, and `AgcSampler`
 - `AgcShader`, `AgcGraphicsPipeline`, and `AgcComputePipeline`
 - `AgcCommandBuffer` and `AgcFence`
 
-That runtime will own heap suballocation, shader reflection, pipeline
-compatibility, resource states, cache transitions, bounded synchronization,
-deferred destruction, validation, capture, and presentation. Applications will
-query capabilities and qualification through `agcGetRuntimeInfo` rather than
-branching on firmware.
+The implemented first contract includes versioned descriptors, reserved-zero
+validation, optional allocation callbacks, explicit parent/child ownership,
+command-buffer state validation, finite binary-fence waits, capability and
+qualification reporting through `agcGetRuntimeInfo`, and generic compute plus
+indexed-graphics submission recording. Applications query capabilities rather
+than branching on firmware.
 
-This native API is a roadmap target, not an implemented interface. See
-[PLAN.md](PLAN.md) for its dependency order and acceptance gates.
+Heap suballocation, shader reflection, validated hardware pipeline binding,
+resource transitions, deferred retirement, capture, and presentation remain
+ordered follow-on milestones. Native Prospero submission fails closed until a
+pipeline can emit a complete reflected hardware bind; the object contract and
+public headers already build unchanged for generic and Prospero. See
+[docs/native_runtime.md](docs/native_runtime.md) for lifecycle rules and
+[PLAN.md](PLAN.md) for the remaining dependency order.
 
 ### Sibling projects
 
@@ -207,7 +215,7 @@ ctest --test-dir build --output-on-failure
 Expected result:
 
 ```text
-12240 passed, 0 failed
+12398 passed, 0 failed
 ```
 
 The Make workflow is equivalent:

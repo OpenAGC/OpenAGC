@@ -18,22 +18,24 @@ passed twice as identical bytes on both endpoint consoles. The FW 11.60
 workload operation remains fail-closed after all known packet forms stalled
 and is not part of the baseline contract.
 
-1. **Define the native C runtime.** Add opaque `AgcDevice`, `AgcQueue`, resource,
-   shader, pipeline, command-buffer, and fence objects above the compatible
-   exports. Add `agcGetRuntimeInfo` so applications query capabilities and
-   qualification state rather than firmware numbers.
-2. **Add resource and pipeline safety.** Implement heap suballocation,
+The native C runtime contract is also complete. Its opaque objects, versioned
+descriptors, ownership/state validation, finite fences, stable errors, and
+runtime capability/qualification reporting are host-qualified. Prospero builds
+the same API but native queue submission remains fail-closed until reflected
+hardware pipeline binding is implemented.
+
+1. **Add resource and pipeline safety.** Implement heap suballocation,
    overflow-safe layouts, staging, reflection from `openagc-psbc`, and graphics
    and compute pipelines that reject shader/export, attachment, blend,
    descriptor, sample-count, and stage-linkage mismatches before PM4 emission.
-3. **Own transitions and synchronization.** Track explicit resource usage and
+2. **Own transitions and synchronization.** Track explicit resource usage and
    derive qualified release/acquire/flush/invalidate actions internally. Add
    bounded fences, multi-command-buffer submission, waits/signals, deferred
    retirement, validation diagnostics, and capture/command-stream inspection.
-4. **Document and integrate.** Publish lifecycle, memory, shader, pipeline,
+3. **Document and integrate.** Publish lifecycle, memory, shader, pipeline,
    synchronization, capability, error, and capture documentation. Qualify one
    long-running reference-game ELF unchanged on FW 5.50 and FW 11.60.
-5. **Rehabilitate `../Vulkan-PS5` last.** Make it a constrained translation
+4. **Rehabilitate `../Vulkan-PS5` last.** Make it a constrained translation
    layer above native OpenAGC objects. It must not retain a second PM4 backend,
    allocator, firmware selector, or synchronization model.
 
@@ -43,6 +45,49 @@ and the planned 4x MSAA matrix are regression coverage, not current
 implementation priorities. Remaining tiled BC, packed/alternate-swap, color-
 metadata, HDR, and depth/MSAA combinations are demand-driven and retain the
 existing host/SPRX/exact-firmware qualification labels.
+
+## Native runtime C API contract complete (2026-07-30)
+
+The PS5-only, firmware-neutral `openagc/runtime.h` header introduces opaque
+`AgcDevice`, `AgcQueue`, buffer/image/view/sampler, shader, graphics/compute
+pipeline, command-buffer, and fence handles without changing the recovered
+low-level ABI. Every v1 descriptor has an initializer, exact `struct_size` and
+`version` validation, reserved-zero rules, and a compile-time 64-bit size
+assertion. Optional allocation callbacks remain dependency-free.
+
+Firmware-neutral here means one ABI across supported PS5 firmware and
+standard/Trinity PS5 profiles. It does not claim a portable non-PS5 GPU API;
+the generic backend remains a host-only validation harness.
+
+The implementation enforces one backend-owning device, externally synchronized
+parent/child ownership, view-to-image and pipeline-to-shader dependencies,
+recorded-resource retention, reverse destroy order, and busy rejection without
+mutation. Command buffers move through initial, recording, executable, and
+pending states; reset releases recorded references and recovers failed
+recordings. Indexed draws and compute dispatches preflight capacity and return
+`AGC_ERROR_COMMAND_SPACE_EXHAUSTED` atomically. Binary fences expose status,
+reset, and finite nanosecond waits; the infinite sentinel is rejected and an
+unsignaled deadline returns `AGC_ERROR_TIMEOUT`.
+
+`agcGetRuntimeInfo` reports the API and caller AGC versions, full firmware and
+normalized ABI key, exact profile and hardware family, capability bits, and a
+qualification class for every capability. Device creation owns exact runtime
+selection, internal memory, caller-selected defaults, and default-state
+notification. Unknown profiles remain fail-closed through the exact registry.
+
+The generic tests create and destroy every object, reject descriptor,
+ownership, lifecycle, and capacity violations, submit one five-dword compute
+ACB, and submit one eleven-dword indexed graphics DCB. The clean result is
+12,398 passed and 0 failed across all six CTest suites; ASan/UBSan passes too.
+The generic and Prospero builds compile without warnings from the same public
+header. Installation includes the header and lifecycle guide, and a separate
+CMake package consumer compiles and runs. A before/after global-symbol audit
+found no removed low-level symbol.
+
+Native Prospero `agcQueueSubmit` is intentionally `AGC_ERROR_NOT_SUPPORTED`
+before GPU mutation until reflection and pipeline compatibility can emit a
+complete hardware bind. The new object/recording path is host-qualified, not
+yet advertised as hardware-qualified. See `docs/native_runtime.md`.
 
 ## Format, compressed-depth, and MSAA milestone complete (2026-07-30)
 

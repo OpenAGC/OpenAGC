@@ -6,6 +6,7 @@ CFLAGS  ?= -O2 -Wall -Wextra -Wpedantic
 CFLAGS  += -I include -I src -DOPENAGC_GENERIC
 
 SRCS = \
+	src/runtime.c \
 	src/capabilities.c \
 	src/memory.c \
 	src/cb.c \
@@ -40,6 +41,7 @@ OBJS = $(SRCS:.c=.o)
 
 TEST_SRCS = \
 	tests/test_main.c \
+	tests/test_runtime.c \
 	tests/test_types.c \
 	tests/test_capabilities.c \
 	tests/test_memory.c \
