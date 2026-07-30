@@ -1,5 +1,22 @@
 # openagc Status
 
+## FW 5.50 current-source mirror regression (2026-07-30)
+
+The audited headless FW 5.50 mirrors passed for the standalone 8,294,400-byte
+DMA copy (twice), indexed/indirect/indexed-indirect draws, NGG
+amplify/lines/invocations, isolated tessellation, and all four TES-to-NGG
+geometry variants. They reproduced the corresponding FW 11.60 DCB sizes and
+exact output hashes, reached bounded fences, shut the driver down, and returned
+PASS with the cleanup ELF immediately preceding every payload.
+
+Uncompressed-depth deployment was deliberately stopped. Rebuilding it with
+the newer sibling `openagc-psbc` revision changed the depth NGG back record's
+CX-register count from 0 to 11 and invalidated all four audited ELF hashes.
+Both firmware variants must be rebuilt and reviewed using the same pinned
+compiler revision before this can serve as a regression comparison. HTILE and
+MSAA hardware gates remain blocked on that baseline. See
+`analysis/fw1160_fw550_parity_matrix_20260730.md`.
+
 ## Regression safety fixes (2026-07-29)
 
 Default context-state construction now bounds register offsets in dwords,

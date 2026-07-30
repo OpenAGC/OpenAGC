@@ -16,6 +16,14 @@ AMD PM4 packet ancestry overlap in useful ways.
 
 ## Current Execution Order
 
+The complete FW 11.60-versus-FW 5.50 capability inventory and required gate
+order are maintained in
+`analysis/fw1160_fw550_parity_matrix_20260730.md`. On 2026-07-30 the audited
+FW 5.50 mirrors for buffer copy, draw variants, NGG, tessellation, and
+TES-to-NGG geometry all passed and reproduced the FW 11.60 hashes. Color and
+uncompressed-depth mirrors remain pending; do not advance to HTILE or MSAA
+until those baselines pass from one pinned shader-compiler revision.
+
 ### FW 11.60 workload parity gate
 
 - Keep the public workload capability disabled while testing isolated causes
