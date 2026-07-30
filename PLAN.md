@@ -139,8 +139,13 @@ AMD PM4 packet ancestry overlap in useful ways.
   complete pixels, exact hash `0x1754baabb2b216ca`, clean shutdowns, and no
   residual process. Prepare combined TES-to-NGG geometry next; keep the
   current-source FW 5.50 mirror pending.
-  Run it twice before preparing combined TES-to-NGG geometry. See
   `analysis/fw1160_tessellation_gate_plan_20260730.md`.
+- The four combined TES-to-NGG gates are now prepared: ordinary geometry,
+  invocations, line strip, and direct BGRA8. Exact logged FW 11.60 artifacts
+  and current-source FW 5.50 mirrors build without warnings. Each inherits the
+  whole-ring four-`4.0f` tessellation oracle, explicit variant identity,
+  bounded fence, target-specific readback, and clean shutdown. Run each twice
+  in that order. See `analysis/fw1160_tess_geometry_gate_plan_20260730.md`.
 - The first uncompressed depth/stencil tier is also built for exact FW 11.60:
   D32, D16, S8-only, then D16+S8. All four passed twice on standard FW
   `0x11600005`, with exact native distributions, immediate-to-3 ms fences,

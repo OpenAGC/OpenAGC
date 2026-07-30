@@ -620,6 +620,54 @@ agc_tessellation_fw550_headless.elf: agc_graphics.c ps5_video_out.h gpu_credenti
 		-DAGC_GRAPHICS_VARIANT_NAME='"tessellation"' \
 		-o $@ agc_graphics.c $(AGC_LDFLAGS)
 
+agc_tess_geometry_fw1160_logged.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_tess_hs_front_sb.h shaders/triangle_tess_hs_back_sb.h shaders/triangle_tess_gs_front_sb.h shaders/triangle_tess_gs_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW1160_GRAPHICS_LOG_FLAGS) -DAGC_TESSELLATION=1 \
+		-DAGC_TESS_GEOMETRY=1 \
+		-DAGC_GRAPHICS_VARIANT_NAME='"tess-geometry"' \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_tess_geometry_invocations_fw1160_logged.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_tess_hs_front_sb.h shaders/triangle_tess_hs_back_sb.h shaders/triangle_tess_invocations_gs_front_sb.h shaders/triangle_tess_invocations_gs_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW1160_GRAPHICS_LOG_FLAGS) -DAGC_TESSELLATION=1 \
+		-DAGC_TESS_GEOMETRY=1 -DAGC_TESS_GEOMETRY_INVOCATIONS=1 \
+		-DAGC_GRAPHICS_VARIANT_NAME='"tess-geometry-invocations"' \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_tess_geometry_lines_fw1160_logged.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_tess_hs_front_sb.h shaders/triangle_tess_hs_back_sb.h shaders/triangle_tess_lines_gs_front_sb.h shaders/triangle_tess_lines_gs_back_sb.h shaders/triangle_line_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW1160_GRAPHICS_LOG_FLAGS) -DAGC_TESSELLATION=1 \
+		-DAGC_TESS_GEOMETRY=1 -DAGC_TESS_GEOMETRY_LINES=1 \
+		-DAGC_GRAPHICS_VARIANT_NAME='"tess-geometry-lines"' \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_tess_geometry_rgba8_fw1160_logged.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_tess_hs_front_sb.h shaders/triangle_tess_hs_back_sb.h shaders/triangle_tess_gs_front_sb.h shaders/triangle_tess_gs_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW1160_GRAPHICS_LOG_FLAGS) -DAGC_TESSELLATION=1 \
+		-DAGC_TESS_GEOMETRY=1 -DAGC_VALIDATE_RGBA8_REFERENCE=1 \
+		-DAGC_GRAPHICS_VARIANT_NAME='"tess-geometry-rgba8"' \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_tess_geometry_fw550_headless.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_tess_hs_front_sb.h shaders/triangle_tess_hs_back_sb.h shaders/triangle_tess_gs_front_sb.h shaders/triangle_tess_gs_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW550_HEADLESS_GRAPHICS_FLAGS) -DAGC_TESSELLATION=1 \
+		-DAGC_TESS_GEOMETRY=1 \
+		-DAGC_GRAPHICS_VARIANT_NAME='"tess-geometry"' \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_tess_geometry_invocations_fw550_headless.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_tess_hs_front_sb.h shaders/triangle_tess_hs_back_sb.h shaders/triangle_tess_invocations_gs_front_sb.h shaders/triangle_tess_invocations_gs_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW550_HEADLESS_GRAPHICS_FLAGS) -DAGC_TESSELLATION=1 \
+		-DAGC_TESS_GEOMETRY=1 -DAGC_TESS_GEOMETRY_INVOCATIONS=1 \
+		-DAGC_GRAPHICS_VARIANT_NAME='"tess-geometry-invocations"' \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_tess_geometry_lines_fw550_headless.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_tess_hs_front_sb.h shaders/triangle_tess_hs_back_sb.h shaders/triangle_tess_lines_gs_front_sb.h shaders/triangle_tess_lines_gs_back_sb.h shaders/triangle_line_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW550_HEADLESS_GRAPHICS_FLAGS) -DAGC_TESSELLATION=1 \
+		-DAGC_TESS_GEOMETRY=1 -DAGC_TESS_GEOMETRY_LINES=1 \
+		-DAGC_GRAPHICS_VARIANT_NAME='"tess-geometry-lines"' \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
+agc_tess_geometry_rgba8_fw550_headless.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_tess_hs_front_sb.h shaders/triangle_tess_hs_back_sb.h shaders/triangle_tess_gs_front_sb.h shaders/triangle_tess_gs_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) $(FW550_HEADLESS_GRAPHICS_FLAGS) -DAGC_TESSELLATION=1 \
+		-DAGC_TESS_GEOMETRY=1 -DAGC_VALIDATE_RGBA8_REFERENCE=1 \
+		-DAGC_GRAPHICS_VARIANT_NAME='"tess-geometry-rgba8"' \
+		-o $@ agc_graphics.c $(AGC_LDFLAGS)
+
 agc_graphics_indexed.elf: agc_graphics.c ps5_video_out.h gpu_credentials.h shaders/triangle_ngg_front_sb.h shaders/triangle_ngg_back_sb.h shaders/triangle_frag_sb.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -DAGC_DRAW_INDEXED=1 -o $@ agc_graphics.c $(AGC_LDFLAGS)
 
@@ -1007,7 +1055,11 @@ deploy_agc_graphics: agc_graphics.elf
 	deploy_agc_graphics_amplify_fw1160_logged \
 	deploy_agc_graphics_lines_fw1160_logged \
 	deploy_agc_graphics_invocations_fw1160_logged \
-	deploy_agc_tessellation_fw1160_logged
+	deploy_agc_tessellation_fw1160_logged \
+	deploy_agc_tess_geometry_fw1160_logged \
+	deploy_agc_tess_geometry_invocations_fw1160_logged \
+	deploy_agc_tess_geometry_lines_fw1160_logged \
+	deploy_agc_tess_geometry_rgba8_fw1160_logged
 deploy_agc_graphics_fw1160: agc_graphics_fw1160.elf
 	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
@@ -1155,6 +1207,31 @@ deploy_agc_tessellation_fw1160_logged: agc_tessellation_fw1160_logged.elf
 		RESULT_LOG_PATH=/data/homebrew/openagc_fw1160_graphics/result.log \
 		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
 
+deploy_agc_tess_geometry_fw1160_logged: agc_tess_geometry_fw1160_logged.elf
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_VARIANT=tess-geometry REQUIRE_TESS_RINGS=1 \
+		RESULT_LOG_PATH=/data/homebrew/openagc_fw1160_graphics/result.log \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
+
+deploy_agc_tess_geometry_invocations_fw1160_logged: agc_tess_geometry_invocations_fw1160_logged.elf
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_VARIANT=tess-geometry-invocations REQUIRE_TESS_RINGS=1 \
+		RESULT_LOG_PATH=/data/homebrew/openagc_fw1160_graphics/result.log \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
+
+deploy_agc_tess_geometry_lines_fw1160_logged: agc_tess_geometry_lines_fw1160_logged.elf
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_VARIANT=tess-geometry-lines REQUIRE_TESS_RINGS=1 \
+		RESULT_LOG_PATH=/data/homebrew/openagc_fw1160_graphics/result.log \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
+
+deploy_agc_tess_geometry_rgba8_fw1160_logged: agc_tess_geometry_rgba8_fw1160_logged.elf
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_VARIANT=tess-geometry-rgba8 REQUIRE_TESS_RINGS=1 \
+		EXPECTED_TARGET=BGRA8_UNORM \
+		RESULT_LOG_PATH=/data/homebrew/openagc_fw1160_graphics/result.log \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
+
 .PHONY: deploy_agc_graphics_rgba8_unorm_fw550_headless \
 	deploy_agc_graphics_bgra8_unorm_fw550_headless \
 	deploy_agc_graphics_rgba8_srgb_fw550_headless \
@@ -1165,7 +1242,11 @@ deploy_agc_tessellation_fw1160_logged: agc_tessellation_fw1160_logged.elf
 	deploy_agc_graphics_amplify_fw550_headless \
 	deploy_agc_graphics_lines_fw550_headless \
 	deploy_agc_graphics_invocations_fw550_headless \
-	deploy_agc_tessellation_fw550_headless
+	deploy_agc_tessellation_fw550_headless \
+	deploy_agc_tess_geometry_fw550_headless \
+	deploy_agc_tess_geometry_invocations_fw550_headless \
+	deploy_agc_tess_geometry_lines_fw550_headless \
+	deploy_agc_tess_geometry_rgba8_fw550_headless
 deploy_agc_graphics_rgba8_unorm_fw550_headless: agc_graphics_rgba8_unorm_fw550_headless.elf
 	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
 		EXPECTED_FW_ABI=0x0550 EXPECTED_TARGET=RGBA8_UNORM \
@@ -1224,6 +1305,30 @@ deploy_agc_tessellation_fw550_headless: agc_tessellation_fw550_headless.elf
 		EXPECTED_FW_ABI=0x0550 EXPECTED_VARIANT=tessellation \
 		REQUIRE_TESS_RINGS=1 PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) \
 		sh ./run_fw1160_graphics.sh
+
+deploy_agc_tess_geometry_fw550_headless: agc_tess_geometry_fw550_headless.elf
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_FW_ABI=0x0550 EXPECTED_VARIANT=tess-geometry \
+		REQUIRE_TESS_RINGS=1 PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) \
+		sh ./run_fw1160_graphics.sh
+
+deploy_agc_tess_geometry_invocations_fw550_headless: agc_tess_geometry_invocations_fw550_headless.elf
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_FW_ABI=0x0550 EXPECTED_VARIANT=tess-geometry-invocations \
+		REQUIRE_TESS_RINGS=1 PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) \
+		sh ./run_fw1160_graphics.sh
+
+deploy_agc_tess_geometry_lines_fw550_headless: agc_tess_geometry_lines_fw550_headless.elf
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_FW_ABI=0x0550 EXPECTED_VARIANT=tess-geometry-lines \
+		REQUIRE_TESS_RINGS=1 PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) \
+		sh ./run_fw1160_graphics.sh
+
+deploy_agc_tess_geometry_rgba8_fw550_headless: agc_tess_geometry_rgba8_fw550_headless.elf
+	PS5_HOST=$(PS5_HOST) GRAPHICS_ARTIFACT=$(THIS_DIR)/$< \
+		EXPECTED_FW_ABI=0x0550 EXPECTED_VARIANT=tess-geometry-rgba8 \
+		REQUIRE_TESS_RINGS=1 EXPECTED_TARGET=BGRA8_UNORM \
+		PROCESS_CLEANUP_ELF=$(PROCESS_CLEANUP_ELF) sh ./run_fw1160_graphics.sh
 
 .PHONY: deploy_agc_depth_d16_fw1160 deploy_agc_stencil_s8_fw1160 \
 	deploy_agc_depth_stencil_d16_s8_fw1160 \

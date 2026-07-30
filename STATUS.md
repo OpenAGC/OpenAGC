@@ -516,6 +516,14 @@ isolated HS+TES+PS on the tested console. The exact FW 5.50 mirror remains
 pending and cross-builds without warnings.
 See `analysis/fw1160_tessellation_gate_plan_20260730.md`.
 
+The remaining combined-stage graphics tier is prepared for TES-to-NGG
+geometry, invocations, line strip, and direct BGRA8 output. Eight exact logged
+FW 11.60/current-source FW 5.50 artifacts cross-build without warnings. The
+runner requires each explicit variant identity, binder success, the complete
+four-`4.0f` factor-ring oracle, positive offchip mutation, bounded fence,
+target-specific readback, clean shutdown, and final PASS. Hardware execution
+is pending; see `analysis/fw1160_tess_geometry_gate_plan_20260730.md`.
+
 Exact next-tier ordinary D16/HTILE and D16 HTILE expclear artifacts now build
 for logged FW 11.60 and mirrored headless FW 5.50 profiles. The shared depth
 runner has detached cleanup, optional stale-proof file verdicts, gate-specific
