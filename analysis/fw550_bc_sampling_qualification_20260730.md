@@ -91,6 +91,17 @@ the post-run residual-process check passed again.
 BC6 UFLOAT is hardware-qualified on exact FW 5.50 and FW 11.60. BC6 SFLOAT is
 next.
 
+## BC6 SFLOAT pass 1
+
+Artifact SHA-256:
+`5bdffd1510c11ac7b334d630782fe931b9ca8b3f19ee31ab0b14b861eec32578`
+
+The guarded run produced `224640` changed pixels, fixture counts
+`{74880,74880,18760,56120}`, decoded range `1..213`, zero decode
+mismatches/error, channel independence, and FNV64 `0x6a278a1c5abd3bfc`.
+All fixture, format, lifecycle, and residual-process gates passed. Repeat the
+identical artifact once.
+
 ## BC7 UNORM pass 2
 
 The identical artifact reproduced `224640` changed pixels, mode counts
