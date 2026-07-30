@@ -1092,6 +1092,10 @@ static void test_runtime_compiler_graphics_sidecar(void)
     AgcImageDesc image_desc = AGC_IMAGE_DESC_INIT;
     AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
     AgcVertexBufferBinding vertex_binding = AGC_VERTEX_BUFFER_BINDING_INIT;
+    AgcResourceTransition target_transitions[2] = {
+        AGC_RESOURCE_TRANSITION_INIT,
+        AGC_RESOURCE_TRANSITION_INIT,
+    };
     AgcColorTargetBinding targets[2] = {
         AGC_COLOR_TARGET_BINDING_INIT,
         AGC_COLOR_TARGET_BINDING_INIT,
@@ -1195,6 +1199,17 @@ static void test_runtime_compiler_graphics_sidecar(void)
         AGC_OK, "compiler-sidecar vertex table binds");
     targets[0].image = first_image;
     targets[1].image = second_image;
+    target_transitions[0].resource_type = kAgcResourceTypeImage;
+    target_transitions[0].image = first_image;
+    target_transitions[0].before = kAgcResourceUsageUndefined;
+    target_transitions[0].after = kAgcResourceUsageColorTarget;
+    target_transitions[0].before_owner = kAgcResourceOwnerHost;
+    target_transitions[0].after_owner = kAgcResourceOwnerGraphics;
+    target_transitions[1] = target_transitions[0];
+    target_transitions[1].image = second_image;
+    TEST_ASSERT_EQ(agcCmdTransitionResources(command, 2u,
+        target_transitions), AGC_OK,
+        "compiler-sidecar color targets transition to graphics ownership");
     TEST_ASSERT_EQ(agcCmdBindColorTargets(command, 2u, targets), AGC_OK,
         "compiler-sidecar MRT targets bind");
     viewport.width = 64.0f;
@@ -2772,6 +2787,7 @@ static void test_runtime_color_target_binding(void)
     AgcBufferDesc buffer_desc = AGC_BUFFER_DESC_INIT;
     AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
     AgcColorTargetBinding target = AGC_COLOR_TARGET_BINDING_INIT;
+    AgcResourceTransition target_transition = AGC_RESOURCE_TRANSITION_INIT;
     AgcGraphicsPipeline pipeline = NULL;
     AgcShader vertex = create_shader(device, kAgcShaderStageVs);
     AgcShader pixel;
@@ -2835,6 +2851,20 @@ static void test_runtime_color_target_binding(void)
     TEST_ASSERT_EQ(agcDestroyImage(incompatible_image), AGC_OK,
         "rejected color target remains destroyable");
     target.image = image;
+    TEST_ASSERT_EQ(agcCmdBindColorTargets(command, 1u, &target),
+        AGC_ERROR_INVALID_STATE,
+        "untransitioned color target cannot bind on the graphics queue");
+    target_transition.resource_type = kAgcResourceTypeImage;
+    target_transition.image = image;
+    target_transition.before = kAgcResourceUsageUndefined;
+    target_transition.after = kAgcResourceUsageColorTarget;
+    target_transition.before_owner = kAgcResourceOwnerHost;
+    target_transition.after_owner = kAgcResourceOwnerGraphics;
+    target_transition.image_range.mip_level_count = 2u;
+    target_transition.image_range.array_layer_count = 2u;
+    TEST_ASSERT_EQ(agcCmdTransitionResources(command, 1u,
+        &target_transition), AGC_OK,
+        "color target transitions to graphics ownership before binding");
     TEST_ASSERT_EQ(agcCmdBindColorTargets(command, 1u, &target), AGC_OK,
         "matching color target emits its native binding state");
     TEST_ASSERT_EQ(agcDestroyImage(image), AGC_ERROR_BUSY,
@@ -2895,6 +2925,10 @@ static void test_runtime_mrt_color_target_binding(void)
     AgcColorTargetBinding targets[2] = {
         AGC_COLOR_TARGET_BINDING_INIT,
         AGC_COLOR_TARGET_BINDING_INIT,
+    };
+    AgcResourceTransition target_transitions[2] = {
+        AGC_RESOURCE_TRANSITION_INIT,
+        AGC_RESOURCE_TRANSITION_INIT,
     };
     AgcGraphicsPipeline pipeline = NULL;
     AgcShader pixel = NULL;
@@ -2970,6 +3004,17 @@ static void test_runtime_mrt_color_target_binding(void)
     TEST_ASSERT_EQ(agcCmdBindColorTargets(command, 1u, targets),
         AGC_ERROR_VALIDATION_FAILED,
         "MRT target count must match reflected exports");
+    target_transitions[0].resource_type = kAgcResourceTypeImage;
+    target_transitions[0].image = first_image;
+    target_transitions[0].before = kAgcResourceUsageUndefined;
+    target_transitions[0].after = kAgcResourceUsageColorTarget;
+    target_transitions[0].before_owner = kAgcResourceOwnerHost;
+    target_transitions[0].after_owner = kAgcResourceOwnerGraphics;
+    target_transitions[1] = target_transitions[0];
+    target_transitions[1].image = second_image;
+    TEST_ASSERT_EQ(agcCmdTransitionResources(command, 2u,
+        target_transitions), AGC_OK,
+        "matching MRT targets transition to graphics ownership");
     TEST_ASSERT_EQ(agcCmdBindColorTargets(command, 2u, targets), AGC_OK,
         "matching MRT targets emit native binding state");
     TEST_ASSERT_EQ(agcDestroyImage(first_image), AGC_ERROR_BUSY,

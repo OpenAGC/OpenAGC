@@ -286,9 +286,14 @@ sample agreement, matching dimensions, qualified target-base alignment, and
 array/mip subresource layout before transactionally emitting the existing
 gfx1013 color-target packets; targets are retained until command reset. Host
 coverage rejects mismatched target counts and dimensions before retaining either
-image, then locks both MRT base-register packets and lifetime release. This is
-not a render-pass abstraction: clear/load/store, transitions, and PS5 hardware
-execution remain open, and no hardware promotion is claimed.
+image, then locks both MRT base-register packets and lifetime release. A target
+also needs an explicit `color-target`/graphics transition in the recording
+command buffer; that state gate runs only after all target definitions validate,
+so it cannot mask an atomic MRT mismatch. Artifact
+`7f86dc3346e70212ce3469380639b0a4e49b8372a08dbd4a5624b9448a103429` passed
+the public two-target graphics probe on exact FW 5.50; see
+`analysis/runtime_color_target_state_gate_fw550_20260731.md`. This is not a
+render-pass abstraction: clear/load/store remain open.
 The native graphics counterpart now compiles a position/color triangle into a
 real NGG main/front pair and a two-export fragment sidecar, consumes those
 exact artifacts in a generic two-color-target/depth-target/vertex/index/

@@ -277,8 +277,14 @@ format, sample count, matching target dimensions, and the proven gfx1013 base
 alignment before emitting any packet. Multi-render-target validation is
 transactional: a mismatched target count or extent retains no image and emits
 no target state. Bound targets cannot be replaced within a command buffer and
-remain retained until reset. Color target binds cover the qualified 1x linear
-and RGBA8 4x layouts.
+remain retained until reset. Each target must already have an explicit
+whole-image `color-target` state owned by the graphics queue in the recording
+command buffer. This state check occurs after complete target-definition
+validation, so an invalid MRT definition retains its atomic validation result
+rather than being hidden by an unrelated state mismatch. The exact FW 5.50
+two-target graphics probe passed this gate; see
+[`runtime_color_target_state_gate_fw550_20260731.md`](../analysis/runtime_color_target_state_gate_fw550_20260731.md).
+Color target binds cover the qualified 1x linear and RGBA8 4x layouts.
 
 For a pipeline with a declared depth/stencil format, bind one matching
 `AgcDepthStencilTargetBinding` before drawing. The v4 path validates exact

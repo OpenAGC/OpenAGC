@@ -4216,6 +4216,9 @@ int32_t PS5_SYSV_ABI agcGetCommandBufferState(
 
 static int32_t agcCommandCommitScratch(AgcCommandBuffer command_buffer,
     const SceAgcCb *scratch, const uint32_t *words);
+static void agcCommandTransitionState(AgcCommandBuffer command_buffer,
+    AgcResourceType resource_type, void *resource, AgcResourceUsage *usage,
+    AgcResourceOwner *owner);
 
 int32_t PS5_SYSV_ABI agcCmdBindGraphicsPipeline(
     AgcCommandBuffer command_buffer, AgcGraphicsPipeline pipeline)
@@ -4281,6 +4284,8 @@ int32_t PS5_SYSV_ABI agcCmdBindColorTargets(
     SceAgcCb scratch;
     uint32_t width = 0u;
     uint32_t height = 0u;
+    AgcResourceUsage usage;
+    AgcResourceOwner owner;
     uint32_t i;
     int32_t result;
 
@@ -4362,6 +4367,13 @@ int32_t PS5_SYSV_ABI agcCmdBindColorTargets(
         } else if (layout.width != width || layout.height != height) {
             return AGC_ERROR_VALIDATION_FAILED;
         }
+    }
+    for (i = 0u; i < target_count; ++i) {
+        agcCommandTransitionState(command_buffer, kAgcResourceTypeImage,
+            targets[i].image, &usage, &owner);
+        if (usage != kAgcResourceUsageColorTarget ||
+            owner != kAgcResourceOwnerGraphics)
+            return AGC_ERROR_INVALID_STATE;
     }
     agcCbInit(&scratch, words, sizeof(words));
     for (i = 0u; i < target_count; ++i) {

@@ -346,8 +346,14 @@ qualified gfx1013 target-base alignment before packet emission; command buffers
 retain successful targets through reset. The generic suite covers failed format
 binding, target-required draw gating, atomic two-target dimension/count
 rejection, captured CB0/CB1 target registers, and release behavior. This is
-host-only and does not claim PS5 execution; clears, load/store, and transitions
-remain future native runtime work.
+now backed by an explicit typed-state gate: every target must be transitioned
+to `color-target` usage owned by graphics before it can bind. The gate runs
+after complete target-definition validation, preserving atomic MRT mismatch
+rejection. Artifact
+`7f86dc3346e70212ce3469380639b0a4e49b8372a08dbd4a5624b9448a103429` passed
+the public two-target FW 5.50 probe; see
+`analysis/runtime_color_target_state_gate_fw550_20260731.md`. Clears and
+load/store policy remain future native runtime work.
 
 The generated `runtime_triangle` NGG vertex main/front pair and fragment
 sidecar now drive a generic native graphics contract and the separate
