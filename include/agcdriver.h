@@ -488,10 +488,11 @@ int32_t PS5_SYSV_ABI sceAgcDriverAgrSubmitMultiDcbs(
 /* Add an EQ event. */
 int32_t PS5_SYSV_ABI sceAgcDriverAddEqEvent(void *eq, uint32_t type, void *event);
 
-/* libSceAgc user-facing init (wrapper around sce_agc_initialize) */
-int32_t PS5_SYSV_ABI sceAgcInit(uint32_t init_level, uint32_t flags, uint32_t *out_value);
-int32_t PS5_SYSV_ABI sceAgcInit_0090(
-    uint32_t init_level, uint32_t flags, uint32_t *out_value);
+/* libSceAgc user-facing initialization ABIs. The current export takes only
+ * the register-default ABI version. The legacy 0.90 export retains its
+ * caller-owned state argument before that version. */
+int32_t PS5_SYSV_ABI sceAgcInit(uint32_t version);
+int32_t PS5_SYSV_ABI sceAgcInit_0090(void *state, uint32_t version);
 
 /* Compatibility-SPRX query. Writes one boolean byte; FW 5.50 standard PS5
  * reports false. NID: BfBDZGbti7A. */

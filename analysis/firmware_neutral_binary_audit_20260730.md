@@ -33,6 +33,12 @@ allocation selected from a compile-time firmware key. This does not prove that
 every shared layout is valid on hardware; those claims remain bounded by the
 per-profile SPRX ledgers and hardware status.
 
+The ABI pass also found and corrected a separate public-init regression:
+`sceAgcInit` had been declared as a three-argument function even though the FW
+5.50 and FW 11.60 current wrappers take only `uint32_t version`. Its legacy
+`23LRUSvYu1M` form retains `state, version`. The old declaration could read an
+undefined third argument as a pointer when called by a real one-argument game.
+
 ## Test-only firmware pins
 
 `AGC_EXPECT_FIRMWARE_ABI_KEY` remains in `samples/hw_test` and its Makefile.

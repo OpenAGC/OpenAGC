@@ -578,7 +578,9 @@ static void agcUpdatePacketMode(void)
 }
 
 /* sceAgcInit (NID: kW3GLb7QfPg)
- * SPRX: wrapper that calls internal init at 0x75e0 which:
+ * FW 5.50's one-argument wrapper moves EDI (version) to ESI, supplies its
+ * internal state selector in EDI, and calls the common initializer at 0x75e0.
+ * FW 11.60 preserves that public ABI. The common initializer:
  *   1. Locks mutex
  *   2. Checks SDK version
  *   3. Gets app info
@@ -586,10 +588,9 @@ static void agcUpdatePacketMode(void)
  *   5. Calls register defaults init
  *   6. Calls register defaults internal init
  * Delegates to sce_agc_initialize on our backend. */
-int32_t PS5_SYSV_ABI sceAgcInit(uint32_t init_level, uint32_t flags, uint32_t *out_value)
+int32_t PS5_SYSV_ABI sceAgcInit(uint32_t version)
 {
-    (void)flags;
-    if (init_level > 9)
+    if (version > AGC_REGISTER_DEFAULTS_VERSION_12)
         return AGC_ERROR_INVALID_ARGUMENT;
 
     int32_t ret = sce_agc_initialize();
@@ -598,16 +599,13 @@ int32_t PS5_SYSV_ABI sceAgcInit(uint32_t init_level, uint32_t flags, uint32_t *o
 
     agcUpdatePacketMode();
 
-    if (out_value)
-        *out_value = 0;
-
     return AGC_OK;
 }
 
-int32_t PS5_SYSV_ABI sceAgcInit_0090(
-    uint32_t init_level, uint32_t flags, uint32_t *out_value)
+int32_t PS5_SYSV_ABI sceAgcInit_0090(void *state, uint32_t version)
 {
-    return sceAgcInit(init_level, flags, out_value);
+    (void)state;
+    return sceAgcInit(version);
 }
 
 /* sceAgcSuspendPoint (NID: h9z6+0hEydk)

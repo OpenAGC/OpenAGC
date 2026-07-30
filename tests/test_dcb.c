@@ -570,20 +570,18 @@ static void test_game_compat_driver_stubs(void) {
 }
 
 static void test_game_compat_init(void) {
-    /* sceAgcInit with valid init_level */
-    uint32_t out_val = 0xDEAD;
-    int32_t r = sceAgcInit(0, 0, &out_val);
+    /* Current sceAgcInit takes exactly one defaults-version argument. */
+    int32_t r = sceAgcInit(8);
     TEST_ASSERT_EQ(r, AGC_OK, "sceAgcInit returns OK");
-    TEST_ASSERT_EQ(out_val, 0u, "sceAgcInit sets out_value to 0");
 
-    out_val = 0xDEAD;
-    r = sceAgcInit_0090(0, 0, &out_val);
-    TEST_ASSERT_EQ(r, AGC_OK, "sceAgcInit_0090 forwards to current ABI");
-    TEST_ASSERT_EQ(out_val, 0u, "sceAgcInit_0090 preserves output ABI");
+    r = sceAgcInit_0090(NULL, 8);
+    TEST_ASSERT_EQ(r, AGC_OK,
+        "sceAgcInit_0090 forwards its legacy version argument");
 
-    /* sceAgcInit with invalid init_level */
-    r = sceAgcInit(10, 0, NULL);
-    TEST_ASSERT(r < 0, "sceAgcInit invalid level fails");
+    TEST_ASSERT_EQ(sceAgcInit(12), AGC_OK,
+        "sceAgcInit accepts the FW 11.60 defaults version");
+    r = sceAgcInit(13);
+    TEST_ASSERT(r < 0, "sceAgcInit rejects an unsupported defaults version");
 
     /* sceAgcSuspendPoint returns OK on generic */
     r = sceAgcSuspendPoint(0, 0, 0, 0);

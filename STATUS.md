@@ -60,7 +60,9 @@ separate parity gate. See
 
 The compile-time assumption audit found no expected-firmware build input in
 the production library. Firmware pins remain confined to hardware-test
-oracles. Exact register-default selection is still available only for FW 5.50
+oracles. It also corrected `sceAgcInit` from an unsafe three-argument prototype
+to the one-version-argument ABI reproduced on FW 5.50 and FW 11.60; the legacy
+entry retains its state-plus-version form. Exact register-default selection is still available only for FW 5.50
 V8 and FW 11.60 V12, making per-profile defaults recovery the next portability
 blocker. See `analysis/firmware_neutral_binary_audit_20260730.md`.
 
