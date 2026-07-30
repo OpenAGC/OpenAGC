@@ -69,8 +69,15 @@ console down, so hardware proof of the teardown must start from a fresh boot:
 5. keep HTILE and MSAA blocked until that sequence passes.
 
 The committed runner invokes the process-cleanup ELF immediately before each
-payload and pins the FW 5.50 artifact SHA-256 to
-`141bac67b58ae42e713ea0a080fb6602e5969feadfe1ca7e355a5f3a38cef972`.
+payload and pins the current-source FW 5.50 artifact SHA-256 to
+`8bb77e4c2719e3f0f5b6ccfaada6de9aa546ee2e72aa281464e8be19bac21e28`.
+Two forced local relinks reproduced those bytes exactly, dependency inspection
+found no AGC SPRX, and a hash-named copy was preserved in the host-only
+`OpenAGC-hw-artifacts` directory before its first launch. The earlier
+`141bac67...` artifact was superseded before FW 5.50 execution after the
+current-source Prospero archive was relinked; the runner did not permit the
+changed bytes to reach the console until the new artifact was audited and
+repinned.
 The matching FW 11.60 artifact is pinned to
 `55478106b4cdbef50c5d37d15e5a327b3b5dc0b6e2da9f6dc2b48953ea2b8d2e`.
 FW 11.60 is a useful runner and teardown safety check, but cannot replace the

@@ -21,7 +21,10 @@ builds now retain committed qualified records; regeneration is explicit.
 Fresh-boot cleanup stress and uncompressed-depth regression remain required,
 and HTILE/MSAA stay blocked. A committed 14-launch file-backed gate now pins
 separate FW 5.50 and FW 11.60 artifacts, invokes the cleanup ELF immediately
-before every payload, and requires zero-valued cleanup results. FW 5.50
+before every payload, and requires zero-valued cleanup results. The audited
+current-source FW 5.50 artifact is pinned to
+`8bb77e4c2719e3f0f5b6ccfaada6de9aa546ee2e72aa281464e8be19bac21e28` and was
+preserved under that hash before first launch. FW 5.50
 hardware is currently unavailable; an FW 11.60 pass is supporting evidence
 only and cannot close this regression. FW 11.60 passed a one-launch canary and
 then 14/14 stress launches with a GPU fence, driver shutdown, and all four
