@@ -864,6 +864,11 @@ all six pinned artifacts for identical-byte FW 5.50 replay and proceed to the
   `81eaf3d07304cd4d1be7ccca8a332f3f40dac8e605be14fcc6ae87c0bcdd1de8`.
   Do not execute it until the FW 11.60 console has rebooted and RG32_UINT passes.
 
+  The prerequisite is now satisfied and pinned RGBA32_UINT pass 1 succeeds:
+  all four lanes contain 255,744 exact samples over the full unsigned range,
+  zero mismatches, independent hashes, packed FNV64 `0x4d36e6ccd1b3e617`,
+  and a clean lifecycle. Replay once before advancing to signed formats.
+
 - `R32_SINT` is host-qualified as append-only value 29 with gfx1013 `32`,
   SINT, standard swap, four bytes per pixel, and `32_R` export 1. Exact PM4
   (`CB_COLOR0_INFO=0x00070510`), all-profile selection, every short-buffer

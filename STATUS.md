@@ -553,6 +553,11 @@ gate. Its final bytes are pinned as SHA-256
 `81eaf3d07304cd4d1be7ccca8a332f3f40dac8e605be14fcc6ae87c0bcdd1de8`;
 execution remains ordered behind the clean-boot RG32_UINT qualification.
 
+That prerequisite is now satisfied. Pinned RGBA32_UINT pass 1 completed with
+255,744 exact four-lane samples, full unsigned range, zero mismatches,
+independent hashes, packed FNV64 `0x4d36e6ccd1b3e617`, clean teardown, and no
+residual process. One identical replay remains.
+
 `AGC_GFX1013_RT_FORMAT_R32_SINT` is appended at value 29 and maps to
 `(format=0x04, number=SINT, swap=standard)`, four bytes per pixel, and `32_R`
 export 1. Exact host coverage locks `CB_COLOR0_INFO=0x00070510`, complete PM4,
