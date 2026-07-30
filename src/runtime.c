@@ -2816,6 +2816,14 @@ static int agcPipelineColorStateValid(
         state->flags == 0u && agcReservedZero(state->reserved, 2u);
 }
 
+static int agcPipelineBlendFactorUsesSource1(AgcBlendFactor factor)
+{
+    return factor == AGC_BLEND_FACTOR_SRC1_COLOR ||
+        factor == AGC_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR ||
+        factor == AGC_BLEND_FACTOR_SRC1_ALPHA ||
+        factor == AGC_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA;
+}
+
 static int agcPipelineRasterizationStateValid(
     const AgcRasterizationState *state)
 {
@@ -3551,6 +3559,10 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
             return AGC_ERROR_VALIDATION_FAILED;
         }
     }
+    if ((ps->reflection.flags &
+         AGC_SHADER_REFLECTION_DUAL_SOURCE_EXPORT_BIT) != 0u) {
+        return AGC_ERROR_NOT_SUPPORTED;
+    }
     if (desc->color_attachment_count != ps->reflection.color_export_count)
         return AGC_ERROR_VALIDATION_FAILED;
     for (i = 0u; i < desc->color_attachment_count; ++i) {
@@ -3565,6 +3577,16 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
              export_info->component_class !=
                 AGC_SHADER_COMPONENT_FLOAT_OR_NORMALIZED)) {
             return AGC_ERROR_VALIDATION_FAILED;
+        }
+        if (agcPipelineBlendFactorUsesSource1(
+                attachment->source_color_factor) ||
+            agcPipelineBlendFactorUsesSource1(
+                attachment->destination_color_factor) ||
+            agcPipelineBlendFactorUsesSource1(
+                attachment->source_alpha_factor) ||
+            agcPipelineBlendFactorUsesSource1(
+                attachment->destination_alpha_factor)) {
+            return AGC_ERROR_NOT_SUPPORTED;
         }
     }
     if (desc->rasterization) {

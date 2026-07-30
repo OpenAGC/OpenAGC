@@ -2253,6 +2253,49 @@ static void test_runtime_graphics_pipeline_compatibility_matrix(void)
     }
 
     {
+        AgcShaderReflection requirements = AGC_SHADER_REFLECTION_INIT;
+        AgcGraphicsPipelineDesc desc = AGC_GRAPHICS_PIPELINE_DESC_INIT;
+        AgcColorBlendAttachmentState attachment =
+            AGC_COLOR_BLEND_ATTACHMENT_STATE_INIT;
+        AgcShader ps;
+        AgcGraphicsPipeline pipeline = NULL;
+
+        requirements.color_export_count = 1u;
+        requirements.color_exports[0] = (AgcShaderColorExport){
+            0u, AGC_SHADER_COLOR_EXPORT_FP16_ABGR,
+            AGC_SHADER_COMPONENT_FLOAT_OR_NORMALIZED, 0xfu, 0u};
+        requirements.flags = AGC_SHADER_REFLECTION_DUAL_SOURCE_EXPORT_BIT;
+        ps = create_shader_with_reflection(
+            device, kAgcShaderStagePs, &requirements);
+        attachment.format = AGC_FORMAT_RGBA8_UNORM;
+        desc.vertex_shader = vs;
+        desc.pixel_shader = ps;
+        desc.color_attachment_count = 1u;
+        desc.color_attachments = &attachment;
+        TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &pipeline),
+            AGC_ERROR_NOT_SUPPORTED,
+            "dual-source reflection fails without a native secondary export contract");
+        TEST_ASSERT(pipeline == NULL,
+            "dual-source reflection leaves pipeline output null");
+        TEST_ASSERT_EQ(agcDestroyShader(ps), AGC_OK,
+            "dual-source pixel shader destroys");
+
+        requirements.flags = 0u;
+        ps = create_shader_with_reflection(
+            device, kAgcShaderStagePs, &requirements);
+        desc.pixel_shader = ps;
+        attachment.blend_enable = 1u;
+        attachment.source_color_factor = AGC_BLEND_FACTOR_SRC1_COLOR;
+        TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &pipeline),
+            AGC_ERROR_NOT_SUPPORTED,
+            "SRC1 blend factor fails without a dual-source shader contract");
+        TEST_ASSERT(pipeline == NULL,
+            "SRC1 blend rejection leaves pipeline output null");
+        TEST_ASSERT_EQ(agcDestroyShader(ps), AGC_OK,
+            "SRC1 pixel shader destroys");
+    }
+
+    {
         AgcGraphicsPipelineDesc desc = AGC_GRAPHICS_PIPELINE_DESC_INIT;
         AgcRasterizationState rasterization = AGC_RASTERIZATION_STATE_INIT;
         AgcShader ps = create_shader(device, kAgcShaderStagePs);

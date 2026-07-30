@@ -263,7 +263,7 @@ logical shader bundles. Reflection v2 adds compiler-derived front-stage
 interfaces and geometry topology/limit facts without changing its serialized
 size; v1/API-14 artifacts remain accepted. The runtime recomputes the
 compiler's FNV-1a stage-linkage hash over its four interface masks before
-accepting a reflected shader. The full generic suite reports 14,376 passed.
+accepting a reflected shader. The full generic suite reports 14,384 passed.
 The opt-in combined-tree contract test now compiles real `openagc-psbc`
 vertex/fragment/compute output and creates OpenAGC graphics/compute pipelines
 without sample-local register knowledge; its 256-byte code alignment and
@@ -304,6 +304,9 @@ The host compatibility matrix now crosses every exposed color attachment format
 with FP16/32-bit float, UINT, and SINT exports. It also proves `DEFAULT`,
 `32_R`, and `32_GR` exports fail closed until native R/RG color-target formats
 are part of a qualified runtime slice.
+Dual-source reflection and `SRC1_*` blend factors also fail closed: the native
+reflection ABI does not yet define a secondary-export-index contract, so the
+low-level dual-source builder is not exposed through an ambiguous runtime API.
 Runtime API v4 adds the equivalent typed depth/stencil binding. A graphics draw
 with declared depth/stencil state now fails before emission until a matching
 single-mip `AGC_IMAGE_USAGE_DEPTH_STENCIL_BIT` image binds; the runtime derives

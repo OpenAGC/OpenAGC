@@ -79,6 +79,12 @@ from the validated reflected pixel exports after applying the shader record.
 This makes the immutable runtime pipeline contract authoritative even when a
 compiler record contains a stale context-register value.
 
+Dual-source exports and `SRC1_*` blend factors are not exposed by this runtime
+slice. The reflection ABI has no secondary-export-index contract, so accepting
+either form could bind an undefined source. Pipeline creation returns
+`AGC_ERROR_NOT_SUPPORTED` before command emission; the lower-level dual-source
+builder's separate evidence does not promote this native API path.
+
 Graphics scratch is not yet packaged and therefore fails pipeline creation.
 Compiler-reflected gfx1013 LDS sizes are bounded before bind generation;
 tessellation additionally uses the explicit reflected hull-LDS requirement.

@@ -170,7 +170,7 @@ lifetime release, and required dynamic-state gating. Line and point polygon
 modes fail pipeline creation with the other unqualified rasterization options.
 Graphics scratch remains unsupported and fails during pipeline creation;
 reflected gfx1013 LDS requirements are bounded before bind generation. The full
-generic suite now reports 14,376
+generic suite now reports 14,384
 passed and 0 failed; the compiler's
 library, varying/export, NGG, and tessellation suites pass. This slice is
 host-tested only. No PS5 hardware test was run or claimed. See
@@ -190,6 +190,11 @@ not expose matching native R/RG color-target formats.
 Line/point polygon mode, depth clamp, rasterizer discard, and non-unit line
 width each have a native-pipeline fixture proving `AGC_ERROR_NOT_SUPPORTED` and
 a `NULL` output handle before command emission.
+
+Native pipeline creation also rejects dual-source-reflected pixel shaders and
+all `SRC1_*` blend factors. The reflection ABI does not yet carry a secondary
+export index, so the separate low-level dual-source builder evidence cannot
+promote an ambiguous runtime contract.
 
 The Prospero native queue bridge submits the GPU-visible command allocation
 through the direct carrier only with an explicit runtime fence, appends an EOP
