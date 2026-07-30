@@ -186,6 +186,13 @@ The identical artifact reproduced `224640` changed pixels,
 and FNV64 `0xae513a67c9bb483d`. All lifecycle gates passed again. BC3 UNORM
 is hardware-qualified on exact FW 11.60; BC3 SRGB is next.
 
+## BC3 SRGB pass 1
+
+The pinned SRGB artifact passed with `224640` changed pixels,
+`{74880,74880,74880}` regions, alpha range `0..255`, zero exact mismatches,
+and FNV64 `0x4cef62aedf2c8da1`. All lifecycle gates passed. Repeat the
+identical bytes once.
+
 ## BC2 SRGB pass 2
 
 The identical artifact reproduced `224640` changed pixels,
