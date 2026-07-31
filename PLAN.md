@@ -79,8 +79,8 @@ expert use, but make the native API the recommended application surface.
    SHA-256 `e04004fee2254e6169805f153ce4812197726ed5f53a9295a4493f0d8ac9a9ce`
    passed twice as identical bytes on both FW 5.50 and FW 11.60 after their
    cleanup stress prerequisites. Preserve this exact artifact as regression
-   evidence. Milestones 1 through 4 are complete; Milestone 5 validation,
-   diagnostics, capture, and documentation is now the active product task.
+   evidence. Milestones 1 through 5 are complete; Milestone 6's firmware-
+   neutral reference game is now the active product task.
 2. **Do not reopen completed format work.** All R/RG/RGBA16
    UNORM/SNORM/UINT/SINT tuples, all six 32-bit UINT/SINT color tuples, all 14
    BC1-BC7 sampling encodings, the planned D16/D32/S8/HTILE progression, and
@@ -732,7 +732,7 @@ buffer and image ownership ranges, and the five-stage presentation ladder.
 The identical firmware-neutral baseline remains 2/2 PASS on FW 5.50 and FW
 11.60. See `analysis/runtime_milestone4_fw550_20260731.md`.
 
-### Milestone 5: validation, diagnostics, capture, and documentation
+### Milestone 5: validation, diagnostics, capture, and documentation — complete
 
 Validation begins with Milestone 1 and becomes a separately selectable debug
 layer here. It must detect invalid enums and object states, misaligned or out-
@@ -836,6 +836,13 @@ Exit criteria: intentionally invalid programs produce actionable diagnostics,
 a captured reference frame decodes deterministically on the host, public API
 examples build from the installed package, and documentation contains no
 firmware branch in ordinary application code.
+
+Completion evidence: every requirement and exit criterion above is mapped to
+current source and executable proof in
+`analysis/milestone5_completion_audit_20260731.md`. The deleted-tree checkpoint
+passes 17,437 assertions, all CTest gates, and the Prospero build. This
+host-defined milestone changes no GPU packet/profile policy and requires no new
+PS5 replay.
 
 ### Milestone 6: build a firmware-neutral reference game
 

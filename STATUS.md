@@ -1,6 +1,6 @@
 # openagc Status
 
-## Current product direction (2026-07-30)
+## Current product direction (2026-07-31)
 
 The proven `sceAgc*`/`sceAgcDriver*`, PM4, shader, `/dev/gc`, firmware-profile,
 graphics, compute, format, depth/HTILE, MSAA, synchronization, memory, and
@@ -36,8 +36,8 @@ API-v22 command recycling. The independent FW 11.60 workload extension
 remains disabled and is not exercised by these native-runtime gates; the
 firmware-neutral baseline remains 2/2 PASS.
 
-1. **Build validation, diagnostics, and capture.** Runtime API v23 has the
-   first optional allocation-free debug-callback slice. API v24 adds the
+1. **Milestone 5 is complete.** Runtime API v23 has the optional
+   allocation-free debug-callback layer. API v24 adds the
    endian-defined framing and core command/submission records. API v25 adds
    pointer-free resource descriptions, shader versions/hashes and opt-in bytes,
    normalized pipelines, typed transitions, selected readback hashes, and the
@@ -49,11 +49,11 @@ firmware-neutral baseline remains 2/2 PASS.
    gates also pass: two separate captures decode identically with address
    redaction, and the public first-compute and first-indexed-triangle examples
    configure, link, and execute using only the installed CMake package.
-2. **Integrate.** The Milestone 5 lifecycle, install/tutorial, memory,
+2. **Build the firmware-neutral reference game.** The Milestone 5 lifecycle,
    synchronization, shader/pipeline, capability, error/timeout, validation,
    capture, hardware-debugging, and complete API-reference documentation is
-   published and mechanically checked. Next, qualify one long-running
-   reference-game ELF unchanged on FW 5.50 and FW 11.60.
+   published and mechanically checked. Now integrate and qualify one
+   long-running reference-game ELF unchanged on FW 5.50 and FW 11.60.
 3. **Rehabilitate `../Vulkan-PS5` last.** Make it a constrained translation
    layer above native OpenAGC objects. It must not retain a second PM4 backend,
    allocator, firmware selector, or synchronization model.
