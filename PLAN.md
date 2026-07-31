@@ -910,13 +910,14 @@ firmware checks, memory
 allocation, transition logic, shader metadata interpretation, and queue/fence
 ownership.
 
-Current checkpoint: Vulkan shader binaries are fully owned by `AgcShader`, and
-direct/indexed, geometry/tessellation, and compute dispatch recording is
-native-only. Pipeline switches now rebind typed descriptor and vertex state.
-The sibling migration audit is 26 direct symbols; proceed with descriptor-table
-and tessellation-resource ownership, then delete the legacy command/submission
-path to reach exactly zero. FW 5.50 qualification remains first; FW 11.60 is
-deferred until that endpoint is available.
+Current checkpoint: the sibling migration audit is exactly zero. Vulkan shader
+binaries, descriptor encoding, custom-border tables, tessellation resources,
+image layouts, command storage, resource transitions, finite fence waits,
+submission, and presentation are owned by public native APIs. The duplicate
+PM4 encoder, raw allocator, and fallback submission path are deleted. Normal
+and sanitizer host qualification pass 46/46, the Prospero build is clean, and
+the focused FW 5.50 custom-border smoke gate passes. The broader FW 5.50
+sequence remains first; FW 11.60 is deferred until that endpoint is available.
 
 OpenAGC API 42 additionally moves custom-border table allocation, values,
 flushes, and base-register programming behind `AgcDevice`/`AgcSampler`. Retain

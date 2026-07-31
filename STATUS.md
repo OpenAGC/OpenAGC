@@ -132,13 +132,14 @@ bounded self-exit, and no residual process.
    layer above native OpenAGC objects. It must not retain a second PM4 backend,
    allocator, firmware selector, or synchronization model.
 
-The current Vulkan migration consumes native `AgcShader` ownership for shader
-allocation, relocation, cache flush, fusion, and lifetime, and records direct,
-indexed, geometry/tessellation, and compute dispatch only through typed native
-commands. Its mechanically checked low-level inventory is now 26 symbols,
-down from 34 after WSI and transfer migration. Next are descriptor-table and
-remaining tessellation-resource ownership, followed by deletion of Vulkan's
-legacy encoder and submission path. FW 5.50 remains the first endpoint.
+The current Vulkan migration is host-complete at the native ownership boundary.
+Its mechanically checked low-level inventory is zero: descriptor encoding,
+image layout, tessellation resources, command storage, finite fence waits,
+submission, and presentation use public native APIs, and the legacy encoder
+and fallback are deleted. Normal and sanitizer host qualification pass 46/46,
+the Prospero build is clean, and the focused FW 5.500.008 custom-border gate
+passes its 18,432-pixel oracle with clean self-exit. The broader FW 5.50
+sequence remains the first hardware endpoint.
 
 The completed R/RG/RGBA16 UNORM/SNORM/UINT/SINT tuples, all six 32-bit integer
 tuples, all 14 BC1-BC7 sampling encodings, the planned depth/HTILE progression,
