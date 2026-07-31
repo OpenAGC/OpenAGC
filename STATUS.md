@@ -26,8 +26,8 @@ compute and baseline graphics oracles now also passed on exact FW 5.50 through
 the direct DCB carrier, without application PM4 or firmware selection.
 
 Milestone 4 typed command recording, resource states, and synchronization is
-complete for the documented support scope. Generic verification passes 17,437
-assertions and CTest 12/12, including the Milestone 5 deterministic-capture,
+complete for the documented support scope. Generic verification passes 17,746
+assertions and CTest 19/19, including the Milestone 5 deterministic-capture,
 installed-package example, complete API-reference, and firmware-neutral
 documentation gates. Nine cleanup-first runtime targets pass as
 identical artifact bytes on exact standard PS5 FW 5.50 and FW 11.60, covering
@@ -35,6 +35,62 @@ presentation, timeline waits, partial ownership, deferred retirement, and
 API-v22 command recycling. The independent FW 11.60 workload extension
 remains disabled and is not exercised by these native-runtime gates; the
 firmware-neutral baseline remains 2/2 PASS.
+
+API 33 also permits compute pipeline binds, dispatches, and shader-write
+resource states in a graphics command buffer. This preserves one ordered DCB
+for Vulkan-style interleaved graphics and compute work and matches the FW 5.50
+hardware-proven compute carrier; color, depth/stencil, and scanout states
+remain graphics-only.
+
+Runtime API 37 adds typed occlusion-query buffers and native reset, begin,
+end, bounded-result, and layout-query entry points. GPU addresses, per-RB
+storage, availability signaling, cache policy, and packet capacity remain
+inside OpenAGC. Generic coverage proves automatic graphics-owned QueryWrite
+acquisition, complete-record reset, precise-query recording, EOP availability,
+portable RB reduction, bounds, finite polling, and retention through command
+recycling. This slice is host-qualified; its Vulkan FW 5.50 execution gate is
+also qualified on FW 5.500.008: the exact candidate
+`db041bf9ab4a47eb4fd79f746588410bdcf851a16a680675f8dbcd008298feb5`
+returned `samples=18432 green=18432` and completed the cleanup-guarded
+lifecycle with no residual process. The gate also exposed and fixed ordering
+of first-use V8 defaults so a pipeline bind cannot reset `DB_COUNT_CONTROL`
+between query begin and draw.
+
+Runtime API 38 adds versioned `AgcDeviceProperties` and portable memory-heap
+property flags. Pre-device discovery may pass a null device; callers receive
+the same qualified image/compute limits, attachment-format masks, sample
+counts, heap sizes, and minimum alignments without importing the low-level
+gfx1013 capability contract. Vulkan-PS5 consumes this interface for its frozen
+physical-device advertisement.
+
+Runtime API 39 adds typed `agcCmdUpdateBuffer` and `agcCmdFillBuffer` commands.
+Both require a declared transfer-destination buffer and a complete aligned
+range in queue-owned CopyDestination state, preflight the entire WRITE_DATA
+stream and retention capacity before mutation, and retain the destination
+until command recycling. Vulkan-PS5 now records both standard commands through
+these entry points instead of silently accepting no-op command records.
+
+Runtime API 40 extends the firmware-neutral present-chain image validation to
+the already-qualified `AGC_FORMAT_BGRA8_SRGB` scanout encoding in addition to
+`AGC_FORMAT_RGBA8_UNORM`. The generic present-chain gate now exercises the
+BGRA form used by Vulkan-PS5. Linked ELF
+`0b1d87d02a5fbe480cc74890c613752bb55c2e7b5f4e729413314785e5302888`
+then passed 1,800 presentations on FW 5.500.008, tore down the retained chain
+and images, self-exited, and left no matching process or scoped fatal/reset
+warning.
+
+Runtime API 41 adds layout-derived image-region and buffer/image transfer
+commands: `agcCmdCopyImageRegions`, `agcCmdCopyBufferToImage`, and
+`agcCmdCopyImageToBuffer`. Versioned offset, extent, subresource-layer, image
+copy, and buffer/image copy records keep image allocation addresses and packet
+details private. The runtime validates every region, mip, layer, row pitch,
+BC block boundary, final buffer footprint, typed state, queue owner, retain,
+and complete DMA command-space requirement before emission. Generic coverage
+records a strided buffer-to-image, offset image-to-image, and tight
+image-to-buffer chain as nine row packets and passes 17,785 assertions.
+Color and BC single-sample layouts are host-qualified; depth/stencil,
+metadata-bearing, and multisample transfer forms fail closed pending their
+native tiled-copy contracts and FW 5.50 qualification.
 
 1. **Milestone 5 is complete.** Runtime API v23 has the optional
    allocation-free debug-callback layer. API v24 adds the
@@ -49,12 +105,20 @@ firmware-neutral baseline remains 2/2 PASS.
    gates also pass: two separate captures decode identically with address
    redaction, and the public first-compute and first-indexed-triangle examples
    configure, link, and execute using only the installed CMake package.
-2. **Build the firmware-neutral reference game.** The Milestone 5 lifecycle,
+2. **Keep the firmware-neutral reference game in view (KIV).** The Milestone 5
+   lifecycle,
    synchronization, shader/pipeline, capability, error/timeout, validation,
    capture, hardware-debugging, and complete API-reference documentation is
-   published and mechanically checked. Now integrate and qualify one
-   long-running reference-game ELF unchanged on FW 5.50 and FW 11.60.
-3. **Rehabilitate `../Vulkan-PS5` last.** Make it a constrained translation
+   published and mechanically checked. The Reference Arena now has host
+   evidence for deterministic BC/shader generation, public-API source audit,
+   guarded capture/deploy failure gates, A-to-B-to-A deferred streaming
+   recovery, and all 180 generic long-run reload windows. This is host
+   integration evidence only: the frame hashes remain discovery values and
+   the final ELF is neither pinned nor endpoint-qualified. FW 5.50 discovery
+   visibly exercises the compute halo, but visible-row hashes differ across
+   clean launches; no values are frozen and the milestone is deferred pending
+   a deterministic graphics/readback diagnosis.
+3. **Rehabilitate `../Vulkan-PS5` now.** Make it a constrained translation
    layer above native OpenAGC objects. It must not retain a second PM4 backend,
    allocator, firmware selector, or synchronization model.
 
@@ -183,6 +247,14 @@ bounded batch fence, and 64-word final readback on exact standard PS5 FW 5.50;
 see `analysis/runtime_compute_copy_shader_fw550_20260731.md`. Graphics
 consumers, cross-queue ownership, partial ranges, and FW 11.60 remain
 unqualified for buffer copies.
+Kernel-submitted native command buffers now use dedicated flexible-memory
+mappings instead of sharing a heap block with mutable resource allocations.
+This isolates DCB storage after a Vulkan graphics-queue copy candidate with a
+shared command/resource mapping kernel-panicked FW 5.50. Host coverage requires
+the dedicated allocation property, and replacement Vulkan artifact
+`35315b83d6731844d825b932e16dad904003b3a0cc6b4114c261b35455ec4d56`
+passed the exact cleanup-guarded two-region copy twice with clean bounded
+completion and teardown.
 Runtime API v12 adds `agcCmdCopyImage` for complete, identical image layouts in
 typed `CopySource` and `CopyDestination` state. Host coverage rejects
 incompatible and overlapping resources, retains both images, and splits a
@@ -379,9 +451,10 @@ the already-qualified gfx1013 register builder; dynamic stencil references
 preserve the pipeline's static masks, and dynamic D16/D32 depth bias selects the
 qualified format control. The former 64-byte v1 depth-only state is normalized
 without overreading; its previously unsupported stencil bit still fails closed
-rather than inventing missing operations. Alpha-to-coverage and alpha-to-one
-remain unqualified and now return `AGC_ERROR_NOT_SUPPORTED` instead of being
-silently ignored.
+rather than inventing missing operations. Alpha-to-coverage remains
+unqualified. Runtime API 33 accepts alpha-to-one only when compiler API 17
+marks the pixel shader's alpha-to-one epilog; a state/reflection mismatch fails
+before pipeline allocation.
 
 The first fused geometry pipeline is packaged without exposing the compiler's
 front/back split to applications. A `geometry_shader` handle containing the
@@ -547,6 +620,60 @@ the state test. Artifact
 the public upload vertex/index row on exact FW 5.50; see
 `analysis/runtime_graphics_input_state_gate_fw550_20260731.md`.
 
+## Explicit placed-memory contract host-qualified (2026-07-31)
+
+Runtime API 27 adds opaque `AgcMemory` allocations plus bounded map, unmap,
+flush, and invalidate operations. `agcCreatePlacedBuffer` and
+`agcCreatePlacedImage` bind aligned subranges without duplicating storage and
+permit deliberate Vulkan-style aliasing. Releasing a memory handle before its
+resources is safe: placed resources retain the allocation, and the final
+resource destruction recovers the exact live-allocation/live-byte baseline.
+The generic runtime and Vulkan resource tests cover offset propagation,
+alignment and range rejection, early handle release, aliasing, and zero
+deferred frees. The warning-free Prospero build and Vulkan-PS5 package-consumer
+plus GPU buffer-copy probes passed on exact FW 5.500.008. The latter preserved
+112 guard bytes around two copied regions, qualifying placed buffer offsets on
+real hardware; see Vulkan-PS5 logs at timestamps `20260731T082817Z` and
+`20260731T082834Z`.
+
+Runtime API 28 extends this slice with explicit linear/optimal image tiling,
+the remaining Vulkan-advertised uncompressed color layout formats, typed
+2D/array/cube views with component swizzles, and complete normalized sampler
+state including custom-border indices. Generic tests compare the native view
+and sampler allocation bytes against independently encoded gfx1013
+descriptors. Vulkan now creates native `AgcImage`, `AgcImageView`, and
+`AgcSampler` backing objects while preserving cube-array, linear depth, MSAA,
+storage-image, custom-border, and anisotropy host gates. Prospero/FW 5.50
+qualification is complete. The final storage-image, depth/stencil, cube-array,
+and swizzled custom-border ELFs had SHA-256 digests
+`2030aac81046a6e5b270a9b8e6c2ee2953cf2555d09c753c0c43e8004d10b03f`,
+`94766f98dfd632b3821df01682dbe0cc78fc724eb93a80c967c6f08db82a5b46`,
+`2e9cfb91fd3f6c783ccda4f864d5399c80264a7eafdd0b4029c29b0545ec1c84`,
+and `61ef02a082c16723310565ee67e979fb960a2a76a3a78aef6caa8b42ce692bc8`.
+All four passed on exact FW 5.500.008; the repeated depth gate also preserved
+identical raw-depth and stencil counts. The storage, cube-array, and border
+probes used the cleanup/klog guard and left only the established raw-ELF
+`amount=0x4000` warning. Vulkan-PS5 retains the matching logs at UTC
+timestamps `20260731T084955Z`, `20260731T085013Z`, `20260731T085153Z`, and
+`20260731T085214Z`.
+
+Runtime API 33 expands Vulkan shader/pipeline ownership. Compiler API 17 and
+PSBC API 18 mark alpha-to-one epilogs and reflect only descriptor sets with a
+stage user-SGPR address, retaining every declared binding within each such set.
+Pipeline validation now reports previously silent user-SGPR, resource-arena,
+and bind-packet failures through the debug layer. Vulkan-PS5 creates native
+`AgcShader` objects for every compiled stage, native compute pipelines, and
+native graphics pipelines across the qualified point, line, triangle,
+geometry, and tessellation forms. API 33 adds strip/fan primitive restart with
+index-type-specific fixed restart values; culling and rasterizer discard are
+owned by the same native pipeline state. The clean
+normal and sanitizer suites pass 46/46, and the Prospero build is clean.
+FW 5.500.008 candidates
+`3198c1a4fe43adb58ddf0de11d223c894c10fba698891df071d05c2cf8ae694a`
+and `4bcefd5ae07303b4d72d5f6a13b2e3ac921e4be3eecc91ae8d59b88dcfbb153f`
+passed storage-image compute and alpha-to-one graphics readback respectively;
+see Vulkan-PS5 logs at `20260731T092529Z` and `20260731T092556Z`.
+
 ## Native runtime C API contract complete (2026-07-30)
 
 The PS5-only, firmware-neutral `openagc/runtime.h` header introduces opaque
@@ -560,8 +687,10 @@ Firmware-neutral here means one ABI across supported PS5 firmware and
 standard/Trinity PS5 profiles. It does not claim a portable non-PS5 GPU API;
 the generic backend remains a host-only validation harness.
 
-The implementation enforces one backend-owning device, externally synchronized
-parent/child ownership, view-to-image and pipeline-to-shader dependencies,
+The implementation supports multiple independent logical devices over one
+process-owned physical backend, rejects mixed active AGC defaults versions,
+and shuts the backend down only with the last device. It enforces externally
+synchronized parent/child ownership, view-to-image and pipeline-to-shader dependencies,
 recorded-resource retention, reverse destroy order, and busy rejection without
 mutation. Command buffers move through initial, recording, executable, and
 pending states; reset releases recorded references and recovers failed
@@ -569,6 +698,18 @@ recordings. Indexed draws and compute dispatches preflight capacity and return
 `AGC_ERROR_COMMAND_SPACE_EXHAUSTED` atomically. Binary fences expose status,
 reset, and finite nanosecond waits; the infinite sentinel is rejected and an
 unsignaled deadline returns `AGC_ERROR_TIMEOUT`.
+
+Runtime API 26 adds that multi-logical-device ownership contract and exact
+generic compute-queue handle retirement. The full generic suite covers two
+simultaneous devices with graphics and compute queues, out-of-order compute
+queue destruction, survivor validity, and last-device shutdown. Vulkan-PS5's
+installed-package consumer then qualified the same lifecycle on exact FW
+5.500.008: candidate
+`a73e41394ba5a82b721567f04e7d034258e8bbd14eeeb0336e2d87022f6c0e60`
+created two native-backed Vulkan devices concurrently, destroyed one, allocated
+and freed memory through the survivor, printed its PASS oracle, and exited with
+only the accepted raw-ELF `amount=0x4000` warning. Evidence is retained in
+`../Vulkan-PS5/examples/qualification-logs/20260731T060556Z-package-consumer.log`.
 
 `agcGetRuntimeInfo` reports the API and caller AGC versions, full firmware and
 normalized ABI key, exact profile and hardware family, capability bits, and a

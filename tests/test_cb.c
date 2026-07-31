@@ -351,6 +351,8 @@ static void test_sce_agc_dcb_indirect_and_index(void) {
     TEST_ASSERT(dispatch != NULL, "DispatchIndirect returns allocated packet");
     TEST_ASSERT_EQ(agcPm4Opcode(dispatch[0]), AGC_PM4_OP_DISPATCH_INDIRECT, "DispatchIndirect opcode");
     TEST_ASSERT_EQ(agcPm4Length(dispatch[0]), 3, "DispatchIndirect length");
+    TEST_ASSERT_EQ(dispatch[0] & 1u, 1u,
+        "DispatchIndirect selects the compute shader type");
     TEST_ASSERT_EQ(dispatch[1], 0x30, "DispatchIndirect data offset");
 
     uint32_t* index = sceAgcDcbSetIndexBuffer(&cb, 0x300000080ULL, 123);

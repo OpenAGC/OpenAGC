@@ -91,6 +91,12 @@ tessellation additionally uses the explicit reflected hull-LDS requirement.
 
 ## Resource and dynamic binding
 
+Indirect graphics commands derive base-vertex, first-instance, and optional
+draw-index register locations solely from shader reflection. The public API
+accepts only typed argument buffers, offsets, counts, and strides; it never
+accepts raw GPU addresses or SGPR locations. A shader lacking the reflected
+locations required by the hardware indirect packet fails closed.
+
 After binding a pipeline, use `agcCmdBindDescriptors` for exact reflected
 descriptor-array coverage, `agcCmdBindVertexBuffers` for every reflected vertex
 binding, and `agcCmdPushConstants` for declared stage ranges. The runtime owns
@@ -117,6 +123,14 @@ reflected compute dispatch. The exact FW 5.50 endpoint oracle additionally
 renders an MRT triangle, hands one target to compute without a CPU wait, and
 matches all 4,096 sampled results against direct image readback.
 
+A graphics command buffer may bind a compute pipeline, transition storage
+resources to `kAgcResourceUsageShaderWrite` with graphics ownership, and issue
+dispatches in the same ordered DCB as graphics work. This is intentional: the
+native graphics carrier supports compute packets and avoids splitting APIs
+such as Vulkan into order-losing parallel streams. Compute command buffers
+continue to support the same shader-write state; graphics-only attachment and
+scanout states remain rejected on compute queues.
+
 A graphics pipeline whose reflected pixel shader exports color must bind one
 `AgcColorTargetBinding` per declared attachment with
 `agcCmdBindColorTargets` before drawing. The command validates exact format,
@@ -136,8 +150,9 @@ single-mip; packed depth-mip policy, clears/load-store, and transitions remain
 fail-closed until their typed contracts are added.
 
 Pipelines declare dynamic state through `dynamic_state_mask`. Viewport,
-scissor, blend constants, stencil reference, and depth bias setters emit the
-qualified command state and satisfy their corresponding bit. A draw fails with
+scissor, blend constants, stencil reference, depth bias, and line-width
+setters emit the qualified command state and satisfy their corresponding bit.
+A draw fails with
 `AGC_ERROR_INVALID_STATE` while any declared bit is unset. Dynamic values and
 resource bindings are command-buffer state and are cleared by reset.
 
@@ -156,25 +171,29 @@ color/depth/stencil formats, complete depth/stencil testing, the declared
 dynamic states above, and the qualified gfx1013 bind groups. In the geometry
 form, `geometry_shader` owns both compiler records and `vertex_shader` must be
 `NULL`; supplying both is rejected instead of silently ignoring either
-handle. The packaged geometry subset accepts compiler-reflected triangle or
-line input, derives the qualified gfx1013 primitive type, permits the
-compiler's invocation count, and requires indexed draws to contain complete
-three- or two-vertex input primitives. Point and adjacency inputs remain
-fail-closed before PM4 emission.
+handle. Geometry accepts point, line, triangle, line-adjacency, and
+triangle-adjacency inputs plus point, line-strip, and triangle-strip outputs.
+Pipeline topology must match the reflected input form; indexed geometry draws
+validate list/strip/fan and adjacency cardinality before emission. The native
+primitive mapping uses hardware values 1–6, 9, and 10–13; in particular,
+triangle fan is 5 and triangle strip is 6. The v5 graphics descriptor adds
+`primitive_restart_enable` for line/triangle strips, triangle fans, and their
+adjacency-strip forms. Indexed draws program the Vulkan-compatible fixed
+restart value from the bound 16- or 32-bit index type; list and patch restart
+requests fail before pipeline allocation.
 
-The host fixtures also instantiate point input/output, line-adjacency input,
-triangle-adjacency input, and point output from triangle input. Each is rejected
-transactionally with `AGC_ERROR_NOT_SUPPORTED`; no pipeline handle or command
-stream is produced.
-
-Only fill polygon mode is qualified in this runtime slice. Line and point
-polygon modes, depth clamp, rasterizer discard, and non-unit line width fail
-pipeline creation before PM4 emission rather than selecting an unqualified
-fixed register sequence.
-
-Each unsupported rasterization field has a native-pipeline fixture that checks
-for `AGC_ERROR_NOT_SUPPORTED` and a `NULL` output handle, so these modes cannot
-silently enter a command stream.
+Fill, line, and point polygon modes, depth clamp, rasterizer discard, and
+qualified 1–64 pixel static or dynamic line widths are encoded by the native
+pipeline. Depth bias is either a validated `static_depth_bias` descriptor or
+the dynamic state bit, never both. The v4 graphics descriptor carries all 16
+logic operations, and v5 adds primitive restart without changing the 200-byte
+ABI size. Distinct graphics and compute pipelines may be rebound in
+one command buffer; each distinct pipeline is retained through reset and each
+resource-bearing bind receives a separate command-owned resource arena.
+Graphics command buffers may also bind compute pipelines and dispatch compute
+packets. This preserves graphics/compute ordering in one hardware DCB for
+universal API queues; compute command buffers remain available for dedicated
+compute queues.
 
 Tessellation uses compiler-owned fused bundles as well. Set
 `tessellation_control_shader` to an HsBack/HsFront bundle whose front program
@@ -198,8 +217,10 @@ indexed input remains a complete tessellation patch.
 
 Compute supports Wave32, at most 1,024 invocations per group, no scratch, and
 at most 64 KiB LDS, including direct or indirect reflected descriptor-set
-addressing. Alpha-to-coverage, alpha-to-one, point/adjacency geometry inputs,
-and Prospero submission remain fail-closed.
+addressing. Compiler API 16 marks pixel shaders whose epilog implements
+alpha-to-one; the pipeline must request exactly the reflected state.
+Alpha-to-coverage, point/adjacency geometry inputs, and unqualified pipeline
+forms remain fail-closed.
 
 ## Qualification
 

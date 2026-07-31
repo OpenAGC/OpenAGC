@@ -55,7 +55,7 @@ succeeded. `agcErrorString` returns immutable library-owned text.
 | Types | Contract |
 | --- | --- |
 | `AgcDevice`, `AgcQueue` | Root runtime and device-owned submission queue. |
-| `AgcBuffer`, `AgcImage`, `AgcImageView`, `AgcSampler` | Device-owned resources; views retain their image. |
+| `AgcMemory`, `AgcBuffer`, `AgcImage`, `AgcImageView`, `AgcSampler` | Device-owned memory and resources; placed resources retain memory and views retain their image. |
 | `AgcShader`, `AgcGraphicsPipeline`, `AgcComputePipeline` | Immutable compiled state; pipelines retain shaders. |
 | `AgcCommandBuffer`, `AgcFence`, `AgcGpuLabel` | Externally synchronized recording and bounded completion objects. |
 | `AgcPresentChain`, `AgcCapture` | Device-owned VideoOut and diagnostic-stream objects. |
@@ -66,17 +66,19 @@ succeeded. `agcErrorString` returns immutable library-owned text.
 
 | Types | Contract |
 | --- | --- |
-| `AgcDeviceDesc`, `AgcRuntimeInfo` | Required capabilities in; selected profile, qualification, limits, and capabilities out. |
-| `AgcQueueDesc`, `AgcBufferDesc`, `AgcImageDesc`, `AgcImageViewDesc`, `AgcSamplerDesc` | Versioned child/resource creation descriptions. |
+| `AgcDeviceDesc`, `AgcRuntimeInfo`, `AgcDeviceProperties`, `AgcMemoryHeapProperties` | Required capabilities in; selected profile, qualification, physical limits, formats, and heap properties out. |
+| `AgcQueueDesc`, `AgcMemoryDesc`, `AgcBufferDesc`, `AgcImageDesc`, `AgcImageViewDesc`, `AgcSamplerDesc` | Versioned child/resource creation descriptions. |
 | `AgcPresentChainDesc` | Images, dimensions, format, and VideoOut policy for a device-owned chain. |
 | `AgcShaderDesc`, `AgcGraphicsPipelineDesc`, `AgcComputePipelineDesc` | Immutable shader and normalized pipeline creation contracts. |
 | `AgcCommandBufferDesc`, `AgcFenceDesc`, `AgcGpuLabelDesc` | Command capacity/queue type and synchronization initial state. |
 | `AgcCaptureDesc`, `AgcCaptureInfo` | Capture callback/flags and active/status/count snapshot. |
 | `AgcSubmitInfo`, `AgcGpuLabelPoint` | Ordered command list plus transient wait/signal points; arrays are borrowed during submit. |
 | `AgcResourceTransition`, `AgcResourceStateInfo` | Typed usage/owner/range transition and committed-state query. |
+| `AgcOcclusionQueryLayout`, `AgcOcclusionQueryResult` | Opaque query-record layout and portable reduced result/availability. |
 | `AgcDescriptorWrite`, `AgcVertexBufferBinding`, `AgcColorTargetBinding`, `AgcDepthStencilTargetBinding` | Borrowed command-binding descriptions retained by recorded object reference. |
 | `AgcViewport`, `AgcScissor`, `AgcDepthBias` | Dynamic command state. |
 | `AgcImageSubresourceRange`, `AgcImageLayout`, `AgcImageSubresourceLayout` | Image selection and overflow-safe computed layout results. |
+| `AgcOffset3D`, `AgcExtent3D`, `AgcImageSubresourceLayers`, `AgcImageCopyRegion`, `AgcBufferImageCopyRegion` | Versioned layout-derived image-region and buffer/image transfer geometry. |
 | `AgcRasterizationState`, `AgcMultisampleState`, `AgcDepthStencilPipelineState`, `AgcStencilFaceState`, `AgcColorBlendAttachmentState` | Normalized immutable graphics-pipeline state. |
 | `AgcFenceInfo`, `AgcGpuLabelInfo` | Submission/profile/marker and last bounded-wait diagnostic snapshots. |
 | `AgcAllocationInfo`, `AgcMemoryStats` | Object placement and device allocation/leak/high-water snapshots. |
@@ -88,15 +90,18 @@ succeeded. `agcErrorString` returns immutable library-owned text.
 | --- | --- |
 | `AgcHardwareFamily`, `AgcQualificationClass`, `AgcRuntimeCapabilityIndex` | Selected hardware family, evidence class, and capability-bit indices. |
 | `AgcQueueType`, `AgcCommandBufferState`, `AgcFenceState` | Queue compatibility and command/fence lifecycle states. |
-| `AgcMemoryHeap`, `AgcObjectType` | Runtime heap and debug/allocation-query object classification. |
+| `AgcMemoryHeap`, `AgcMemoryPropertyFlags`, `AgcMemoryCreateFlagBits`, `AgcObjectType` | Runtime heap, portable heap properties, dedicated-allocation policy, and debug/allocation-query object classification. |
 | `AgcResourceType`, `AgcResourceUsage`, `AgcResourceOwner` | Typed transition resource, use, and host/graphics/compute ownership. |
 | `AgcFormat`, `AgcImageAspectFlagBits`, `AgcImageAspectFlags` | Image/attachment encoding and aspect mask. |
+| `AgcImageTiling`, `AgcImageViewType`, `AgcComponentSwizzle` | Linear/optimal layout selection and normalized view type/component mapping. |
+| `AgcMipFilter`, `AgcSamplerBorderColor` | Native sampler mip filtering and fixed/custom border selection. |
 | `AgcBufferUsageFlagBits`, `AgcBufferUsageFlags`, `AgcBufferCreateFlagBits` | Buffer permitted uses and upload/readback/dedicated policy. |
 | `AgcImageUsageFlagBits`, `AgcImageUsageFlags` | Image sampled/storage/target/transfer/scanout uses. |
 | `AgcFilter`, `AgcAddressMode` | Sampler filtering and addressing. |
-| `AgcBlendFactor`, `AgcBlendOperation`, `AgcCompareOperation`, `AgcStencilOperation` | Blend, compare, and stencil operations. |
+| `AgcBlendFactor`, `AgcBlendOperation`, `AgcLogicOperation`, `AgcCompareOperation`, `AgcStencilOperation` | Blend, logic, compare, and stencil operations. |
 | `AgcPolygonMode`, `AgcCullModeFlagBits`, `AgcCullModeFlags`, `AgcFrontFace` | Rasterization selection. |
-| `AgcDynamicStateFlagBits`, `AgcDynamicStateFlags`, `AgcIndexSize` | Dynamic pipeline fields and index width. |
+| `AgcPrimitiveTopology` | Point/list/strip/fan/adjacency/patch topology; graphics descriptor v5 optionally enables fixed-index primitive restart for strip/fan forms. |
+| `AgcDynamicStateFlagBits`, `AgcDynamicStateFlags`, `AgcPrimitiveTopology`, `AgcIndexSize` | Dynamic pipeline fields, primitive topology, and index width. |
 | `AgcDebugMessageSeverityFlagBits`, `AgcDebugMessageSeverityFlags` | Diagnostic severity mask. |
 | `AgcDebugMessageCategoryFlagBits`, `AgcDebugMessageCategoryFlags` | Diagnostic parameter/state/compatibility/capability/capacity/lifetime mask. |
 | `AgcCaptureFlagBits`, `AgcCaptureFlags`, `AgcCaptureRecordType`, `AgcCaptureObjectType`, `AgcCaptureHashAlgorithm` | Capture opt-in, framing vocabulary, stable object kind, and hash algorithm. |
@@ -127,6 +132,7 @@ reset/destruction; “borrowed” means the input is read only during the call.
 | `agcCreateDevice` | Creates the root; copies descriptor/callback table. | capability, allocation, initialization errors | [compute](../examples/first_compute.c) |
 | `agcDestroyDevice` | Requires no live children/deferred objects. | `AGC_ERROR_BUSY` if ownership remains | [cleanup](getting_started.md#first-compute-submission) |
 | `agcGetRuntimeInfo` | Writes a snapshot; no ownership transfer. | structure/version validation | [capabilities](getting_started.md#capability-and-error-policy) |
+| `agcGetDeviceProperties` | Returns firmware-neutral image/compute limits, format/sample masks, and heap profiles; a null device is valid for pre-device discovery. | structure/version/device validation | [capabilities](getting_started.md#capability-and-error-policy) |
 | `agcGetObjectAllocationInfo` | Queries a same-device resource/object. | invalid object/type | [memory](memory_resources.md#diagnostics-and-retirement) |
 | `agcSetObjectDebugName` | Copies the name into a supported same-device object. | invalid type/object, allocation | [capture](capture.md#application-setup) |
 | `agcGetMemoryStats` | Writes current/high-water/deferred statistics. | structure/version validation | [memory](memory_resources.md#diagnostics-and-retirement) |
@@ -147,14 +153,26 @@ reset/destruction; “borrowed” means the input is read only during the call.
 
 | Function | Ownership/state | Returns | Example |
 | --- | --- | --- | --- |
+| `agcCreateMemory` | Creates an explicit flexible or garlic allocation for placed resources. | size/alignment/heap/allocation errors | [memory](memory_resources.md) |
+| `agcDestroyMemory` | Releases the application reference; placed resources retain storage until their destruction. | invalid/released handle | [memory](memory_resources.md) |
+| `agcMapMemory` | Returns a CPU pointer for one live nonempty allocation range. | invalid/released/range errors | [memory](memory_resources.md) |
+| `agcUnmapMemory` | Ends an application mapping epoch; persistent backend mapping remains internal. | invalid/released handle | [memory](memory_resources.md) |
+| `agcFlushMemory` | Makes one mapped write range available to the device. | invalid/released/range errors | [visibility](memory_resources.md#visibility-and-staging) |
+| `agcInvalidateMemory` | Makes one device-written range visible to the host. | invalid/released/range errors | [visibility](memory_resources.md#visibility-and-staging) |
 | `agcCreateBuffer` | Creates device-owned storage from a validated layout. | usage/size/capability/allocation errors | [compute](../examples/first_compute.c) |
+| `agcCreatePlacedBuffer` | Creates a buffer bound to an aligned in-range explicit-memory interval; aliasing is permitted. | device/heap/alignment/range errors | [memory](memory_resources.md) |
 | `agcDestroyBuffer` | Requires no view/recorded/pending references. | `AGC_ERROR_BUSY` | [cleanup](../examples/first_compute.c) |
 | `agcDestroyBufferDeferred` | Consumes application use of the handle; retires after fence/references. | invalid fence/device/state | [retirement](memory_resources.md#diagnostics-and-retirement) |
 | `agcWriteBuffer` | Copies into an upload-visible in-range interval. | usage, range, alignment/state errors | [triangle upload](../examples/first_triangle.c) |
 | `agcReadBuffer` | Invalidates and copies a host-readable committed interval. | usage/range/state errors | [compute](../examples/first_compute.c) |
 | `agcGetBufferStateInfo` | Queries uniform whole-buffer committed state. | `AGC_ERROR_NOT_SUPPORTED` for mixed ranges | [states](memory_resources.md#visibility-and-staging) |
 | `agcGetBufferRangeStateInfo` | Queries one exact nonempty byte interval. | range/mixed-state errors | [states](memory_resources.md#visibility-and-staging) |
+| `agcGetCommandBufferRangeStateInfo` | Queries effective range state including transitions already recorded in one command buffer. | recording/device/range/mixed-state errors | [states](memory_resources.md#visibility-and-staging) |
+| `agcGetOcclusionQueryLayout` | Returns the opaque record size/alignment without exposing RB or packet layout. | output/device/version errors | [queries](memory_resources.md#occlusion-query-storage) |
+| `agcResetOcclusionQueryResults` | Host-clears complete query records and publishes HostWrite state. | usage/range/state errors | [queries](memory_resources.md#occlusion-query-storage) |
+| `agcGetOcclusionQueryResult` | Finite-waits or polls, invalidates, and reduces all RB snapshots to one value. | busy/timeout/usage/range errors | [queries](memory_resources.md#occlusion-query-storage) |
 | `agcCreateImage` | Creates a device-owned computed image allocation. | layout/format/usage/capability/allocation errors | [triangle](../examples/first_triangle.c) |
+| `agcCreatePlacedImage` | Creates an image bound to a queried-layout-aligned garlic-memory interval. | device/heap/layout/alignment/range errors | [image layout](memory_resources.md#image-layouts) |
 | `agcDestroyImage` | Requires no view/chain/recorded/pending references. | `AGC_ERROR_BUSY` | [triangle cleanup](../examples/first_triangle.c) |
 | `agcDestroyImageDeferred` | Retires after fence completion and reference release. | invalid fence/device/state | [retirement](memory_resources.md#diagnostics-and-retirement) |
 | `agcWriteImage` | Copies raw allocation bytes to an upload-visible range. | usage/range/state errors | [layout](memory_resources.md#image-layouts) |
@@ -201,9 +219,11 @@ reset/destruction; “borrowed” means the input is read only during the call.
 | `agcCmdPushConstants` | Copies bytes into recorded command state. | stage/range/reflection errors | [compute](../examples/first_compute.c) |
 | `agcCmdSetViewport` | Records dynamic viewport. | pipeline/dynamic/finite-value errors | [triangle](../examples/first_triangle.c) |
 | `agcCmdSetScissor` | Records dynamic scissor. | pipeline/dynamic/range errors | [triangle](../examples/first_triangle.c) |
+| `agcCmdSetViewportScissors` | Records one to sixteen paired viewport/scissor entries. | pipeline/dynamic/count/value errors | [triangle](../examples/first_triangle.c) |
 | `agcCmdSetBlendConstants` | Copies four finite dynamic constants. | pipeline/dynamic/value errors | [binding](shader_pipelines.md#resource-and-dynamic-binding) |
 | `agcCmdSetStencilReference` | Records front/back dynamic references. | pipeline/dynamic/state errors | [binding](shader_pipelines.md#resource-and-dynamic-binding) |
 | `agcCmdSetDepthBias` | Copies dynamic bias state. | pipeline/dynamic/value errors | [binding](shader_pipelines.md#resource-and-dynamic-binding) |
+| `agcCmdSetLineWidth` | Records a qualified dynamic line width. | pipeline/dynamic/value errors | [binding](shader_pipelines.md#resource-and-dynamic-binding) |
 
 ### Commands, transitions, and synchronization packets
 
@@ -211,9 +231,21 @@ reset/destruction; “borrowed” means the input is read only during the call.
 | --- | --- | --- | --- |
 | `agcCmdTransitionResources` | Records typed range state and retains resources/dependency label. | usage/owner/range/dependency/capacity errors | [compute](../examples/first_compute.c) |
 | `agcCmdCopyBuffer` | Records nonoverlapping aligned ranges in CopySource/CopyDestination. | usage/range/alignment/state errors | [transitions](native_runtime.md#explicit-resource-transitions) |
+| `agcCmdUpdateBuffer` | Embeds aligned source bytes and writes a retained CopyDestination range. | usage/range/alignment/state/capacity errors | [transitions](native_runtime.md#explicit-resource-transitions) |
+| `agcCmdFillBuffer` | Embeds a repeated 32-bit value and fills a retained CopyDestination range. | usage/range/alignment/state/capacity errors | [transitions](native_runtime.md#explicit-resource-transitions) |
 | `agcCmdCopyImage` | Records whole compatible image-allocation copy. | shape/format/layout/state errors | [transitions](native_runtime.md#explicit-resource-transitions) |
+| `agcCmdCopyImageRegions` | Records color/BC mip, layer, offset, and extent row copies from queried layouts. | format/block/range/state/capacity errors | [transitions](native_runtime.md#explicit-resource-transitions) |
+| `agcCmdCopyBufferToImage` | Records strided buffer rows into color/BC image subresources. | usage/footprint/block/state/capacity errors | [transitions](native_runtime.md#explicit-resource-transitions) |
+| `agcCmdCopyImageToBuffer` | Records color/BC image subresource rows into a strided buffer footprint. | usage/footprint/block/state/capacity errors | [transitions](native_runtime.md#explicit-resource-transitions) |
+| `agcCmdResetOcclusionQueries` | Acquires and clears one or more retained typed query records. | queue/usage/range/capacity errors | [queries](memory_resources.md#occlusion-query-storage) |
+| `agcCmdBeginOcclusionQuery` | Records one normal or precise query snapshot after internal QueryWrite acquire. | queue/usage/range/capacity errors | [queries](memory_resources.md#occlusion-query-storage) |
+| `agcCmdEndOcclusionQuery` | Records the closing snapshot and cache-flushing availability release. | queue/usage/range/capacity errors | [queries](memory_resources.md#occlusion-query-storage) |
+| `agcCmdDraw` | Records a non-indexed draw after complete compatible graphics state. | missing binding/topology/capacity errors | [triangle](../examples/first_triangle.c) |
 | `agcCmdDrawIndexed` | Records an indexed draw after complete compatible graphics state. | missing binding/range/topology/capacity errors | [triangle](../examples/first_triangle.c) |
+| `agcCmdDrawIndirect` | Records one or more 16-byte draw records from a retained typed indirect buffer. | usage/state/stride/range/reflection/capacity errors | [binding](shader_pipelines.md#resource-and-dynamic-binding) |
+| `agcCmdDrawIndexedIndirect` | Records one or more 20-byte indexed-draw records with a bound retained index buffer. | usage/state/stride/range/reflection/capacity errors | [binding](shader_pipelines.md#resource-and-dynamic-binding) |
 | `agcCmdDispatch` | Records dispatch after complete reflected compute state. | missing descriptor/push/range/capacity errors | [compute](../examples/first_compute.c) |
+| `agcCmdDispatchIndirect` | Records one 12-byte dispatch record from a retained typed indirect buffer. | usage/state/alignment/range/capacity errors | [compute](../examples/first_compute.c) |
 | `agcCmdWaitGpuLabel` | Records a wait for an already scheduled monotonic point. | ordering/value/queue/capacity errors | [sync](native_runtime.md#ownership-and-synchronization) |
 | `agcCmdSignalGpuLabel` | Records an increasing nonterminal signal and retains label. | stale/decreasing/wrap/capacity errors | [sync](native_runtime.md#ownership-and-synchronization) |
 
@@ -237,7 +269,7 @@ reset/destruction; “borrowed” means the input is read only during the call.
 
 | Function | Ownership/state | Returns | Example |
 | --- | --- | --- | --- |
-| `agcCreatePresentChain` | Creates chain retaining dedicated scanout images. | capability/shape/format/VideoOut errors | [presentation](native_runtime.md#current-qualification-boundary) |
+| `agcCreatePresentChain` | Creates a chain retaining dedicated 1920×1080 linear `RGBA8_UNORM` or `BGRA8_SRGB` scanout images. | capability/shape/format/VideoOut errors | [presentation](native_runtime.md#current-qualification-boundary) |
 | `agcDestroyPresentChain` | Releases retained images after no active present. | `AGC_ERROR_BUSY`, VideoOut failure | [presentation](native_runtime.md#current-qualification-boundary) |
 | `agcPresent` | Waits finite ready fence/VSYNC and presents Host/graphics-qualified scanout image. | timeout/state/index/VideoOut errors | [presentation](native_runtime.md#current-qualification-boundary) |
 

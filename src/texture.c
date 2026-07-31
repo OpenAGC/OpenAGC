@@ -358,6 +358,16 @@ void agcSamplerDescriptorSetBorderColor(AgcSamplerDescriptor *desc,
     desc->words[3] |= (uint32_t)border_color << 30;
 }
 
+int32_t PS5_SYSV_ABI agcSamplerDescriptorSetCustomBorderColor(
+    AgcSamplerDescriptor *desc, uint32_t table_index)
+{
+    if (!desc || table_index > 0xfffu)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    desc->words[3] &= ~UINT32_C(0xc0000fff);
+    desc->words[3] |= table_index | (UINT32_C(3) << 30);
+    return AGC_OK;
+}
+
 void agcSamplerDescriptorSetMaxAnisotropy(AgcSamplerDescriptor *desc,
     uint32_t max_aniso)
 {

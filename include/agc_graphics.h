@@ -90,7 +90,7 @@ extern "C" {
 
 #define AGC_GFX1013_FRAME_PROLOGUE_BASE_DWORDS  2275u
 #define AGC_GFX1013_FRAME_PROLOGUE_DWORDS       2471u
-#define AGC_GFX1013_FRAME_POST_BIND_DWORDS        24u
+#define AGC_GFX1013_FRAME_POST_BIND_DWORDS        30u
 #define AGC_GFX1013_BLEND_STATE_DWORDS            32u
 #define AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS    14u
 #define AGC_GFX1013_DEPTH_BIAS_STATE_DWORDS       10u
@@ -556,6 +556,11 @@ typedef enum AgcGfx1013PrimitiveTopology {
     AGC_GFX1013_TOPOLOGY_LINE_STRIP,
     AGC_GFX1013_TOPOLOGY_TRIANGLE_LIST,
     AGC_GFX1013_TOPOLOGY_TRIANGLE_STRIP,
+    AGC_GFX1013_TOPOLOGY_TRIANGLE_FAN,
+    AGC_GFX1013_TOPOLOGY_LINE_LIST_WITH_ADJACENCY,
+    AGC_GFX1013_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY,
+    AGC_GFX1013_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY,
+    AGC_GFX1013_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY,
     AGC_GFX1013_TOPOLOGY_PATCH_LIST,
     AGC_GFX1013_TOPOLOGY_COUNT
 } AgcGfx1013PrimitiveTopology;
@@ -586,6 +591,8 @@ typedef struct AgcGfx1013FrameState {
     uint32_t instance_step_rate;
     uint32_t clip_control;
     uint32_t raster_mode_control;
+    uint32_t primitive_restart_enable;
+    uint32_t primitive_restart_index;
 } AgcGfx1013FrameState;
 
 typedef struct AgcGfx1013GraphicsDefaultStats {
@@ -878,6 +885,8 @@ int32_t PS5_SYSV_ABI agcGfx1013SetPrimitiveSizeState(
     SceAgcCb *cb, const AgcGfx1013PrimitiveSizeState *state);
 int32_t PS5_SYSV_ABI agcGfx1013SetTargetMask(
     SceAgcCb *cb, uint32_t mask);
+int32_t PS5_SYSV_ABI agcGfx1013SetBorderColorTable(
+    SceAgcCb *cb, uint64_t gpu_address);
 int32_t PS5_SYSV_ABI agcGfx1013SetColorBlendState(
     SceAgcCb *cb, const AgcGfx1013ColorBlendState *state);
 int32_t PS5_SYSV_ABI agcGfx1013SetDepthBiasState(
@@ -898,6 +907,9 @@ int32_t PS5_SYSV_ABI agcGfx1013ApplyComputeDefaultsV8(
     SceAgcCb *cb, AgcGfx1013ComputeDefaultStats *stats);
 int32_t PS5_SYSV_ABI agcGfx1013DispatchCompute(
     SceAgcCb *cb, const AgcGfx1013ComputeState *state);
+int32_t PS5_SYSV_ABI agcGfx1013DispatchComputeIndirect(
+    SceAgcCb *cb, const AgcGfx1013ComputeState *state,
+    uint64_t argument_buffer_address, uint32_t argument_offset);
 int32_t PS5_SYSV_ABI agcGfx1013RmwHtile(
     SceAgcCb *cb, const AgcGfx1013HtileRmwState *state);
 int32_t PS5_SYSV_ABI agcGfx1013BindResourceTables(

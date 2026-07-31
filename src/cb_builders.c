@@ -401,7 +401,7 @@ uint32_t *PS5_SYSV_ABI sceAgcDcbDispatchIndirect(
     if (!cmd)
         return 0;
 
-    cmd[0] = agcPm4Header3(AGC_PM4_OP_DISPATCH_INDIRECT, 3);
+    cmd[0] = agcPm4Header3(AGC_PM4_OP_DISPATCH_INDIRECT, 3) | 1u;
     cmd[1] = data_offset;
     cmd[2] = (modifier & 0xA038u) | 0x41u;
     return cmd;

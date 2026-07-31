@@ -377,7 +377,7 @@ static void test_gfx1013_baseline_draw_wrapper(void)
     agcCbInit(&cb, buffer, sizeof(buffer));
     TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndexAuto(&cb, &draw), AGC_OK,
         "gfx1013 baseline wrapper applies frame post-bind state");
-    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 68u,
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 74u,
         "gfx1013 baseline frame post-bind exact dword count");
     TEST_ASSERT_EQ(buffer[36],
         agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 3u),
@@ -390,7 +390,7 @@ static void test_gfx1013_baseline_draw_wrapper(void)
     TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndexAuto(&cb, &draw), AGC_OK,
         "gfx1013 baseline wrapper applies sample state post-bind");
     TEST_ASSERT_EQ(agcCbUsedDwords(&cb),
-        68u + AGC_GFX1013_SAMPLE_STATE_DWORDS,
+        74u + AGC_GFX1013_SAMPLE_STATE_DWORDS,
         "gfx1013 baseline sample state exact dword count");
     uint32_t value = 0u;
     TEST_ASSERT(find_last_register(
@@ -406,7 +406,7 @@ static void test_gfx1013_baseline_draw_wrapper(void)
     TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndexAuto(&cb, &draw), AGC_OK,
         "gfx1013 baseline wrapper reapplies viewport array post-bind");
     TEST_ASSERT_EQ(agcCbUsedDwords(&cb),
-        68u + AGC_GFX1013_VIEWPORT_ARRAY_DWORDS(1u),
+        74u + AGC_GFX1013_VIEWPORT_ARRAY_DWORDS(1u),
         "gfx1013 baseline viewport array exact dword count");
     TEST_ASSERT(find_last_register(
         buffer, agcCbUsedDwords(&cb), AGC_PM4_OP_SET_CONTEXT_REG,
@@ -416,7 +416,7 @@ static void test_gfx1013_baseline_draw_wrapper(void)
         "gfx1013 baseline retains Vulkan viewport transform");
     draw.viewport_array_state = NULL;
 
-    agcCbInit(&cb, buffer, 67u * sizeof(uint32_t));
+    agcCbInit(&cb, buffer, 73u * sizeof(uint32_t));
     TEST_ASSERT_EQ(agcGfx1013DrawBaselineIndexAuto(&cb, &draw),
         AGC_ERROR_BUFFER_TOO_SMALL,
         "gfx1013 baseline wrapper rejects short buffer");
@@ -980,7 +980,7 @@ static void test_gfx1013_wave32_tessellation_binding(void)
     TEST_ASSERT_EQ(agcGfx1013DrawTessIndexAuto(&cb, &draw), AGC_OK,
         "gfx1013 tessellation draw composes");
     TEST_ASSERT_EQ(agcCbUsedDwords(&cb),
-        134u + AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS,
+        140u + AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS,
         "gfx1013 tessellation draw exact dword count");
     TEST_ASSERT(find_last_register(buffer, agcCbUsedDwords(&cb),
         AGC_PM4_OP_SET_SH_REG, 0x220u, &value),
@@ -1007,20 +1007,20 @@ static void test_gfx1013_wave32_tessellation_binding(void)
     TEST_ASSERT_EQ(value, 0u,
         "caller post-bind depth override follows typed depth state");
     TEST_ASSERT_EQ(agcPm4Opcode(
-        buffer[129u + AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS]),
+        buffer[135u + AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS]),
         AGC_PM4_OP_NUM_INSTANCES,
         "tessellation draw instance packet order");
-    TEST_ASSERT_EQ(buffer[130u + AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS], 1u,
+    TEST_ASSERT_EQ(buffer[136u + AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS], 1u,
         "tessellation draw instance count");
     TEST_ASSERT_EQ(agcPm4Opcode(
-        buffer[131u + AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS]),
+        buffer[137u + AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS]),
         AGC_PM4_OP_DRAW_INDEX_AUTO,
         "tessellation draw packet order");
-    TEST_ASSERT_EQ(buffer[132u + AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS], 3u,
+    TEST_ASSERT_EQ(buffer[138u + AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS], 3u,
         "tessellation draw vertex count");
 
     agcCbReset(&cb, buffer,
-        (133u + AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS) * sizeof(uint32_t));
+        (139u + AGC_GFX1013_DEPTH_STENCIL_STATE_DWORDS) * sizeof(uint32_t));
     TEST_ASSERT_EQ(agcGfx1013DrawTessIndexAuto(&cb, &draw),
         AGC_ERROR_BUFFER_TOO_SMALL, "short tessellation draw rejects");
     TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
@@ -1068,7 +1068,8 @@ static void test_gfx1013_polygon_modes(void)
 
 static void test_gfx1013_raster_primitives(void)
 {
-    static const uint32_t expected_types[] = {1u, 2u, 3u, 4u, 5u, 9u};
+    static const uint32_t expected_types[] = {
+        1u, 2u, 3u, 4u, 6u, 5u, 10u, 11u, 12u, 13u, 9u};
     const uint32_t expected_state[] = {
         agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG,
             AGC_GFX1013_PRIMITIVE_SIZE_STATE_DWORDS),
@@ -1449,6 +1450,21 @@ static void test_gfx1013_resource_transitions(void)
         "read-to-read transition succeeds");
     TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
         "read-to-read transition is an explicit no-op");
+
+    transition.before = AGC_GFX1013_RESOURCE_USAGE_SHADER_READ;
+    transition.after = AGC_GFX1013_RESOURCE_USAGE_HOST_READ;
+    transition.completion_address = 0x00000002014bb000ull;
+    transition.completion_value = 0x1234abcdu;
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013GetResourceTransitionDwords(
+        &transition, &dword_count), AGC_OK,
+        "read-only ownership handoff sizes an EOP release");
+    TEST_ASSERT_EQ(dword_count, AGC_GFX1013_EOP_FENCE_DWORDS,
+        "read-only ownership handoff needs no cache flush");
+    TEST_ASSERT_EQ(agcGfx1013TransitionResource(&cb, &transition), AGC_OK,
+        "read-only ownership handoff emits");
+    TEST_ASSERT(memcmp(buffer, release, sizeof(release)) == 0,
+        "read-only ownership handoff preserves EOP ordering");
 
     transition.before = AGC_GFX1013_RESOURCE_USAGE_DEPTH_STENCIL_WRITE;
     transition.after = AGC_GFX1013_RESOURCE_USAGE_DEPTH_STENCIL_READ;
@@ -2217,6 +2233,39 @@ static void test_gfx1013_fixed_function_packets(void)
         "gfx1013 depth-disabled state emits");
     TEST_ASSERT(memcmp(buffer, expected_depth, sizeof(expected_depth)) == 0,
         "gfx1013 depth-disabled exact packet stream");
+}
+
+static void test_gfx1013_border_color_table_packet(void)
+{
+    uint32_t buffer[8] = {0};
+    SceAgcCb cb;
+    uint32_t value = 0u;
+    const uint64_t address = UINT64_C(0x0000023456789a00);
+
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetBorderColorTable(&cb, address), AGC_OK,
+        "gfx1013 border color table emits");
+    TEST_ASSERT(find_register(buffer, agcCbUsedDwords(&cb),
+        AGC_PM4_OP_SET_CONTEXT_REG, AGC_REG_TA_BC_BASE_ADDR, &value),
+        "gfx1013 border color base register present");
+    TEST_ASSERT_EQ(value, (uint32_t)(address >> 8),
+        "gfx1013 border color base low encoding");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 4u,
+        "gfx1013 border color table uses one consecutive-register packet");
+    TEST_ASSERT_EQ(buffer[3], (uint32_t)(address >> 40),
+        "gfx1013 border color base high encoding");
+
+    agcCbReset(&cb, buffer, 3u * sizeof(uint32_t));
+    TEST_ASSERT_EQ(agcGfx1013SetBorderColorTable(&cb, address),
+        AGC_ERROR_BUFFER_TOO_SMALL, "short border color table packet rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "short border color table packet is atomic");
+    TEST_ASSERT_EQ(agcGfx1013SetBorderColorTable(&cb, address + 1u),
+        AGC_ERROR_INVALID_ARGUMENT, "unaligned border color table rejects");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "unaligned border color table emits nothing");
+    TEST_ASSERT_EQ(agcGfx1013SetBorderColorTable(NULL, address),
+        AGC_ERROR_INVALID_ARGUMENT, "null border color command buffer rejects");
 }
 
 static void test_gfx1013_viewport_array_packets(void)
@@ -3471,6 +3520,30 @@ static void test_gfx1013_compute_packets(void)
     TEST_ASSERT_EQ(buffer[40], 32400u, "gfx1013 dispatch group X");
     TEST_ASSERT_EQ(buffer[43], 0x8041u,
         "gfx1013 Wave32 dispatch initiator");
+
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013DispatchComputeIndirect(&cb, &state,
+        UINT64_C(0x0000000202600000), 4u), AGC_OK,
+        "gfx1013 indirect compute dispatch emits");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 46u,
+        "gfx1013 indirect compute exact dword count");
+    TEST_ASSERT_EQ(agcPm4Opcode(buffer[39]), AGC_PM4_OP_SET_BASE,
+        "gfx1013 indirect compute establishes argument base");
+    TEST_ASSERT_EQ(buffer[40], 1u,
+        "gfx1013 indirect compute selects dispatch argument base");
+    TEST_ASSERT_EQ(agcPm4Opcode(buffer[43]), AGC_PM4_OP_DISPATCH_INDIRECT,
+        "gfx1013 indirect compute dispatch opcode");
+    TEST_ASSERT_EQ(buffer[44], 4u,
+        "gfx1013 indirect compute byte offset");
+    agcCbReset(&cb, buffer, 45u * sizeof(uint32_t));
+    TEST_ASSERT_EQ(agcGfx1013DispatchComputeIndirect(&cb, &state,
+        UINT64_C(0x0000000202600000), 4u), AGC_ERROR_BUFFER_TOO_SMALL,
+        "short indirect compute buffer rejects atomically");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "short indirect compute dispatch preserves cursor");
+    TEST_ASSERT_EQ(agcGfx1013DispatchComputeIndirect(&cb, &state,
+        UINT64_C(0x0000000202600004), 0u), AGC_ERROR_INVALID_ARGUMENT,
+        "unaligned indirect compute base rejects");
 
     agcCbReset(&cb, buffer, 43u * sizeof(uint32_t));
     TEST_ASSERT_EQ(agcGfx1013DispatchCompute(&cb, &state),
@@ -4767,6 +4840,7 @@ void test_suite_graphics(void)
     TEST_RUN(test_gfx1013_occlusion_snapshot);
     TEST_RUN(test_gfx1013_resource_transitions);
     TEST_RUN(test_gfx1013_fixed_function_packets);
+    TEST_RUN(test_gfx1013_border_color_table_packet);
     TEST_RUN(test_gfx1013_viewport_array_packets);
     TEST_RUN(test_gfx1013_blend_depth_stencil_packets);
     TEST_RUN(test_gfx1013_depth_surface_packets);

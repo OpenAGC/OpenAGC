@@ -659,6 +659,26 @@ static void test_sampler_set_border_color(void) {
     TEST_ASSERT_EQ((desc.words[3] >> 30) & 0x3u, 0u, "Border color = transparent black");
 }
 
+static void test_sampler_set_custom_border_color(void) {
+    AgcSamplerDescriptor desc;
+    agcSamplerDescriptorInit(&desc);
+    desc.words[3] = 0x3ff00000u;
+    TEST_ASSERT_EQ(agcSamplerDescriptorSetCustomBorderColor(&desc, 0x5a5u),
+        AGC_OK, "Custom border color index encodes");
+    TEST_ASSERT_EQ(desc.words[3] & 0xfffu, 0x5a5u,
+        "Custom border color table index occupies low 12 bits");
+    TEST_ASSERT_EQ((desc.words[3] >> 30) & 0x3u, 3u,
+        "Custom border color selects table type");
+    TEST_ASSERT_EQ(desc.words[3] & 0x3ffff000u, 0x3ff00000u,
+        "Custom border color preserves unrelated sampler bits");
+    TEST_ASSERT_EQ(agcSamplerDescriptorSetCustomBorderColor(&desc, 0x1000u),
+        AGC_ERROR_INVALID_ARGUMENT, "Custom border color rejects large index");
+    TEST_ASSERT_EQ(desc.words[3], 0xfff005a5u,
+        "Rejected custom border index preserves descriptor");
+    TEST_ASSERT_EQ(agcSamplerDescriptorSetCustomBorderColor(NULL, 0u),
+        AGC_ERROR_INVALID_ARGUMENT, "Custom border color rejects null descriptor");
+}
+
 static void test_sampler_set_max_anisotropy(void) {
     AgcSamplerDescriptor desc;
     agcSamplerDescriptorInit(&desc);
@@ -1330,6 +1350,7 @@ void test_suite_texture(void) {
     TEST_RUN(test_sampler_filter_matches_raw);
     TEST_RUN(test_sampler_filter_aniso);
     TEST_RUN(test_sampler_set_border_color);
+    TEST_RUN(test_sampler_set_custom_border_color);
     TEST_RUN(test_sampler_set_max_anisotropy);
     TEST_RUN(test_sampler_max_aniso_matches_raw);
     TEST_RUN(test_sampler_typed_combined);

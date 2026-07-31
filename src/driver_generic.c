@@ -313,6 +313,19 @@ int32_t PS5_SYSV_ABI agcGenericDestroyUserSpecialQueue(void)
     return AGC_ERROR_CB_INVALID_QUEUE;
 }
 
+static int32_t PS5_SYSV_ABI agcGenericDestroyUserSpecialQueueHandle(
+    int32_t handle)
+{
+    if (!g_agc_initialized)
+        return AGC_ERROR_NOT_INITIALIZED;
+    if (handle < 0 || handle >= AGC_GENERIC_MAX_QUEUES ||
+        !g_queues[handle].in_use)
+        return AGC_ERROR_CB_INVALID_QUEUE;
+    g_queues[handle].in_use = false;
+    g_queues[handle].pipe_id = 0u;
+    return AGC_OK;
+}
+
 int32_t PS5_SYSV_ABI agcGenericRegisterCaptureInterface(void)
 {
     return AGC_OK;
@@ -411,6 +424,8 @@ const AgcDriverOps agcGenericDriverOps = {
     .set_workload_complete = agcGenericSetWorkloadComplete,
     .create_user_special_queue = agcGenericCreateUserSpecialQueue,
     .destroy_user_special_queue = agcGenericDestroyUserSpecialQueue,
+    .destroy_user_special_queue_handle =
+        agcGenericDestroyUserSpecialQueueHandle,
     .register_capture_interface = agcGenericRegisterCaptureInterface,
     .deregister_capture_interface = agcGenericDeregisterCaptureInterface,
     .acquire_razor_acq = agcGenericAcquireRazorACQ,

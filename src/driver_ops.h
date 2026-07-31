@@ -36,6 +36,7 @@ typedef struct AgcDriverOps {
     int32_t (PS5_SYSV_ABI *set_workload_complete)(uint32_t);
     int32_t (PS5_SYSV_ABI *create_user_special_queue)(void);
     int32_t (PS5_SYSV_ABI *destroy_user_special_queue)(void);
+    int32_t (PS5_SYSV_ABI *destroy_user_special_queue_handle)(int32_t);
     int32_t (PS5_SYSV_ABI *register_capture_interface)(void);
     int32_t (PS5_SYSV_ABI *deregister_capture_interface)(void);
     int32_t (PS5_SYSV_ABI *acquire_razor_acq)(void);
@@ -57,6 +58,7 @@ int32_t agcProsperoSelectRegisterDefaultsVersion(uint32_t version);
 const AgcDriverOps *agcDriverGetOps(void);
 const char *agcDriverDebugBackendName(void);
 int32_t agcDriverSelectRegisterDefaultsVersion(uint32_t version);
+int32_t agcDriverDestroyUserSpecialQueueHandle(int32_t handle);
 
 #ifdef OPENAGC_GENERIC
 int32_t agcDriverInstallOpsForTesting(const AgcDriverOps *ops);

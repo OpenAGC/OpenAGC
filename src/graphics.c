@@ -1214,9 +1214,13 @@ static int32_t agcGfx1013ValidateTransition(
         transition->after >= AGC_GFX1013_RESOURCE_USAGE_COUNT)
         return AGC_ERROR_INVALID_ARGUMENT;
 
+    /* A completion-address transition is also the ordered GPU handoff for a
+     * read-only resource.  It still needs an EOP fence even though it has no
+     * cache writes to flush. */
     *release = transition->before != transition->after &&
         transition->after != AGC_GFX1013_RESOURCE_USAGE_UNDEFINED &&
-        agcGfx1013UsageWrites(transition->before);
+        (agcGfx1013UsageWrites(transition->before) ||
+         transition->completion_address != 0u);
     *acquire = transition->before != transition->after &&
         transition->before != AGC_GFX1013_RESOURCE_USAGE_UNDEFINED &&
         transition->after != AGC_GFX1013_RESOURCE_USAGE_UNDEFINED &&
@@ -2655,7 +2659,7 @@ int32_t PS5_SYSV_ABI agcGfx1013GetPrimitiveType(
     AgcGfx1013PrimitiveTopology topology, uint32_t *primitive_type)
 {
     static const uint8_t types[AGC_GFX1013_TOPOLOGY_COUNT] = {
-        1u, 2u, 3u, 4u, 5u, 9u,
+        1u, 2u, 3u, 4u, 6u, 5u, 10u, 11u, 12u, 13u, 9u,
     };
 
     if (!primitive_type || (uint32_t)topology >= AGC_GFX1013_TOPOLOGY_COUNT)
@@ -2910,6 +2914,19 @@ int32_t PS5_SYSV_ABI agcGfx1013SetTargetMask(
         return AGC_ERROR_BUFFER_TOO_SMALL;
     return agcGfx1013EmitCx(cb, AGC_REG_CB_TARGET_MASK, mask)
         ? AGC_OK : AGC_ERROR_INTERNAL;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013SetBorderColorTable(
+    SceAgcCb *cb, uint64_t gpu_address)
+{
+    const AgcRegisterValue registers[2] = {
+        {AGC_REG_TA_BC_BASE_ADDR, (uint32_t)(gpu_address >> 8)},
+        {AGC_REG_TA_BC_BASE_ADDR_HI, (uint32_t)(gpu_address >> 40)},
+    };
+    if (!cb || !gpu_address || (gpu_address & UINT64_C(0xff)))
+        return AGC_ERROR_INVALID_ARGUMENT;
+    return sceAgcCbSetCxRegistersDirect(cb, registers, 2u) ?
+        AGC_OK : AGC_ERROR_BUFFER_TOO_SMALL;
 }
 
 static bool agcGfx1013StencilOpValid(AgcGfx1013StencilOp operation)
@@ -3216,6 +3233,7 @@ static int32_t agcGfx1013ValidateFrameState(
     if (target_count > AGC_GFX1013_MAX_COLOR_TARGETS ||
         state->min_vertex_index > state->max_vertex_index ||
         state->instance_step_rate == 0u ||
+        state->primitive_restart_enable > 1u ||
         state->scissor.right > state->color_target.width ||
         state->scissor.bottom > state->color_target.height)
         return AGC_ERROR_INVALID_ARGUMENT;
@@ -3340,7 +3358,11 @@ int32_t PS5_SYSV_ABI agcGfx1013ApplyFramePostBind(
         !agcGfx1013EmitCx(
             cb, AGC_REG_PA_CL_CLIP_CNTL, state->clip_control) ||
         !agcGfx1013EmitCx(
-            cb, AGC_REG_PA_SU_SC_MODE_CNTL, state->raster_mode_control))
+            cb, AGC_REG_PA_SU_SC_MODE_CNTL, state->raster_mode_control) ||
+        !agcGfx1013EmitCx(cb, AGC_REG_GE_MULTI_PRIM_IB_RESET_EN,
+            state->primitive_restart_enable) ||
+        !agcGfx1013EmitCx(cb, AGC_REG_VGT_MULTI_PRIM_IB_RESET_INDX,
+            state->primitive_restart_index))
         return AGC_ERROR_INTERNAL;
     return AGC_OK;
 }
@@ -3621,8 +3643,9 @@ int32_t PS5_SYSV_ABI agcGfx1013ApplyComputeDefaultsV8(
     return AGC_OK;
 }
 
-int32_t PS5_SYSV_ABI agcGfx1013DispatchCompute(
-    SceAgcCb *cb, const AgcGfx1013ComputeState *state)
+static int32_t agcGfx1013DispatchComputeCommon(
+    SceAgcCb *cb, const AgcGfx1013ComputeState *state,
+    uint64_t argument_buffer_address, uint32_t argument_offset)
 {
     AgcGfx1013ShaderBinding shader;
     uint32_t limits0[3] = {0x3fffffffu, 0xffffffffu, 0xffffffffu};
@@ -3654,7 +3677,14 @@ int32_t PS5_SYSV_ABI agcGfx1013DispatchCompute(
         if (result != AGC_OK)
             return result;
     }
-    required_dwords = 38u + state->num_user_data + resource_count * 3u;
+    if ((argument_buffer_address == 0u && argument_offset != 0u) ||
+        (argument_buffer_address != 0u &&
+         ((argument_buffer_address & 7u) != 0u ||
+          (argument_buffer_address >> 48u) != 0u ||
+          (argument_offset & 3u) != 0u)))
+        return AGC_ERROR_INVALID_ARGUMENT;
+    required_dwords = (argument_buffer_address != 0u ? 40u : 38u) +
+        state->num_user_data + resource_count * 3u;
     if (agcCbRemainingDwords(cb) < required_dwords)
         return AGC_ERROR_BUFFER_TOO_SMALL;
 
@@ -3697,15 +3727,39 @@ int32_t PS5_SYSV_ABI agcGfx1013DispatchCompute(
         if (result != AGC_OK)
             return result;
     }
-    dispatch = agcCbAllocDwords(cb, 5u);
-    if (!dispatch)
-        return AGC_ERROR_INTERNAL;
-    dispatch[0] = agcPm4Header3(AGC_PM4_OP_DISPATCH_DIRECT, 5u) | 1u;
-    dispatch[1] = state->group_count_x;
-    dispatch[2] = state->group_count_y;
-    dispatch[3] = state->group_count_z;
-    dispatch[4] = (state->modifier & 0xa038u) | 0x41u;
+    if (argument_buffer_address != 0u) {
+        if (!sceAgcDcbSetBaseIndirectArgs(
+                cb, 1u, argument_buffer_address) ||
+            !sceAgcDcbDispatchIndirect(
+                cb, argument_offset, state->modifier))
+            return AGC_ERROR_INTERNAL;
+    } else {
+        dispatch = agcCbAllocDwords(cb, 5u);
+        if (!dispatch)
+            return AGC_ERROR_INTERNAL;
+        dispatch[0] = agcPm4Header3(AGC_PM4_OP_DISPATCH_DIRECT, 5u) | 1u;
+        dispatch[1] = state->group_count_x;
+        dispatch[2] = state->group_count_y;
+        dispatch[3] = state->group_count_z;
+        dispatch[4] = (state->modifier & 0xa038u) | 0x41u;
+    }
     return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013DispatchCompute(
+    SceAgcCb *cb, const AgcGfx1013ComputeState *state)
+{
+    return agcGfx1013DispatchComputeCommon(cb, state, 0u, 0u);
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013DispatchComputeIndirect(
+    SceAgcCb *cb, const AgcGfx1013ComputeState *state,
+    uint64_t argument_buffer_address, uint32_t argument_offset)
+{
+    if (argument_buffer_address == 0u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    return agcGfx1013DispatchComputeCommon(cb, state,
+        argument_buffer_address, argument_offset);
 }
 
 int32_t PS5_SYSV_ABI agcGfx1013RmwHtile(

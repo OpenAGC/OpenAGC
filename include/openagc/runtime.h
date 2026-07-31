@@ -19,14 +19,19 @@
 extern "C" {
 #endif
 
-#define AGC_RUNTIME_API_VERSION 25u
+#define AGC_RUNTIME_API_VERSION 41u
+#define AGC_RUNTIME_MAX_VIEWPORTS 16u
 #define AGC_RUNTIME_STRUCTURE_VERSION_1 1u
 #define AGC_RUNTIME_STRUCTURE_VERSION_2 2u
+#define AGC_RUNTIME_STRUCTURE_VERSION_3 3u
+#define AGC_RUNTIME_STRUCTURE_VERSION_4 4u
+#define AGC_RUNTIME_STRUCTURE_VERSION_5 5u
 #define AGC_RUNTIME_PROFILE_NAME_SIZE 48u
 #define AGC_RUNTIME_INFINITE_TIMEOUT UINT64_MAX
 
 typedef struct AgcDeviceImpl *AgcDevice;
 typedef struct AgcQueueImpl *AgcQueue;
+typedef struct AgcMemoryImpl *AgcMemory;
 typedef struct AgcBufferImpl *AgcBuffer;
 typedef struct AgcImageImpl *AgcImage;
 typedef struct AgcImageViewImpl *AgcImageView;
@@ -38,6 +43,7 @@ typedef struct AgcCommandBufferImpl *AgcCommandBuffer;
 typedef struct AgcFenceImpl *AgcFence;
 typedef struct AgcGpuLabelImpl *AgcGpuLabel;
 typedef struct AgcPresentChainImpl *AgcPresentChain;
+typedef struct AgcDepthBias AgcDepthBias;
 
 typedef void *(PS5_SYSV_ABI *AgcAllocationFunction)(
     void *user_data, size_t size, size_t alignment);
@@ -50,9 +56,11 @@ typedef struct AgcAllocationCallbacks {
     AgcFreeFunction free;
 } AgcAllocationCallbacks;
 
-/* Applications synchronize every device, queue, and child-object call
- * externally. Destroying a parent with live children or recorded references
- * returns AGC_ERROR_BUSY and performs no mutation. */
+/* Applications synchronize each device, queue, and child-object externally.
+ * Independent devices may be used concurrently. Devices in one process share
+ * the selected physical backend and therefore require the same agc_version.
+ * Destroying a parent with live children or recorded references returns
+ * AGC_ERROR_BUSY and performs no mutation. */
 typedef struct AgcDeviceDesc {
     uint32_t struct_size;
     uint32_t version;
@@ -132,6 +140,53 @@ typedef struct AgcRuntimeInfo {
     { sizeof(AgcRuntimeInfo), AGC_RUNTIME_STRUCTURE_VERSION_1, 0u, 0u, 0u, \
       0u, 0u, 0u, {0}, {0}, {0u, 0u, 0u, 0u} }
 
+typedef uint32_t AgcMemoryPropertyFlags;
+#define AGC_MEMORY_PROPERTY_DEVICE_LOCAL_BIT (1u << 0)
+#define AGC_MEMORY_PROPERTY_HOST_VISIBLE_BIT (1u << 1)
+#define AGC_MEMORY_PROPERTY_HOST_COHERENT_BIT (1u << 2)
+#define AGC_MEMORY_PROPERTY_HOST_CACHED_BIT (1u << 3)
+
+typedef enum AgcMemoryHeap {
+    AGC_MEMORY_HEAP_FLEXIBLE = 0,
+    AGC_MEMORY_HEAP_GARLIC = 1,
+    AGC_MEMORY_HEAP_COUNT = 2
+} AgcMemoryHeap;
+
+typedef struct AgcMemoryHeapProperties {
+    uint64_t size;
+    uint64_t minimum_alignment;
+    AgcMemoryPropertyFlags property_flags;
+    uint32_t reserved;
+} AgcMemoryHeapProperties;
+
+typedef struct AgcDeviceProperties {
+    uint32_t struct_size;
+    uint32_t version;
+    uint32_t max_image_dimension_1d;
+    uint32_t max_image_dimension_2d;
+    uint32_t max_image_dimension_3d;
+    uint32_t max_image_dimension_cube;
+    uint32_t max_image_array_layers;
+    uint32_t max_color_targets;
+    uint32_t subgroup_size;
+    uint32_t max_compute_shared_memory_size;
+    uint32_t max_compute_workgroup_invocations;
+    uint32_t max_compute_workgroup_size[3];
+    uint32_t color_sample_counts;
+    uint32_t depth_sample_counts;
+    uint64_t color_target_format_mask;
+    uint32_t depth_stencil_format_mask;
+    uint32_t memory_heap_count;
+    AgcMemoryHeapProperties memory_heaps[AGC_MEMORY_HEAP_COUNT];
+    uint64_t reserved[4];
+} AgcDeviceProperties;
+
+#define AGC_DEVICE_PROPERTIES_INIT \
+    { sizeof(AgcDeviceProperties), AGC_RUNTIME_STRUCTURE_VERSION_1, \
+      0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, {0u, 0u, 0u}, 0u, 0u, \
+      0u, 0u, 0u, {{0u, 0u, 0u, 0u}, {0u, 0u, 0u, 0u}}, \
+      {0u, 0u, 0u, 0u} }
+
 typedef struct AgcQueueDesc {
     uint32_t struct_size;
     uint32_t version;
@@ -144,13 +199,33 @@ typedef struct AgcQueueDesc {
     { sizeof(AgcQueueDesc), AGC_RUNTIME_STRUCTURE_VERSION_1, \
       kAgcQueueGraphics, 0u, {0u, 0u, 0u, 0u} }
 
+typedef enum AgcMemoryCreateFlagBits {
+    AGC_MEMORY_CREATE_DEDICATED_BIT = 1u << 0
+} AgcMemoryCreateFlagBits;
+
+typedef struct AgcMemoryDesc {
+    uint32_t struct_size;
+    uint32_t version;
+    uint64_t size;
+    AgcMemoryHeap heap;
+    uint32_t flags;
+    uint64_t alignment;
+    uint64_t reserved[4];
+} AgcMemoryDesc;
+
+#define AGC_MEMORY_DESC_INIT \
+    { sizeof(AgcMemoryDesc), AGC_RUNTIME_STRUCTURE_VERSION_1, 0u, \
+      AGC_MEMORY_HEAP_FLEXIBLE, 0u, 0u, {0u, 0u, 0u, 0u} }
+
 typedef enum AgcBufferUsageFlagBits {
     AGC_BUFFER_USAGE_VERTEX_BIT = 1u << 0,
     AGC_BUFFER_USAGE_INDEX_BIT = 1u << 1,
     AGC_BUFFER_USAGE_UNIFORM_BIT = 1u << 2,
     AGC_BUFFER_USAGE_STORAGE_BIT = 1u << 3,
     AGC_BUFFER_USAGE_TRANSFER_SRC_BIT = 1u << 4,
-    AGC_BUFFER_USAGE_TRANSFER_DST_BIT = 1u << 5
+    AGC_BUFFER_USAGE_TRANSFER_DST_BIT = 1u << 5,
+    AGC_BUFFER_USAGE_INDIRECT_BIT = 1u << 6,
+    AGC_BUFFER_USAGE_QUERY_BIT = 1u << 7
 } AgcBufferUsageFlagBits;
 typedef uint32_t AgcBufferUsageFlags;
 
@@ -186,6 +261,11 @@ typedef enum AgcImageUsageFlagBits {
 } AgcImageUsageFlagBits;
 typedef uint32_t AgcImageUsageFlags;
 
+typedef enum AgcImageTiling {
+    AGC_IMAGE_TILING_LINEAR = 0,
+    AGC_IMAGE_TILING_OPTIMAL = 1
+} AgcImageTiling;
+
 typedef struct AgcImageDesc {
     uint32_t struct_size;
     uint32_t version;
@@ -198,11 +278,14 @@ typedef struct AgcImageDesc {
     uint32_t sample_count;
     AgcImageUsageFlags usage;
     uint64_t reserved[4];
+    AgcImageTiling tiling;
+    uint32_t flags;
 } AgcImageDesc;
 
 #define AGC_IMAGE_DESC_INIT \
-    { sizeof(AgcImageDesc), AGC_RUNTIME_STRUCTURE_VERSION_1, 1u, 1u, 1u, \
-      1u, 1u, 0u, 1u, 0u, {0u, 0u, 0u, 0u} }
+    { sizeof(AgcImageDesc), AGC_RUNTIME_STRUCTURE_VERSION_2, 1u, 1u, 1u, \
+      1u, 1u, 0u, 1u, 0u, {0u, 0u, 0u, 0u}, \
+      AGC_IMAGE_TILING_OPTIMAL, 0u }
 
 #define AGC_PRESENT_CHAIN_MAX_IMAGES 16u
 #define AGC_PRESENT_CHAIN_MIN_IMAGES 2u
@@ -237,6 +320,7 @@ typedef enum AgcResourceUsage {
     kAgcResourceUsageVideoOutScanout = 8,
     kAgcResourceUsageHostRead = 9,
     kAgcResourceUsageHostWrite = 10,
+    kAgcResourceUsageQueryWrite = 11,
     kAgcResourceUsageCount
 } AgcResourceUsage;
 
@@ -266,6 +350,69 @@ typedef struct AgcImageSubresourceRange {
 
 #define AGC_IMAGE_SUBRESOURCE_RANGE_INIT \
     { AGC_IMAGE_ASPECT_COLOR_BIT, 0u, 1u, 0u, 1u, 0u }
+
+typedef struct AgcOffset3D {
+    int32_t x;
+    int32_t y;
+    int32_t z;
+} AgcOffset3D;
+
+typedef struct AgcExtent3D {
+    uint32_t width;
+    uint32_t height;
+    uint32_t depth;
+} AgcExtent3D;
+
+typedef struct AgcImageSubresourceLayers {
+    AgcImageAspectFlags aspect_mask;
+    uint32_t mip_level;
+    uint32_t base_array_layer;
+    uint32_t array_layer_count;
+} AgcImageSubresourceLayers;
+
+typedef struct AgcImageCopyRegion {
+    uint32_t struct_size;
+    uint32_t version;
+    uint32_t flags;
+    uint32_t reserved0;
+    AgcImageSubresourceLayers source_subresource;
+    AgcOffset3D source_offset;
+    uint32_t reserved1;
+    AgcImageSubresourceLayers destination_subresource;
+    AgcOffset3D destination_offset;
+    uint32_t reserved2;
+    AgcExtent3D extent;
+    uint32_t reserved3;
+    uint64_t reserved[4];
+} AgcImageCopyRegion;
+
+#define AGC_IMAGE_COPY_REGION_INIT \
+    { sizeof(AgcImageCopyRegion), AGC_RUNTIME_STRUCTURE_VERSION_1, 0u, 0u, \
+      { AGC_IMAGE_ASPECT_COLOR_BIT, 0u, 0u, 1u }, { 0, 0, 0 }, 0u, \
+      { AGC_IMAGE_ASPECT_COLOR_BIT, 0u, 0u, 1u }, { 0, 0, 0 }, 0u, \
+      { 1u, 1u, 1u }, 0u, { 0u, 0u, 0u, 0u } }
+
+typedef struct AgcBufferImageCopyRegion {
+    uint32_t struct_size;
+    uint32_t version;
+    uint32_t flags;
+    uint32_t reserved0;
+    uint64_t buffer_offset;
+    uint32_t buffer_row_length;
+    uint32_t buffer_image_height;
+    AgcImageSubresourceLayers image_subresource;
+    AgcOffset3D image_offset;
+    uint32_t reserved1;
+    AgcExtent3D image_extent;
+    uint32_t reserved2;
+    uint64_t reserved[4];
+} AgcBufferImageCopyRegion;
+
+#define AGC_BUFFER_IMAGE_COPY_REGION_INIT \
+    { sizeof(AgcBufferImageCopyRegion), AGC_RUNTIME_STRUCTURE_VERSION_1, \
+      0u, 0u, 0u, 0u, 0u, \
+      { AGC_IMAGE_ASPECT_COLOR_BIT, 0u, 0u, 1u }, { 0, 0, 0 }, 0u, \
+      { 1u, 1u, 1u }, 0u, { 0u, 0u, 0u, 0u } }
 
 /* Exactly one of buffer or image is set according to resource_type. Buffer
  * ranges are byte ranges; image ranges name whole subresources. Source and
@@ -360,6 +507,34 @@ typedef struct AgcResourceStateInfo {
       kAgcResourceOwnerHost, NULL, 0u, 0u, 0u, 0u, \
       {0u, 0u, 0u, 0u} }
 
+/* Occlusion-query storage is a typed buffer contract. Applications query the
+ * opaque record size instead of depending on render-backend packet or RB
+ * layouts. Results are reduced to one portable 64-bit sample count. */
+typedef struct AgcOcclusionQueryLayout {
+    uint32_t struct_size;
+    uint32_t version;
+    uint64_t record_size;
+    uint64_t alignment;
+    uint64_t reserved[5];
+} AgcOcclusionQueryLayout;
+
+#define AGC_OCCLUSION_QUERY_LAYOUT_INIT \
+    { sizeof(AgcOcclusionQueryLayout), AGC_RUNTIME_STRUCTURE_VERSION_1, \
+      0u, 0u, {0u, 0u, 0u, 0u, 0u} }
+
+typedef struct AgcOcclusionQueryResult {
+    uint32_t struct_size;
+    uint32_t version;
+    uint64_t value;
+    uint32_t available;
+    uint32_t reserved0;
+    uint64_t reserved[5];
+} AgcOcclusionQueryResult;
+
+#define AGC_OCCLUSION_QUERY_RESULT_INIT \
+    { sizeof(AgcOcclusionQueryResult), AGC_RUNTIME_STRUCTURE_VERSION_1, \
+      0u, 0u, 0u, {0u, 0u, 0u, 0u, 0u} }
+
 typedef struct AgcImageViewDesc {
     uint32_t struct_size;
     uint32_t version;
@@ -370,11 +545,36 @@ typedef struct AgcImageViewDesc {
     uint32_t base_array_layer;
     uint32_t array_layer_count;
     uint64_t reserved[4];
+    uint32_t view_type;
+    uint32_t swizzle_r;
+    uint32_t swizzle_g;
+    uint32_t swizzle_b;
+    uint32_t swizzle_a;
+    uint32_t flags;
 } AgcImageViewDesc;
 
+typedef enum AgcImageViewType {
+    AGC_IMAGE_VIEW_TYPE_2D = 0,
+    AGC_IMAGE_VIEW_TYPE_2D_ARRAY = 1,
+    AGC_IMAGE_VIEW_TYPE_CUBE = 2,
+    AGC_IMAGE_VIEW_TYPE_CUBE_ARRAY = 3
+} AgcImageViewType;
+
+typedef enum AgcComponentSwizzle {
+    AGC_COMPONENT_SWIZZLE_IDENTITY = 0,
+    AGC_COMPONENT_SWIZZLE_ZERO = 1,
+    AGC_COMPONENT_SWIZZLE_ONE = 2,
+    AGC_COMPONENT_SWIZZLE_R = 3,
+    AGC_COMPONENT_SWIZZLE_G = 4,
+    AGC_COMPONENT_SWIZZLE_B = 5,
+    AGC_COMPONENT_SWIZZLE_A = 6
+} AgcComponentSwizzle;
+
 #define AGC_IMAGE_VIEW_DESC_INIT \
-    { sizeof(AgcImageViewDesc), AGC_RUNTIME_STRUCTURE_VERSION_1, NULL, 0u, \
-      0u, 1u, 0u, 1u, {0u, 0u, 0u, 0u} }
+    { sizeof(AgcImageViewDesc), AGC_RUNTIME_STRUCTURE_VERSION_2, NULL, 0u, \
+      0u, 1u, 0u, 1u, {0u, 0u, 0u, 0u}, AGC_IMAGE_VIEW_TYPE_2D, \
+      AGC_COMPONENT_SWIZZLE_IDENTITY, AGC_COMPONENT_SWIZZLE_IDENTITY, \
+      AGC_COMPONENT_SWIZZLE_IDENTITY, AGC_COMPONENT_SWIZZLE_IDENTITY, 0u }
 
 /* One color attachment for agcCmdBindColorTargets. The image subresource is
  * retained by the command buffer until it is reset or destroyed. */
@@ -419,8 +619,24 @@ typedef enum AgcFilter {
 
 typedef enum AgcAddressMode {
     AGC_ADDRESS_MODE_REPEAT = 0,
-    AGC_ADDRESS_MODE_CLAMP_TO_EDGE = 1
+    AGC_ADDRESS_MODE_CLAMP_TO_EDGE = 1,
+    AGC_ADDRESS_MODE_MIRRORED_REPEAT = 2,
+    AGC_ADDRESS_MODE_CLAMP_TO_BORDER = 3,
+    AGC_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE = 4
 } AgcAddressMode;
+
+typedef enum AgcMipFilter {
+    AGC_MIP_FILTER_NONE = 0,
+    AGC_MIP_FILTER_NEAREST = 1,
+    AGC_MIP_FILTER_LINEAR = 2
+} AgcMipFilter;
+
+typedef enum AgcSamplerBorderColor {
+    AGC_SAMPLER_BORDER_TRANSPARENT_BLACK = 0,
+    AGC_SAMPLER_BORDER_OPAQUE_BLACK = 1,
+    AGC_SAMPLER_BORDER_OPAQUE_WHITE = 2,
+    AGC_SAMPLER_BORDER_CUSTOM = 3
+} AgcSamplerBorderColor;
 
 typedef struct AgcSamplerDesc {
     uint32_t struct_size;
@@ -432,13 +648,26 @@ typedef struct AgcSamplerDesc {
     AgcAddressMode address_w;
     uint32_t flags;
     uint64_t reserved[4];
+    AgcMipFilter mip_filter;
+    uint32_t anisotropy_enable;
+    uint32_t max_anisotropy;
+    uint32_t compare_enable;
+    uint32_t compare_operation;
+    AgcSamplerBorderColor border_color;
+    uint32_t custom_border_color_index;
+    float min_lod;
+    float max_lod;
+    float lod_bias;
+    uint32_t reserved2;
 } AgcSamplerDesc;
 
 #define AGC_SAMPLER_DESC_INIT \
-    { sizeof(AgcSamplerDesc), AGC_RUNTIME_STRUCTURE_VERSION_1, \
+    { sizeof(AgcSamplerDesc), AGC_RUNTIME_STRUCTURE_VERSION_2, \
       AGC_FILTER_NEAREST, AGC_FILTER_NEAREST, AGC_ADDRESS_MODE_REPEAT, \
       AGC_ADDRESS_MODE_REPEAT, AGC_ADDRESS_MODE_REPEAT, 0u, \
-      {0u, 0u, 0u, 0u} }
+      {0u, 0u, 0u, 0u}, AGC_MIP_FILTER_NONE, 0u, 1u, 0u, \
+      AGC_COMPARE_OPERATION_ALWAYS, AGC_SAMPLER_BORDER_TRANSPARENT_BLACK, \
+      0u, 0.0f, 0.0f, 0.0f, 0u }
 
 typedef struct AgcShaderDesc {
     uint32_t struct_size;
@@ -488,6 +717,26 @@ typedef enum AgcBlendOperation {
     AGC_BLEND_OPERATION_MAX,
     AGC_BLEND_OPERATION_COUNT
 } AgcBlendOperation;
+
+typedef enum AgcLogicOperation {
+    AGC_LOGIC_OPERATION_CLEAR = 0,
+    AGC_LOGIC_OPERATION_AND,
+    AGC_LOGIC_OPERATION_AND_REVERSE,
+    AGC_LOGIC_OPERATION_COPY,
+    AGC_LOGIC_OPERATION_AND_INVERTED,
+    AGC_LOGIC_OPERATION_NO_OP,
+    AGC_LOGIC_OPERATION_XOR,
+    AGC_LOGIC_OPERATION_OR,
+    AGC_LOGIC_OPERATION_NOR,
+    AGC_LOGIC_OPERATION_EQUIVALENT,
+    AGC_LOGIC_OPERATION_INVERT,
+    AGC_LOGIC_OPERATION_OR_REVERSE,
+    AGC_LOGIC_OPERATION_COPY_INVERTED,
+    AGC_LOGIC_OPERATION_OR_INVERTED,
+    AGC_LOGIC_OPERATION_NAND,
+    AGC_LOGIC_OPERATION_SET,
+    AGC_LOGIC_OPERATION_COUNT
+} AgcLogicOperation;
 
 typedef struct AgcColorBlendAttachmentState {
     uint32_t struct_size;
@@ -636,9 +885,25 @@ typedef enum AgcDynamicStateFlagBits {
     AGC_DYNAMIC_STATE_SCISSOR_BIT = 1u << 1,
     AGC_DYNAMIC_STATE_BLEND_CONSTANTS_BIT = 1u << 2,
     AGC_DYNAMIC_STATE_STENCIL_REFERENCE_BIT = 1u << 3,
-    AGC_DYNAMIC_STATE_DEPTH_BIAS_BIT = 1u << 4
+    AGC_DYNAMIC_STATE_DEPTH_BIAS_BIT = 1u << 4,
+    AGC_DYNAMIC_STATE_LINE_WIDTH_BIT = 1u << 5
 } AgcDynamicStateFlagBits;
 typedef uint32_t AgcDynamicStateFlags;
+
+typedef enum AgcPrimitiveTopology {
+    AGC_PRIMITIVE_TOPOLOGY_POINT_LIST = 0,
+    AGC_PRIMITIVE_TOPOLOGY_LINE_LIST,
+    AGC_PRIMITIVE_TOPOLOGY_LINE_STRIP,
+    AGC_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+    AGC_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,
+    AGC_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN,
+    AGC_PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY,
+    AGC_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY,
+    AGC_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY,
+    AGC_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY,
+    AGC_PRIMITIVE_TOPOLOGY_PATCH_LIST,
+    AGC_PRIMITIVE_TOPOLOGY_COUNT
+} AgcPrimitiveTopology;
 
 typedef struct AgcGraphicsPipelineDesc {
     uint32_t struct_size;
@@ -663,15 +928,21 @@ typedef struct AgcGraphicsPipelineDesc {
     const AgcDepthStencilPipelineState *depth_stencil;
     const AgcMultisampleState *multisample;
     AgcDynamicStateFlags dynamic_state_mask;
-    uint32_t reserved1;
-    uint64_t reserved2[4];
+    AgcPrimitiveTopology primitive_topology;
+    const AgcDepthBias *static_depth_bias;
+    uint32_t logic_operation_enable;
+    AgcLogicOperation logic_operation;
+    uint32_t primitive_restart_enable;
+    uint32_t reserved3;
+    uint64_t reserved2[1];
 } AgcGraphicsPipelineDesc;
 
 #define AGC_GRAPHICS_PIPELINE_DESC_INIT \
-    { sizeof(AgcGraphicsPipelineDesc), AGC_RUNTIME_STRUCTURE_VERSION_2, \
+    { sizeof(AgcGraphicsPipelineDesc), AGC_RUNTIME_STRUCTURE_VERSION_5, \
       NULL, NULL, 0u, 0u, {0u, 0u, 0u, 0u}, NULL, NULL, NULL, NULL, \
-      0u, 0u, NULL, 0u, 0u, NULL, NULL, NULL, NULL, NULL, 0u, 0u, \
-      {0u, 0u, 0u, 0u} }
+      0u, 0u, NULL, 0u, 0u, NULL, NULL, NULL, NULL, NULL, 0u, \
+      AGC_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, NULL, 0u, \
+      AGC_LOGIC_OPERATION_COPY, 0u, 0u, {0u} }
 
 typedef struct AgcComputePipelineDesc {
     uint32_t struct_size;
@@ -762,7 +1033,7 @@ typedef struct AgcScissor {
     { sizeof(AgcScissor), AGC_RUNTIME_STRUCTURE_VERSION_1, \
       0, 0, 1u, 1u, {0u, 0u} }
 
-typedef struct AgcDepthBias {
+struct AgcDepthBias {
     uint32_t struct_size;
     uint32_t version;
     float constant_factor;
@@ -770,7 +1041,7 @@ typedef struct AgcDepthBias {
     float slope_factor;
     uint32_t flags;
     uint64_t reserved[2];
-} AgcDepthBias;
+};
 
 #define AGC_DEPTH_BIAS_INIT \
     { sizeof(AgcDepthBias), AGC_RUNTIME_STRUCTURE_VERSION_1, \
@@ -897,14 +1168,17 @@ typedef enum AgcFormat {
     AGC_FORMAT_RGBA16_UINT = 514,
     AGC_FORMAT_RGBA16_SINT = 515,
     AGC_FORMAT_RGBA32_UINT = 516,
-    AGC_FORMAT_RGBA32_SINT = 517
+    AGC_FORMAT_RGBA32_SINT = 517,
+    AGC_FORMAT_R8_UNORM = 518,
+    AGC_FORMAT_RG8_UNORM = 519,
+    AGC_FORMAT_RGB10A2_UNORM = 520,
+    AGC_FORMAT_R16_FLOAT = 521,
+    AGC_FORMAT_RG16_FLOAT = 522,
+    AGC_FORMAT_R32_FLOAT = 523,
+    AGC_FORMAT_RG32_FLOAT = 524,
+    AGC_FORMAT_R11G11B10_FLOAT = 525,
+    AGC_FORMAT_BGRA8_SRGB = 526
 } AgcFormat;
-
-typedef enum AgcMemoryHeap {
-    AGC_MEMORY_HEAP_FLEXIBLE = 0,
-    AGC_MEMORY_HEAP_GARLIC = 1,
-    AGC_MEMORY_HEAP_COUNT = 2
-} AgcMemoryHeap;
 
 typedef enum AgcObjectType {
     AGC_OBJECT_TYPE_BUFFER = 0,
@@ -913,7 +1187,8 @@ typedef enum AgcObjectType {
     AGC_OBJECT_TYPE_COMMAND_BUFFER = 3,
     AGC_OBJECT_TYPE_IMAGE_VIEW = 4,
     AGC_OBJECT_TYPE_SAMPLER = 5,
-    AGC_OBJECT_TYPE_COUNT = 6
+    AGC_OBJECT_TYPE_MEMORY = 6,
+    AGC_OBJECT_TYPE_COUNT = 7
 } AgcObjectType;
 
 #define AGC_RUNTIME_DEBUG_NAME_SIZE 64u
@@ -1133,27 +1408,49 @@ _Static_assert(sizeof(AgcDeviceDesc) == 64u,
     "AgcDeviceDesc v1 size mismatch");
 _Static_assert(sizeof(AgcRuntimeInfo) == 120u,
     "AgcRuntimeInfo v1 size mismatch");
+_Static_assert(sizeof(AgcMemoryHeapProperties) == 24u,
+    "AgcMemoryHeapProperties size mismatch");
+_Static_assert(sizeof(AgcDeviceProperties) == 160u,
+    "AgcDeviceProperties v1 size mismatch");
 _Static_assert(sizeof(AgcQueueDesc) == 48u,
     "AgcQueueDesc v1 size mismatch");
 _Static_assert(sizeof(AgcBufferDesc) == 56u,
     "AgcBufferDesc v1 size mismatch");
-_Static_assert(sizeof(AgcImageDesc) == 72u,
-    "AgcImageDesc v1 size mismatch");
+_Static_assert(sizeof(AgcMemoryDesc) == 64u,
+    "AgcMemoryDesc v1 size mismatch");
+_Static_assert(offsetof(AgcImageDesc, tiling) == 72u,
+    "AgcImageDesc v1 prefix size mismatch");
+_Static_assert(sizeof(AgcImageDesc) == 80u,
+    "AgcImageDesc v2 size mismatch");
 _Static_assert(sizeof(AgcImageSubresourceRange) == 24u,
     "AgcImageSubresourceRange v1 size mismatch");
+_Static_assert(sizeof(AgcOffset3D) == 12u,
+    "AgcOffset3D size mismatch");
+_Static_assert(sizeof(AgcExtent3D) == 12u,
+    "AgcExtent3D size mismatch");
+_Static_assert(sizeof(AgcImageSubresourceLayers) == 16u,
+    "AgcImageSubresourceLayers size mismatch");
+_Static_assert(sizeof(AgcImageCopyRegion) == 128u,
+    "AgcImageCopyRegion v1 size mismatch");
+_Static_assert(sizeof(AgcBufferImageCopyRegion) == 112u,
+    "AgcBufferImageCopyRegion v1 size mismatch");
 _Static_assert(offsetof(AgcResourceTransition, dependency_label) ==
     AGC_RESOURCE_TRANSITION_V1_SIZE,
     "AgcResourceTransition v1 prefix size mismatch");
 _Static_assert(sizeof(AgcResourceTransition) == 160u,
     "AgcResourceTransition v2 size mismatch");
-_Static_assert(sizeof(AgcImageViewDesc) == 72u,
-    "AgcImageViewDesc v1 size mismatch");
+_Static_assert(offsetof(AgcImageViewDesc, view_type) == 72u,
+    "AgcImageViewDesc v1 prefix size mismatch");
+_Static_assert(sizeof(AgcImageViewDesc) == 96u,
+    "AgcImageViewDesc v2 size mismatch");
 _Static_assert(sizeof(AgcColorTargetBinding) == 64u,
     "AgcColorTargetBinding v1 size mismatch");
 _Static_assert(sizeof(AgcDepthStencilTargetBinding) == 64u,
     "AgcDepthStencilTargetBinding v1 size mismatch");
-_Static_assert(sizeof(AgcSamplerDesc) == 64u,
-    "AgcSamplerDesc v1 size mismatch");
+_Static_assert(offsetof(AgcSamplerDesc, mip_filter) == 64u,
+    "AgcSamplerDesc v1 prefix size mismatch");
+_Static_assert(sizeof(AgcSamplerDesc) == 112u,
+    "AgcSamplerDesc v2 size mismatch");
 _Static_assert(sizeof(AgcShaderDesc) == 88u,
     "AgcShaderDesc v2 size mismatch");
 _Static_assert(sizeof(AgcColorBlendAttachmentState) == 64u,
@@ -1209,19 +1506,42 @@ _Static_assert(sizeof(AgcGpuLabelInfo) == 144u,
     "AgcGpuLabelInfo v2 size mismatch");
 _Static_assert(sizeof(AgcResourceStateInfo) == 88u,
     "AgcResourceStateInfo v1 size mismatch");
+_Static_assert(sizeof(AgcOcclusionQueryLayout) == 64u,
+    "AgcOcclusionQueryLayout v1 size mismatch");
+_Static_assert(sizeof(AgcOcclusionQueryResult) == 64u,
+    "AgcOcclusionQueryResult v1 size mismatch");
 
 int32_t PS5_SYSV_ABI agcCreateDevice(
     const AgcDeviceDesc *desc, AgcDevice *device_out);
 int32_t PS5_SYSV_ABI agcDestroyDevice(AgcDevice device);
 int32_t PS5_SYSV_ABI agcGetRuntimeInfo(
     AgcDevice device, AgcRuntimeInfo *info);
+int32_t PS5_SYSV_ABI agcGetDeviceProperties(
+    AgcDevice device, AgcDeviceProperties *properties);
 
 int32_t PS5_SYSV_ABI agcCreateQueue(
     AgcDevice device, const AgcQueueDesc *desc, AgcQueue *queue_out);
 int32_t PS5_SYSV_ABI agcDestroyQueue(AgcQueue queue);
 
+/* Explicit allocations back placed Vulkan-style resources. Destroying a
+ * memory handle releases the application reference; storage remains alive
+ * until every placed resource is destroyed. */
+int32_t PS5_SYSV_ABI agcCreateMemory(
+    AgcDevice device, const AgcMemoryDesc *desc, AgcMemory *memory_out);
+int32_t PS5_SYSV_ABI agcDestroyMemory(AgcMemory memory);
+int32_t PS5_SYSV_ABI agcMapMemory(
+    AgcMemory memory, uint64_t offset, uint64_t size, void **data_out);
+int32_t PS5_SYSV_ABI agcUnmapMemory(AgcMemory memory);
+int32_t PS5_SYSV_ABI agcFlushMemory(
+    AgcMemory memory, uint64_t offset, uint64_t size);
+int32_t PS5_SYSV_ABI agcInvalidateMemory(
+    AgcMemory memory, uint64_t offset, uint64_t size);
+
 int32_t PS5_SYSV_ABI agcCreateBuffer(
     AgcDevice device, const AgcBufferDesc *desc, AgcBuffer *buffer_out);
+int32_t PS5_SYSV_ABI agcCreatePlacedBuffer(AgcDevice device,
+    const AgcBufferDesc *desc, AgcMemory memory, uint64_t memory_offset,
+    AgcBuffer *buffer_out);
 int32_t PS5_SYSV_ABI agcDestroyBuffer(AgcBuffer buffer);
 int32_t PS5_SYSV_ABI agcGetBufferStateInfo(
     AgcBuffer buffer, AgcResourceStateInfo *info);
@@ -1229,6 +1549,11 @@ int32_t PS5_SYSV_ABI agcGetBufferStateInfo(
  * committed ranges differ; query each application-owned range explicitly. */
 int32_t PS5_SYSV_ABI agcGetBufferRangeStateInfo(AgcBuffer buffer,
     uint64_t offset, uint64_t size, AgcResourceStateInfo *info);
+/* Queries the effective range state including transitions already recorded in
+ * this command buffer. This keeps translator-side state mirrors unnecessary. */
+int32_t PS5_SYSV_ABI agcGetCommandBufferRangeStateInfo(
+    AgcCommandBuffer command_buffer, AgcBuffer buffer, uint64_t offset,
+    uint64_t size, AgcResourceStateInfo *info);
 /* Queues retirement against a finite-wait fence. Existing command references
  * may remain, but allocation reuse waits for both fence completion and release
  * of those references by command reset/destruction. */
@@ -1238,8 +1563,19 @@ int32_t PS5_SYSV_ABI agcWriteBuffer(
     AgcBuffer buffer, uint64_t offset, const void *data, uint64_t size);
 int32_t PS5_SYSV_ABI agcReadBuffer(
     AgcBuffer buffer, uint64_t offset, void *data, uint64_t size);
+int32_t PS5_SYSV_ABI agcGetOcclusionQueryLayout(
+    AgcDevice device, AgcOcclusionQueryLayout *layout);
+/* A zero timeout polls. Infinite waits are rejected; every blocking query
+ * read therefore has a caller-selected finite upper bound. */
+int32_t PS5_SYSV_ABI agcGetOcclusionQueryResult(AgcBuffer buffer,
+    uint64_t offset, uint64_t timeout_ns, AgcOcclusionQueryResult *result);
+int32_t PS5_SYSV_ABI agcResetOcclusionQueryResults(AgcBuffer buffer,
+    uint64_t offset, uint32_t query_count);
 int32_t PS5_SYSV_ABI agcCreateImage(
     AgcDevice device, const AgcImageDesc *desc, AgcImage *image_out);
+int32_t PS5_SYSV_ABI agcCreatePlacedImage(AgcDevice device,
+    const AgcImageDesc *desc, AgcMemory memory, uint64_t memory_offset,
+    AgcImage *image_out);
 int32_t PS5_SYSV_ABI agcDestroyImage(AgcImage image);
 int32_t PS5_SYSV_ABI agcGetImageStateInfo(
     AgcImage image, AgcResourceStateInfo *info);
@@ -1316,12 +1652,44 @@ int32_t PS5_SYSV_ABI agcCmdTransitionResources(
 int32_t PS5_SYSV_ABI agcCmdCopyBuffer(AgcCommandBuffer command_buffer,
     AgcBuffer source, uint64_t source_offset, AgcBuffer destination,
     uint64_t destination_offset, uint64_t size);
+/* Embeds four-byte-aligned data or a repeated 32-bit value into the command
+ * stream and writes it to a CopyDestination buffer range. The complete
+ * command-space and retention requirements are preflighted before emission. */
+int32_t PS5_SYSV_ABI agcCmdUpdateBuffer(AgcCommandBuffer command_buffer,
+    AgcBuffer destination, uint64_t destination_offset, const void *data,
+    uint64_t size);
+int32_t PS5_SYSV_ABI agcCmdFillBuffer(AgcCommandBuffer command_buffer,
+    AgcBuffer destination, uint64_t destination_offset, uint64_t size,
+    uint32_t value);
+/* Query records require AGC_BUFFER_USAGE_QUERY_BIT. These operations acquire
+ * each record into graphics-owned QueryWrite state internally. Reset zeroes
+ * complete records. End writes availability through a cache-flushing EOP. */
+int32_t PS5_SYSV_ABI agcCmdResetOcclusionQueries(
+    AgcCommandBuffer command_buffer, AgcBuffer buffer, uint64_t offset,
+    uint32_t query_count);
+int32_t PS5_SYSV_ABI agcCmdBeginOcclusionQuery(
+    AgcCommandBuffer command_buffer, AgcBuffer buffer, uint64_t offset,
+    uint32_t precise);
+int32_t PS5_SYSV_ABI agcCmdEndOcclusionQuery(
+    AgcCommandBuffer command_buffer, AgcBuffer buffer, uint64_t offset);
 /* Copies the complete allocation between two distinct images with identical
  * dimensions, format, sample count, mip/layer shape, and computed layout.
  * Both images require explicit CopySource/CopyDestination state on the command
  * queue. Partial subresources and layout conversion remain fail-closed. */
 int32_t PS5_SYSV_ABI agcCmdCopyImage(AgcCommandBuffer command_buffer,
     AgcImage source, AgcImage destination);
+/* Region copies derive every byte address from native subresource layouts.
+ * Color and BC mip/layer/3D rows are supported when their physical rows are
+ * DMA-addressable. Depth/HTILE/MSAA linearization remains fail-closed. */
+int32_t PS5_SYSV_ABI agcCmdCopyImageRegions(
+    AgcCommandBuffer command_buffer, AgcImage source, AgcImage destination,
+    uint32_t region_count, const AgcImageCopyRegion *regions);
+int32_t PS5_SYSV_ABI agcCmdCopyBufferToImage(
+    AgcCommandBuffer command_buffer, AgcBuffer source, AgcImage destination,
+    uint32_t region_count, const AgcBufferImageCopyRegion *regions);
+int32_t PS5_SYSV_ABI agcCmdCopyImageToBuffer(
+    AgcCommandBuffer command_buffer, AgcImage source, AgcBuffer destination,
+    uint32_t region_count, const AgcBufferImageCopyRegion *regions);
 /* Descriptor resources must already have a compatible explicit typed state
  * on this command buffer's queue. Read-only descriptors require ShaderRead;
  * storage descriptors accept ShaderRead or ShaderWrite until reflection
@@ -1336,19 +1704,36 @@ int32_t PS5_SYSV_ABI agcCmdSetViewport(
     AgcCommandBuffer command_buffer, const AgcViewport *viewport);
 int32_t PS5_SYSV_ABI agcCmdSetScissor(
     AgcCommandBuffer command_buffer, const AgcScissor *scissor);
+int32_t PS5_SYSV_ABI agcCmdSetViewportScissors(
+    AgcCommandBuffer command_buffer, uint32_t count,
+    const AgcViewport *viewports, const AgcScissor *scissors);
 int32_t PS5_SYSV_ABI agcCmdSetBlendConstants(
     AgcCommandBuffer command_buffer, const float constants[4]);
 int32_t PS5_SYSV_ABI agcCmdSetStencilReference(
     AgcCommandBuffer command_buffer, uint32_t front, uint32_t back);
 int32_t PS5_SYSV_ABI agcCmdSetDepthBias(
     AgcCommandBuffer command_buffer, const AgcDepthBias *depth_bias);
+int32_t PS5_SYSV_ABI agcCmdSetLineWidth(
+    AgcCommandBuffer command_buffer, float line_width);
 int32_t PS5_SYSV_ABI agcCmdBindIndexBuffer(AgcCommandBuffer command_buffer,
     AgcBuffer buffer, uint64_t offset, AgcIndexSize index_size);
+int32_t PS5_SYSV_ABI agcCmdDraw(AgcCommandBuffer command_buffer,
+    uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex,
+    uint32_t first_instance);
 int32_t PS5_SYSV_ABI agcCmdDrawIndexed(AgcCommandBuffer command_buffer,
     uint32_t index_count, uint32_t instance_count, uint32_t first_index,
     int32_t vertex_offset, uint32_t first_instance);
+int32_t PS5_SYSV_ABI agcCmdDrawIndirect(AgcCommandBuffer command_buffer,
+    AgcBuffer argument_buffer, uint64_t offset, uint32_t draw_count,
+    uint32_t stride);
+int32_t PS5_SYSV_ABI agcCmdDrawIndexedIndirect(
+    AgcCommandBuffer command_buffer, AgcBuffer argument_buffer,
+    uint64_t offset, uint32_t draw_count, uint32_t stride);
 int32_t PS5_SYSV_ABI agcCmdDispatch(AgcCommandBuffer command_buffer,
     uint32_t group_count_x, uint32_t group_count_y, uint32_t group_count_z);
+int32_t PS5_SYSV_ABI agcCmdDispatchIndirect(
+    AgcCommandBuffer command_buffer, AgcBuffer argument_buffer,
+    uint64_t offset);
 
 int32_t PS5_SYSV_ABI agcCreateFence(
     AgcDevice device, const AgcFenceDesc *desc, AgcFence *fence_out);

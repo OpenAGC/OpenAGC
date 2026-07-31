@@ -23,6 +23,18 @@ Applications select resource intent, not a firmware-specific allocator:
 - `AGC_BUFFER_CREATE_DEDICATED_BIT` requests a dedicated buffer allocation;
 - allocations larger than half a normal block become dedicated automatically.
 
+Runtime API 36 adds `AGC_BUFFER_USAGE_INDIRECT_BIT`. Indirect draw and dispatch
+arguments remain ordinary typed `AgcBuffer` objects: applications transition
+the complete 16-byte draw, 20-byte indexed-draw, or 12-byte dispatch record
+range to `kAgcResourceUsageShaderRead` on the consuming queue. The runtime
+validates the final multi-draw record, retains the argument buffer through
+command recycling, and keeps GPU addresses and encoder reservations private.
+
+Runtime API 37 adds `AGC_BUFFER_USAGE_QUERY_BIT` and
+`kAgcResourceUsageQueryWrite`. Query buffers may combine upload and readback
+flags because host reset and bounded result retrieval are both part of the
+same storage lifecycle.
+
 Small resources share alignment-aware blocks. Freed ranges are discovered from
 the sorted live-allocation map and reused without allocating a new direct-memory
 object per resource. Empty pooled blocks stay cached until device destruction;
@@ -33,6 +45,23 @@ descriptor slot apiece. The reflection/pipeline milestone will populate and
 group those slots; Milestone 2 owns their GPU-visible allocation and lifetime.
 If resource creation fails after acquiring a new heap block, the block and all
 metadata are rolled back before the error is returned.
+
+## Occlusion-query storage
+
+Call `agcGetOcclusionQueryLayout` to size and align query storage. The returned
+record size is opaque: applications do not consume render-backend count slots,
+GPU addresses, or availability packet fields. A query buffer must use
+`AGC_BUFFER_USAGE_QUERY_BIT`; host-reset/readback buffers normally use both
+`AGC_BUFFER_CREATE_UPLOAD_BIT` and `AGC_BUFFER_CREATE_READBACK_BIT`.
+
+`agcResetOcclusionQueryResults` clears complete records on the host.
+`agcCmdResetOcclusionQueries`, `agcCmdBeginOcclusionQuery`, and
+`agcCmdEndOcclusionQuery` retain the buffer through command recycling and
+acquire each range into graphics-owned `QueryWrite` state internally. End
+records a cache-flushing EOP availability write. `agcGetOcclusionQueryResult`
+accepts either a zero-time poll or a finite nanosecond timeout, invalidates the
+record, and returns one reduced 64-bit count plus availability. Infinite waits
+are rejected.
 
 ## Visibility and staging
 
@@ -53,6 +82,29 @@ application initialize or inspect a linear image without exposing a PS5 cache
 operation, while preserving tiled-layout handling as an explicit later
 transfer-path concern.
 
+Runtime API 27 also exposes `AgcMemory` for Vulkan-style explicit binding.
+`agcCreateMemory` allocates one flexible or garlic interval; applications may
+map, flush, and invalidate bounded ranges without receiving firmware policy.
+`agcCreatePlacedBuffer` and `agcCreatePlacedImage` bind aligned, in-range
+resource intervals to that allocation, and overlapping bindings are permitted
+for explicit aliasing. Buffers must match the heap implied by their upload or
+readback flags. Linear and BC images may bind flexible or garlic memory when
+the allocation satisfies `agcGetImageLayout`; tiled depth and MSAA layouts
+retain 64-KiB alignment and therefore require garlic.
+
+Destroying an `AgcMemory` handle releases the application reference. Existing
+placed resources retain the allocation, so their commands and bounded transfer
+operations remain valid until the last resource is destroyed. A released
+memory handle cannot be mapped or used for another binding. Exact live-byte and
+allocation baselines recover when the last placed resource releases storage.
+
+Runtime API 28 makes image tiling explicit. Linear color and depth images use
+256-byte binding alignment and may reside in flexible or garlic memory;
+optimal depth and 4x-MSAA color images retain their qualified 64-KiB tiled
+layouts. Version-2 image views carry 2D/array/cube type plus component swizzles,
+and version-2 samplers normalize mip filtering, wrap modes, anisotropy,
+comparison, LOD, and fixed/custom border indices into native descriptors.
+
 Shader uploads and descriptor initialization are flushed when their objects
 are created. Executable command storage is flushed over its used byte range at
 submission. These publication operations use the same checked low-level cache
@@ -64,6 +116,14 @@ not infer or emit cache-control packets themselves. The initial transition
 contract accepts complete buffers and complete image ranges only, and publishes
 their new state only after submit succeeds. See `native_runtime.md` for the
 supported usage/ownership matrix and current fail-closed limits.
+
+`agcCmdUpdateBuffer` embeds caller bytes in the recorded stream, while
+`agcCmdFillBuffer` embeds a repeated 32-bit value. Both operate only on
+four-byte-aligned, nonempty, in-bounds ranges that have been transitioned to
+CopyDestination on the recording queue. Packet space and retained-resource
+capacity are checked for the entire operation before any packet is committed.
+The caller's update pointer therefore need not remain alive after the command
+returns, while the destination buffer remains retained until command recycling.
 
 ## Image layouts
 

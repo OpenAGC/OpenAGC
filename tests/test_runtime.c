@@ -24,6 +24,8 @@
 #include "../samples/hw_test/shaders/runtime_triangle_vert_front_sb.h"
 #include "../samples/hw_test/shaders/runtime_triangle_vert_reflection.h"
 
+extern bool agcDriverDebugIsQueueInUse(uint32_t index);
+
 static AgcDevice create_device(void)
 {
     AgcDeviceDesc desc = AGC_DEVICE_DESC_INIT;
@@ -459,7 +461,7 @@ static AgcShader create_ngg_shader_bundle(AgcDevice device,
 
     reflection.stage = stage;
     reflection.flags |= AGC_SHADER_REFLECTION_NGG_BIT;
-    if (stage != kAgcShaderStageVs)
+    if (stage == kAgcShaderStageGs)
         reflection.flags |= AGC_SHADER_REFLECTION_FUSED_STAGE_BIT;
     reflection.shader_record_version = AGC_SHADER_RECORD_VERSION_GEN5;
     reflection.compiler_api_version = AGC_SHADER_COMPILER_API_VERSION;
@@ -595,6 +597,7 @@ static void test_runtime_descriptor_and_info_contract(void)
 {
     AgcDeviceDesc desc = AGC_DEVICE_DESC_INIT;
     AgcRuntimeInfo info = AGC_RUNTIME_INFO_INIT;
+    AgcDeviceProperties properties = AGC_DEVICE_PROPERTIES_INIT;
     AgcDevice device = NULL;
 
     desc.version++;
@@ -635,6 +638,22 @@ static void test_runtime_descriptor_and_info_contract(void)
         TEST_ASSERT_EQ(info.qualification[i], AGC_QUALIFICATION_HOST_TESTED,
             "generic runtime capabilities are host-tested");
     }
+    TEST_ASSERT_EQ(agcGetDeviceProperties(device, &properties), AGC_OK,
+        "firmware-neutral device properties query succeeds");
+    TEST_ASSERT(properties.max_image_dimension_2d != 0u &&
+        properties.max_compute_workgroup_invocations != 0u,
+        "device properties expose qualified image and compute limits");
+    TEST_ASSERT_EQ(properties.memory_heap_count, AGC_MEMORY_HEAP_COUNT,
+        "device properties expose every native heap profile");
+    TEST_ASSERT((properties.memory_heaps[AGC_MEMORY_HEAP_FLEXIBLE].
+            property_flags & AGC_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0u &&
+        (properties.memory_heaps[AGC_MEMORY_HEAP_GARLIC].property_flags &
+            AGC_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != 0u,
+        "device properties expose portable heap property flags");
+    properties.reserved[0] = 1u;
+    TEST_ASSERT_EQ(agcGetDeviceProperties(device, &properties),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "device properties reject nonzero reserved fields");
 
     info = (AgcRuntimeInfo)AGC_RUNTIME_INFO_INIT;
     info.reserved[0] = 1u;
@@ -643,6 +662,63 @@ static void test_runtime_descriptor_and_info_contract(void)
         "runtime info rejects nonzero reserved fields");
     TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
         "native device destruction succeeds");
+}
+
+static void test_runtime_multiple_logical_devices(void)
+{
+    AgcDeviceDesc desc = AGC_DEVICE_DESC_INIT;
+    AgcQueueDesc queue_desc = AGC_QUEUE_DESC_INIT;
+    AgcRuntimeInfo info = AGC_RUNTIME_INFO_INIT;
+    AgcDevice first = NULL;
+    AgcDevice second = NULL;
+    AgcDevice mismatched = NULL;
+    AgcQueue first_queue = NULL;
+    AgcQueue second_queue = NULL;
+    AgcQueue first_compute = NULL;
+    AgcQueue second_compute = NULL;
+
+    desc.required_capability_bits = AGC_RUNTIME_CAP_BASELINE;
+    TEST_ASSERT_EQ(agcCreateDevice(&desc, &first), AGC_OK,
+        "first logical device creates");
+    TEST_ASSERT_EQ(agcCreateDevice(&desc, &second), AGC_OK,
+        "second logical device shares the initialized physical backend");
+    desc.agc_version++;
+    TEST_ASSERT_EQ(agcCreateDevice(&desc, &mismatched), AGC_ERROR_BUSY,
+        "concurrent logical device rejects a different AGC defaults version");
+    TEST_ASSERT(mismatched == NULL,
+        "rejected mismatched logical device returns no handle");
+
+    TEST_ASSERT_EQ(agcCreateQueue(first, &queue_desc, &first_queue), AGC_OK,
+        "first logical device owns an independent graphics queue");
+    TEST_ASSERT_EQ(agcCreateQueue(second, &queue_desc, &second_queue), AGC_OK,
+        "second logical device owns an independent graphics queue");
+    queue_desc.type = kAgcQueueCompute;
+    TEST_ASSERT_EQ(agcCreateQueue(first, &queue_desc, &first_compute), AGC_OK,
+        "first logical device owns an independent compute queue");
+    TEST_ASSERT_EQ(agcCreateQueue(second, &queue_desc, &second_compute), AGC_OK,
+        "second logical device owns an independent compute queue");
+    TEST_ASSERT(agcDriverDebugIsQueueInUse(0u) &&
+        agcDriverDebugIsQueueInUse(1u),
+        "both logical compute queue backend handles are live");
+    TEST_ASSERT_EQ(agcDestroyQueue(second_compute), AGC_OK,
+        "second logical compute queue destroys out of creation order");
+    TEST_ASSERT(agcDriverDebugIsQueueInUse(0u) &&
+        !agcDriverDebugIsQueueInUse(1u),
+        "compute queue destruction releases its exact backend handle");
+    TEST_ASSERT_EQ(agcDestroyDevice(first), AGC_ERROR_BUSY,
+        "first logical device retains its own children");
+    TEST_ASSERT_EQ(agcDestroyQueue(first_queue), AGC_OK,
+        "first logical device queue destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(first_compute), AGC_OK,
+        "first logical compute queue destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(first), AGC_OK,
+        "first logical device destroys without shutting down shared backend");
+    TEST_ASSERT_EQ(agcGetRuntimeInfo(second, &info), AGC_OK,
+        "second logical device remains valid after first device destruction");
+    TEST_ASSERT_EQ(agcDestroyQueue(second_queue), AGC_OK,
+        "second logical device queue destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(second), AGC_OK,
+        "last logical device destroys and shuts down physical backend");
 }
 
 static void test_runtime_optional_debug_callback(void)
@@ -1845,9 +1921,13 @@ static void test_runtime_compute_submission(void)
     AgcShader shader = create_shader(device, kAgcShaderStageCs);
     AgcComputePipelineDesc pipeline_desc = AGC_COMPUTE_PIPELINE_DESC_INIT;
     AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcBufferDesc argument_desc = AGC_BUFFER_DESC_INIT;
+    AgcResourceTransition argument_transition =
+        AGC_RESOURCE_TRANSITION_INIT;
     AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
     AgcComputePipeline pipeline = NULL;
     AgcCommandBuffer command_buffer = NULL;
+    AgcBuffer argument_buffer = NULL;
     AgcFence fence = NULL;
     AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
     AgcFenceInfo fence_info = AGC_FENCE_INFO_INIT;
@@ -1856,15 +1936,24 @@ static void test_runtime_compute_submission(void)
     uint32_t defaults[512] = {0};
     SceAgcCb defaults_cb;
     uint32_t owner = UINT32_MAX;
+    const uint32_t indirect_groups[3] = {5u, 4u, 3u};
 
     pipeline_desc.shader = shader;
     pipeline_desc.local_size_x = 64u;
     command_desc.queue_type = kAgcQueueCompute;
-    command_desc.capacity_dwords = 512u;
+    command_desc.capacity_dwords = 1024u;
+    argument_desc.size = 16u;
+    argument_desc.usage = AGC_BUFFER_USAGE_INDIRECT_BIT;
+    argument_desc.flags = AGC_BUFFER_CREATE_UPLOAD_BIT;
     TEST_ASSERT_EQ(agcCreateComputePipeline(device, &pipeline_desc, &pipeline),
         AGC_OK, "compute pipeline creation succeeds");
     TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc,
         &command_buffer), AGC_OK, "compute command buffer creation succeeds");
+    TEST_ASSERT_EQ(agcCreateBuffer(device, &argument_desc, &argument_buffer),
+        AGC_OK, "indirect argument buffer creation succeeds");
+    TEST_ASSERT_EQ(agcWriteBuffer(argument_buffer, 4u, indirect_groups,
+        sizeof(indirect_groups)), AGC_OK,
+        "indirect dispatch record uploads at an aligned offset");
     TEST_ASSERT_EQ(agcCreateFence(device, &fence_desc, &fence), AGC_OK,
         "compute fence creation succeeds");
     TEST_ASSERT_EQ(agcBeginCommandBuffer(command_buffer), AGC_OK,
@@ -1873,12 +1962,36 @@ static void test_runtime_compute_submission(void)
         AGC_ERROR_INVALID_STATE, "dispatch requires a bound pipeline");
     TEST_ASSERT_EQ(agcCmdBindComputePipeline(command_buffer, pipeline), AGC_OK,
         "compute pipeline bind succeeds");
+    TEST_ASSERT_EQ(agcCmdDispatchIndirect(command_buffer, argument_buffer,
+        4u), AGC_ERROR_INVALID_STATE,
+        "indirect dispatch requires graphics-readable argument state");
+    argument_transition.resource_type = kAgcResourceTypeBuffer;
+    argument_transition.buffer = argument_buffer;
+    argument_transition.buffer_offset = 4u;
+    argument_transition.buffer_size = sizeof(indirect_groups);
+    argument_transition.before = kAgcResourceUsageUndefined;
+    argument_transition.after = kAgcResourceUsageShaderRead;
+    argument_transition.before_owner = kAgcResourceOwnerHost;
+    argument_transition.after_owner = kAgcResourceOwnerCompute;
+    TEST_ASSERT_EQ(agcCmdTransitionResources(command_buffer, 1u,
+        &argument_transition), AGC_OK,
+        "indirect dispatch range transitions to compute ownership");
+    TEST_ASSERT_EQ(agcCmdDispatchIndirect(command_buffer, argument_buffer,
+        2u), AGC_ERROR_INVALID_ARGUMENT,
+        "indirect dispatch rejects a non-dword offset");
+    TEST_ASSERT_EQ(agcCmdDispatchIndirect(command_buffer, argument_buffer,
+        8u), AGC_ERROR_INVALID_ARGUMENT,
+        "indirect dispatch rejects a truncated 12-byte record");
     TEST_ASSERT_EQ(agcCmdDispatch(command_buffer, 3u, 2u, 1u), AGC_OK,
         "compute dispatch records");
+    TEST_ASSERT_EQ(agcCmdDispatchIndirect(command_buffer, argument_buffer,
+        4u), AGC_OK, "compute indirect dispatch records");
     TEST_ASSERT_EQ(agcEndCommandBuffer(command_buffer), AGC_OK,
         "compute command buffer becomes executable");
     TEST_ASSERT_EQ(agcDestroyComputePipeline(pipeline), AGC_ERROR_BUSY,
         "recorded compute pipeline cannot be destroyed");
+    TEST_ASSERT_EQ(agcDestroyBuffer(argument_buffer), AGC_ERROR_BUSY,
+        "recorded indirect buffer is retained until command reset");
 
     submit.command_buffer_count = 1u;
     submit.command_buffers = &command_buffer;
@@ -1895,17 +2008,17 @@ static void test_runtime_compute_submission(void)
     TEST_ASSERT(captured->dword_count > 36u,
         "compute submission includes qualified defaults and dispatch state");
     TEST_ASSERT_EQ(captured->dword_count,
-        agcCbUsedDwords(&defaults_cb) + 36u,
-        "runtime compute submission contains all defaults plus dispatch");
+        2u * agcCbUsedDwords(&defaults_cb) + 74u,
+        "runtime compute submission contains defaults plus direct and indirect dispatches");
     TEST_ASSERT_EQ(captured->command_address & 0xffu, 0u,
         "compute submission command allocation is GPU-address aligned");
-    words += captured->dword_count - 5u;
-    TEST_ASSERT_EQ((words[0] >> 8) & 0xffu, AGC_PM4_OP_DISPATCH_DIRECT,
-        "compute submission records DISPATCH_DIRECT");
+    words += captured->dword_count - 3u;
+    TEST_ASSERT_EQ((words[0] >> 8) & 0xffu, AGC_PM4_OP_DISPATCH_INDIRECT,
+        "compute submission records DISPATCH_INDIRECT");
     TEST_ASSERT_EQ(words[0] & 1u, 1u,
         "compute dispatch carries shader-type bit");
-    TEST_ASSERT_EQ(words[1], 3u, "compute dispatch records group count X");
-    TEST_ASSERT_EQ(words[2], 2u, "compute dispatch records group count Y");
+    TEST_ASSERT_EQ(words[1], 4u,
+        "compute indirect dispatch records its dword-aligned byte offset");
     TEST_ASSERT_EQ(agcGetFenceStatus(fence), AGC_OK,
         "successful compute submission signals fence");
     TEST_ASSERT_EQ(agcWaitFence(fence, 1u), AGC_OK,
@@ -1947,9 +2060,88 @@ static void test_runtime_compute_submission(void)
         "compute command buffer destroys");
     TEST_ASSERT_EQ(agcDestroyComputePipeline(pipeline), AGC_OK,
         "compute pipeline destroys after reset");
+    TEST_ASSERT_EQ(agcDestroyBuffer(argument_buffer), AGC_OK,
+        "indirect argument buffer destroys after reset");
     TEST_ASSERT_EQ(agcDestroyShader(shader), AGC_OK, "compute shader destroys");
     TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK, "compute queue destroys");
     TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK, "compute device destroys");
+}
+
+static void test_runtime_compute_on_graphics_queue(void)
+{
+    AgcDevice device = create_device();
+    AgcQueue queue = create_queue(device, kAgcQueueGraphics);
+    AgcShader shader = create_shader(device, kAgcShaderStageCs);
+    AgcComputePipelineDesc pipeline_desc = AGC_COMPUTE_PIPELINE_DESC_INIT;
+    AgcBufferDesc buffer_desc = AGC_BUFFER_DESC_INIT;
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcResourceTransition transition = AGC_RESOURCE_TRANSITION_INIT;
+    AgcComputePipeline pipeline = NULL;
+    AgcBuffer storage = NULL;
+    AgcCommandBuffer command = NULL;
+    AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    const AgcCommandBufferSubmit *captured;
+    const uint32_t *words;
+
+    pipeline_desc.shader = shader;
+    pipeline_desc.local_size_x = 64u;
+    buffer_desc.size = 256u;
+    buffer_desc.usage = AGC_BUFFER_USAGE_STORAGE_BIT;
+    command_desc.queue_type = kAgcQueueGraphics;
+    command_desc.capacity_dwords = 4096u;
+    TEST_ASSERT_EQ(agcCreateComputePipeline(device, &pipeline_desc,
+        &pipeline), AGC_OK,
+        "graphics-queue compute pipeline creates");
+    TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &storage), AGC_OK,
+        "graphics-queue compute storage buffer creates");
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
+        AGC_OK, "graphics command buffer for compute creates");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+        "graphics command buffer for compute begins");
+    transition.after = kAgcResourceUsageShaderWrite;
+    transition.after_owner = kAgcResourceOwnerGraphics;
+    transition.buffer = storage;
+    transition.buffer_size = buffer_desc.size;
+    TEST_ASSERT_EQ(agcCmdTransitionResources(command, 1u, &transition),
+        AGC_OK,
+        "graphics command buffer accepts compute shader-write state");
+    TEST_ASSERT_EQ(agcCmdBindComputePipeline(command, pipeline), AGC_OK,
+        "graphics command buffer accepts compute pipeline");
+    TEST_ASSERT_EQ(agcCmdDispatch(command, 7u, 3u, 1u), AGC_OK,
+        "graphics command stream records compute dispatch in order");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+        "graphics command stream with compute ends");
+    submit.command_buffer_count = 1u;
+    submit.command_buffers = &command;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, NULL), AGC_OK,
+        "graphics queue submits compute packets through one DCB");
+    captured = agcDriverDebugLastDcbSubmit();
+    TEST_ASSERT(captured != NULL && captured->dword_count >= 5u,
+        "graphics-queue compute submission is captured as a DCB");
+    words = (const uint32_t *)(uintptr_t)captured->command_address +
+        captured->dword_count - 5u;
+    TEST_ASSERT_EQ(agcPm4Opcode(words[0]), AGC_PM4_OP_DISPATCH_DIRECT,
+        "graphics DCB ends with compute dispatch");
+    TEST_ASSERT_EQ(words[0] & 1u, 1u,
+        "graphics DCB compute dispatch retains the shader-type bit");
+    TEST_ASSERT_EQ(words[1], 7u,
+        "graphics DCB compute dispatch preserves group count X");
+    TEST_ASSERT_EQ(words[2], 3u,
+        "graphics DCB compute dispatch preserves group count Y");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+        "graphics-queue compute command resets");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+        "graphics-queue compute command destroys");
+    TEST_ASSERT_EQ(agcDestroyBuffer(storage), AGC_OK,
+        "graphics-queue compute storage buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyComputePipeline(pipeline), AGC_OK,
+        "graphics-queue compute pipeline destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(shader), AGC_OK,
+        "graphics-queue compute shader destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
+        "graphics queue used for compute destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "graphics-queue compute device destroys");
 }
 
 static void test_runtime_empty_submission_eop_diagnostic(void)
@@ -2294,6 +2486,8 @@ static void test_runtime_compiler_graphics_sidecar(void)
         "compiler-sidecar viewport binds");
     TEST_ASSERT_EQ(agcCmdSetScissor(command, &scissor), AGC_OK,
         "compiler-sidecar scissor binds");
+    TEST_ASSERT_EQ(agcCmdDraw(command, 3u, 1u, 0u, 0u), AGC_OK,
+        "compiler-sidecar non-indexed draw records");
     TEST_ASSERT_EQ(agcCmdBindIndexBuffer(command, index_buffer, 2u,
         kAgcIndexSize16), AGC_ERROR_INVALID_STATE,
         "untransitioned index buffer cannot bind on graphics");
@@ -2413,7 +2607,7 @@ static void test_runtime_indexed_graphics_submission(void)
     TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
         "indexed graphics command buffer submits");
     captured = agcDriverDebugLastDcbSubmit();
-    TEST_ASSERT_EQ(captured->dword_count, 2284u,
+    TEST_ASSERT_EQ(captured->dword_count, 2287u,
         "indexed graphics submission includes qualified defaults and draw");
     words = (const uint32_t *)(uintptr_t)captured->command_address;
     TEST_ASSERT_EQ(captured->command_address & 0xffu, 0u,
@@ -3047,8 +3241,12 @@ static void test_runtime_copy_buffer_submission(void)
     AgcBuffer destination = NULL;
     AgcCommandBuffer command_buffer = NULL;
     AgcFence fence = NULL;
+    AgcAllocationInfo command_allocation = AGC_ALLOCATION_INFO_INIT;
     const AgcCommandBufferSubmit *captured;
     const uint32_t *words;
+    const uint32_t update_words[2] = {
+        UINT32_C(0x11223344), UINT32_C(0x55667788)
+    };
     uint32_t owner = UINT32_MAX;
 
     source_desc.size = 64u;
@@ -3064,6 +3262,12 @@ static void test_runtime_copy_buffer_submission(void)
         "copy destination buffer creates");
     TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc,
         &command_buffer), AGC_OK, "copy command buffer creates");
+    TEST_ASSERT_EQ(agcGetObjectAllocationInfo(device,
+        AGC_OBJECT_TYPE_COMMAND_BUFFER, command_buffer,
+        &command_allocation), AGC_OK,
+        "copy command buffer allocation is queryable");
+    TEST_ASSERT_EQ(command_allocation.dedicated, 1u,
+        "kernel-submitted command storage has an isolated mapping");
     TEST_ASSERT_EQ(agcCreateFence(device, &fence_desc, &fence), AGC_OK,
         "copy fence creates");
     TEST_ASSERT_EQ(agcBeginCommandBuffer(command_buffer), AGC_OK,
@@ -3091,9 +3295,21 @@ static void test_runtime_copy_buffer_submission(void)
         AGC_OK, "copy source and destination transitions record");
     TEST_ASSERT_EQ(agcCmdCopyBuffer(command_buffer, source, 16u, destination,
         16u, 32u), AGC_OK, "typed partial-range copy records DMA packet");
+    TEST_ASSERT_EQ(agcCmdUpdateBuffer(command_buffer, destination, 16u,
+        update_words, sizeof(update_words)), AGC_OK,
+        "typed buffer update embeds data in a WRITE_DATA packet");
+    TEST_ASSERT_EQ(agcCmdFillBuffer(command_buffer, destination, 24u, 8u,
+        UINT32_C(0xa5a5a5a5)), AGC_OK,
+        "typed buffer fill embeds a repeated WRITE_DATA payload");
     TEST_ASSERT_EQ(agcCmdCopyBuffer(command_buffer, source, 0u, destination,
         0u, 4u), AGC_ERROR_INVALID_STATE,
         "copy rejects bytes outside transitioned ranges");
+    TEST_ASSERT_EQ(agcCmdUpdateBuffer(command_buffer, destination, 0u,
+        update_words, sizeof(update_words)), AGC_ERROR_INVALID_STATE,
+        "buffer update rejects bytes outside transitioned ranges");
+    TEST_ASSERT_EQ(agcCmdFillBuffer(command_buffer, destination, 16u, 6u,
+        0u), AGC_ERROR_INVALID_ARGUMENT,
+        "buffer fill rejects a non-dword range without command mutation");
     TEST_ASSERT_EQ(agcCmdCopyBuffer(command_buffer, destination, 0u,
         destination, 4u, 32u), AGC_ERROR_INVALID_ARGUMENT,
         "overlapping copy rejects without command mutation");
@@ -3114,6 +3330,9 @@ static void test_runtime_copy_buffer_submission(void)
     TEST_ASSERT(captured != NULL && owner != UINT32_MAX &&
         runtime_has_opcode(words, captured->dword_count, AGC_PM4_OP_DMA_DATA),
         "typed copy submit contains DMA_DATA");
+    TEST_ASSERT(runtime_has_opcode(words, captured->dword_count,
+        AGC_PM4_OP_WRITE_DATA),
+        "typed update and fill submit contains WRITE_DATA");
     TEST_ASSERT_EQ(agcDestroyBuffer(source), AGC_ERROR_BUSY,
         "submitted copy retains source through command reset");
     TEST_ASSERT_EQ(agcResetCommandBuffer(command_buffer), AGC_OK,
@@ -3259,7 +3478,7 @@ static void test_runtime_image_subresource_states(void)
     image_desc.usage = AGC_IMAGE_USAGE_SAMPLED_BIT |
         AGC_IMAGE_USAGE_TRANSFER_SRC_BIT;
     command_desc.queue_type = kAgcQueueCompute;
-    command_desc.capacity_dwords = 256u;
+    command_desc.capacity_dwords = 1024u;
     TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &image), AGC_OK,
         "subresource-state image creates");
     TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
@@ -3501,6 +3720,166 @@ static void test_runtime_copy_image_submission(void)
         "image-copy queue destroys");
     TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
         "image-copy device destroys");
+}
+
+static void test_runtime_image_region_and_buffer_copies(void)
+{
+    AgcDevice device = create_device();
+    AgcQueue queue = create_queue(device, kAgcQueueCompute);
+    AgcBufferDesc upload_desc = AGC_BUFFER_DESC_INIT;
+    AgcBufferDesc readback_desc = AGC_BUFFER_DESC_INIT;
+    AgcImageDesc image_desc = AGC_IMAGE_DESC_INIT;
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
+    AgcResourceTransition transitions[4] = {
+        AGC_RESOURCE_TRANSITION_INIT, AGC_RESOURCE_TRANSITION_INIT,
+        AGC_RESOURCE_TRANSITION_INIT, AGC_RESOURCE_TRANSITION_INIT
+    };
+    AgcBufferImageCopyRegion buffer_region =
+        AGC_BUFFER_IMAGE_COPY_REGION_INIT;
+    AgcImageCopyRegion image_region = AGC_IMAGE_COPY_REGION_INIT;
+    AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    AgcBuffer upload = NULL;
+    AgcBuffer readback = NULL;
+    AgcImage first = NULL;
+    AgcImage second = NULL;
+    AgcCommandBuffer command = NULL;
+    AgcFence fence = NULL;
+    const AgcCommandBufferSubmit *captured;
+    const uint32_t *words;
+    uint32_t owner = UINT32_MAX;
+    uint8_t source[256];
+    uint8_t copied[256];
+
+    for (uint32_t i = 0u; i < sizeof(source); ++i)
+        source[i] = (uint8_t)(i ^ 0x5au);
+    memset(copied, 0, sizeof(copied));
+    upload_desc.size = sizeof(source);
+    upload_desc.usage = AGC_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    upload_desc.flags = AGC_BUFFER_CREATE_UPLOAD_BIT;
+    readback_desc.size = sizeof(copied);
+    readback_desc.usage = AGC_BUFFER_USAGE_TRANSFER_DST_BIT;
+    readback_desc.flags = AGC_BUFFER_CREATE_READBACK_BIT;
+    image_desc.width = 8u;
+    image_desc.height = 8u;
+    image_desc.format = AGC_FORMAT_RGBA8_UNORM;
+    image_desc.usage = AGC_IMAGE_USAGE_TRANSFER_SRC_BIT |
+        AGC_IMAGE_USAGE_TRANSFER_DST_BIT;
+    image_desc.tiling = AGC_IMAGE_TILING_LINEAR;
+    command_desc.queue_type = kAgcQueueCompute;
+    command_desc.capacity_dwords = 1024u;
+    TEST_ASSERT_EQ(agcCreateBuffer(device, &upload_desc, &upload), AGC_OK,
+        "region-copy upload buffer creates");
+    TEST_ASSERT_EQ(agcCreateBuffer(device, &readback_desc, &readback), AGC_OK,
+        "region-copy readback buffer creates");
+    TEST_ASSERT_EQ(agcWriteBuffer(upload, 0u, source, sizeof(source)), AGC_OK,
+        "region-copy upload buffer fills");
+    TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &first), AGC_OK,
+        "region-copy first image creates");
+    TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &second), AGC_OK,
+        "region-copy second image creates");
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
+        AGC_OK, "region-copy command creates");
+    TEST_ASSERT_EQ(agcCreateFence(device, &fence_desc, &fence), AGC_OK,
+        "region-copy fence creates");
+
+    transitions[0].buffer = upload;
+    transitions[0].buffer_size = sizeof(source);
+    transitions[0].before = kAgcResourceUsageUndefined;
+    transitions[0].after = kAgcResourceUsageCopySource;
+    transitions[0].before_owner = kAgcResourceOwnerHost;
+    transitions[0].after_owner = kAgcResourceOwnerCompute;
+    transitions[1].resource_type = kAgcResourceTypeImage;
+    transitions[1].image = first;
+    transitions[1].image_range =
+        (AgcImageSubresourceRange)AGC_IMAGE_SUBRESOURCE_RANGE_INIT;
+    transitions[1].before = kAgcResourceUsageUndefined;
+    transitions[1].after = kAgcResourceUsageCopyDestination;
+    transitions[1].before_owner = kAgcResourceOwnerHost;
+    transitions[1].after_owner = kAgcResourceOwnerCompute;
+    transitions[2] = transitions[1];
+    transitions[2].image = second;
+    transitions[3].buffer = readback;
+    transitions[3].buffer_size = sizeof(copied);
+    transitions[3].before = kAgcResourceUsageUndefined;
+    transitions[3].after = kAgcResourceUsageCopyDestination;
+    transitions[3].before_owner = kAgcResourceOwnerHost;
+    transitions[3].after_owner = kAgcResourceOwnerCompute;
+
+    buffer_region.buffer_row_length = 8u;
+    buffer_region.buffer_image_height = 4u;
+    buffer_region.image_offset = (AgcOffset3D){2, 2, 0};
+    buffer_region.image_extent = (AgcExtent3D){4u, 3u, 1u};
+    image_region.source_offset = (AgcOffset3D){2, 2, 0};
+    image_region.destination_offset = (AgcOffset3D){0, 1, 0};
+    image_region.extent = (AgcExtent3D){4u, 3u, 1u};
+
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+        "region-copy command begins");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(command, 4u, transitions),
+        AGC_OK, "region-copy initial states record");
+    TEST_ASSERT_EQ(agcCmdCopyBufferToImage(command, upload, first, 1u,
+        &buffer_region), AGC_OK, "strided buffer-to-image rows record");
+    transitions[1].before = kAgcResourceUsageCopyDestination;
+    transitions[1].after = kAgcResourceUsageCopySource;
+    transitions[1].before_owner = kAgcResourceOwnerCompute;
+    TEST_ASSERT_EQ(agcCmdTransitionResources(command, 1u, &transitions[1]),
+        AGC_OK, "first image becomes copy source");
+    TEST_ASSERT_EQ(agcCmdCopyImageRegions(command, first, second, 1u,
+        &image_region), AGC_OK, "offset image rows record");
+    transitions[2].before = kAgcResourceUsageCopyDestination;
+    transitions[2].after = kAgcResourceUsageCopySource;
+    transitions[2].before_owner = kAgcResourceOwnerCompute;
+    TEST_ASSERT_EQ(agcCmdTransitionResources(command, 1u, &transitions[2]),
+        AGC_OK, "second image becomes copy source");
+    buffer_region.buffer_offset = 128u;
+    buffer_region.buffer_row_length = 0u;
+    buffer_region.buffer_image_height = 0u;
+    buffer_region.image_offset = (AgcOffset3D){0, 1, 0};
+    TEST_ASSERT_EQ(agcCmdCopyImageToBuffer(command, second, readback, 1u,
+        &buffer_region), AGC_OK, "image-to-buffer tight rows record");
+    transitions[3].before = kAgcResourceUsageCopyDestination;
+    transitions[3].after = kAgcResourceUsageHostRead;
+    transitions[3].before_owner = kAgcResourceOwnerCompute;
+    transitions[3].after_owner = kAgcResourceOwnerHost;
+    transitions[3].buffer_offset = 128u;
+    transitions[3].buffer_size = 48u;
+    TEST_ASSERT_EQ(agcCmdTransitionResources(command, 1u, &transitions[3]),
+        AGC_OK, "copied buffer rows become host-readable");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+        "region-copy command ends");
+    submit.command_buffer_count = 1u;
+    submit.command_buffers = &command;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
+        "region-copy command submits");
+    captured = agcDriverDebugLastAcbSubmit(&owner);
+    words = (const uint32_t *)(uintptr_t)captured->command_address;
+    TEST_ASSERT(captured != NULL && owner != UINT32_MAX,
+        "region-copy submission is captured by the generic backend");
+    TEST_ASSERT_EQ(runtime_count_opcode(words, captured->dword_count,
+        AGC_PM4_OP_DMA_DATA), 9u,
+        "three row copies are emitted for each transfer leg");
+    TEST_ASSERT_EQ(agcReadBuffer(readback, 128u, copied + 128u, 48u), AGC_OK,
+        "region-copy readback succeeds");
+
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+        "region-copy command resets");
+    TEST_ASSERT_EQ(agcDestroyFence(fence), AGC_OK,
+        "region-copy fence destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+        "region-copy command destroys");
+    TEST_ASSERT_EQ(agcDestroyImage(second), AGC_OK,
+        "region-copy second image destroys");
+    TEST_ASSERT_EQ(agcDestroyImage(first), AGC_OK,
+        "region-copy first image destroys");
+    TEST_ASSERT_EQ(agcDestroyBuffer(readback), AGC_OK,
+        "region-copy readback buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyBuffer(upload), AGC_OK,
+        "region-copy upload buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
+        "region-copy queue destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "region-copy device destroys");
 }
 
 static void test_runtime_compute_copy_shader_batch(void)
@@ -5896,6 +6275,10 @@ static void test_runtime_dynamic_graphics_state(void)
     AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
     AgcViewport viewport = AGC_VIEWPORT_INIT;
     AgcScissor scissor = AGC_SCISSOR_INIT;
+    AgcViewport viewport_array[2] = {
+        AGC_VIEWPORT_INIT, AGC_VIEWPORT_INIT};
+    AgcScissor scissor_array[2] = {
+        AGC_SCISSOR_INIT, AGC_SCISSOR_INIT};
     AgcDepthBias depth_bias = AGC_DEPTH_BIAS_INIT;
     AgcDepthStencilTargetBinding depth_target =
         AGC_DEPTH_STENCIL_TARGET_BINDING_INIT;
@@ -5929,7 +6312,8 @@ static void test_runtime_dynamic_graphics_state(void)
         AGC_DYNAMIC_STATE_SCISSOR_BIT |
         AGC_DYNAMIC_STATE_BLEND_CONSTANTS_BIT |
         AGC_DYNAMIC_STATE_STENCIL_REFERENCE_BIT |
-        AGC_DYNAMIC_STATE_DEPTH_BIAS_BIT;
+        AGC_DYNAMIC_STATE_DEPTH_BIAS_BIT |
+        AGC_DYNAMIC_STATE_LINE_WIDTH_BIT;
     TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc,
         &pipeline), AGC_OK, "dynamic-state graphics pipeline creates");
     buffer_desc.size = 64u;
@@ -5987,6 +6371,20 @@ static void test_runtime_dynamic_graphics_state(void)
         "valid viewport records");
     TEST_ASSERT_EQ(agcCmdSetScissor(command, &scissor), AGC_OK,
         "valid scissor records");
+    TEST_ASSERT_EQ(agcCmdSetViewportScissors(command, 0u,
+        viewport_array, scissor_array), AGC_ERROR_INVALID_ARGUMENT,
+        "viewport/scissor array rejects an empty update");
+    viewport_array[0] = viewport;
+    viewport_array[1] = viewport;
+    viewport_array[1].x = 640.0f;
+    viewport_array[1].width = 640.0f;
+    scissor_array[0] = scissor;
+    scissor_array[1] = scissor;
+    scissor_array[1].x = 640;
+    scissor_array[1].width = 640u;
+    TEST_ASSERT_EQ(agcCmdSetViewportScissors(command, 2u,
+        viewport_array, scissor_array), AGC_OK,
+        "two viewport/scissor pairs record atomically");
     TEST_ASSERT_EQ(agcCmdSetBlendConstants(command, blend_constants), AGC_OK,
         "valid blend constants record");
     TEST_ASSERT_EQ(agcCmdSetStencilReference(command, 3u, 7u), AGC_OK,
@@ -5999,6 +6397,11 @@ static void test_runtime_dynamic_graphics_state(void)
     depth_bias.slope_factor = -1.5f;
     TEST_ASSERT_EQ(agcCmdSetDepthBias(command, &depth_bias), AGC_OK,
         "valid dynamic depth bias records");
+    TEST_ASSERT_EQ(agcCmdSetLineWidth(command, 0.5f),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "invalid dynamic line width does not satisfy required state");
+    TEST_ASSERT_EQ(agcCmdSetLineWidth(command, 8.0f), AGC_OK,
+        "valid dynamic line width records");
     TEST_ASSERT_EQ(agcCmdDrawIndexed(command, 3u, 1u, 0u, 0, 0u), AGC_OK,
         "draw records after all required dynamic state");
     TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
@@ -6033,6 +6436,16 @@ static void test_runtime_dynamic_graphics_state(void)
         "dynamic depth bias emits its depth-format control");
     TEST_ASSERT_EQ(value, 0x000001e9u,
         "dynamic D32 depth-bias format control is exact");
+    TEST_ASSERT(runtime_find_context_register(words, captured->dword_count,
+        AGC_REG_PA_SU_LINE_CNTL, &value),
+        "dynamic line width emits its primitive-size register");
+    TEST_ASSERT_EQ(value, 64u,
+        "dynamic eight-pixel line width uses qualified 1/8-pixel units");
+    TEST_ASSERT(runtime_find_context_register(words, captured->dword_count,
+        AGC_REG_PA_SC_VPORT_SCISSOR_0_TL + 2u, &value),
+        "viewport/scissor array emits its second viewport scissor");
+    TEST_ASSERT_EQ(value, 640u,
+        "second viewport scissor preserves its horizontal origin");
     TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
         "dynamic-state command buffer resets");
     TEST_ASSERT_EQ(agcDestroyFence(fence), AGC_OK,
@@ -6220,6 +6633,7 @@ static void test_runtime_multisample_pipeline_state(void)
     AgcShader vs = create_shader(device, kAgcShaderStageVs);
     AgcShaderReflection ps_requirements = AGC_SHADER_REFLECTION_INIT;
     AgcShader ps;
+    AgcShader alpha_ps;
     AgcGraphicsPipelineDesc desc = AGC_GRAPHICS_PIPELINE_DESC_INIT;
     AgcMultisampleState multisample = AGC_MULTISAMPLE_STATE_INIT;
     AgcGraphicsPipeline pipeline = NULL;
@@ -6256,10 +6670,22 @@ static void test_runtime_multisample_pipeline_state(void)
     multisample.alpha_to_coverage_enable = 0u;
     multisample.alpha_to_one_enable = 1u;
     TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &pipeline),
-        AGC_ERROR_NOT_SUPPORTED,
-        "unqualified alpha-to-one fails closed");
+        AGC_ERROR_VALIDATION_FAILED,
+        "alpha-to-one requires matching shader reflection");
     TEST_ASSERT(pipeline == NULL,
-        "alpha-to-one rejection leaves pipeline output null");
+        "alpha-to-one reflection mismatch leaves pipeline output null");
+    ps_requirements.flags |= AGC_SHADER_REFLECTION_ALPHA_TO_ONE_BIT;
+    alpha_ps = create_shader_with_reflection(
+        device, kAgcShaderStagePs, &ps_requirements);
+    desc.pixel_shader = alpha_ps;
+    TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &pipeline),
+        AGC_OK, "reflected alpha-to-one creates pipeline");
+    TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(pipeline), AGC_OK,
+        "alpha-to-one pipeline destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(alpha_ps), AGC_OK,
+        "alpha-to-one pixel shader destroys");
+    pipeline = NULL;
+    desc.pixel_shader = ps;
     multisample.alpha_to_one_enable = 0u;
     multisample.sample_shading_enable = 0u;
     TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &pipeline),
@@ -6550,6 +6976,18 @@ static void test_runtime_graphics_pipeline_compatibility_matrix(void)
         TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &pipeline),
             AGC_ERROR_VALIDATION_FAILED,
             "unsupported attachment encoding fails closed");
+        attachments[0].format = AGC_FORMAT_RGBA8_UNORM;
+        desc.logic_operation_enable = 1u;
+        desc.logic_operation = AGC_LOGIC_OPERATION_XOR;
+        TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &pipeline),
+            AGC_OK, "logic operation creates a native pipeline");
+        TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(pipeline), AGC_OK,
+            "logic-operation pipeline destroys");
+        pipeline = NULL;
+        desc.logic_operation = AGC_LOGIC_OPERATION_COUNT;
+        TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &pipeline),
+            AGC_ERROR_INVALID_ARGUMENT,
+            "invalid logic operation fails before pipeline allocation");
         TEST_ASSERT_EQ(agcDestroyShader(ps), AGC_OK,
             "export-count pixel shader destroys");
     }
@@ -6600,6 +7038,9 @@ static void test_runtime_graphics_pipeline_compatibility_matrix(void)
     {
         AgcGraphicsPipelineDesc desc = AGC_GRAPHICS_PIPELINE_DESC_INIT;
         AgcRasterizationState rasterization = AGC_RASTERIZATION_STATE_INIT;
+        AgcDepthStencilPipelineState depth_stencil =
+            AGC_DEPTH_STENCIL_PIPELINE_STATE_INIT;
+        AgcDepthBias static_depth_bias = AGC_DEPTH_BIAS_INIT;
         AgcShader ps = create_shader(device, kAgcShaderStagePs);
         AgcGraphicsPipeline pipeline = NULL;
 
@@ -6608,37 +7049,54 @@ static void test_runtime_graphics_pipeline_compatibility_matrix(void)
         desc.rasterization = &rasterization;
         rasterization.polygon_mode = AGC_POLYGON_MODE_LINE;
         TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &pipeline),
-            AGC_ERROR_NOT_SUPPORTED,
-            "unqualified line polygon mode fails before pipeline creation");
-        TEST_ASSERT(pipeline == NULL,
-            "line polygon-mode rejection leaves pipeline output null");
+            AGC_OK, "line polygon mode creates a native pipeline");
+        TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(pipeline), AGC_OK,
+            "line polygon-mode pipeline destroys");
+        pipeline = NULL;
         rasterization.polygon_mode = AGC_POLYGON_MODE_POINT;
         TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &pipeline),
-            AGC_ERROR_NOT_SUPPORTED,
-            "unqualified point polygon mode fails before pipeline creation");
-        TEST_ASSERT(pipeline == NULL,
-            "point polygon-mode rejection leaves pipeline output null");
+            AGC_OK, "point polygon mode creates a native pipeline");
+        TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(pipeline), AGC_OK,
+            "point polygon-mode pipeline destroys");
+        pipeline = NULL;
         rasterization = (AgcRasterizationState)AGC_RASTERIZATION_STATE_INIT;
         rasterization.depth_clamp_enable = 1u;
         TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &pipeline),
-            AGC_ERROR_NOT_SUPPORTED,
-            "unqualified depth clamp fails before pipeline creation");
-        TEST_ASSERT(pipeline == NULL,
-            "depth-clamp rejection leaves pipeline output null");
+            AGC_OK, "depth clamp creates a native pipeline");
+        TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(pipeline), AGC_OK,
+            "depth-clamp pipeline destroys");
+        pipeline = NULL;
         rasterization = (AgcRasterizationState)AGC_RASTERIZATION_STATE_INIT;
         rasterization.rasterizer_discard_enable = 1u;
         TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &pipeline),
-            AGC_ERROR_NOT_SUPPORTED,
-            "unqualified rasterizer discard fails before pipeline creation");
-        TEST_ASSERT(pipeline == NULL,
-            "rasterizer-discard rejection leaves pipeline output null");
+            AGC_OK, "rasterizer discard creates a native pipeline");
+        TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(pipeline), AGC_OK,
+            "rasterizer-discard pipeline destroys");
+        pipeline = NULL;
         rasterization = (AgcRasterizationState)AGC_RASTERIZATION_STATE_INIT;
         rasterization.line_width = 2.0f;
         TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &pipeline),
-            AGC_ERROR_NOT_SUPPORTED,
-            "unqualified wide line fails before pipeline creation");
-        TEST_ASSERT(pipeline == NULL,
-            "wide-line rejection leaves pipeline output null");
+            AGC_OK, "wide line creates a native pipeline");
+        TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(pipeline), AGC_OK,
+            "wide-line pipeline destroys");
+        pipeline = NULL;
+        rasterization = (AgcRasterizationState)AGC_RASTERIZATION_STATE_INIT;
+        rasterization.depth_bias_enable = 1u;
+        depth_stencil.format = AGC_FORMAT_D32_FLOAT;
+        static_depth_bias.constant_factor = 2.0f;
+        static_depth_bias.clamp = 0.25f;
+        static_depth_bias.slope_factor = -1.5f;
+        desc.depth_stencil = &depth_stencil;
+        desc.static_depth_bias = &static_depth_bias;
+        TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &pipeline),
+            AGC_OK, "static depth bias creates a native pipeline");
+        TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(pipeline), AGC_OK,
+            "static-depth-bias pipeline destroys");
+        pipeline = NULL;
+        desc.static_depth_bias = NULL;
+        TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &pipeline),
+            AGC_ERROR_VALIDATION_FAILED,
+            "enabled depth bias without static or dynamic state fails closed");
         TEST_ASSERT_EQ(agcDestroyShader(ps), AGC_OK,
             "unqualified polygon-mode pixel shader destroys");
     }
@@ -6647,6 +7105,105 @@ static void test_runtime_graphics_pipeline_compatibility_matrix(void)
         "matrix vertex shader destroys");
     TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
         "graphics compatibility matrix device destroys");
+}
+
+static void test_runtime_pipeline_switching(void)
+{
+    AgcDevice device = create_device();
+    AgcShader vs = create_shader(device, kAgcShaderStageVs);
+    AgcShader ps = create_shader(device, kAgcShaderStagePs);
+    AgcShaderReflection cs_requirements = AGC_SHADER_REFLECTION_INIT;
+    AgcShader cs;
+    AgcGraphicsPipelineDesc graphics_desc = AGC_GRAPHICS_PIPELINE_DESC_INIT;
+    AgcComputePipelineDesc compute_desc = AGC_COMPUTE_PIPELINE_DESC_INIT;
+    AgcRasterizationState line_raster = AGC_RASTERIZATION_STATE_INIT;
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcGraphicsPipeline graphics_a = NULL;
+    AgcGraphicsPipeline graphics_b = NULL;
+    AgcComputePipeline compute_a = NULL;
+    AgcComputePipeline compute_b = NULL;
+    AgcCommandBuffer graphics_command = NULL;
+    AgcCommandBuffer compute_command = NULL;
+
+    cs_requirements.local_size_x = 1u;
+    cs_requirements.local_size_y = 1u;
+    cs_requirements.local_size_z = 1u;
+    cs = create_shader_with_reflection(
+        device, kAgcShaderStageCs, &cs_requirements);
+    graphics_desc.vertex_shader = vs;
+    graphics_desc.pixel_shader = ps;
+    TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &graphics_desc,
+        &graphics_a), AGC_OK, "first switchable graphics pipeline creates");
+    line_raster.polygon_mode = AGC_POLYGON_MODE_LINE;
+    graphics_desc.rasterization = &line_raster;
+    TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &graphics_desc,
+        &graphics_b), AGC_OK, "second switchable graphics pipeline creates");
+    compute_desc.shader = cs;
+    compute_desc.local_size_x = 1u;
+    compute_desc.local_size_y = 1u;
+    compute_desc.local_size_z = 1u;
+    TEST_ASSERT_EQ(agcCreateComputePipeline(device, &compute_desc,
+        &compute_a), AGC_OK, "first switchable compute pipeline creates");
+    TEST_ASSERT_EQ(agcCreateComputePipeline(device, &compute_desc,
+        &compute_b), AGC_OK, "second switchable compute pipeline creates");
+
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc,
+        &graphics_command), AGC_OK, "graphics switch command creates");
+    command_desc.queue_type = kAgcQueueCompute;
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc,
+        &compute_command), AGC_OK, "compute switch command creates");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(graphics_command), AGC_OK,
+        "graphics switch command begins");
+    TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(graphics_command, graphics_a),
+        AGC_OK, "graphics command binds first pipeline");
+    TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(graphics_command, graphics_b),
+        AGC_OK, "graphics command switches to second pipeline");
+    TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(graphics_command, graphics_a),
+        AGC_OK, "graphics command switches back to first pipeline");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(graphics_command), AGC_OK,
+        "graphics switch command ends");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(compute_command), AGC_OK,
+        "compute switch command begins");
+    TEST_ASSERT_EQ(agcCmdBindComputePipeline(compute_command, compute_a),
+        AGC_OK, "compute command binds first pipeline");
+    TEST_ASSERT_EQ(agcCmdBindComputePipeline(compute_command, compute_b),
+        AGC_OK, "compute command switches to second pipeline");
+    TEST_ASSERT_EQ(agcCmdBindComputePipeline(compute_command, compute_a),
+        AGC_OK, "compute command switches back to first pipeline");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(compute_command), AGC_OK,
+        "compute switch command ends");
+    TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(graphics_a), AGC_ERROR_BUSY,
+        "recorded first graphics pipeline remains retained");
+    TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(graphics_b), AGC_ERROR_BUSY,
+        "recorded second graphics pipeline remains retained");
+    TEST_ASSERT_EQ(agcDestroyComputePipeline(compute_a), AGC_ERROR_BUSY,
+        "recorded first compute pipeline remains retained");
+    TEST_ASSERT_EQ(agcDestroyComputePipeline(compute_b), AGC_ERROR_BUSY,
+        "recorded second compute pipeline remains retained");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(graphics_command), AGC_OK,
+        "graphics switch command releases both pipelines");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(compute_command), AGC_OK,
+        "compute switch command releases both pipelines");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(compute_command), AGC_OK,
+        "compute switch command destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(graphics_command), AGC_OK,
+        "graphics switch command destroys");
+    TEST_ASSERT_EQ(agcDestroyComputePipeline(compute_b), AGC_OK,
+        "second compute pipeline destroys");
+    TEST_ASSERT_EQ(agcDestroyComputePipeline(compute_a), AGC_OK,
+        "first compute pipeline destroys");
+    TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(graphics_b), AGC_OK,
+        "second graphics pipeline destroys");
+    TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(graphics_a), AGC_OK,
+        "first graphics pipeline destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(cs), AGC_OK,
+        "switching compute shader destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(ps), AGC_OK,
+        "switching pixel shader destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(vs), AGC_OK,
+        "switching vertex shader destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "pipeline-switching device destroys");
 }
 
 static void test_runtime_pipeline_layout_and_stage_validation(void)
@@ -7017,6 +7574,92 @@ static void test_runtime_indirect_descriptor_set_table(void)
         "indirect descriptor device destroys");
 }
 
+static void test_runtime_primitive_restart_pipeline(void)
+{
+    AgcDevice device = create_device();
+    AgcQueue queue = create_queue(device, kAgcQueueGraphics);
+    AgcShader vertex = create_shader(device, kAgcShaderStageVs);
+    AgcShader pixel = create_shader(device, kAgcShaderStagePs);
+    AgcGraphicsPipelineDesc pipeline_desc = AGC_GRAPHICS_PIPELINE_DESC_INIT;
+    AgcGraphicsPipeline pipeline = NULL;
+    AgcGraphicsPipeline invalid = NULL;
+    AgcBufferDesc buffer_desc = AGC_BUFFER_DESC_INIT;
+    AgcBuffer index_buffer = NULL;
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcCommandBuffer command = NULL;
+    AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    const AgcCommandBufferSubmit *captured;
+    const uint32_t *words;
+    uint32_t value = 0u;
+
+    pipeline_desc.vertex_shader = vertex;
+    pipeline_desc.pixel_shader = pixel;
+    pipeline_desc.primitive_topology =
+        AGC_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+    pipeline_desc.primitive_restart_enable = 1u;
+    TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc,
+        &pipeline), AGC_OK,
+        "strip primitive-restart pipeline creates");
+    pipeline_desc.primitive_topology =
+        AGC_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc,
+        &invalid), AGC_ERROR_VALIDATION_FAILED,
+        "list primitive restart fails closed without list-restart support");
+    TEST_ASSERT(invalid == NULL,
+        "rejected primitive-restart pipeline output remains null");
+
+    buffer_desc.size = 64u;
+    buffer_desc.usage = AGC_BUFFER_USAGE_INDEX_BIT;
+    TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &index_buffer),
+        AGC_OK, "primitive-restart index buffer creates");
+    command_desc.capacity_dwords = 4096u;
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
+        AGC_OK, "primitive-restart command buffer creates");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+        "primitive-restart command begins");
+    TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(command, pipeline), AGC_OK,
+        "primitive-restart pipeline binds");
+    TEST_ASSERT_EQ(runtime_transition_buffer_to_graphics_read(command,
+        index_buffer, buffer_desc.size, kAgcResourceUsageUndefined, 0u),
+        AGC_OK, "primitive-restart index buffer transitions");
+    TEST_ASSERT_EQ(agcCmdBindIndexBuffer(command, index_buffer, 0u,
+        kAgcIndexSize16), AGC_OK, "16-bit restart index buffer binds");
+    TEST_ASSERT_EQ(agcCmdDrawIndexed(command, 4u, 1u, 0u, 0, 0u),
+        AGC_OK, "16-bit primitive-restart draw records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+        "primitive-restart command ends");
+    submit.command_buffer_count = 1u;
+    submit.command_buffers = &command;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, NULL), AGC_OK,
+        "primitive-restart command submits");
+    captured = agcDriverDebugLastDcbSubmit();
+    words = (const uint32_t *)(uintptr_t)captured->command_address;
+    TEST_ASSERT(runtime_find_context_register(words, captured->dword_count,
+        AGC_REG_GE_MULTI_PRIM_IB_RESET_EN, &value) && value == 1u,
+        "pipeline bind enables primitive restart");
+    TEST_ASSERT(runtime_find_context_register(words, captured->dword_count,
+        AGC_REG_VGT_MULTI_PRIM_IB_RESET_INDX, &value) &&
+        value == UINT16_MAX,
+        "16-bit indexed draw programs the fixed restart index");
+
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+        "primitive-restart command resets");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+        "primitive-restart command destroys");
+    TEST_ASSERT_EQ(agcDestroyBuffer(index_buffer), AGC_OK,
+        "primitive-restart index buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(pipeline), AGC_OK,
+        "primitive-restart pipeline destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(pixel), AGC_OK,
+        "primitive-restart pixel shader destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(vertex), AGC_OK,
+        "primitive-restart vertex shader destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
+        "primitive-restart queue destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "primitive-restart device destroys");
+}
+
 static void test_runtime_geometry_pipeline_bundle(void)
 {
     AgcDevice device = create_device();
@@ -7058,6 +7701,7 @@ static void test_runtime_geometry_pipeline_bundle(void)
         device, kAgcShaderStagePs, &ps_requirements);
     pipeline_desc.geometry_shader = geometry;
     pipeline_desc.pixel_shader = pixel;
+    pipeline_desc.primitive_topology = AGC_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
     pipeline_desc.vertex_inputs = &vertex_input;
     pipeline_desc.vertex_input_count = 1u;
     TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc,
@@ -7149,6 +7793,7 @@ static void test_runtime_geometry_pipeline_bundle(void)
         device, kAgcShaderStagePs, &ps_requirements);
     pipeline_desc.geometry_shader = geometry;
     pipeline_desc.pixel_shader = pixel;
+    pipeline_desc.primitive_topology = AGC_PRIMITIVE_TOPOLOGY_LINE_LIST;
     pipeline = NULL;
     TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc,
         &pipeline), AGC_OK,
@@ -7202,6 +7847,7 @@ static void test_runtime_geometry_pipeline_bundle(void)
         AGC_SHADER_PRIMITIVE_TRIANGLE_STRIP;
     gs_requirements.geometry_vertices_in = 3u;
     gs_requirements.geometry_invocations = 2u;
+    pipeline_desc.primitive_topology = AGC_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
     geometry = create_ngg_shader_bundle(
         device, kAgcShaderStageGs, &gs_requirements);
     pixel = create_shader_with_reflection(
@@ -7225,45 +7871,50 @@ static void test_runtime_geometry_pipeline_bundle(void)
             AgcShaderPrimitiveTopology output;
             uint32_t vertices_in;
             uint32_t vertices_out;
-        } unqualified_topologies[] = {
+            AgcPrimitiveTopology topology;
+        } supported_topologies[] = {
             {AGC_SHADER_PRIMITIVE_POINTS, AGC_SHADER_PRIMITIVE_POINTS,
-             1u, 1u},
+             1u, 1u, AGC_PRIMITIVE_TOPOLOGY_POINT_LIST},
             {AGC_SHADER_PRIMITIVE_LINES_ADJACENCY,
-             AGC_SHADER_PRIMITIVE_LINE_STRIP, 4u, 4u},
+             AGC_SHADER_PRIMITIVE_LINE_STRIP, 4u, 4u,
+             AGC_PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY},
             {AGC_SHADER_PRIMITIVE_TRIANGLES_ADJACENCY,
-             AGC_SHADER_PRIMITIVE_TRIANGLE_STRIP, 6u, 6u},
+             AGC_SHADER_PRIMITIVE_TRIANGLE_STRIP, 6u, 6u,
+             AGC_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY},
             {AGC_SHADER_PRIMITIVE_TRIANGLES, AGC_SHADER_PRIMITIVE_POINTS,
-             3u, 1u},
+             3u, 1u, AGC_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST},
         };
         uint32_t i;
 
         gs_requirements.geometry_invocations = 1u;
-        for (i = 0u; i < sizeof(unqualified_topologies) /
-             sizeof(unqualified_topologies[0]); ++i) {
+        for (i = 0u; i < sizeof(supported_topologies) /
+             sizeof(supported_topologies[0]); ++i) {
             gs_requirements.geometry_input_primitive =
-                unqualified_topologies[i].input;
+                supported_topologies[i].input;
             gs_requirements.geometry_output_primitive =
-                unqualified_topologies[i].output;
+                supported_topologies[i].output;
             gs_requirements.geometry_vertices_in =
-                unqualified_topologies[i].vertices_in;
+                supported_topologies[i].vertices_in;
             gs_requirements.geometry_vertices_out =
-                unqualified_topologies[i].vertices_out;
+                supported_topologies[i].vertices_out;
             geometry = create_ngg_shader_bundle(
                 device, kAgcShaderStageGs, &gs_requirements);
             pixel = create_shader_with_reflection(
                 device, kAgcShaderStagePs, &ps_requirements);
             pipeline_desc.geometry_shader = geometry;
             pipeline_desc.pixel_shader = pixel;
+            pipeline_desc.primitive_topology =
+                supported_topologies[i].topology;
             pipeline = NULL;
             TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc,
-                &pipeline), AGC_ERROR_NOT_SUPPORTED,
-                "unqualified geometry topology fails before PM4 emission");
-            TEST_ASSERT(pipeline == NULL,
-                "unqualified geometry topology leaves pipeline output null");
+                &pipeline), AGC_OK,
+                "qualified geometry topology creates a native pipeline");
+            TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(pipeline), AGC_OK,
+                "qualified geometry topology pipeline destroys");
             TEST_ASSERT_EQ(agcDestroyShader(pixel), AGC_OK,
-                "unqualified geometry pixel shader destroys");
+                "qualified geometry pixel shader destroys");
             TEST_ASSERT_EQ(agcDestroyShader(geometry), AGC_OK,
-                "unqualified geometry bundle destroys");
+                "qualified geometry bundle destroys");
         }
     }
 
@@ -7271,6 +7922,7 @@ static void test_runtime_geometry_pipeline_bundle(void)
         AGC_SHADER_PRIMITIVE_TRIANGLES;
     gs_requirements.geometry_output_primitive =
         AGC_SHADER_PRIMITIVE_TRIANGLE_STRIP;
+    pipeline_desc.primitive_topology = AGC_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
     gs_requirements.geometry_vertices_in = 3u;
     gs_requirements.geometry_vertices_out = 3u;
     gs_requirements.scratch_bytes_per_wave = 256u;
@@ -7394,6 +8046,7 @@ static void test_runtime_tessellation_pipeline_bundles(void)
     pipeline_desc.tessellation_control_shader = hull;
     pipeline_desc.tessellation_evaluation_shader = evaluation;
     pipeline_desc.pixel_shader = pixel;
+    pipeline_desc.primitive_topology = AGC_PRIMITIVE_TOPOLOGY_PATCH_LIST;
     pipeline_desc.vertex_inputs = &vertex_input;
     pipeline_desc.vertex_input_count = 1u;
     pipeline_desc.push_constant_ranges = &hull_push_range;
@@ -7737,6 +8390,45 @@ static void test_runtime_ps5_image_layouts(void)
         "3D mip size includes every depth slice");
     TEST_ASSERT_EQ(layout.allocation_size & 0xffffu, 0u,
         "linear 3D aggregate retains 64-KiB allocation padding");
+    TEST_ASSERT_EQ(layout.alignment, 256u,
+        "linear image binding requires only qualified 256-byte alignment");
+
+    desc = (AgcImageDesc)AGC_IMAGE_DESC_INIT;
+    layout = (AgcImageLayout)AGC_IMAGE_LAYOUT_INIT;
+    desc.width = 64u;
+    desc.height = 32u;
+    desc.format = AGC_FORMAT_D16_UNORM;
+    desc.usage = AGC_IMAGE_USAGE_DEPTH_STENCIL_BIT |
+        AGC_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    desc.tiling = AGC_IMAGE_TILING_LINEAR;
+    TEST_ASSERT_EQ(agcGetImageLayout(device, &desc, &layout), AGC_OK,
+        "linear depth layout remains distinct from optimal depth tiling");
+    TEST_ASSERT_EQ(layout.alignment, 256u,
+        "linear depth layout is flexible-memory alignable");
+    TEST_ASSERT_EQ(layout.bytes_per_block, 2u,
+        "linear D16 layout preserves its element size");
+
+    {
+        const uint32_t formats[] = { AGC_FORMAT_R8_UNORM,
+            AGC_FORMAT_RG8_UNORM, AGC_FORMAT_RGB10A2_UNORM,
+            AGC_FORMAT_R16_FLOAT, AGC_FORMAT_RG16_FLOAT,
+            AGC_FORMAT_R32_FLOAT, AGC_FORMAT_RG32_FLOAT,
+            AGC_FORMAT_R11G11B10_FLOAT, AGC_FORMAT_BGRA8_SRGB };
+        const uint32_t bytes[] = { 1u, 2u, 4u, 2u, 4u, 4u, 8u, 4u, 4u };
+        uint32_t i;
+        for (i = 0u; i < sizeof(formats) / sizeof(formats[0]); ++i) {
+            desc = (AgcImageDesc)AGC_IMAGE_DESC_INIT;
+            layout = (AgcImageLayout)AGC_IMAGE_LAYOUT_INIT;
+            desc.width = 8u;
+            desc.height = 8u;
+            desc.format = formats[i];
+            desc.usage = AGC_IMAGE_USAGE_COLOR_TARGET_BIT;
+            TEST_ASSERT_EQ(agcGetImageLayout(device, &desc, &layout), AGC_OK,
+                "Vulkan color format has a native image layout");
+            TEST_ASSERT_EQ(layout.bytes_per_block, bytes[i],
+                "native Vulkan color format exposes the exact element size");
+        }
+    }
 
     desc = (AgcImageDesc)AGC_IMAGE_DESC_INIT;
     layout = (AgcImageLayout)AGC_IMAGE_LAYOUT_INIT;
@@ -8440,7 +9132,7 @@ static void test_runtime_present_chain(void)
 
     image_desc.width = 1920u;
     image_desc.height = 1080u;
-    image_desc.format = AGC_FORMAT_RGBA8_UNORM;
+    image_desc.format = AGC_FORMAT_BGRA8_SRGB;
     image_desc.usage = AGC_IMAGE_USAGE_SCANOUT_BIT |
         AGC_IMAGE_USAGE_COLOR_TARGET_BIT;
     TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &images[0]), AGC_OK,
@@ -8538,18 +9230,351 @@ static void test_runtime_present_chain(void)
         "present device destroys");
 }
 
+static void test_runtime_explicit_placed_memory(void)
+{
+    AgcDevice device = create_device();
+    AgcMemoryStats baseline = AGC_MEMORY_STATS_INIT;
+    AgcMemoryStats final = AGC_MEMORY_STATS_INIT;
+    AgcMemoryDesc memory_desc = AGC_MEMORY_DESC_INIT;
+    AgcBufferDesc buffer_desc = AGC_BUFFER_DESC_INIT;
+    AgcImageDesc image_desc = AGC_IMAGE_DESC_INIT;
+    AgcImageLayout image_layout = AGC_IMAGE_LAYOUT_INIT;
+    AgcMemory flexible = NULL;
+    AgcMemory garlic = NULL;
+    AgcBuffer first = NULL;
+    AgcBuffer second = NULL;
+    AgcBuffer invalid_buffer = NULL;
+    AgcImage image = NULL;
+    uint8_t pattern[64];
+    uint8_t readback[64];
+    uint8_t *mapped = NULL;
+    uint32_t i;
+
+    TEST_ASSERT_EQ(agcGetMemoryStats(device, &baseline), AGC_OK,
+        "placed-memory test records its allocator baseline");
+    memory_desc.size = 4096u;
+    memory_desc.heap = AGC_MEMORY_HEAP_FLEXIBLE;
+    memory_desc.alignment = 256u;
+    TEST_ASSERT_EQ(agcCreateMemory(device, &memory_desc, &flexible), AGC_OK,
+        "explicit flexible memory creates");
+    TEST_ASSERT_EQ(agcMapMemory(flexible, 0u, memory_desc.size,
+        (void **)&mapped), AGC_OK, "explicit memory maps an in-range span");
+    for (i = 0u; i < sizeof(pattern); ++i)
+        pattern[i] = (uint8_t)(i * 3u + 1u);
+    memcpy(mapped + 512u, pattern, sizeof(pattern));
+    TEST_ASSERT_EQ(agcFlushMemory(flexible, 512u, sizeof(pattern)), AGC_OK,
+        "explicit mapped bytes flush");
+    TEST_ASSERT_EQ(agcInvalidateMemory(flexible, 512u, sizeof(pattern)),
+        AGC_OK, "explicit mapped bytes invalidate");
+    TEST_ASSERT_EQ(agcUnmapMemory(flexible), AGC_OK,
+        "explicit memory unmaps");
+
+    buffer_desc.size = 512u;
+    buffer_desc.usage = AGC_BUFFER_USAGE_STORAGE_BIT |
+        AGC_BUFFER_USAGE_TRANSFER_SRC_BIT |
+        AGC_BUFFER_USAGE_TRANSFER_DST_BIT;
+    buffer_desc.flags = AGC_BUFFER_CREATE_UPLOAD_BIT;
+    TEST_ASSERT_EQ(agcCreatePlacedBuffer(device, &buffer_desc, flexible,
+        256u, &first), AGC_OK, "first placed buffer binds at an offset");
+    TEST_ASSERT_EQ(agcCreatePlacedBuffer(device, &buffer_desc, flexible,
+        512u, &second), AGC_OK,
+        "second placed buffer may alias the first buffer");
+    TEST_ASSERT_EQ(agcMapMemory(flexible, 0u, memory_desc.size,
+        (void **)&mapped), AGC_OK,
+        "explicit memory remaps for alias verification");
+    TEST_ASSERT(memcmp(mapped + 512u, pattern, sizeof(pattern)) == 0,
+        "placed buffer storage aliases mapped explicit memory");
+    TEST_ASSERT_EQ(agcWriteBuffer(second, 0u, pattern, sizeof(pattern)),
+        AGC_OK, "placed buffer writes through its binding offset");
+    TEST_ASSERT_EQ(agcUnmapMemory(flexible), AGC_OK,
+        "explicit memory unmaps after alias verification");
+    TEST_ASSERT_EQ(agcCreatePlacedBuffer(device, &buffer_desc, flexible,
+        1u, &invalid_buffer), AGC_ERROR_INVALID_ARGUMENT,
+        "placed buffer rejects a misaligned offset");
+    TEST_ASSERT_EQ(agcCreatePlacedBuffer(device, &buffer_desc, flexible,
+        3840u, &invalid_buffer), AGC_ERROR_INVALID_ARGUMENT,
+        "placed buffer rejects an out-of-range binding");
+    TEST_ASSERT_EQ(agcDestroyMemory(flexible), AGC_OK,
+        "destroying memory releases its handle before placed resources");
+    TEST_ASSERT_EQ(agcMapMemory(flexible, 0u, 1u, (void **)&mapped),
+        AGC_ERROR_INVALID_ARGUMENT, "released memory cannot be mapped again");
+    TEST_ASSERT_EQ(agcWriteBuffer(first, 256u, pattern, sizeof(pattern)),
+        AGC_OK, "placed resources retain storage after memory release");
+    TEST_ASSERT_EQ(agcDestroyBuffer(second), AGC_OK,
+        "second placed buffer releases its reference");
+    TEST_ASSERT_EQ(agcDestroyBuffer(first), AGC_OK,
+        "last placed buffer retires released memory storage");
+
+    image_desc.width = 8u;
+    image_desc.height = 8u;
+    image_desc.depth = 1u;
+    image_desc.mip_levels = 1u;
+    image_desc.array_layers = 1u;
+    image_desc.format = AGC_FORMAT_RGBA8_UNORM;
+    image_desc.sample_count = 1u;
+    image_desc.usage = AGC_IMAGE_USAGE_TRANSFER_SRC_BIT |
+        AGC_IMAGE_USAGE_TRANSFER_DST_BIT;
+    TEST_ASSERT_EQ(agcGetImageLayout(device, &image_desc, &image_layout),
+        AGC_OK, "placed image queries its required layout");
+    memory_desc.size = image_layout.alignment + image_layout.allocation_size;
+    memory_desc.heap = AGC_MEMORY_HEAP_GARLIC;
+    memory_desc.alignment = image_layout.alignment;
+    TEST_ASSERT_EQ(agcCreateMemory(device, &memory_desc, &garlic), AGC_OK,
+        "explicit garlic memory creates for an image");
+    TEST_ASSERT_EQ(agcCreatePlacedImage(device, &image_desc, garlic,
+        image_layout.alignment, &image), AGC_OK,
+        "placed image binds with queried alignment and size");
+    TEST_ASSERT_EQ(agcDestroyMemory(garlic), AGC_OK,
+        "placed image retains released explicit memory");
+    TEST_ASSERT_EQ(agcWriteImage(image, 0u, pattern, sizeof(pattern)), AGC_OK,
+        "placed image upload honors its memory offset");
+    memset(readback, 0, sizeof(readback));
+    TEST_ASSERT_EQ(agcReadImage(image, 0u, readback, sizeof(readback)), AGC_OK,
+        "placed image readback honors its memory offset");
+    TEST_ASSERT(memcmp(readback, pattern, sizeof(pattern)) == 0,
+        "placed image round-trips through explicit memory");
+    TEST_ASSERT_EQ(agcDestroyImage(image), AGC_OK,
+        "last placed image releases explicit memory storage");
+    TEST_ASSERT_EQ(agcGetMemoryStats(device, &final), AGC_OK,
+        "placed-memory test records final allocator state");
+    TEST_ASSERT_EQ(final.live_allocation_count, baseline.live_allocation_count,
+        "placed-memory allocation count returns exactly to baseline");
+    TEST_ASSERT_EQ(final.live_bytes, baseline.live_bytes,
+        "placed-memory live bytes return exactly to baseline");
+    TEST_ASSERT_EQ(final.deferred_free_count, baseline.deferred_free_count,
+        "placed-memory test leaves no deferred frees");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "placed-memory device destroys cleanly");
+}
+
+static void test_runtime_extended_image_view_and_sampler(void)
+{
+    AgcDevice device = create_device();
+    AgcImageDesc image_desc = AGC_IMAGE_DESC_INIT;
+    AgcImageViewDesc view_desc = AGC_IMAGE_VIEW_DESC_INIT;
+    AgcSamplerDesc sampler_desc = AGC_SAMPLER_DESC_INIT;
+    AgcAllocationInfo image_info = AGC_ALLOCATION_INFO_INIT;
+    AgcAllocationInfo view_info = AGC_ALLOCATION_INFO_INIT;
+    AgcAllocationInfo sampler_info = AGC_ALLOCATION_INFO_INIT;
+    AgcGfx1013Image2DState image_state = {0};
+    AgcGfx1013ImageDescriptor expected_view;
+    AgcSamplerDescriptor expected_sampler;
+    AgcImage image = NULL;
+    AgcImageView view = NULL;
+    AgcSampler sampler = NULL;
+
+    image_desc.width = 32u;
+    image_desc.height = 16u;
+    image_desc.format = AGC_FORMAT_RGBA8_UNORM;
+    image_desc.usage = AGC_IMAGE_USAGE_SAMPLED_BIT;
+    image_desc.tiling = AGC_IMAGE_TILING_LINEAR;
+    TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &image), AGC_OK,
+        "extended-view source image creates");
+    TEST_ASSERT_EQ(agcGetObjectAllocationInfo(device, AGC_OBJECT_TYPE_IMAGE,
+        image, &image_info), AGC_OK, "source image allocation is queryable");
+    view_desc.image = image;
+    view_desc.format = AGC_GFX1013_IMAGE_FORMAT_RGBA8_UNORM;
+    view_desc.swizzle_r = AGC_COMPONENT_SWIZZLE_B;
+    view_desc.swizzle_b = AGC_COMPONENT_SWIZZLE_R;
+    TEST_ASSERT_EQ(agcCreateImageView(device, &view_desc, &view), AGC_OK,
+        "v2 image view accepts explicit component swizzles");
+    TEST_ASSERT_EQ(agcGetObjectAllocationInfo(device,
+        AGC_OBJECT_TYPE_IMAGE_VIEW, view, &view_info), AGC_OK,
+        "swizzled image-view descriptor allocation is queryable");
+    image_state.address = image_info.gpu_address;
+    image_state.width = image_desc.width;
+    image_state.height = image_desc.height;
+    image_state.format = AGC_GFX1013_IMAGE_FORMAT_RGBA8_UNORM;
+    image_state.image_type = AGC_GFX1013_IMAGE_TYPE_2D;
+    image_state.dst_sel_x = 6u;
+    image_state.dst_sel_y = 5u;
+    image_state.dst_sel_z = 4u;
+    image_state.dst_sel_w = 7u;
+    image_state.sample_count = 1u;
+    image_state.mip_level_count = 1u;
+    TEST_ASSERT_EQ(agcGfx1013Image2DDescriptorEncode(&expected_view,
+        &image_state), AGC_OK, "expected swizzled view descriptor encodes");
+    TEST_ASSERT(memcmp(view_info.cpu_address, &expected_view,
+        sizeof(expected_view)) == 0,
+        "native image-view backing contains the exact swizzled descriptor");
+
+    sampler_desc.min_filter = AGC_FILTER_LINEAR;
+    sampler_desc.mag_filter = AGC_FILTER_NEAREST;
+    sampler_desc.address_u = AGC_ADDRESS_MODE_MIRRORED_REPEAT;
+    sampler_desc.address_v = AGC_ADDRESS_MODE_CLAMP_TO_BORDER;
+    sampler_desc.address_w = AGC_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE;
+    sampler_desc.mip_filter = AGC_MIP_FILTER_LINEAR;
+    sampler_desc.anisotropy_enable = 1u;
+    sampler_desc.max_anisotropy = 8u;
+    sampler_desc.compare_enable = 1u;
+    sampler_desc.compare_operation = AGC_COMPARE_OPERATION_LESS_OR_EQUAL;
+    sampler_desc.border_color = AGC_SAMPLER_BORDER_CUSTOM;
+    sampler_desc.custom_border_color_index = 7u;
+    sampler_desc.min_lod = 1.0f;
+    sampler_desc.max_lod = 5.0f;
+    sampler_desc.lod_bias = 0.5f;
+    TEST_ASSERT_EQ(agcCreateSampler(device, &sampler_desc, &sampler), AGC_OK,
+        "v2 sampler accepts mip, anisotropy, compare, wrap, and custom border state");
+    TEST_ASSERT_EQ(agcGetObjectAllocationInfo(device, AGC_OBJECT_TYPE_SAMPLER,
+        sampler, &sampler_info), AGC_OK,
+        "extended sampler descriptor allocation is queryable");
+    agcSamplerDescriptorInit(&expected_sampler);
+    agcSamplerDescriptorSetFilterMode(&expected_sampler,
+        kAgcFilterAnisoLinear, kAgcFilterAnisoPoint, kAgcMipFilterLinear);
+    agcSamplerDescriptorSetClampMode(&expected_sampler, kAgcClampMirror,
+        kAgcClampBorder, kAgcClampMirrorOnce);
+    agcSamplerDescriptorSetLod(&expected_sampler, 1.0f, 5.0f, 0.5f);
+    agcSamplerDescriptorSetMaxAnisotropy(&expected_sampler, 8u);
+    agcSamplerDescriptorSetCompareFunc(&expected_sampler,
+        AGC_COMPARE_OPERATION_LESS_OR_EQUAL);
+    TEST_ASSERT_EQ(agcSamplerDescriptorSetCustomBorderColor(&expected_sampler,
+        7u), AGC_OK, "expected custom-border sampler descriptor encodes");
+    TEST_ASSERT(memcmp(sampler_info.cpu_address, &expected_sampler,
+        sizeof(expected_sampler)) == 0,
+        "native sampler backing matches the complete normalized descriptor");
+
+    TEST_ASSERT_EQ(agcDestroySampler(sampler), AGC_OK,
+        "extended sampler destroys");
+    TEST_ASSERT_EQ(agcDestroyImageView(view), AGC_OK,
+        "extended image view destroys");
+    TEST_ASSERT_EQ(agcDestroyImage(image), AGC_OK,
+        "extended-view source image destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "extended resource device destroys");
+}
+
+static void test_runtime_occlusion_query_commands(void)
+{
+    AgcDevice device = create_device();
+    AgcOcclusionQueryLayout layout = AGC_OCCLUSION_QUERY_LAYOUT_INIT;
+    AgcOcclusionQueryResult query_result = AGC_OCCLUSION_QUERY_RESULT_INIT;
+    AgcBufferDesc buffer_desc = AGC_BUFFER_DESC_INIT;
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcAllocationInfo buffer_info = AGC_ALLOCATION_INFO_INIT;
+    AgcResourceStateInfo state = AGC_RESOURCE_STATE_INFO_INIT;
+    AgcBuffer query_buffer = NULL;
+    AgcBuffer wrong_buffer = NULL;
+    AgcCommandBuffer command = NULL;
+    uint8_t *records;
+    uint32_t rb;
+
+    TEST_ASSERT_EQ(agcGetOcclusionQueryLayout(device, &layout), AGC_OK,
+        "occlusion query layout is queryable without backend constants");
+    TEST_ASSERT(layout.record_size >=
+        AGC_GFX1013_OCCLUSION_QUERY_STRIDE + sizeof(uint32_t),
+        "occlusion query record includes snapshots and availability");
+    TEST_ASSERT_EQ(layout.alignment, 8u,
+        "occlusion query records retain snapshot alignment");
+
+    buffer_desc.size = layout.record_size * 2u;
+    buffer_desc.usage = AGC_BUFFER_USAGE_QUERY_BIT;
+    buffer_desc.flags = AGC_BUFFER_CREATE_UPLOAD_BIT |
+        AGC_BUFFER_CREATE_READBACK_BIT;
+    TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &query_buffer),
+        AGC_OK, "typed query buffer creates with host reset/readback access");
+    TEST_ASSERT_EQ(agcResetOcclusionQueryResults(query_buffer, 0u, 2u),
+        AGC_OK, "host query reset clears complete opaque records");
+    TEST_ASSERT_EQ(agcGetBufferStateInfo(query_buffer, &state), AGC_OK,
+        "host-reset query buffer state is queryable");
+    TEST_ASSERT_EQ(state.usage, kAgcResourceUsageHostWrite,
+        "host query reset records HostWrite state");
+    TEST_ASSERT_EQ(agcGetOcclusionQueryResult(query_buffer,
+        layout.record_size, 0u, &query_result), AGC_ERROR_BUSY,
+        "zero-time query poll reports an unavailable result without waiting");
+
+    buffer_desc.usage = AGC_BUFFER_USAGE_STORAGE_BIT;
+    buffer_desc.flags = 0u;
+    TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &wrong_buffer),
+        AGC_OK, "non-query control buffer creates");
+    command_desc.queue_type = kAgcQueueGraphics;
+    command_desc.capacity_dwords = 4096u;
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
+        AGC_OK, "query graphics command buffer creates");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+        "query graphics command buffer begins");
+    TEST_ASSERT_EQ(agcCmdBeginOcclusionQuery(command, wrong_buffer, 0u, 0u),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "query begin rejects a buffer without typed query usage");
+    TEST_ASSERT_EQ(agcCmdResetOcclusionQueries(command, query_buffer, 0u, 2u),
+        AGC_OK, "GPU query reset acquires and clears two records");
+    state = (AgcResourceStateInfo)AGC_RESOURCE_STATE_INFO_INIT;
+    TEST_ASSERT_EQ(agcGetCommandBufferRangeStateInfo(command, query_buffer,
+        layout.record_size, layout.record_size, &state), AGC_OK,
+        "command-local range query observes recorded transitions");
+    TEST_ASSERT_EQ(state.usage, kAgcResourceUsageQueryWrite,
+        "command-local range state reports the effective query usage");
+    TEST_ASSERT_EQ(agcCmdBeginOcclusionQuery(command, query_buffer,
+        layout.record_size, 1u), AGC_OK,
+        "precise occlusion query begins through a typed buffer offset");
+    TEST_ASSERT_EQ(agcCmdEndOcclusionQuery(command, query_buffer,
+        layout.record_size), AGC_OK,
+        "occlusion query end records snapshot and EOP availability");
+    TEST_ASSERT_EQ(agcCmdBeginOcclusionQuery(command, query_buffer,
+        layout.record_size * 2u, 0u), AGC_ERROR_INVALID_ARGUMENT,
+        "query begin rejects an out-of-bounds opaque record");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+        "query graphics command buffer ends");
+    TEST_ASSERT_EQ(agcDestroyBuffer(query_buffer), AGC_ERROR_BUSY,
+        "recorded query storage is retained until command recycling");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+        "query command recycling releases retained storage");
+
+    TEST_ASSERT_EQ(agcGetObjectAllocationInfo(device, AGC_OBJECT_TYPE_BUFFER,
+        query_buffer, &buffer_info), AGC_OK,
+        "query backing is inspectable for generic result execution");
+    records = (uint8_t *)buffer_info.cpu_address + layout.record_size;
+    for (rb = 0u; rb < AGC_GFX1013_OCCLUSION_QUERY_MAX_RBS; ++rb) {
+        uint64_t begin = (UINT64_C(1) << 63u) | (10u + rb);
+        uint64_t end = (UINT64_C(1) << 63u) | (20u + rb);
+        memcpy(records + rb * 16u, &begin, sizeof(begin));
+        memcpy(records + rb * 16u + 8u, &end, sizeof(end));
+    }
+    {
+        const uint32_t available = 1u;
+        memcpy(records + AGC_GFX1013_OCCLUSION_QUERY_STRIDE,
+            &available, sizeof(available));
+    }
+    query_result = (AgcOcclusionQueryResult)
+        AGC_OCCLUSION_QUERY_RESULT_INIT;
+    TEST_ASSERT_EQ(agcGetOcclusionQueryResult(query_buffer,
+        layout.record_size, 0u, &query_result), AGC_OK,
+        "available query record reduces without a CPU-side backend layout");
+    TEST_ASSERT_EQ(query_result.available, 1u,
+        "available query result reports availability");
+    TEST_ASSERT_EQ(query_result.value,
+        10u * AGC_GFX1013_OCCLUSION_QUERY_MAX_RBS,
+        "query result reduces all active render-backend counters");
+    TEST_ASSERT_EQ(agcGetBufferRangeStateInfo(query_buffer,
+        layout.record_size, layout.record_size, &state), AGC_OK,
+        "read query record state is queryable");
+    TEST_ASSERT_EQ(state.usage, kAgcResourceUsageHostRead,
+        "successful query result read records HostRead state");
+
+    TEST_ASSERT_EQ(agcDestroyBuffer(wrong_buffer), AGC_OK,
+        "non-query control buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyBuffer(query_buffer), AGC_OK,
+        "recycled query storage destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+        "query command buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "query device destroys cleanly");
+}
+
 void test_suite_runtime(void)
 {
     TEST_SUITE("Firmware-neutral Native Runtime");
     TEST_RUN(test_runtime_descriptor_and_info_contract);
+    TEST_RUN(test_runtime_multiple_logical_devices);
     TEST_RUN(test_runtime_optional_debug_callback);
     TEST_RUN(test_runtime_invalid_program_diagnostic_matrix);
     TEST_RUN(test_runtime_capture_v1_stream);
     TEST_RUN(test_runtime_capture_shader_bytes_opt_in);
     TEST_RUN(test_runtime_shader_reflection_contract);
     TEST_RUN(test_runtime_graphics_pipeline_compatibility_matrix);
+    TEST_RUN(test_runtime_pipeline_switching);
     TEST_RUN(test_runtime_pipeline_layout_and_stage_validation);
     TEST_RUN(test_runtime_indirect_descriptor_set_table);
+    TEST_RUN(test_runtime_primitive_restart_pipeline);
     TEST_RUN(test_runtime_geometry_pipeline_bundle);
     TEST_RUN(test_runtime_tessellation_pipeline_bundles);
     TEST_RUN(test_runtime_allocation_callbacks);
@@ -8558,6 +9583,7 @@ void test_suite_runtime(void)
     TEST_RUN(test_runtime_all_object_lifecycle);
     TEST_RUN(test_runtime_fence_and_command_states);
     TEST_RUN(test_runtime_compute_submission);
+    TEST_RUN(test_runtime_compute_on_graphics_queue);
     TEST_RUN(test_runtime_empty_submission_eop_diagnostic);
     TEST_RUN(test_runtime_compiler_reflection_sidecar);
     TEST_RUN(test_runtime_compiler_graphics_sidecar);
@@ -8569,7 +9595,8 @@ void test_suite_runtime(void)
     TEST_RUN(test_runtime_copy_buffer_submission);
     TEST_RUN(test_runtime_buffer_range_fragmentation);
     TEST_RUN(test_runtime_image_subresource_states);
-    TEST_RUN(test_runtime_copy_image_submission);
+TEST_RUN(test_runtime_copy_image_submission);
+TEST_RUN(test_runtime_image_region_and_buffer_copies);
     TEST_RUN(test_runtime_compute_copy_shader_batch);
     TEST_RUN(test_runtime_gpu_labels);
     TEST_RUN(test_runtime_gpu_label_timeline_waits);
@@ -8588,6 +9615,9 @@ void test_suite_runtime(void)
     TEST_RUN(test_runtime_ps5_image_layouts);
     TEST_RUN(test_runtime_all_backing_categories);
     TEST_RUN(test_runtime_heap_staging_and_stats);
+    TEST_RUN(test_runtime_explicit_placed_memory);
+    TEST_RUN(test_runtime_extended_image_view_and_sampler);
+    TEST_RUN(test_runtime_occlusion_query_commands);
     TEST_RUN(test_runtime_fence_deferred_free);
     TEST_RUN(test_runtime_batch_deferred_retirement_stress);
     TEST_RUN(test_runtime_present_chain);

@@ -181,6 +181,22 @@ four-megabyte host fixture locks three-packet splitting; exact standard-PS5 FW
 passed twice with exact 256-word readback. See
 [`runtime_image_copy_fw550_20260731.md`](../analysis/runtime_image_copy_fw550_20260731.md).
 
+Runtime API v41 adds `agcCmdCopyImageRegions`, `agcCmdCopyBufferToImage`, and
+`agcCmdCopyImageToBuffer`. Each region names an image mip, array-layer span,
+signed texel offset, and extent; buffer/image regions additionally name a byte
+offset plus Vulkan-style row-length and image-height strides, where zero means
+tightly packed. The runtime derives every image row from
+`agcGetImageSubresourceLayout`, converts BC texels to blocks, permits a partial
+final BC block only at the mip edge, verifies the complete final buffer
+footprint, and reserves every row packet and resource retain before writing
+the command stream. Both resources must already be in queue-owned typed copy
+state. Single-plane color and BC images with one sample are supported. Depth,
+stencil, metadata-bearing, multisample, format-converting, blit, clear, and
+resolve transfers return a fail-closed error until dedicated native contracts
+are qualified. The generic backend intentionally records rather than executes
+GPU DMA; host coverage therefore checks the exact row-packet count and
+lifecycle, while pixel results remain an FW 5.50 hardware oracle.
+
 Runtime API v13 adds an opaque `AgcPresentChain`. Creation accepts two to 16
 distinct, device-owned 1920x1080 linear `RGBA8_UNORM` images carrying
 `AGC_IMAGE_USAGE_SCANOUT_BIT`; the runtime validates their common pitch,

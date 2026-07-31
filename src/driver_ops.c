@@ -227,6 +227,12 @@ int32_t PS5_SYSV_ABI _sceAgcDriverDestroyUserSpecialQueue(void)
     AGC_DISPATCH_OR_UNSUPPORTED(destroy_user_special_queue, ());
 }
 
+int32_t agcDriverDestroyUserSpecialQueueHandle(int32_t handle)
+{
+    AGC_DISPATCH_OR_UNSUPPORTED(
+        destroy_user_special_queue_handle, (handle));
+}
+
 int32_t PS5_SYSV_ABI sceAgcDriverRegisterCaptureInterface(void)
 {
     AGC_DISPATCH_OR_UNSUPPORTED(register_capture_interface, ());

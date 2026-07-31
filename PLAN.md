@@ -79,8 +79,10 @@ expert use, but make the native API the recommended application surface.
    SHA-256 `e04004fee2254e6169805f153ce4812197726ed5f53a9295a4493f0d8ac9a9ce`
    passed twice as identical bytes on both FW 5.50 and FW 11.60 after their
    cleanup stress prerequisites. Preserve this exact artifact as regression
-   evidence. Milestones 1 through 5 are complete; Milestone 6's firmware-
-   neutral reference game is now the active product task.
+   evidence. Milestones 1 through 5 are complete. Milestone 6's firmware-
+   neutral reference game is kept in view (KIV): its host integration work is
+   retained, but endpoint discovery is deferred until a stable graphics
+   readback path is available. Milestone 7 is the active product task.
 2. **Do not reopen completed format work.** All R/RG/RGBA16
    UNORM/SNORM/UINT/SINT tuples, all six 32-bit UINT/SINT color tuples, all 14
    BC1-BC7 sampling encodings, the planned D16/D32/S8/HTILE progression, and
@@ -99,7 +101,7 @@ expert use, but make the native API the recommended application surface.
    and pipeline validation must reject incompatible exports, formats, blend
    state, descriptor layouts, sample counts, and stage linkage before command
    emission. This precedes broad state-object or Vulkan feature expansion.
-5. **Stabilize the native API before repairing `../Vulkan-PS5`.** Vulkan must
+5. **Repair `../Vulkan-PS5` above the stable native API.** Vulkan must
    translate into OpenAGC objects and capabilities; it must not grow a second
    PM4 backend, allocator, firmware selector, or synchronization model.
 6. **Documentation and validation are part of every milestone.** Do not defer
@@ -560,6 +562,14 @@ four-megabyte copy. Exact artifact
 passed twice on standard PS5 FW 5.50 with exact 256-word readback and complete
 teardown; see `analysis/runtime_image_copy_fw550_20260731.md`.
 
+Runtime API v41 generalizes the transfer contract without exposing PM4 or GPU
+addresses. `agcCmdCopyImageRegions`, `agcCmdCopyBufferToImage`, and
+`agcCmdCopyImageToBuffer` consume versioned regions, queried subresource
+layouts, explicit row/image strides, and typed copy states. Host coverage now
+includes offset color rows and BC-aware mip/block validation. Keep
+depth/stencil, metadata-bearing, multisample, blit, clear, and resolve forms
+fail-closed until their native tiled operations and FW 5.50 gates exist.
+
 Descriptor tables now fail closed before command emission unless their
 resources have an explicit compatible typed state on the recording queue.
 Read-only descriptor types require `shader-read`; storage descriptors accept
@@ -610,6 +620,14 @@ then stopped returning and made the console services
 unreachable, so it is not qualification evidence and must not be rerun.
 Resume only through the replacement five-stage guarded ladder after reboot;
 see `analysis/runtime_present_attempt_fw550_20260731.md`.
+
+Runtime API v40 also admits the hardware-qualified `BGRA8_SRGB` encoding to
+this native scanout boundary. Vulkan-PS5 consumes it for its frozen WSI surface
+format; the generic present-chain test covers registration and state
+transitions. The rebuilt combined Vulkan ELF
+`0b1d87d02a5fbe480cc74890c613752bb55c2e7b5f4e729413314785e5302888`
+then passed its cleanup-first 1,800-frame FW 5.500.008 presentation and clean
+lifecycle gate. FW 11.60 replay remains deferred until that endpoint returns.
 
 Runtime API v14 closes the deferred-retirement contract gap exposed by the
 exit audit. Submitted buffer/image references may now enter fence-keyed
@@ -844,7 +862,7 @@ passes 17,437 assertions, all CTest gates, and the Prospero build. This
 host-defined milestone changes no GPU packet/profile policy and requires no new
 PS5 replay.
 
-### Milestone 6: build a firmware-neutral reference game
+### Milestone 6: build a firmware-neutral reference game — KIV
 
 Build a small source-available game-like workload with the native API rather
 than another one-feature probe. Keep focused hardware samples for isolation,
@@ -871,11 +889,24 @@ Exit criteria: the same hash-identical ELF completes cold boot, a bounded
 long-run test, repeated level reloads, teardown, and relaunch on both endpoint
 firmwares with stable memory high-water marks and deterministic frame oracles.
 
-### Milestone 7: rehabilitate `../Vulkan-PS5` above the native runtime
+Current evidence: Reference Arena's generic CTest gates cover reproducible
+assets/shaders, mode/scheduling/hash policy, public-source audit, guarded
+runner failure paths, capture decoding, A-to-B-to-A deferred retirement, and
+all 180 long-mode reload windows. These results deliberately do not establish
+a pixel oracle, frozen frame hashes, a pinned ELF, or any endpoint hardware
+result. FW 5.50 discovery visibly exercises the compute halo, but visible-row
+readback hashes differ across clean launches. Do not freeze those values, pin
+the current ELF, or count the runs as hardware qualification. Resume this
+milestone only after the graphics/readback determinism issue can be isolated
+without weakening the identical-byte endpoint requirements.
 
-Begin only after Milestones 1-5 are stable and the reference game has exercised
-the runtime contracts. First audit `../Vulkan-PS5`; retain useful API-facing
-code, but remove or replace duplicated PM4 emission, firmware checks, memory
+### Milestone 7: rehabilitate `../Vulkan-PS5` above the native runtime — active
+
+Milestones 1-5 are stable. The Reference Arena remains an integration gate but
+is KIV pending deterministic endpoint readback; it is not a prerequisite for
+starting this constrained Vulkan audit. First audit `../Vulkan-PS5`; retain
+useful API-facing code, but remove or replace duplicated PM4 emission,
+firmware checks, memory
 allocation, transition logic, shader metadata interpretation, and queue/fence
 ownership.
 

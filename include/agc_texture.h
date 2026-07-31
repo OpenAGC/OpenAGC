@@ -622,6 +622,8 @@ void agcSamplerDescriptorSetFilterMode(AgcSamplerDescriptor *desc,
     AgcFilterMode min_filter, AgcFilterMode mag_filter, AgcMipFilterMode mip_filter);
 void agcSamplerDescriptorSetBorderColor(AgcSamplerDescriptor *desc,
     AgcBorderColor border_color);
+int32_t PS5_SYSV_ABI agcSamplerDescriptorSetCustomBorderColor(
+    AgcSamplerDescriptor *desc, uint32_t table_index);
 void agcSamplerDescriptorSetMaxAnisotropy(AgcSamplerDescriptor *desc,
     uint32_t max_aniso);
 
