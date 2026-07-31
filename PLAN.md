@@ -910,6 +910,14 @@ firmware checks, memory
 allocation, transition logic, shader metadata interpretation, and queue/fence
 ownership.
 
+Current checkpoint: Vulkan shader binaries are fully owned by `AgcShader`, and
+direct/indexed, geometry/tessellation, and compute dispatch recording is
+native-only. Pipeline switches now rebind typed descriptor and vertex state.
+The sibling migration audit is 26 direct symbols; proceed with descriptor-table
+and tessellation-resource ownership, then delete the legacy command/submission
+path to reach exactly zero. FW 5.50 qualification remains first; FW 11.60 is
+deferred until that endpoint is available.
+
 Implement and publish an explicit constrained feature profile for common
 homebrew needs:
 
