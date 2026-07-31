@@ -152,6 +152,7 @@ typedef struct AgcRuntimePipelineResourceLayout {
     uint32_t descriptor_element_count;
     uint32_t vertex_binding_mask;
     uint32_t push_constant_size;
+    uint32_t push_constant_stride;
     uint32_t uses_indirect_set_table;
 } AgcRuntimePipelineResourceLayout;
 
@@ -5326,12 +5327,20 @@ static int32_t agcPipelineBuildResourceLayout(
             return AGC_ERROR_VALIDATION_FAILED;
     }
     if (push_constant_size != 0u) {
+        uint64_t push_constant_stride;
+        uint64_t push_constant_span;
         if (!agcAlignU64(offset, 16u, &offset))
             return AGC_ERROR_VALIDATION_FAILED;
         layout->push_constant_offset = offset;
         layout->push_constant_size = push_constant_size;
-        if (!agcAddU64(offset, push_constant_size, &offset))
+        if (!agcAlignU64(push_constant_size, 16u,
+                &push_constant_stride) ||
+            push_constant_stride > UINT32_MAX ||
+            !agcMulU64(push_constant_stride, kAgcShaderStageCount,
+                &push_constant_span) ||
+            !agcAddU64(offset, push_constant_span, &offset))
             return AGC_ERROR_VALIDATION_FAILED;
+        layout->push_constant_stride = (uint32_t)push_constant_stride;
     }
     if (!agcAlignU64(offset, 256u, &layout->total_size) ||
         layout->total_size > AGC_RUNTIME_MAX_RESOURCE_ARENA_SIZE)
@@ -10763,11 +10772,18 @@ int32_t PS5_SYSV_ABI agcCmdPushConstants(AgcCommandBuffer command_buffer,
         if (!covered)
             return AGC_ERROR_VALIDATION_FAILED;
     }
-    memcpy((uint8_t *)agcAllocationCpuAddress(
-            command_buffer->resource_allocation) +
-            layout->push_constant_offset + offset, data, size);
+    for (stage = 0u; stage < kAgcShaderStageCount; ++stage) {
+        if ((stage_mask & (1u << stage)) == 0u)
+            continue;
+        memcpy((uint8_t *)agcAllocationCpuAddress(
+                command_buffer->resource_allocation) +
+                layout->push_constant_offset +
+                (uint64_t)stage * layout->push_constant_stride + offset,
+            data, size);
+    }
     result = agcFlushRuntimeAllocation(command_buffer->resource_allocation,
-        layout->push_constant_offset + offset, size);
+        layout->push_constant_offset,
+        (uint64_t)layout->push_constant_stride * kAgcShaderStageCount);
     if (result != AGC_OK)
         return result;
     mask = size == 256u ? UINT64_MAX :
@@ -10849,7 +10865,8 @@ static int32_t agcCommandUserSgprValue(AgcCommandBuffer command_buffer,
     case AGC_SHADER_USER_SGPR_PUSH_CONSTANT_POINTER:
         if (!gpu_base || layout->push_constant_size == 0u)
             return AGC_ERROR_RESOURCE_NOT_BOUND;
-        *value = (uint32_t)(gpu_base + layout->push_constant_offset);
+        *value = (uint32_t)(gpu_base + layout->push_constant_offset +
+            (uint64_t)shader->stage * layout->push_constant_stride);
         return AGC_OK;
     case AGC_SHADER_USER_SGPR_INLINE_PUSH_CONSTANT:
         if (!cpu_base || sgpr->index >= 64u ||
@@ -10857,6 +10874,7 @@ static int32_t agcCommandUserSgprValue(AgcCommandBuffer command_buffer,
              (UINT64_C(1) << sgpr->index)) == 0u)
             return AGC_ERROR_RESOURCE_NOT_BOUND;
         memcpy(value, cpu_base + layout->push_constant_offset +
+            (uint64_t)shader->stage * layout->push_constant_stride +
             sgpr->index * sizeof(uint32_t), sizeof(*value));
         return AGC_OK;
     case AGC_SHADER_USER_SGPR_VERTEX_BUFFER_TABLE:

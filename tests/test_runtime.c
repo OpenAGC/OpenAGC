@@ -9484,6 +9484,108 @@ static void test_runtime_extended_image_view_and_sampler(void)
         "extended resource device destroys");
 }
 
+static void test_runtime_stage_distinct_push_constants(void)
+{
+    AgcDevice device = create_device();
+    AgcQueue queue = create_queue(device, kAgcQueueGraphics);
+    AgcShaderReflection vs_reflection = AGC_SHADER_REFLECTION_INIT;
+    AgcShaderReflection ps_reflection = AGC_SHADER_REFLECTION_INIT;
+    const AgcShaderPushConstantRange push_range = {
+        0u, 4u, 4u,
+        (1u << kAgcShaderStageVs) | (1u << kAgcShaderStagePs)};
+    AgcGraphicsPipelineDesc pipeline_desc = AGC_GRAPHICS_PIPELINE_DESC_INIT;
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    AgcGraphicsPipeline pipeline = NULL;
+    AgcCommandBuffer command = NULL;
+    AgcShader vs;
+    AgcShader ps;
+    const AgcCommandBufferSubmit *captured;
+    const uint32_t *words;
+    const uint32_t vs_value = UINT32_C(0x11223344);
+    const uint32_t ps_value = UINT32_C(0xaabbccdd);
+    uint32_t value = 0u;
+
+    vs_reflection.push_constant_size = 4u;
+    vs_reflection.push_constant_alignment = 4u;
+    vs_reflection.push_constant_range_count = 1u;
+    vs_reflection.push_constant_ranges[0] = push_range;
+    vs_reflection.inline_push_constant_mask = 1u;
+    vs_reflection.user_sgpr_count = 1u;
+    vs_reflection.user_sgprs[0] = (AgcShaderUserSgpr){
+        AGC_SHADER_USER_SGPR_INLINE_PUSH_CONSTANT, 0u,
+        AGC_REG_SPI_SHADER_USER_DATA_GS_0 + 7u, 1u};
+    ps_reflection.push_constant_size = 4u;
+    ps_reflection.push_constant_alignment = 4u;
+    ps_reflection.push_constant_range_count = 1u;
+    ps_reflection.push_constant_ranges[0] = push_range;
+    ps_reflection.inline_push_constant_mask = 1u;
+    ps_reflection.user_sgpr_count = 1u;
+    ps_reflection.user_sgprs[0] = (AgcShaderUserSgpr){
+        AGC_SHADER_USER_SGPR_INLINE_PUSH_CONSTANT, 0u,
+        AGC_REG_SPI_SHADER_USER_DATA_PS_0 + 7u, 1u};
+    vs = create_shader_with_reflection(
+        device, kAgcShaderStageVs, &vs_reflection);
+    ps = create_shader_with_reflection(
+        device, kAgcShaderStagePs, &ps_reflection);
+    pipeline_desc.vertex_shader = vs;
+    pipeline_desc.pixel_shader = ps;
+    pipeline_desc.push_constant_ranges = &push_range;
+    pipeline_desc.push_constant_range_count = 1u;
+    TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc,
+        &pipeline), AGC_OK,
+        "stage-distinct push-constant pipeline creates");
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
+        AGC_OK, "stage-distinct push-constant command buffer creates");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+        "stage-distinct push-constant command buffer begins");
+    TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(command, pipeline), AGC_OK,
+        "stage-distinct push-constant pipeline binds");
+    TEST_ASSERT_EQ(agcCmdPushConstants(command, 1u << kAgcShaderStageVs,
+        0u, sizeof(vs_value), &vs_value), AGC_OK,
+        "vertex push-constant value binds independently");
+    TEST_ASSERT_EQ(agcCmdPushConstants(command, 1u << kAgcShaderStagePs,
+        0u, sizeof(ps_value), &ps_value), AGC_OK,
+        "pixel push-constant value binds independently");
+    TEST_ASSERT_EQ(agcCmdDraw(command, 3u, 1u, 0u, 0u), AGC_OK,
+        "stage-distinct push-constant draw records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+        "stage-distinct push-constant command buffer ends");
+    submit.command_buffer_count = 1u;
+    submit.command_buffers = &command;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, NULL), AGC_OK,
+        "stage-distinct push-constant command buffer submits");
+    captured = agcDriverDebugLastDcbSubmit();
+    TEST_ASSERT(captured != NULL,
+        "stage-distinct push-constant submission is captured");
+    words = (const uint32_t *)(uintptr_t)captured->command_address;
+    TEST_ASSERT(runtime_find_shader_register(words, captured->dword_count,
+        AGC_REG_SPI_SHADER_USER_DATA_GS_0 + 7u, &value),
+        "vertex inline push constant is emitted");
+    TEST_ASSERT_EQ(value, vs_value,
+        "vertex inline push constant retains its stage-local value");
+    TEST_ASSERT(runtime_find_shader_register(words, captured->dword_count,
+        AGC_REG_SPI_SHADER_USER_DATA_PS_0 + 7u, &value),
+        "pixel inline push constant is emitted");
+    TEST_ASSERT_EQ(value, ps_value,
+        "pixel inline push constant retains its stage-local value");
+
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+        "stage-distinct push-constant command buffer resets");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+        "stage-distinct push-constant command buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(pipeline), AGC_OK,
+        "stage-distinct push-constant pipeline destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(ps), AGC_OK,
+        "stage-distinct pixel shader destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(vs), AGC_OK,
+        "stage-distinct vertex shader destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
+        "stage-distinct push-constant queue destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "stage-distinct push-constant device destroys");
+}
+
 static void test_runtime_occlusion_query_commands(void)
 {
     AgcDevice device = create_device();
@@ -9658,6 +9760,7 @@ TEST_RUN(test_runtime_image_region_and_buffer_copies);
     TEST_RUN(test_runtime_heap_staging_and_stats);
     TEST_RUN(test_runtime_explicit_placed_memory);
     TEST_RUN(test_runtime_extended_image_view_and_sampler);
+    TEST_RUN(test_runtime_stage_distinct_push_constants);
     TEST_RUN(test_runtime_occlusion_query_commands);
     TEST_RUN(test_runtime_fence_deferred_free);
     TEST_RUN(test_runtime_batch_deferred_retirement_stress);
