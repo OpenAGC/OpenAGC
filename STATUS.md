@@ -26,7 +26,7 @@ compute and baseline graphics oracles now also passed on exact FW 5.50 through
 the direct DCB carrier, without application PM4 or firmware selection.
 
 Milestone 4 typed command recording, resource states, and synchronization is
-complete for the documented support scope. Generic verification passes 17,746
+complete for the documented support scope. Generic verification passes 17,817
 assertions and CTest 19/19, including the Milestone 5 deterministic-capture,
 installed-package example, complete API-reference, and firmware-neutral
 documentation gates. Nine cleanup-first runtime targets pass as
@@ -41,6 +41,13 @@ resource states in a graphics command buffer. This preserves one ordered DCB
 for Vulkan-style interleaved graphics and compute work and matches the FW 5.50
 hardware-proven compute carrier; color, depth/stencil, and scanout states
 remain graphics-only.
+
+Push-constant backing is stage-local inside the reflected command resource
+arena. Vertex, hull, domain, geometry, pixel, and compute stages may retain
+different values at the same byte offset; pointer and inline user-SGPR
+bindings select the consuming shader's slot. Generic packet inspection proves
+different vertex/pixel inline values survive one draw. This internal layout
+fix is host-qualified and invalidates earlier linked Prospero candidate bytes.
 
 Runtime API 37 adds typed occlusion-query buffers and native reset, begin,
 end, bounded-result, and layout-query entry points. GPU addresses, per-RB
