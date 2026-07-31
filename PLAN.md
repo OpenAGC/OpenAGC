@@ -918,6 +918,10 @@ and tessellation-resource ownership, then delete the legacy command/submission
 path to reach exactly zero. FW 5.50 qualification remains first; FW 11.60 is
 deferred until that endpoint is available.
 
+OpenAGC API 42 additionally moves custom-border table allocation, values,
+flushes, and base-register programming behind `AgcDevice`/`AgcSampler`. Retain
+the Vulkan custom-border readback as the FW 5.50 gate for this ownership fix.
+
 Implement and publish an explicit constrained feature profile for common
 homebrew needs:
 

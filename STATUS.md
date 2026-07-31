@@ -92,6 +92,16 @@ Color and BC single-sample layouts are host-qualified; depth/stencil,
 metadata-bearing, and multisample transfer forms fail closed pending their
 native tiled-copy contracts and FW 5.50 qualification.
 
+Runtime API 42 closes native custom-border ownership. Version-3
+`AgcSamplerDesc` carries the exact 128-bit table value as well as its normalized
+index. The device lazily owns and flushes the 4,096-entry table, and the first
+graphics pipeline bind programs its qualified base address before sampler use.
+Applications no longer need a raw allocation or `agcGfx1013SetBorderColorTable`.
+The consuming Vulkan candidate
+`53b5f333d704220c91d291d2254534676a7bf6888e0112a30e047109d3d8e025`
+is FW 5.500.008-qualified with all 18,432 expected swizzled-blue samples,
+bounded self-exit, and no residual process.
+
 1. **Milestone 5 is complete.** Runtime API v23 has the optional
    allocation-free debug-callback layer. API v24 adds the
    endian-defined framing and core command/submission records. API v25 adds

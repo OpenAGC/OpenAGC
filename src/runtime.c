@@ -221,6 +221,7 @@ struct AgcDeviceImpl {
     AgcRuntimeAllocation *tessellation_offchip_allocation;
     AgcRuntimeAllocation *tessellation_factor_allocation;
     AgcRuntimeAllocation *tessellation_table_allocation;
+    AgcRuntimeAllocation *border_color_allocation;
     uint32_t tessellation_initialized;
     AgcDebugMessageFunction debug_callback;
     void *debug_user_data;
@@ -1865,6 +1866,8 @@ int32_t PS5_SYSV_ABI agcDestroyDevice(AgcDevice device)
         g_backend_agc_version = 0u;
     agcDeviceRegistryUnlock();
     agcRuntimeDestroyTessellationStorage(device);
+    if (device->border_color_allocation)
+        agcRuntimeFree(device, device->border_color_allocation);
     agcDestroyMemoryBlocks(device);
     allocation = device->allocation;
     device->magic = 0u;
@@ -4258,14 +4261,18 @@ int32_t PS5_SYSV_ABI agcCreateSampler(
     AgcSamplerDescriptor descriptor;
     int32_t result;
     int version2;
+    int version3;
 
     if (!sampler_out)
         return AGC_ERROR_INVALID_ARGUMENT;
     *sampler_out = NULL;
     if (!agcDeviceValid(device))
         return AGC_ERROR_INVALID_ARGUMENT;
-    version2 = desc && desc->version == AGC_RUNTIME_STRUCTURE_VERSION_2 &&
+    version3 = desc && desc->version == AGC_RUNTIME_STRUCTURE_VERSION_3 &&
         desc->struct_size == sizeof(*desc);
+    version2 = desc &&
+        ((desc->version == AGC_RUNTIME_STRUCTURE_VERSION_2 &&
+          desc->struct_size == 112u) || version3);
     if (!desc ||
         !((desc->version == AGC_RUNTIME_STRUCTURE_VERSION_1 &&
            desc->struct_size == offsetof(AgcSamplerDesc, mip_filter)) ||
@@ -4287,7 +4294,9 @@ int32_t PS5_SYSV_ABI agcCreateSampler(
          !agcRuntimeFloatFinite(desc->min_lod) ||
          !agcRuntimeFloatFinite(desc->max_lod) ||
          !agcRuntimeFloatFinite(desc->lod_bias) || desc->min_lod < 0.0f ||
-         desc->max_lod < desc->min_lod || desc->reserved2 != 0u))) {
+         desc->max_lod < desc->min_lod || desc->reserved2 != 0u ||
+         (desc->border_color == AGC_SAMPLER_BORDER_CUSTOM &&
+          !version3)))) {
         return agcDebugReport(device, AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
             AGC_DEBUG_MESSAGE_CATEGORY_PARAMETER_BIT,
             AGC_ERROR_INVALID_ARGUMENT, "agcCreateSampler",
@@ -4335,8 +4344,26 @@ int32_t PS5_SYSV_ABI agcCreateSampler(
             agcSamplerDescriptorSetCompareFunc(&descriptor,
                 desc->compare_operation);
         if (desc->border_color == AGC_SAMPLER_BORDER_CUSTOM) {
+            uint8_t *table;
             result = agcSamplerDescriptorSetCustomBorderColor(&descriptor,
                 desc->custom_border_color_index);
+            if (result != AGC_OK)
+                return result;
+            if (!device->border_color_allocation) {
+                result = agcRuntimeAllocate(device, AGC_MEMORY_HEAP_FLEXIBLE,
+                    4096u * 16u, 256u, 0u, AGC_OBJECT_TYPE_SAMPLER, device,
+                    &device->border_color_allocation);
+                if (result != AGC_OK)
+                    return result;
+                memset(agcAllocationCpuAddress(
+                    device->border_color_allocation), 0, 4096u * 16u);
+            }
+            table = agcAllocationCpuAddress(device->border_color_allocation);
+            memcpy(table + desc->custom_border_color_index * 16u,
+                desc->custom_border_color, 16u);
+            result = agcFlushRuntimeAllocation(
+                device->border_color_allocation,
+                desc->custom_border_color_index * 16u, 16u);
             if (result != AGC_OK)
                 return result;
         } else {
@@ -7203,6 +7230,9 @@ int32_t PS5_SYSV_ABI agcCmdBindGraphicsPipeline(
     uint32_t defaults[AGC_RUNTIME_GRAPHICS_DEFAULT_DWORDS];
     SceAgcCb defaults_cb;
     uint32_t defaults_dword_count;
+    uint32_t border_words[4];
+    SceAgcCb border_cb;
+    uint32_t border_dword_count;
     uint32_t pipeline_index;
     uint32_t first_bind;
     int32_t result;
@@ -7243,8 +7273,19 @@ int32_t PS5_SYSV_ABI agcCmdBindGraphicsPipeline(
                 AGC_ERROR_COMMAND_SPACE_EXHAUSTED : result;
         defaults_dword_count = (uint32_t)agcCbUsedDwords(&defaults_cb);
         }
+        border_dword_count = 0u;
+        if (first_bind && command_buffer->device->border_color_allocation) {
+            agcCbInit(&border_cb, border_words, sizeof(border_words));
+            result = agcGfx1013SetBorderColorTable(&border_cb,
+                agcAllocationGpuAddress(
+                    command_buffer->device->border_color_allocation));
+            if (result != AGC_OK)
+                return result;
+            border_dword_count = (uint32_t)agcCbUsedDwords(&border_cb);
+        }
         if (agcCbRemainingDwords(&command_buffer->cursor) <
-            defaults_dword_count + pipeline->bind_dword_count)
+            defaults_dword_count + border_dword_count +
+                pipeline->bind_dword_count)
             return AGC_ERROR_COMMAND_SPACE_EXHAUSTED;
         result = agcPrepareCommandResources(
             command_buffer, &pipeline->resource_layout);
@@ -7258,6 +7299,14 @@ int32_t PS5_SYSV_ABI agcCmdBindGraphicsPipeline(
             memcpy(commands, defaults,
                 defaults_dword_count * sizeof(uint32_t));
             command_buffer->graphics_defaults_emitted = 1u;
+        }
+        if (border_dword_count != 0u) {
+            commands = agcCbAllocDwords(&command_buffer->cursor,
+                border_dword_count);
+            if (!commands)
+                return AGC_ERROR_INTERNAL;
+            memcpy(commands, border_words,
+                border_dword_count * sizeof(uint32_t));
         }
         commands = agcCbAllocDwords(
             &command_buffer->cursor, pipeline->bind_dword_count);

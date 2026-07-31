@@ -103,7 +103,10 @@ Runtime API 28 makes image tiling explicit. Linear color and depth images use
 optimal depth and 4x-MSAA color images retain their qualified 64-KiB tiled
 layouts. Version-2 image views carry 2D/array/cube type plus component swizzles,
 and version-2 samplers normalize mip filtering, wrap modes, anisotropy,
-comparison, LOD, and fixed/custom border indices into native descriptors.
+comparison, LOD, and fixed/custom border selection into native descriptors.
+Version-3 sampler descriptions include the exact 128-bit custom value. The
+device owns, flushes, and programs the indexed table; callers never provide its
+GPU address.
 
 Shader uploads and descriptor initialization are flushed when their objects
 are created. Executable command storage is flushed over its used byte range at

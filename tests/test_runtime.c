@@ -9359,6 +9359,8 @@ static void test_runtime_extended_image_view_and_sampler(void)
     AgcGfx1013Image2DState image_state = {0};
     AgcGfx1013ImageDescriptor expected_view;
     AgcSamplerDescriptor expected_sampler;
+    AgcMemoryStats before_sampler = AGC_MEMORY_STATS_INIT;
+    AgcMemoryStats after_sampler = AGC_MEMORY_STATS_INIT;
     AgcImage image = NULL;
     AgcImageView view = NULL;
     AgcSampler sampler = NULL;
@@ -9410,11 +9412,22 @@ static void test_runtime_extended_image_view_and_sampler(void)
     sampler_desc.compare_operation = AGC_COMPARE_OPERATION_LESS_OR_EQUAL;
     sampler_desc.border_color = AGC_SAMPLER_BORDER_CUSTOM;
     sampler_desc.custom_border_color_index = 7u;
+    sampler_desc.custom_border_color[0] = 0x3f800000u;
+    sampler_desc.custom_border_color[1] = 0x3f000000u;
+    sampler_desc.custom_border_color[2] = 0x3e800000u;
+    sampler_desc.custom_border_color[3] = 0x3f800000u;
     sampler_desc.min_lod = 1.0f;
     sampler_desc.max_lod = 5.0f;
     sampler_desc.lod_bias = 0.5f;
+    TEST_ASSERT_EQ(agcGetMemoryStats(device, &before_sampler), AGC_OK,
+        "custom-border baseline stats query succeeds");
     TEST_ASSERT_EQ(agcCreateSampler(device, &sampler_desc, &sampler), AGC_OK,
-        "v2 sampler accepts mip, anisotropy, compare, wrap, and custom border state");
+        "v3 sampler accepts mip, anisotropy, compare, wrap, and custom border state");
+    TEST_ASSERT_EQ(agcGetMemoryStats(device, &after_sampler), AGC_OK,
+        "custom-border allocation stats query succeeds");
+    TEST_ASSERT_EQ(after_sampler.live_allocation_count,
+        before_sampler.live_allocation_count + 2u,
+        "first custom sampler owns its descriptor and the device border table");
     TEST_ASSERT_EQ(agcGetObjectAllocationInfo(device, AGC_OBJECT_TYPE_SAMPLER,
         sampler, &sampler_info), AGC_OK,
         "extended sampler descriptor allocation is queryable");

@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-#define AGC_RUNTIME_API_VERSION 41u
+#define AGC_RUNTIME_API_VERSION 42u
 #define AGC_RUNTIME_MAX_VIEWPORTS 16u
 #define AGC_RUNTIME_STRUCTURE_VERSION_1 1u
 #define AGC_RUNTIME_STRUCTURE_VERSION_2 2u
@@ -659,15 +659,16 @@ typedef struct AgcSamplerDesc {
     float max_lod;
     float lod_bias;
     uint32_t reserved2;
+    uint32_t custom_border_color[4];
 } AgcSamplerDesc;
 
 #define AGC_SAMPLER_DESC_INIT \
-    { sizeof(AgcSamplerDesc), AGC_RUNTIME_STRUCTURE_VERSION_2, \
+    { sizeof(AgcSamplerDesc), AGC_RUNTIME_STRUCTURE_VERSION_3, \
       AGC_FILTER_NEAREST, AGC_FILTER_NEAREST, AGC_ADDRESS_MODE_REPEAT, \
       AGC_ADDRESS_MODE_REPEAT, AGC_ADDRESS_MODE_REPEAT, 0u, \
       {0u, 0u, 0u, 0u}, AGC_MIP_FILTER_NONE, 0u, 1u, 0u, \
       AGC_COMPARE_OPERATION_ALWAYS, AGC_SAMPLER_BORDER_TRANSPARENT_BLACK, \
-      0u, 0.0f, 0.0f, 0.0f, 0u }
+      0u, 0.0f, 0.0f, 0.0f, 0u, {0u, 0u, 0u, 0u} }
 
 typedef struct AgcShaderDesc {
     uint32_t struct_size;
@@ -1449,8 +1450,10 @@ _Static_assert(sizeof(AgcDepthStencilTargetBinding) == 64u,
     "AgcDepthStencilTargetBinding v1 size mismatch");
 _Static_assert(offsetof(AgcSamplerDesc, mip_filter) == 64u,
     "AgcSamplerDesc v1 prefix size mismatch");
-_Static_assert(sizeof(AgcSamplerDesc) == 112u,
-    "AgcSamplerDesc v2 size mismatch");
+_Static_assert(offsetof(AgcSamplerDesc, custom_border_color) == 108u,
+    "AgcSamplerDesc v2 prefix size mismatch");
+_Static_assert(sizeof(AgcSamplerDesc) == 128u,
+    "AgcSamplerDesc v3 size mismatch");
 _Static_assert(sizeof(AgcShaderDesc) == 88u,
     "AgcShaderDesc v2 size mismatch");
 _Static_assert(sizeof(AgcColorBlendAttachmentState) == 64u,
