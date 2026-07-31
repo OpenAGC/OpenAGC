@@ -26,7 +26,7 @@ compute and baseline graphics oracles now also passed on exact FW 5.50 through
 the direct DCB carrier, without application PM4 or firmware selection.
 
 Milestone 4 typed command recording, resource states, and synchronization is
-complete for the documented support scope. Generic verification passes 17,187
+complete for the documented support scope. Generic verification passes 17,340
 assertions and CTest 8/8. Nine cleanup-first runtime targets pass as
 identical artifact bytes on exact standard PS5 FW 5.50 and FW 11.60, covering
 presentation, timeline waits, partial ownership, deferred retirement, and
@@ -39,8 +39,10 @@ firmware-neutral baseline remains 2/2 PASS.
    endian-defined framing and core command/submission records. API v25 adds
    pointer-free resource descriptions, shader versions/hashes and opt-in bytes,
    normalized pipelines, typed transitions, selected readback hashes, and the
-   matching host decoder. Extend actionable validation across the remaining
-   creation, pipeline, descriptor, and range failure paths.
+   matching host decoder. The host invalid-program matrix now closes creation,
+   enum/range, transition, reflection/descriptor, export/attachment,
+   integer-blend, capability, command-capacity, use-after-submit, and lifetime
+   diagnostics without allocating or changing fail-closed results.
 2. **Document and integrate.** Publish lifecycle, memory, shader, pipeline,
    synchronization, capability, error, and capture documentation. Qualify one
    long-running reference-game ELF unchanged on FW 5.50 and FW 11.60.

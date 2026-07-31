@@ -792,6 +792,15 @@ references without exposing process pointers. The captured reference-frame
 gate and broader invalid-program diagnostic coverage remain active work; see
 `analysis/runtime_capture_semantics_host_20260731.md`.
 
+The completed validation matrix extends the API-v23 messenger across every
+Milestone 5 failure class: invalid descriptors/enums, object state and
+use-after-submit, aligned/in-range GPU-backed intervals, missing transitions,
+reflection/descriptor/export/attachment compatibility, integer blending,
+unsupported capabilities, command capacity, and premature destruction. Tests
+assert exact result/category/function/message tuples and prove callback delivery
+performs no allocation attempt with an application allocator armed to fail.
+See `analysis/runtime_validation_matrix_host_20260731.md`.
+
 Create and maintain application documentation alongside the API:
 
 - A native API overview and object-lifecycle guide.

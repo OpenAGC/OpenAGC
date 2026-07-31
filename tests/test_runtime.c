@@ -55,6 +55,22 @@ static void PS5_SYSV_ABI runtime_debug_callback(
     probe->last = *message;
 }
 
+static void expect_runtime_debug(const RuntimeDebugProbe *probe,
+    uint32_t count, AgcDebugMessageCategoryFlags category, int32_t result,
+    const char *function_name, const char *message_fragment)
+{
+    TEST_ASSERT_EQ(probe->callback_count, count,
+        "invalid program emits exactly one diagnostic");
+    TEST_ASSERT_EQ(probe->last.category, category,
+        "invalid program diagnostic category is exact");
+    TEST_ASSERT_EQ(probe->last.result, result,
+        "invalid program diagnostic preserves public result");
+    TEST_ASSERT(strcmp(probe->last.function_name, function_name) == 0,
+        "invalid program diagnostic names the public entry point");
+    TEST_ASSERT(strstr(probe->last.message, message_fragment) != NULL,
+        "invalid program diagnostic explains the corrective contract");
+}
+
 static void PS5_SYSV_ABI runtime_capture_write(
     void *user_data, const void *data, size_t size)
 {
@@ -755,6 +771,322 @@ static void test_runtime_optional_debug_callback(void)
         "debug device destroys after dependencies release");
 }
 
+static void test_runtime_invalid_program_diagnostic_matrix(void)
+{
+    AgcDevice device = create_device();
+    AgcDebugCallbackDesc debug_desc = AGC_DEBUG_CALLBACK_DESC_INIT;
+    RuntimeDebugProbe probe = {0};
+    AgcSamplerDesc sampler_desc = AGC_SAMPLER_DESC_INIT;
+    AgcBufferDesc buffer_desc = AGC_BUFFER_DESC_INIT;
+    AgcImageDesc image_desc = AGC_IMAGE_DESC_INIT;
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcResourceTransition transition = AGC_RESOURCE_TRANSITION_INIT;
+    AgcComputePipelineDesc compute_desc = AGC_COMPUTE_PIPELINE_DESC_INIT;
+    AgcSampler sampler = NULL;
+    AgcBuffer source = NULL;
+    AgcBuffer destination = NULL;
+    AgcImage image = NULL;
+    AgcCommandBuffer command = NULL;
+    AgcShader shader = NULL;
+    AgcComputePipeline compute = NULL;
+    uint32_t word = 0u;
+
+    debug_desc.callback = runtime_debug_callback;
+    debug_desc.user_data = &probe;
+    TEST_ASSERT_EQ(agcSetDebugCallback(device, &debug_desc), AGC_OK,
+        "invalid-program diagnostic callback installs");
+
+    sampler_desc.min_filter = (AgcFilter)UINT32_MAX;
+    TEST_ASSERT_EQ(agcCreateSampler(device, &sampler_desc, &sampler),
+        AGC_ERROR_INVALID_ARGUMENT, "invalid sampler enum fails closed");
+    expect_runtime_debug(&probe, 1u,
+        AGC_DEBUG_MESSAGE_CATEGORY_PARAMETER_BIT,
+        AGC_ERROR_INVALID_ARGUMENT, "agcCreateSampler", "invalid enum");
+
+    buffer_desc.size = 64u;
+    buffer_desc.usage = UINT32_C(1) << 31;
+    TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &source),
+        AGC_ERROR_INVALID_ARGUMENT, "unknown buffer usage fails closed");
+    expect_runtime_debug(&probe, 2u,
+        AGC_DEBUG_MESSAGE_CATEGORY_PARAMETER_BIT,
+        AGC_ERROR_INVALID_ARGUMENT, "agcCreateBuffer", "usage");
+
+    buffer_desc.usage = AGC_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    buffer_desc.flags = AGC_BUFFER_CREATE_UPLOAD_BIT;
+    TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &source), AGC_OK,
+        "diagnostic source buffer creates");
+    TEST_ASSERT_EQ(agcSetObjectDebugName(device, AGC_OBJECT_TYPE_BUFFER,
+        source, "diagnostic-source"), AGC_OK,
+        "diagnostic source receives a name");
+    buffer_desc.usage = AGC_BUFFER_USAGE_TRANSFER_DST_BIT;
+    buffer_desc.flags = AGC_BUFFER_CREATE_READBACK_BIT;
+    TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &destination), AGC_OK,
+        "diagnostic destination buffer creates");
+    TEST_ASSERT_EQ(agcWriteBuffer(source, 60u, &word, 8u),
+        AGC_ERROR_INVALID_ARGUMENT, "buffer upload overrun fails closed");
+    expect_runtime_debug(&probe, 3u,
+        AGC_DEBUG_MESSAGE_CATEGORY_PARAMETER_BIT,
+        AGC_ERROR_INVALID_ARGUMENT, "agcWriteBuffer", "in-range");
+
+    image_desc.width = 4u;
+    image_desc.height = 4u;
+    image_desc.format = AGC_FORMAT_RGBA8_UNORM;
+    image_desc.usage = AGC_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &image), AGC_OK,
+        "diagnostic image creates");
+    TEST_ASSERT_EQ(agcReadImage(image, UINT64_MAX, &word, sizeof(word)),
+        AGC_ERROR_INVALID_ARGUMENT, "image readback overrun fails closed");
+    expect_runtime_debug(&probe, 4u,
+        AGC_DEBUG_MESSAGE_CATEGORY_PARAMETER_BIT,
+        AGC_ERROR_INVALID_ARGUMENT, "agcReadImage", "in-range");
+
+    command_desc.queue_type = kAgcQueueCompute;
+    command_desc.capacity_dwords = 64u;
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
+        AGC_OK, "diagnostic copy command creates");
+    TEST_ASSERT_EQ(agcSetObjectDebugName(device,
+        AGC_OBJECT_TYPE_COMMAND_BUFFER, command, "diagnostic-copy"), AGC_OK,
+        "diagnostic copy command receives a name");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+        "diagnostic copy command begins");
+    TEST_ASSERT_EQ(agcCmdCopyBuffer(command, source, 1u, destination, 0u, 4u),
+        AGC_ERROR_INVALID_ARGUMENT, "misaligned GPU-backed range fails closed");
+    expect_runtime_debug(&probe, 5u,
+        AGC_DEBUG_MESSAGE_CATEGORY_PARAMETER_BIT,
+        AGC_ERROR_INVALID_ARGUMENT, "agcCmdCopyBuffer", "four-byte aligned");
+    TEST_ASSERT_EQ(agcCmdCopyBuffer(command, source, 0u, destination, 0u, 4u),
+        AGC_ERROR_INVALID_STATE, "copy without transitions fails closed");
+    expect_runtime_debug(&probe, 6u,
+        AGC_DEBUG_MESSAGE_CATEGORY_RESOURCE_STATE_BIT,
+        AGC_ERROR_INVALID_STATE, "agcCmdCopyBuffer", "transitioned");
+
+    transition.resource_type = kAgcResourceTypeBuffer;
+    transition.before = kAgcResourceUsageUndefined;
+    transition.before_owner = kAgcResourceOwnerHost;
+    transition.after = kAgcResourceUsageCopySource;
+    transition.after_owner = kAgcResourceOwnerCompute;
+    transition.buffer = source;
+    transition.buffer_size = buffer_desc.size;
+    TEST_ASSERT_EQ(agcCmdTransitionResources(command, 1u, &transition),
+        AGC_OK, "diagnostic source transition records");
+    transition.after = kAgcResourceUsageCopyDestination;
+    transition.buffer = destination;
+    TEST_ASSERT_EQ(agcCmdTransitionResources(command, 1u, &transition),
+        AGC_OK, "diagnostic destination transition records");
+    TEST_ASSERT_EQ(agcDestroyBuffer(source), AGC_ERROR_BUSY,
+        "premature recorded-buffer destruction fails closed");
+    expect_runtime_debug(&probe, 7u,
+        AGC_DEBUG_MESSAGE_CATEGORY_LIFETIME_BIT, AGC_ERROR_BUSY,
+        "agcDestroyBuffer", "recorded references");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+        "diagnostic copy command reset releases resources");
+    TEST_ASSERT_EQ(agcReadBuffer(destination, 60u, &word, 8u),
+        AGC_ERROR_INVALID_ARGUMENT, "buffer readback overrun fails closed");
+    expect_runtime_debug(&probe, 8u,
+        AGC_DEBUG_MESSAGE_CATEGORY_PARAMETER_BIT,
+        AGC_ERROR_INVALID_ARGUMENT, "agcReadBuffer", "in-range");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+        "diagnostic copy command destroys");
+    TEST_ASSERT_EQ(agcDestroyImage(image), AGC_OK,
+        "diagnostic image destroys");
+    TEST_ASSERT_EQ(agcDestroyBuffer(destination), AGC_OK,
+        "diagnostic destination destroys");
+    TEST_ASSERT_EQ(agcDestroyBuffer(source), AGC_OK,
+        "diagnostic source destroys after reset");
+
+    {
+        AgcShaderReflection requirements = AGC_SHADER_REFLECTION_INIT;
+
+        requirements.wave_size = 64u;
+        shader = create_shader_with_reflection(
+            device, kAgcShaderStageCs, &requirements);
+        compute_desc.shader = shader;
+        compute_desc.local_size_x = 64u;
+        TEST_ASSERT_EQ(agcCreateComputePipeline(device, &compute_desc,
+            &compute), AGC_ERROR_NOT_SUPPORTED,
+            "unsupported compute wave fails closed");
+        expect_runtime_debug(&probe, 9u,
+            AGC_DEBUG_MESSAGE_CATEGORY_CAPABILITY_BIT,
+            AGC_ERROR_NOT_SUPPORTED, "agcCreateComputePipeline", "wave");
+        TEST_ASSERT_EQ(agcDestroyShader(shader), AGC_OK,
+            "unsupported-wave shader destroys");
+    }
+
+    shader = create_shader(device, kAgcShaderStageCs);
+    compute_desc = (AgcComputePipelineDesc)AGC_COMPUTE_PIPELINE_DESC_INIT;
+    compute_desc.shader = shader;
+    compute_desc.local_size_x = 64u;
+    TEST_ASSERT_EQ(agcCreateComputePipeline(device, &compute_desc, &compute),
+        AGC_OK, "capacity diagnostic compute pipeline creates");
+    command_desc.capacity_dwords = 2u;
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
+        AGC_OK, "capacity diagnostic command creates");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+        "capacity diagnostic command begins");
+    TEST_ASSERT_EQ(agcCmdBindComputePipeline(command, compute), AGC_OK,
+        "capacity diagnostic pipeline binds");
+    TEST_ASSERT_EQ(agcCmdDispatch(command, 1u, 1u, 1u),
+        AGC_ERROR_COMMAND_SPACE_EXHAUSTED,
+        "dispatch command exhaustion fails closed");
+    expect_runtime_debug(&probe, 10u,
+        AGC_DEBUG_MESSAGE_CATEGORY_COMMAND_CAPACITY_BIT,
+        AGC_ERROR_COMMAND_SPACE_EXHAUSTED, "agcCmdDispatch",
+        "insufficient dwords");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+        "capacity diagnostic command resets");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+        "capacity diagnostic command destroys");
+    TEST_ASSERT_EQ(agcDestroyComputePipeline(compute), AGC_OK,
+        "capacity diagnostic pipeline destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(shader), AGC_OK,
+        "capacity diagnostic shader destroys");
+
+    {
+        AgcShaderReflection requirements = AGC_SHADER_REFLECTION_INIT;
+        AgcShaderDescriptorMapping mapping = {
+            0u, 0u, AGC_SHADER_DESCRIPTOR_STORAGE_BUFFER, 1u, 0u, 16u};
+        AgcDescriptorWrite write = AGC_DESCRIPTOR_WRITE_INIT;
+
+        requirements.descriptor_mapping_count = 1u;
+        requirements.descriptor_mappings[0] = mapping;
+        requirements.user_sgpr_count = 1u;
+        requirements.user_sgprs[0] = (AgcShaderUserSgpr){
+            AGC_SHADER_USER_SGPR_DESCRIPTOR_SET, 0u,
+            AGC_REG_COMPUTE_USER_DATA_0, 1u};
+        shader = create_shader_with_reflection(
+            device, kAgcShaderStageCs, &requirements);
+        compute_desc = (AgcComputePipelineDesc)AGC_COMPUTE_PIPELINE_DESC_INIT;
+        compute_desc.shader = shader;
+        compute_desc.local_size_x = 64u;
+        compute_desc.descriptor_mapping_count = 1u;
+        compute_desc.descriptor_mappings = &mapping;
+        TEST_ASSERT_EQ(agcCreateComputePipeline(device, &compute_desc,
+            &compute), AGC_OK, "descriptor diagnostic pipeline creates");
+        command_desc.capacity_dwords = 512u;
+        TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
+            AGC_OK, "descriptor diagnostic command creates");
+        TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+            "descriptor diagnostic command begins");
+        TEST_ASSERT_EQ(agcCmdBindComputePipeline(command, compute), AGC_OK,
+            "descriptor diagnostic pipeline binds");
+        buffer_desc.size = 256u;
+        buffer_desc.usage = AGC_BUFFER_USAGE_STORAGE_BIT;
+        buffer_desc.flags = 0u;
+        TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &source), AGC_OK,
+            "descriptor diagnostic storage buffer creates");
+        write.type = AGC_SHADER_DESCRIPTOR_UNIFORM_BUFFER;
+        write.buffer = source;
+        TEST_ASSERT_EQ(agcCmdBindDescriptors(command, 1u, &write),
+            AGC_ERROR_VALIDATION_FAILED,
+            "descriptor/reflection mismatch fails closed");
+        expect_runtime_debug(&probe, 11u,
+            AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT,
+            AGC_ERROR_VALIDATION_FAILED, "agcCmdBindDescriptors",
+            "does not match shader reflection");
+        TEST_ASSERT_EQ(agcCmdDispatch(command, 1u, 1u, 1u),
+            AGC_ERROR_RESOURCE_NOT_BOUND,
+            "dispatch with missing reflected descriptors fails closed");
+        expect_runtime_debug(&probe, 12u,
+            AGC_DEBUG_MESSAGE_CATEGORY_RESOURCE_STATE_BIT,
+            AGC_ERROR_RESOURCE_NOT_BOUND, "agcCmdDispatch", "missing");
+        TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+            "descriptor diagnostic command resets");
+        TEST_ASSERT_EQ(agcDestroyBuffer(source), AGC_OK,
+            "descriptor diagnostic storage buffer destroys");
+        TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+            "descriptor diagnostic command destroys");
+        TEST_ASSERT_EQ(agcDestroyComputePipeline(compute), AGC_OK,
+            "descriptor diagnostic pipeline destroys");
+        TEST_ASSERT_EQ(agcDestroyShader(shader), AGC_OK,
+            "descriptor diagnostic shader destroys");
+    }
+
+    {
+        AgcShaderReflection requirements = AGC_SHADER_REFLECTION_INIT;
+        AgcGraphicsPipelineDesc graphics_desc =
+            AGC_GRAPHICS_PIPELINE_DESC_INIT;
+        AgcColorBlendAttachmentState attachment =
+            AGC_COLOR_BLEND_ATTACHMENT_STATE_INIT;
+        AgcShader vertex = create_shader(device, kAgcShaderStageVs);
+        AgcShader pixel;
+        AgcGraphicsPipeline graphics = NULL;
+
+        requirements.color_export_count = 1u;
+        requirements.color_exports[0].location = 0u;
+        requirements.color_exports[0].format =
+            AGC_SHADER_COLOR_EXPORT_UINT16_ABGR;
+        requirements.color_exports[0].component_class =
+            AGC_SHADER_COMPONENT_UINT;
+        requirements.color_exports[0].write_mask = 0xfu;
+        pixel = create_shader_with_reflection(
+            device, kAgcShaderStagePs, &requirements);
+        attachment.format = AGC_FORMAT_RGBA16_UINT;
+        attachment.blend_enable = 1u;
+        graphics_desc.vertex_shader = vertex;
+        graphics_desc.pixel_shader = pixel;
+        graphics_desc.color_attachment_count = 1u;
+        graphics_desc.color_attachments = &attachment;
+        TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &graphics_desc,
+            &graphics), AGC_ERROR_VALIDATION_FAILED,
+            "integer-target blending fails closed");
+        expect_runtime_debug(&probe, 13u,
+            AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT,
+            AGC_ERROR_VALIDATION_FAILED, "agcCreateGraphicsPipeline",
+            "integer targets cannot enable blending");
+        TEST_ASSERT_EQ(agcDestroyShader(pixel), AGC_OK,
+            "integer-export shader destroys");
+        TEST_ASSERT_EQ(agcDestroyShader(vertex), AGC_OK,
+            "integer-blend vertex shader destroys");
+    }
+
+    {
+        AgcQueueDesc queue_desc = AGC_QUEUE_DESC_INIT;
+        AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
+        AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+        AgcQueue queue = NULL;
+        AgcFence fence = NULL;
+
+        command_desc.capacity_dwords = 64u;
+        TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
+            AGC_OK, "use-after-submit command creates");
+        TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+            "use-after-submit command begins");
+        TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+            "use-after-submit command ends");
+        queue_desc.type = kAgcQueueCompute;
+        TEST_ASSERT_EQ(agcCreateQueue(device, &queue_desc, &queue), AGC_OK,
+            "use-after-submit queue creates");
+        TEST_ASSERT_EQ(agcCreateFence(device, &fence_desc, &fence), AGC_OK,
+            "use-after-submit fence creates");
+        submit.command_buffer_count = 1u;
+        submit.command_buffers = &command;
+        TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
+            "use-after-submit command submits");
+        TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_ERROR_INVALID_STATE,
+            "submitted command reuse without reset fails closed");
+        expect_runtime_debug(&probe, 14u,
+            AGC_DEBUG_MESSAGE_CATEGORY_OBJECT_STATE_BIT,
+            AGC_ERROR_INVALID_STATE, "agcBeginCommandBuffer", "Initial");
+        TEST_ASSERT_EQ(agcWaitFence(fence, UINT64_C(1000000)), AGC_OK,
+            "use-after-submit fence completes");
+        TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+            "use-after-submit command resets after completion");
+        TEST_ASSERT_EQ(agcDestroyFence(fence), AGC_OK,
+            "use-after-submit fence destroys");
+        TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
+            "use-after-submit queue destroys");
+        TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+            "use-after-submit command destroys");
+    }
+
+    TEST_ASSERT_EQ(probe.callback_count, 14u,
+        "invalid-program matrix emits a deterministic diagnostic count");
+    TEST_ASSERT_EQ(agcSetDebugCallback(device, NULL), AGC_OK,
+        "invalid-program diagnostic callback disables");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "invalid-program diagnostic device destroys without leaks");
+}
+
 static void test_runtime_capture_v1_stream(void)
 {
     AgcDevice device = create_device();
@@ -1093,6 +1425,47 @@ static void PS5_SYSV_ABI probe_free(void *user_data, void *memory)
     AllocationProbe *probe = user_data;
     probe->frees++;
     free(memory);
+}
+
+static void test_runtime_validation_is_allocation_free(void)
+{
+    AllocationProbe allocation_probe = {0};
+    AgcAllocationCallbacks callbacks = {
+        &allocation_probe, probe_allocate, probe_free
+    };
+    AgcDeviceDesc device_desc = AGC_DEVICE_DESC_INIT;
+    AgcDebugCallbackDesc debug_desc = AGC_DEBUG_CALLBACK_DESC_INIT;
+    AgcSamplerDesc sampler_desc = AGC_SAMPLER_DESC_INIT;
+    RuntimeDebugProbe debug_probe = {0};
+    AgcDevice device = NULL;
+    AgcSampler sampler = NULL;
+    uint32_t attempts_before;
+
+    device_desc.allocation_callbacks = &callbacks;
+    TEST_ASSERT_EQ(agcCreateDevice(&device_desc, &device), AGC_OK,
+        "allocation-free validation device creates");
+    debug_desc.callback = runtime_debug_callback;
+    debug_desc.user_data = &debug_probe;
+    TEST_ASSERT_EQ(agcSetDebugCallback(device, &debug_desc), AGC_OK,
+        "allocation-free validation callback installs");
+    attempts_before = allocation_probe.attempts;
+    allocation_probe.fail_on_attempt = attempts_before + 1u;
+    sampler_desc.address_w = (AgcAddressMode)UINT32_MAX;
+    TEST_ASSERT_EQ(agcCreateSampler(device, &sampler_desc, &sampler),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "invalid sampler remains diagnostic when the next allocation would fail");
+    TEST_ASSERT_EQ(allocation_probe.attempts, attempts_before,
+        "validation and callback delivery perform no allocation attempt");
+    expect_runtime_debug(&debug_probe, 1u,
+        AGC_DEBUG_MESSAGE_CATEGORY_PARAMETER_BIT,
+        AGC_ERROR_INVALID_ARGUMENT, "agcCreateSampler", "invalid enum");
+    allocation_probe.fail_on_attempt = 0u;
+    TEST_ASSERT_EQ(agcSetDebugCallback(device, NULL), AGC_OK,
+        "allocation-free validation callback disables");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "allocation-free validation device destroys");
+    TEST_ASSERT_EQ(allocation_probe.allocations, allocation_probe.frees,
+        "allocation-free validation preserves balanced application allocations");
 }
 
 static void test_runtime_allocation_callbacks(void)
@@ -8053,6 +8426,7 @@ void test_suite_runtime(void)
     TEST_SUITE("Firmware-neutral Native Runtime");
     TEST_RUN(test_runtime_descriptor_and_info_contract);
     TEST_RUN(test_runtime_optional_debug_callback);
+    TEST_RUN(test_runtime_invalid_program_diagnostic_matrix);
     TEST_RUN(test_runtime_capture_v1_stream);
     TEST_RUN(test_runtime_capture_shader_bytes_opt_in);
     TEST_RUN(test_runtime_shader_reflection_contract);
@@ -8062,6 +8436,7 @@ void test_suite_runtime(void)
     TEST_RUN(test_runtime_geometry_pipeline_bundle);
     TEST_RUN(test_runtime_tessellation_pipeline_bundles);
     TEST_RUN(test_runtime_allocation_callbacks);
+    TEST_RUN(test_runtime_validation_is_allocation_free);
     TEST_RUN(test_runtime_allocation_failure_rollback);
     TEST_RUN(test_runtime_all_object_lifecycle);
     TEST_RUN(test_runtime_fence_and_command_states);

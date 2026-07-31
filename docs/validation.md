@@ -48,14 +48,28 @@ before the first delivery. The fixed-size snapshot contains no object pointer,
 GPU address, or allocation address, so it is suitable for later capture-stream
 serialization without leaking process-specific addresses.
 
-The first API-v23 slice reports device-lifetime violations, invalid command
-buffer begin/end/reset states, invalid single-command submission descriptors,
-queue/device mismatches, fence reuse, unsatisfied or decreasing GPU-label
-dependencies, mismatched committed resource transitions, and submission-time
-command-space exhaustion. Later Milestone 5 slices extend the same message
-contract across creation, pipeline compatibility, descriptor, range, and
-resource-lifetime validation. API v24 capture serializes these pointer-free
-messages even when the application callback is disabled.
+The completed Milestone 5 validation coverage reports:
+
+- invalid descriptor versions, reserved fields, enums, flags, counts, and
+  pointers;
+- command-buffer state misuse, including reuse after submission without reset;
+- misaligned, empty, overlapping, or out-of-range GPU-backed byte intervals;
+- missing or mismatched typed transitions and queue ownership;
+- shader-reflection, stage-linkage, descriptor, push-constant, vertex-input,
+  export/attachment, depth/stencil, and multisample incompatibility;
+- integer-target blending and unsupported dual-source behavior;
+- unsupported wave, scratch, LDS, workgroup, tessellation, geometry,
+  rasterization, and multisample capabilities;
+- command-buffer dword and transition-journal exhaustion;
+- premature destruction of resources, views, samplers, shaders, pipelines,
+  command buffers, fences, queues, and devices.
+
+Messages identify the public entry point, retain the exact `AGC_ERROR_*`
+result, and state the corrective contract. API v24+ capture serializes the
+same pointer-free messages even when the application callback is disabled.
+The host invalid-program matrix exercises every category and verifies that
+diagnostic delivery performs no allocation attempt even when the next
+application allocator call is forced to fail.
 
 ## Release behavior
 
