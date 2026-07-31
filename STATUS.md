@@ -27,8 +27,9 @@ the direct DCB carrier, without application PM4 or firmware selection.
 
 Milestone 4 typed command recording, resource states, and synchronization is
 complete for the documented support scope. Generic verification passes 17,340
-assertions and CTest 10/10, including the Milestone 5 deterministic-capture and
-installed-package example gates. Nine cleanup-first runtime targets pass as
+assertions and CTest 12/12, including the Milestone 5 deterministic-capture,
+installed-package example, complete API-reference, and firmware-neutral
+documentation gates. Nine cleanup-first runtime targets pass as
 identical artifact bytes on exact standard PS5 FW 5.50 and FW 11.60, covering
 presentation, timeline waits, partial ownership, deferred retirement, and
 API-v22 command recycling. The independent FW 11.60 workload extension
@@ -48,9 +49,11 @@ firmware-neutral baseline remains 2/2 PASS.
    gates also pass: two separate captures decode identically with address
    redaction, and the public first-compute and first-indexed-triangle examples
    configure, link, and execute using only the installed CMake package.
-2. **Document and integrate.** Publish lifecycle, memory, shader, pipeline,
-   synchronization, capability, error, and capture documentation. Qualify one
-   long-running reference-game ELF unchanged on FW 5.50 and FW 11.60.
+2. **Integrate.** The Milestone 5 lifecycle, install/tutorial, memory,
+   synchronization, shader/pipeline, capability, error/timeout, validation,
+   capture, hardware-debugging, and complete API-reference documentation is
+   published and mechanically checked. Next, qualify one long-running
+   reference-game ELF unchanged on FW 5.50 and FW 11.60.
 3. **Rehabilitate `../Vulkan-PS5` last.** Make it a constrained translation
    layer above native OpenAGC objects. It must not retain a second PM4 backend,
    allocator, firmware selector, or synchronization model.

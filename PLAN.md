@@ -811,6 +811,14 @@ only through `find_package(OpenAGC CONFIG REQUIRED)`, link
 `analysis/runtime_reference_capture_examples_host_20260731.md` and
 `docs/getting_started.md`.
 
+The Milestone 5 documentation set is complete and installed. It now includes
+the lifecycle and CMake tutorials, resource/synchronization and
+reflection/pipeline guides, capability/qualification and bounded-debugging
+policy, capture/validation guides, and a mechanically checked reference for all
+119 public native types and 87 functions. A second host gate rejects firmware
+selection, Sony exports, PM4, and `/dev/gc` access from ordinary documented C
+code. See `analysis/runtime_documentation_host_20260731.md`.
+
 Create and maintain application documentation alongside the API:
 
 - A native API overview and object-lifecycle guide.

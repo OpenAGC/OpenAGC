@@ -422,6 +422,10 @@ cmake/            Relocatable package configuration
 
 - [docs/getting_started.md](docs/getting_started.md) — installation, CMake
   consumption, and first compute/indexed-triangle tutorials.
+- [docs/api_reference.md](docs/api_reference.md) — complete native type and
+  function index with ownership, thread-safety, returns, and examples.
+- [docs/capabilities_debugging.md](docs/capabilities_debugging.md) —
+  firmware-neutral capability policy, bounded timeouts, and console evidence.
 - [docs/native_runtime.md](docs/native_runtime.md) — firmware-neutral runtime
   objects, ownership, queues, commands, and fences.
 - [docs/memory_resources.md](docs/memory_resources.md) — memory placement,

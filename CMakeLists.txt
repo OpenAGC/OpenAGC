@@ -163,6 +163,12 @@ if(Python3_Interpreter_FOUND)
     add_test(NAME capture_decoder_v1
         COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_capture_decoder.py)
+    add_test(NAME native_api_reference_complete
+        COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_api_reference.py)
+    add_test(NAME documented_application_firmware_neutral
+        COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_documented_firmware_neutrality.py)
     add_test(NAME reference_capture_deterministic
         COMMAND sh
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_reference_capture.sh
@@ -259,6 +265,7 @@ if(OPENAGC_PACKAGE_PSBC)
         RENAME openagc-psbc)
 endif()
 install(FILES LICENSE README.md docs/getting_started.md
+    docs/api_reference.md docs/capabilities_debugging.md
     docs/native_runtime.md docs/memory_resources.md
     docs/shader_pipelines.md docs/validation.md docs/capture.md
     DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/doc/OpenAGC)
