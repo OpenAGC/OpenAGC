@@ -772,6 +772,17 @@ reuse, and submit-time command capacity. Creation, pipeline/descriptor/range
 coverage and capture serialization remain active work; see
 `analysis/runtime_validation_debug_layer_host_20260731.md`.
 
+Runtime API v24 adds capture framing and the first deterministic vertical
+slice. Its streaming callback emits a little-endian header, runtime/profile
+record, dense pointer-free object IDs, command boundaries, application and
+post-injection PM4 dwords, submission wait/signal order, fence results,
+validation messages, and final counts. The host decoder names packets and
+known registers while redacting address-bearing and unknown fields by default.
+Generic runtime and independent decoder fixtures cover valid and malformed
+streams. Resource/shader/pipeline/transition/readback records and the captured
+reference-frame gate remain active work; see
+`analysis/runtime_capture_v1_host_20260731.md`.
+
 Create and maintain application documentation alongside the API:
 
 - A native API overview and object-lifecycle guide.

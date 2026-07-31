@@ -134,13 +134,16 @@ reference/depth-bias dynamic state are recorded through the command buffer;
 draw and dispatch fail until every reflected requirement is bound. Versioned
 depth/stencil state covers depth bounds and independent front/back stencil
 operations/masks; unqualified alpha-to-coverage and alpha-to-one fail closed.
-Unsupported graphics forms and capture remain ordered follow-on work;
-transitions and bounded presentation are implemented. The native Prospero
+Unsupported graphics forms and the remaining resource/shader/pipeline capture
+records remain ordered follow-on work; capture framing, transitions, and
+bounded presentation are implemented. The native Prospero
 queue bridge is intentionally
 limited to the qualified direct carriers and a runtime completion fence; it
 does not make the host harness a hardware substitute. See
 [docs/native_runtime.md](docs/native_runtime.md) for lifecycle rules,
 [docs/validation.md](docs/validation.md) for optional diagnostics,
+[docs/capture.md](docs/capture.md) for the versioned diagnostic stream and
+host decoder,
 [docs/shader_pipelines.md](docs/shader_pipelines.md) for the reflection and
 pipeline contract, and [PLAN.md](PLAN.md) for the remaining dependency order.
 

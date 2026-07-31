@@ -54,7 +54,8 @@ queue/device mismatches, fence reuse, unsatisfied or decreasing GPU-label
 dependencies, mismatched committed resource transitions, and submission-time
 command-space exhaustion. Later Milestone 5 slices extend the same message
 contract across creation, pipeline compatibility, descriptor, range, and
-resource-lifetime validation before command capture is enabled.
+resource-lifetime validation. API v24 capture serializes these pointer-free
+messages even when the application callback is disabled.
 
 ## Release behavior
 

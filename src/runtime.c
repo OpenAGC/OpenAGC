@@ -5,6 +5,7 @@
  */
 
 #include "openagc/runtime.h"
+#include "openagc/capture.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,6 +35,7 @@
 #define AGC_MAGIC_FENCE UINT32_C(0x464e5641)
 #define AGC_MAGIC_GPU_LABEL UINT32_C(0x4c425641)
 #define AGC_MAGIC_PRESENT_CHAIN UINT32_C(0x50435641)
+#define AGC_MAGIC_CAPTURE UINT32_C(0x4350564f)
 
 #define AGC_FLEXIBLE_HEAP_BLOCK_SIZE UINT64_C(0x01000000)
 #define AGC_GARLIC_HEAP_BLOCK_SIZE UINT64_C(0x02000000)
@@ -55,6 +57,7 @@
 typedef struct AgcRuntimeBlock AgcRuntimeBlock;
 typedef struct AgcRuntimeAllocation AgcRuntimeAllocation;
 typedef struct AgcDeferredFree AgcDeferredFree;
+typedef struct AgcCaptureObjectMap AgcCaptureObjectMap;
 
 typedef struct AgcRuntimeRecordedTransition {
     AgcResourceType resource_type;
@@ -124,6 +127,8 @@ typedef struct AgcRuntimeRecordedLabelSignal {
 
 static int agcCommandRetainGpuLabel(AgcCommandBuffer command_buffer,
     AgcGpuLabel label);
+static void agcCaptureRecordValidation(
+    AgcDevice device, const AgcDebugMessage *message);
 
 typedef struct AgcRuntimePipelineResourceLayout {
     uint64_t set_offsets[8];
@@ -165,6 +170,28 @@ struct AgcDeferredFree {
     uint32_t type;
 };
 
+struct AgcCaptureObjectMap {
+    AgcCaptureObjectMap *next;
+    const void *object;
+    uint64_t id;
+    uint32_t type;
+};
+
+struct AgcCaptureImpl {
+    uint32_t magic;
+    uint32_t flags;
+    AgcDevice device;
+    AgcCaptureWriteFunction write;
+    void *user_data;
+    uint32_t active;
+    int32_t status;
+    uint64_t record_count;
+    uint64_t byte_count;
+    uint64_t sequence;
+    uint64_t next_object_id;
+    AgcCaptureObjectMap *objects;
+};
+
 struct AgcDeviceImpl {
     uint32_t magic;
     uint32_t child_count;
@@ -190,6 +217,7 @@ struct AgcDeviceImpl {
     uint64_t debug_sequence;
     uint32_t has_debug_message;
     AgcDebugMessage last_debug_message;
+    AgcCapture active_capture;
 };
 
 struct AgcQueueImpl {
@@ -422,6 +450,10 @@ _Static_assert(offsetof(AgcDebugMessage, message) == 144u,
     "AgcDebugMessage message offset mismatch");
 _Static_assert(sizeof(AgcDebugCallbackDesc) == 64u,
     "AgcDebugCallbackDesc ABI size mismatch");
+_Static_assert(sizeof(AgcCaptureDesc) == 64u,
+    "AgcCaptureDesc ABI size mismatch");
+_Static_assert(sizeof(AgcCaptureInfo) == 72u,
+    "AgcCaptureInfo ABI size mismatch");
 
 static int agcCommandImageRangeState(AgcCommandBuffer command_buffer,
     AgcImage image, const AgcImageSubresourceRange *range,
@@ -475,14 +507,22 @@ static int32_t agcDebugReport(AgcDevice device,
     const char *object_name, const char *message)
 {
     AgcDebugMessage debug_message = AGC_DEBUG_MESSAGE_INIT;
+    int callback_selected;
+    int capture_selected;
 
-    if (!agcDeviceValid(device) || !device->debug_callback ||
-        (device->debug_severity_mask & severity) == 0u ||
-        (device->debug_category_mask & category) == 0u) {
+    if (!agcDeviceValid(device))
         return result;
+    callback_selected = device->debug_callback != NULL &&
+        (device->debug_severity_mask & severity) != 0u &&
+        (device->debug_category_mask & category) != 0u;
+    capture_selected = device->active_capture != NULL &&
+        device->active_capture->active;
+    if (!callback_selected && !capture_selected)
+        return result;
+    if (callback_selected) {
+        device->debug_sequence++;
+        debug_message.sequence = device->debug_sequence;
     }
-    device->debug_sequence++;
-    debug_message.sequence = device->debug_sequence;
     debug_message.severity = severity;
     debug_message.category = category;
     debug_message.result = result;
@@ -494,10 +534,14 @@ static int32_t agcDebugReport(AgcDevice device,
         sizeof(debug_message.object_name), "%s", object_name ? object_name : "");
     (void)snprintf(debug_message.message, sizeof(debug_message.message), "%s",
         message ? message : "");
-    device->last_debug_message = debug_message;
-    device->has_debug_message = 1u;
-    device->debug_callback(device->debug_user_data,
-        &device->last_debug_message);
+    if (capture_selected)
+        agcCaptureRecordValidation(device, &debug_message);
+    if (callback_selected) {
+        device->last_debug_message = debug_message;
+        device->has_debug_message = 1u;
+        device->debug_callback(device->debug_user_data,
+            &device->last_debug_message);
+    }
     return result;
 }
 
@@ -524,6 +568,342 @@ static void agcFree(AgcDevice device, void *memory)
         device->allocation.free(device->allocation.user_data, memory);
     else
         free(memory);
+}
+
+static void agcCaptureWrite(AgcCapture capture, const void *data, size_t size)
+{
+    if (!capture || !capture->active || capture->status != AGC_OK ||
+        size == 0u)
+        return;
+    if (UINT64_MAX - capture->byte_count < size) {
+        capture->status = AGC_ERROR_OUT_OF_MEMORY;
+        return;
+    }
+    capture->write(capture->user_data, data, size);
+    capture->byte_count += size;
+}
+
+static void agcCaptureWriteU16(AgcCapture capture, uint16_t value)
+{
+    uint8_t bytes[2] = {
+        (uint8_t)value, (uint8_t)(value >> 8)
+    };
+    agcCaptureWrite(capture, bytes, sizeof(bytes));
+}
+
+static void agcCaptureWriteU32(AgcCapture capture, uint32_t value)
+{
+    uint8_t bytes[4] = {
+        (uint8_t)value, (uint8_t)(value >> 8),
+        (uint8_t)(value >> 16), (uint8_t)(value >> 24)
+    };
+    agcCaptureWrite(capture, bytes, sizeof(bytes));
+}
+
+static void agcCaptureWriteU64(AgcCapture capture, uint64_t value)
+{
+    uint8_t bytes[8];
+    uint32_t i;
+
+    for (i = 0u; i < 8u; ++i)
+        bytes[i] = (uint8_t)(value >> (i * 8u));
+    agcCaptureWrite(capture, bytes, sizeof(bytes));
+}
+
+static int agcCaptureBeginRecord(AgcCapture capture, uint16_t type,
+    uint32_t payload_size)
+{
+    uint32_t record_size;
+
+    if (!capture || !capture->active || capture->status != AGC_OK ||
+        payload_size > UINT32_MAX - AGC_CAPTURE_RECORD_HEADER_SIZE) {
+        if (capture && payload_size >
+                UINT32_MAX - AGC_CAPTURE_RECORD_HEADER_SIZE)
+            capture->status = AGC_ERROR_OUT_OF_MEMORY;
+        return 0;
+    }
+    record_size = AGC_CAPTURE_RECORD_HEADER_SIZE + payload_size;
+    capture->sequence++;
+    capture->record_count++;
+    agcCaptureWriteU16(capture, type);
+    agcCaptureWriteU16(capture, AGC_CAPTURE_FORMAT_VERSION);
+    agcCaptureWriteU32(capture, record_size);
+    agcCaptureWriteU64(capture, capture->sequence);
+    return capture->status == AGC_OK;
+}
+
+static void agcCaptureClearObjects(AgcCapture capture)
+{
+    AgcCaptureObjectMap *entry = capture->objects;
+
+    while (entry) {
+        AgcCaptureObjectMap *next = entry->next;
+        agcFree(capture->device, entry);
+        entry = next;
+    }
+    capture->objects = NULL;
+}
+
+static uint64_t agcCaptureObjectId(AgcCapture capture, const void *object,
+    uint32_t type)
+{
+    AgcCaptureObjectMap *entry;
+
+    if (!capture || !capture->active || !object)
+        return 0u;
+    for (entry = capture->objects; entry; entry = entry->next) {
+        if (entry->object == object && entry->type == type)
+            return entry->id;
+    }
+    if (capture->next_object_id == UINT64_MAX) {
+        capture->status = AGC_ERROR_NOT_SUPPORTED;
+        return 0u;
+    }
+    entry = agcAlloc(capture->device, sizeof(*entry), sizeof(void *));
+    if (!entry) {
+        capture->status = AGC_ERROR_OUT_OF_MEMORY;
+        return 0u;
+    }
+    entry->object = object;
+    entry->type = type;
+    entry->id = capture->next_object_id++;
+    entry->next = capture->objects;
+    capture->objects = entry;
+    return entry->id;
+}
+
+static void agcCaptureRecordRuntimeInfo(AgcCapture capture)
+{
+    const AgcRuntimeInfo *info = &capture->device->runtime_info;
+
+    if (!agcCaptureBeginRecord(capture, AGC_CAPTURE_RECORD_RUNTIME_INFO, 76u))
+        return;
+    agcCaptureWriteU32(capture, info->firmware_version);
+    agcCaptureWriteU16(capture, info->firmware_abi_key);
+    agcCaptureWriteU16(capture, info->hardware_family);
+    agcCaptureWriteU32(capture, info->agc_version);
+    agcCaptureWriteU64(capture, info->capability_bits);
+    agcCaptureWrite(capture, info->qualification,
+        AGC_RUNTIME_CAPABILITY_COUNT);
+    agcCaptureWrite(capture, info->profile_name,
+        AGC_RUNTIME_PROFILE_NAME_SIZE);
+}
+
+static void agcCaptureRecordObjectCreate(AgcDevice device,
+    const void *object, uint32_t type, uint32_t detail0, uint32_t detail1)
+{
+    AgcCapture capture = device->active_capture;
+    uint64_t id;
+
+    if (!capture || !capture->active)
+        return;
+    id = agcCaptureObjectId(capture, object, type);
+    if (id == 0u || !agcCaptureBeginRecord(capture,
+            AGC_CAPTURE_RECORD_OBJECT_CREATE, 24u))
+        return;
+    agcCaptureWriteU64(capture, id);
+    agcCaptureWriteU32(capture, type);
+    agcCaptureWriteU32(capture, 0u);
+    agcCaptureWriteU32(capture, detail0);
+    agcCaptureWriteU32(capture, detail1);
+}
+
+static void agcCaptureRecordObjectDestroy(AgcDevice device,
+    const void *object, uint32_t type)
+{
+    AgcCapture capture = device->active_capture;
+    uint64_t id;
+
+    if (!capture || !capture->active)
+        return;
+    id = agcCaptureObjectId(capture, object, type);
+    if (id == 0u || !agcCaptureBeginRecord(capture,
+            AGC_CAPTURE_RECORD_OBJECT_DESTROY, 16u))
+        return;
+    agcCaptureWriteU64(capture, id);
+    agcCaptureWriteU32(capture, type);
+    agcCaptureWriteU32(capture, 0u);
+}
+
+static void agcCaptureRecordObjectName(AgcDevice device,
+    const void *object, uint32_t type, const char *name)
+{
+    AgcCapture capture = device->active_capture;
+    uint64_t id;
+    char bounded_name[AGC_RUNTIME_DEBUG_NAME_SIZE] = {0};
+
+    if (!capture || !capture->active)
+        return;
+    id = agcCaptureObjectId(capture, object, type);
+    if (id == 0u || !agcCaptureBeginRecord(capture,
+            AGC_CAPTURE_RECORD_OBJECT_NAME, 76u))
+        return;
+    (void)snprintf(bounded_name, sizeof(bounded_name), "%s", name);
+    agcCaptureWriteU64(capture, id);
+    agcCaptureWriteU32(capture, type);
+    agcCaptureWrite(capture, bounded_name, sizeof(bounded_name));
+}
+
+static uint32_t agcCaptureObjectTypeFromRuntime(AgcObjectType type)
+{
+    switch (type) {
+    case AGC_OBJECT_TYPE_BUFFER:
+        return AGC_CAPTURE_OBJECT_BUFFER;
+    case AGC_OBJECT_TYPE_IMAGE:
+        return AGC_CAPTURE_OBJECT_IMAGE;
+    case AGC_OBJECT_TYPE_SHADER:
+        return AGC_CAPTURE_OBJECT_SHADER;
+    case AGC_OBJECT_TYPE_COMMAND_BUFFER:
+        return AGC_CAPTURE_OBJECT_COMMAND_BUFFER;
+    case AGC_OBJECT_TYPE_IMAGE_VIEW:
+        return AGC_CAPTURE_OBJECT_IMAGE_VIEW;
+    case AGC_OBJECT_TYPE_SAMPLER:
+        return AGC_CAPTURE_OBJECT_SAMPLER;
+    default:
+        return UINT32_MAX;
+    }
+}
+
+static void agcCaptureRecordCommandBegin(AgcCommandBuffer command_buffer)
+{
+    AgcCapture capture = command_buffer->device->active_capture;
+    uint64_t id;
+
+    if (!capture || !capture->active)
+        return;
+    id = agcCaptureObjectId(capture, command_buffer,
+        AGC_CAPTURE_OBJECT_COMMAND_BUFFER);
+    if (id == 0u || !agcCaptureBeginRecord(capture,
+            AGC_CAPTURE_RECORD_COMMAND_BEGIN, 16u))
+        return;
+    agcCaptureWriteU64(capture, id);
+    agcCaptureWriteU32(capture, command_buffer->queue_type);
+    agcCaptureWriteU32(capture, command_buffer->capacity_dwords);
+}
+
+static void agcCaptureRecordCommandWords(AgcCommandBuffer command_buffer,
+    uint16_t record_type)
+{
+    AgcCapture capture = command_buffer->device->active_capture;
+    uint32_t used;
+    uint32_t payload_size;
+    uint32_t i;
+    uint64_t id;
+
+    if (!capture || !capture->active)
+        return;
+    used = agcCbUsedDwords(&command_buffer->cursor);
+    if (used > (UINT32_MAX - 16u) / sizeof(uint32_t)) {
+        capture->status = AGC_ERROR_OUT_OF_MEMORY;
+        return;
+    }
+    payload_size = 16u + used * sizeof(uint32_t);
+    id = agcCaptureObjectId(capture, command_buffer,
+        AGC_CAPTURE_OBJECT_COMMAND_BUFFER);
+    if (id == 0u || !agcCaptureBeginRecord(capture,
+            record_type, payload_size))
+        return;
+    agcCaptureWriteU64(capture, id);
+    agcCaptureWriteU32(capture, command_buffer->queue_type);
+    agcCaptureWriteU32(capture, used);
+    for (i = 0u; i < used; ++i)
+        agcCaptureWriteU32(capture, command_buffer->storage[i]);
+}
+
+static void agcCaptureRecordValidation(
+    AgcDevice device, const AgcDebugMessage *message)
+{
+    AgcCapture capture = device->active_capture;
+
+    if (!capture || !capture->active || !agcCaptureBeginRecord(capture,
+            AGC_CAPTURE_RECORD_VALIDATION_MESSAGE, 328u))
+        return;
+    agcCaptureWriteU64(capture, message->sequence);
+    agcCaptureWriteU32(capture, message->severity);
+    agcCaptureWriteU32(capture, message->category);
+    agcCaptureWriteU32(capture, (uint32_t)message->result);
+    agcCaptureWriteU32(capture, message->object_type);
+    agcCaptureWrite(capture, message->function_name,
+        AGC_RUNTIME_DEBUG_FUNCTION_NAME_SIZE);
+    agcCaptureWrite(capture, message->object_name,
+        AGC_RUNTIME_DEBUG_NAME_SIZE);
+    agcCaptureWrite(capture, message->message,
+        AGC_RUNTIME_DEBUG_MESSAGE_SIZE);
+}
+
+static void agcCaptureRecordSubmission(AgcQueue queue,
+    const AgcSubmitInfo *submit_info, AgcFence fence, int32_t result,
+    uint64_t submission_id)
+{
+    AgcCapture capture = queue->device->active_capture;
+    uint32_t wait_count = 0u;
+    uint32_t signal_count = 0u;
+    uint64_t payload_size;
+    uint64_t fence_id = 0u;
+    uint32_t i;
+
+    if (!capture || !capture->active)
+        return;
+    if (submit_info->version == AGC_RUNTIME_STRUCTURE_VERSION_2) {
+        wait_count = submit_info->wait_count;
+        signal_count = submit_info->signal_count;
+    }
+    payload_size = 40u + (uint64_t)submit_info->command_buffer_count * 8u +
+        (uint64_t)(wait_count + signal_count) * 16u;
+    if (payload_size > UINT32_MAX) {
+        capture->status = AGC_ERROR_OUT_OF_MEMORY;
+        return;
+    }
+    if (fence)
+        fence_id = agcCaptureObjectId(capture, fence,
+            AGC_CAPTURE_OBJECT_FENCE);
+    if (!agcCaptureBeginRecord(capture, AGC_CAPTURE_RECORD_SUBMISSION,
+            (uint32_t)payload_size))
+        return;
+    agcCaptureWriteU64(capture, submission_id);
+    agcCaptureWriteU32(capture, queue->type);
+    agcCaptureWriteU32(capture, submit_info->command_buffer_count);
+    agcCaptureWriteU32(capture, wait_count);
+    agcCaptureWriteU32(capture, signal_count);
+    agcCaptureWriteU32(capture, (uint32_t)result);
+    agcCaptureWriteU32(capture, 0u);
+    agcCaptureWriteU64(capture, fence_id);
+    for (i = 0u; i < submit_info->command_buffer_count; ++i) {
+        agcCaptureWriteU64(capture, agcCaptureObjectId(capture,
+            submit_info->command_buffers[i],
+            AGC_CAPTURE_OBJECT_COMMAND_BUFFER));
+    }
+    for (i = 0u; i < wait_count; ++i) {
+        agcCaptureWriteU64(capture, agcCaptureObjectId(capture,
+            submit_info->waits[i].label, AGC_CAPTURE_OBJECT_GPU_LABEL));
+        agcCaptureWriteU32(capture, submit_info->waits[i].value);
+        agcCaptureWriteU32(capture, 0u);
+    }
+    for (i = 0u; i < signal_count; ++i) {
+        agcCaptureWriteU64(capture, agcCaptureObjectId(capture,
+            submit_info->signals[i].label, AGC_CAPTURE_OBJECT_GPU_LABEL));
+        agcCaptureWriteU32(capture, submit_info->signals[i].value);
+        agcCaptureWriteU32(capture, 0u);
+    }
+}
+
+static void agcCaptureRecordFenceResult(AgcFence fence, int32_t result,
+    uint64_t timeout_ns)
+{
+    AgcCapture capture = fence->device->active_capture;
+    uint64_t id;
+
+    if (!capture || !capture->active)
+        return;
+    id = agcCaptureObjectId(capture, fence, AGC_CAPTURE_OBJECT_FENCE);
+    if (id == 0u || !agcCaptureBeginRecord(capture,
+            AGC_CAPTURE_RECORD_FENCE_RESULT, 32u))
+        return;
+    agcCaptureWriteU64(capture, id);
+    agcCaptureWriteU64(capture, fence->submission_id);
+    agcCaptureWriteU32(capture, (uint32_t)result);
+    agcCaptureWriteU32(capture, 1u);
+    agcCaptureWriteU64(capture, timeout_ns);
 }
 
 static int agcAddU64(uint64_t a, uint64_t b, uint64_t *result)
@@ -1032,6 +1412,131 @@ int32_t PS5_SYSV_ABI agcGetRuntimeInfo(
     return AGC_OK;
 }
 
+int32_t PS5_SYSV_ABI agcCreateCapture(AgcDevice device,
+    const AgcCaptureDesc *desc, AgcCapture *capture_out)
+{
+    AgcCapture capture;
+
+    if (!capture_out)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    *capture_out = NULL;
+    if (!agcDeviceValid(device) || !desc ||
+        !agcHeaderValid(desc->struct_size, sizeof(*desc), desc->version) ||
+        (desc->flags & ~AGC_CAPTURE_INCLUDE_SHADER_BYTES_BIT) != 0u ||
+        desc->reserved0 != 0u || !desc->write ||
+        !agcReservedZero(desc->reserved, 4u)) {
+        return AGC_ERROR_INVALID_ARGUMENT;
+    }
+    capture = agcCreateChild(device, sizeof(*capture));
+    if (!capture)
+        return AGC_ERROR_OUT_OF_MEMORY;
+    capture->magic = AGC_MAGIC_CAPTURE;
+    capture->flags = desc->flags;
+    capture->device = device;
+    capture->write = desc->write;
+    capture->user_data = desc->user_data;
+    capture->status = AGC_OK;
+    capture->next_object_id = 1u;
+    *capture_out = capture;
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcDestroyCapture(AgcCapture capture)
+{
+    AgcDevice device;
+
+    if (!capture || capture->magic != AGC_MAGIC_CAPTURE ||
+        !agcDeviceValid(capture->device)) {
+        return AGC_ERROR_INVALID_ARGUMENT;
+    }
+    if (capture->active)
+        return AGC_ERROR_BUSY;
+    device = capture->device;
+    agcCaptureClearObjects(capture);
+    capture->magic = 0u;
+    agcDestroyChild(device, capture);
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcBeginCapture(AgcCapture capture)
+{
+    static const uint8_t magic[8] = {
+        AGC_CAPTURE_MAGIC_BYTE_0, AGC_CAPTURE_MAGIC_BYTE_1,
+        AGC_CAPTURE_MAGIC_BYTE_2, AGC_CAPTURE_MAGIC_BYTE_3,
+        AGC_CAPTURE_MAGIC_BYTE_4, AGC_CAPTURE_MAGIC_BYTE_5,
+        AGC_CAPTURE_MAGIC_BYTE_6, AGC_CAPTURE_MAGIC_BYTE_7
+    };
+    AgcDevice device;
+
+    if (!capture || capture->magic != AGC_MAGIC_CAPTURE ||
+        !agcDeviceValid(capture->device)) {
+        return AGC_ERROR_INVALID_ARGUMENT;
+    }
+    device = capture->device;
+    if (capture->active || device->active_capture)
+        return AGC_ERROR_BUSY;
+    agcCaptureClearObjects(capture);
+    capture->active = 1u;
+    capture->status = AGC_OK;
+    capture->record_count = 0u;
+    capture->byte_count = 0u;
+    capture->sequence = 0u;
+    capture->next_object_id = 1u;
+    device->active_capture = capture;
+    agcCaptureWrite(capture, magic, sizeof(magic));
+    agcCaptureWriteU32(capture, AGC_CAPTURE_FORMAT_VERSION);
+    agcCaptureWriteU32(capture, AGC_CAPTURE_FILE_HEADER_SIZE);
+    agcCaptureWriteU32(capture, AGC_CAPTURE_ENDIAN_TAG);
+    agcCaptureWriteU32(capture, AGC_RUNTIME_API_VERSION);
+    agcCaptureWriteU32(capture, capture->flags);
+    agcCaptureWriteU32(capture, 0u);
+    agcCaptureRecordRuntimeInfo(capture);
+    return capture->status;
+}
+
+int32_t PS5_SYSV_ABI agcEndCapture(AgcCapture capture)
+{
+    int32_t status;
+
+    if (!capture || capture->magic != AGC_MAGIC_CAPTURE ||
+        !agcDeviceValid(capture->device)) {
+        return AGC_ERROR_INVALID_ARGUMENT;
+    }
+    if (!capture->active || capture->device->active_capture != capture)
+        return AGC_ERROR_INVALID_STATE;
+    status = capture->status;
+    if (status == AGC_OK && agcCaptureBeginRecord(capture,
+            AGC_CAPTURE_RECORD_END, 24u)) {
+        uint64_t final_byte_count = capture->byte_count + 24u;
+        agcCaptureWriteU32(capture, (uint32_t)status);
+        agcCaptureWriteU32(capture, 0u);
+        agcCaptureWriteU64(capture, capture->record_count);
+        agcCaptureWriteU64(capture, final_byte_count);
+        status = capture->status;
+    }
+    capture->device->active_capture = NULL;
+    capture->active = 0u;
+    agcCaptureClearObjects(capture);
+    return status;
+}
+
+int32_t PS5_SYSV_ABI agcGetCaptureInfo(
+    AgcCapture capture, AgcCaptureInfo *info)
+{
+    if (!capture || capture->magic != AGC_MAGIC_CAPTURE ||
+        !agcDeviceValid(capture->device) || !info ||
+        !agcHeaderValid(info->struct_size, sizeof(*info), info->version) ||
+        !agcReservedZero(info->reserved, 4u)) {
+        return AGC_ERROR_INVALID_ARGUMENT;
+    }
+    info->active = capture->active;
+    info->status = capture->status;
+    info->record_count = capture->record_count;
+    info->byte_count = capture->byte_count;
+    info->next_object_id = capture->next_object_id;
+    return AGC_OK;
+}
+
 int32_t PS5_SYSV_ABI agcCreateQueue(
     AgcDevice device, const AgcQueueDesc *desc, AgcQueue *queue_out)
 {
@@ -1087,6 +1592,8 @@ int32_t PS5_SYSV_ABI agcCreateQueue(
         device->graphics_queue_count++;
     else
         device->compute_queue_count++;
+    agcCaptureRecordObjectCreate(device, queue, AGC_CAPTURE_OBJECT_QUEUE,
+        (uint32_t)queue->type, desc->priority);
     *queue_out = queue;
     return AGC_OK;
 }
@@ -1115,6 +1622,7 @@ int32_t PS5_SYSV_ABI agcDestroyQueue(AgcQueue queue)
     } else {
         device->graphics_queue_count--;
     }
+    agcCaptureRecordObjectDestroy(device, queue, AGC_CAPTURE_OBJECT_QUEUE);
     queue->magic = 0u;
     agcDestroyChild(device, queue);
     return AGC_OK;
@@ -5104,6 +5612,9 @@ int32_t PS5_SYSV_ABI agcCreateCommandBuffer(AgcDevice device,
     command_buffer->state = AGC_COMMAND_BUFFER_STATE_INITIAL;
     command_buffer->capacity_dwords = desc->capacity_dwords;
     agcCbInit(&command_buffer->cursor, command_buffer->storage, storage_size);
+    agcCaptureRecordObjectCreate(device, command_buffer,
+        AGC_CAPTURE_OBJECT_COMMAND_BUFFER, (uint32_t)desc->queue_type,
+        desc->capacity_dwords);
     *command_buffer_out = command_buffer;
     return AGC_OK;
 }
@@ -5124,6 +5635,8 @@ int32_t PS5_SYSV_ABI agcDestroyCommandBuffer(AgcCommandBuffer command_buffer)
     device = command_buffer->device;
     agcReleaseCommandReferences(command_buffer);
     agcRuntimeFree(device, command_buffer->allocation);
+    agcCaptureRecordObjectDestroy(device, command_buffer,
+        AGC_CAPTURE_OBJECT_COMMAND_BUFFER);
     command_buffer->magic = 0u;
     agcDestroyChild(device, command_buffer);
     return AGC_OK;
@@ -5146,6 +5659,7 @@ int32_t PS5_SYSV_ABI agcBeginCommandBuffer(AgcCommandBuffer command_buffer)
     agcCbReset(&command_buffer->cursor, command_buffer->storage,
         (size_t)command_buffer->capacity_dwords * sizeof(uint32_t));
     command_buffer->state = AGC_COMMAND_BUFFER_STATE_RECORDING;
+    agcCaptureRecordCommandBegin(command_buffer);
     return AGC_OK;
 }
 
@@ -5164,6 +5678,8 @@ int32_t PS5_SYSV_ABI agcEndCommandBuffer(AgcCommandBuffer command_buffer)
             command_buffer->allocation->debug_name,
             "command buffer must be Recording before end");
     command_buffer->state = AGC_COMMAND_BUFFER_STATE_EXECUTABLE;
+    agcCaptureRecordCommandWords(command_buffer,
+        AGC_CAPTURE_RECORD_COMMAND_END);
     return AGC_OK;
 }
 
@@ -8304,6 +8820,8 @@ int32_t PS5_SYSV_ABI agcCreateGpuLabel(
     label->last_signal_value = desc->initial_value;
     label->last_signal_queue_type = UINT32_MAX;
     label->last_wait_result = AGC_ERROR_BUSY;
+    agcCaptureRecordObjectCreate(device, label,
+        AGC_CAPTURE_OBJECT_GPU_LABEL, desc->initial_value, 0u);
     *label_out = label;
     return AGC_OK;
 }
@@ -8321,6 +8839,8 @@ int32_t PS5_SYSV_ABI agcDestroyGpuLabel(AgcGpuLabel label)
     if (label->last_signal_queue)
         label->last_signal_queue->label_refs--;
     agcRuntimeFree(device, label->allocation);
+    agcCaptureRecordObjectDestroy(device, label,
+        AGC_CAPTURE_OBJECT_GPU_LABEL);
     label->magic = 0u;
     agcDestroyChild(device, label);
     return AGC_OK;
@@ -8561,6 +9081,8 @@ int32_t PS5_SYSV_ABI agcCreateFence(
 #endif
     fence->magic = AGC_MAGIC_FENCE;
     fence->signaled = desc->signaled;
+    agcCaptureRecordObjectCreate(device, fence, AGC_CAPTURE_OBJECT_FENCE,
+        desc->signaled, 0u);
     *fence_out = fence;
     return AGC_OK;
 }
@@ -8578,6 +9100,7 @@ int32_t PS5_SYSV_ABI agcDestroyFence(AgcFence fence)
     device = fence->device;
     if (fence->allocation)
         agcRuntimeFree(device, fence->allocation);
+    agcCaptureRecordObjectDestroy(device, fence, AGC_CAPTURE_OBJECT_FENCE);
     fence->magic = 0u;
     agcDestroyChild(device, fence);
     return AGC_OK;
@@ -8717,6 +9240,7 @@ int32_t PS5_SYSV_ABI agcWaitFence(AgcFence fence, uint64_t timeout_ns)
     result = agcFencePollCompletion(fence);
     if (result != AGC_ERROR_BUSY) {
         fence->last_wait_result = result;
+        agcCaptureRecordFenceResult(fence, result, timeout_ns);
         return result;
     }
 #ifdef OPENAGC_PROSPERO
@@ -8736,6 +9260,7 @@ int32_t PS5_SYSV_ABI agcWaitFence(AgcFence fence, uint64_t timeout_ns)
                 fence->timeout_count++;
                 fence->last_timeout_ns = timeout_ns;
             }
+            agcCaptureRecordFenceResult(fence, result, timeout_ns);
             return result;
         }
         result = agcFencePollCompletion(fence);
@@ -8746,13 +9271,16 @@ int32_t PS5_SYSV_ABI agcWaitFence(AgcFence fence, uint64_t timeout_ns)
             fence->timeout_count++;
             fence->last_timeout_ns = timeout_ns;
         }
+        agcCaptureRecordFenceResult(fence, result, timeout_ns);
         return result;
     }
+    agcCaptureRecordFenceResult(fence, AGC_ERROR_INTERNAL, timeout_ns);
     return AGC_ERROR_INTERNAL;
 #else
     fence->last_wait_result = AGC_ERROR_TIMEOUT;
     fence->timeout_count++;
     fence->last_timeout_ns = timeout_ns;
+    agcCaptureRecordFenceResult(fence, AGC_ERROR_TIMEOUT, timeout_ns);
     return AGC_ERROR_TIMEOUT;
 #endif
 }
@@ -9105,8 +9633,20 @@ int32_t PS5_SYSV_ABI agcQueueSubmit(
             "submission fence must be reset before reuse");
     if (queue->next_submission_id == UINT64_MAX)
         return AGC_ERROR_NOT_SUPPORTED;
-    if (submit_info->command_buffer_count > 1u)
-        return agcQueueSubmitBatch(queue, submit_info, fence);
+    if (submit_info->command_buffer_count > 1u) {
+        uint32_t i;
+        result = agcQueueSubmitBatch(queue, submit_info, fence);
+        if (result == AGC_OK) {
+            for (i = 0u; i < submit_info->command_buffer_count; ++i) {
+                agcCaptureRecordCommandWords(
+                    submit_info->command_buffers[i],
+                    AGC_CAPTURE_RECORD_COMMAND_STREAM);
+            }
+        }
+        agcCaptureRecordSubmission(queue, submit_info, fence, result,
+            result == AGC_OK ? queue->next_submission_id : 0u);
+        return result;
+    }
     command_buffer = submit_info->command_buffers[0];
     if (!command_buffer || command_buffer->magic != AGC_MAGIC_COMMAND_BUFFER ||
         command_buffer->device != queue->device ||
@@ -9246,6 +9786,8 @@ int32_t PS5_SYSV_ABI agcQueueSubmit(
         command_buffer->allocation);
     packet.dword_count = agcCbUsedDwords(&command_buffer->cursor);
     packet.reserved = 0u;
+    agcCaptureRecordCommandWords(command_buffer,
+        AGC_CAPTURE_RECORD_COMMAND_STREAM);
     command_buffer->state = AGC_COMMAND_BUFFER_STATE_PENDING;
     command_buffer->pending_refs++;
     queue->pending_count++;
@@ -9281,6 +9823,8 @@ int32_t PS5_SYSV_ABI agcQueueSubmit(
             fence->last_wait_result = AGC_ERROR_BUSY;
         }
     }
+    agcCaptureRecordSubmission(queue, submit_info, fence, result,
+        result == AGC_OK ? queue->next_submission_id : 0u);
 #ifdef OPENAGC_PROSPERO
     if (result == AGC_OK) {
         fence->pending_command_buffer_count = 1u;
@@ -9417,6 +9961,11 @@ int32_t PS5_SYSV_ABI agcSetObjectDebugName(AgcDevice device,
         return AGC_ERROR_INVALID_ARGUMENT;
     (void)snprintf(allocation->debug_name, sizeof(allocation->debug_name),
         "%s", name);
+    {
+        uint32_t capture_type = agcCaptureObjectTypeFromRuntime(type);
+        if (capture_type != UINT32_MAX)
+            agcCaptureRecordObjectName(device, object, capture_type, name);
+    }
     return AGC_OK;
 }
 

@@ -149,6 +149,12 @@ add_test(NAME firmware_neutral_elf_verifier
     COMMAND sh
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_firmware_neutral_elf_verifier.sh
         ${CMAKE_CURRENT_SOURCE_DIR}/tools/verify_firmware_neutral_elf.sh)
+find_package(Python3 QUIET COMPONENTS Interpreter)
+if(Python3_Interpreter_FOUND)
+    add_test(NAME capture_decoder_v1
+        COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_capture_decoder.py)
+endif()
 endif()
 
 # === Optional compiler/runtime integration test ===
@@ -238,7 +244,7 @@ if(OPENAGC_PACKAGE_PSBC)
         RENAME openagc-psbc)
 endif()
 install(FILES LICENSE README.md docs/native_runtime.md docs/memory_resources.md
-    docs/shader_pipelines.md
+    docs/shader_pipelines.md docs/validation.md docs/capture.md
     DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/doc/OpenAGC)
 
 set(OPENAGC_CMAKE_INSTALL_DIR

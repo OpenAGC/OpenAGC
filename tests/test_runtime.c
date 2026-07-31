@@ -13,6 +13,7 @@
 #include "agc_pm4.h"
 #include "agc_registers.h"
 #include "agc_texture.h"
+#include "openagc/capture.h"
 #include "openagc/runtime.h"
 
 #include "../samples/hw_test/shaders/fill_color_native_reflection.h"
@@ -39,6 +40,12 @@ typedef struct RuntimeDebugProbe {
     AgcDebugMessage last;
 } RuntimeDebugProbe;
 
+typedef struct RuntimeCaptureSink {
+    uint8_t bytes[65536];
+    size_t size;
+    uint32_t overflow;
+} RuntimeCaptureSink;
+
 static void PS5_SYSV_ABI runtime_debug_callback(
     void *user_data, const AgcDebugMessage *message)
 {
@@ -46,6 +53,40 @@ static void PS5_SYSV_ABI runtime_debug_callback(
 
     probe->callback_count++;
     probe->last = *message;
+}
+
+static void PS5_SYSV_ABI runtime_capture_write(
+    void *user_data, const void *data, size_t size)
+{
+    RuntimeCaptureSink *sink = user_data;
+
+    if (size > sizeof(sink->bytes) - sink->size) {
+        sink->overflow = 1u;
+        return;
+    }
+    memcpy(sink->bytes + sink->size, data, size);
+    sink->size += size;
+}
+
+static uint16_t runtime_capture_u16(const uint8_t *bytes)
+{
+    return (uint16_t)bytes[0] | (uint16_t)((uint16_t)bytes[1] << 8);
+}
+
+static uint32_t runtime_capture_u32(const uint8_t *bytes)
+{
+    return (uint32_t)bytes[0] | ((uint32_t)bytes[1] << 8) |
+        ((uint32_t)bytes[2] << 16) | ((uint32_t)bytes[3] << 24);
+}
+
+static uint64_t runtime_capture_u64(const uint8_t *bytes)
+{
+    uint64_t value = 0u;
+    uint32_t i;
+
+    for (i = 0u; i < 8u; ++i)
+        value |= (uint64_t)bytes[i] << (i * 8u);
+    return value;
 }
 
 static int32_t runtime_transition_buffer_to_graphics_read(
@@ -712,6 +753,189 @@ static void test_runtime_optional_debug_callback(void)
         "debug command destroys");
     TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
         "debug device destroys after dependencies release");
+}
+
+static void test_runtime_capture_v1_stream(void)
+{
+    AgcDevice device = create_device();
+    AgcCaptureDesc capture_desc = AGC_CAPTURE_DESC_INIT;
+    AgcCaptureInfo capture_info = AGC_CAPTURE_INFO_INIT;
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
+    AgcQueueDesc queue_desc = AGC_QUEUE_DESC_INIT;
+    AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    RuntimeCaptureSink sink = {0};
+    AgcCapture capture = NULL;
+    AgcCommandBuffer command = NULL;
+    AgcQueue queue = NULL;
+    AgcFence fence = NULL;
+    uint32_t counts[AGC_CAPTURE_RECORD_COMMAND_STREAM + 1u] = {0};
+    uint64_t expected_sequence = 1u;
+    size_t offset;
+
+    TEST_ASSERT_EQ(sizeof(AgcCaptureDesc), 64u,
+        "capture descriptor ABI size is stable");
+    TEST_ASSERT_EQ(sizeof(AgcCaptureInfo), 72u,
+        "capture info ABI size is stable");
+    capture_desc.user_data = &sink;
+    TEST_ASSERT_EQ(agcCreateCapture(device, &capture_desc, &capture),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "capture creation requires a streaming callback");
+    capture_desc.write = runtime_capture_write;
+    capture_desc.flags = UINT32_C(1) << 31;
+    TEST_ASSERT_EQ(agcCreateCapture(device, &capture_desc, &capture),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "capture creation rejects unknown flags");
+    capture_desc.flags = 0u;
+    TEST_ASSERT_EQ(agcCreateCapture(device, &capture_desc, &capture), AGC_OK,
+        "capture object creates");
+    TEST_ASSERT_EQ(agcGetCaptureInfo(capture, &capture_info), AGC_OK,
+        "inactive capture info queries");
+    TEST_ASSERT_EQ(capture_info.active, 0u,
+        "new capture starts inactive");
+    TEST_ASSERT_EQ(agcBeginCapture(capture), AGC_OK,
+        "capture stream begins");
+    TEST_ASSERT_EQ(agcBeginCapture(capture), AGC_ERROR_BUSY,
+        "active capture cannot begin twice");
+    TEST_ASSERT_EQ(agcDestroyCapture(capture), AGC_ERROR_BUSY,
+        "active capture cannot be destroyed");
+
+    command_desc.queue_type = kAgcQueueCompute;
+    command_desc.capacity_dwords = 64u;
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
+        AGC_OK, "captured command buffer creates");
+    TEST_ASSERT_EQ(agcSetObjectDebugName(device,
+        AGC_OBJECT_TYPE_COMMAND_BUFFER, command, "captured-command"), AGC_OK,
+        "captured command receives a debug name");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_ERROR_INVALID_STATE,
+        "capture records validation without a debug callback");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+        "captured command begins");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+        "captured empty command ends");
+
+    queue_desc.type = kAgcQueueCompute;
+    TEST_ASSERT_EQ(agcCreateQueue(device, &queue_desc, &queue), AGC_OK,
+        "captured compute queue creates");
+    TEST_ASSERT_EQ(agcCreateFence(device, &fence_desc, &fence), AGC_OK,
+        "captured fence creates");
+    submit.command_buffer_count = 1u;
+    submit.command_buffers = &command;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
+        "captured command submits");
+    TEST_ASSERT_EQ(agcWaitFence(fence, UINT64_C(1000000)), AGC_OK,
+        "captured fence wait completes");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+        "captured command resets");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "captured fence resets");
+    TEST_ASSERT_EQ(agcDestroyFence(fence), AGC_OK,
+        "captured fence destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+        "captured command destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
+        "captured queue destroys");
+    TEST_ASSERT_EQ(agcEndCapture(capture), AGC_OK,
+        "capture stream ends cleanly");
+    TEST_ASSERT_EQ(sink.overflow, 0u,
+        "capture sink did not overflow");
+    TEST_ASSERT(sink.size >= AGC_CAPTURE_FILE_HEADER_SIZE,
+        "capture contains a complete file header");
+    TEST_ASSERT(memcmp(sink.bytes, "OAGCCAP", 7u) == 0 &&
+        sink.bytes[7] == 0u, "capture magic is exact");
+    TEST_ASSERT_EQ(runtime_capture_u32(sink.bytes + 8u),
+        AGC_CAPTURE_FORMAT_VERSION, "capture format version is exact");
+    TEST_ASSERT_EQ(runtime_capture_u32(sink.bytes + 12u),
+        AGC_CAPTURE_FILE_HEADER_SIZE, "capture header size is exact");
+    TEST_ASSERT_EQ(runtime_capture_u32(sink.bytes + 16u),
+        AGC_CAPTURE_ENDIAN_TAG, "capture endian tag is little-endian");
+    TEST_ASSERT_EQ(runtime_capture_u32(sink.bytes + 20u),
+        AGC_RUNTIME_API_VERSION, "capture records runtime API version");
+
+    offset = AGC_CAPTURE_FILE_HEADER_SIZE;
+    while (offset < sink.size) {
+        uint16_t type;
+        uint16_t version;
+        uint32_t size;
+        uint64_t sequence;
+
+        TEST_ASSERT(sink.size - offset >= AGC_CAPTURE_RECORD_HEADER_SIZE,
+            "capture record header is in bounds");
+        if (sink.size - offset < AGC_CAPTURE_RECORD_HEADER_SIZE)
+            break;
+        type = runtime_capture_u16(sink.bytes + offset);
+        version = runtime_capture_u16(sink.bytes + offset + 2u);
+        size = runtime_capture_u32(sink.bytes + offset + 4u);
+        sequence = runtime_capture_u64(sink.bytes + offset + 8u);
+        TEST_ASSERT_EQ(version, AGC_CAPTURE_FORMAT_VERSION,
+            "capture record version is exact");
+        TEST_ASSERT(size >= AGC_CAPTURE_RECORD_HEADER_SIZE &&
+            size <= sink.size - offset, "capture record size is in bounds");
+        TEST_ASSERT_EQ(sequence, expected_sequence,
+            "capture record sequence is contiguous");
+        expected_sequence++;
+        if (type <= AGC_CAPTURE_RECORD_COMMAND_STREAM)
+            counts[type]++;
+        if (type == AGC_CAPTURE_RECORD_COMMAND_END) {
+            TEST_ASSERT_EQ(runtime_capture_u32(sink.bytes + offset + 28u), 0u,
+                "command-end record preserves empty application body");
+        } else if (type == AGC_CAPTURE_RECORD_COMMAND_STREAM) {
+            uint32_t used = runtime_capture_u32(sink.bytes + offset + 28u);
+            TEST_ASSERT_EQ(used, 2u,
+                "submitted stream includes runtime-owned generic NOP");
+            TEST_ASSERT_EQ(agcPm4Opcode(runtime_capture_u32(
+                sink.bytes + offset + 32u)), AGC_PM4_OP_NOP,
+                "submitted stream decodes its NOP packet");
+        } else if (type == AGC_CAPTURE_RECORD_END) {
+            TEST_ASSERT_EQ(runtime_capture_u64(sink.bytes + offset + 32u),
+                sink.size, "end record authenticates final byte count");
+        }
+        if (size < AGC_CAPTURE_RECORD_HEADER_SIZE || size > sink.size - offset)
+            break;
+        offset += size;
+    }
+    TEST_ASSERT_EQ(offset, sink.size,
+        "capture parser consumes the complete stream");
+    TEST_ASSERT_EQ(counts[AGC_CAPTURE_RECORD_RUNTIME_INFO], 1u,
+        "capture contains one runtime profile record");
+    TEST_ASSERT_EQ(counts[AGC_CAPTURE_RECORD_OBJECT_CREATE], 3u,
+        "capture contains command, queue, and fence creation");
+    TEST_ASSERT_EQ(counts[AGC_CAPTURE_RECORD_OBJECT_NAME], 1u,
+        "capture contains the command debug name");
+    TEST_ASSERT_EQ(counts[AGC_CAPTURE_RECORD_OBJECT_DESTROY], 3u,
+        "capture contains matching object destruction");
+    TEST_ASSERT_EQ(counts[AGC_CAPTURE_RECORD_COMMAND_BEGIN], 1u,
+        "capture contains one command begin boundary");
+    TEST_ASSERT_EQ(counts[AGC_CAPTURE_RECORD_COMMAND_END], 1u,
+        "capture contains one command end boundary");
+    TEST_ASSERT_EQ(counts[AGC_CAPTURE_RECORD_COMMAND_STREAM], 1u,
+        "capture contains exact submitted PM4 dwords");
+    TEST_ASSERT_EQ(counts[AGC_CAPTURE_RECORD_SUBMISSION], 1u,
+        "capture contains submission ordering");
+    TEST_ASSERT_EQ(counts[AGC_CAPTURE_RECORD_FENCE_RESULT], 1u,
+        "capture contains bounded fence result");
+    TEST_ASSERT_EQ(counts[AGC_CAPTURE_RECORD_VALIDATION_MESSAGE], 1u,
+        "capture contains actionable validation warning");
+    TEST_ASSERT_EQ(counts[AGC_CAPTURE_RECORD_END], 1u,
+        "capture contains one final record");
+
+    capture_info = (AgcCaptureInfo)AGC_CAPTURE_INFO_INIT;
+    TEST_ASSERT_EQ(agcGetCaptureInfo(capture, &capture_info), AGC_OK,
+        "completed capture info queries");
+    TEST_ASSERT_EQ(capture_info.active, 0u,
+        "completed capture is inactive");
+    TEST_ASSERT_EQ(capture_info.status, AGC_OK,
+        "completed capture status is successful");
+    TEST_ASSERT_EQ(capture_info.byte_count, sink.size,
+        "capture info reports exact byte count");
+    TEST_ASSERT_EQ(capture_info.record_count, expected_sequence - 1u,
+        "capture info reports exact record count");
+    TEST_ASSERT_EQ(capture_info.next_object_id, 4u,
+        "capture-local object IDs are dense and pointer-independent");
+    TEST_ASSERT_EQ(agcDestroyCapture(capture), AGC_OK,
+        "completed capture destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "capture device destroys without leaks");
 }
 
 typedef struct AllocationProbe {
@@ -7699,6 +7923,7 @@ void test_suite_runtime(void)
     TEST_SUITE("Firmware-neutral Native Runtime");
     TEST_RUN(test_runtime_descriptor_and_info_contract);
     TEST_RUN(test_runtime_optional_debug_callback);
+    TEST_RUN(test_runtime_capture_v1_stream);
     TEST_RUN(test_runtime_shader_reflection_contract);
     TEST_RUN(test_runtime_graphics_pipeline_compatibility_matrix);
     TEST_RUN(test_runtime_pipeline_layout_and_stage_validation);

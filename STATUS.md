@@ -26,18 +26,19 @@ compute and baseline graphics oracles now also passed on exact FW 5.50 through
 the direct DCB carrier, without application PM4 or firmware selection.
 
 Milestone 4 typed command recording, resource states, and synchronization is
-complete for the documented support scope. Clean generic verification passes
-16,946 assertions and CTest 7/7. Nine cleanup-first runtime targets pass as
+complete for the documented support scope. Generic verification passes 17,064
+assertions and CTest 8/8. Nine cleanup-first runtime targets pass as
 identical artifact bytes on exact standard PS5 FW 5.50 and FW 11.60, covering
 presentation, timeline waits, partial ownership, deferred retirement, and
 API-v22 command recycling. The independent FW 11.60 workload extension
 remains disabled and is not exercised by these native-runtime gates; the
 firmware-neutral baseline remains 2/2 PASS.
 
-1. **Build validation, diagnostics, and capture.** Runtime API v23 now has the
-   first optional allocation-free debug-callback slice for lifetime, command,
-   and submission errors. Extend it across creation/pipeline/resource
-   validation, then add the versioned command-stream capture/decoder.
+1. **Build validation, diagnostics, and capture.** Runtime API v23 has the
+   first optional allocation-free debug-callback slice. API v24 now adds the
+   endian-defined capture framing, command/submission/fence/validation records,
+   and pointer-redacting host decoder. Extend validation and capture across
+   resources, shaders, pipelines, transitions, and readback hashes.
 2. **Document and integrate.** Publish lifecycle, memory, shader, pipeline,
    synchronization, capability, error, and capture documentation. Qualify one
    long-running reference-game ELF unchanged on FW 5.50 and FW 11.60.
