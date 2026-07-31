@@ -9460,35 +9460,41 @@ int32_t PS5_SYSV_ABI agcCmdFillBuffer(AgcCommandBuffer command_buffer,
     AgcBuffer destination, uint64_t destination_offset, uint64_t size,
     uint32_t value)
 {
-    enum { kFillPacketDwords = 256u };
-    uint32_t pattern[kFillPacketDwords];
-    uint64_t data_dwords = size / sizeof(uint32_t);
-    uint64_t packet_count = data_dwords / kFillPacketDwords +
-        (data_dwords % kFillPacketDwords != 0u);
+    const uint64_t maximum_chunk_size = UINT64_C(0x1ffffc);
+    const uint64_t packet_dwords = 7u;
+    uint64_t packet_count = size / maximum_chunk_size +
+        (size % maximum_chunk_size != 0u);
     uint64_t required_dwords;
-    uint64_t emitted_dwords = 0u;
-    uint32_t i;
+    uint64_t emitted_bytes = 0u;
     int32_t result;
 
     if (size == 0u || (size & 3u) != 0u ||
-        packet_count > (UINT64_MAX - data_dwords) / 4u)
+        packet_count > UINT64_MAX / packet_dwords)
         return AGC_ERROR_INVALID_ARGUMENT;
-    required_dwords = data_dwords + packet_count * 4u;
+    required_dwords = packet_count * packet_dwords;
     result = agcCommandValidateBufferWrite(command_buffer, destination,
         destination_offset, size, required_dwords, "agcCmdFillBuffer");
     if (result != AGC_OK)
         return result;
-    for (i = 0u; i < kFillPacketDwords; ++i)
-        pattern[i] = value;
-    while (emitted_dwords < data_dwords) {
-        uint32_t chunk = data_dwords - emitted_dwords > kFillPacketDwords ?
-            kFillPacketDwords : (uint32_t)(data_dwords - emitted_dwords);
-        if (!sceAgcDcbWriteData(&command_buffer->cursor, 2u, 0u,
-                agcBufferGpuAddress(destination) + destination_offset +
-                    emitted_dwords * sizeof(uint32_t),
-                pattern, chunk, 1u, 1u))
+    while (emitted_bytes < size) {
+        uint64_t address = agcBufferGpuAddress(destination) +
+            destination_offset + emitted_bytes;
+        uint32_t chunk = size - emitted_bytes > maximum_chunk_size ?
+            (uint32_t)maximum_chunk_size : (uint32_t)(size - emitted_bytes);
+        uint32_t *packet = agcCbAllocDwords(&command_buffer->cursor,
+            (uint32_t)packet_dwords);
+        if (!packet)
             return AGC_ERROR_INTERNAL;
-        emitted_dwords += chunk;
+        packet[0] = agcPm4Header3(AGC_PM4_OP_DMA_DATA,
+            (uint32_t)packet_dwords);
+        /* Immediate source, memory destination, and completion ordering. */
+        packet[1] = UINT32_C(0xc0000000);
+        packet[2] = value;
+        packet[3] = 0u;
+        packet[4] = (uint32_t)address;
+        packet[5] = (uint32_t)(address >> 32u);
+        packet[6] = chunk;
+        emitted_bytes += chunk;
     }
     if (!agcCommandRetainBuffer(command_buffer, destination))
         return AGC_ERROR_INTERNAL;

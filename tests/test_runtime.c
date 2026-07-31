@@ -219,6 +219,26 @@ static int runtime_has_opcode(const uint32_t *commands, uint32_t used,
     return 0;
 }
 
+static int runtime_has_immediate_dma_fill(const uint32_t *commands,
+    uint32_t used, uint32_t value, uint32_t size)
+{
+    uint32_t cursor = 0u;
+
+    while (cursor < used) {
+        uint32_t length = agcPm4Length(commands[cursor]);
+        if (length < 2u || length > used - cursor)
+            return 0;
+        if (agcPm4Opcode(commands[cursor]) == AGC_PM4_OP_DMA_DATA &&
+            length == 7u && commands[cursor + 1u] == UINT32_C(0xc0000000) &&
+            commands[cursor + 2u] == value &&
+            commands[cursor + 3u] == 0u &&
+            commands[cursor + 6u] == size)
+            return 1;
+        cursor += length;
+    }
+    return 0;
+}
+
 static uint32_t runtime_count_opcode(const uint32_t *commands, uint32_t used,
     uint32_t opcode)
 {
@@ -3306,7 +3326,7 @@ static void test_runtime_copy_buffer_submission(void)
         "typed buffer update embeds data in a WRITE_DATA packet");
     TEST_ASSERT_EQ(agcCmdFillBuffer(command_buffer, destination, 24u, 8u,
         UINT32_C(0xa5a5a5a5)), AGC_OK,
-        "typed buffer fill embeds a repeated WRITE_DATA payload");
+        "typed buffer fill records an immediate DMA_DATA packet");
     TEST_ASSERT_EQ(agcCmdCopyBuffer(command_buffer, source, 0u, destination,
         0u, 4u), AGC_ERROR_INVALID_STATE,
         "copy rejects bytes outside transitioned ranges");
@@ -3337,8 +3357,10 @@ static void test_runtime_copy_buffer_submission(void)
         runtime_has_opcode(words, captured->dword_count, AGC_PM4_OP_DMA_DATA),
         "typed copy submit contains DMA_DATA");
     TEST_ASSERT(runtime_has_opcode(words, captured->dword_count,
-        AGC_PM4_OP_WRITE_DATA),
-        "typed update and fill submit contains WRITE_DATA");
+        AGC_PM4_OP_WRITE_DATA), "typed update submit contains WRITE_DATA");
+    TEST_ASSERT(runtime_has_immediate_dma_fill(words, captured->dword_count,
+        UINT32_C(0xa5a5a5a5), 8u),
+        "typed fill submit contains the canonical immediate DMA_DATA form");
     TEST_ASSERT_EQ(agcDestroyBuffer(source), AGC_ERROR_BUSY,
         "submitted copy retains source through command reset");
     TEST_ASSERT_EQ(agcResetCommandBuffer(command_buffer), AGC_OK,
