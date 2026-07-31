@@ -129,6 +129,8 @@ static int agcCommandRetainGpuLabel(AgcCommandBuffer command_buffer,
     AgcGpuLabel label);
 static void agcCaptureRecordValidation(
     AgcDevice device, const AgcDebugMessage *message);
+static uint64_t agcShaderHashBytes(
+    uint64_t hash, const void *data, uint64_t size);
 
 typedef struct AgcRuntimePipelineResourceLayout {
     uint64_t set_offsets[8];
@@ -906,6 +908,314 @@ static void agcCaptureRecordFenceResult(AgcFence fence, int32_t result,
     agcCaptureWriteU64(capture, timeout_ns);
 }
 
+static void agcCaptureRecordResourceDesc(AgcDevice device,
+    const void *object, uint32_t type)
+{
+    AgcCapture capture = device->active_capture;
+    uint64_t id;
+
+    if (!capture || !capture->active)
+        return;
+    id = agcCaptureObjectId(capture, object, type);
+    if (id == 0u)
+        return;
+    if (type == AGC_CAPTURE_OBJECT_BUFFER) {
+        const AgcBuffer buffer = (AgcBuffer)object;
+        if (!agcCaptureBeginRecord(capture,
+                AGC_CAPTURE_RECORD_RESOURCE_DESC, 32u))
+            return;
+        agcCaptureWriteU64(capture, id);
+        agcCaptureWriteU32(capture, type);
+        agcCaptureWriteU32(capture, AGC_RUNTIME_STRUCTURE_VERSION_1);
+        agcCaptureWriteU64(capture, buffer->size);
+        agcCaptureWriteU32(capture, buffer->usage);
+        agcCaptureWriteU32(capture, buffer->create_flags);
+    } else if (type == AGC_CAPTURE_OBJECT_IMAGE) {
+        const AgcImage image = (AgcImage)object;
+        if (!agcCaptureBeginRecord(capture,
+                AGC_CAPTURE_RECORD_RESOURCE_DESC, 48u))
+            return;
+        agcCaptureWriteU64(capture, id);
+        agcCaptureWriteU32(capture, type);
+        agcCaptureWriteU32(capture, image->desc.version);
+        agcCaptureWriteU32(capture, image->desc.width);
+        agcCaptureWriteU32(capture, image->desc.height);
+        agcCaptureWriteU32(capture, image->desc.depth);
+        agcCaptureWriteU32(capture, image->desc.mip_levels);
+        agcCaptureWriteU32(capture, image->desc.array_layers);
+        agcCaptureWriteU32(capture, image->desc.format);
+        agcCaptureWriteU32(capture, image->desc.sample_count);
+        agcCaptureWriteU32(capture, image->desc.usage);
+    } else if (type == AGC_CAPTURE_OBJECT_IMAGE_VIEW) {
+        const AgcImageView view = (AgcImageView)object;
+        if (!agcCaptureBeginRecord(capture,
+                AGC_CAPTURE_RECORD_RESOURCE_DESC, 48u))
+            return;
+        agcCaptureWriteU64(capture, id);
+        agcCaptureWriteU32(capture, type);
+        agcCaptureWriteU32(capture, view->desc.version);
+        agcCaptureWriteU64(capture, agcCaptureObjectId(capture,
+            view->image, AGC_CAPTURE_OBJECT_IMAGE));
+        agcCaptureWriteU32(capture, view->desc.format);
+        agcCaptureWriteU32(capture, view->desc.base_mip_level);
+        agcCaptureWriteU32(capture, view->desc.mip_level_count);
+        agcCaptureWriteU32(capture, view->desc.base_array_layer);
+        agcCaptureWriteU32(capture, view->desc.array_layer_count);
+        agcCaptureWriteU32(capture, 0u);
+    } else if (type == AGC_CAPTURE_OBJECT_SAMPLER) {
+        const AgcSampler sampler = (AgcSampler)object;
+        if (!agcCaptureBeginRecord(capture,
+                AGC_CAPTURE_RECORD_RESOURCE_DESC, 40u))
+            return;
+        agcCaptureWriteU64(capture, id);
+        agcCaptureWriteU32(capture, type);
+        agcCaptureWriteU32(capture, sampler->desc.version);
+        agcCaptureWriteU32(capture, sampler->desc.min_filter);
+        agcCaptureWriteU32(capture, sampler->desc.mag_filter);
+        agcCaptureWriteU32(capture, sampler->desc.address_u);
+        agcCaptureWriteU32(capture, sampler->desc.address_v);
+        agcCaptureWriteU32(capture, sampler->desc.address_w);
+        agcCaptureWriteU32(capture, sampler->desc.flags);
+    }
+}
+
+static void agcCaptureRecordShaderDesc(AgcShader shader)
+{
+    AgcCapture capture = shader->device->active_capture;
+    uint64_t id;
+    uint64_t front_size = 0u;
+    uint64_t code_hash;
+    uint64_t front_hash = 0u;
+
+    if (!capture || !capture->active)
+        return;
+    id = agcCaptureObjectId(capture, shader, AGC_CAPTURE_OBJECT_SHADER);
+    if (id == 0u)
+        return;
+    code_hash = agcShaderHashBytes(UINT64_C(14695981039346656037),
+        shader->code, shader->code_size);
+    if (shader->has_front_record) {
+        front_size = shader->allocation->requested_size -
+            shader->front_binary_offset;
+        front_hash = agcShaderHashBytes(UINT64_C(14695981039346656037),
+            (const uint8_t *)shader->code + shader->front_binary_offset,
+            front_size);
+    }
+    if (agcCaptureBeginRecord(capture, AGC_CAPTURE_RECORD_SHADER_DESC, 64u)) {
+        agcCaptureWriteU64(capture, id);
+        agcCaptureWriteU32(capture, AGC_CAPTURE_OBJECT_SHADER);
+        agcCaptureWriteU32(capture, shader->stage);
+        agcCaptureWriteU32(capture, 0u);
+        agcCaptureWriteU32(capture,
+            shader->has_reflection ? shader->record.version : 0u);
+        agcCaptureWriteU32(capture,
+            shader->has_front_record ? shader->front_record.version : 0u);
+        agcCaptureWriteU32(capture, shader->has_reflection);
+        agcCaptureWriteU64(capture, shader->code_size);
+        agcCaptureWriteU64(capture, code_hash);
+        agcCaptureWriteU64(capture, front_size);
+        agcCaptureWriteU64(capture, front_hash);
+    }
+    if ((capture->flags & AGC_CAPTURE_INCLUDE_SHADER_BYTES_BIT) != 0u &&
+        shader->code_size <= UINT32_MAX - 16u &&
+        agcCaptureBeginRecord(capture, AGC_CAPTURE_RECORD_SHADER_BYTES,
+            16u + (uint32_t)shader->code_size)) {
+        agcCaptureWriteU64(capture, id);
+        agcCaptureWriteU32(capture, 0u);
+        agcCaptureWriteU32(capture, (uint32_t)shader->code_size);
+        agcCaptureWrite(capture, shader->code, (size_t)shader->code_size);
+    }
+    if ((capture->flags & AGC_CAPTURE_INCLUDE_SHADER_BYTES_BIT) != 0u &&
+        front_size != 0u && front_size <= UINT32_MAX - 16u &&
+        agcCaptureBeginRecord(capture, AGC_CAPTURE_RECORD_SHADER_BYTES,
+            16u + (uint32_t)front_size)) {
+        agcCaptureWriteU64(capture, id);
+        agcCaptureWriteU32(capture, 1u);
+        agcCaptureWriteU32(capture, (uint32_t)front_size);
+        agcCaptureWrite(capture,
+            (const uint8_t *)shader->code + shader->front_binary_offset,
+            (size_t)front_size);
+    }
+}
+
+static void agcCaptureWritePipelineArrays(AgcCapture capture,
+    const AgcShaderVertexInput *vertices, uint32_t vertex_count,
+    const AgcShaderDescriptorMapping *mappings, uint32_t mapping_count,
+    const AgcShaderPushConstantRange *ranges, uint32_t range_count)
+{
+    uint32_t i;
+
+    for (i = 0u; i < vertex_count; ++i) {
+        agcCaptureWriteU32(capture, vertices[i].location);
+        agcCaptureWriteU32(capture, vertices[i].binding);
+        agcCaptureWriteU32(capture, vertices[i].offset);
+        agcCaptureWriteU32(capture, vertices[i].stride);
+        agcCaptureWriteU32(capture, vertices[i].format);
+        agcCaptureWriteU32(capture, vertices[i].input_rate);
+        agcCaptureWriteU32(capture, vertices[i].divisor);
+        agcCaptureWriteU32(capture, vertices[i].component_mask);
+    }
+    for (i = 0u; i < mapping_count; ++i) {
+        agcCaptureWriteU32(capture, mappings[i].set);
+        agcCaptureWriteU32(capture, mappings[i].binding);
+        agcCaptureWriteU32(capture, mappings[i].type);
+        agcCaptureWriteU32(capture, mappings[i].array_size);
+        agcCaptureWriteU32(capture, mappings[i].byte_offset);
+        agcCaptureWriteU32(capture, mappings[i].byte_stride);
+    }
+    for (i = 0u; i < range_count; ++i) {
+        agcCaptureWriteU32(capture, ranges[i].offset);
+        agcCaptureWriteU32(capture, ranges[i].size);
+        agcCaptureWriteU32(capture, ranges[i].alignment);
+        agcCaptureWriteU32(capture, ranges[i].stage_mask);
+    }
+}
+
+static void agcCaptureRecordGraphicsPipeline(AgcGraphicsPipeline pipeline)
+{
+    AgcCapture capture = pipeline->device->active_capture;
+    uint64_t payload_size;
+    uint32_t i;
+
+    if (!capture || !capture->active)
+        return;
+    payload_size = 96u + (uint64_t)pipeline->vertex_input_count * 32u +
+        (uint64_t)pipeline->descriptor_mapping_count * 24u +
+        (uint64_t)pipeline->push_constant_range_count * 16u +
+        (uint64_t)pipeline->color_attachment_count * 48u;
+    if (payload_size > UINT32_MAX) {
+        capture->status = AGC_ERROR_OUT_OF_MEMORY;
+        return;
+    }
+    if (!agcCaptureBeginRecord(capture, AGC_CAPTURE_RECORD_PIPELINE_DESC,
+            (uint32_t)payload_size))
+        return;
+    agcCaptureWriteU64(capture, agcCaptureObjectId(capture, pipeline,
+        AGC_CAPTURE_OBJECT_GRAPHICS_PIPELINE));
+    agcCaptureWriteU32(capture, AGC_CAPTURE_OBJECT_GRAPHICS_PIPELINE);
+    agcCaptureWriteU32(capture, AGC_RUNTIME_STRUCTURE_VERSION_2);
+    agcCaptureWriteU64(capture, agcCaptureObjectId(capture,
+        pipeline->hull_shader, AGC_CAPTURE_OBJECT_SHADER));
+    agcCaptureWriteU64(capture, agcCaptureObjectId(capture,
+        pipeline->primitive_shader, AGC_CAPTURE_OBJECT_SHADER));
+    agcCaptureWriteU64(capture, agcCaptureObjectId(capture,
+        pipeline->pixel_shader, AGC_CAPTURE_OBJECT_SHADER));
+    agcCaptureWriteU32(capture, pipeline->vertex_input_count);
+    agcCaptureWriteU32(capture, pipeline->descriptor_mapping_count);
+    agcCaptureWriteU32(capture, pipeline->push_constant_range_count);
+    agcCaptureWriteU32(capture, pipeline->color_attachment_count);
+    agcCaptureWriteU32(capture, pipeline->dynamic_state_mask);
+    agcCaptureWriteU32(capture, pipeline->primitive_type);
+    agcCaptureWriteU32(capture, pipeline->depth_stencil.format);
+    agcCaptureWriteU32(capture, pipeline->multisample.rasterization_samples);
+    agcCaptureWriteU32(capture, pipeline->rasterization.polygon_mode);
+    agcCaptureWriteU32(capture, pipeline->rasterization.cull_mode);
+    agcCaptureWriteU32(capture, pipeline->rasterization.front_face);
+    agcCaptureWriteU32(capture, pipeline->rasterization.depth_clamp_enable);
+    agcCaptureWriteU32(capture,
+        pipeline->rasterization.rasterizer_discard_enable);
+    agcCaptureWriteU32(capture, pipeline->rasterization.depth_bias_enable);
+    agcCaptureWritePipelineArrays(capture, pipeline->vertex_inputs,
+        pipeline->vertex_input_count, pipeline->descriptor_mappings,
+        pipeline->descriptor_mapping_count, pipeline->push_constant_ranges,
+        pipeline->push_constant_range_count);
+    for (i = 0u; i < pipeline->color_attachment_count; ++i) {
+        const AgcColorBlendAttachmentState *state =
+            &pipeline->color_attachments[i];
+        agcCaptureWriteU32(capture, state->format);
+        agcCaptureWriteU32(capture, state->blend_enable);
+        agcCaptureWriteU32(capture, state->write_mask);
+        agcCaptureWriteU32(capture, state->source_color_factor);
+        agcCaptureWriteU32(capture, state->destination_color_factor);
+        agcCaptureWriteU32(capture, state->color_operation);
+        agcCaptureWriteU32(capture, state->source_alpha_factor);
+        agcCaptureWriteU32(capture, state->destination_alpha_factor);
+        agcCaptureWriteU32(capture, state->alpha_operation);
+        agcCaptureWriteU32(capture, state->flags);
+        agcCaptureWriteU32(capture, 0u);
+        agcCaptureWriteU32(capture, 0u);
+    }
+}
+
+static void agcCaptureRecordComputePipeline(AgcComputePipeline pipeline)
+{
+    AgcCapture capture = pipeline->device->active_capture;
+    uint64_t payload_size;
+
+    if (!capture || !capture->active)
+        return;
+    payload_size = 48u +
+        (uint64_t)pipeline->descriptor_mapping_count * 24u +
+        (uint64_t)pipeline->push_constant_range_count * 16u;
+    if (payload_size > UINT32_MAX) {
+        capture->status = AGC_ERROR_OUT_OF_MEMORY;
+        return;
+    }
+    if (!agcCaptureBeginRecord(capture, AGC_CAPTURE_RECORD_PIPELINE_DESC,
+            (uint32_t)payload_size))
+        return;
+    agcCaptureWriteU64(capture, agcCaptureObjectId(capture, pipeline,
+        AGC_CAPTURE_OBJECT_COMPUTE_PIPELINE));
+    agcCaptureWriteU32(capture, AGC_CAPTURE_OBJECT_COMPUTE_PIPELINE);
+    agcCaptureWriteU32(capture, AGC_RUNTIME_STRUCTURE_VERSION_2);
+    agcCaptureWriteU64(capture, agcCaptureObjectId(capture,
+        pipeline->shader, AGC_CAPTURE_OBJECT_SHADER));
+    agcCaptureWriteU32(capture, pipeline->local_size[0]);
+    agcCaptureWriteU32(capture, pipeline->local_size[1]);
+    agcCaptureWriteU32(capture, pipeline->local_size[2]);
+    agcCaptureWriteU32(capture, pipeline->descriptor_mapping_count);
+    agcCaptureWriteU32(capture, pipeline->push_constant_range_count);
+    agcCaptureWriteU32(capture, 0u);
+    agcCaptureWritePipelineArrays(capture, NULL, 0u,
+        pipeline->descriptor_mappings, pipeline->descriptor_mapping_count,
+        pipeline->push_constant_ranges, pipeline->push_constant_range_count);
+}
+
+static void agcCaptureRecordTransition(AgcCommandBuffer command_buffer,
+    const AgcResourceTransition *transition, void *resource, uint32_t flags,
+    AgcGpuLabel label, uint32_t value)
+{
+    AgcCapture capture = command_buffer->device->active_capture;
+    uint32_t capture_type;
+    uint64_t resource_id;
+
+    if (!capture || !capture->active)
+        return;
+    capture_type = transition->resource_type == kAgcResourceTypeBuffer ?
+        AGC_CAPTURE_OBJECT_BUFFER : AGC_CAPTURE_OBJECT_IMAGE;
+    resource_id = agcCaptureObjectId(capture, resource, capture_type);
+    if (resource_id == 0u || !agcCaptureBeginRecord(capture,
+            AGC_CAPTURE_RECORD_RESOURCE_TRANSITION, 80u))
+        return;
+    agcCaptureWriteU64(capture, agcCaptureObjectId(capture, command_buffer,
+        AGC_CAPTURE_OBJECT_COMMAND_BUFFER));
+    agcCaptureWriteU64(capture, resource_id);
+    agcCaptureWriteU64(capture, agcCaptureObjectId(capture, label,
+        AGC_CAPTURE_OBJECT_GPU_LABEL));
+    agcCaptureWriteU32(capture, transition->resource_type);
+    agcCaptureWriteU32(capture, flags);
+    agcCaptureWriteU32(capture, transition->before);
+    agcCaptureWriteU32(capture, transition->before_owner);
+    agcCaptureWriteU32(capture, transition->after);
+    agcCaptureWriteU32(capture, transition->after_owner);
+    agcCaptureWriteU32(capture, value);
+    agcCaptureWriteU32(capture, 0u);
+    if (transition->resource_type == kAgcResourceTypeBuffer) {
+        agcCaptureWriteU64(capture, transition->buffer_offset);
+        agcCaptureWriteU64(capture, transition->buffer_size);
+        agcCaptureWriteU64(capture, 0u);
+    } else {
+        agcCaptureWriteU32(capture, transition->image_range.aspect_mask);
+        agcCaptureWriteU32(capture, transition->image_range.base_mip_level);
+        agcCaptureWriteU32(capture, transition->image_range.mip_level_count);
+        agcCaptureWriteU32(capture,
+            transition->image_range.base_array_layer);
+        agcCaptureWriteU32(capture,
+            transition->image_range.array_layer_count);
+        agcCaptureWriteU32(capture, 0u);
+    }
+}
+
 static int agcAddU64(uint64_t a, uint64_t b, uint64_t *result)
 {
     if (UINT64_MAX - a < b)
@@ -1535,6 +1845,65 @@ int32_t PS5_SYSV_ABI agcGetCaptureInfo(
     info->byte_count = capture->byte_count;
     info->next_object_id = capture->next_object_id;
     return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcCaptureRecordReadbackHash(AgcCapture capture,
+    AgcCaptureObjectType object_type, const void *object,
+    uint64_t offset, uint64_t size)
+{
+    AgcRuntimeAllocation *allocation;
+    const uint8_t *bytes;
+    uint64_t object_size;
+    uint64_t object_id;
+    uint64_t hash;
+    int32_t result;
+
+    if (!capture || capture->magic != AGC_MAGIC_CAPTURE ||
+        !agcDeviceValid(capture->device) || !capture->active ||
+        capture->device->active_capture != capture || !object || size == 0u ||
+        size > SIZE_MAX)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (object_type == AGC_CAPTURE_OBJECT_BUFFER) {
+        AgcBuffer buffer = (AgcBuffer)object;
+        if (buffer->magic != AGC_MAGIC_BUFFER ||
+            buffer->device != capture->device || buffer->deferred ||
+            (buffer->create_flags & AGC_BUFFER_CREATE_READBACK_BIT) == 0u)
+            return AGC_ERROR_INVALID_ARGUMENT;
+        allocation = buffer->allocation;
+        bytes = buffer->storage;
+        object_size = buffer->size;
+    } else if (object_type == AGC_CAPTURE_OBJECT_IMAGE) {
+        AgcImage image = (AgcImage)object;
+        if (image->magic != AGC_MAGIC_IMAGE ||
+            image->device != capture->device || image->deferred ||
+            (image->desc.usage & AGC_IMAGE_USAGE_TRANSFER_SRC_BIT) == 0u)
+            return AGC_ERROR_INVALID_ARGUMENT;
+        allocation = image->allocation;
+        bytes = agcAllocationCpuAddress(allocation);
+        object_size = image->layout.allocation_size;
+    } else {
+        return AGC_ERROR_INVALID_ARGUMENT;
+    }
+    if (offset > object_size || size > object_size - offset ||
+        allocation->offset > SIZE_MAX - offset)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    result = agcGpuMemoryInvalidate(&allocation->block->memory,
+        (size_t)(allocation->offset + offset), (size_t)size);
+    if (result != AGC_OK)
+        return result;
+    hash = agcShaderHashBytes(UINT64_C(14695981039346656037),
+        bytes + offset, size);
+    object_id = agcCaptureObjectId(capture, object, object_type);
+    if (object_id == 0u || !agcCaptureBeginRecord(capture,
+            AGC_CAPTURE_RECORD_READBACK_HASH, 40u))
+        return capture->status;
+    agcCaptureWriteU64(capture, object_id);
+    agcCaptureWriteU32(capture, object_type);
+    agcCaptureWriteU32(capture, AGC_CAPTURE_HASH_FNV1A64);
+    agcCaptureWriteU64(capture, offset);
+    agcCaptureWriteU64(capture, size);
+    agcCaptureWriteU64(capture, hash);
+    return capture->status;
 }
 
 int32_t PS5_SYSV_ABI agcCreateQueue(
@@ -2406,6 +2775,9 @@ int32_t PS5_SYSV_ABI agcCreateBuffer(
     buffer->inline_state_range = (AgcRuntimeBufferStateRange){
         buffer->size, kAgcResourceUsageUndefined, kAgcResourceOwnerHost };
     *buffer_out = buffer;
+    agcCaptureRecordObjectCreate(device, buffer, AGC_CAPTURE_OBJECT_BUFFER,
+        buffer->usage, buffer->create_flags);
+    agcCaptureRecordResourceDesc(device, buffer, AGC_CAPTURE_OBJECT_BUFFER);
     return AGC_OK;
 }
 
@@ -2422,6 +2794,7 @@ int32_t PS5_SYSV_ABI agcDestroyBuffer(AgcBuffer buffer)
     if (buffer->deferred)
         return AGC_ERROR_INVALID_STATE;
     device = buffer->device;
+    agcCaptureRecordObjectDestroy(device, buffer, AGC_CAPTURE_OBJECT_BUFFER);
     agcRuntimeFree(device, buffer->allocation);
     if (buffer->state_ranges != &buffer->inline_state_range)
         agcFree(device, buffer->state_ranges);
@@ -2971,6 +3344,9 @@ int32_t PS5_SYSV_ABI agcCreateImage(
     image->transfer_capacity = 1u;
     image->transfers = &image->inline_transfer;
     *image_out = image;
+    agcCaptureRecordObjectCreate(device, image, AGC_CAPTURE_OBJECT_IMAGE,
+        image->desc.format, image->desc.usage);
+    agcCaptureRecordResourceDesc(device, image, AGC_CAPTURE_OBJECT_IMAGE);
     return AGC_OK;
 }
 
@@ -2988,6 +3364,7 @@ int32_t PS5_SYSV_ABI agcDestroyImage(AgcImage image)
     if (image->deferred)
         return AGC_ERROR_INVALID_STATE;
     device = image->device;
+    agcCaptureRecordObjectDestroy(device, image, AGC_CAPTURE_OBJECT_IMAGE);
     agcRuntimeFree(device, image->allocation);
     if (image->subresource_states)
         agcFree(device, image->subresource_states);
@@ -3285,6 +3662,10 @@ int32_t PS5_SYSV_ABI agcCreateImageView(
     view->desc = *desc;
     image->dependency_refs++;
     *view_out = view;
+    agcCaptureRecordObjectCreate(device, view,
+        AGC_CAPTURE_OBJECT_IMAGE_VIEW, view->desc.format, 0u);
+    agcCaptureRecordResourceDesc(device, view,
+        AGC_CAPTURE_OBJECT_IMAGE_VIEW);
     return AGC_OK;
 }
 
@@ -3299,6 +3680,8 @@ int32_t PS5_SYSV_ABI agcDestroyImageView(AgcImageView view)
     if (view->recorded_refs != 0u)
         return AGC_ERROR_BUSY;
     device = view->device;
+    agcCaptureRecordObjectDestroy(device, view,
+        AGC_CAPTURE_OBJECT_IMAGE_VIEW);
     view->image->dependency_refs--;
     agcRuntimeFree(device, view->allocation);
     view->magic = 0u;
@@ -3363,6 +3746,11 @@ int32_t PS5_SYSV_ABI agcCreateSampler(
     sampler->device = device;
     sampler->desc = *desc;
     *sampler_out = sampler;
+    agcCaptureRecordObjectCreate(device, sampler,
+        AGC_CAPTURE_OBJECT_SAMPLER, sampler->desc.min_filter,
+        sampler->desc.mag_filter);
+    agcCaptureRecordResourceDesc(device, sampler,
+        AGC_CAPTURE_OBJECT_SAMPLER);
     return AGC_OK;
 }
 
@@ -3377,6 +3765,8 @@ int32_t PS5_SYSV_ABI agcDestroySampler(AgcSampler sampler)
     if (sampler->recorded_refs != 0u)
         return AGC_ERROR_BUSY;
     device = sampler->device;
+    agcCaptureRecordObjectDestroy(device, sampler,
+        AGC_CAPTURE_OBJECT_SAMPLER);
     agcRuntimeFree(device, sampler->allocation);
     sampler->magic = 0u;
     agcDestroyChild(device, sampler);
@@ -3877,6 +4267,9 @@ int32_t PS5_SYSV_ABI agcCreateShader(
     shader->stage = desc->stage;
     shader->code_size = desc->code_size;
     *shader_out = shader;
+    agcCaptureRecordObjectCreate(device, shader, AGC_CAPTURE_OBJECT_SHADER,
+        shader->stage, shader->has_reflection);
+    agcCaptureRecordShaderDesc(shader);
     return AGC_OK;
 }
 
@@ -3891,6 +4284,7 @@ int32_t PS5_SYSV_ABI agcDestroyShader(AgcShader shader)
     if (shader->dependency_refs != 0u)
         return AGC_ERROR_BUSY;
     device = shader->device;
+    agcCaptureRecordObjectDestroy(device, shader, AGC_CAPTURE_OBJECT_SHADER);
     agcRuntimeFree(device, shader->allocation);
     shader->magic = 0u;
     agcDestroyChild(device, shader);
@@ -5301,6 +5695,10 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
     primitive->dependency_refs++;
     ps->dependency_refs++;
     *pipeline_out = pipeline;
+    agcCaptureRecordObjectCreate(device, pipeline,
+        AGC_CAPTURE_OBJECT_GRAPHICS_PIPELINE,
+        pipeline->color_attachment_count, pipeline->multisample.rasterization_samples);
+    agcCaptureRecordGraphicsPipeline(pipeline);
     return AGC_OK;
 }
 
@@ -5315,6 +5713,8 @@ int32_t PS5_SYSV_ABI agcDestroyGraphicsPipeline(AgcGraphicsPipeline pipeline)
     if (pipeline->recorded_refs != 0u)
         return AGC_ERROR_BUSY;
     device = pipeline->device;
+    agcCaptureRecordObjectDestroy(device, pipeline,
+        AGC_CAPTURE_OBJECT_GRAPHICS_PIPELINE);
     if (pipeline->hull_shader)
         pipeline->hull_shader->dependency_refs--;
     pipeline->primitive_shader->dependency_refs--;
@@ -5443,6 +5843,10 @@ int32_t PS5_SYSV_ABI agcCreateComputePipeline(AgcDevice device,
     pipeline->resource_layout = resource_layout;
     shader->dependency_refs++;
     *pipeline_out = pipeline;
+    agcCaptureRecordObjectCreate(device, pipeline,
+        AGC_CAPTURE_OBJECT_COMPUTE_PIPELINE, pipeline->local_size[0],
+        pipeline->local_size[1]);
+    agcCaptureRecordComputePipeline(pipeline);
     return AGC_OK;
 }
 
@@ -5457,6 +5861,8 @@ int32_t PS5_SYSV_ABI agcDestroyComputePipeline(AgcComputePipeline pipeline)
     if (pipeline->recorded_refs != 0u)
         return AGC_ERROR_BUSY;
     device = pipeline->device;
+    agcCaptureRecordObjectDestroy(device, pipeline,
+        AGC_CAPTURE_OBJECT_COMPUTE_PIPELINE);
     pipeline->shader->dependency_refs--;
     pipeline->magic = 0u;
     agcDestroyChild(device, pipeline);
@@ -7503,6 +7909,8 @@ int32_t PS5_SYSV_ABI agcCmdTransitionResources(
                 transitions[i].after, transitions[i].after_owner, flags, label,
                 value, transitions[i].buffer_offset,
                 transitions[i].buffer_size, transitions[i].image_range };
+        agcCaptureRecordTransition(command_buffer, &transitions[i], resource,
+            flags, label, value);
         if (flags == AGC_RESOURCE_TRANSITION_RELEASE_BIT) {
             command_buffer->recorded_label_signals[
                 command_buffer->recorded_label_signal_count++] =

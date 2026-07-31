@@ -779,9 +779,18 @@ post-injection PM4 dwords, submission wait/signal order, fence results,
 validation messages, and final counts. The host decoder names packets and
 known registers while redacting address-bearing and unknown fields by default.
 Generic runtime and independent decoder fixtures cover valid and malformed
-streams. Resource/shader/pipeline/transition/readback records and the captured
-reference-frame gate remain active work; see
+streams. See
 `analysis/runtime_capture_v1_host_20260731.md`.
+
+Runtime API v25 completes the required semantic capture vocabulary. The v1
+stream now records buffer/image/view/sampler descriptions, shader record
+versions and FNV-1a-64 hashes, shader bytes only after explicit opt-in,
+normalized graphics/compute pipeline descriptions, exact typed transition
+ranges and dependency points, and runtime-computed selected readback hashes.
+The decoder validates every new fixed/dynamic layout and prints stable resource
+references without exposing process pointers. The captured reference-frame
+gate and broader invalid-program diagnostic coverage remain active work; see
+`analysis/runtime_capture_semantics_host_20260731.md`.
 
 Create and maintain application documentation alongside the API:
 

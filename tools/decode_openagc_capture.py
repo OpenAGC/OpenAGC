@@ -26,6 +26,11 @@ RECORD_NAMES = {
     10: "READBACK_HASH",
     11: "END",
     12: "COMMAND_STREAM",
+    13: "RESOURCE_DESC",
+    14: "SHADER_DESC",
+    15: "SHADER_BYTES",
+    16: "PIPELINE_DESC",
+    17: "RESOURCE_TRANSITION",
 }
 
 OBJECT_NAMES = {
@@ -45,6 +50,22 @@ OBJECT_NAMES = {
 }
 
 QUEUE_NAMES = {0: "graphics", 1: "compute"}
+
+RESOURCE_USAGE_NAMES = {
+    0: "undefined",
+    1: "copy-source",
+    2: "copy-destination",
+    3: "vertex-buffer",
+    4: "index-buffer",
+    5: "uniform-read",
+    6: "shader-read",
+    7: "shader-write",
+    8: "color-target",
+    9: "depth-stencil-target",
+    10: "videoout-scanout",
+}
+
+RESOURCE_OWNER_NAMES = {0: "host", 1: "graphics", 2: "compute"}
 
 OPCODE_NAMES = {
     0x10: "NOP",
@@ -269,10 +290,146 @@ def decode_record(record_type: int, payload: bytes,
             f"result=0x{result:08x} function={function} "
             f"object_type={object_type} object_name={object_name!r}")
         lines.append(f"    {message} debug_sequence={debug_sequence}")
+    elif record_type == 10:
+        object_id, object_type, algorithm, offset, size, hash_value = \
+            unpack_from("<QIIQQQ", payload)
+        if len(payload) != 40:
+            raise CaptureError("readback hash record has invalid size")
+        algorithm_name = "fnv1a64" if algorithm == 1 else str(algorithm)
+        lines.append(
+            f"  resource={object_id} "
+            f"type={OBJECT_NAMES.get(object_type, object_type)} "
+            f"range=[{offset},{offset + size}) algorithm={algorithm_name} "
+            f"hash=0x{hash_value:016x}")
     elif record_type == 11:
         status, _, records, byte_count = unpack_from("<IIQQ", payload)
         lines.append(
             f"  status=0x{status:08x} records={records} bytes={byte_count}")
+    elif record_type == 13:
+        object_id, object_type, version = unpack_from("<QII", payload)
+        object_name = OBJECT_NAMES.get(object_type, object_type)
+        if object_type == 2:
+            if len(payload) != 32:
+                raise CaptureError("buffer descriptor record has invalid size")
+            size, usage, flags = unpack_from("<QII", payload, 16)
+            lines.append(
+                f"  resource={object_id} type={object_name} v{version} "
+                f"size={size} usage=0x{usage:x} flags=0x{flags:x}")
+        elif object_type == 3:
+            if len(payload) != 48:
+                raise CaptureError("image descriptor record has invalid size")
+            width, height, depth, mips, layers, image_format, samples, usage = \
+                unpack_from("<8I", payload, 16)
+            lines.append(
+                f"  resource={object_id} type={object_name} v{version} "
+                f"extent={width}x{height}x{depth} mips={mips} layers={layers} "
+                f"format={image_format} samples={samples} usage=0x{usage:x}")
+        elif object_type == 4:
+            if len(payload) != 48:
+                raise CaptureError("image-view descriptor record has invalid size")
+            image, image_format, base_mip, mip_count, base_layer, layer_count, _ = \
+                unpack_from("<Q6I", payload, 16)
+            lines.append(
+                f"  resource={object_id} type={object_name} v{version} "
+                f"image={image} format={image_format} "
+                f"mips=[{base_mip},{base_mip + mip_count}) "
+                f"layers=[{base_layer},{base_layer + layer_count})")
+        elif object_type == 5:
+            if len(payload) != 40:
+                raise CaptureError("sampler descriptor record has invalid size")
+            min_filter, mag_filter, address_u, address_v, address_w, flags = \
+                unpack_from("<6I", payload, 16)
+            lines.append(
+                f"  resource={object_id} type={object_name} v{version} "
+                f"filter={min_filter}/{mag_filter} "
+                f"address={address_u}/{address_v}/{address_w} flags=0x{flags:x}")
+        else:
+            raise CaptureError("resource descriptor has unsupported object type")
+    elif record_type == 14:
+        if len(payload) != 64:
+            raise CaptureError("shader descriptor record has invalid size")
+        object_id, object_type, stage, flags, record_version, front_version, \
+            reflected, code_size, code_hash, front_size, front_hash = \
+            unpack_from("<Q6I4Q", payload)
+        lines.append(
+            f"  shader={object_id} type={OBJECT_NAMES.get(object_type, object_type)} "
+            f"stage={stage} flags=0x{flags:x} reflected={reflected} "
+            f"record_version={record_version} code_size={code_size} "
+            f"code_hash=0x{code_hash:016x} front_version={front_version} "
+            f"front_size={front_size} front_hash=0x{front_hash:016x}")
+    elif record_type == 15:
+        shader, half, byte_count = unpack_from("<QII", payload)
+        if len(payload) != 16 + byte_count:
+            raise CaptureError("shader byte count does not match size")
+        lines.append(
+            f"  shader={shader} half={'front' if half else 'primary'} "
+            f"bytes={byte_count}")
+    elif record_type == 16:
+        pipeline, pipeline_type, version = unpack_from("<QII", payload)
+        if pipeline_type == 7:
+            if len(payload) < 96:
+                raise CaptureError("graphics pipeline record is truncated")
+            hull, primitive, pixel, vertex_count, mapping_count, range_count, \
+                color_count, dynamic, primitive_type, depth_format, samples, \
+                polygon, cull, front_face, depth_clamp, discard, depth_bias = \
+                unpack_from("<3Q14I", payload, 16)
+            expected = 96 + vertex_count * 32 + mapping_count * 24 + \
+                range_count * 16 + color_count * 48
+            if len(payload) != expected:
+                raise CaptureError("graphics pipeline array counts do not match size")
+            cursor = 96 + vertex_count * 32 + mapping_count * 24 + \
+                range_count * 16
+            formats = [unpack_from("<I", payload, cursor + index * 48)[0]
+                       for index in range(color_count)]
+            lines.append(
+                f"  pipeline={pipeline} type=graphics v{version} "
+                f"shaders={{hull:{hull}, primitive:{primitive}, pixel:{pixel}}} "
+                f"vertices={vertex_count} mappings={mapping_count} "
+                f"push_ranges={range_count} color_formats={formats} "
+                f"depth_format={depth_format} samples={samples} "
+                f"dynamic=0x{dynamic:x} primitive={primitive_type} "
+                f"raster={polygon}/{cull}/{front_face} "
+                f"depth_clamp={depth_clamp} discard={discard} depth_bias={depth_bias}")
+        elif pipeline_type == 8:
+            if len(payload) < 48:
+                raise CaptureError("compute pipeline record is truncated")
+            shader, local_x, local_y, local_z, mapping_count, range_count, _ = \
+                unpack_from("<Q6I", payload, 16)
+            expected = 48 + mapping_count * 24 + range_count * 16
+            if len(payload) != expected:
+                raise CaptureError("compute pipeline array counts do not match size")
+            lines.append(
+                f"  pipeline={pipeline} type=compute v{version} shader={shader} "
+                f"local_size={local_x}x{local_y}x{local_z} "
+                f"mappings={mapping_count} push_ranges={range_count}")
+        else:
+            raise CaptureError("pipeline descriptor has unsupported object type")
+    elif record_type == 17:
+        if len(payload) != 80:
+            raise CaptureError("resource transition record has invalid size")
+        command, resource, label, resource_type, flags, before, before_owner, \
+            after, after_owner, value, _ = unpack_from("<3Q8I", payload)
+        before_name = RESOURCE_USAGE_NAMES.get(before, before)
+        after_name = RESOURCE_USAGE_NAMES.get(after, after)
+        before_owner_name = RESOURCE_OWNER_NAMES.get(before_owner, before_owner)
+        after_owner_name = RESOURCE_OWNER_NAMES.get(after_owner, after_owner)
+        if resource_type == 0:
+            offset, size, _ = unpack_from("<3Q", payload, 56)
+            range_text = f"bytes=[{offset},{offset + size})"
+        elif resource_type == 1:
+            aspect, base_mip, mip_count, base_layer, layer_count, _ = \
+                unpack_from("<6I", payload, 56)
+            range_text = (
+                f"aspect=0x{aspect:x} mips=[{base_mip},{base_mip + mip_count}) "
+                f"layers=[{base_layer},{base_layer + layer_count})")
+        else:
+            raise CaptureError("transition has unsupported resource type")
+        lines.append(
+            f"  command={command} resource={resource} "
+            f"type={'buffer' if resource_type == 0 else 'image'} "
+            f"{before_name}/{before_owner_name} -> {after_name}/{after_owner_name} "
+            f"flags=0x{flags:x} dependency={{label:{label}, value:{value}}} "
+            f"{range_text}")
     else:
         lines.append(f"  payload_bytes={len(payload)}")
     return lines

@@ -34,7 +34,7 @@ def record(record_type: int, sequence: int, payload: bytes) -> bytes:
 
 def build_fixture() -> bytes:
     header = b"OAGCCAP\0" + struct.pack(
-        "<6I", 1, 32, 0x01020304, 24, 0, 0)
+        "<6I", 1, 32, 0x01020304, 25, 0, 0)
     records: list[bytes] = []
     runtime = struct.pack("<IHHIQ", 0x11600005, 0x1160, 1, 12,
                           0xFF) + bytes([3] * 8) + fixed("fixture-profile", 48)
@@ -54,9 +54,23 @@ def build_fixture() -> bytes:
         fixed("agcEndCommandBuffer", 48) + fixed("fixture-command", 64) + \
         fixed("command buffer must be Recording before end", 192)
     records.append(record(9, 5, validation))
+    resource = struct.pack("<QIIQII", 2, 2, 1, 4096, 0x30, 2)
+    records.append(record(13, 6, resource))
+    shader = struct.pack("<Q6I4Q", 3, 6, 0, 0, 24, 0, 1, 128,
+                         0x1122334455667788, 0, 0)
+    records.append(record(14, 7, shader))
+    records.append(record(15, 8, struct.pack("<QII4s", 3, 0, 4, b"SB\0\1")))
+    pipeline = struct.pack("<QIIQ6I", 4, 8, 2, 3, 64, 1, 1, 0, 0, 0)
+    records.append(record(16, 9, pipeline))
+    transition = struct.pack("<3Q8I3Q", 1, 2, 0, 0, 0, 0, 0, 2, 1,
+                             0, 0, 128, 256, 0)
+    records.append(record(17, 10, transition))
+    readback = struct.pack("<QIIQQQ", 2, 2, 1, 128, 256,
+                           0xCBF29CE484222325)
+    records.append(record(10, 11, readback))
     final_size = len(header) + sum(map(len, records)) + 40
-    end = struct.pack("<IIQQ", 0, 0, 6, final_size)
-    records.append(record(11, 6, end))
+    end = struct.pack("<IIQQ", 0, 0, 12, final_size)
+    records.append(record(11, 12, end))
     return header + b"".join(records)
 
 
@@ -66,7 +80,7 @@ def main() -> int:
     first = decoder.decode_capture(fixture)
     second = decoder.decode_capture(fixture)
     assert first == second
-    assert "OpenAGC capture v1 runtime_api=24" in first
+    assert "OpenAGC capture v1 runtime_api=25" in first
     assert "profile=fixture-profile firmware=0x11600005 abi=0x1160" in first
     assert "COMMAND_STREAM" in first
     assert "SET_CONTEXT_REG dwords=3" in first
@@ -75,7 +89,14 @@ def main() -> int:
     assert "address=<redacted>" in first
     assert "function=agcEndCommandBuffer" in first
     assert "command buffer must be Recording before end" in first
-    assert "records=6" in first
+    assert "type=buffer v1 size=4096 usage=0x30 flags=0x2" in first
+    assert "record_version=24 code_size=128" in first
+    assert "shader=3 half=primary bytes=4" in first
+    assert "type=compute v2 shader=3 local_size=64x1x1" in first
+    assert "undefined/host -> copy-destination/graphics" in first
+    assert "bytes=[128,384)" in first
+    assert "algorithm=fnv1a64 hash=0xcbf29ce484222325" in first
+    assert "records=12" in first
     shown = decoder.decode_capture(fixture, show_addresses=True)
     assert "address=0x0000000f12345000" in shown
     try:

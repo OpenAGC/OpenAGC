@@ -1,6 +1,6 @@
 # Native runtime capture v1
 
-OpenAGC runtime API v24 provides a diagnostic capture stream through
+OpenAGC runtime API v25 provides a diagnostic capture stream through
 `openagc/capture.h`. Captures describe what the native runtime validated and
 submitted; they are not replay files and must never be sent directly to a GPU.
 
@@ -40,7 +40,22 @@ into failure.
 
 Shader bytes are omitted by default. Setting
 `AGC_CAPTURE_INCLUDE_SHADER_BYTES_BIT` is the explicit application opt-in for
-a later shader-byte record; shader hashes and versions do not require it.
+a shader-byte record; FNV-1a-64 hashes and shader-record versions are emitted
+regardless.
+
+After a fence or label proves that a GPU write is complete, an application can
+select a readback buffer or transfer-source image range for capture:
+
+```c
+result = agcCaptureRecordReadbackHash(capture,
+    AGC_CAPTURE_OBJECT_BUFFER, readback, offset, size);
+```
+
+The call invalidates the selected CPU-visible range, computes FNV-1a-64, and
+emits the stable resource ID, range, algorithm, and hash. It rejects other
+object types, resources from another device, non-readback buffers,
+non-transfer-source images, empty ranges, and overruns. The caller remains
+responsible for completing GPU-to-host synchronization before the call.
 
 ## Binary format
 
@@ -66,13 +81,21 @@ Each record begins with a 16-byte header: 16-bit type, 16-bit record version,
 sequence number beginning at one. Unknown record types can be skipped by size;
 an unknown record version must be rejected unless that version is documented.
 
-The initial v1 writer emits runtime/profile capabilities, object creation and
-debug names, matching destruction, command begin/end boundaries, application
-PM4, final post-injection submitted PM4, submission command IDs and typed
-wait/signal label points, bounded fence results, validation messages, and a
-final authenticated record/byte count. Resource, shader/pipeline, transition,
-and selected readback-hash records are extended in subsequent Milestone 5
-slices using the same framing and stable capture-local IDs.
+The v1 writer emits:
+
+- runtime/profile capabilities, object creation, debug names, and matching
+  destruction;
+- buffer, image, image-view, and sampler descriptions with stable local IDs;
+- shader stage, record/front-record versions, binary sizes, FNV-1a-64 hashes,
+  reflection presence, and opt-in primary/front bytes;
+- normalized graphics/compute pipeline descriptions, shader references,
+  vertex/descriptor/push layouts, attachment formats, sample state, and local
+  workgroup sizes;
+- typed buffer/image transitions with exact ranges, ownership, usages, and
+  optional dependency-label points;
+- command begin/end boundaries, application PM4, final post-injection PM4,
+  submission order, waits/signals, bounded fence results, validation messages,
+  selected readback hashes, and a final authenticated record/byte count.
 
 Raw host pointers and GPU addresses are never written by the runtime capture
 API. PM4 dwords can themselves contain process-specific addresses, so the host
@@ -92,6 +115,8 @@ validation warnings. Address-bearing fields show `<redacted>` by default.
 `--show-addresses` is an explicit diagnostic opt-in and should not be used when
 sharing a capture.
 
-The decoder rejects bad magic, unsupported versions, invalid sizes,
-non-contiguous sequences, truncated command dwords, and malformed submission
-tails. It performs no hardware access.
+The decoder resolves resource and shader references by stable IDs and explains
+typed transition ranges and readback hashes. It rejects bad magic, unsupported
+versions, invalid sizes, count/size mismatches, non-contiguous sequences,
+truncated command dwords, and malformed submission tails. It performs no
+hardware access.

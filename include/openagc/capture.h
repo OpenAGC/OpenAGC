@@ -51,8 +51,17 @@ typedef enum AgcCaptureRecordType {
     AGC_CAPTURE_RECORD_READBACK_HASH = 10,
     AGC_CAPTURE_RECORD_END = 11,
     /* Final post-injection dwords exactly as submitted to the backend. */
-    AGC_CAPTURE_RECORD_COMMAND_STREAM = 12
+    AGC_CAPTURE_RECORD_COMMAND_STREAM = 12,
+    AGC_CAPTURE_RECORD_RESOURCE_DESC = 13,
+    AGC_CAPTURE_RECORD_SHADER_DESC = 14,
+    AGC_CAPTURE_RECORD_SHADER_BYTES = 15,
+    AGC_CAPTURE_RECORD_PIPELINE_DESC = 16,
+    AGC_CAPTURE_RECORD_RESOURCE_TRANSITION = 17
 } AgcCaptureRecordType;
+
+typedef enum AgcCaptureHashAlgorithm {
+    AGC_CAPTURE_HASH_FNV1A64 = 1
+} AgcCaptureHashAlgorithm;
 
 typedef enum AgcCaptureObjectType {
     AGC_CAPTURE_OBJECT_DEVICE = 0,
@@ -114,6 +123,11 @@ int32_t PS5_SYSV_ABI agcBeginCapture(AgcCapture capture);
 int32_t PS5_SYSV_ABI agcEndCapture(AgcCapture capture);
 int32_t PS5_SYSV_ABI agcGetCaptureInfo(
     AgcCapture capture, AgcCaptureInfo *info);
+/* Invalidates and hashes one selected readback range. The object must be a
+ * readback buffer or a transfer-source image owned by this capture's device. */
+int32_t PS5_SYSV_ABI agcCaptureRecordReadbackHash(AgcCapture capture,
+    AgcCaptureObjectType object_type, const void *object,
+    uint64_t offset, uint64_t size);
 
 #ifdef __cplusplus
 }

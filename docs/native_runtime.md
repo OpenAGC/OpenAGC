@@ -42,6 +42,8 @@ versioned, pointer-free message snapshots. It does not replace required safety
 checks; see [validation.md](validation.md).
 Runtime API v24 adds the endian-defined diagnostic capture stream and
 pointer-redacting host decoder described in [capture.md](capture.md).
+Runtime API v25 completes its semantic records for resources, shaders,
+pipelines, transitions, opt-in shader bytes, and selected readback hashes.
 OpenAGC rejects unknown versions, nonzero flags, or nonzero reserved fields
 without partial object or command creation.
 

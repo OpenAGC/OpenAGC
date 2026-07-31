@@ -764,12 +764,24 @@ static void test_runtime_capture_v1_stream(void)
     AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
     AgcQueueDesc queue_desc = AGC_QUEUE_DESC_INIT;
     AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    AgcBufferDesc buffer_desc = AGC_BUFFER_DESC_INIT;
+    AgcImageDesc image_desc = AGC_IMAGE_DESC_INIT;
+    AgcImageViewDesc view_desc = AGC_IMAGE_VIEW_DESC_INIT;
+    AgcSamplerDesc sampler_desc = AGC_SAMPLER_DESC_INIT;
+    AgcComputePipelineDesc pipeline_desc = AGC_COMPUTE_PIPELINE_DESC_INIT;
+    AgcResourceTransition transition = AGC_RESOURCE_TRANSITION_INIT;
     RuntimeCaptureSink sink = {0};
     AgcCapture capture = NULL;
     AgcCommandBuffer command = NULL;
     AgcQueue queue = NULL;
     AgcFence fence = NULL;
-    uint32_t counts[AGC_CAPTURE_RECORD_COMMAND_STREAM + 1u] = {0};
+    AgcBuffer buffer = NULL;
+    AgcImage image = NULL;
+    AgcImageView view = NULL;
+    AgcSampler sampler = NULL;
+    AgcShader shader = NULL;
+    AgcComputePipeline pipeline = NULL;
+    uint32_t counts[AGC_CAPTURE_RECORD_RESOURCE_TRANSITION + 1u] = {0};
     uint64_t expected_sequence = 1u;
     size_t offset;
 
@@ -800,6 +812,38 @@ static void test_runtime_capture_v1_stream(void)
     TEST_ASSERT_EQ(agcDestroyCapture(capture), AGC_ERROR_BUSY,
         "active capture cannot be destroyed");
 
+    buffer_desc.size = 256u;
+    buffer_desc.usage = AGC_BUFFER_USAGE_TRANSFER_SRC_BIT |
+        AGC_BUFFER_USAGE_TRANSFER_DST_BIT;
+    buffer_desc.flags = AGC_BUFFER_CREATE_READBACK_BIT;
+    TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &buffer), AGC_OK,
+        "captured readback buffer creates");
+    image_desc.width = 4u;
+    image_desc.height = 4u;
+    image_desc.format = AGC_FORMAT_RGBA8_UNORM;
+    image_desc.usage = AGC_IMAGE_USAGE_SAMPLED_BIT |
+        AGC_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &image), AGC_OK,
+        "captured image creates");
+    view_desc.image = image;
+    view_desc.format = image_desc.format;
+    TEST_ASSERT_EQ(agcCreateImageView(device, &view_desc, &view), AGC_OK,
+        "captured image view creates");
+    TEST_ASSERT_EQ(agcCreateSampler(device, &sampler_desc, &sampler), AGC_OK,
+        "captured sampler creates");
+    shader = create_shader(device, kAgcShaderStageCs);
+    pipeline_desc.shader = shader;
+    pipeline_desc.local_size_x = 64u;
+    TEST_ASSERT_EQ(agcCreateComputePipeline(device, &pipeline_desc,
+        &pipeline), AGC_OK, "captured compute pipeline creates");
+    TEST_ASSERT_EQ(agcCaptureRecordReadbackHash(capture,
+        AGC_CAPTURE_OBJECT_BUFFER, buffer, 0u, buffer_desc.size), AGC_OK,
+        "selected readback range hashes into capture");
+    TEST_ASSERT_EQ(agcCaptureRecordReadbackHash(capture,
+        AGC_CAPTURE_OBJECT_SAMPLER, sampler, 0u, 1u),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "non-resource readback hash fails closed");
+
     command_desc.queue_type = kAgcQueueCompute;
     command_desc.capacity_dwords = 64u;
     TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
@@ -829,12 +873,39 @@ static void test_runtime_capture_v1_stream(void)
         "captured command resets");
     TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
         "captured fence resets");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+        "captured transition command begins");
+    transition.resource_type = kAgcResourceTypeBuffer;
+    transition.before = kAgcResourceUsageUndefined;
+    transition.before_owner = kAgcResourceOwnerHost;
+    transition.after = kAgcResourceUsageCopyDestination;
+    transition.after_owner = kAgcResourceOwnerCompute;
+    transition.buffer = buffer;
+    transition.buffer_size = buffer_desc.size;
+    TEST_ASSERT_EQ(agcCmdTransitionResources(command, 1u, &transition),
+        AGC_OK, "typed captured transition records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+        "captured transition command ends");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+        "captured transition command resets and releases resource");
     TEST_ASSERT_EQ(agcDestroyFence(fence), AGC_OK,
         "captured fence destroys");
     TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
         "captured command destroys");
     TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
         "captured queue destroys");
+    TEST_ASSERT_EQ(agcDestroyComputePipeline(pipeline), AGC_OK,
+        "captured compute pipeline destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(shader), AGC_OK,
+        "captured shader destroys");
+    TEST_ASSERT_EQ(agcDestroySampler(sampler), AGC_OK,
+        "captured sampler destroys");
+    TEST_ASSERT_EQ(agcDestroyImageView(view), AGC_OK,
+        "captured image view destroys");
+    TEST_ASSERT_EQ(agcDestroyImage(image), AGC_OK,
+        "captured image destroys");
+    TEST_ASSERT_EQ(agcDestroyBuffer(buffer), AGC_OK,
+        "captured readback buffer destroys");
     TEST_ASSERT_EQ(agcEndCapture(capture), AGC_OK,
         "capture stream ends cleanly");
     TEST_ASSERT_EQ(sink.overflow, 0u,
@@ -874,11 +945,14 @@ static void test_runtime_capture_v1_stream(void)
         TEST_ASSERT_EQ(sequence, expected_sequence,
             "capture record sequence is contiguous");
         expected_sequence++;
-        if (type <= AGC_CAPTURE_RECORD_COMMAND_STREAM)
+        if (type <= AGC_CAPTURE_RECORD_RESOURCE_TRANSITION)
             counts[type]++;
         if (type == AGC_CAPTURE_RECORD_COMMAND_END) {
-            TEST_ASSERT_EQ(runtime_capture_u32(sink.bytes + offset + 28u), 0u,
-                "command-end record preserves empty application body");
+            if (counts[type] == 1u) {
+                TEST_ASSERT_EQ(runtime_capture_u32(
+                    sink.bytes + offset + 28u), 0u,
+                    "first command-end preserves empty application body");
+            }
         } else if (type == AGC_CAPTURE_RECORD_COMMAND_STREAM) {
             uint32_t used = runtime_capture_u32(sink.bytes + offset + 28u);
             TEST_ASSERT_EQ(used, 2u,
@@ -898,16 +972,16 @@ static void test_runtime_capture_v1_stream(void)
         "capture parser consumes the complete stream");
     TEST_ASSERT_EQ(counts[AGC_CAPTURE_RECORD_RUNTIME_INFO], 1u,
         "capture contains one runtime profile record");
-    TEST_ASSERT_EQ(counts[AGC_CAPTURE_RECORD_OBJECT_CREATE], 3u,
-        "capture contains command, queue, and fence creation");
+    TEST_ASSERT_EQ(counts[AGC_CAPTURE_RECORD_OBJECT_CREATE], 9u,
+        "capture contains every captured object creation");
     TEST_ASSERT_EQ(counts[AGC_CAPTURE_RECORD_OBJECT_NAME], 1u,
         "capture contains the command debug name");
-    TEST_ASSERT_EQ(counts[AGC_CAPTURE_RECORD_OBJECT_DESTROY], 3u,
+    TEST_ASSERT_EQ(counts[AGC_CAPTURE_RECORD_OBJECT_DESTROY], 9u,
         "capture contains matching object destruction");
-    TEST_ASSERT_EQ(counts[AGC_CAPTURE_RECORD_COMMAND_BEGIN], 1u,
-        "capture contains one command begin boundary");
-    TEST_ASSERT_EQ(counts[AGC_CAPTURE_RECORD_COMMAND_END], 1u,
-        "capture contains one command end boundary");
+    TEST_ASSERT_EQ(counts[AGC_CAPTURE_RECORD_COMMAND_BEGIN], 2u,
+        "capture contains both command begin boundaries");
+    TEST_ASSERT_EQ(counts[AGC_CAPTURE_RECORD_COMMAND_END], 2u,
+        "capture contains both command end boundaries");
     TEST_ASSERT_EQ(counts[AGC_CAPTURE_RECORD_COMMAND_STREAM], 1u,
         "capture contains exact submitted PM4 dwords");
     TEST_ASSERT_EQ(counts[AGC_CAPTURE_RECORD_SUBMISSION], 1u,
@@ -916,6 +990,18 @@ static void test_runtime_capture_v1_stream(void)
         "capture contains bounded fence result");
     TEST_ASSERT_EQ(counts[AGC_CAPTURE_RECORD_VALIDATION_MESSAGE], 1u,
         "capture contains actionable validation warning");
+    TEST_ASSERT_EQ(counts[AGC_CAPTURE_RECORD_READBACK_HASH], 1u,
+        "capture contains one selected readback hash");
+    TEST_ASSERT_EQ(counts[AGC_CAPTURE_RECORD_RESOURCE_DESC], 4u,
+        "capture contains buffer, image, view, and sampler descriptions");
+    TEST_ASSERT_EQ(counts[AGC_CAPTURE_RECORD_SHADER_DESC], 1u,
+        "capture contains shader record version and hashes");
+    TEST_ASSERT_EQ(counts[AGC_CAPTURE_RECORD_SHADER_BYTES], 0u,
+        "capture omits shader bytes without explicit opt-in");
+    TEST_ASSERT_EQ(counts[AGC_CAPTURE_RECORD_PIPELINE_DESC], 1u,
+        "capture contains normalized compute pipeline description");
+    TEST_ASSERT_EQ(counts[AGC_CAPTURE_RECORD_RESOURCE_TRANSITION], 1u,
+        "capture contains one typed resource transition");
     TEST_ASSERT_EQ(counts[AGC_CAPTURE_RECORD_END], 1u,
         "capture contains one final record");
 
@@ -930,12 +1016,56 @@ static void test_runtime_capture_v1_stream(void)
         "capture info reports exact byte count");
     TEST_ASSERT_EQ(capture_info.record_count, expected_sequence - 1u,
         "capture info reports exact record count");
-    TEST_ASSERT_EQ(capture_info.next_object_id, 4u,
+    TEST_ASSERT_EQ(capture_info.next_object_id, 10u,
         "capture-local object IDs are dense and pointer-independent");
     TEST_ASSERT_EQ(agcDestroyCapture(capture), AGC_OK,
         "completed capture destroys");
     TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
         "capture device destroys without leaks");
+}
+
+static void test_runtime_capture_shader_bytes_opt_in(void)
+{
+    AgcDevice device = create_device();
+    AgcCaptureDesc desc = AGC_CAPTURE_DESC_INIT;
+    RuntimeCaptureSink sink = {0};
+    AgcCapture capture = NULL;
+    AgcShader shader = NULL;
+    uint32_t byte_records = 0u;
+    size_t offset;
+
+    desc.flags = AGC_CAPTURE_INCLUDE_SHADER_BYTES_BIT;
+    desc.write = runtime_capture_write;
+    desc.user_data = &sink;
+    TEST_ASSERT_EQ(agcCreateCapture(device, &desc, &capture), AGC_OK,
+        "shader-byte opt-in capture creates");
+    TEST_ASSERT_EQ(agcBeginCapture(capture), AGC_OK,
+        "shader-byte opt-in capture begins");
+    shader = create_shader(device, kAgcShaderStageCs);
+    TEST_ASSERT_EQ(agcDestroyShader(shader), AGC_OK,
+        "opt-in captured shader destroys");
+    TEST_ASSERT_EQ(agcEndCapture(capture), AGC_OK,
+        "shader-byte opt-in capture ends");
+    offset = AGC_CAPTURE_FILE_HEADER_SIZE;
+    while (offset < sink.size) {
+        uint16_t type = runtime_capture_u16(sink.bytes + offset);
+        uint32_t size = runtime_capture_u32(sink.bytes + offset + 4u);
+
+        if (type == AGC_CAPTURE_RECORD_SHADER_BYTES) {
+            uint32_t byte_count = runtime_capture_u32(
+                sink.bytes + offset + 28u);
+            byte_records++;
+            TEST_ASSERT_EQ(size, AGC_CAPTURE_RECORD_HEADER_SIZE + 16u +
+                byte_count, "opt-in shader byte record size is exact");
+        }
+        offset += size;
+    }
+    TEST_ASSERT_EQ(byte_records, 1u,
+        "explicit opt-in captures primary shader bytes exactly once");
+    TEST_ASSERT_EQ(agcDestroyCapture(capture), AGC_OK,
+        "shader-byte opt-in capture destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "shader-byte opt-in device destroys without leaks");
 }
 
 typedef struct AllocationProbe {
@@ -7924,6 +8054,7 @@ void test_suite_runtime(void)
     TEST_RUN(test_runtime_descriptor_and_info_contract);
     TEST_RUN(test_runtime_optional_debug_callback);
     TEST_RUN(test_runtime_capture_v1_stream);
+    TEST_RUN(test_runtime_capture_shader_bytes_opt_in);
     TEST_RUN(test_runtime_shader_reflection_contract);
     TEST_RUN(test_runtime_graphics_pipeline_compatibility_matrix);
     TEST_RUN(test_runtime_pipeline_layout_and_stage_validation);
