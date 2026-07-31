@@ -788,8 +788,10 @@ versions and FNV-1a-64 hashes, shader bytes only after explicit opt-in,
 normalized graphics/compute pipeline descriptions, exact typed transition
 ranges and dependency points, and runtime-computed selected readback hashes.
 The decoder validates every new fixed/dynamic layout and prints stable resource
-references without exposing process pointers. The captured reference-frame
-gate and broader invalid-program diagnostic coverage remain active work; see
+references without exposing process pointers. Completion-audit fixtures cover
+submission waits/signals, graphics and compute pipelines, buffer and image
+transitions, and opt-in primary/front shader bytes. The captured reference-
+frame gate and broader invalid-program diagnostic coverage are complete; see
 `analysis/runtime_capture_semantics_host_20260731.md`.
 
 The completed validation matrix extends the API-v23 messenger across every

@@ -26,7 +26,7 @@ compute and baseline graphics oracles now also passed on exact FW 5.50 through
 the direct DCB carrier, without application PM4 or firmware selection.
 
 Milestone 4 typed command recording, resource states, and synchronization is
-complete for the documented support scope. Generic verification passes 17,340
+complete for the documented support scope. Generic verification passes 17,437
 assertions and CTest 12/12, including the Milestone 5 deterministic-capture,
 installed-package example, complete API-reference, and firmware-neutral
 documentation gates. Nine cleanup-first runtime targets pass as

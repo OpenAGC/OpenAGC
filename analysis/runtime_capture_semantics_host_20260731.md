@@ -49,3 +49,37 @@ cmake --build build-prospero --parallel                             PASS
 Both builds retained `-Wall -Wextra -Wpedantic` and emitted no new warning.
 No PS5 replay is required for this serialization/host-decoder-only slice;
 hardware remains reserved for the Milestone 5 reference qualification gate.
+
+## Completion-audit coverage extension
+
+The final Milestone 5 audit closed branch-level evidence gaps without changing
+the format or implementation. The runtime fixture now captures two real v2
+submissions and asserts stable label IDs/values for a signal followed by a
+wait/signal dependency; both final injected command streams and bounded fence
+results are present. It also creates both compute and graphics pipelines,
+records buffer and image subresource transitions, and proves explicit shader-
+byte opt-in emits exactly one primary and one front-half record.
+
+The independent decoder fixture now parses and renders submission dependency
+lists, both pipeline kinds, and both transition range kinds. It retains the
+named packet/register/field, validation-warning, resource-reference, malformed-
+stream, deterministic output, and default address-redaction checks.
+
+Focused result before the clean checkpoint:
+
+```text
+build/openagc_tests                         17437 passed, 0 failed
+python3 tests/test_capture_decoder.py       PASS
+```
+
+The completion-audit checkpoint then rebuilt from a deleted generic tree:
+
+```text
+cmake -B build -DOPENAGC_PLATFORM=generic -DOPENAGC_BUILD_TESTS=ON   PASS
+cmake --build build --parallel                                      PASS
+ctest --test-dir build --output-on-failure                          12/12 PASS
+build/openagc_tests                                                  17437/0
+cmake --build build-prospero --parallel                             PASS
+```
+
+No new warning was emitted by either toolchain.
