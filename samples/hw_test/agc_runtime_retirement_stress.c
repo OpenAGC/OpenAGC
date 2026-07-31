@@ -1,8 +1,10 @@
 /* Native-runtime batch submission plus deferred-retirement stress gate. */
 
+#include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <unistd.h>
 
 #include "agc_error.h"
 #include "openagc/runtime.h"
@@ -12,6 +14,10 @@ enum {
     kCycles = 32u,
     kCompletionTimeoutNs = 200000000u,
 };
+
+#ifndef AGC_SELF_TERMINATE
+#define AGC_SELF_TERMINATE 0
+#endif
 
 static void report_result(const char *operation, int32_t result)
 {
@@ -311,5 +317,10 @@ cleanup:
     }
     puts(passed ? "BATCH_RETIREMENT_STRESS PASS" :
         "BATCH_RETIREMENT_STRESS FAIL");
+    fflush(stdout);
+    fflush(stderr);
+#if AGC_SELF_TERMINATE
+    kill(getpid(), SIGKILL);
+#endif
     return passed ? 0 : 1;
 }

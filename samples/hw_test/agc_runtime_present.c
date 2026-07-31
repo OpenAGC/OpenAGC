@@ -7,9 +7,11 @@
  * before each flip.
  */
 
+#include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <unistd.h>
 
 #include "agc_error.h"
 #include "openagc/runtime.h"
@@ -24,6 +26,10 @@ enum {
 
 #ifndef AGC_PRESENT_STAGE
 #define AGC_PRESENT_STAGE 0
+#endif
+
+#ifndef AGC_SELF_TERMINATE
+#define AGC_SELF_TERMINATE 0
 #endif
 
 static uint32_t g_pixels[kPixelCount];
@@ -255,5 +261,10 @@ cleanup:
         report_result("agcDestroyDevice", agcDestroyDevice(device));
     printf("PRESENT_STAGE_%u %s\n", (unsigned)AGC_PRESENT_STAGE,
         passed ? "PASS" : "FAIL");
+    fflush(stdout);
+    fflush(stderr);
+#if AGC_SELF_TERMINATE
+    kill(getpid(), SIGKILL);
+#endif
     return passed ? 0 : 1;
 }

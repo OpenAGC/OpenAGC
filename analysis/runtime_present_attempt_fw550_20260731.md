@@ -55,11 +55,11 @@ at most one final flip, and compiles five guarded stages:
 
 The final API-v22 staged artifact hashes are:
 
-- Stage 0: `70c9f44db94154a8105b4379ccb86f213736047001f6d09ba72a97688542c714`
-- Stage 1: `84e709cb15a18b3262e81b732d4258ae52e42913ad063fd9dfe332745c9e6643`
-- Stage 2: `d67bbade7d48a918cb2636ac1e42f0c176dca99848a3a00f244019f5686ece11`
-- Stage 3: `d5ee2434129f16d068110208671bba72d95637681db22d2226919d487a4452f6`
-- Stage 4: `108416ea85233ff5768062a8bc5b062376a2ee2ced909b5358e2a7e050e658bf`
+- Stage 0: `f83de2ab8251375db4dd040e34c6abc3d7557eb8b6d503c1cef6a256e4b89de4`
+- Stage 1: `adceba2bb3da402fbb29660d1a9a30597585366f80082581ebd925b21ae1ece0`
+- Stage 2: `f384e65fe0a7d3cd3cdb26980cd07b003dabeceb1a4489441a906b65943691fb`
+- Stage 3: `30a08d185ddef730ebdebccf672c80bbd1781e555747020a2d299cbf22d4d9c8`
+- Stage 4: `a24956e489cc9abff3b562199a65ceeded8a8b38a138b453210de04e86e7b6fa`
 
 Use only the hash-pinned cleanup-first Make targets:
 
@@ -88,5 +88,6 @@ returned `AGC_OK`, and the guarded runner verified HTTP/FTP recovery after
 each process.
 
 The staged carrier therefore hardware-qualifies the opaque presentation
-boundary on exact FW 5.50. The earlier combined artifact remains invalid and
-must not be rerun.
+boundary on exact FW 5.50. The self-terminating current bytes were replayed on
+FW 5.50 and passed unchanged on exact FW 11.60. The earlier combined artifact
+remains invalid and must not be rerun.

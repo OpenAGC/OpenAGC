@@ -190,8 +190,10 @@ The first FW 5.50 one-buffer registration failed safely; a two-buffer combined
 registration/transition/flip attempt did not return and remains invalid. Do
 not rerun that artifact. The replacement cleanup-first ladder passed
 registration-only, transition-only, first-flip, round-trip-transition, and
-final-flip stages with clean teardown on exact FW 5.50. See
-[`runtime_present_attempt_fw550_20260731.md`](../analysis/runtime_present_attempt_fw550_20260731.md).
+final-flip stages with clean teardown as identical bytes on exact FW 5.50 and
+FW 11.60. See
+[`runtime_present_attempt_fw550_20260731.md`](../analysis/runtime_present_attempt_fw550_20260731.md)
+and [`runtime_milestone4_fw1160_20260731.md`](../analysis/runtime_milestone4_fw1160_20260731.md).
 
 Runtime API v14 makes fence-keyed retirement usable for resources referenced
 by submitted command buffers. `agcDestroyBufferDeferred` and
@@ -209,8 +211,8 @@ uses a 200 ms finite wait, proves pre-reset collection returns
 `AGC_ERROR_BUSY`, recycles both commands atomically, and returns deferred
 count, live allocation count, and live bytes to the exact baseline. It also
 proves a present-chain dependency delays image collection. The identical
-Prospero artifact passes all 32 cycles with clean teardown on exact FW 5.50;
-see
+Prospero artifact passes all 32 cycles with clean teardown on exact FW 5.50
+and FW 11.60; see
 [`runtime_batch_deferred_retirement_host_20260731.md`](../analysis/runtime_batch_deferred_retirement_host_20260731.md).
 
 Runtime API v15 makes `Undefined` a valid destination as well as an initial
@@ -268,9 +270,9 @@ Command-local tentative signals and ordered multi-DCB signals are revalidated
 against the latest submitted point, so stale recordings cannot publish a
 decreasing counter. This prevents a wait from passing on stale memory while a
 later timeline point still satisfies every earlier dependency. The
-exact graphics/compute label
-carrier and single-command submit lists are hardware-qualified on FW 5.50;
-event objects remain unsupported.
+exact graphics/compute label carrier and the Milestone 4 timeline-wait gate are
+hardware-qualified on FW 5.50 and FW 11.60; single-command submit-list workload
+coverage remains exact-FW-5.50-qualified. Event objects remain unsupported.
 
 `agcGetGpuLabelStatus(label, value)` succeeds when the CPU-observed word is at
 or beyond an already-scheduled point. `agcWaitGpuLabel` applies the same

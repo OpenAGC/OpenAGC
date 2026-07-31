@@ -44,7 +44,7 @@ and Prospero builds complete without warnings.
 `samples/hw_test/agc_runtime_retirement_stress.elf` carries the same 32-cycle
 sequence and bounded waits.
 
-- SHA-256: `a3d04e6472c2cdd0ea09624cd3536dd5eb53345fa063aa5cee937636290852fb`
+- SHA-256: `837183c7d4ad463a50baa993755b55d071845ba479454ede0441901efc66b17d`
 - Expected verdict: `BATCH_RETIREMENT_STRESS PASS`
 - Expected teardown: both labels, fence, both command buffers, queue, and
   device return `AGC_OK`.
@@ -55,8 +55,9 @@ system version `0x05500008`. Every cycle completed its batch fence, rejected
 premature collection, atomically recycled both command buffers, collected the
 retired buffer and image, and returned live/deferred statistics to baseline.
 Both labels, the fence, both command buffers, the queue, and the device then
-destroyed with `AGC_OK`. This hardware-qualifies the stress contract and API
-v22 command recycling on exact FW 5.50.
+destroyed with `AGC_OK`. The same self-terminating bytes subsequently passed
+on exact FW 5.50 and FW 11.60. This hardware-qualifies the stress contract and
+API v22 command recycling on both endpoint profiles.
 
 Regression reruns must use the cleanup-first, hash-pinned target:
 

@@ -517,8 +517,9 @@ The equivalent native compute-queue oracle also passed without CPU waits,
 artifact `95caaab9277368f06db8907147604e8e8dbc3296189fd80e5e15a37f0d46f9a2`.
 Artifact `b4d21c6673d74af2b997e695605018ff4499df4998782fc243f18523e7c7576e`
 also passed a reflected compute dispatch in the first DCB, a verified label in
-the second, one batch fence, and 64-word readback on exact FW 5.50. FW 11.60,
-larger batches, and non-compute workload batch forms remain open.
+the second, one batch fence, and 64-word readback on exact FW 5.50. Larger
+batches and non-compute workload batch forms remain open. The separate
+Milestone 4 extension matrix is qualified on FW 11.60 below.
 
 Runtime API v10 adds `AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT` for an
 explicit same-queue, earlier-DCB state dependency. Submission simulates the
@@ -618,8 +619,8 @@ typed DCBs per cycle, queues both referenced resources, verifies collection is
 busy before atomic command-batch recycling, then proves deferred count,
 allocation count, and live bytes return exactly to baseline. The matching
 Prospero artifact
-`a3d04e6472c2cdd0ea09624cd3536dd5eb53345fa063aa5cee937636290852fb`
-is ready but hardware qualification awaits reachable websrv services. See
+`837183c7d4ad463a50baa993755b55d071845ba479454ede0441901efc66b17d`
+passes all 32 cycles on exact FW 5.50 and FW 11.60. See
 `analysis/runtime_batch_deferred_retirement_host_20260731.md`.
 
 Runtime API v15 completes the exact low-level host transition matrix and fixes
@@ -667,8 +668,8 @@ result, timeout count, and deadline while preserving the 104-byte v1 prefix.
 Command-local and ordered-batch signal sequences are revalidated against the
 latest committed point before submission, and `UINT32_MAX` is terminal rather
 than wrapping. The generic suite covers transactional rejection and final
-publication; the cleanup-first FW 5.50 artifact is pinned pending reachable
-websrv. See `analysis/runtime_gpu_label_timeline_host_20260731.md`.
+publication; the cleanup-first artifact passes as identical bytes on FW 5.50
+and FW 11.60. See `analysis/runtime_gpu_label_timeline_host_20260731.md`.
 
 Runtime API v20 extends the ownership protocol to exact buffer byte ranges and
 image aspect/mip/layer ranges. Multiple disjoint releases may remain pending
@@ -690,25 +691,27 @@ The generic gate passes 16,852 assertions; the strengthened timeline and both
 partial-range artifacts pass on exact FW 5.50. See
 `analysis/runtime_gpu_timeline_waits_host_20260731.md`.
 
-The FW 5.50 presentation ladder, retirement stress, timeline wait, and partial
-ownership probes share one fail-closed runner. All nine Make targets pin the
+The FW 5.50/FW 11.60 presentation ladder, retirement stress, timeline wait,
+and partial ownership probes share one fail-closed runner. All targets pin the
 current artifact hash,
 launch the process-cleanup ELF first, verify service recovery, require exact
 firmware/verdict/device-teardown lines, reject error text and transport
 timeouts, and recheck websrv afterward. Its host mock proves hash mismatch and
 missing verdict fail before success; CTest now passes 7/7 suites. Manual direct
 launch is not part of the qualification procedure. All nine guarded targets
-passed on exact FW 5.50; see
-`analysis/runtime_milestone4_fw550_20260731.md`.
+passed as identical bytes on exact FW 5.50 and FW 11.60; see
+`analysis/runtime_milestone4_fw550_20260731.md` and
+`analysis/runtime_milestone4_fw1160_20260731.md`.
 
 Exit criteria: exact host fixtures cover the supported transition matrix and
 atomic short-buffer failure; exact FW 5.50 gates cover render-to-shader,
 compute-to-copy, copy-to-shader, host-read, timeline waits, partial ownership,
 retirement, and present-to-render; repeated multi-command-buffer submission
 and deferred destruction complete without leaks, stale ownership, or
-unbounded waits. The identical firmware-neutral baseline remains qualified on
-both FW 5.50 and FW 11.60; optional Milestone 4 extensions on FW 11.60 remain
-separately unqualified.
+unbounded waits. The identical firmware-neutral baseline and the nine optional
+Milestone 4 extensions are qualified on both FW 5.50 and FW 11.60. The
+independent FW 11.60 workload extension remains disabled and outside this
+contract.
 
 The initial whole-buffer compute row is established on exact FW 5.50: public
 runtime artifact `ab8852e9161c0f6ed1c373bc6de047bb9831df0d7cc7bc3df6d247baf549af31`

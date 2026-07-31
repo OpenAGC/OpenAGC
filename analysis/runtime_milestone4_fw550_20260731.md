@@ -13,15 +13,15 @@ websrv HTTP/FTP afterward.
 
 | Contract | SHA-256 | Result |
 | --- | --- | --- |
-| API v22 batch recycling and deferred retirement, 32 cycles | `a3d04e6472c2cdd0ea09624cd3536dd5eb53345fa063aa5cee937636290852fb` | PASS |
-| reached-or-passed timeline wait | `c30a07d6b8c55b495df9736476376e2e7d8869e17e90f1f7e98a60f85be6976f` | PASS |
+| API v22 batch recycling and deferred retirement, 32 cycles | `837183c7d4ad463a50baa993755b55d071845ba479454ede0441901efc66b17d` | PASS |
+| reached-or-passed timeline wait | `cb1bd3285de6003ad9cf1f2f07533c3151c3d85d05f1966a57493c73d3f30c1e` | PASS |
 | two disjoint buffer ownership ranges | `2b78f787d8ab15ee972382102d566afaab2e06742b27953936aea3530e33ba80` | PASS |
 | two disjoint image mip/layer ownership ranges | `249125fd245037c720f409c9830a105a872310498217f15835536403189a8e2c` | PASS |
-| presentation stage 0: registration | `70c9f44db94154a8105b4379ccb86f213736047001f6d09ba72a97688542c714` | PASS |
-| presentation stage 1: initial scanout transition | `84e709cb15a18b3262e81b732d4258ae52e42913ad063fd9dfe332745c9e6643` | PASS |
-| presentation stage 2: first bounded flip | `d67bbade7d48a918cb2636ac1e42f0c176dca99848a3a00f244019f5686ece11` | PASS |
-| presentation stage 3: render/scanout round trip | `d5ee2434129f16d068110208671bba72d95637681db22d2226919d487a4452f6` | PASS |
-| presentation stage 4: final bounded flip | `108416ea85233ff5768062a8bc5b062376a2ee2ced909b5358e2a7e050e658bf` | PASS |
+| presentation stage 0: registration | `f83de2ab8251375db4dd040e34c6abc3d7557eb8b6d503c1cef6a256e4b89de4` | PASS |
+| presentation stage 1: initial scanout transition | `adceba2bb3da402fbb29660d1a9a30597585366f80082581ebd925b21ae1ece0` | PASS |
+| presentation stage 2: first bounded flip | `f384e65fe0a7d3cd3cdb26980cd07b003dabeceb1a4489441a906b65943691fb` | PASS |
+| presentation stage 3: render/scanout round trip | `30a08d185ddef730ebdebccf672c80bbd1781e555747020a2d299cbf22d4d9c8` | PASS |
+| presentation stage 4: final bounded flip | `a24956e489cc9abff3b562199a65ceeded8a8b38a138b453210de04e86e7b6fa` | PASS |
 
 All final public destroy calls returned `AGC_OK`. No guarded PASS left an
 unreachable service or residual process.
@@ -37,7 +37,7 @@ builds and passed through the same guard.
 
 ## Qualification boundary
 
-These results qualify the listed contracts only for the exact FW 5.50 standard
-PS5 profile. Host tests remain the broader negative/transactional contract.
-FW 11.60 retains its previously proven firmware-neutral baseline, but these
-optional Milestone 4 extensions have not been replayed there.
+These results qualify the listed contracts for the exact FW 5.50 standard PS5
+profile. Host tests remain the broader negative/transactional contract. The
+same bytes also passed on exact FW 11.60; see
+`runtime_milestone4_fw1160_20260731.md`.

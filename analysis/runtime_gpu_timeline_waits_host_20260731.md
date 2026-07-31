@@ -33,7 +33,7 @@ The three directly relevant artifacts reproduced across two consecutive
 builds and are pinned as:
 
 - timeline wait:
-  `c30a07d6b8c55b495df9736476376e2e7d8869e17e90f1f7e98a60f85be6976f`
+  `cb1bd3285de6003ad9cf1f2f07533c3151c3d85d05f1966a57493c73d3f30c1e`
 - partial buffer handoff:
   `2b78f787d8ab15ee972382102d566afaab2e06742b27953936aea3530e33ba80`
 - partial image handoff:
@@ -44,10 +44,14 @@ accepted neither websrv port 8080 nor FTP port 2121. No payload ran and no
 hardware qualification claim changed at that time.
 
 After websrv recovery, all three guarded targets passed on exact standard PS5
-FW 5.50. The timeline target observed point 2, successfully waited for and
+FW 5.50. The then-current timeline artifact
+`c30a07d6b8c55b495df9736476376e2e7d8869e17e90f1f7e98a60f85be6976f`
+observed point 2, successfully waited for and
 queried point 1, then submitted the cross-queue acquire without a CPU wait.
 The corrected 64-dword partial buffer/image variants each released and acquired
 two disjoint ranges at points 1 and 2. Every bounded fence and teardown
-operation completed with `AGC_OK`. Reached-or-passed waits and these two-range
-carriers are therefore hardware-qualified for exact FW 5.50; FW 11.60 remains
-unqualified for the extension.
+operation completed with `AGC_OK`. The current timeline bytes and both partial
+range artifacts then passed through exact-FW-11.60 cleanup-first aliases. The
+current timeline bytes were replayed successfully on FW 5.50 as well.
+Reached-or-passed waits and these two-range carriers are therefore
+hardware-qualified as identical bytes on exact FW 5.50 and FW 11.60.

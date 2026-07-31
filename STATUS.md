@@ -27,11 +27,12 @@ the direct DCB carrier, without application PM4 or firmware selection.
 
 Milestone 4 typed command recording, resource states, and synchronization is
 complete for the documented support scope. Clean generic verification passes
-16,902 assertions and CTest 7/7. Nine cleanup-first runtime targets pass on
-exact standard PS5 FW 5.50, covering presentation, timeline waits, partial
-ownership, deferred retirement, and API-v22 command recycling. Optional
-extensions not qualified on FW 11.60 remain reported as unsupported; its
-identical firmware-neutral baseline remains 2/2 PASS.
+16,902 assertions and CTest 7/7. Nine cleanup-first runtime targets pass as
+identical artifact bytes on exact standard PS5 FW 5.50 and FW 11.60, covering
+presentation, timeline waits, partial ownership, deferred retirement, and
+API-v22 command recycling. The independent FW 11.60 workload extension
+remains disabled and is not exercised by these native-runtime gates; the
+firmware-neutral baseline remains 2/2 PASS.
 
 1. **Build validation, diagnostics, and capture.** Add the optional debug
    layer and versioned command-stream capture/decoder described in Milestone 5.
@@ -181,9 +182,10 @@ readiness-fence wait followed by a bounded flip from committed Graphics-owned
 `VideoOutScanout` state. Generic coverage passes the complete
 scanout-to-color-target-to-scanout lifecycle. The replacement five-stage
 cleanup-first ladder passes registration, initial transition, first flip,
-round-trip transition, final flip, and clean teardown on exact FW 5.50. The
-earlier combined artifact remains invalid and must not be rerun. See
-`analysis/runtime_present_attempt_fw550_20260731.md`.
+round-trip transition, final flip, and clean teardown as identical bytes on
+exact FW 5.50 and FW 11.60. The earlier combined artifact remains invalid and
+must not be rerun. See `analysis/runtime_present_attempt_fw550_20260731.md`
+and `analysis/runtime_milestone4_fw1160_20260731.md`.
 Runtime API v14 permits buffer/image retirement while submitted command or
 dependent-object references remain. Objects reject new use immediately, but
 the collector requires both the finite-wait fence and reference release before
@@ -192,8 +194,8 @@ buffer and image retirement, pre-recycle busy collection, atomic command-batch
 recycling, and exact deferred/live-count/live-byte baselines; present-chain
 retention is also
 covered. Prospero builds the identical stress artifact with SHA-256
-`a3d04e6472c2cdd0ea09624cd3536dd5eb53345fa063aa5cee937636290852fb`,
-which passes all 32 cycles and clean teardown on exact FW 5.50. See
+`837183c7d4ad463a50baa993755b55d071845ba479454ede0441901efc66b17d`,
+which passes all 32 cycles and clean teardown on exact FW 5.50 and FW 11.60. See
 `analysis/runtime_batch_deferred_retirement_host_20260731.md`.
 Runtime API v15 accepts `Undefined` as the documented discard destination.
 Discard is a zero-packet state change even after a writer; all other release,
