@@ -762,6 +762,16 @@ addresses by default. Captures are diagnostic records, not automatically safe
 hardware replays; a future replay tool needs a separate address-remapping and
 security design.
 
+Runtime API v23 starts this milestone with the allocation-free validation
+messenger. A device selects synchronous severity/category masks, receives a
+fixed-size pointer-free `AgcDebugMessage`, and can query the last delivered
+snapshot. Required fail-closed results remain identical when reporting is
+filtered or disabled. The first hooks cover device lifetime, command state,
+single-command submission, label ordering, resource-state publication, fence
+reuse, and submit-time command capacity. Creation, pipeline/descriptor/range
+coverage and capture serialization remain active work; see
+`analysis/runtime_validation_debug_layer_host_20260731.md`.
+
 Create and maintain application documentation alongside the API:
 
 - A native API overview and object-lifecycle guide.

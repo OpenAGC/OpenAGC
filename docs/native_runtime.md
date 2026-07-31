@@ -37,6 +37,9 @@ Runtime API v21 makes GPU command, submit-list, and ownership-acquire waits
 timeline-aware: a submitted label value satisfies every earlier point.
 Runtime API v22 adds `agcRecycleCommandBuffers`, which polls one completed
 fence and atomically returns a validated command-buffer batch to `INITIAL`.
+Runtime API v23 adds an optional allocation-free validation callback with
+versioned, pointer-free message snapshots. It does not replace required safety
+checks; see [validation.md](validation.md).
 OpenAGC rejects unknown versions, nonzero flags, or nonzero reserved fields
 without partial object or command creation.
 
@@ -44,6 +47,10 @@ All public entry points use `PS5_SYSV_ABI`. Handles are opaque pointers; an
 application must not inspect, copy, allocate, or free their storage. Optional
 `AgcAllocationCallbacks` must provide both allocation and free callbacks and
 remain callable until the device is destroyed.
+
+Optional diagnostics are synchronously selected with `agcSetDebugCallback`.
+Callbacks require the same external synchronization as the device and must not
+re-enter it. Passing `NULL` disables messages without disabling validation.
 
 ## Ownership and synchronization
 

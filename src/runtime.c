@@ -183,6 +183,13 @@ struct AgcDeviceImpl {
     AgcRuntimeAllocation *tessellation_factor_allocation;
     AgcRuntimeAllocation *tessellation_table_allocation;
     uint32_t tessellation_initialized;
+    AgcDebugMessageFunction debug_callback;
+    void *debug_user_data;
+    AgcDebugMessageSeverityFlags debug_severity_mask;
+    AgcDebugMessageCategoryFlags debug_category_mask;
+    uint64_t debug_sequence;
+    uint32_t has_debug_message;
+    AgcDebugMessage last_debug_message;
 };
 
 struct AgcQueueImpl {
@@ -409,6 +416,13 @@ struct AgcFenceImpl {
     uint64_t last_timeout_ns;
 };
 
+_Static_assert(sizeof(AgcDebugMessage) == 368u,
+    "AgcDebugMessage ABI size mismatch");
+_Static_assert(offsetof(AgcDebugMessage, message) == 144u,
+    "AgcDebugMessage message offset mismatch");
+_Static_assert(sizeof(AgcDebugCallbackDesc) == 64u,
+    "AgcDebugCallbackDesc ABI size mismatch");
+
 static int agcCommandImageRangeState(AgcCommandBuffer command_buffer,
     AgcImage image, const AgcImageSubresourceRange *range,
     AgcResourceUsage *usage, AgcResourceOwner *owner);
@@ -452,6 +466,39 @@ static int agcDeviceValid(AgcDevice device)
 {
     return device != NULL && device == g_active_device &&
         device->magic == AGC_MAGIC_DEVICE;
+}
+
+static int32_t agcDebugReport(AgcDevice device,
+    AgcDebugMessageSeverityFlags severity,
+    AgcDebugMessageCategoryFlags category, int32_t result,
+    const char *function_name, uint32_t object_type,
+    const char *object_name, const char *message)
+{
+    AgcDebugMessage debug_message = AGC_DEBUG_MESSAGE_INIT;
+
+    if (!agcDeviceValid(device) || !device->debug_callback ||
+        (device->debug_severity_mask & severity) == 0u ||
+        (device->debug_category_mask & category) == 0u) {
+        return result;
+    }
+    device->debug_sequence++;
+    debug_message.sequence = device->debug_sequence;
+    debug_message.severity = severity;
+    debug_message.category = category;
+    debug_message.result = result;
+    debug_message.object_type = object_type;
+    (void)snprintf(debug_message.function_name,
+        sizeof(debug_message.function_name), "%s",
+        function_name ? function_name : "");
+    (void)snprintf(debug_message.object_name,
+        sizeof(debug_message.object_name), "%s", object_name ? object_name : "");
+    (void)snprintf(debug_message.message, sizeof(debug_message.message), "%s",
+        message ? message : "");
+    device->last_debug_message = debug_message;
+    device->has_debug_message = 1u;
+    device->debug_callback(device->debug_user_data,
+        &device->last_debug_message);
+    return result;
 }
 
 static void *agcAlloc(AgcDevice device, size_t size, size_t alignment)
@@ -954,7 +1001,10 @@ int32_t PS5_SYSV_ABI agcDestroyDevice(AgcDevice device)
     if (!agcDeviceValid(device))
         return AGC_ERROR_INVALID_ARGUMENT;
     if (device->child_count != 0u)
-        return AGC_ERROR_BUSY;
+        return agcDebugReport(device, AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
+            AGC_DEBUG_MESSAGE_CATEGORY_LIFETIME_BIT, AGC_ERROR_BUSY,
+            "agcDestroyDevice", AGC_DEBUG_OBJECT_TYPE_NONE, NULL,
+            "device destruction requires all child objects to be destroyed");
     result = agcDriverShutdown();
     if (result != AGC_OK)
         return result;
@@ -5086,7 +5136,13 @@ int32_t PS5_SYSV_ABI agcBeginCommandBuffer(AgcCommandBuffer command_buffer)
         return AGC_ERROR_INVALID_ARGUMENT;
     }
     if (command_buffer->state != AGC_COMMAND_BUFFER_STATE_INITIAL)
-        return AGC_ERROR_INVALID_STATE;
+        return agcDebugReport(command_buffer->device,
+            AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
+            AGC_DEBUG_MESSAGE_CATEGORY_OBJECT_STATE_BIT,
+            AGC_ERROR_INVALID_STATE, "agcBeginCommandBuffer",
+            AGC_OBJECT_TYPE_COMMAND_BUFFER,
+            command_buffer->allocation->debug_name,
+            "command buffer must be in Initial state before begin");
     agcCbReset(&command_buffer->cursor, command_buffer->storage,
         (size_t)command_buffer->capacity_dwords * sizeof(uint32_t));
     command_buffer->state = AGC_COMMAND_BUFFER_STATE_RECORDING;
@@ -5100,7 +5156,13 @@ int32_t PS5_SYSV_ABI agcEndCommandBuffer(AgcCommandBuffer command_buffer)
         return AGC_ERROR_INVALID_ARGUMENT;
     }
     if (command_buffer->state != AGC_COMMAND_BUFFER_STATE_RECORDING)
-        return AGC_ERROR_INVALID_STATE;
+        return agcDebugReport(command_buffer->device,
+            AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
+            AGC_DEBUG_MESSAGE_CATEGORY_OBJECT_STATE_BIT,
+            AGC_ERROR_INVALID_STATE, "agcEndCommandBuffer",
+            AGC_OBJECT_TYPE_COMMAND_BUFFER,
+            command_buffer->allocation->debug_name,
+            "command buffer must be Recording before end");
     command_buffer->state = AGC_COMMAND_BUFFER_STATE_EXECUTABLE;
     return AGC_OK;
 }
@@ -5112,7 +5174,13 @@ int32_t PS5_SYSV_ABI agcResetCommandBuffer(AgcCommandBuffer command_buffer)
         return AGC_ERROR_INVALID_ARGUMENT;
     }
     if (command_buffer->state == AGC_COMMAND_BUFFER_STATE_PENDING) {
-        return AGC_ERROR_INVALID_STATE;
+        return agcDebugReport(command_buffer->device,
+            AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
+            AGC_DEBUG_MESSAGE_CATEGORY_OBJECT_STATE_BIT,
+            AGC_ERROR_INVALID_STATE, "agcResetCommandBuffer",
+            AGC_OBJECT_TYPE_COMMAND_BUFFER,
+            command_buffer->allocation->debug_name,
+            "pending command buffer cannot be reset before completion");
     }
     agcReleaseCommandReferences(command_buffer);
     agcCbReset(&command_buffer->cursor, command_buffer->storage,
@@ -9004,18 +9072,37 @@ int32_t PS5_SYSV_ABI agcQueueSubmit(
 #endif
 
     if (!queue || queue->magic != AGC_MAGIC_QUEUE ||
-        !agcDeviceValid(queue->device) || !agcSubmitInfoValid(submit_info) ||
+        !agcDeviceValid(queue->device)) {
+        return AGC_ERROR_INVALID_ARGUMENT;
+    }
+    if (!agcSubmitInfoValid(submit_info) ||
         submit_info->command_buffer_count == 0u ||
         submit_info->command_buffer_count >
             AGC_RUNTIME_MAX_SUBMIT_COMMAND_BUFFERS ||
         !submit_info->command_buffers) {
-        return AGC_ERROR_INVALID_ARGUMENT;
+        return agcDebugReport(queue->device,
+            AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
+            AGC_DEBUG_MESSAGE_CATEGORY_PARAMETER_BIT,
+            AGC_ERROR_INVALID_ARGUMENT, "agcQueueSubmit",
+            AGC_DEBUG_OBJECT_TYPE_NONE, NULL,
+            "submission descriptor is invalid or has no command buffers");
     }
     if (fence && (fence->magic != AGC_MAGIC_FENCE ||
-            fence->device != queue->device))
-        return AGC_ERROR_INVALID_ARGUMENT;
+            fence->device != queue->device)) {
+        return agcDebugReport(queue->device,
+            AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
+            AGC_DEBUG_MESSAGE_CATEGORY_PARAMETER_BIT,
+            AGC_ERROR_INVALID_ARGUMENT, "agcQueueSubmit",
+            AGC_DEBUG_OBJECT_TYPE_NONE, NULL,
+            "submission fence does not belong to the queue device");
+    }
     if (fence && fence->signaled)
-        return AGC_ERROR_INVALID_STATE;
+        return agcDebugReport(queue->device,
+            AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
+            AGC_DEBUG_MESSAGE_CATEGORY_SYNCHRONIZATION_BIT,
+            AGC_ERROR_INVALID_STATE, "agcQueueSubmit",
+            AGC_DEBUG_OBJECT_TYPE_NONE, NULL,
+            "submission fence must be reset before reuse");
     if (queue->next_submission_id == UINT64_MAX)
         return AGC_ERROR_NOT_SUPPORTED;
     if (submit_info->command_buffer_count > 1u)
@@ -9023,22 +9110,54 @@ int32_t PS5_SYSV_ABI agcQueueSubmit(
     command_buffer = submit_info->command_buffers[0];
     if (!command_buffer || command_buffer->magic != AGC_MAGIC_COMMAND_BUFFER ||
         command_buffer->device != queue->device ||
-        command_buffer->queue_type != queue->type)
-        return AGC_ERROR_INVALID_ARGUMENT;
+        command_buffer->queue_type != queue->type) {
+        return agcDebugReport(queue->device,
+            AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
+            AGC_DEBUG_MESSAGE_CATEGORY_PARAMETER_BIT,
+            AGC_ERROR_INVALID_ARGUMENT, "agcQueueSubmit",
+            AGC_DEBUG_OBJECT_TYPE_NONE, NULL,
+            "command buffer is invalid or belongs to a different device or queue type");
+    }
     if (command_buffer->state != AGC_COMMAND_BUFFER_STATE_EXECUTABLE)
-        return AGC_ERROR_INVALID_STATE;
+        return agcDebugReport(queue->device,
+            AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
+            AGC_DEBUG_MESSAGE_CATEGORY_OBJECT_STATE_BIT,
+            AGC_ERROR_INVALID_STATE, "agcQueueSubmit",
+            AGC_OBJECT_TYPE_COMMAND_BUFFER,
+            command_buffer->allocation->debug_name,
+            "submitted command buffer must be Executable");
     result = agcValidateCommandLabelWaits(queue, command_buffer);
     if (result != AGC_OK)
-        return result;
+        return agcDebugReport(queue->device,
+            AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
+            AGC_DEBUG_MESSAGE_CATEGORY_SYNCHRONIZATION_BIT, result,
+            "agcQueueSubmit", AGC_OBJECT_TYPE_COMMAND_BUFFER,
+            command_buffer->allocation->debug_name,
+            "command buffer has an unsatisfied GPU-label wait");
     result = agcValidateBatchLabelSignalOrder(&command_buffer, 1u);
     if (result != AGC_OK)
-        return result;
+        return agcDebugReport(queue->device,
+            AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
+            AGC_DEBUG_MESSAGE_CATEGORY_SYNCHRONIZATION_BIT, result,
+            "agcQueueSubmit", AGC_OBJECT_TYPE_COMMAND_BUFFER,
+            command_buffer->allocation->debug_name,
+            "command buffer contains a stale or decreasing GPU-label signal");
     result = agcValidateSubmissionTransitions(&command_buffer, 1u);
     if (result != AGC_OK)
-        return result;
+        return agcDebugReport(queue->device,
+            AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
+            AGC_DEBUG_MESSAGE_CATEGORY_RESOURCE_STATE_BIT, result,
+            "agcQueueSubmit", AGC_OBJECT_TYPE_COMMAND_BUFFER,
+            command_buffer->allocation->debug_name,
+            "recorded resource transitions do not match committed state");
     result = agcValidateSubmitLabelLists(queue, command_buffer, submit_info);
     if (result != AGC_OK)
-        return result;
+        return agcDebugReport(queue->device,
+            AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
+            AGC_DEBUG_MESSAGE_CATEGORY_SYNCHRONIZATION_BIT, result,
+            "agcQueueSubmit", AGC_OBJECT_TYPE_COMMAND_BUFFER,
+            command_buffer->allocation->debug_name,
+            "submission wait or signal list is invalid");
     if (submit_info->version == AGC_RUNTIME_STRUCTURE_VERSION_2 &&
         (submit_info->wait_count != 0u || submit_info->signal_count != 0u)) {
         uint64_t required_dwords = (uint64_t)submit_info->wait_count * 7u +
@@ -9051,7 +9170,13 @@ int32_t PS5_SYSV_ABI agcQueueSubmit(
                 agcCbUsedDwords(&command_buffer->cursor) ||
             required_dwords + agcCbUsedDwords(&command_buffer->cursor) >
                 command_buffer->capacity_dwords)
-            return AGC_ERROR_COMMAND_SPACE_EXHAUSTED;
+            return agcDebugReport(queue->device,
+                AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
+                AGC_DEBUG_MESSAGE_CATEGORY_COMMAND_CAPACITY_BIT,
+                AGC_ERROR_COMMAND_SPACE_EXHAUSTED, "agcQueueSubmit",
+                AGC_OBJECT_TYPE_COMMAND_BUFFER,
+                command_buffer->allocation->debug_name,
+                "command buffer lacks space for runtime submission packets");
         snapshot_size = (size_t)command_buffer->capacity_dwords *
             sizeof(*snapshot);
         snapshot = agcAlloc(queue->device, snapshot_size, sizeof(uint32_t));
@@ -9292,6 +9417,47 @@ int32_t PS5_SYSV_ABI agcSetObjectDebugName(AgcDevice device,
         return AGC_ERROR_INVALID_ARGUMENT;
     (void)snprintf(allocation->debug_name, sizeof(allocation->debug_name),
         "%s", name);
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcSetDebugCallback(AgcDevice device,
+    const AgcDebugCallbackDesc *desc)
+{
+    if (!agcDeviceValid(device))
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (!desc) {
+        device->debug_callback = NULL;
+        device->debug_user_data = NULL;
+        device->debug_severity_mask = 0u;
+        device->debug_category_mask = 0u;
+        return AGC_OK;
+    }
+    if (!agcHeaderValid(desc->struct_size, sizeof(*desc), desc->version) ||
+        !desc->callback || desc->severity_mask == 0u ||
+        (desc->severity_mask & ~AGC_DEBUG_MESSAGE_SEVERITY_ALL) != 0u ||
+        desc->category_mask == 0u ||
+        (desc->category_mask & ~AGC_DEBUG_MESSAGE_CATEGORY_ALL) != 0u ||
+        !agcReservedZero(desc->reserved, 4u)) {
+        return AGC_ERROR_INVALID_ARGUMENT;
+    }
+    device->debug_callback = desc->callback;
+    device->debug_user_data = desc->user_data;
+    device->debug_severity_mask = desc->severity_mask;
+    device->debug_category_mask = desc->category_mask;
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGetLastDebugMessage(AgcDevice device,
+    AgcDebugMessage *message)
+{
+    if (!agcDeviceValid(device) || !message ||
+        !agcHeaderValid(message->struct_size, sizeof(*message),
+            message->version) || !agcReservedZero(message->reserved, 4u)) {
+        return AGC_ERROR_INVALID_ARGUMENT;
+    }
+    if (!device->has_debug_message)
+        return AGC_ERROR_NOT_FOUND;
+    *message = device->last_debug_message;
     return AGC_OK;
 }
 

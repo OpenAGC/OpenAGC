@@ -119,8 +119,9 @@ OpenAGC targets only the PS5 GPU. The API uses opaque:
 The implemented native contract includes versioned descriptors, reserved-zero
 validation, optional allocation callbacks, explicit parent/child ownership,
 command-buffer state validation, finite binary-fence waits, capability and
-qualification reporting through `agcGetRuntimeInfo`, and generic compute plus
-indexed-graphics submission recording. Version 2 also consumes the shared
+qualification reporting through `agcGetRuntimeInfo`, and an optional API-v23
+validation callback with deterministic pointer-free messages. Version 2 also
+consumes the shared
 `AgcShaderReflection` emitted by `openagc-psbc`, verifies serialized shader
 records and hashes, and creates fail-closed graphics and compute pipelines.
 Applications query capabilities rather than branching on firmware.
@@ -133,11 +134,13 @@ reference/depth-bias dynamic state are recorded through the command buffer;
 draw and dispatch fail until every reflected requirement is bound. Versioned
 depth/stencil state covers depth bounds and independent front/back stencil
 operations/masks; unqualified alpha-to-coverage and alpha-to-one fail closed.
-Unsupported graphics forms, transitions, capture, and presentation remain
-ordered follow-on work. The native Prospero queue bridge is intentionally
+Unsupported graphics forms and capture remain ordered follow-on work;
+transitions and bounded presentation are implemented. The native Prospero
+queue bridge is intentionally
 limited to the qualified direct carriers and a runtime completion fence; it
 does not make the host harness a hardware substitute. See
 [docs/native_runtime.md](docs/native_runtime.md) for lifecycle rules,
+[docs/validation.md](docs/validation.md) for optional diagnostics,
 [docs/shader_pipelines.md](docs/shader_pipelines.md) for the reflection and
 pipeline contract, and [PLAN.md](PLAN.md) for the remaining dependency order.
 

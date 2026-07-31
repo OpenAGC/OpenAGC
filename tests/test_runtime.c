@@ -34,6 +34,20 @@ static AgcDevice create_device(void)
     return device;
 }
 
+typedef struct RuntimeDebugProbe {
+    uint32_t callback_count;
+    AgcDebugMessage last;
+} RuntimeDebugProbe;
+
+static void PS5_SYSV_ABI runtime_debug_callback(
+    void *user_data, const AgcDebugMessage *message)
+{
+    RuntimeDebugProbe *probe = user_data;
+
+    probe->callback_count++;
+    probe->last = *message;
+}
+
 static int32_t runtime_transition_buffer_to_graphics_read(
     AgcCommandBuffer command_buffer, AgcBuffer buffer, uint64_t size,
     AgcResourceUsage before, uint32_t flags)
@@ -572,6 +586,132 @@ static void test_runtime_descriptor_and_info_contract(void)
         "runtime info rejects nonzero reserved fields");
     TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
         "native device destruction succeeds");
+}
+
+static void test_runtime_optional_debug_callback(void)
+{
+    AgcDevice device = create_device();
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcDebugCallbackDesc debug_desc = AGC_DEBUG_CALLBACK_DESC_INIT;
+    AgcDebugMessage message = AGC_DEBUG_MESSAGE_INIT;
+    RuntimeDebugProbe probe = {0};
+    AgcCommandBuffer command = NULL;
+
+    TEST_ASSERT_EQ(sizeof(AgcDebugMessage), 368u,
+        "debug-message ABI size is stable");
+    TEST_ASSERT_EQ(offsetof(AgcDebugMessage, message), 144u,
+        "debug-message text offset is stable");
+    TEST_ASSERT_EQ(sizeof(AgcDebugCallbackDesc), 64u,
+        "debug-callback descriptor ABI size is stable");
+    TEST_ASSERT_EQ(agcGetLastDebugMessage(device, &message),
+        AGC_ERROR_NOT_FOUND, "debug query reports no message initially");
+
+    debug_desc.user_data = &probe;
+    debug_desc.reserved[0] = 1u;
+    TEST_ASSERT_EQ(agcSetDebugCallback(device, &debug_desc),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "debug callback rejects nonzero reserved fields");
+    debug_desc.reserved[0] = 0u;
+    TEST_ASSERT_EQ(agcSetDebugCallback(device, &debug_desc),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "debug callback requires a function");
+    debug_desc.callback = runtime_debug_callback;
+    debug_desc.severity_mask = 0u;
+    TEST_ASSERT_EQ(agcSetDebugCallback(device, &debug_desc),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "debug callback rejects an empty severity mask");
+    debug_desc.severity_mask = UINT32_C(1) << 31;
+    TEST_ASSERT_EQ(agcSetDebugCallback(device, &debug_desc),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "debug callback rejects unknown severity bits");
+    debug_desc.severity_mask = AGC_DEBUG_MESSAGE_SEVERITY_ALL;
+    debug_desc.category_mask = 0u;
+    TEST_ASSERT_EQ(agcSetDebugCallback(device, &debug_desc),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "debug callback rejects an empty category mask");
+    debug_desc.category_mask = UINT32_C(1) << 31;
+    TEST_ASSERT_EQ(agcSetDebugCallback(device, &debug_desc),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "debug callback rejects unknown category bits");
+    debug_desc.category_mask = AGC_DEBUG_MESSAGE_CATEGORY_ALL;
+    TEST_ASSERT_EQ(agcSetDebugCallback(device, &debug_desc), AGC_OK,
+        "debug callback installs without allocation");
+
+    command_desc.queue_type = kAgcQueueCompute;
+    command_desc.capacity_dwords = 64u;
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
+        AGC_OK, "debug command buffer creates");
+    TEST_ASSERT_EQ(agcSetObjectDebugName(device,
+        AGC_OBJECT_TYPE_COMMAND_BUFFER, command, "debug-command"), AGC_OK,
+        "debug command receives a stable name");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_ERROR_INVALID_STATE,
+        "invalid end still returns the required safety error");
+    TEST_ASSERT_EQ(probe.callback_count, 1u,
+        "invalid end emits one actionable callback");
+    TEST_ASSERT_EQ(probe.last.sequence, 1u,
+        "first debug callback has deterministic sequence one");
+    TEST_ASSERT_EQ(probe.last.severity,
+        AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
+        "invalid state is an error diagnostic");
+    TEST_ASSERT_EQ(probe.last.category,
+        AGC_DEBUG_MESSAGE_CATEGORY_OBJECT_STATE_BIT,
+        "invalid end identifies object-state category");
+    TEST_ASSERT_EQ(probe.last.result, AGC_ERROR_INVALID_STATE,
+        "debug callback preserves the public result");
+    TEST_ASSERT(strcmp(probe.last.function_name,
+        "agcEndCommandBuffer") == 0,
+        "debug callback names the failing public function");
+    TEST_ASSERT(strcmp(probe.last.object_name, "debug-command") == 0,
+        "debug callback includes the application debug name");
+    TEST_ASSERT(strstr(probe.last.message, "Recording") != NULL,
+        "debug callback explains the required state");
+
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+        "debug command begins normally");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_ERROR_INVALID_STATE,
+        "duplicate begin remains fail-closed");
+    TEST_ASSERT_EQ(probe.callback_count, 2u,
+        "duplicate begin emits one callback");
+    TEST_ASSERT_EQ(probe.last.sequence, 2u,
+        "debug sequence increases monotonically");
+    TEST_ASSERT(strcmp(probe.last.function_name,
+        "agcBeginCommandBuffer") == 0,
+        "duplicate begin names its public function");
+
+    debug_desc.category_mask = AGC_DEBUG_MESSAGE_CATEGORY_LIFETIME_BIT;
+    TEST_ASSERT_EQ(agcSetDebugCallback(device, &debug_desc), AGC_OK,
+        "debug category filter updates deterministically");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+        "debug command ends for lifetime check");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_ERROR_INVALID_STATE,
+        "filtered object-state error still preserves safety");
+    TEST_ASSERT_EQ(probe.callback_count, 2u,
+        "category filter suppresses only the optional callback");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_ERROR_BUSY,
+        "premature device destruction remains fail-closed");
+    TEST_ASSERT_EQ(probe.callback_count, 3u,
+        "premature destruction emits a lifetime diagnostic");
+    TEST_ASSERT_EQ(probe.last.sequence, 3u,
+        "filtered messages do not consume sequence numbers");
+    TEST_ASSERT_EQ(probe.last.category,
+        AGC_DEBUG_MESSAGE_CATEGORY_LIFETIME_BIT,
+        "premature destruction identifies lifetime category");
+    TEST_ASSERT(strstr(probe.last.message, "child objects") != NULL,
+        "lifetime diagnostic identifies the retained dependency");
+
+    message = (AgcDebugMessage)AGC_DEBUG_MESSAGE_INIT;
+    TEST_ASSERT_EQ(agcGetLastDebugMessage(device, &message), AGC_OK,
+        "last debug message is queryable without callback state");
+    TEST_ASSERT_EQ(message.sequence, probe.last.sequence,
+        "queried debug message matches callback sequence");
+    TEST_ASSERT(strcmp(message.function_name, "agcDestroyDevice") == 0,
+        "queried debug message preserves function name");
+    TEST_ASSERT_EQ(agcSetDebugCallback(device, NULL), AGC_OK,
+        "NULL descriptor disables optional diagnostics");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+        "debug command destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "debug device destroys after dependencies release");
 }
 
 typedef struct AllocationProbe {
@@ -7558,6 +7698,7 @@ void test_suite_runtime(void)
 {
     TEST_SUITE("Firmware-neutral Native Runtime");
     TEST_RUN(test_runtime_descriptor_and_info_contract);
+    TEST_RUN(test_runtime_optional_debug_callback);
     TEST_RUN(test_runtime_shader_reflection_contract);
     TEST_RUN(test_runtime_graphics_pipeline_compatibility_matrix);
     TEST_RUN(test_runtime_pipeline_layout_and_stage_validation);

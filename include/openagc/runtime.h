@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-#define AGC_RUNTIME_API_VERSION 22u
+#define AGC_RUNTIME_API_VERSION 23u
 #define AGC_RUNTIME_STRUCTURE_VERSION_1 1u
 #define AGC_RUNTIME_STRUCTURE_VERSION_2 2u
 #define AGC_RUNTIME_PROFILE_NAME_SIZE 48u
@@ -917,6 +917,80 @@ typedef enum AgcObjectType {
 } AgcObjectType;
 
 #define AGC_RUNTIME_DEBUG_NAME_SIZE 64u
+#define AGC_RUNTIME_DEBUG_FUNCTION_NAME_SIZE 48u
+#define AGC_RUNTIME_DEBUG_MESSAGE_SIZE 192u
+#define AGC_DEBUG_OBJECT_TYPE_NONE UINT32_MAX
+
+typedef enum AgcDebugMessageSeverityFlagBits {
+    AGC_DEBUG_MESSAGE_SEVERITY_INFO_BIT = 1u << 0,
+    AGC_DEBUG_MESSAGE_SEVERITY_WARNING_BIT = 1u << 1,
+    AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT = 1u << 2
+} AgcDebugMessageSeverityFlagBits;
+typedef uint32_t AgcDebugMessageSeverityFlags;
+
+#define AGC_DEBUG_MESSAGE_SEVERITY_ALL \
+    (AGC_DEBUG_MESSAGE_SEVERITY_INFO_BIT | \
+     AGC_DEBUG_MESSAGE_SEVERITY_WARNING_BIT | \
+     AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT)
+
+typedef enum AgcDebugMessageCategoryFlagBits {
+    AGC_DEBUG_MESSAGE_CATEGORY_PARAMETER_BIT = 1u << 0,
+    AGC_DEBUG_MESSAGE_CATEGORY_OBJECT_STATE_BIT = 1u << 1,
+    AGC_DEBUG_MESSAGE_CATEGORY_RESOURCE_STATE_BIT = 1u << 2,
+    AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT = 1u << 3,
+    AGC_DEBUG_MESSAGE_CATEGORY_COMMAND_CAPACITY_BIT = 1u << 4,
+    AGC_DEBUG_MESSAGE_CATEGORY_LIFETIME_BIT = 1u << 5,
+    AGC_DEBUG_MESSAGE_CATEGORY_CAPABILITY_BIT = 1u << 6,
+    AGC_DEBUG_MESSAGE_CATEGORY_SYNCHRONIZATION_BIT = 1u << 7
+} AgcDebugMessageCategoryFlagBits;
+typedef uint32_t AgcDebugMessageCategoryFlags;
+
+#define AGC_DEBUG_MESSAGE_CATEGORY_ALL \
+    (AGC_DEBUG_MESSAGE_CATEGORY_PARAMETER_BIT | \
+     AGC_DEBUG_MESSAGE_CATEGORY_OBJECT_STATE_BIT | \
+     AGC_DEBUG_MESSAGE_CATEGORY_RESOURCE_STATE_BIT | \
+     AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT | \
+     AGC_DEBUG_MESSAGE_CATEGORY_COMMAND_CAPACITY_BIT | \
+     AGC_DEBUG_MESSAGE_CATEGORY_LIFETIME_BIT | \
+     AGC_DEBUG_MESSAGE_CATEGORY_CAPABILITY_BIT | \
+     AGC_DEBUG_MESSAGE_CATEGORY_SYNCHRONIZATION_BIT)
+
+typedef struct AgcDebugMessage {
+    uint32_t struct_size;
+    uint32_t version;
+    uint64_t sequence;
+    AgcDebugMessageSeverityFlags severity;
+    AgcDebugMessageCategoryFlags category;
+    int32_t result;
+    uint32_t object_type;
+    char function_name[AGC_RUNTIME_DEBUG_FUNCTION_NAME_SIZE];
+    char object_name[AGC_RUNTIME_DEBUG_NAME_SIZE];
+    char message[AGC_RUNTIME_DEBUG_MESSAGE_SIZE];
+    uint64_t reserved[4];
+} AgcDebugMessage;
+
+#define AGC_DEBUG_MESSAGE_INIT \
+    { sizeof(AgcDebugMessage), AGC_RUNTIME_STRUCTURE_VERSION_1, 0u, 0u, 0u, \
+      AGC_OK, AGC_DEBUG_OBJECT_TYPE_NONE, {0}, {0}, {0}, \
+      {0u, 0u, 0u, 0u} }
+
+typedef void (PS5_SYSV_ABI *AgcDebugMessageFunction)(
+    void *user_data, const AgcDebugMessage *message);
+
+typedef struct AgcDebugCallbackDesc {
+    uint32_t struct_size;
+    uint32_t version;
+    AgcDebugMessageSeverityFlags severity_mask;
+    AgcDebugMessageCategoryFlags category_mask;
+    AgcDebugMessageFunction callback;
+    void *user_data;
+    uint64_t reserved[4];
+} AgcDebugCallbackDesc;
+
+#define AGC_DEBUG_CALLBACK_DESC_INIT \
+    { sizeof(AgcDebugCallbackDesc), AGC_RUNTIME_STRUCTURE_VERSION_1, \
+      AGC_DEBUG_MESSAGE_SEVERITY_ALL, AGC_DEBUG_MESSAGE_CATEGORY_ALL, \
+      NULL, NULL, {0u, 0u, 0u, 0u} }
 
 typedef struct AgcAllocationInfo {
     uint32_t struct_size;
@@ -1308,6 +1382,12 @@ int32_t PS5_SYSV_ABI agcGetObjectAllocationInfo(AgcDevice device,
     AgcObjectType type, const void *object, AgcAllocationInfo *info);
 int32_t PS5_SYSV_ABI agcSetObjectDebugName(AgcDevice device,
     AgcObjectType type, void *object, const char *name);
+/* Installs one synchronous, allocation-free validation callback. Passing NULL
+ * disables the optional layer; required safety validation remains active. */
+int32_t PS5_SYSV_ABI agcSetDebugCallback(AgcDevice device,
+    const AgcDebugCallbackDesc *desc);
+int32_t PS5_SYSV_ABI agcGetLastDebugMessage(AgcDevice device,
+    AgcDebugMessage *message);
 int32_t PS5_SYSV_ABI agcGetMemoryStats(
     AgcDevice device, AgcMemoryStats *stats);
 int32_t PS5_SYSV_ABI agcCollectDeferredFrees(AgcDevice device);
