@@ -1065,6 +1065,12 @@ static void test_runtime_invalid_program_diagnostic_matrix(void)
         expect_runtime_debug(&probe, 12u,
             AGC_DEBUG_MESSAGE_CATEGORY_RESOURCE_STATE_BIT,
             AGC_ERROR_RESOURCE_NOT_BOUND, "agcCmdDispatch", "missing");
+        write.type = AGC_SHADER_DESCRIPTOR_STORAGE_BUFFER;
+        write.buffer = NULL;
+        TEST_ASSERT_EQ(agcCmdBindDescriptors(command, 1u, &write), AGC_OK,
+            "null descriptor satisfies the reflected binding");
+        TEST_ASSERT_EQ(agcCmdDispatch(command, 1u, 1u, 1u), AGC_OK,
+            "dispatch accepts an explicitly bound null descriptor");
         TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
             "descriptor diagnostic command resets");
         TEST_ASSERT_EQ(agcDestroyBuffer(source), AGC_OK,

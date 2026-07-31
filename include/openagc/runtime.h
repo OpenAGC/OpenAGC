@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-#define AGC_RUNTIME_API_VERSION 42u
+#define AGC_RUNTIME_API_VERSION 43u
 #define AGC_RUNTIME_MAX_VIEWPORTS 16u
 #define AGC_RUNTIME_STRUCTURE_VERSION_1 1u
 #define AGC_RUNTIME_STRUCTURE_VERSION_2 2u
@@ -1696,7 +1696,9 @@ int32_t PS5_SYSV_ABI agcCmdCopyImageToBuffer(
 /* Descriptor resources must already have a compatible explicit typed state
  * on this command buffer's queue. Read-only descriptors require ShaderRead;
  * storage descriptors accept ShaderRead or ShaderWrite until reflection
- * carries per-binding read/write access qualifiers. */
+ * carries per-binding read/write access qualifiers. A write with the typed
+ * resource handles unset encodes a zero/null descriptor; unused typed fields,
+ * offsets, ranges, and strides must also be zero. */
 int32_t PS5_SYSV_ABI agcCmdBindDescriptors(AgcCommandBuffer command_buffer,
     uint32_t write_count, const AgcDescriptorWrite *writes);
 int32_t PS5_SYSV_ABI agcCmdBindVertexBuffers(AgcCommandBuffer command_buffer,

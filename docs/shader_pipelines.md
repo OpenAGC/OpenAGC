@@ -110,6 +110,10 @@ indirect declarations in one shader fail pipeline creation.
 Each v1 descriptor write names one set, binding, and array element. A bind must
 cover every declared element exactly once. Buffer/image/sampler type, usage,
 device ownership, offset, range, and stride are validated as a transaction.
+An explicitly written null descriptor is encoded as all-zero bytes. A null
+buffer requires zero offset, range, and stride; combined image/sampler writes
+may independently leave either typed handle null. Null writes still count
+toward exact reflected array coverage but retain no absent resource.
 Successful bindings retain their resources until command-buffer reset or
 destruction; rejected bindings retain nothing. Push-constant coverage is
 tracked per stage, so draw or dispatch fails with

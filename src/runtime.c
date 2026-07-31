@@ -10351,8 +10351,11 @@ static int32_t agcCommandEncodeDescriptor(
         (uint64_t)write->array_element * mapping->byte_stride;
     switch (mapping->type) {
     case AGC_SHADER_DESCRIPTOR_SAMPLER:
-        if (write->buffer || write->image_view || !write->sampler ||
-            write->sampler->magic != AGC_MAGIC_SAMPLER ||
+        if (write->buffer || write->image_view)
+            return AGC_ERROR_RESOURCE_INVALID;
+        if (!write->sampler)
+            return AGC_OK;
+        if (write->sampler->magic != AGC_MAGIC_SAMPLER ||
             write->sampler->device != command_buffer->device)
             return AGC_ERROR_RESOURCE_INVALID;
         memcpy(encoded->bytes,
@@ -10362,8 +10365,11 @@ static int32_t agcCommandEncodeDescriptor(
     case AGC_SHADER_DESCRIPTOR_SAMPLED_IMAGE:
     case AGC_SHADER_DESCRIPTOR_STORAGE_IMAGE:
     case AGC_SHADER_DESCRIPTOR_INPUT_ATTACHMENT:
-        if (write->buffer || write->sampler || !write->image_view ||
-            write->image_view->magic != AGC_MAGIC_IMAGE_VIEW ||
+        if (write->buffer || write->sampler)
+            return AGC_ERROR_RESOURCE_INVALID;
+        if (!write->image_view)
+            return AGC_OK;
+        if (write->image_view->magic != AGC_MAGIC_IMAGE_VIEW ||
             write->image_view->device != command_buffer->device)
             return AGC_ERROR_RESOURCE_INVALID;
         if ((mapping->type == AGC_SHADER_DESCRIPTOR_STORAGE_IMAGE &&
@@ -10382,33 +10388,46 @@ static int32_t agcCommandEncodeDescriptor(
         encoded->view = write->image_view;
         return AGC_OK;
     case AGC_SHADER_DESCRIPTOR_COMBINED_IMAGE_SAMPLER:
-        if (write->buffer || !write->image_view || !write->sampler ||
-            write->image_view->magic != AGC_MAGIC_IMAGE_VIEW ||
-            write->sampler->magic != AGC_MAGIC_SAMPLER ||
-            write->image_view->device != command_buffer->device ||
-            write->sampler->device != command_buffer->device ||
-            (write->image_view->image->desc.usage &
-             AGC_IMAGE_USAGE_SAMPLED_BIT) == 0u)
+        if (write->buffer)
             return AGC_ERROR_RESOURCE_INVALID;
-        result = agcCommandValidateDescriptorImageState(command_buffer,
-            write->image_view, mapping);
-        if (result != AGC_OK)
-            return result;
-        memcpy(encoded->bytes,
-            agcAllocationCpuAddress(write->image_view->allocation),
-            sizeof(AgcGfx1013ImageDescriptor));
-        memcpy(encoded->bytes + sizeof(AgcGfx1013ImageDescriptor),
-            agcAllocationCpuAddress(write->sampler->allocation),
-            sizeof(AgcSamplerDescriptor));
-        encoded->view = write->image_view;
-        encoded->sampler = write->sampler;
+        if (write->image_view) {
+            if (write->image_view->magic != AGC_MAGIC_IMAGE_VIEW ||
+                write->image_view->device != command_buffer->device ||
+                (write->image_view->image->desc.usage &
+                 AGC_IMAGE_USAGE_SAMPLED_BIT) == 0u)
+                return AGC_ERROR_RESOURCE_INVALID;
+            result = agcCommandValidateDescriptorImageState(command_buffer,
+                write->image_view, mapping);
+            if (result != AGC_OK)
+                return result;
+            memcpy(encoded->bytes,
+                agcAllocationCpuAddress(write->image_view->allocation),
+                sizeof(AgcGfx1013ImageDescriptor));
+            encoded->view = write->image_view;
+        }
+        if (write->sampler) {
+            if (write->sampler->magic != AGC_MAGIC_SAMPLER ||
+                write->sampler->device != command_buffer->device)
+                return AGC_ERROR_RESOURCE_INVALID;
+            memcpy(encoded->bytes + sizeof(AgcGfx1013ImageDescriptor),
+                agcAllocationCpuAddress(write->sampler->allocation),
+                sizeof(AgcSamplerDescriptor));
+            encoded->sampler = write->sampler;
+        }
         return AGC_OK;
     case AGC_SHADER_DESCRIPTOR_UNIFORM_TEXEL_BUFFER:
     case AGC_SHADER_DESCRIPTOR_STORAGE_TEXEL_BUFFER:
     case AGC_SHADER_DESCRIPTOR_UNIFORM_BUFFER:
     case AGC_SHADER_DESCRIPTOR_STORAGE_BUFFER:
-        if (!write->buffer || write->image_view || write->sampler ||
-            write->buffer->magic != AGC_MAGIC_BUFFER ||
+        if (write->image_view || write->sampler)
+            return AGC_ERROR_RESOURCE_INVALID;
+        if (!write->buffer) {
+            if (write->buffer_offset || write->buffer_range ||
+                write->buffer_stride)
+                return AGC_ERROR_RESOURCE_INVALID;
+            return AGC_OK;
+        }
+        if (write->buffer->magic != AGC_MAGIC_BUFFER ||
             write->buffer->device != command_buffer->device ||
             write->buffer->deferred ||
             write->buffer_offset >= write->buffer->size)
