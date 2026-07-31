@@ -27,7 +27,8 @@ the direct DCB carrier, without application PM4 or firmware selection.
 
 Milestone 4 typed command recording, resource states, and synchronization is
 complete for the documented support scope. Generic verification passes 17,340
-assertions and CTest 8/8. Nine cleanup-first runtime targets pass as
+assertions and CTest 10/10, including the Milestone 5 deterministic-capture and
+installed-package example gates. Nine cleanup-first runtime targets pass as
 identical artifact bytes on exact standard PS5 FW 5.50 and FW 11.60, covering
 presentation, timeline waits, partial ownership, deferred retirement, and
 API-v22 command recycling. The independent FW 11.60 workload extension
@@ -43,6 +44,10 @@ firmware-neutral baseline remains 2/2 PASS.
    enum/range, transition, reflection/descriptor, export/attachment,
    integer-blend, capability, command-capacity, use-after-submit, and lifetime
    diagnostics without allocating or changing fail-closed results.
+   The deterministic captured reference frame and installed-package consumer
+   gates also pass: two separate captures decode identically with address
+   redaction, and the public first-compute and first-indexed-triangle examples
+   configure, link, and execute using only the installed CMake package.
 2. **Document and integrate.** Publish lifecycle, memory, shader, pipeline,
    synchronization, capability, error, and capture documentation. Qualify one
    long-running reference-game ELF unchanged on FW 5.50 and FW 11.60.

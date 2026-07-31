@@ -420,6 +420,18 @@ cmake/            Relocatable package configuration
 
 ## Documentation
 
+- [docs/getting_started.md](docs/getting_started.md) — installation, CMake
+  consumption, and first compute/indexed-triangle tutorials.
+- [docs/native_runtime.md](docs/native_runtime.md) — firmware-neutral runtime
+  objects, ownership, queues, commands, and fences.
+- [docs/memory_resources.md](docs/memory_resources.md) — memory placement,
+  resource state, staging, suballocation, and retirement.
+- [docs/shader_pipelines.md](docs/shader_pipelines.md) — compiler reflection,
+  descriptors, shader linkage, and pipeline validation.
+- [docs/validation.md](docs/validation.md) — optional deterministic diagnostic
+  callback and required fail-closed validation.
+- [docs/capture.md](docs/capture.md) — capture format, address redaction, and
+  host decoder workflow.
 - [PLAN.md](PLAN.md) — authoritative product roadmap and detailed evidence
   ledger.
 - [STATUS.md](STATUS.md) — current qualification status and chronological

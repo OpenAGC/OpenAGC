@@ -801,6 +801,16 @@ assert exact result/category/function/message tuples and prove callback delivery
 performs no allocation attempt with an application allocator armed to fail.
 See `analysis/runtime_validation_matrix_host_20260731.md`.
 
+The deterministic reference-frame and installed-package gates are complete on
+the host. A real reflected compute frame now records the complete semantic
+resource-to-submit-to-readback chain; two independent producer processes decode
+to identical address-redacted text. Standalone first-compute and first-indexed-
+triangle applications are installed with their generated artifacts, configure
+only through `find_package(OpenAGC CONFIG REQUIRED)`, link
+`OpenAGC::openagc`, and execute on the generic backend. See
+`analysis/runtime_reference_capture_examples_host_20260731.md` and
+`docs/getting_started.md`.
+
 Create and maintain application documentation alongside the API:
 
 - A native API overview and object-lifecycle guide.

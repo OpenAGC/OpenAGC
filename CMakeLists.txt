@@ -124,6 +124,10 @@ if(OPENAGC_BUILD_TESTS)
         ${CMAKE_CURRENT_SOURCE_DIR}/src
     )
 
+    add_executable(openagc_capture_reference
+        tests/capture_reference_frame.c)
+    target_link_libraries(openagc_capture_reference PRIVATE openagc)
+
 add_test(NAME openagc_all_tests COMMAND openagc_tests)
 add_test(NAME portability_runner_fail_closed
     COMMAND sh
@@ -149,11 +153,22 @@ add_test(NAME firmware_neutral_elf_verifier
     COMMAND sh
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_firmware_neutral_elf_verifier.sh
         ${CMAKE_CURRENT_SOURCE_DIR}/tools/verify_firmware_neutral_elf.sh)
+add_test(NAME installed_package_examples
+    COMMAND sh
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_installed_examples.sh
+        ${CMAKE_COMMAND}
+        ${CMAKE_CURRENT_BINARY_DIR})
 find_package(Python3 QUIET COMPONENTS Interpreter)
 if(Python3_Interpreter_FOUND)
     add_test(NAME capture_decoder_v1
         COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_capture_decoder.py)
+    add_test(NAME reference_capture_deterministic
+        COMMAND sh
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_reference_capture.sh
+            $<TARGET_FILE:openagc_capture_reference>
+            ${CMAKE_CURRENT_SOURCE_DIR}/tools/decode_openagc_capture.py
+            ${Python3_EXECUTABLE})
 endif()
 endif()
 
@@ -243,9 +258,25 @@ if(OPENAGC_PACKAGE_PSBC)
         DESTINATION ${CMAKE_INSTALL_BINDIR}
         RENAME openagc-psbc)
 endif()
-install(FILES LICENSE README.md docs/native_runtime.md docs/memory_resources.md
+install(FILES LICENSE README.md docs/getting_started.md
+    docs/native_runtime.md docs/memory_resources.md
     docs/shader_pipelines.md docs/validation.md docs/capture.md
     DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/doc/OpenAGC)
+install(FILES
+    examples/CMakeLists.txt
+    examples/first_compute.c
+    examples/first_triangle.c
+    DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/doc/OpenAGC/examples
+)
+install(FILES
+    samples/hw_test/shaders/fill_color_native_reflection.h
+    samples/hw_test/shaders/fill_color_native_sb.h
+    samples/hw_test/shaders/runtime_triangle_frag_reflection.h
+    samples/hw_test/shaders/runtime_triangle_frag_sb.h
+    samples/hw_test/shaders/runtime_triangle_vert_back_sb.h
+    samples/hw_test/shaders/runtime_triangle_vert_front_sb.h
+    samples/hw_test/shaders/runtime_triangle_vert_reflection.h
+    DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/doc/OpenAGC/examples/shaders)
 
 set(OPENAGC_CMAKE_INSTALL_DIR
     "${CMAKE_INSTALL_LIBDIR}/cmake/OpenAGC")
