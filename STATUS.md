@@ -1470,6 +1470,14 @@ fields while preserving the existing MSAA encoding. The BC1 descriptor fixture
 locks a 5x7, three-mip, two-layer array and atomic invalid-count rejection. The
 generic suite passes 12,240 assertions.
 
+Native runtime image views now accept nonzero mip intervals. Descriptor
+encoding retains the allocation-wide `MAX_MIP`, programs the view's independent
+gfx10.3 `BASE_LEVEL`/`LAST_LEVEL`, and anchors single-layer 2D views at that
+layer's mip-zero allocation base. The generic descriptor fixture covers a
+five-level allocation viewed at levels 2-3, and the Prospero library builds
+without warnings. GPU sampling through a nonzero-base view remains a hardware
+qualification item and is not inferred from descriptor inspection.
+
 Portable BC1 UNORM and SRGB sampling gates now build with a dedicated
 `sampler2DArray` pixel shader and no firmware or AGC SPRX dependency. Their
 direct-upload fixture is 5x7 with three mips and two layers, contains explicit

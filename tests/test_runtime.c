@@ -9565,6 +9565,7 @@ static void test_runtime_extended_image_view_and_sampler(void)
     AgcAllocationInfo sampler_info = AGC_ALLOCATION_INFO_INIT;
     AgcGfx1013Image2DState image_state = {0};
     AgcGfx1013ImageDescriptor expected_view;
+    AgcImageSubresourceLayout mip_zero = AGC_IMAGE_SUBRESOURCE_LAYOUT_INIT;
     AgcSamplerDescriptor expected_sampler;
     AgcMemoryStats before_sampler = AGC_MEMORY_STATS_INIT;
     AgcMemoryStats after_sampler = AGC_MEMORY_STATS_INIT;
@@ -9574,6 +9575,7 @@ static void test_runtime_extended_image_view_and_sampler(void)
 
     image_desc.width = 32u;
     image_desc.height = 16u;
+    image_desc.mip_levels = 5u;
     image_desc.format = AGC_FORMAT_RGBA8_UNORM;
     image_desc.usage = AGC_IMAGE_USAGE_SAMPLED_BIT;
     image_desc.tiling = AGC_IMAGE_TILING_LINEAR;
@@ -9581,6 +9583,8 @@ static void test_runtime_extended_image_view_and_sampler(void)
         "extended-view source image creates");
     TEST_ASSERT_EQ(agcGetObjectAllocationInfo(device, AGC_OBJECT_TYPE_IMAGE,
         image, &image_info), AGC_OK, "source image allocation is queryable");
+    TEST_ASSERT_EQ(agcGetImageSubresourceLayout(device, &image_desc, 0u, 0u,
+        0u, &mip_zero), AGC_OK, "source mip-zero layout is queryable");
     view_desc.image = image;
     view_desc.format = AGC_GFX1013_IMAGE_FORMAT_RGBA8_UNORM;
     view_desc.swizzle_r = AGC_COMPONENT_SWIZZLE_B;
@@ -9590,7 +9594,7 @@ static void test_runtime_extended_image_view_and_sampler(void)
     TEST_ASSERT_EQ(agcGetObjectAllocationInfo(device,
         AGC_OBJECT_TYPE_IMAGE_VIEW, view, &view_info), AGC_OK,
         "swizzled image-view descriptor allocation is queryable");
-    image_state.address = image_info.gpu_address;
+    image_state.address = image_info.gpu_address + mip_zero.offset;
     image_state.width = image_desc.width;
     image_state.height = image_desc.height;
     image_state.format = AGC_GFX1013_IMAGE_FORMAT_RGBA8_UNORM;
@@ -9600,12 +9604,30 @@ static void test_runtime_extended_image_view_and_sampler(void)
     image_state.dst_sel_z = 4u;
     image_state.dst_sel_w = 7u;
     image_state.sample_count = 1u;
-    image_state.mip_level_count = 1u;
+    image_state.mip_level_count = image_desc.mip_levels;
     TEST_ASSERT_EQ(agcGfx1013Image2DDescriptorEncode(&expected_view,
         &image_state), AGC_OK, "expected swizzled view descriptor encodes");
+    expected_view.words[3] &= ~0x000f0000u;
     TEST_ASSERT(memcmp(view_info.cpu_address, &expected_view,
         sizeof(expected_view)) == 0,
         "native image-view backing contains the exact swizzled descriptor");
+
+    TEST_ASSERT_EQ(agcDestroyImageView(view), AGC_OK,
+        "base-zero swizzled image view destroys");
+    view = NULL;
+    view_info = (AgcAllocationInfo)AGC_ALLOCATION_INFO_INIT;
+    view_desc.base_mip_level = 2u;
+    view_desc.mip_level_count = 2u;
+    TEST_ASSERT_EQ(agcCreateImageView(device, &view_desc, &view), AGC_OK,
+        "image view accepts a nonzero in-range mip interval");
+    TEST_ASSERT_EQ(agcGetObjectAllocationInfo(device,
+        AGC_OBJECT_TYPE_IMAGE_VIEW, view, &view_info), AGC_OK,
+        "nonzero-base image-view descriptor allocation is queryable");
+    expected_view.words[3] = (expected_view.words[3] & ~0x000ff000u) |
+        (2u << 12u) | (3u << 16u);
+    TEST_ASSERT(memcmp(view_info.cpu_address, &expected_view,
+        sizeof(expected_view)) == 0,
+        "native descriptor encodes base two, last three, and allocation max mip");
 
     sampler_desc.min_filter = AGC_FILTER_LINEAR;
     sampler_desc.mag_filter = AGC_FILTER_NEAREST;

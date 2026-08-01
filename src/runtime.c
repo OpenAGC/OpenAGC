@@ -4082,7 +4082,7 @@ static int32_t agcRuntimeEncodeImageView(
     uint32_t resource_format = desc->format;
     uint32_t i;
 
-    if (desc->base_mip_level != 0u || image->desc.depth != 1u)
+    if (image->desc.depth != 1u)
         return AGC_ERROR_NOT_SUPPORTED;
     /* BGRA8 encodings are abstract runtime render-target formats. SQ has no
      * matching sampled-image resource encoding, so use the corresponding
@@ -4121,7 +4121,7 @@ static int32_t agcRuntimeEncodeImageView(
     if (view_type == AGC_IMAGE_VIEW_TYPE_2D) {
         AgcImageSubresourceLayout layout = AGC_IMAGE_SUBRESOURCE_LAYOUT_INIT;
         int32_t result = agcGetImageSubresourceLayout(image->device,
-            &image->desc, desc->base_mip_level, desc->base_array_layer, 0u,
+            &image->desc, 0u, desc->base_array_layer, 0u,
             &layout);
         if (result != AGC_OK || layout.offset > UINT64_MAX - state.address)
             return result != AGC_OK ? result : AGC_ERROR_INVALID_ARGUMENT;
@@ -4133,7 +4133,10 @@ static int32_t agcRuntimeEncodeImageView(
         state.last_array_layer = desc->base_array_layer +
             desc->array_layer_count - 1u;
     }
-    state.mip_level_count = desc->mip_level_count;
+    /* MAX_MIP describes the complete allocation while BASE_LEVEL/LAST_LEVEL
+     * select the view interval.  Keeping these separate is required for
+     * array/cube pitch calculation and nonzero-base Vulkan image views. */
+    state.mip_level_count = image->desc.mip_levels;
     if (image->desc.sample_count == 4u) {
         state.image_type = AGC_GFX1013_IMAGE_TYPE_2D_MSAA;
         state.swizzle_mode = AGC_GFX1013_IMAGE_SWIZZLE_64KB_R_X;
@@ -4145,7 +4148,17 @@ static int32_t agcRuntimeEncodeImageView(
     } else {
         state.image_type = AGC_GFX1013_IMAGE_TYPE_2D;
     }
-    return agcGfx1013Image2DDescriptorEncode(descriptor, &state);
+    {
+        int32_t result = agcGfx1013Image2DDescriptorEncode(descriptor, &state);
+        uint32_t last_mip_level;
+        if (result != AGC_OK)
+            return result;
+        last_mip_level = desc->base_mip_level + desc->mip_level_count - 1u;
+        descriptor->words[3] =
+            (descriptor->words[3] & ~0x000ff000u) |
+            (desc->base_mip_level << 12u) | (last_mip_level << 16u);
+        return AGC_OK;
+    }
 }
 
 static int agcImageViewDescHeaderValid(const AgcImageViewDesc *desc)

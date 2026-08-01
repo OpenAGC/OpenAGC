@@ -1979,7 +1979,9 @@ linear host qualification.
 
 The sampled-image descriptor now has an append-only `mip_level_count` field.
 For ordinary images it emits exact gfx10.3 `LAST_LEVEL` and `MAX_MIP` values;
-MSAA retains its sample-log2 interpretation. A BC1 5x7, three-mip, two-layer
+runtime image views additionally encode an independent `BASE_LEVEL`/`LAST_LEVEL`
+interval while retaining the allocation-wide `MAX_MIP`. MSAA retains its
+sample-log2 interpretation. A BC1 5x7, three-mip, two-layer
 fixture locks all six populated descriptor dwords and rejects impossible mip
 counts atomically. This removes the descriptor-side blocker for explicit-LOD
 and array-layer sampling.
