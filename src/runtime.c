@@ -8223,6 +8223,30 @@ static int agcCommandImageRangeState(AgcCommandBuffer command_buffer,
     return 1;
 }
 
+int32_t PS5_SYSV_ABI agcGetCommandBufferImageSubresourceStateInfo(
+    AgcCommandBuffer command_buffer, AgcImage image,
+    const AgcImageSubresourceRange *range, AgcResourceStateInfo *info)
+{
+    AgcResourceUsage usage;
+    AgcResourceOwner owner;
+
+    if (!command_buffer || command_buffer->magic != AGC_MAGIC_COMMAND_BUFFER ||
+        !image || image->magic != AGC_MAGIC_IMAGE || !range || !info ||
+        !agcDeviceValid(command_buffer->device) ||
+        image->device != command_buffer->device || image->deferred ||
+        command_buffer->state != AGC_COMMAND_BUFFER_STATE_RECORDING ||
+        !agcHeaderValid(info->struct_size, sizeof(*info), info->version) ||
+        info->reserved0 != 0u || !agcReservedZero(info->reserved, 4u) ||
+        !agcImageRangeValid(image, range))
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (!agcCommandImageRangeState(command_buffer, image, range,
+            &usage, &owner))
+        return AGC_ERROR_NOT_SUPPORTED;
+    info->usage = usage;
+    info->owner = owner;
+    return AGC_OK;
+}
+
 static void agcCommandTransitionState(AgcCommandBuffer command_buffer,
     AgcResourceType resource_type, void *resource, AgcResourceUsage *usage,
     AgcResourceOwner *owner)

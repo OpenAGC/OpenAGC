@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-#define AGC_RUNTIME_API_VERSION 46u
+#define AGC_RUNTIME_API_VERSION 47u
 #define AGC_RUNTIME_MAX_VIEWPORTS 16u
 #define AGC_RUNTIME_STRUCTURE_VERSION_1 1u
 #define AGC_RUNTIME_STRUCTURE_VERSION_2 2u
@@ -1571,6 +1571,11 @@ int32_t PS5_SYSV_ABI agcGetBufferRangeStateInfo(AgcBuffer buffer,
 int32_t PS5_SYSV_ABI agcGetCommandBufferRangeStateInfo(
     AgcCommandBuffer command_buffer, AgcBuffer buffer, uint64_t offset,
     uint64_t size, AgcResourceStateInfo *info);
+/* Image counterpart of agcGetCommandBufferRangeStateInfo. The returned state
+ * includes every transition already recorded for the queried subresources. */
+int32_t PS5_SYSV_ABI agcGetCommandBufferImageSubresourceStateInfo(
+    AgcCommandBuffer command_buffer, AgcImage image,
+    const AgcImageSubresourceRange *range, AgcResourceStateInfo *info);
 /* Queues retirement against a finite-wait fence. Existing command references
  * may remain, but allocation reuse waits for both fence completion and release
  * of those references by command reset/destruction. */

@@ -168,6 +168,7 @@ reset/destruction; “borrowed” means the input is read only during the call.
 | `agcGetBufferStateInfo` | Queries uniform whole-buffer committed state. | `AGC_ERROR_NOT_SUPPORTED` for mixed ranges | [states](memory_resources.md#visibility-and-staging) |
 | `agcGetBufferRangeStateInfo` | Queries one exact nonempty byte interval. | range/mixed-state errors | [states](memory_resources.md#visibility-and-staging) |
 | `agcGetCommandBufferRangeStateInfo` | Queries effective range state including transitions already recorded in one command buffer. | recording/device/range/mixed-state errors | [states](memory_resources.md#visibility-and-staging) |
+| `agcGetCommandBufferImageSubresourceStateInfo` | Queries effective image-subresource state including transitions already recorded in one command buffer. | recording/device/range/mixed-state errors | [states](memory_resources.md#visibility-and-staging) |
 | `agcGetOcclusionQueryLayout` | Returns the opaque record size/alignment without exposing RB or packet layout. | output/device/version errors | [queries](memory_resources.md#occlusion-query-storage) |
 | `agcResetOcclusionQueryResults` | Host-clears complete query records and publishes HostWrite state. | usage/range/state errors | [queries](memory_resources.md#occlusion-query-storage) |
 | `agcGetOcclusionQueryResult` | Finite-waits or polls, invalidates, and reduces all RB snapshots to one value. | busy/timeout/usage/range errors | [queries](memory_resources.md#occlusion-query-storage) |

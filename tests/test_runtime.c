@@ -3538,8 +3538,27 @@ static void test_runtime_image_subresource_states(void)
         "partial image transition command begins");
     TEST_ASSERT_EQ(agcCmdTransitionResources(command, 1u, &transition),
         AGC_OK, "one image mip/layer transition records");
+    TEST_ASSERT_EQ(agcGetCommandBufferImageSubresourceStateInfo(command,
+        image, &selected, &info), AGC_OK,
+        "recording command reports transitioned image subresource state");
+    TEST_ASSERT_EQ(info.usage, kAgcResourceUsageShaderRead,
+        "recording command query observes pending image usage");
+    TEST_ASSERT_EQ(info.owner, kAgcResourceOwnerCompute,
+        "recording command query observes pending image owner");
+    info = (AgcResourceStateInfo)AGC_RESOURCE_STATE_INFO_INIT;
+    TEST_ASSERT_EQ(agcGetCommandBufferImageSubresourceStateInfo(command,
+        image, &neighbor, &info), AGC_OK,
+        "recording command reports untouched image subresource state");
+    TEST_ASSERT_EQ(info.usage, kAgcResourceUsageUndefined,
+        "recording command preserves untouched image usage");
+    TEST_ASSERT_EQ(info.owner, kAgcResourceOwnerHost,
+        "recording command preserves untouched image owner");
     TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
         "partial image transition command ends");
+    info = (AgcResourceStateInfo)AGC_RESOURCE_STATE_INFO_INIT;
+    TEST_ASSERT_EQ(agcGetCommandBufferImageSubresourceStateInfo(command,
+        image, &selected, &info), AGC_ERROR_INVALID_ARGUMENT,
+        "command image state query requires Recording state");
     submit.command_buffer_count = 1u;
     submit.command_buffers = &command;
     TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
