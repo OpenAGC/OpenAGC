@@ -4154,10 +4154,14 @@ static int32_t agcRuntimeEncodeImageView(
         uint32_t last_mip_level;
         if (result != AGC_OK)
             return result;
-        last_mip_level = desc->base_mip_level + desc->mip_level_count - 1u;
-        descriptor->words[3] =
-            (descriptor->words[3] & ~0x000ff000u) |
-            (desc->base_mip_level << 12u) | (last_mip_level << 16u);
+        if (image->desc.sample_count == 1u) {
+            last_mip_level = desc->base_mip_level +
+                desc->mip_level_count - 1u;
+            descriptor->words[3] =
+                (descriptor->words[3] & ~0x000ff000u) |
+                (desc->base_mip_level << 12u) |
+                (last_mip_level << 16u);
+        }
         return AGC_OK;
     }
 }

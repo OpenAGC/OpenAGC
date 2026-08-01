@@ -9620,6 +9620,65 @@ static void test_runtime_explicit_placed_memory(void)
         "placed-memory device destroys cleanly");
 }
 
+static void test_runtime_msaa_sampled_image_view(void)
+{
+    AgcDevice device = create_device();
+    AgcImageDesc image_desc = AGC_IMAGE_DESC_INIT;
+    AgcImageViewDesc view_desc = AGC_IMAGE_VIEW_DESC_INIT;
+    AgcAllocationInfo image_info = AGC_ALLOCATION_INFO_INIT;
+    AgcAllocationInfo view_info = AGC_ALLOCATION_INFO_INIT;
+    AgcGfx1013Image2DState state = {0};
+    AgcGfx1013ImageDescriptor expected;
+    AgcImage image = NULL;
+    AgcImageView view = NULL;
+
+    image_desc.width = 32u;
+    image_desc.height = 32u;
+    image_desc.format = AGC_FORMAT_RGBA8_UNORM;
+    image_desc.sample_count = 4u;
+    image_desc.usage = AGC_IMAGE_USAGE_COLOR_TARGET_BIT |
+        AGC_IMAGE_USAGE_SAMPLED_BIT;
+    image_desc.tiling = AGC_IMAGE_TILING_OPTIMAL;
+    TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &image), AGC_OK,
+        "4x sampled image creates");
+    TEST_ASSERT_EQ(agcGetObjectAllocationInfo(device, AGC_OBJECT_TYPE_IMAGE,
+        image, &image_info), AGC_OK, "4x image allocation is queryable");
+    view_desc.image = image;
+    view_desc.format = image_desc.format;
+    TEST_ASSERT_EQ(agcCreateImageView(device, &view_desc, &view), AGC_OK,
+        "4x sampled image view creates");
+    TEST_ASSERT_EQ(agcGetObjectAllocationInfo(device,
+        AGC_OBJECT_TYPE_IMAGE_VIEW, view, &view_info), AGC_OK,
+        "4x sampled view allocation is queryable");
+
+    state.address = image_info.gpu_address;
+    state.width = image_desc.width;
+    state.height = image_desc.height;
+    state.format = image_desc.format;
+    state.image_type = AGC_GFX1013_IMAGE_TYPE_2D_MSAA;
+    state.dst_sel_x = 4u;
+    state.dst_sel_y = 5u;
+    state.dst_sel_z = 6u;
+    state.dst_sel_w = 7u;
+    state.sample_count = 4u;
+    state.mip_level_count = 1u;
+    state.swizzle_mode = AGC_GFX1013_IMAGE_SWIZZLE_64KB_R_X;
+    TEST_ASSERT_EQ(agcGfx1013Image2DDescriptorEncode(&expected, &state),
+        AGC_OK, "expected 4x sampled descriptor encodes");
+    TEST_ASSERT_EQ((expected.words[3] >> 16u) & 0xfu, 2u,
+        "4x descriptor stores log2 samples in LAST_LEVEL");
+    TEST_ASSERT(memcmp(view_info.cpu_address, &expected,
+        sizeof(expected)) == 0,
+        "runtime 4x view preserves the sample-count descriptor field");
+
+    TEST_ASSERT_EQ(agcDestroyImageView(view), AGC_OK,
+        "4x sampled image view destroys");
+    TEST_ASSERT_EQ(agcDestroyImage(image), AGC_OK,
+        "4x sampled image destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "4x sampled image device destroys");
+}
+
 static void test_runtime_extended_image_view_and_sampler(void)
 {
     AgcDevice device = create_device();
@@ -10099,6 +10158,7 @@ TEST_RUN(test_runtime_image_region_and_buffer_copies);
     TEST_RUN(test_runtime_all_backing_categories);
     TEST_RUN(test_runtime_heap_staging_and_stats);
     TEST_RUN(test_runtime_explicit_placed_memory);
+    TEST_RUN(test_runtime_msaa_sampled_image_view);
     TEST_RUN(test_runtime_extended_image_view_and_sampler);
     TEST_RUN(test_runtime_mutable_srgb_image_views);
     TEST_RUN(test_runtime_stage_distinct_push_constants);

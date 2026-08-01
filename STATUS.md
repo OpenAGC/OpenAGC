@@ -65,6 +65,15 @@ earlier draws. A zero-color pipeline accepts `agcCmdBindColorTargets(command,
 the Prospero library builds clean. Hardware execution of the Vulkan
 graphics-meta consumer remains pending.
 
+Native 4x sampled-image views now preserve gfx1013's overloaded
+`LAST_LEVEL=log2(sample_count)` field. The former generic mip-view rewrite
+cleared it to zero, causing Vulkan `sampler2DMS` resolves to observe sample
+zero and return zero for samples one through three. Generic verification now
+passes 17,932 assertions with an exact full-descriptor regression fixture.
+The corrected Vulkan resolve probe also passed all 1,024 exact pixels on FW
+11.600.005 with clean teardown; the identical FW 5.50 replay remains pending.
+See [analysis/runtime_msaa_image_view_last_level_20260801.md](analysis/runtime_msaa_image_view_last_level_20260801.md).
+
 Push-constant backing is stage-local inside the reflected command resource
 arena. Vertex, hull, domain, geometry, pixel, and compute stages may retain
 different values at the same byte offset; pointer and inline user-SGPR
