@@ -140,6 +140,14 @@ Generic verification passes 19,395 assertions with exact layout, descriptor,
 pipeline-compatibility, and color-info coverage. Prospero and Vulkan FW 5.50
 qualification remain pending for this API slice.
 
+Runtime API 52 adds the gfx10.3 RGB9E5 shared-exponent sampled-image format.
+The public layout is four bytes per texel, sampled descriptors use SQ resource
+format 132 with an explicit alpha-one selector, and color-target usage remains
+unadvertised pending qualification of the gfx10.3 RB+ partial-write-mask
+workaround. Clean generic verification passes 19,405 assertions and the clean
+Prospero library builds without warnings. Vulkan owns exact clear/readback and
+FW 5.50 consumer qualification.
+
 Push-constant backing is stage-local inside the reflected command resource
 arena. Vertex, hull, domain, geometry, pixel, and compute stages may retain
 different values at the same byte offset; pointer and inline user-SGPR

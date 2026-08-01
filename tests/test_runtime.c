@@ -8929,7 +8929,8 @@ static void test_runtime_ps5_image_layouts(void)
             AGC_FORMAT_A4B4G4R4_UNORM, AGC_FORMAT_R4G4_UNORM,
             AGC_FORMAT_R16_FLOAT, AGC_FORMAT_RG16_FLOAT,
             AGC_FORMAT_R32_FLOAT, AGC_FORMAT_RG32_FLOAT,
-            AGC_FORMAT_R11G11B10_FLOAT, AGC_FORMAT_BGRA8_SRGB,
+            AGC_FORMAT_R11G11B10_FLOAT, AGC_FORMAT_RGB9E5_FLOAT,
+            AGC_FORMAT_BGRA8_SRGB,
             AGC_FORMAT_R16_UNORM, AGC_FORMAT_R16_SNORM,
             AGC_FORMAT_R16_UINT, AGC_FORMAT_R16_SINT,
             AGC_FORMAT_RG16_UNORM, AGC_FORMAT_RG16_SNORM,
@@ -8939,7 +8940,7 @@ static void test_runtime_ps5_image_layouts(void)
             AGC_FORMAT_RG32_UINT, AGC_FORMAT_RG32_SINT };
         const uint32_t bytes[] = { 1u, 1u, 1u, 1u, 2u, 2u, 2u, 2u,
             4u, 4u, 4u, 4u, 4u, 4u, 2u, 2u, 2u, 2u, 2u, 1u,
-            2u, 4u, 4u, 8u, 4u, 4u,
+            2u, 4u, 4u, 8u, 4u, 4u, 4u,
             2u, 2u, 2u, 2u, 4u, 4u, 4u, 4u, 8u, 8u, 4u, 4u, 8u, 8u };
         uint32_t i;
         for (i = 0u; i < sizeof(formats) / sizeof(formats[0]); ++i) {
@@ -9932,6 +9933,8 @@ static void test_runtime_regular_color_sampled_image_views(void)
         {AGC_FORMAT_RG32_SINT, AGC_GFX1013_IMAGE_FORMAT_RG32_SINT, 0u},
         {AGC_FORMAT_R11G11B10_FLOAT,
          AGC_GFX1013_IMAGE_FORMAT_R11G11B10_FLOAT, 0u},
+        {AGC_FORMAT_RGB9E5_FLOAT,
+         AGC_GFX1013_IMAGE_FORMAT_RGB9E5_FLOAT, 0u},
         {AGC_FORMAT_RGBA16_FLOAT,
          AGC_GFX1013_IMAGE_FORMAT_RGBA16_FLOAT, 0u},
         {AGC_FORMAT_RGBA16_UNORM,
@@ -10051,6 +10054,7 @@ static void test_runtime_regular_color_sampled_image_views(void)
             state.dst_sel_w = 1u;
             break;
         case AGC_FORMAT_R11G11B10_FLOAT:
+        case AGC_FORMAT_RGB9E5_FLOAT:
         case AGC_FORMAT_BC6_UFLOAT:
         case AGC_FORMAT_BC6_SFLOAT:
             state.dst_sel_w = 1u;

@@ -138,6 +138,9 @@ expert use, but make the native API the recommended application surface.
    A4B4G4R4, and R4G4 UNORM packed-image forms. Preserve the exact 565/5551
    selector and CB-swap regressions; keep R4G4 sampled-only unless a qualified
    color-target encoding is found. Vulkan owns FW 5.50 pixel qualification.
+   API 52 adds RGB9E5 as a four-byte sampled-image contract with alpha fixed to
+   one. Keep its color-target path disabled until the gfx10.3 RB+ partial-mask
+   erratum has an explicit, hardware-qualified runtime workaround.
 6. **Documentation and validation are part of every milestone.** Do not defer
    public API reference material, negative tests, or capability labels to the
    final release phase.

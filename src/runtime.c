@@ -2278,6 +2278,7 @@ static int agcGetRuntimeFormatInfo(uint32_t format, AgcRuntimeFormatInfo *info)
     case AGC_FORMAT_R32_UINT:
     case AGC_FORMAT_R32_SINT:
     case AGC_FORMAT_R11G11B10_FLOAT:
+    case AGC_FORMAT_RGB9E5_FLOAT:
         info->bytes[0] = 4u;
         return 1;
     case AGC_FORMAT_RG32_FLOAT:
@@ -4243,6 +4244,9 @@ static int32_t agcRuntimeEncodeImageView(
     case AGC_FORMAT_R11G11B10_FLOAT:
         resource_format = AGC_GFX1013_IMAGE_FORMAT_R11G11B10_FLOAT;
         break;
+    case AGC_FORMAT_RGB9E5_FLOAT:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_RGB9E5_FLOAT;
+        break;
     case AGC_FORMAT_RGBA16_FLOAT:
         resource_format = AGC_GFX1013_IMAGE_FORMAT_RGBA16_FLOAT;
         break;
@@ -4316,6 +4320,7 @@ static int32_t agcRuntimeEncodeImageView(
         base[3] = 1u;
         break;
     case AGC_FORMAT_R11G11B10_FLOAT:
+    case AGC_FORMAT_RGB9E5_FLOAT:
     case AGC_FORMAT_BC6_UFLOAT:
     case AGC_FORMAT_BC6_SFLOAT:
         base[3] = 1u;
