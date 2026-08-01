@@ -104,6 +104,10 @@ optimal depth and 4x-MSAA color images retain their qualified 64-KiB tiled
 layouts. Version-2 image views carry 2D/array/cube type plus component swizzles,
 and version-2 samplers normalize mip filtering, wrap modes, anisotropy,
 comparison, LOD, and fixed/custom border selection into native descriptors.
+Single-mip 2D views are rebased to that mip's queried address and extent and
+encoded as one-level resources. This keeps gfx1013 sampling consistent with
+OpenAGC's explicit linear subresource layout, including nonzero base mips;
+multi-mip views remain allocation-relative.
 Version-3 sampler descriptions include the exact 128-bit custom value. The
 device owns, flushes, and programs the indexed table; callers never provide its
 GPU address.

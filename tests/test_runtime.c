@@ -9821,6 +9821,7 @@ static void test_runtime_extended_image_view_and_sampler(void)
     AgcGfx1013Image2DState image_state = {0};
     AgcGfx1013ImageDescriptor expected_view;
     AgcImageSubresourceLayout mip_zero = AGC_IMAGE_SUBRESOURCE_LAYOUT_INIT;
+    AgcImageSubresourceLayout mip_two = AGC_IMAGE_SUBRESOURCE_LAYOUT_INIT;
     AgcSamplerDescriptor expected_sampler;
     AgcMemoryStats before_sampler = AGC_MEMORY_STATS_INIT;
     AgcMemoryStats after_sampler = AGC_MEMORY_STATS_INIT;
@@ -9840,6 +9841,8 @@ static void test_runtime_extended_image_view_and_sampler(void)
         image, &image_info), AGC_OK, "source image allocation is queryable");
     TEST_ASSERT_EQ(agcGetImageSubresourceLayout(device, &image_desc, 0u, 0u,
         0u, &mip_zero), AGC_OK, "source mip-zero layout is queryable");
+    TEST_ASSERT_EQ(agcGetImageSubresourceLayout(device, &image_desc, 2u, 0u,
+        0u, &mip_two), AGC_OK, "source mip-two layout is queryable");
     view_desc.image = image;
     view_desc.format = AGC_GFX1013_IMAGE_FORMAT_RGBA8_UNORM;
     view_desc.swizzle_r = AGC_COMPONENT_SWIZZLE_B;
@@ -9859,7 +9862,7 @@ static void test_runtime_extended_image_view_and_sampler(void)
     image_state.dst_sel_z = 4u;
     image_state.dst_sel_w = 7u;
     image_state.sample_count = 1u;
-    image_state.mip_level_count = image_desc.mip_levels;
+    image_state.mip_level_count = 1u;
     TEST_ASSERT_EQ(agcGfx1013Image2DDescriptorEncode(&expected_view,
         &image_state), AGC_OK, "expected swizzled view descriptor encodes");
     expected_view.words[3] &= ~0x000f0000u;
@@ -9878,11 +9881,36 @@ static void test_runtime_extended_image_view_and_sampler(void)
     TEST_ASSERT_EQ(agcGetObjectAllocationInfo(device,
         AGC_OBJECT_TYPE_IMAGE_VIEW, view, &view_info), AGC_OK,
         "nonzero-base image-view descriptor allocation is queryable");
+    image_state.mip_level_count = image_desc.mip_levels;
+    TEST_ASSERT_EQ(agcGfx1013Image2DDescriptorEncode(&expected_view,
+        &image_state), AGC_OK,
+        "expected allocation-relative multi-mip descriptor encodes");
     expected_view.words[3] = (expected_view.words[3] & ~0x000ff000u) |
         (2u << 12u) | (3u << 16u);
     TEST_ASSERT(memcmp(view_info.cpu_address, &expected_view,
         sizeof(expected_view)) == 0,
         "native descriptor encodes base two, last three, and allocation max mip");
+
+    TEST_ASSERT_EQ(agcDestroyImageView(view), AGC_OK,
+        "multi-mip image view destroys before single-mip rebase test");
+    view = NULL;
+    view_info = (AgcAllocationInfo)AGC_ALLOCATION_INFO_INIT;
+    view_desc.mip_level_count = 1u;
+    TEST_ASSERT_EQ(agcCreateImageView(device, &view_desc, &view), AGC_OK,
+        "nonzero single-mip image view creates");
+    TEST_ASSERT_EQ(agcGetObjectAllocationInfo(device,
+        AGC_OBJECT_TYPE_IMAGE_VIEW, view, &view_info), AGC_OK,
+        "nonzero single-mip descriptor allocation is queryable");
+    image_state.address = image_info.gpu_address + mip_two.offset;
+    image_state.width = mip_two.width;
+    image_state.height = mip_two.height;
+    image_state.mip_level_count = 1u;
+    TEST_ASSERT_EQ(agcGfx1013Image2DDescriptorEncode(&expected_view,
+        &image_state), AGC_OK,
+        "expected rebased single-mip descriptor encodes");
+    TEST_ASSERT(memcmp(view_info.cpu_address, &expected_view,
+        sizeof(expected_view)) == 0,
+        "single-mip view rebases address, extent, and level interval exactly");
 
     sampler_desc.min_filter = AGC_FILTER_LINEAR;
     sampler_desc.mag_filter = AGC_FILTER_NEAREST;

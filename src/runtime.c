@@ -4088,6 +4088,7 @@ static int32_t agcRuntimeEncodeImageView(
         &state.dst_sel_z, &state.dst_sel_w };
     uint32_t base[4] = { 4u, 5u, 6u, 7u };
     uint32_t resource_format = desc->format;
+    uint32_t rebased_single_mip = 0u;
     uint32_t i;
 
     /* BGRA8 encodings are abstract runtime render-target formats. SQ has no
@@ -4127,11 +4128,18 @@ static int32_t agcRuntimeEncodeImageView(
     if (view_type == AGC_IMAGE_VIEW_TYPE_2D) {
         AgcImageSubresourceLayout layout = AGC_IMAGE_SUBRESOURCE_LAYOUT_INIT;
         int32_t result = agcGetImageSubresourceLayout(image->device,
-            &image->desc, 0u, desc->base_array_layer, 0u,
+            &image->desc,
+            desc->mip_level_count == 1u ? desc->base_mip_level : 0u,
+            desc->base_array_layer, 0u,
             &layout);
         if (result != AGC_OK || layout.offset > UINT64_MAX - state.address)
             return result != AGC_OK ? result : AGC_ERROR_INVALID_ARGUMENT;
         state.address += layout.offset;
+        if (desc->mip_level_count == 1u) {
+            state.width = layout.width;
+            state.height = layout.height;
+            rebased_single_mip = 1u;
+        }
         state.base_array_layer = 0u;
         state.last_array_layer = 0u;
     } else if (view_type == AGC_IMAGE_VIEW_TYPE_3D) {
@@ -4145,7 +4153,8 @@ static int32_t agcRuntimeEncodeImageView(
     /* MAX_MIP describes the complete allocation while BASE_LEVEL/LAST_LEVEL
      * select the view interval.  Keeping these separate is required for
      * array/cube pitch calculation and nonzero-base Vulkan image views. */
-    state.mip_level_count = image->desc.mip_levels;
+    state.mip_level_count = rebased_single_mip ? 1u :
+        image->desc.mip_levels;
     if (image->desc.sample_count == 4u) {
         state.image_type = AGC_GFX1013_IMAGE_TYPE_2D_MSAA;
         state.swizzle_mode = AGC_GFX1013_IMAGE_SWIZZLE_64KB_R_X;
@@ -4165,11 +4174,11 @@ static int32_t agcRuntimeEncodeImageView(
         if (result != AGC_OK)
             return result;
         if (image->desc.sample_count == 1u) {
-            last_mip_level = desc->base_mip_level +
-                desc->mip_level_count - 1u;
+            last_mip_level = rebased_single_mip ? 0u :
+                desc->base_mip_level + desc->mip_level_count - 1u;
             descriptor->words[3] =
                 (descriptor->words[3] & ~0x000ff000u) |
-                (desc->base_mip_level << 12u) |
+                ((rebased_single_mip ? 0u : desc->base_mip_level) << 12u) |
                 (last_mip_level << 16u);
         }
         return AGC_OK;
