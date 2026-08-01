@@ -4205,6 +4205,51 @@ static int32_t agcRuntimeEncodeImageView(
         resource_format = desc->format;
         break;
     }
+    /* SQ defaults absent channels to physical channel aliases, which is not
+     * the API-visible sampled-image contract.  In particular BC5 otherwise
+     * decodes as (R,G,R,G).  Select zero/one explicitly for absent color
+     * components before composing an application view swizzle. */
+    switch ((AgcFormat)desc->format) {
+    case AGC_FORMAT_R8_UNORM:
+    case AGC_FORMAT_R16_FLOAT:
+    case AGC_FORMAT_R16_UNORM:
+    case AGC_FORMAT_R16_SNORM:
+    case AGC_FORMAT_R16_UINT:
+    case AGC_FORMAT_R16_SINT:
+    case AGC_FORMAT_R32_FLOAT:
+    case AGC_FORMAT_R32_UINT:
+    case AGC_FORMAT_R32_SINT:
+    case AGC_FORMAT_BC4_UNORM:
+    case AGC_FORMAT_BC4_SNORM:
+    case AGC_FORMAT_D16_UNORM:
+    case AGC_FORMAT_D32_FLOAT:
+    case AGC_FORMAT_S8_UINT:
+        base[1] = 0u;
+        base[2] = 0u;
+        base[3] = 1u;
+        break;
+    case AGC_FORMAT_RG8_UNORM:
+    case AGC_FORMAT_RG16_FLOAT:
+    case AGC_FORMAT_RG16_UNORM:
+    case AGC_FORMAT_RG16_SNORM:
+    case AGC_FORMAT_RG16_UINT:
+    case AGC_FORMAT_RG16_SINT:
+    case AGC_FORMAT_RG32_FLOAT:
+    case AGC_FORMAT_RG32_UINT:
+    case AGC_FORMAT_RG32_SINT:
+    case AGC_FORMAT_BC5_UNORM:
+    case AGC_FORMAT_BC5_SNORM:
+        base[2] = 0u;
+        base[3] = 1u;
+        break;
+    case AGC_FORMAT_R11G11B10_FLOAT:
+    case AGC_FORMAT_BC6_UFLOAT:
+    case AGC_FORMAT_BC6_SFLOAT:
+        base[3] = 1u;
+        break;
+    default:
+        break;
+    }
     /* BGRA8 encodings are abstract runtime render-target formats. SQ has no
      * matching sampled-image resource encoding, so use the corresponding
      * RGBA8 encoding and compose the byte-order swap with the requested view

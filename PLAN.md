@@ -122,7 +122,12 @@ expert use, but make the native API the recommended application surface.
    R/RG 16-bit normalized/integer, RGBA16 normalized, and R/RG 32-bit integer
    images, views, render targets, and exact scalar/vector export validation.
    Preserve the table-driven descriptor and pipeline compatibility regressions
-   while Vulkan qualifies shader and attachment execution.
+   while Vulkan qualifies shader and attachment execution. Also preserve the
+   explicit absent-channel selector contract established by the FW 5.50
+   Vulkan BC sampling gate: R/BC4 use `(X,0,0,1)`, RG/BC5 use `(X,Y,0,1)`,
+   and RGB/BC6 use `(X,Y,Z,1)`. All fourteen BC1-BC7 sampling encodings now
+   pass that consumer gate twice; copy/mip-copy and the final FW 11.60 replay
+   remain separate qualification work.
 6. **Documentation and validation are part of every milestone.** Do not defer
    public API reference material, negative tests, or capability labels to the
    final release phase.

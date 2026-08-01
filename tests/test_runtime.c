@@ -9891,6 +9891,20 @@ static void test_runtime_regular_color_sampled_image_views(void)
          AGC_GFX1013_IMAGE_FORMAT_RGBA32_UINT, 0u},
         {AGC_FORMAT_RGBA32_SINT,
          AGC_GFX1013_IMAGE_FORMAT_RGBA32_SINT, 0u},
+        {AGC_FORMAT_BC1_UNORM, AGC_GFX1013_IMAGE_FORMAT_BC1_UNORM, 0u},
+        {AGC_FORMAT_BC1_SRGB, AGC_GFX1013_IMAGE_FORMAT_BC1_SRGB, 0u},
+        {AGC_FORMAT_BC2_UNORM, AGC_GFX1013_IMAGE_FORMAT_BC2_UNORM, 0u},
+        {AGC_FORMAT_BC2_SRGB, AGC_GFX1013_IMAGE_FORMAT_BC2_SRGB, 0u},
+        {AGC_FORMAT_BC3_UNORM, AGC_GFX1013_IMAGE_FORMAT_BC3_UNORM, 0u},
+        {AGC_FORMAT_BC3_SRGB, AGC_GFX1013_IMAGE_FORMAT_BC3_SRGB, 0u},
+        {AGC_FORMAT_BC4_UNORM, AGC_GFX1013_IMAGE_FORMAT_BC4_UNORM, 0u},
+        {AGC_FORMAT_BC4_SNORM, AGC_GFX1013_IMAGE_FORMAT_BC4_SNORM, 0u},
+        {AGC_FORMAT_BC5_UNORM, AGC_GFX1013_IMAGE_FORMAT_BC5_UNORM, 0u},
+        {AGC_FORMAT_BC5_SNORM, AGC_GFX1013_IMAGE_FORMAT_BC5_SNORM, 0u},
+        {AGC_FORMAT_BC6_UFLOAT, AGC_GFX1013_IMAGE_FORMAT_BC6_UFLOAT, 0u},
+        {AGC_FORMAT_BC6_SFLOAT, AGC_GFX1013_IMAGE_FORMAT_BC6_SFLOAT, 0u},
+        {AGC_FORMAT_BC7_UNORM, AGC_GFX1013_IMAGE_FORMAT_BC7_UNORM, 0u},
+        {AGC_FORMAT_BC7_SRGB, AGC_GFX1013_IMAGE_FORMAT_BC7_SRGB, 0u},
     };
     AgcDevice device = create_device();
     uint32_t i;
@@ -9931,6 +9945,44 @@ static void test_runtime_regular_color_sampled_image_views(void)
         state.dst_sel_y = 5u;
         state.dst_sel_z = cases[i].bgra ? 4u : 6u;
         state.dst_sel_w = 7u;
+        switch ((AgcFormat)cases[i].format) {
+        case AGC_FORMAT_R8_UNORM:
+        case AGC_FORMAT_R16_FLOAT:
+        case AGC_FORMAT_R16_UNORM:
+        case AGC_FORMAT_R16_SNORM:
+        case AGC_FORMAT_R16_UINT:
+        case AGC_FORMAT_R16_SINT:
+        case AGC_FORMAT_R32_FLOAT:
+        case AGC_FORMAT_R32_UINT:
+        case AGC_FORMAT_R32_SINT:
+        case AGC_FORMAT_BC4_UNORM:
+        case AGC_FORMAT_BC4_SNORM:
+            state.dst_sel_y = 0u;
+            state.dst_sel_z = 0u;
+            state.dst_sel_w = 1u;
+            break;
+        case AGC_FORMAT_RG8_UNORM:
+        case AGC_FORMAT_RG16_FLOAT:
+        case AGC_FORMAT_RG16_UNORM:
+        case AGC_FORMAT_RG16_SNORM:
+        case AGC_FORMAT_RG16_UINT:
+        case AGC_FORMAT_RG16_SINT:
+        case AGC_FORMAT_RG32_FLOAT:
+        case AGC_FORMAT_RG32_UINT:
+        case AGC_FORMAT_RG32_SINT:
+        case AGC_FORMAT_BC5_UNORM:
+        case AGC_FORMAT_BC5_SNORM:
+            state.dst_sel_z = 0u;
+            state.dst_sel_w = 1u;
+            break;
+        case AGC_FORMAT_R11G11B10_FLOAT:
+        case AGC_FORMAT_BC6_UFLOAT:
+        case AGC_FORMAT_BC6_SFLOAT:
+            state.dst_sel_w = 1u;
+            break;
+        default:
+            break;
+        }
         state.sample_count = 1u;
         state.mip_level_count = 1u;
         TEST_ASSERT_EQ(agcGfx1013Image2DDescriptorEncode(&expected, &state),

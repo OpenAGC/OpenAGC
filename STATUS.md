@@ -102,6 +102,17 @@ incompatible class/width pairs fail-closed. Generic verification passes
 18,784 assertions and the Prospero library builds clean; hardware shader and
 attachment execution remains qualification work for the Vulkan consumer.
 
+Sampled descriptors now program explicit Vulkan-compatible absent-channel
+selectors instead of inheriting `XYZW` for every regular or block-compressed
+format: single-channel formats select `(X,0,0,1)`, two-channel formats select
+`(X,Y,0,1)`, and three-channel formats select `(X,Y,Z,1)`. A guarded FW 5.50
+Vulkan compute-sampling probe exposed the former BC5 `(X,Y,Z,W)` behavior and
+then passed all fourteen BC1-BC7 UNORM/SRGB/SFLOAT encodings twice after this
+correction. The final Vulkan ELF was pinned at SHA-256
+`601d0d2694c819e48140b429bb9e16b473ea91b5c9ad9eaac69bb8ae8624b639`;
+FW 11.60 replay remains part of the final endpoint gate. Table-driven generic
+coverage now checks the selectors for every affected regular and BC view.
+
 Push-constant backing is stage-local inside the reflected command resource
 arena. Vertex, hull, domain, geometry, pixel, and compute stages may retain
 different values at the same byte offset; pointer and inline user-SGPR
