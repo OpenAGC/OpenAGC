@@ -103,7 +103,12 @@ expert use, but make the native API the recommended application surface.
    emission. This precedes broad state-object or Vulkan feature expansion.
 5. **Repair `../Vulkan-PS5` above the stable native API.** Vulkan must
    translate into OpenAGC objects and capabilities; it must not grow a second
-   PM4 backend, allocator, firmware selector, or synchronization model.
+   PM4 backend, allocator, firmware selector, or synchronization model. Treat
+   Eden as one coverage driver, not as a compatibility profile: descriptor,
+   push-constant, vertex, pipeline-switch, clear, copy, blit, and resolve
+   behavior must remain valid for unrelated Vulkan applications and targeted
+   CTS/deqp coverage. Runtime resource tables snapshot after consumption so a
+   later bind cannot retroactively alter an earlier draw or dispatch.
 6. **Documentation and validation are part of every milestone.** Do not defer
    public API reference material, negative tests, or capability labels to the
    final release phase.

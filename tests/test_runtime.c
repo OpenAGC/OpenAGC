@@ -7605,6 +7605,17 @@ static void test_runtime_pipeline_layout_and_stage_validation(void)
             AGC_OK, "matching reflected push constants bind");
         TEST_ASSERT_EQ(agcCmdDispatch(command, 1u, 1u, 1u), AGC_OK,
             "fully bound reflected compute dispatch records");
+        write.buffer_offset = 64u;
+        write.buffer_range = 128u;
+        TEST_ASSERT_EQ(agcCmdBindDescriptors(command, 1u, &write), AGC_OK,
+            "descriptor rebind snapshots state after the first dispatch");
+        push_data[0] = 5u;
+        TEST_ASSERT_EQ(agcCmdPushConstants(command,
+            1u << kAgcShaderStageCs, 0u, sizeof(push_data), push_data),
+            AGC_OK,
+            "push-constant update preserves the first dispatch snapshot");
+        TEST_ASSERT_EQ(agcCmdDispatch(command, 1u, 1u, 1u), AGC_OK,
+            "second dispatch records with rebound descriptor state");
         TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
             "reflected compute command buffer becomes executable");
         TEST_ASSERT_EQ(agcDestroyBuffer(storage), AGC_ERROR_BUSY,

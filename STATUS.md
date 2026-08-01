@@ -42,6 +42,17 @@ for Vulkan-style interleaved graphics and compute work and matches the FW 5.50
 hardware-proven compute carrier; color, depth/stencil, and scanout states
 remain graphics-only.
 
+Command resource tables now support Vulkan-style descriptor, push-constant,
+and vertex-buffer rebinding after a draw or dispatch. The runtime snapshots the
+GPU-visible table before mutation, retains every snapshot through command
+recycling, and rewrites indirect set-table addresses for the new allocation;
+earlier commands therefore keep the exact state they recorded. Graphics and
+compute pipeline switches also select one unambiguous active resource layout.
+Generic verification passes 17,905 assertions, including two compute
+dispatches with different descriptor ranges and push constants in one command
+buffer. This internal contract is host-qualified; its first Vulkan consumer
+still requires Prospero build and endpoint execution evidence.
+
 Push-constant backing is stage-local inside the reflected command resource
 arena. Vertex, hull, domain, geometry, pixel, and compute stages may retain
 different values at the same byte offset; pointer and inline user-SGPR

@@ -418,6 +418,7 @@ struct AgcCommandBufferImpl {
     uint64_t index_offset;
     AgcIndexSize index_size;
     uint32_t descriptors_bound;
+    uint32_t resource_state_consumed;
     uint32_t vertex_binding_mask;
     uint32_t dynamic_state_set_mask;
     uint32_t color_target_count;
@@ -7089,6 +7090,7 @@ static void agcReleaseCommandReferences(AgcCommandBuffer command_buffer)
     command_buffer->recorded_label_wait_count = 0u;
     command_buffer->recorded_label_signal_count = 0u;
     command_buffer->descriptors_bound = 0u;
+    command_buffer->resource_state_consumed = 0u;
     command_buffer->vertex_binding_mask = 0u;
     command_buffer->dynamic_state_set_mask = 0u;
     command_buffer->color_target_count = 0u;
@@ -7149,6 +7151,42 @@ static int32_t agcPrepareCommandResources(AgcCommandBuffer command_buffer,
         command_buffer->recorded_resource_allocation_count++] = allocation;
     command_buffer->resource_allocation = allocation;
     return AGC_OK;
+}
+
+static int32_t agcSnapshotCommandResources(AgcCommandBuffer command_buffer,
+    const AgcRuntimePipelineResourceLayout *layout)
+{
+    AgcRuntimeAllocation *previous;
+    uint8_t *cpu_base;
+    uint64_t gpu_base;
+    int32_t result;
+
+    if (!command_buffer || !layout || !command_buffer->resource_allocation)
+        return AGC_ERROR_INVALID_STATE;
+    if (!command_buffer->resource_state_consumed)
+        return AGC_OK;
+    previous = command_buffer->resource_allocation;
+    result = agcPrepareCommandResources(command_buffer, layout);
+    if (result != AGC_OK)
+        return result;
+    cpu_base = agcAllocationCpuAddress(command_buffer->resource_allocation);
+    gpu_base = agcAllocationGpuAddress(command_buffer->resource_allocation);
+    memcpy(cpu_base, agcAllocationCpuAddress(previous),
+        (size_t)layout->total_size);
+    if (layout->uses_indirect_set_table) {
+        uint32_t *set_addresses = (uint32_t *)(void *)(cpu_base +
+            layout->indirect_set_table_offset);
+        uint32_t i;
+        for (i = 0u; i < 8u; ++i) {
+            set_addresses[i] = (layout->set_mask & (1u << i)) != 0u ?
+                (uint32_t)(gpu_base + layout->set_offsets[i]) : 0u;
+        }
+    }
+    result = agcFlushRuntimeAllocation(command_buffer->resource_allocation,
+        0u, layout->total_size);
+    if (result == AGC_OK)
+        command_buffer->resource_state_consumed = 0u;
+    return result;
 }
 
 int32_t PS5_SYSV_ABI agcCreateCommandBuffer(AgcDevice device,
@@ -7397,7 +7435,9 @@ int32_t PS5_SYSV_ABI agcCmdBindGraphicsPipeline(
         memcpy(commands, pipeline->bind_words,
             pipeline->bind_dword_count * sizeof(uint32_t));
         command_buffer->graphics_pipeline = pipeline;
+        command_buffer->compute_pipeline = NULL;
         command_buffer->descriptors_bound = 0u;
+        command_buffer->resource_state_consumed = 0u;
         command_buffer->vertex_binding_mask = 0u;
         memset(command_buffer->push_constant_masks, 0,
             sizeof(command_buffer->push_constant_masks));
@@ -7758,7 +7798,9 @@ int32_t PS5_SYSV_ABI agcCmdBindComputePipeline(
     if (result != AGC_OK)
         return result;
     command_buffer->compute_pipeline = pipeline;
+    command_buffer->graphics_pipeline = NULL;
     command_buffer->descriptors_bound = 0u;
+    command_buffer->resource_state_consumed = 0u;
     memset(command_buffer->push_constant_masks, 0,
         sizeof(command_buffer->push_constant_masks));
     if (pipeline_index == command_buffer->recorded_compute_pipeline_count) {
@@ -10644,14 +10686,6 @@ int32_t PS5_SYSV_ABI agcCmdBindDescriptors(AgcCommandBuffer command_buffer,
             AGC_OBJECT_TYPE_COMMAND_BUFFER,
             command_buffer->allocation->debug_name,
             "descriptor binding requires a Recording command buffer with a bound pipeline");
-    if (command_buffer->descriptors_bound)
-        return agcDebugReport(command_buffer->device,
-            AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
-            AGC_DEBUG_MESSAGE_CATEGORY_CAPABILITY_BIT,
-            AGC_ERROR_NOT_SUPPORTED, "agcCmdBindDescriptors",
-            AGC_OBJECT_TYPE_COMMAND_BUFFER,
-            command_buffer->allocation->debug_name,
-            "descriptor tables are immutable after their first bind in this command buffer");
     layout = agcCommandResourceLayout(command_buffer);
     mappings = agcCommandDescriptorMappings(command_buffer, &mapping_count);
     if (!layout || write_count != layout->descriptor_element_count ||
@@ -10717,6 +10751,9 @@ int32_t PS5_SYSV_ABI agcCmdBindDescriptors(AgcCommandBuffer command_buffer,
                 command_buffer->allocation->debug_name,
                 "descriptor resource is invalid, deferred, misaligned, out of range, or incompatible with its reflected type");
     }
+    result = agcSnapshotCommandResources(command_buffer, layout);
+    if (result != AGC_OK)
+        return result;
     for (i = 0u; i < write_count; ++i) {
         memcpy((uint8_t *)agcAllocationCpuAddress(
                 command_buffer->resource_allocation) +
@@ -10768,7 +10805,6 @@ int32_t PS5_SYSV_ABI agcCmdBindVertexBuffers(AgcCommandBuffer command_buffer,
     }
     if (binding_count != required_count ||
         layout->vertex_binding_mask == 0u ||
-        command_buffer->vertex_binding_mask != 0u ||
         !command_buffer->resource_allocation)
         return AGC_ERROR_VALIDATION_FAILED;
     memset(descriptors, 0, sizeof(descriptors));
@@ -10823,6 +10859,9 @@ int32_t PS5_SYSV_ABI agcCmdBindVertexBuffers(AgcCommandBuffer command_buffer,
             owner != kAgcResourceOwnerGraphics)
             return AGC_ERROR_INVALID_STATE;
     }
+    result = agcSnapshotCommandResources(command_buffer, layout);
+    if (result != AGC_OK)
+        return result;
     for (i = 0u; i < binding_count; ++i) {
         memcpy((uint8_t *)agcAllocationCpuAddress(
                 command_buffer->resource_allocation) +
@@ -10895,6 +10934,9 @@ int32_t PS5_SYSV_ABI agcCmdPushConstants(AgcCommandBuffer command_buffer,
         if (!covered)
             return AGC_ERROR_VALIDATION_FAILED;
     }
+    result = agcSnapshotCommandResources(command_buffer, layout);
+    if (result != AGC_OK)
+        return result;
     for (stage = 0u; stage < kAgcShaderStageCount; ++stage) {
         if ((stage_mask & (1u << stage)) == 0u)
             continue;
@@ -11639,6 +11681,7 @@ int32_t PS5_SYSV_ABI agcCmdDraw(AgcCommandBuffer command_buffer,
     if (!destination)
         return AGC_ERROR_INTERNAL;
     memcpy(destination, temporary, dword_count * sizeof(uint32_t));
+    command_buffer->resource_state_consumed = 1u;
     return AGC_OK;
 }
 
@@ -11796,6 +11839,7 @@ int32_t PS5_SYSV_ABI agcCmdDrawIndexed(AgcCommandBuffer command_buffer,
     if (!destination)
         return AGC_ERROR_INTERNAL;
     memcpy(destination, temporary, dword_count * sizeof(uint32_t));
+    command_buffer->resource_state_consumed = 1u;
     return AGC_OK;
 }
 
@@ -11991,6 +12035,7 @@ static int32_t agcCommandDrawIndirectCommon(
     }
     if (!agcCommandRetainBuffer(command_buffer, argument_buffer))
         return AGC_ERROR_INTERNAL;
+    command_buffer->resource_state_consumed = 1u;
     return AGC_OK;
 }
 
@@ -12098,6 +12143,7 @@ int32_t PS5_SYSV_ABI agcCmdDispatch(AgcCommandBuffer command_buffer,
     if (!destination)
         return AGC_ERROR_INTERNAL;
     memcpy(destination, temporary, dword_count * sizeof(uint32_t));
+    command_buffer->resource_state_consumed = 1u;
     return AGC_OK;
 }
 
@@ -12190,6 +12236,7 @@ int32_t PS5_SYSV_ABI agcCmdDispatchIndirect(
     memcpy(destination, temporary, dword_count * sizeof(uint32_t));
     if (!agcCommandRetainBuffer(command_buffer, argument_buffer))
         return AGC_ERROR_INTERNAL;
+    command_buffer->resource_state_consumed = 1u;
     return AGC_OK;
 }
 
