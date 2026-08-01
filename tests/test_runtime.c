@@ -9773,6 +9773,97 @@ static void test_runtime_explicit_placed_memory(void)
         "placed-memory device destroys cleanly");
 }
 
+static void test_runtime_regular_color_sampled_image_views(void)
+{
+    typedef struct RuntimeSampledFormatCase {
+        AgcFormat format;
+        uint32_t resource_format;
+        uint32_t bgra;
+    } RuntimeSampledFormatCase;
+    static const RuntimeSampledFormatCase cases[] = {
+        {AGC_FORMAT_R8_UNORM, AGC_GFX1013_IMAGE_FORMAT_R8_UNORM, 0u},
+        {AGC_FORMAT_RG8_UNORM, AGC_GFX1013_IMAGE_FORMAT_RG8_UNORM, 0u},
+        {AGC_FORMAT_RGBA8_UNORM, AGC_GFX1013_IMAGE_FORMAT_RGBA8_UNORM, 0u},
+        {AGC_FORMAT_BGRA8_UNORM, AGC_GFX1013_IMAGE_FORMAT_RGBA8_UNORM, 1u},
+        {AGC_FORMAT_RGBA8_SRGB, AGC_GFX1013_IMAGE_FORMAT_RGBA8_SRGB, 0u},
+        {AGC_FORMAT_BGRA8_SRGB, AGC_GFX1013_IMAGE_FORMAT_RGBA8_SRGB, 1u},
+        {AGC_FORMAT_RGB10A2_UNORM,
+         AGC_GFX1013_IMAGE_FORMAT_RGB10A2_UNORM, 0u},
+        {AGC_FORMAT_R16_FLOAT, AGC_GFX1013_IMAGE_FORMAT_R16_FLOAT, 0u},
+        {AGC_FORMAT_RG16_FLOAT, AGC_GFX1013_IMAGE_FORMAT_RG16_FLOAT, 0u},
+        {AGC_FORMAT_R32_FLOAT, AGC_GFX1013_IMAGE_FORMAT_R32_FLOAT, 0u},
+        {AGC_FORMAT_RG32_FLOAT, AGC_GFX1013_IMAGE_FORMAT_RG32_FLOAT, 0u},
+        {AGC_FORMAT_R11G11B10_FLOAT,
+         AGC_GFX1013_IMAGE_FORMAT_R11G11B10_FLOAT, 0u},
+        {AGC_FORMAT_RGBA16_FLOAT,
+         AGC_GFX1013_IMAGE_FORMAT_RGBA16_FLOAT, 0u},
+        {AGC_FORMAT_RGBA32_FLOAT,
+         AGC_GFX1013_IMAGE_FORMAT_RGBA32_FLOAT, 0u},
+        {AGC_FORMAT_RGBA16_UINT,
+         AGC_GFX1013_IMAGE_FORMAT_RGBA16_UINT, 0u},
+        {AGC_FORMAT_RGBA16_SINT,
+         AGC_GFX1013_IMAGE_FORMAT_RGBA16_SINT, 0u},
+        {AGC_FORMAT_RGBA32_UINT,
+         AGC_GFX1013_IMAGE_FORMAT_RGBA32_UINT, 0u},
+        {AGC_FORMAT_RGBA32_SINT,
+         AGC_GFX1013_IMAGE_FORMAT_RGBA32_SINT, 0u},
+    };
+    AgcDevice device = create_device();
+    uint32_t i;
+
+    for (i = 0u; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+        AgcImageDesc image_desc = AGC_IMAGE_DESC_INIT;
+        AgcImageViewDesc view_desc = AGC_IMAGE_VIEW_DESC_INIT;
+        AgcAllocationInfo image_info = AGC_ALLOCATION_INFO_INIT;
+        AgcAllocationInfo view_info = AGC_ALLOCATION_INFO_INIT;
+        AgcGfx1013Image2DState state = {0};
+        AgcGfx1013ImageDescriptor expected;
+        AgcImage image = NULL;
+        AgcImageView view = NULL;
+
+        image_desc.width = 8u;
+        image_desc.height = 4u;
+        image_desc.format = cases[i].format;
+        image_desc.usage = AGC_IMAGE_USAGE_SAMPLED_BIT;
+        TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &image), AGC_OK,
+            "regular sampled image creates");
+        TEST_ASSERT_EQ(agcGetObjectAllocationInfo(device,
+            AGC_OBJECT_TYPE_IMAGE, image, &image_info), AGC_OK,
+            "regular sampled image allocation is queryable");
+        view_desc.image = image;
+        view_desc.format = image_desc.format;
+        TEST_ASSERT_EQ(agcCreateImageView(device, &view_desc, &view), AGC_OK,
+            "regular sampled image view creates");
+        TEST_ASSERT_EQ(agcGetObjectAllocationInfo(device,
+            AGC_OBJECT_TYPE_IMAGE_VIEW, view, &view_info), AGC_OK,
+            "regular sampled view allocation is queryable");
+
+        state.address = image_info.gpu_address;
+        state.width = image_desc.width;
+        state.height = image_desc.height;
+        state.format = cases[i].resource_format;
+        state.image_type = AGC_GFX1013_IMAGE_TYPE_2D;
+        state.dst_sel_x = cases[i].bgra ? 6u : 4u;
+        state.dst_sel_y = 5u;
+        state.dst_sel_z = cases[i].bgra ? 4u : 6u;
+        state.dst_sel_w = 7u;
+        state.sample_count = 1u;
+        state.mip_level_count = 1u;
+        TEST_ASSERT_EQ(agcGfx1013Image2DDescriptorEncode(&expected, &state),
+            AGC_OK, "expected regular sampled descriptor encodes");
+        TEST_ASSERT(memcmp(view_info.cpu_address, &expected,
+            sizeof(expected)) == 0,
+            "runtime translates regular sampled resource format exactly");
+
+        TEST_ASSERT_EQ(agcDestroyImageView(view), AGC_OK,
+            "regular sampled image view destroys");
+        TEST_ASSERT_EQ(agcDestroyImage(image), AGC_OK,
+            "regular sampled image destroys");
+    }
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "regular sampled image device destroys");
+}
+
 static void test_runtime_msaa_sampled_image_view(void)
 {
     AgcDevice device = create_device();
@@ -10105,7 +10196,7 @@ static void test_runtime_mutable_srgb_image_views(void)
     state.address = image_info.gpu_address;
     state.width = image_desc.width;
     state.height = image_desc.height;
-    state.format = AGC_FORMAT_RGBA8_UNORM;
+    state.format = AGC_GFX1013_IMAGE_FORMAT_RGBA8_UNORM;
     state.image_type = AGC_GFX1013_IMAGE_TYPE_2D;
     state.dst_sel_x = 6u;
     state.dst_sel_y = 5u;
@@ -10128,7 +10219,7 @@ static void test_runtime_mutable_srgb_image_views(void)
     TEST_ASSERT_EQ(agcGetObjectAllocationInfo(device,
         AGC_OBJECT_TYPE_IMAGE_VIEW, view, &view_info), AGC_OK,
         "BGRA8-SRGB view allocation is queryable");
-    state.format = AGC_FORMAT_RGBA8_SRGB;
+    state.format = AGC_GFX1013_IMAGE_FORMAT_RGBA8_SRGB;
     state.dst_sel_x = 6u;
     state.dst_sel_z = 4u;
     TEST_ASSERT_EQ(agcGfx1013Image2DDescriptorEncode(&expected, &state),
@@ -10420,6 +10511,7 @@ TEST_RUN(test_runtime_image_region_and_buffer_copies);
     TEST_RUN(test_runtime_all_backing_categories);
     TEST_RUN(test_runtime_heap_staging_and_stats);
     TEST_RUN(test_runtime_explicit_placed_memory);
+    TEST_RUN(test_runtime_regular_color_sampled_image_views);
     TEST_RUN(test_runtime_msaa_sampled_image_view);
     TEST_RUN(test_runtime_3d_sampled_image_view);
     TEST_RUN(test_runtime_extended_image_view_and_sampler);

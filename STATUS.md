@@ -84,8 +84,12 @@ chosen mip; validation derives that mip's depth, addresses the slice through
 the queried `slice_pitch`, retains it through command recycling, and keeps
 ordinary array-image behavior unchanged. Exact descriptor, invalid view-type,
 mip-slice bounds, retention, reset, and teardown coverage brings generic
-verification to 17,954 assertions with 19/19 CTest suites passing. The
-Prospero library builds clean; Vulkan 3D blit hardware pixels remain pending.
+verification to 17,961 assertions. Runtime API 47 also exposes the image
+counterpart of the command-buffer range-state query, reporting effective
+per-subresource usage and ownership including transitions recorded but not yet
+submitted. This lets Vulkan translators perform simultaneous disjoint-range
+operations without stale committed-state guesses. The Prospero library builds
+clean; Vulkan 3D blit hardware pixels remain pending.
 
 Push-constant backing is stage-local inside the reflected command resource
 arena. Vertex, hull, domain, geometry, pixel, and compute stages may retain
@@ -240,6 +244,18 @@ and fallback are deleted. Normal and sanitizer host qualification pass 46/46,
 the Prospero build is clean, and the focused FW 5.500.008 custom-border gate
 passes its 18,432-pixel oracle with clean self-exit. The broader FW 5.50
 sequence remains the first hardware endpoint.
+
+The Eden-format audit exposed that application-facing `AgcFormat` values for
+regular R/RG/RGBA float and integer images are not identical to gfx1013's SQ
+image-resource encodings. Image-view creation now translates all 18 supported
+regular color formats explicitly, including the previously rejected values
+above `0x1ff` and the distinct RGBA8-SRGB resource encoding `130`; BGRA views
+compose the translation with their channel swap. Complete descriptor bytes are
+locked by a table-driven generic regression. A fresh generic build passes all
+19 CTest gates and 18,140 runtime assertions, and a fresh Prospero library
+build is clean. This slice is host/Prospero-qualified; sampled pixels for the
+newly reachable formats remain a hardware gate before higher layers advertise
+new capabilities.
 
 The completed R/RG/RGBA16 UNORM/SNORM/UINT/SINT tuples, all six 32-bit integer
 tuples, all 14 BC1-BC7 sampling encodings, the planned depth/HTILE progression,

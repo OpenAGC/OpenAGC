@@ -4087,18 +4087,76 @@ static int32_t agcRuntimeEncodeImageView(
     uint32_t *selectors[4] = { &state.dst_sel_x, &state.dst_sel_y,
         &state.dst_sel_z, &state.dst_sel_w };
     uint32_t base[4] = { 4u, 5u, 6u, 7u };
-    uint32_t resource_format = desc->format;
+    uint32_t resource_format;
     uint32_t rebased_single_mip = 0u;
     uint32_t i;
 
+    /* Runtime formats are an application-facing image/render-target contract;
+     * several deliberately do not equal the gfx1013 SQ image-resource field.
+     * Translate every such regular-color encoding before building the view. */
+    switch ((AgcFormat)desc->format) {
+    case AGC_FORMAT_R8_UNORM:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_R8_UNORM;
+        break;
+    case AGC_FORMAT_RG8_UNORM:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_RG8_UNORM;
+        break;
+    case AGC_FORMAT_RGBA8_UNORM:
+    case AGC_FORMAT_BGRA8_UNORM:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_RGBA8_UNORM;
+        break;
+    case AGC_FORMAT_RGBA8_SRGB:
+    case AGC_FORMAT_BGRA8_SRGB:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_RGBA8_SRGB;
+        break;
+    case AGC_FORMAT_RGB10A2_UNORM:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_RGB10A2_UNORM;
+        break;
+    case AGC_FORMAT_R16_FLOAT:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_R16_FLOAT;
+        break;
+    case AGC_FORMAT_RG16_FLOAT:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_RG16_FLOAT;
+        break;
+    case AGC_FORMAT_R32_FLOAT:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_R32_FLOAT;
+        break;
+    case AGC_FORMAT_RG32_FLOAT:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_RG32_FLOAT;
+        break;
+    case AGC_FORMAT_R11G11B10_FLOAT:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_R11G11B10_FLOAT;
+        break;
+    case AGC_FORMAT_RGBA16_FLOAT:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_RGBA16_FLOAT;
+        break;
+    case AGC_FORMAT_RGBA32_FLOAT:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_RGBA32_FLOAT;
+        break;
+    case AGC_FORMAT_RGBA16_UINT:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_RGBA16_UINT;
+        break;
+    case AGC_FORMAT_RGBA16_SINT:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_RGBA16_SINT;
+        break;
+    case AGC_FORMAT_RGBA32_UINT:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_RGBA32_UINT;
+        break;
+    case AGC_FORMAT_RGBA32_SINT:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_RGBA32_SINT;
+        break;
+    default:
+        resource_format = desc->format;
+        break;
+    }
     /* BGRA8 encodings are abstract runtime render-target formats. SQ has no
      * matching sampled-image resource encoding, so use the corresponding
      * RGBA8 encoding and compose the byte-order swap with the requested view
      * swizzle. */
     if (resource_format == AGC_FORMAT_BGRA8_UNORM ||
-        resource_format == AGC_FORMAT_BGRA8_SRGB) {
-        resource_format = resource_format == AGC_FORMAT_BGRA8_SRGB ?
-            AGC_FORMAT_RGBA8_SRGB : AGC_FORMAT_RGBA8_UNORM;
+        resource_format == AGC_FORMAT_BGRA8_SRGB ||
+        desc->format == AGC_FORMAT_BGRA8_UNORM ||
+        desc->format == AGC_FORMAT_BGRA8_SRGB) {
         base[0] = 6u;
         base[2] = 4u;
     }

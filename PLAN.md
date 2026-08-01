@@ -115,7 +115,10 @@ expert use, but make the native API the recommended application surface.
    depth-only work. API 46 now supplies typed 3D sampled views and per-mip
    depth-slice color bindings for Vulkan's general 3D blit path; preserve its
    exact descriptor and slice-bound regressions while the Vulkan consumer is
-   completed and qualified on FW 5.50.
+   completed and qualified on FW 5.50. API 47 adds the matching recording-time
+   image-subresource state query so translators can derive exact transition
+   predecessors after earlier commands without maintaining a duplicate state
+   model.
 6. **Documentation and validation are part of every milestone.** Do not defer
    public API reference material, negative tests, or capability labels to the
    final release phase.
@@ -926,10 +929,14 @@ Current checkpoint: the sibling migration audit is exactly zero. Vulkan shader
 binaries, descriptor encoding, custom-border tables, tessellation resources,
 image layouts, command storage, resource transitions, finite fence waits,
 submission, and presentation are owned by public native APIs. The duplicate
-PM4 encoder, raw allocator, and fallback submission path are deleted. Normal
-and sanitizer host qualification pass 46/46, the Prospero build is clean, and
-the focused FW 5.50 custom-border smoke gate passes. The broader FW 5.50
-sequence remains first; FW 11.60 is deferred until that endpoint is available.
+PM4 encoder, raw allocator, and fallback submission path are deleted. The
+current Vulkan normal and sanitizer suites pass 50/50, and the FW 5.50
+current-commit regression sequence reaches the 1,800-frame WSI gate with clean
+teardown. OpenAGC now also translates all supported regular-color runtime
+formats to exact SQ image-resource encodings, removing the sampled-view blocker
+for R/RG and RGBA16/32 float/integer images. Keep those additional Vulkan
+format advertisements gated on Vulkan semantics plus exact hardware pixels.
+FW 11.60 remains the final identical-artifact replay endpoint.
 
 OpenAGC API 42 additionally moves custom-border table allocation, values,
 flushes, and base-register programming behind `AgcDevice`/`AgcSampler`. Retain
