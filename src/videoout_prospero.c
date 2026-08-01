@@ -34,11 +34,11 @@ typedef struct SceVideoOutBufferAttribute {
     uint32_t reserved;
 } SceVideoOutBufferAttribute;
 
+_Static_assert(sizeof(SceVideoOutBufferAttribute) == 0x20u,
+               "legacy VideoOut buffer attribute size");
+
 int32_t sceVideoOutOpen(int32_t, int32_t, int32_t, const void *);
 int32_t sceVideoOutClose(int32_t);
-void sceVideoOutSetBufferAttribute(SceVideoOutBufferAttribute *, uint32_t,
-                                   uint32_t, uint32_t, uint32_t, uint32_t,
-                                   uint32_t);
 int32_t sceVideoOutRegisterBuffers(int32_t, int32_t, void *const *, int32_t,
                                    const SceVideoOutBufferAttribute *);
 int32_t sceVideoOutSetFlipRate(int32_t, int32_t);
@@ -150,14 +150,27 @@ int32_t agcVideoOutOpen(const AgcVideoOutCreateInfo *info,
     if (err != AGC_OK)
         goto fail;
 
-    SceVideoOutBufferAttribute attribute;
-    memset(&attribute, 0, sizeof(attribute));
-    sceVideoOutSetBufferAttribute(&attribute,
-        SCE_VIDEO_OUT_PIXEL_FORMAT_A8R8G8B8_SRGB,
-        SCE_VIDEO_OUT_TILING_MODE_LINEAR, SCE_VIDEO_OUT_ASPECT_RATIO_16_9,
-        info->width, info->height, info->pitch_pixels);
+    /* Build the legacy attribute bytes directly. The installed setter writes
+     * beyond the public 0x20-byte record on FW 5.50, which corrupts an
+     * optimized caller's stack. The 0x40-byte zeroed carrier and first six
+     * dwords match the hardware-qualified samples. */
+    union {
+        SceVideoOutBufferAttribute attribute;
+        uint8_t storage[64];
+    } attribute_storage;
+    memset(&attribute_storage, 0, sizeof(attribute_storage));
+    attribute_storage.attribute.pixel_format =
+        SCE_VIDEO_OUT_PIXEL_FORMAT_A8R8G8B8_SRGB;
+    attribute_storage.attribute.tiling_mode =
+        SCE_VIDEO_OUT_TILING_MODE_LINEAR;
+    attribute_storage.attribute.aspect_ratio =
+        SCE_VIDEO_OUT_ASPECT_RATIO_16_9;
+    attribute_storage.attribute.width = info->width;
+    attribute_storage.attribute.height = info->height;
+    attribute_storage.attribute.pitch_in_pixel = info->pitch_pixels;
     int32_t register_result = sceVideoOutRegisterBuffers(result->handle, 0,
-        info->buffers, (int32_t)info->buffer_count, &attribute);
+        info->buffers, (int32_t)info->buffer_count,
+        &attribute_storage.attribute);
     int32_t restore_result = set_linear_registration_patch(false);
     if (register_result != 0) {
         err = AGC_ERROR_NOT_SUPPORTED;

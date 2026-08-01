@@ -206,6 +206,18 @@ then passed 1,800 presentations on FW 5.500.008, tore down the retained chain
 and images, self-exited, and left no matching process or scoped fatal/reset
 warning.
 
+The Prospero VideoOut backend now constructs the legacy buffer-attribute
+record explicitly in a zeroed 0x40-byte carrier instead of calling the
+installed attribute setter with a 0x20-byte optimized stack object. A
+component optimization matrix isolated the resulting null-write crash to
+optimized `agcVideoOutOpen`; the explicit record then passed two consecutive
+cleanup-guarded 600-frame Eden/Vulkan present runs on FW 5.500.008 with the
+same Release ELF SHA-256
+`3e07642449b6dddd371cb233bddb88a62a70a50a15efb20f43f028493591fa9e`,
+clean teardown, exact process absence, and immediate relaunch. The earlier
+fault was a user-process SIGSEGV with a corrupted return path, not a kernel
+panic or PSBC failure.
+
 Runtime API 41 adds layout-derived image-region and buffer/image transfer
 commands: `agcCmdCopyImageRegions`, `agcCmdCopyBufferToImage`, and
 `agcCmdCopyImageToBuffer`. Versioned offset, extent, subresource-layer, image
