@@ -91,6 +91,17 @@ submitted. This lets Vulkan translators perform simultaneous disjoint-range
 operations without stale committed-state guesses. The Prospero library builds
 clean; Vulkan 3D blit hardware pixels remain pending.
 
+Runtime API 48 expands the regular color contract with fourteen native
+gfx1013 formats: R/RG 16-bit UNORM, SNORM, UINT, and SINT; RGBA16 UNORM and
+SNORM; and R/RG 32-bit UINT and SINT. Layouts, sampled-image descriptors,
+render-target mappings, component classes, and pipeline export compatibility
+are exact rather than aliases. Pipeline validation now follows each qualified
+target's `32_R`, `32_GR`, FP16, UINT16, SINT16, or `32_ABGR` export contract,
+closing the previously rejected R32/RG32 graphics forms while keeping
+incompatible class/width pairs fail-closed. Generic verification passes
+18,784 assertions and the Prospero library builds clean; hardware shader and
+attachment execution remains qualification work for the Vulkan consumer.
+
 Push-constant backing is stage-local inside the reflected command resource
 arena. Vertex, hull, domain, geometry, pixel, and compute stages may retain
 different values at the same byte offset; pointer and inline user-SGPR

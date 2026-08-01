@@ -118,7 +118,11 @@ expert use, but make the native API the recommended application surface.
    completed and qualified on FW 5.50. API 47 adds the matching recording-time
    image-subresource state query so translators can derive exact transition
    predecessors after earlier commands without maintaining a duplicate state
-   model.
+   model. API 48 supplies the next application-neutral Vulkan format slice:
+   R/RG 16-bit normalized/integer, RGBA16 normalized, and R/RG 32-bit integer
+   images, views, render targets, and exact scalar/vector export validation.
+   Preserve the table-driven descriptor and pipeline compatibility regressions
+   while Vulkan qualifies shader and attachment execution.
 6. **Documentation and validation are part of every milestone.** Do not defer
    public API reference material, negative tests, or capability labels to the
    final release phase.

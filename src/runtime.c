@@ -2239,6 +2239,10 @@ static int agcGetRuntimeFormatInfo(uint32_t format, AgcRuntimeFormatInfo *info)
         return 1;
     case AGC_FORMAT_RG8_UNORM:
     case AGC_FORMAT_R16_FLOAT:
+    case AGC_FORMAT_R16_UNORM:
+    case AGC_FORMAT_R16_SNORM:
+    case AGC_FORMAT_R16_UINT:
+    case AGC_FORMAT_R16_SINT:
         info->bytes[0] = 2u;
         return 1;
     case AGC_FORMAT_RGBA8_UNORM:
@@ -2247,12 +2251,22 @@ static int agcGetRuntimeFormatInfo(uint32_t format, AgcRuntimeFormatInfo *info)
     case AGC_FORMAT_BGRA8_SRGB:
     case AGC_FORMAT_RGB10A2_UNORM:
     case AGC_FORMAT_RG16_FLOAT:
+    case AGC_FORMAT_RG16_UNORM:
+    case AGC_FORMAT_RG16_SNORM:
+    case AGC_FORMAT_RG16_UINT:
+    case AGC_FORMAT_RG16_SINT:
     case AGC_FORMAT_R32_FLOAT:
+    case AGC_FORMAT_R32_UINT:
+    case AGC_FORMAT_R32_SINT:
     case AGC_FORMAT_R11G11B10_FLOAT:
         info->bytes[0] = 4u;
         return 1;
     case AGC_FORMAT_RG32_FLOAT:
+    case AGC_FORMAT_RG32_UINT:
+    case AGC_FORMAT_RG32_SINT:
     case AGC_FORMAT_RGBA16_FLOAT:
+    case AGC_FORMAT_RGBA16_UNORM:
+    case AGC_FORMAT_RGBA16_SNORM:
     case AGC_FORMAT_RGBA16_UINT:
     case AGC_FORMAT_RGBA16_SINT:
         info->bytes[0] = 8u;
@@ -4115,20 +4129,62 @@ static int32_t agcRuntimeEncodeImageView(
     case AGC_FORMAT_R16_FLOAT:
         resource_format = AGC_GFX1013_IMAGE_FORMAT_R16_FLOAT;
         break;
+    case AGC_FORMAT_R16_UNORM:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_R16_UNORM;
+        break;
+    case AGC_FORMAT_R16_SNORM:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_R16_SNORM;
+        break;
+    case AGC_FORMAT_R16_UINT:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_R16_UINT;
+        break;
+    case AGC_FORMAT_R16_SINT:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_R16_SINT;
+        break;
     case AGC_FORMAT_RG16_FLOAT:
         resource_format = AGC_GFX1013_IMAGE_FORMAT_RG16_FLOAT;
+        break;
+    case AGC_FORMAT_RG16_UNORM:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_RG16_UNORM;
+        break;
+    case AGC_FORMAT_RG16_SNORM:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_RG16_SNORM;
+        break;
+    case AGC_FORMAT_RG16_UINT:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_RG16_UINT;
+        break;
+    case AGC_FORMAT_RG16_SINT:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_RG16_SINT;
         break;
     case AGC_FORMAT_R32_FLOAT:
         resource_format = AGC_GFX1013_IMAGE_FORMAT_R32_FLOAT;
         break;
+    case AGC_FORMAT_R32_UINT:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_R32_UINT;
+        break;
+    case AGC_FORMAT_R32_SINT:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_R32_SINT;
+        break;
     case AGC_FORMAT_RG32_FLOAT:
         resource_format = AGC_GFX1013_IMAGE_FORMAT_RG32_FLOAT;
+        break;
+    case AGC_FORMAT_RG32_UINT:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_RG32_UINT;
+        break;
+    case AGC_FORMAT_RG32_SINT:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_RG32_SINT;
         break;
     case AGC_FORMAT_R11G11B10_FLOAT:
         resource_format = AGC_GFX1013_IMAGE_FORMAT_R11G11B10_FLOAT;
         break;
     case AGC_FORMAT_RGBA16_FLOAT:
         resource_format = AGC_GFX1013_IMAGE_FORMAT_RGBA16_FLOAT;
+        break;
+    case AGC_FORMAT_RGBA16_UNORM:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_RGBA16_UNORM;
+        break;
+    case AGC_FORMAT_RGBA16_SNORM:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_RGBA16_SNORM;
         break;
     case AGC_FORMAT_RGBA32_FLOAT:
         resource_format = AGC_GFX1013_IMAGE_FORMAT_RGBA32_FLOAT;
@@ -5497,6 +5553,12 @@ static int agcPipelineFormatInfo(
     case AGC_FORMAT_RGB10A2_UNORM:
     case AGC_FORMAT_R16_FLOAT:
     case AGC_FORMAT_RG16_FLOAT:
+    case AGC_FORMAT_R16_UNORM:
+    case AGC_FORMAT_R16_SNORM:
+    case AGC_FORMAT_RG16_UNORM:
+    case AGC_FORMAT_RG16_SNORM:
+    case AGC_FORMAT_RGBA16_UNORM:
+    case AGC_FORMAT_RGBA16_SNORM:
     case AGC_FORMAT_R32_FLOAT:
     case AGC_FORMAT_RG32_FLOAT:
     case AGC_FORMAT_R11G11B10_FLOAT:
@@ -5510,18 +5572,26 @@ static int agcPipelineFormatInfo(
         *component_bits = 32u;
         return 1;
     case AGC_FORMAT_RGBA16_UINT:
+    case AGC_FORMAT_R16_UINT:
+    case AGC_FORMAT_RG16_UINT:
         *component_class = AGC_SHADER_COMPONENT_UINT;
         *component_bits = 16u;
         return 1;
     case AGC_FORMAT_RGBA16_SINT:
+    case AGC_FORMAT_R16_SINT:
+    case AGC_FORMAT_RG16_SINT:
         *component_class = AGC_SHADER_COMPONENT_SINT;
         *component_bits = 16u;
         return 1;
     case AGC_FORMAT_RGBA32_UINT:
+    case AGC_FORMAT_R32_UINT:
+    case AGC_FORMAT_RG32_UINT:
         *component_class = AGC_SHADER_COMPONENT_UINT;
         *component_bits = 32u;
         return 1;
     case AGC_FORMAT_RGBA32_SINT:
+    case AGC_FORMAT_R32_SINT:
+    case AGC_FORMAT_RG32_SINT:
         *component_class = AGC_SHADER_COMPONENT_SINT;
         *component_bits = 32u;
         return 1;
@@ -5575,20 +5645,62 @@ static int agcRuntimeColorTargetFormat(uint32_t format,
     case AGC_FORMAT_R16_FLOAT:
         *target_format = AGC_GFX1013_RT_FORMAT_R16_FLOAT;
         return 1;
+    case AGC_FORMAT_R16_UNORM:
+        *target_format = AGC_GFX1013_RT_FORMAT_R16_UNORM;
+        return 1;
+    case AGC_FORMAT_R16_SNORM:
+        *target_format = AGC_GFX1013_RT_FORMAT_R16_SNORM;
+        return 1;
+    case AGC_FORMAT_R16_UINT:
+        *target_format = AGC_GFX1013_RT_FORMAT_R16_UINT;
+        return 1;
+    case AGC_FORMAT_R16_SINT:
+        *target_format = AGC_GFX1013_RT_FORMAT_R16_SINT;
+        return 1;
     case AGC_FORMAT_RG16_FLOAT:
         *target_format = AGC_GFX1013_RT_FORMAT_RG16_FLOAT;
+        return 1;
+    case AGC_FORMAT_RG16_UNORM:
+        *target_format = AGC_GFX1013_RT_FORMAT_RG16_UNORM;
+        return 1;
+    case AGC_FORMAT_RG16_SNORM:
+        *target_format = AGC_GFX1013_RT_FORMAT_RG16_SNORM;
+        return 1;
+    case AGC_FORMAT_RG16_UINT:
+        *target_format = AGC_GFX1013_RT_FORMAT_RG16_UINT;
+        return 1;
+    case AGC_FORMAT_RG16_SINT:
+        *target_format = AGC_GFX1013_RT_FORMAT_RG16_SINT;
         return 1;
     case AGC_FORMAT_R32_FLOAT:
         *target_format = AGC_GFX1013_RT_FORMAT_R32_FLOAT;
         return 1;
+    case AGC_FORMAT_R32_UINT:
+        *target_format = AGC_GFX1013_RT_FORMAT_R32_UINT;
+        return 1;
+    case AGC_FORMAT_R32_SINT:
+        *target_format = AGC_GFX1013_RT_FORMAT_R32_SINT;
+        return 1;
     case AGC_FORMAT_RG32_FLOAT:
         *target_format = AGC_GFX1013_RT_FORMAT_RG32_FLOAT;
+        return 1;
+    case AGC_FORMAT_RG32_UINT:
+        *target_format = AGC_GFX1013_RT_FORMAT_RG32_UINT;
+        return 1;
+    case AGC_FORMAT_RG32_SINT:
+        *target_format = AGC_GFX1013_RT_FORMAT_RG32_SINT;
         return 1;
     case AGC_FORMAT_R11G11B10_FLOAT:
         *target_format = AGC_GFX1013_RT_FORMAT_R11G11B10_FLOAT;
         return 1;
     case AGC_FORMAT_RGBA16_FLOAT:
         *target_format = AGC_GFX1013_RT_FORMAT_RGBA16_FLOAT;
+        return 1;
+    case AGC_FORMAT_RGBA16_UNORM:
+        *target_format = AGC_GFX1013_RT_FORMAT_RGBA16_UNORM;
+        return 1;
+    case AGC_FORMAT_RGBA16_SNORM:
+        *target_format = AGC_GFX1013_RT_FORMAT_RGBA16_SNORM;
         return 1;
     case AGC_FORMAT_RGBA32_FLOAT:
         *target_format = AGC_GFX1013_RT_FORMAT_RGBA32_FLOAT;
@@ -5615,25 +5727,28 @@ static int agcPipelineColorExportCompatible(
     const AgcColorBlendAttachmentState *attachment)
 {
     AgcShaderComponentClass attachment_class;
+    AgcGfx1013ColorTargetFormat target_format;
+    AgcGfx1013ColorTargetFormatInfo target_info;
     uint32_t component_bits;
     uint32_t depth;
     uint32_t stencil;
 
     if (!agcPipelineFormatInfo(attachment->format, &attachment_class,
             &component_bits, &depth, &stencil) || depth || stencil ||
-        attachment_class != export_info->component_class)
+        attachment_class != export_info->component_class ||
+        !agcRuntimeColorTargetFormat(attachment->format, &target_format) ||
+        agcGfx1013GetColorTargetFormatInfo(target_format, &target_info) !=
+            AGC_OK)
         return 0;
-    if (component_bits == 16u) {
-        if (attachment_class == AGC_SHADER_COMPONENT_UINT)
-            return export_info->format ==
-                AGC_SHADER_COLOR_EXPORT_UINT16_ABGR;
-        if (attachment_class == AGC_SHADER_COMPONENT_SINT)
-            return export_info->format ==
-                AGC_SHADER_COLOR_EXPORT_SINT16_ABGR;
-        return export_info->format == AGC_SHADER_COLOR_EXPORT_FP16_ABGR ||
-            export_info->format == AGC_SHADER_COLOR_EXPORT_32_ABGR;
-    }
-    return export_info->format == AGC_SHADER_COLOR_EXPORT_32_ABGR;
+    if ((uint32_t)export_info->format == target_info.spi_shader_export_format)
+        return 1;
+    /* Floating/normalized 8- and 16-bit targets also accept the compiler's
+     * full 32-bit ABGR export and perform their normal target conversion. */
+    return component_bits == 16u &&
+        attachment_class == AGC_SHADER_COMPONENT_FLOAT_OR_NORMALIZED &&
+        target_info.spi_shader_export_format ==
+            AGC_GFX1013_SPI_EXPORT_FP16_ABGR &&
+        export_info->format == AGC_SHADER_COLOR_EXPORT_32_ABGR;
 }
 
 static int agcPipelineColorStateValid(

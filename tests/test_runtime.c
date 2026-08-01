@@ -7081,6 +7081,22 @@ static void test_runtime_graphics_pipeline_compatibility_matrix(void)
         kRuntimeFormatRgba32Uint,
         kRuntimeFormatRgba16Sint,
         kRuntimeFormatRgba32Sint,
+        kRuntimeFormatR16Unorm,
+        kRuntimeFormatRg16Unorm,
+        kRuntimeFormatRgba16Unorm,
+        kRuntimeFormatR16Snorm,
+        kRuntimeFormatRg16Snorm,
+        kRuntimeFormatRgba16Snorm,
+        kRuntimeFormatR16Uint,
+        kRuntimeFormatRg16Uint,
+        kRuntimeFormatR16Sint,
+        kRuntimeFormatRg16Sint,
+        kRuntimeFormatR32Float,
+        kRuntimeFormatRg32Float,
+        kRuntimeFormatR32Uint,
+        kRuntimeFormatRg32Uint,
+        kRuntimeFormatR32Sint,
+        kRuntimeFormatRg32Sint,
     };
     static const AgcFormat attachment_formats[] = {
         AGC_FORMAT_RGBA8_UNORM,
@@ -7092,6 +7108,22 @@ static void test_runtime_graphics_pipeline_compatibility_matrix(void)
         AGC_FORMAT_RGBA32_UINT,
         AGC_FORMAT_RGBA16_SINT,
         AGC_FORMAT_RGBA32_SINT,
+        AGC_FORMAT_R16_UNORM,
+        AGC_FORMAT_RG16_UNORM,
+        AGC_FORMAT_RGBA16_UNORM,
+        AGC_FORMAT_R16_SNORM,
+        AGC_FORMAT_RG16_SNORM,
+        AGC_FORMAT_RGBA16_SNORM,
+        AGC_FORMAT_R16_UINT,
+        AGC_FORMAT_RG16_UINT,
+        AGC_FORMAT_R16_SINT,
+        AGC_FORMAT_RG16_SINT,
+        AGC_FORMAT_R32_FLOAT,
+        AGC_FORMAT_RG32_FLOAT,
+        AGC_FORMAT_R32_UINT,
+        AGC_FORMAT_RG32_UINT,
+        AGC_FORMAT_R32_SINT,
+        AGC_FORMAT_RG32_SINT,
     };
     static const PipelineCompatibilityCase cases[] = {
         {AGC_SHADER_COLOR_EXPORT_FP16_ABGR,
@@ -7099,28 +7131,56 @@ static void test_runtime_graphics_pipeline_compatibility_matrix(void)
          (1u << kRuntimeFormatRgba8Unorm) |
          (1u << kRuntimeFormatBgra8Unorm) |
          (1u << kRuntimeFormatRgba8Srgb) |
-         (1u << kRuntimeFormatRgba16Float)},
+         (1u << kRuntimeFormatRgba16Float) |
+         (1u << kRuntimeFormatR16Unorm) |
+         (1u << kRuntimeFormatRg16Unorm) |
+         (1u << kRuntimeFormatRgba16Unorm) |
+         (1u << kRuntimeFormatR16Snorm) |
+         (1u << kRuntimeFormatRg16Snorm) |
+         (1u << kRuntimeFormatRgba16Snorm)},
         {AGC_SHADER_COLOR_EXPORT_32_ABGR,
          AGC_SHADER_COMPONENT_FLOAT_OR_NORMALIZED,
          (1u << kRuntimeFormatRgba8Unorm) |
          (1u << kRuntimeFormatBgra8Unorm) |
          (1u << kRuntimeFormatRgba8Srgb) |
          (1u << kRuntimeFormatRgba16Float) |
-         (1u << kRuntimeFormatRgba32Float)},
+         (1u << kRuntimeFormatRgba32Float) |
+         (1u << kRuntimeFormatR16Unorm) |
+         (1u << kRuntimeFormatRg16Unorm) |
+         (1u << kRuntimeFormatRgba16Unorm) |
+         (1u << kRuntimeFormatR16Snorm) |
+         (1u << kRuntimeFormatRg16Snorm) |
+         (1u << kRuntimeFormatRgba16Snorm)},
         {AGC_SHADER_COLOR_EXPORT_UINT16_ABGR,
-         AGC_SHADER_COMPONENT_UINT, 1u << kRuntimeFormatRgba16Uint},
+         AGC_SHADER_COMPONENT_UINT,
+         (1u << kRuntimeFormatRgba16Uint) |
+         (1u << kRuntimeFormatR16Uint) |
+         (1u << kRuntimeFormatRg16Uint)},
         {AGC_SHADER_COLOR_EXPORT_32_ABGR,
          AGC_SHADER_COMPONENT_UINT, 1u << kRuntimeFormatRgba32Uint},
         {AGC_SHADER_COLOR_EXPORT_SINT16_ABGR,
-         AGC_SHADER_COMPONENT_SINT, 1u << kRuntimeFormatRgba16Sint},
+         AGC_SHADER_COMPONENT_SINT,
+         (1u << kRuntimeFormatRgba16Sint) |
+         (1u << kRuntimeFormatR16Sint) |
+         (1u << kRuntimeFormatRg16Sint)},
         {AGC_SHADER_COLOR_EXPORT_32_ABGR,
          AGC_SHADER_COMPONENT_SINT, 1u << kRuntimeFormatRgba32Sint},
         {AGC_SHADER_COLOR_EXPORT_DEFAULT,
          AGC_SHADER_COMPONENT_FLOAT_OR_NORMALIZED, 0u},
         {AGC_SHADER_COLOR_EXPORT_32_R,
-         AGC_SHADER_COMPONENT_FLOAT_OR_NORMALIZED, 0u},
+         AGC_SHADER_COMPONENT_FLOAT_OR_NORMALIZED,
+         1u << kRuntimeFormatR32Float},
         {AGC_SHADER_COLOR_EXPORT_32_GR,
-         AGC_SHADER_COMPONENT_FLOAT_OR_NORMALIZED, 0u},
+         AGC_SHADER_COMPONENT_FLOAT_OR_NORMALIZED,
+         1u << kRuntimeFormatRg32Float},
+        {AGC_SHADER_COLOR_EXPORT_32_R,
+         AGC_SHADER_COMPONENT_UINT, 1u << kRuntimeFormatR32Uint},
+        {AGC_SHADER_COLOR_EXPORT_32_GR,
+         AGC_SHADER_COMPONENT_UINT, 1u << kRuntimeFormatRg32Uint},
+        {AGC_SHADER_COLOR_EXPORT_32_R,
+         AGC_SHADER_COMPONENT_SINT, 1u << kRuntimeFormatR32Sint},
+        {AGC_SHADER_COLOR_EXPORT_32_GR,
+         AGC_SHADER_COMPONENT_SINT, 1u << kRuntimeFormatRg32Sint},
     };
     AgcDevice device = create_device();
     AgcShader vs = create_shader(device, kAgcShaderStageVs);
@@ -8839,8 +8899,16 @@ static void test_runtime_ps5_image_layouts(void)
             AGC_FORMAT_RG8_UNORM, AGC_FORMAT_RGB10A2_UNORM,
             AGC_FORMAT_R16_FLOAT, AGC_FORMAT_RG16_FLOAT,
             AGC_FORMAT_R32_FLOAT, AGC_FORMAT_RG32_FLOAT,
-            AGC_FORMAT_R11G11B10_FLOAT, AGC_FORMAT_BGRA8_SRGB };
-        const uint32_t bytes[] = { 1u, 2u, 4u, 2u, 4u, 4u, 8u, 4u, 4u };
+            AGC_FORMAT_R11G11B10_FLOAT, AGC_FORMAT_BGRA8_SRGB,
+            AGC_FORMAT_R16_UNORM, AGC_FORMAT_R16_SNORM,
+            AGC_FORMAT_R16_UINT, AGC_FORMAT_R16_SINT,
+            AGC_FORMAT_RG16_UNORM, AGC_FORMAT_RG16_SNORM,
+            AGC_FORMAT_RG16_UINT, AGC_FORMAT_RG16_SINT,
+            AGC_FORMAT_RGBA16_UNORM, AGC_FORMAT_RGBA16_SNORM,
+            AGC_FORMAT_R32_UINT, AGC_FORMAT_R32_SINT,
+            AGC_FORMAT_RG32_UINT, AGC_FORMAT_RG32_SINT };
+        const uint32_t bytes[] = { 1u, 2u, 4u, 2u, 4u, 4u, 8u, 4u, 4u,
+            2u, 2u, 2u, 2u, 4u, 4u, 4u, 4u, 8u, 8u, 4u, 4u, 8u, 8u };
         uint32_t i;
         for (i = 0u; i < sizeof(formats) / sizeof(formats[0]); ++i) {
             desc = (AgcImageDesc)AGC_IMAGE_DESC_INIT;
@@ -9790,13 +9858,29 @@ static void test_runtime_regular_color_sampled_image_views(void)
         {AGC_FORMAT_RGB10A2_UNORM,
          AGC_GFX1013_IMAGE_FORMAT_RGB10A2_UNORM, 0u},
         {AGC_FORMAT_R16_FLOAT, AGC_GFX1013_IMAGE_FORMAT_R16_FLOAT, 0u},
+        {AGC_FORMAT_R16_UNORM, AGC_GFX1013_IMAGE_FORMAT_R16_UNORM, 0u},
+        {AGC_FORMAT_R16_SNORM, AGC_GFX1013_IMAGE_FORMAT_R16_SNORM, 0u},
+        {AGC_FORMAT_R16_UINT, AGC_GFX1013_IMAGE_FORMAT_R16_UINT, 0u},
+        {AGC_FORMAT_R16_SINT, AGC_GFX1013_IMAGE_FORMAT_R16_SINT, 0u},
         {AGC_FORMAT_RG16_FLOAT, AGC_GFX1013_IMAGE_FORMAT_RG16_FLOAT, 0u},
+        {AGC_FORMAT_RG16_UNORM, AGC_GFX1013_IMAGE_FORMAT_RG16_UNORM, 0u},
+        {AGC_FORMAT_RG16_SNORM, AGC_GFX1013_IMAGE_FORMAT_RG16_SNORM, 0u},
+        {AGC_FORMAT_RG16_UINT, AGC_GFX1013_IMAGE_FORMAT_RG16_UINT, 0u},
+        {AGC_FORMAT_RG16_SINT, AGC_GFX1013_IMAGE_FORMAT_RG16_SINT, 0u},
         {AGC_FORMAT_R32_FLOAT, AGC_GFX1013_IMAGE_FORMAT_R32_FLOAT, 0u},
+        {AGC_FORMAT_R32_UINT, AGC_GFX1013_IMAGE_FORMAT_R32_UINT, 0u},
+        {AGC_FORMAT_R32_SINT, AGC_GFX1013_IMAGE_FORMAT_R32_SINT, 0u},
         {AGC_FORMAT_RG32_FLOAT, AGC_GFX1013_IMAGE_FORMAT_RG32_FLOAT, 0u},
+        {AGC_FORMAT_RG32_UINT, AGC_GFX1013_IMAGE_FORMAT_RG32_UINT, 0u},
+        {AGC_FORMAT_RG32_SINT, AGC_GFX1013_IMAGE_FORMAT_RG32_SINT, 0u},
         {AGC_FORMAT_R11G11B10_FLOAT,
          AGC_GFX1013_IMAGE_FORMAT_R11G11B10_FLOAT, 0u},
         {AGC_FORMAT_RGBA16_FLOAT,
          AGC_GFX1013_IMAGE_FORMAT_RGBA16_FLOAT, 0u},
+        {AGC_FORMAT_RGBA16_UNORM,
+         AGC_GFX1013_IMAGE_FORMAT_RGBA16_UNORM, 0u},
+        {AGC_FORMAT_RGBA16_SNORM,
+         AGC_GFX1013_IMAGE_FORMAT_RGBA16_SNORM, 0u},
         {AGC_FORMAT_RGBA32_FLOAT,
          AGC_GFX1013_IMAGE_FORMAT_RGBA32_FLOAT, 0u},
         {AGC_FORMAT_RGBA16_UINT,
