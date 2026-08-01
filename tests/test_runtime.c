@@ -10185,6 +10185,69 @@ static void test_runtime_msaa_sampled_image_view(void)
         "4x sampled image view destroys");
     TEST_ASSERT_EQ(agcDestroyImage(image), AGC_OK,
         "4x sampled image destroys");
+
+    {
+        const AgcFormat depth_formats[] = {
+            AGC_FORMAT_D32_FLOAT, AGC_FORMAT_S8_UINT
+        };
+        const uint32_t resource_formats[] = {
+            AGC_GFX1013_IMAGE_FORMAT_D32_FLOAT,
+            AGC_GFX1013_IMAGE_FORMAT_S8_UINT
+        };
+        uint32_t index;
+
+        for (index = 0u; index < 2u; ++index) {
+            image = NULL;
+            view = NULL;
+            image_desc = (AgcImageDesc)AGC_IMAGE_DESC_INIT;
+            image_desc.width = 32u;
+            image_desc.height = 32u;
+            image_desc.format = depth_formats[index];
+            image_desc.sample_count = 4u;
+            image_desc.usage = AGC_IMAGE_USAGE_DEPTH_STENCIL_BIT |
+                AGC_IMAGE_USAGE_SAMPLED_BIT;
+            image_desc.tiling = AGC_IMAGE_TILING_OPTIMAL;
+            TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &image), AGC_OK,
+                "4x sampled depth/stencil image creates");
+            image_info = (AgcAllocationInfo)AGC_ALLOCATION_INFO_INIT;
+            TEST_ASSERT_EQ(agcGetObjectAllocationInfo(device,
+                AGC_OBJECT_TYPE_IMAGE, image, &image_info), AGC_OK,
+                "4x sampled depth/stencil allocation is queryable");
+            view_desc = (AgcImageViewDesc)AGC_IMAGE_VIEW_DESC_INIT;
+            view_desc.image = image;
+            view_desc.format = image_desc.format;
+            TEST_ASSERT_EQ(agcCreateImageView(device, &view_desc, &view),
+                AGC_OK, "4x sampled depth/stencil view creates");
+            view_info = (AgcAllocationInfo)AGC_ALLOCATION_INFO_INIT;
+            TEST_ASSERT_EQ(agcGetObjectAllocationInfo(device,
+                AGC_OBJECT_TYPE_IMAGE_VIEW, view, &view_info), AGC_OK,
+                "4x sampled depth/stencil view allocation is queryable");
+
+            memset(&state, 0, sizeof(state));
+            state.address = image_info.gpu_address;
+            state.width = image_desc.width;
+            state.height = image_desc.height;
+            state.format = resource_formats[index];
+            state.image_type = AGC_GFX1013_IMAGE_TYPE_2D_MSAA;
+            state.dst_sel_x = 4u;
+            state.dst_sel_y = 0u;
+            state.dst_sel_z = 0u;
+            state.dst_sel_w = 1u;
+            state.sample_count = 4u;
+            state.mip_level_count = 1u;
+            state.swizzle_mode = AGC_GFX1013_IMAGE_SWIZZLE_64KB_Z_X;
+            TEST_ASSERT_EQ(agcGfx1013Image2DDescriptorEncode(&expected,
+                &state), AGC_OK,
+                "expected 4x sampled depth/stencil descriptor encodes");
+            TEST_ASSERT(memcmp(view_info.cpu_address, &expected,
+                sizeof(expected)) == 0,
+                "runtime 4x depth/stencil view uses scalar Z_X descriptor");
+            TEST_ASSERT_EQ(agcDestroyImageView(view), AGC_OK,
+                "4x sampled depth/stencil view destroys");
+            TEST_ASSERT_EQ(agcDestroyImage(image), AGC_OK,
+                "4x sampled depth/stencil image destroys");
+        }
+    }
     TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
         "4x sampled image device destroys");
 }

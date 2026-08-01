@@ -13,6 +13,11 @@ Build a clean open-source PS5 AGC implementation in stages:
 5. Build a safe, documented, firmware-neutral OpenAGC device, resource,
    pipeline, command, synchronization, and presentation API above it.
 
+The Vulkan CTS follow-up has added host-qualified scalar D16/D32/S8 4x sampled
+views over the existing Z_X layout path. Preserve its byte-exact descriptor
+fixtures and qualify sampled depth/stencil pixels on FW 5.50 before promoting
+that extension of the MSAA matrix to hardware-qualified status.
+
 The project target is native PS5 AGC behavior, not PS4 GNM compatibility. GNM
 is still a valuable reference because PS5 backward compatibility, GNM, AGC, and
 AMD PM4 packet ancestry overlap in useful ways.

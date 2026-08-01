@@ -35,7 +35,8 @@ int32_t PS5_SYSV_ABI agcGfx1013GetCapabilities(
     capabilities->max_compute_workgroup_size[2] = 64u;
     capabilities->color_sample_counts = AGC_GFX1013_SAMPLE_COUNT_1_BIT |
         AGC_GFX1013_SAMPLE_COUNT_4_BIT;
-    capabilities->depth_sample_counts = AGC_GFX1013_SAMPLE_COUNT_1_BIT;
+    capabilities->depth_sample_counts = AGC_GFX1013_SAMPLE_COUNT_1_BIT |
+        AGC_GFX1013_SAMPLE_COUNT_4_BIT;
 
     for (index = 0; index < AGC_GFX1013_RT_FORMAT_COUNT; ++index) {
         capabilities->color_target_format_mask |= 1ull << index;

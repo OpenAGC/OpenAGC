@@ -677,7 +677,8 @@ int32_t PS5_SYSV_ABI agcGfx1013Image2DDescriptorEncode(
         if (state->mip_level_count > 1u)
             return AGC_ERROR_NOT_SUPPORTED;
         if (state->image_type != AGC_GFX1013_IMAGE_TYPE_2D_MSAA ||
-            state->swizzle_mode != AGC_GFX1013_IMAGE_SWIZZLE_64KB_R_X ||
+            (state->swizzle_mode != AGC_GFX1013_IMAGE_SWIZZLE_64KB_R_X &&
+             state->swizzle_mode != AGC_GFX1013_IMAGE_SWIZZLE_64KB_Z_X) ||
             state->base_array_layer != 0u ||
             state->last_array_layer != 0u)
             return AGC_ERROR_NOT_SUPPORTED;

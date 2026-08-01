@@ -4271,6 +4271,15 @@ static int32_t agcRuntimeEncodeImageView(
     case AGC_FORMAT_RGBA32_SINT:
         resource_format = AGC_GFX1013_IMAGE_FORMAT_RGBA32_SINT;
         break;
+    case AGC_FORMAT_D16_UNORM:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_D16_UNORM;
+        break;
+    case AGC_FORMAT_D32_FLOAT:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_D32_FLOAT;
+        break;
+    case AGC_FORMAT_S8_UINT:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_S8_UINT;
+        break;
     default:
         resource_format = desc->format;
         break;
@@ -4412,7 +4421,10 @@ static int32_t agcRuntimeEncodeImageView(
         image->desc.mip_levels;
     if (image->desc.sample_count == 4u) {
         state.image_type = AGC_GFX1013_IMAGE_TYPE_2D_MSAA;
-        state.swizzle_mode = AGC_GFX1013_IMAGE_SWIZZLE_64KB_R_X;
+        state.swizzle_mode =
+            (image->desc.usage & AGC_IMAGE_USAGE_DEPTH_STENCIL_BIT) != 0u ?
+            AGC_GFX1013_IMAGE_SWIZZLE_64KB_Z_X :
+            AGC_GFX1013_IMAGE_SWIZZLE_64KB_R_X;
     } else if (view_type == AGC_IMAGE_VIEW_TYPE_CUBE ||
                view_type == AGC_IMAGE_VIEW_TYPE_CUBE_ARRAY) {
         state.image_type = AGC_GFX1013_IMAGE_TYPE_CUBE;

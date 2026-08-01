@@ -9,6 +9,15 @@ runtime. `PLAN.md` is the authoritative forward roadmap; chronological entries
 below remain qualification evidence and may describe a gate that a later entry
 closes.
 
+The public runtime now reports 1x/4x depth sample counts and emits 4x sampled
+D16, D32, and S8 image views with their scalar SQ resource formats and
+`64KB_Z_X` swizzle. The descriptor encoder accepts the hardware depth swizzle
+without weakening its 64 KiB alignment, single-mip, or 2D-MSAA validation.
+Generic verification passes 19,564 assertions, including byte-exact D32 and
+S8 view descriptors. Existing 4x D32 attachment and color-resolve hardware
+evidence supports the layout path; sampled D32/S8 pixels remain to be
+qualified before this capability is called hardware-complete.
+
 Current execution order:
 
 The one-binary portability gate is complete. The FW 5.50 and FW 11.60 cleanup
