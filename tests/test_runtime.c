@@ -15,6 +15,7 @@
 #include "agc_texture.h"
 #include "openagc/capture.h"
 #include "openagc/runtime.h"
+#include "runtime_profile.h"
 
 #include "../samples/hw_test/shaders/fill_color_native_reflection.h"
 #include "../samples/hw_test/shaders/fill_color_native_sb.h"
@@ -6564,6 +6565,18 @@ static void test_runtime_depth_clip_control(void)
     const AgcCommandBufferSubmit *captured;
     const uint32_t *words;
     uint32_t value = 0u;
+
+    TEST_ASSERT_EQ(agcRuntimeDepthClipControl(0u, 0),
+        AGC_GFX1013_VULKAN_CLIP_CONTROL,
+        "generic explicit clip enable retains linear attributes");
+    TEST_ASSERT_EQ(agcRuntimeDepthClipControl(0x0550u, 0),
+        AGC_GFX1013_VULKAN_CLIP_CONTROL,
+        "FW 5.50 explicit clip enable retains linear attributes");
+    TEST_ASSERT_EQ(agcRuntimeDepthClipControl(0x1160u, 0), 0x00080000u,
+        "FW 11.60 explicit clip enable clears linear attributes");
+    TEST_ASSERT_EQ(agcRuntimeDepthClipControl(0x1160u, 1),
+        AGC_GFX1013_DEPTH_CLIP_DISABLE_CONTROL,
+        "FW 11.60 explicit clip disable retains qualified control");
 
     pipeline_desc.vertex_shader = vs;
     pipeline_desc.pixel_shader = ps;

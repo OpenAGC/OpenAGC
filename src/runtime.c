@@ -5,6 +5,7 @@
  */
 
 #include "openagc/runtime.h"
+#include "runtime_profile.h"
 #include "openagc/capture.h"
 
 #include <stdio.h>
@@ -5979,10 +5980,9 @@ static int32_t agcBuildGraphicsPipelineBind(
         agcPipelineDepthClipDisabled(&pipeline->rasterization) ||
         pipeline->rasterization.rasterizer_discard_enable) {
         clip_register.offset = AGC_REG_PA_CL_CLIP_CNTL;
-        clip_register.value = agcPipelineDepthClipDisabled(
-                &pipeline->rasterization) ?
-            AGC_GFX1013_DEPTH_CLIP_DISABLE_CONTROL :
-            AGC_GFX1013_VULKAN_CLIP_CONTROL;
+        clip_register.value = agcRuntimeDepthClipControl(
+            pipeline->device->runtime_info.firmware_abi_key,
+            agcPipelineDepthClipDisabled(&pipeline->rasterization));
         if (pipeline->rasterization.rasterizer_discard_enable)
             clip_register.value |=
                 1u << AGC_REG_PA_CL_CLIP_CNTL_DX_RASTERIZATION_KILL_SHIFT;

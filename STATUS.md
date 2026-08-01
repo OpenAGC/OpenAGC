@@ -143,7 +143,16 @@ set gfx10.3 `DX_LINEAR_ATTR_CLIP_ENA`; without that bit Mesa's generated
 interpolated clear pipeline produced zero RGBA. The corrected named-field
 encoding returned exact RGBA `64,128,191,255` through SDL/EGL/Zink with normal
 teardown, establishing the hardware requirement without exposing the register
-through the public runtime API.
+through the public runtime API. The identical FW 11.600.005 replay then exposed
+the inverse profile requirement when Z clipping remains enabled: setting
+`DX_LINEAR_ATTR_CLIP_ENA` produced zero RGBA, while the current-extension
+counterfactual with that bit clear returned the exact pixel oracle. The runtime
+now selects the two proven encodings from its internal firmware ABI key; host
+tests freeze generic, FW 5.50, FW 11.60, and explicit-disable values. The final
+FW 11.60 candidate passed the depth probe twice at `20260801T050433Z` and
+`20260801T050440Z`, then SDL/EGL/Zink twice at `20260801T050511Z` and
+`20260801T050519Z`. Because this changed linked bytes, the matching FW 5.50
+replay is required before restoring cross-firmware qualification.
 
 1. **Milestone 5 is complete.** Runtime API v23 has the optional
    allocation-free debug-callback layer. API v24 adds the
