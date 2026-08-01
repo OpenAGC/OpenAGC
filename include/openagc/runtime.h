@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-#define AGC_RUNTIME_API_VERSION 45u
+#define AGC_RUNTIME_API_VERSION 46u
 #define AGC_RUNTIME_MAX_VIEWPORTS 16u
 #define AGC_RUNTIME_STRUCTURE_VERSION_1 1u
 #define AGC_RUNTIME_STRUCTURE_VERSION_2 2u
@@ -562,7 +562,8 @@ typedef enum AgcImageViewType {
     AGC_IMAGE_VIEW_TYPE_2D = 0,
     AGC_IMAGE_VIEW_TYPE_2D_ARRAY = 1,
     AGC_IMAGE_VIEW_TYPE_CUBE = 2,
-    AGC_IMAGE_VIEW_TYPE_CUBE_ARRAY = 3
+    AGC_IMAGE_VIEW_TYPE_CUBE_ARRAY = 3,
+    AGC_IMAGE_VIEW_TYPE_3D = 4
 } AgcImageViewType;
 
 typedef enum AgcComponentSwizzle {
@@ -581,8 +582,10 @@ typedef enum AgcComponentSwizzle {
       AGC_COMPONENT_SWIZZLE_IDENTITY, AGC_COMPONENT_SWIZZLE_IDENTITY, \
       AGC_COMPONENT_SWIZZLE_IDENTITY, AGC_COMPONENT_SWIZZLE_IDENTITY, 0u }
 
-/* One color attachment for agcCmdBindColorTargets. The image subresource is
- * retained by the command buffer until it is reset or destroyed. */
+/* One color attachment for agcCmdBindColorTargets. For a 3D image,
+ * array_layer selects a depth slice of mip_level; otherwise it selects an
+ * array layer. The image subresource is retained by the command buffer until
+ * it is reset or destroyed. */
 typedef struct AgcColorTargetBinding {
     uint32_t struct_size;
     uint32_t version;

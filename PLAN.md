@@ -112,7 +112,10 @@ expert use, but make the native API the recommended application surface.
    Attachment bindings follow the same rule: color and depth/stencil targets
    can be rebound within one command buffer, prior images remain retained, and
    zero-color pipelines can explicitly clear the logical color binding before
-   depth-only work.
+   depth-only work. API 46 now supplies typed 3D sampled views and per-mip
+   depth-slice color bindings for Vulkan's general 3D blit path; preserve its
+   exact descriptor and slice-bound regressions while the Vulkan consumer is
+   completed and qualified on FW 5.50.
 6. **Documentation and validation are part of every milestone.** Do not defer
    public API reference material, negative tests, or capability labels to the
    final release phase.

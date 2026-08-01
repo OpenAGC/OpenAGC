@@ -2328,6 +2328,13 @@ static AgcImageTiling agcImageDescTiling(const AgcImageDesc *desc)
         AGC_IMAGE_TILING_OPTIMAL;
 }
 
+static uint32_t agcRuntimeMipDimension(uint32_t dimension,
+    uint32_t mip_level)
+{
+    const uint32_t value = dimension >> mip_level;
+    return value ? value : 1u;
+}
+
 static int agcImageDescBasicValid(const AgcImageDesc *desc)
 {
     AgcRuntimeFormatInfo format;
@@ -4083,8 +4090,6 @@ static int32_t agcRuntimeEncodeImageView(
     uint32_t resource_format = desc->format;
     uint32_t i;
 
-    if (image->desc.depth != 1u)
-        return AGC_ERROR_NOT_SUPPORTED;
     /* BGRA8 encodings are abstract runtime render-target formats. SQ has no
      * matching sampled-image resource encoding, so use the corresponding
      * RGBA8 encoding and compose the byte-order swap with the requested view
@@ -4129,6 +4134,9 @@ static int32_t agcRuntimeEncodeImageView(
         state.address += layout.offset;
         state.base_array_layer = 0u;
         state.last_array_layer = 0u;
+    } else if (view_type == AGC_IMAGE_VIEW_TYPE_3D) {
+        state.base_array_layer = 0u;
+        state.last_array_layer = image->desc.depth - 1u;
     } else {
         state.base_array_layer = desc->base_array_layer;
         state.last_array_layer = desc->base_array_layer +
@@ -4146,6 +4154,8 @@ static int32_t agcRuntimeEncodeImageView(
         state.image_type = AGC_GFX1013_IMAGE_TYPE_CUBE;
     } else if (view_type == AGC_IMAGE_VIEW_TYPE_2D_ARRAY) {
         state.image_type = AGC_GFX1013_IMAGE_TYPE_2D_ARRAY;
+    } else if (view_type == AGC_IMAGE_VIEW_TYPE_3D) {
+        state.image_type = AGC_GFX1013_IMAGE_TYPE_3D;
     } else {
         state.image_type = AGC_GFX1013_IMAGE_TYPE_2D;
     }
@@ -4206,7 +4216,7 @@ int32_t PS5_SYSV_ABI agcCreateImageView(
     if (!agcImageViewDescHeaderValid(desc) ||
         !agcReservedZero(desc->reserved, 4u) ||
         (desc->version >= AGC_RUNTIME_STRUCTURE_VERSION_2 &&
-         (desc->view_type > AGC_IMAGE_VIEW_TYPE_CUBE_ARRAY ||
+         (desc->view_type > AGC_IMAGE_VIEW_TYPE_3D ||
           desc->swizzle_r > AGC_COMPONENT_SWIZZLE_A ||
           desc->swizzle_g > AGC_COMPONENT_SWIZZLE_A ||
           desc->swizzle_b > AGC_COMPONENT_SWIZZLE_A ||
@@ -4236,8 +4246,13 @@ int32_t PS5_SYSV_ABI agcCreateImageView(
             "image view requires a live same-device image, matching format, and in-range mip/layer interval");
     }
     if (desc->version >= AGC_RUNTIME_STRUCTURE_VERSION_2 &&
-        ((desc->view_type == AGC_IMAGE_VIEW_TYPE_2D &&
+        (((desc->view_type == AGC_IMAGE_VIEW_TYPE_2D ||
+           desc->view_type == AGC_IMAGE_VIEW_TYPE_3D) &&
           desc->array_layer_count != 1u) ||
+         (desc->view_type == AGC_IMAGE_VIEW_TYPE_3D &&
+          (image->desc.depth == 1u || desc->base_array_layer != 0u)) ||
+         (desc->view_type != AGC_IMAGE_VIEW_TYPE_3D &&
+          image->desc.depth != 1u) ||
          ((desc->view_type == AGC_IMAGE_VIEW_TYPE_CUBE ||
            desc->view_type == AGC_IMAGE_VIEW_TYPE_CUBE_ARRAY) &&
           (((image->desc.usage & AGC_IMAGE_USAGE_CUBE_COMPATIBLE_BIT) == 0u) ||
@@ -7519,13 +7534,18 @@ int32_t PS5_SYSV_ABI agcCmdBindColorTargets(
         if (!image || image->magic != AGC_MAGIC_IMAGE ||
             image->device != command_buffer->device || image->deferred ||
             (image->desc.usage & AGC_IMAGE_USAGE_COLOR_TARGET_BIT) == 0u ||
-            image->desc.depth != 1u) {
+            binding->mip_level >= image->desc.mip_levels ||
+            (image->desc.depth == 1u ?
+                binding->array_layer >= image->desc.array_layers :
+                binding->array_layer >=
+                    agcRuntimeMipDimension(image->desc.depth,
+                        binding->mip_level))) {
             return agcDebugReport(command_buffer->device,
                 AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
                 AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT,
                 AGC_ERROR_INVALID_ARGUMENT, "agcCmdBindColorTargets",
                 AGC_OBJECT_TYPE_IMAGE, NULL,
-                "color target requires a live same-device color-target image with depth one");
+                "color target requires a live same-device image and an in-range array layer or 3D depth slice");
         }
         if (image->desc.format != command_buffer->graphics_pipeline->
                 color_attachments[i].format ||
@@ -7542,7 +7562,8 @@ int32_t PS5_SYSV_ABI agcCmdBindColorTargets(
             }
         }
         result = agcGetImageSubresourceLayout(command_buffer->device,
-            &image->desc, binding->mip_level, binding->array_layer, 0u,
+            &image->desc, binding->mip_level,
+            image->desc.depth == 1u ? binding->array_layer : 0u, 0u,
             &layout);
         if (result != AGC_OK)
             return agcDebugReport(command_buffer->device,
@@ -7551,8 +7572,17 @@ int32_t PS5_SYSV_ABI agcCmdBindColorTargets(
                 "agcCmdBindColorTargets", AGC_OBJECT_TYPE_IMAGE, NULL,
                 "color-target subresource layout query failed");
         address = agcImageGpuAddress(image);
-        if (layout.depth != 1u || layout.offset > UINT64_MAX - address)
+        if (layout.offset > UINT64_MAX - address ||
+            (image->desc.depth == 1u && layout.depth != 1u) ||
+            (image->desc.depth > 1u &&
+             (layout.slice_pitch == 0u ||
+              binding->array_layer >= layout.depth ||
+              binding->array_layer >
+                (UINT64_MAX - layout.offset) / layout.slice_pitch)))
             return AGC_ERROR_RESOURCE_INVALID;
+        if (image->desc.depth > 1u)
+            layout.offset += (uint64_t)binding->array_layer *
+                layout.slice_pitch;
         result = agcGfx1013InitColorTarget(&states[i], address + layout.offset,
             layout.width, layout.height, format);
         if (result != AGC_OK)
@@ -7587,7 +7617,9 @@ int32_t PS5_SYSV_ABI agcCmdBindColorTargets(
     }
     for (i = 0u; i < target_count; ++i) {
         AgcImageSubresourceRange range = { AGC_IMAGE_ASPECT_COLOR_BIT,
-            targets[i].mip_level, 1u, targets[i].array_layer, 1u, 0u };
+            targets[i].mip_level, 1u,
+            targets[i].image->desc.depth == 1u ?
+                targets[i].array_layer : 0u, 1u, 0u };
         if (!agcCommandImageRangeState(command_buffer, targets[i].image,
                 &range, &usage, &owner) ||
             usage != kAgcResourceUsageColorTarget ||

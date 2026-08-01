@@ -76,6 +76,17 @@ passed all 1,024 exact pixels twice on FW 5.500.008 and twice on FW 11.600.005
 with clean teardown and no residual process.
 See [analysis/runtime_msaa_image_view_last_level_20260801.md](analysis/runtime_msaa_image_view_last_level_20260801.md).
 
+Runtime API 46 adds typed 3D sampled-image views and per-mip depth-slice color
+target binding. `AGC_IMAGE_VIEW_TYPE_3D` encodes gfx1013 resource type 10 with
+the allocation depth while preserving explicit base/last mip selection. For a
+3D image, `AgcColorTargetBinding.array_layer` selects a depth slice of the
+chosen mip; validation derives that mip's depth, addresses the slice through
+the queried `slice_pitch`, retains it through command recycling, and keeps
+ordinary array-image behavior unchanged. Exact descriptor, invalid view-type,
+mip-slice bounds, retention, reset, and teardown coverage brings generic
+verification to 17,954 assertions with 19/19 CTest suites passing. The
+Prospero library builds clean; Vulkan 3D blit hardware pixels remain pending.
+
 Push-constant backing is stage-local inside the reflected command resource
 arena. Vertex, hull, domain, geometry, pixel, and compute stages may retain
 different values at the same byte offset; pointer and inline user-SGPR

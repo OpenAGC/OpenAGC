@@ -665,7 +665,8 @@ int32_t PS5_SYSV_ABI agcGfx1013Image2DDescriptorEncode(
                 state->base_array_layer + 1u;
             if (layer_count % 6u != 0u)
                 return AGC_ERROR_NOT_SUPPORTED;
-        } else if (state->image_type != AGC_GFX1013_IMAGE_TYPE_2D_ARRAY) {
+        } else if (state->image_type != AGC_GFX1013_IMAGE_TYPE_2D_ARRAY &&
+                   state->image_type != AGC_GFX1013_IMAGE_TYPE_3D) {
             return AGC_ERROR_NOT_SUPPORTED;
         }
     } else if (sample_count == 4u) {

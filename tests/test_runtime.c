@@ -5868,6 +5868,7 @@ static void test_runtime_color_target_binding(void)
     AgcShader vertex = create_shader(device, kAgcShaderStageVs);
     AgcShader pixel;
     AgcImage image = NULL;
+    AgcImage image_3d = NULL;
     AgcImage incompatible_image = NULL;
     AgcBuffer index_buffer = NULL;
     AgcCommandBuffer command = NULL;
@@ -5901,6 +5902,11 @@ static void test_runtime_color_target_binding(void)
     image_desc.format = AGC_FORMAT_RGBA16_FLOAT;
     TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &incompatible_image),
         AGC_OK, "incompatible color target creates for validation");
+    image_desc.format = AGC_FORMAT_RGBA8_UNORM;
+    image_desc.depth = 4u;
+    image_desc.array_layers = 1u;
+    TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &image_3d), AGC_OK,
+        "3D color target creates");
     buffer_desc.size = 64u;
     buffer_desc.usage = AGC_BUFFER_USAGE_INDEX_BIT;
     TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &index_buffer), AGC_OK,
@@ -5951,6 +5957,28 @@ static void test_runtime_color_target_binding(void)
     target.array_layer = 0u;
     TEST_ASSERT_EQ(agcCmdBindColorTargets(command, 1u, &target), AGC_OK,
         "color target can be rebound while prior image retention remains");
+    target_transition.image = image_3d;
+    target_transition.image_range.mip_level_count = 2u;
+    target_transition.image_range.array_layer_count = 1u;
+    TEST_ASSERT_EQ(agcCmdTransitionResources(command, 1u,
+        &target_transition), AGC_OK,
+        "3D color target transitions to graphics ownership");
+    target.image = image_3d;
+    target.mip_level = 1u;
+    target.array_layer = 2u;
+    TEST_ASSERT_EQ(agcCmdBindColorTargets(command, 1u, &target),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "3D color target rejects a slice beyond the selected mip depth");
+    target.array_layer = 1u;
+    TEST_ASSERT_EQ(agcCmdBindColorTargets(command, 1u, &target), AGC_OK,
+        "3D color target binds one in-range mip slice");
+    TEST_ASSERT_EQ(agcDestroyImage(image_3d), AGC_ERROR_BUSY,
+        "recorded 3D color target remains retained");
+    target.image = image;
+    target.mip_level = 0u;
+    target.array_layer = 0u;
+    TEST_ASSERT_EQ(agcCmdBindColorTargets(command, 1u, &target), AGC_OK,
+        "2D color target restores after the 3D slice binding");
     TEST_ASSERT_EQ(agcCmdDrawIndexed(command, 3u, 1u, 0u, 0, 0u), AGC_OK,
         "draw records after its reflected target binds");
     TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
@@ -5971,6 +5999,8 @@ static void test_runtime_color_target_binding(void)
         "reset releases the retained color target");
     TEST_ASSERT_EQ(agcDestroyImage(image), AGC_OK,
         "released color target destroys after reset");
+    TEST_ASSERT_EQ(agcDestroyImage(image_3d), AGC_OK,
+        "released 3D color target destroys after reset");
     TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
         "color-target command buffer destroys");
     TEST_ASSERT_EQ(agcDestroyBuffer(index_buffer), AGC_OK,
@@ -9679,6 +9709,87 @@ static void test_runtime_msaa_sampled_image_view(void)
         "4x sampled image device destroys");
 }
 
+static void test_runtime_3d_sampled_image_view(void)
+{
+    AgcDevice device = create_device();
+    AgcImageDesc image_desc = AGC_IMAGE_DESC_INIT;
+    AgcImageViewDesc view_desc = AGC_IMAGE_VIEW_DESC_INIT;
+    AgcAllocationInfo image_info = AGC_ALLOCATION_INFO_INIT;
+    AgcAllocationInfo view_info = AGC_ALLOCATION_INFO_INIT;
+    AgcGfx1013Image2DState state = {0};
+    AgcGfx1013ImageDescriptor expected;
+    AgcImage image = NULL;
+    AgcImage image_2d = NULL;
+    AgcImageView view = NULL;
+
+    image_desc.width = 32u;
+    image_desc.height = 16u;
+    image_desc.depth = 8u;
+    image_desc.mip_levels = 4u;
+    image_desc.format = AGC_FORMAT_RGBA8_UNORM;
+    image_desc.usage = AGC_IMAGE_USAGE_SAMPLED_BIT;
+    image_desc.tiling = AGC_IMAGE_TILING_LINEAR;
+    TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &image), AGC_OK,
+        "3D sampled image creates");
+    TEST_ASSERT_EQ(agcGetObjectAllocationInfo(device, AGC_OBJECT_TYPE_IMAGE,
+        image, &image_info), AGC_OK, "3D image allocation is queryable");
+    view_desc.image = image;
+    view_desc.format = image_desc.format;
+    view_desc.view_type = AGC_IMAGE_VIEW_TYPE_3D;
+    view_desc.base_mip_level = 1u;
+    view_desc.mip_level_count = 2u;
+    TEST_ASSERT_EQ(agcCreateImageView(device, &view_desc, &view), AGC_OK,
+        "3D sampled image view creates");
+    TEST_ASSERT_EQ(agcGetObjectAllocationInfo(device,
+        AGC_OBJECT_TYPE_IMAGE_VIEW, view, &view_info), AGC_OK,
+        "3D sampled view allocation is queryable");
+
+    state.address = image_info.gpu_address;
+    state.width = image_desc.width;
+    state.height = image_desc.height;
+    state.format = image_desc.format;
+    state.image_type = AGC_GFX1013_IMAGE_TYPE_3D;
+    state.dst_sel_x = 4u;
+    state.dst_sel_y = 5u;
+    state.dst_sel_z = 6u;
+    state.dst_sel_w = 7u;
+    state.sample_count = 1u;
+    state.last_array_layer = image_desc.depth - 1u;
+    state.mip_level_count = image_desc.mip_levels;
+    TEST_ASSERT_EQ(agcGfx1013Image2DDescriptorEncode(&expected, &state),
+        AGC_OK, "expected 3D sampled descriptor encodes");
+    expected.words[3] = (expected.words[3] & ~0x000ff000u) |
+        (1u << 12u) | (2u << 16u);
+    TEST_ASSERT(memcmp(view_info.cpu_address, &expected,
+        sizeof(expected)) == 0,
+        "runtime 3D view stores exact type, depth, and mip interval");
+
+    TEST_ASSERT_EQ(agcDestroyImageView(view), AGC_OK,
+        "3D sampled image view destroys");
+    view = NULL;
+    view_desc.view_type = AGC_IMAGE_VIEW_TYPE_2D;
+    TEST_ASSERT_EQ(agcCreateImageView(device, &view_desc, &view),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "3D image rejects an ordinary 2D view");
+    image_desc.depth = 1u;
+    image_desc.mip_levels = 1u;
+    TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &image_2d), AGC_OK,
+        "2D comparison image creates");
+    view_desc.image = image_2d;
+    view_desc.base_mip_level = 0u;
+    view_desc.mip_level_count = 1u;
+    view_desc.view_type = AGC_IMAGE_VIEW_TYPE_3D;
+    TEST_ASSERT_EQ(agcCreateImageView(device, &view_desc, &view),
+        AGC_ERROR_INVALID_ARGUMENT, "2D image rejects a 3D view");
+
+    TEST_ASSERT_EQ(agcDestroyImage(image_2d), AGC_OK,
+        "2D comparison image destroys");
+    TEST_ASSERT_EQ(agcDestroyImage(image), AGC_OK,
+        "3D sampled image destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "3D sampled image device destroys");
+}
+
 static void test_runtime_extended_image_view_and_sampler(void)
 {
     AgcDevice device = create_device();
@@ -10159,6 +10270,7 @@ TEST_RUN(test_runtime_image_region_and_buffer_copies);
     TEST_RUN(test_runtime_heap_staging_and_stats);
     TEST_RUN(test_runtime_explicit_placed_memory);
     TEST_RUN(test_runtime_msaa_sampled_image_view);
+    TEST_RUN(test_runtime_3d_sampled_image_view);
     TEST_RUN(test_runtime_extended_image_view_and_sampler);
     TEST_RUN(test_runtime_mutable_srgb_image_views);
     TEST_RUN(test_runtime_stage_distinct_push_constants);
