@@ -43,5 +43,23 @@ values before `DRAW_INDEX_2`.
 
 Host reflection, pipeline, and final-register checks plus clean generic and
 Prospero builds are prerequisites. Hardware replay requires a fresh console
-reboot and the guarded runner. Until that replay passes, the corrected native
-path is host-qualified only.
+reboot and the guarded runner.
+
+## Corrected hardware replay
+
+The corrected candidate passed the guarded FW 5.50 replay after a fresh
+reboot:
+
+- ELF SHA-256:
+  `36ea106cd21a63d124c92958fa81ad4c1eb891bfc15c8a4f4a6082764e957304`
+- Exact oracle:
+  `dual_src_blend: PASS covered=18432 center=ff00ff00 src1=green`
+- The application performed a clean system exit and ps5debug-NG found no
+  remaining process.
+- The captured target klog contained no panic, fault, timeout, or GPU error.
+- The runner reported only the accepted raw-ELF loader VM warning of
+  `0x4000` bytes, and websrv remained responsive after the test.
+
+The failed ELF remains prohibited. The corrected final-register contract and
+its host regression test are now hardware-qualified on FW 5.50. FW 11.60
+replay remains deferred to the endpoint qualification pass.
