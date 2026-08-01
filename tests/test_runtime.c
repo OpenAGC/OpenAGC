@@ -5018,6 +5018,7 @@ static void test_runtime_resource_transitions(void)
     AgcImage handoff_image = NULL;
     AgcCommandBuffer compute_command = NULL;
     AgcCommandBuffer graphics_command = NULL;
+    AgcCommandBuffer replay_graphics_command = NULL;
     AgcFence fence = NULL;
     AgcGpuLabel label = NULL;
     AgcGpuLabel image_label = NULL;
@@ -5141,6 +5142,9 @@ static void test_runtime_resource_transitions(void)
     command_desc.queue_type = kAgcQueueGraphics;
     TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc,
         &graphics_command), AGC_OK, "handoff graphics command creates");
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc,
+        &replay_graphics_command), AGC_OK,
+        "replay graphics command creates");
 
     handoff.resource_type = kAgcResourceTypeBuffer;
     handoff.buffer = buffer;
@@ -5421,6 +5425,13 @@ static void test_runtime_resource_transitions(void)
     image_transitions[0].after_owner = kAgcResourceOwnerGraphics;
     image_transitions[1] = image_transitions[0];
     image_transitions[1].image = second_image;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(replay_graphics_command), AGC_OK,
+        "replay image transition command begins before prior submit");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(replay_graphics_command, 1u,
+        image_transitions), AGC_OK,
+        "replay image transition records the original prior state");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(replay_graphics_command), AGC_OK,
+        "replay image transition command ends before prior submit");
     TEST_ASSERT_EQ(agcBeginCommandBuffer(graphics_command), AGC_OK,
         "image transition command begins");
     TEST_ASSERT_EQ(agcCmdTransitionResources(graphics_command, 2u,
@@ -5437,14 +5448,22 @@ static void test_runtime_resource_transitions(void)
         "successful submit publishes image usage");
     TEST_ASSERT_EQ(state_info.owner, kAgcResourceOwnerGraphics,
         "successful submit publishes image ownership");
-    TEST_ASSERT_EQ(state_info.recorded_reference_count, 1u,
-        "submitted image remains retained until command reset");
+    TEST_ASSERT_EQ(state_info.recorded_reference_count, 2u,
+        "both independently recorded image transitions retain the image");
     TEST_ASSERT_EQ(agcGetFenceStatus(fence), AGC_OK,
         "image transition completes on host");
     TEST_ASSERT_EQ(agcResetCommandBuffer(graphics_command), AGC_OK,
         "image transition command resets");
     TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
         "image transition fence resets");
+    submit.command_buffers = &replay_graphics_command;
+    TEST_ASSERT_EQ(agcQueueSubmit(graphics_queue, &submit, fence), AGC_OK,
+        "ordinary transition replays when committed state already equals after");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(replay_graphics_command), AGC_OK,
+        "replayed image transition command resets");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "replayed image transition fence resets");
+    submit.command_buffers = &graphics_command;
 
     image_transitions[0].before = kAgcResourceUsageColorTarget;
     image_transitions[0].after = kAgcResourceUsageHostRead;
@@ -5584,6 +5603,8 @@ static void test_runtime_resource_transitions(void)
         "acquired image destroys after final state submit");
     handoff_image = NULL;
     TEST_ASSERT_EQ(agcDestroyFence(fence), AGC_OK, "transition fence destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(replay_graphics_command), AGC_OK,
+        "replay graphics command destroys");
     TEST_ASSERT_EQ(agcDestroyCommandBuffer(graphics_command), AGC_OK,
         "transition graphics command destroys");
     TEST_ASSERT_EQ(agcDestroyCommandBuffer(compute_command), AGC_OK,

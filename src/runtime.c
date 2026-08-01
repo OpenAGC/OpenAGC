@@ -8674,7 +8674,20 @@ static int32_t agcValidateSubmissionTransitions(
             }
             if (result != AGC_OK)
                 break;
-            if (usage != record->before || owner != record->before_owner) {
+            if ((usage != record->before ||
+                    owner != record->before_owner) &&
+                !(record->flags == 0u && usage == record->after &&
+                    owner == record->after_owner)) {
+#ifdef OPENAGC_PROSPERO
+                fprintf(stderr,
+                    "[openagc] transition state mismatch command=%u "
+                    "record=%u type=%u flags=0x%x "
+                    "expected_usage=%u actual_usage=%u "
+                    "expected_owner=%u actual_owner=%u\n",
+                    i, transition_index, record->resource_type,
+                    record->flags, record->before, usage,
+                    record->before_owner, owner);
+#endif
                 result = AGC_ERROR_INVALID_STATE;
                 break;
             }
