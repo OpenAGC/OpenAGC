@@ -523,6 +523,11 @@ void agcSamplerDescriptorSetAnisotropy(AgcSamplerDescriptor *desc,
 #define AGC_GFX1013_IMAGE_FORMAT_RGBA32_SINT 76u
 #define AGC_GFX1013_IMAGE_FORMAT_RGBA32_FLOAT 77u
 #define AGC_GFX1013_IMAGE_FORMAT_RGBA8_SRGB 130u
+#define AGC_GFX1013_IMAGE_FORMAT_RGB565_UNORM 133u
+#define AGC_GFX1013_IMAGE_FORMAT_A1RGB5_UNORM 134u
+#define AGC_GFX1013_IMAGE_FORMAT_RGB5A1_UNORM 135u
+#define AGC_GFX1013_IMAGE_FORMAT_RGBA4_UNORM 136u
+#define AGC_GFX1013_IMAGE_FORMAT_RG4_UNORM 137u
 /* GFX10 SQ image-resource formats use a 9-bit field. These BC encodings match
  * the gfx10 resource-format table and are sampled-image formats, not render
  * target formats. */

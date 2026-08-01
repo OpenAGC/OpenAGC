@@ -1705,6 +1705,16 @@ static void test_gfx1013_fixed_function_packets(void)
          0x00070420u},
         {AGC_GFX1013_RT_FORMAT_BGR10A2_UNORM, 0x08u, 0u, 1u, 4u, 4u,
          0x00028820u},
+        {AGC_GFX1013_RT_FORMAT_R5G6B5_UNORM, 0x10u, 0u, 2u, 2u, 4u,
+         0x00029040u},
+        {AGC_GFX1013_RT_FORMAT_B5G6R5_UNORM, 0x10u, 0u, 0u, 2u, 4u,
+         0x00028040u},
+        {AGC_GFX1013_RT_FORMAT_R5G5B5A1_UNORM, 0x12u, 0u, 2u, 2u, 4u,
+         0x00029048u},
+        {AGC_GFX1013_RT_FORMAT_A1R5G5B5_UNORM, 0x11u, 0u, 1u, 2u, 4u,
+         0x00028844u},
+        {AGC_GFX1013_RT_FORMAT_A4B4G4R4_UNORM, 0x13u, 0u, 0u, 2u, 4u,
+         0x0002804cu},
     };
     uint32_t buffer[64] = {0};
     uint32_t expected_format[28];
@@ -1852,6 +1862,10 @@ static void test_gfx1013_fixed_function_packets(void)
         41u, "gfx1013 RGB10A2 UINT enum is appended");
     TEST_ASSERT_EQ((uint32_t)AGC_GFX1013_RT_FORMAT_BGR10A2_UNORM,
         42u, "gfx1013 BGR10A2 UNORM enum is appended");
+    TEST_ASSERT_EQ((uint32_t)AGC_GFX1013_RT_FORMAT_R5G6B5_UNORM,
+        43u, "gfx1013 R5G6B5 UNORM enum is appended");
+    TEST_ASSERT_EQ((uint32_t)AGC_GFX1013_RT_FORMAT_A4B4G4R4_UNORM,
+        47u, "gfx1013 A4B4G4R4 UNORM enum is appended");
 
     agcCbInit(&cb, buffer, sizeof(buffer));
     TEST_ASSERT_EQ(agcGfx1013SetColorTarget(&cb, &color), AGC_OK,

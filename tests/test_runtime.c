@@ -7097,6 +7097,12 @@ static void test_runtime_graphics_pipeline_compatibility_matrix(void)
         kRuntimeFormatRg32Uint,
         kRuntimeFormatR32Sint,
         kRuntimeFormatRg32Sint,
+        kRuntimeFormatR5G6B5Unorm,
+        kRuntimeFormatB5G6R5Unorm,
+        kRuntimeFormatR5G5B5A1Unorm,
+        kRuntimeFormatA1R5G5B5Unorm,
+        kRuntimeFormatA4B4G4R4Unorm,
+        kRuntimeFormatR4G4Unorm,
     };
     static const AgcFormat attachment_formats[] = {
         AGC_FORMAT_RGBA8_UNORM,
@@ -7124,6 +7130,12 @@ static void test_runtime_graphics_pipeline_compatibility_matrix(void)
         AGC_FORMAT_RG32_UINT,
         AGC_FORMAT_R32_SINT,
         AGC_FORMAT_RG32_SINT,
+        AGC_FORMAT_R5G6B5_UNORM,
+        AGC_FORMAT_B5G6R5_UNORM,
+        AGC_FORMAT_R5G5B5A1_UNORM,
+        AGC_FORMAT_A1R5G5B5_UNORM,
+        AGC_FORMAT_A4B4G4R4_UNORM,
+        AGC_FORMAT_R4G4_UNORM,
     };
     static const PipelineCompatibilityCase cases[] = {
         {AGC_SHADER_COLOR_EXPORT_FP16_ABGR,
@@ -7137,7 +7149,12 @@ static void test_runtime_graphics_pipeline_compatibility_matrix(void)
          (1u << kRuntimeFormatRgba16Unorm) |
          (1u << kRuntimeFormatR16Snorm) |
          (1u << kRuntimeFormatRg16Snorm) |
-         (1u << kRuntimeFormatRgba16Snorm)},
+         (1u << kRuntimeFormatRgba16Snorm) |
+         (1u << kRuntimeFormatR5G6B5Unorm) |
+         (1u << kRuntimeFormatB5G6R5Unorm) |
+         (1u << kRuntimeFormatR5G5B5A1Unorm) |
+         (1u << kRuntimeFormatA1R5G5B5Unorm) |
+         (1u << kRuntimeFormatA4B4G4R4Unorm)},
         {AGC_SHADER_COLOR_EXPORT_32_ABGR,
          AGC_SHADER_COMPONENT_FLOAT_OR_NORMALIZED,
          (1u << kRuntimeFormatRgba8Unorm) |
@@ -7150,7 +7167,12 @@ static void test_runtime_graphics_pipeline_compatibility_matrix(void)
          (1u << kRuntimeFormatRgba16Unorm) |
          (1u << kRuntimeFormatR16Snorm) |
          (1u << kRuntimeFormatRg16Snorm) |
-         (1u << kRuntimeFormatRgba16Snorm)},
+         (1u << kRuntimeFormatRgba16Snorm) |
+         (1u << kRuntimeFormatR5G6B5Unorm) |
+         (1u << kRuntimeFormatB5G6R5Unorm) |
+         (1u << kRuntimeFormatR5G5B5A1Unorm) |
+         (1u << kRuntimeFormatA1R5G5B5Unorm) |
+         (1u << kRuntimeFormatA4B4G4R4Unorm)},
         {AGC_SHADER_COLOR_EXPORT_UINT16_ABGR,
          AGC_SHADER_COMPONENT_UINT,
          (1u << kRuntimeFormatRgba16Uint) |
@@ -8902,6 +8924,9 @@ static void test_runtime_ps5_image_layouts(void)
             AGC_FORMAT_RGBA8_SNORM, AGC_FORMAT_RGBA8_UINT,
             AGC_FORMAT_RGBA8_SINT, AGC_FORMAT_RGB10A2_UNORM,
             AGC_FORMAT_RGB10A2_UINT, AGC_FORMAT_BGR10A2_UNORM,
+            AGC_FORMAT_R5G6B5_UNORM, AGC_FORMAT_B5G6R5_UNORM,
+            AGC_FORMAT_R5G5B5A1_UNORM, AGC_FORMAT_A1R5G5B5_UNORM,
+            AGC_FORMAT_A4B4G4R4_UNORM, AGC_FORMAT_R4G4_UNORM,
             AGC_FORMAT_R16_FLOAT, AGC_FORMAT_RG16_FLOAT,
             AGC_FORMAT_R32_FLOAT, AGC_FORMAT_RG32_FLOAT,
             AGC_FORMAT_R11G11B10_FLOAT, AGC_FORMAT_BGRA8_SRGB,
@@ -8913,7 +8938,8 @@ static void test_runtime_ps5_image_layouts(void)
             AGC_FORMAT_R32_UINT, AGC_FORMAT_R32_SINT,
             AGC_FORMAT_RG32_UINT, AGC_FORMAT_RG32_SINT };
         const uint32_t bytes[] = { 1u, 1u, 1u, 1u, 2u, 2u, 2u, 2u,
-            4u, 4u, 4u, 4u, 4u, 4u, 2u, 4u, 4u, 8u, 4u, 4u,
+            4u, 4u, 4u, 4u, 4u, 4u, 2u, 2u, 2u, 2u, 2u, 1u,
+            2u, 4u, 4u, 8u, 4u, 4u,
             2u, 2u, 2u, 2u, 4u, 4u, 4u, 4u, 8u, 8u, 4u, 4u, 8u, 8u };
         uint32_t i;
         for (i = 0u; i < sizeof(formats) / sizeof(formats[0]); ++i) {
@@ -9876,6 +9902,18 @@ static void test_runtime_regular_color_sampled_image_views(void)
          AGC_GFX1013_IMAGE_FORMAT_RGB10A2_UINT, 0u},
         {AGC_FORMAT_BGR10A2_UNORM,
          AGC_GFX1013_IMAGE_FORMAT_RGB10A2_UNORM, 1u},
+        {AGC_FORMAT_R5G6B5_UNORM,
+         AGC_GFX1013_IMAGE_FORMAT_RGB565_UNORM, 1u},
+        {AGC_FORMAT_B5G6R5_UNORM,
+         AGC_GFX1013_IMAGE_FORMAT_RGB565_UNORM, 0u},
+        {AGC_FORMAT_R5G5B5A1_UNORM,
+         AGC_GFX1013_IMAGE_FORMAT_RGB5A1_UNORM, 0u},
+        {AGC_FORMAT_A1R5G5B5_UNORM,
+         AGC_GFX1013_IMAGE_FORMAT_A1RGB5_UNORM, 0u},
+        {AGC_FORMAT_A4B4G4R4_UNORM,
+         AGC_GFX1013_IMAGE_FORMAT_RGBA4_UNORM, 0u},
+        {AGC_FORMAT_R4G4_UNORM,
+         AGC_GFX1013_IMAGE_FORMAT_RG4_UNORM, 0u},
         {AGC_FORMAT_R16_FLOAT, AGC_GFX1013_IMAGE_FORMAT_R16_FLOAT, 0u},
         {AGC_FORMAT_R16_UNORM, AGC_GFX1013_IMAGE_FORMAT_R16_UNORM, 0u},
         {AGC_FORMAT_R16_SNORM, AGC_GFX1013_IMAGE_FORMAT_R16_SNORM, 0u},
@@ -9964,6 +10002,17 @@ static void test_runtime_regular_color_sampled_image_views(void)
         state.dst_sel_y = 5u;
         state.dst_sel_z = cases[i].bgra ? 4u : 6u;
         state.dst_sel_w = 7u;
+        if (cases[i].format == AGC_FORMAT_R5G5B5A1_UNORM) {
+            state.dst_sel_x = 7u;
+            state.dst_sel_y = 6u;
+            state.dst_sel_z = 5u;
+            state.dst_sel_w = 4u;
+        } else if (cases[i].format == AGC_FORMAT_A1R5G5B5_UNORM) {
+            state.dst_sel_x = 6u;
+            state.dst_sel_y = 5u;
+            state.dst_sel_z = 4u;
+            state.dst_sel_w = 7u;
+        }
         switch ((AgcFormat)cases[i].format) {
         case AGC_FORMAT_R8_UNORM:
         case AGC_FORMAT_R8_SNORM:
@@ -9995,6 +10044,7 @@ static void test_runtime_regular_color_sampled_image_views(void)
         case AGC_FORMAT_RG32_FLOAT:
         case AGC_FORMAT_RG32_UINT:
         case AGC_FORMAT_RG32_SINT:
+        case AGC_FORMAT_R4G4_UNORM:
         case AGC_FORMAT_BC5_UNORM:
         case AGC_FORMAT_BC5_SNORM:
             state.dst_sel_z = 0u;

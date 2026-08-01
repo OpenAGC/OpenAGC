@@ -2249,7 +2249,15 @@ static int agcGetRuntimeFormatInfo(uint32_t format, AgcRuntimeFormatInfo *info)
     case AGC_FORMAT_R16_SNORM:
     case AGC_FORMAT_R16_UINT:
     case AGC_FORMAT_R16_SINT:
+    case AGC_FORMAT_R5G6B5_UNORM:
+    case AGC_FORMAT_B5G6R5_UNORM:
+    case AGC_FORMAT_R5G5B5A1_UNORM:
+    case AGC_FORMAT_A1R5G5B5_UNORM:
+    case AGC_FORMAT_A4B4G4R4_UNORM:
         info->bytes[0] = 2u;
+        return 1;
+    case AGC_FORMAT_R4G4_UNORM:
+        info->bytes[0] = 1u;
         return 1;
     case AGC_FORMAT_RGBA8_UNORM:
     case AGC_FORMAT_BGRA8_UNORM:
@@ -4168,6 +4176,22 @@ static int32_t agcRuntimeEncodeImageView(
     case AGC_FORMAT_RGB10A2_UINT:
         resource_format = AGC_GFX1013_IMAGE_FORMAT_RGB10A2_UINT;
         break;
+    case AGC_FORMAT_R5G6B5_UNORM:
+    case AGC_FORMAT_B5G6R5_UNORM:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_RGB565_UNORM;
+        break;
+    case AGC_FORMAT_R5G5B5A1_UNORM:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_RGB5A1_UNORM;
+        break;
+    case AGC_FORMAT_A1R5G5B5_UNORM:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_A1RGB5_UNORM;
+        break;
+    case AGC_FORMAT_A4B4G4R4_UNORM:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_RGBA4_UNORM;
+        break;
+    case AGC_FORMAT_R4G4_UNORM:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_RG4_UNORM;
+        break;
     case AGC_FORMAT_R16_FLOAT:
         resource_format = AGC_GFX1013_IMAGE_FORMAT_R16_FLOAT;
         break;
@@ -4285,6 +4309,7 @@ static int32_t agcRuntimeEncodeImageView(
     case AGC_FORMAT_RG32_FLOAT:
     case AGC_FORMAT_RG32_UINT:
     case AGC_FORMAT_RG32_SINT:
+    case AGC_FORMAT_R4G4_UNORM:
     case AGC_FORMAT_BC5_UNORM:
     case AGC_FORMAT_BC5_SNORM:
         base[2] = 0u;
@@ -4304,9 +4329,21 @@ static int32_t agcRuntimeEncodeImageView(
      * swizzle. */
     if (desc->format == AGC_FORMAT_BGRA8_UNORM ||
         desc->format == AGC_FORMAT_BGRA8_SRGB ||
-        desc->format == AGC_FORMAT_BGR10A2_UNORM) {
+        desc->format == AGC_FORMAT_BGR10A2_UNORM ||
+        desc->format == AGC_FORMAT_R5G6B5_UNORM) {
         base[0] = 6u;
         base[2] = 4u;
+    }
+    if (desc->format == AGC_FORMAT_R5G5B5A1_UNORM) {
+        base[0] = 7u;
+        base[1] = 6u;
+        base[2] = 5u;
+        base[3] = 4u;
+    } else if (desc->format == AGC_FORMAT_A1R5G5B5_UNORM) {
+        base[0] = 6u;
+        base[1] = 5u;
+        base[2] = 4u;
+        base[3] = 7u;
     }
     if (resource_format > 0x1ffu)
         return AGC_ERROR_NOT_SUPPORTED;
@@ -5647,6 +5684,12 @@ static int agcPipelineFormatInfo(
     case AGC_FORMAT_BGRA8_SRGB:
     case AGC_FORMAT_RGB10A2_UNORM:
     case AGC_FORMAT_BGR10A2_UNORM:
+    case AGC_FORMAT_R5G6B5_UNORM:
+    case AGC_FORMAT_B5G6R5_UNORM:
+    case AGC_FORMAT_R5G5B5A1_UNORM:
+    case AGC_FORMAT_A1R5G5B5_UNORM:
+    case AGC_FORMAT_A4B4G4R4_UNORM:
+    case AGC_FORMAT_R4G4_UNORM:
     case AGC_FORMAT_R16_FLOAT:
     case AGC_FORMAT_RG16_FLOAT:
     case AGC_FORMAT_R16_UNORM:
@@ -5777,6 +5820,21 @@ static int agcRuntimeColorTargetFormat(uint32_t format,
         return 1;
     case AGC_FORMAT_BGR10A2_UNORM:
         *target_format = AGC_GFX1013_RT_FORMAT_BGR10A2_UNORM;
+        return 1;
+    case AGC_FORMAT_R5G6B5_UNORM:
+        *target_format = AGC_GFX1013_RT_FORMAT_R5G6B5_UNORM;
+        return 1;
+    case AGC_FORMAT_B5G6R5_UNORM:
+        *target_format = AGC_GFX1013_RT_FORMAT_B5G6R5_UNORM;
+        return 1;
+    case AGC_FORMAT_R5G5B5A1_UNORM:
+        *target_format = AGC_GFX1013_RT_FORMAT_R5G5B5A1_UNORM;
+        return 1;
+    case AGC_FORMAT_A1R5G5B5_UNORM:
+        *target_format = AGC_GFX1013_RT_FORMAT_A1R5G5B5_UNORM;
+        return 1;
+    case AGC_FORMAT_A4B4G4R4_UNORM:
+        *target_format = AGC_GFX1013_RT_FORMAT_A4B4G4R4_UNORM;
         return 1;
     case AGC_FORMAT_R16_FLOAT:
         *target_format = AGC_GFX1013_RT_FORMAT_R16_FLOAT;

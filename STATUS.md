@@ -131,6 +131,15 @@ format `57` cannot spuriously swap channels. Generic verification passes
 19,127 assertions and the Prospero library builds without warnings; Vulkan
 advertisement and FW 5.50 exact-pixel qualification remain consumer work.
 
+Runtime API 51 adds R5G6B5, B5G6R5, R5G5B5A1, A1R5G5B5, A4B4G4R4, and
+R4G4 UNORM packed-image contracts. Sampled views use the gfx10.3 565, 5551,
+4444, and 44 SQ encodings with exact logical-component selectors. The five
+16-bit forms also expose their matching CB format and component swap; R4G4 is
+sampled-only because gfx10.3 has no corresponding color-target encoding.
+Generic verification passes 19,395 assertions with exact layout, descriptor,
+pipeline-compatibility, and color-info coverage. Prospero and Vulkan FW 5.50
+qualification remain pending for this API slice.
+
 Push-constant backing is stage-local inside the reflected command resource
 arena. Vertex, hull, domain, geometry, pixel, and compute stages may retain
 different values at the same byte offset; pointer and inline user-SGPR
