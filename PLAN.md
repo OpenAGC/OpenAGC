@@ -139,7 +139,10 @@ expert use, but make the native API the recommended application surface.
    API design and hardware qualification.
    API 50 extends that exact matrix with RGBA8 SNORM/UINT/SINT, RGB10A2 UINT,
    and selector-swapped BGR10A2 UNORM. Preserve the abstract-format versus SQ
-   resource-format collision regression while Vulkan qualifies these forms.
+   resource-format collision regression and the hardware
+   `COLOR_2_10_10_10` (`0x09`) CB encoding. Vulkan's 36-format attachment
+   gate passes twice on FW 5.500.008; the identical-byte FW 11.60 replay is
+   deferred.
    API 51 adds the Vulkan-required R5G6B5, B5G6R5, R5G5B5A1, A1R5G5B5,
    A4B4G4R4, and R4G4 UNORM packed-image forms. Preserve the exact 565/5551
    selector and CB-swap regressions; keep R4G4 sampled-only unless a qualified

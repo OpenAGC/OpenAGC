@@ -136,10 +136,14 @@ Runtime API 50 adds exact RGBA8 SNORM, UINT, and SINT, RGB10A2 UINT, and
 BGR10A2 UNORM contracts. The sampled-image encodings use the qualified SQ
 number formats, BGR10A2 composes the physical R/B selectors, and the render
 targets use the matching CB number class, component swap, and SPI export.
+The logical 10:10:10:2 targets now encode gfx10.3
+`COLOR_2_10_10_10` (`0x09`), matching Mesa and the physical little-endian
+layout instead of the reversed `COLOR_10_10_10_2` form.
 Tests also lock the abstract-BGRA/SQ-SNORM numeric collision so translated SQ
 format `57` cannot spuriously swap channels. Generic verification passes
-19,127 assertions and the Prospero library builds without warnings; Vulkan
-advertisement and FW 5.50 exact-pixel qualification remain consumer work.
+19,544 assertions and the Prospero library builds without warnings. The final
+Vulkan consumer ELF passed all 36 advertised color-attachment formats and 36
+bit-exact pixels twice on FW 5.500.008; FW 11.60 replay remains deferred.
 
 Runtime API 51 adds R5G6B5, B5G6R5, R5G5B5A1, A1R5G5B5, A4B4G4R4, and
 R4G4 UNORM packed-image contracts. Sampled views use the gfx10.3 565, 5551,

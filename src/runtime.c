@@ -5950,7 +5950,7 @@ static int agcPipelineColorExportCompatible(
         return 1;
     /* Floating/normalized 8- and 16-bit targets also accept the compiler's
      * full 32-bit ABGR export and perform their normal target conversion. */
-    return component_bits == 16u &&
+    return (component_bits == 8u || component_bits == 16u) &&
         attachment_class == AGC_SHADER_COMPONENT_FLOAT_OR_NORMALIZED &&
         target_info.spi_shader_export_format ==
             AGC_GFX1013_SPI_EXPORT_FP16_ABGR &&

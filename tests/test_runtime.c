@@ -7272,6 +7272,43 @@ static void test_runtime_graphics_pipeline_compatibility_matrix(void)
     }
 
     {
+        static const AgcFormat normalized_8bit_formats[] = {
+            AGC_FORMAT_R8_UNORM,
+            AGC_FORMAT_RG8_UNORM,
+            AGC_FORMAT_R8_SNORM,
+            AGC_FORMAT_RG8_SNORM,
+        };
+        AgcShaderReflection requirements = AGC_SHADER_REFLECTION_INIT;
+        AgcGraphicsPipelineDesc desc = AGC_GRAPHICS_PIPELINE_DESC_INIT;
+        AgcColorBlendAttachmentState attachment =
+            AGC_COLOR_BLEND_ATTACHMENT_STATE_INIT;
+        AgcShader ps;
+
+        requirements.color_export_count = 1u;
+        requirements.color_exports[0] = (AgcShaderColorExport){
+            0u, AGC_SHADER_COLOR_EXPORT_32_ABGR,
+            AGC_SHADER_COMPONENT_FLOAT_OR_NORMALIZED, 0xfu, 0u};
+        ps = create_shader_with_reflection(
+            device, kAgcShaderStagePs, &requirements);
+        desc.vertex_shader = vs;
+        desc.pixel_shader = ps;
+        desc.color_attachment_count = 1u;
+        desc.color_attachments = &attachment;
+        for (j = 0u; j < sizeof(normalized_8bit_formats) /
+                sizeof(normalized_8bit_formats[0]); ++j) {
+            AgcGraphicsPipeline pipeline = NULL;
+            attachment.format = normalized_8bit_formats[j];
+            TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc,
+                &pipeline), AGC_OK,
+                "32_ABGR export accepts normalized 8-bit attachment");
+            TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(pipeline), AGC_OK,
+                "normalized 8-bit graphics pipeline destroys");
+        }
+        TEST_ASSERT_EQ(agcDestroyShader(ps), AGC_OK,
+            "normalized 8-bit export shader destroys");
+    }
+
+    {
         AgcShaderReflection requirements = AGC_SHADER_REFLECTION_INIT;
         AgcGraphicsPipelineDesc desc = AGC_GRAPHICS_PIPELINE_DESC_INIT;
         AgcColorBlendAttachmentState attachments[2] = {
