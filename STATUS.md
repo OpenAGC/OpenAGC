@@ -56,6 +56,15 @@ constants plus 70 inline-push dispatches in one command buffer. This internal
 contract is host-qualified; its first Vulkan consumer still requires Prospero
 build and endpoint execution evidence.
 
+The gfx1013 compute encoder now derives `COMPUTE_RESOURCE_LIMITS` from the
+actual workgroup invocation count and Wave32/Wave64 mode. It no longer emits
+the historical all-ones value, which requested maximum wave and CU-group
+limits irrespective of the shader. Packet tests cover the established
+64-thread Wave32 form and Eden's 1,024-thread/32-wave form, including the
+required SIMD distribution bit. The generic suite passes 19/19 tests and
+19,548 assertions, and a clean Release Prospero library builds without
+warnings. The 1,024-thread execution oracle remains FW 5.50-hardware-pending.
+
 Color and depth/stencil attachment bindings may now be replaced within one
 recording command buffer. Every emitted binding retains its image through
 command recycling, so later pipeline/attachment changes cannot invalidate

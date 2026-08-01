@@ -3739,7 +3739,7 @@ static int32_t agcGfx1013DispatchComputeCommon(
     uint64_t argument_buffer_address, uint32_t argument_offset)
 {
     AgcGfx1013ShaderBinding shader;
-    uint32_t limits0[3] = {0x3fffffffu, 0xffffffffu, 0xffffffffu};
+    uint32_t limits0[3] = {0u, 0xffffffffu, 0xffffffffu};
     uint32_t limits1[2] = {0xffffffffu, 0xffffffffu};
     uint32_t threads[6];
     uint32_t program[2];
@@ -3755,6 +3755,22 @@ static int32_t agcGfx1013DispatchComputeCommon(
     result = agcGfx1013ValidateCompute(state);
     if (result != AGC_OK)
         return result;
+    {
+        const uint64_t local_invocations =
+            (uint64_t)state->local_size_x * state->local_size_y *
+            state->local_size_z;
+        const uint32_t wave_size =
+            (state->modifier & AGC_GFX1013_COMPUTE_DISPATCH_WAVE32) != 0u ?
+                32u : 64u;
+        const uint32_t waves_per_threadgroup =
+            (uint32_t)((local_invocations + wave_size - 1u) / wave_size);
+        /* gfx10 distributes workgroups evenly across its four SIMDs when
+         * their wave count is a multiple of four. WAVES_PER_SH remains zero
+         * (unlimited) and CU_GROUP_COUNT remains zero (one group per CU),
+         * matching Mesa's qualified gfx10 compute policy. */
+        if ((waves_per_threadgroup & 3u) == 0u)
+            limits0[0] = 1u << 22u;
+    }
     shader.record = state->record;
     shader.sh_registers = state->sh_registers;
     shader.num_sh_registers = state->num_sh_registers;

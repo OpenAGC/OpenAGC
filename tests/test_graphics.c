@@ -3580,6 +3580,8 @@ static void test_gfx1013_compute_packets(void)
         "gfx1013 compute limits select compute shader");
     TEST_ASSERT_EQ(buffer[4], AGC_REG_COMPUTE_RESOURCE_LIMITS,
         "gfx1013 compute limits offset");
+    TEST_ASSERT_EQ(buffer[5], 0u,
+        "gfx1013 two-wave workgroup keeps default compute limits");
     TEST_ASSERT_EQ(buffer[12] & 1u, 1u,
         "gfx1013 thread packet selects compute shader");
     TEST_ASSERT_EQ(buffer[13], AGC_REG_COMPUTE_START_X,
@@ -3606,6 +3608,18 @@ static void test_gfx1013_compute_packets(void)
     TEST_ASSERT_EQ(buffer[40], 32400u, "gfx1013 dispatch group X");
     TEST_ASSERT_EQ(buffer[43], 0x8041u,
         "gfx1013 Wave32 dispatch initiator");
+
+    state.local_size_x = 1024u;
+    state.group_count_x = 1u;
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013DispatchCompute(&cb, &state), AGC_OK,
+        "gfx1013 1024-thread compute dispatch emits");
+    TEST_ASSERT_EQ(buffer[5], 1u << 22u,
+        "gfx1013 32-wave workgroup enables SIMD distribution");
+    TEST_ASSERT_EQ(buffer[17], 1024u,
+        "gfx1013 1024-thread local size X");
+    state.local_size_x = 64u;
+    state.group_count_x = 32400u;
 
     agcCbReset(&cb, buffer, sizeof(buffer));
     TEST_ASSERT_EQ(agcGfx1013DispatchComputeIndirect(&cb, &state,
