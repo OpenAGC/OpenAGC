@@ -5563,6 +5563,10 @@ static int agcPipelineBlendFactorUsesSource1(AgcBlendFactor factor)
 static int agcPipelineRasterizationStateValid(
     const AgcRasterizationState *state)
 {
+    const uint32_t depth_clip_flags =
+        AGC_RASTERIZATION_DEPTH_CLIP_ENABLE_BIT |
+        AGC_RASTERIZATION_DEPTH_CLIP_DISABLE_BIT;
+
     return state &&
         agcHeaderValid(state->struct_size, sizeof(*state), state->version) &&
         state->polygon_mode < AGC_POLYGON_MODE_COUNT &&
@@ -5572,7 +5576,19 @@ static int agcPipelineRasterizationStateValid(
         state->depth_clamp_enable <= 1u &&
         state->rasterizer_discard_enable <= 1u &&
         state->depth_bias_enable <= 1u && state->line_width > 0.0f &&
-        state->flags == 0u && agcReservedZero(state->reserved, 3u);
+        (state->flags & ~depth_clip_flags) == 0u &&
+        (state->flags & depth_clip_flags) != depth_clip_flags &&
+        agcReservedZero(state->reserved, 3u);
+}
+
+static int agcPipelineDepthClipDisabled(
+    const AgcRasterizationState *state)
+{
+    if (state->flags & AGC_RASTERIZATION_DEPTH_CLIP_ENABLE_BIT)
+        return 0;
+    if (state->flags & AGC_RASTERIZATION_DEPTH_CLIP_DISABLE_BIT)
+        return 1;
+    return state->depth_clamp_enable != 0u;
 }
 
 static int agcPipelineDepthBiasValid(const AgcDepthBias *state)
@@ -5957,11 +5973,15 @@ static int32_t agcBuildGraphicsPipelineBind(
         if (result != AGC_OK)
             return result;
     }
-    if (pipeline->rasterization.depth_clamp_enable ||
+    if ((pipeline->rasterization.flags &
+            (AGC_RASTERIZATION_DEPTH_CLIP_ENABLE_BIT |
+             AGC_RASTERIZATION_DEPTH_CLIP_DISABLE_BIT)) != 0u ||
+        agcPipelineDepthClipDisabled(&pipeline->rasterization) ||
         pipeline->rasterization.rasterizer_discard_enable) {
         clip_register.offset = AGC_REG_PA_CL_CLIP_CNTL;
-        clip_register.value = pipeline->rasterization.depth_clamp_enable ?
-            AGC_GFX1013_DEPTH_CLAMP_CLIP_CONTROL :
+        clip_register.value = agcPipelineDepthClipDisabled(
+                &pipeline->rasterization) ?
+            AGC_GFX1013_DEPTH_CLIP_DISABLE_CONTROL :
             AGC_GFX1013_VULKAN_CLIP_CONTROL;
         if (pipeline->rasterization.rasterizer_discard_enable)
             clip_register.value |=

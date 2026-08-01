@@ -130,6 +130,15 @@ PC. Clean generic qualification passes 19/19 suites, and two consecutive FW
 5.500.008 SDL/EGL/Zink runs returned exact RGBA `64,128,191,255` with no GPU
 fault, retained child, stale process, or relaunch failure.
 
+Runtime API 45 makes Z clipping explicit without exposing `PA_CL_CLIP_CNTL`.
+`AgcRasterizationState` accepts mutually exclusive force-enable and
+force-disable flags; leaving both clear preserves the prior rule that depth
+clamp disables both Z clip planes. This tri-state contract lets Vulkan keep
+`depthClipEnable` independent from `depthClampEnable`. Generic validation
+rejects conflicting flags, and exact command inspection proves both-plane
+disable plus explicit-enable override. Hardware qualification remains owned by
+the consuming Vulkan/Zink FW 5.50 depth-sensitive gate.
+
 1. **Milestone 5 is complete.** Runtime API v23 has the optional
    allocation-free debug-callback layer. API v24 adds the
    endian-defined framing and core command/submission records. API v25 adds

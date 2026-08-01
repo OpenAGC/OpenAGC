@@ -186,7 +186,8 @@ adjacency-strip forms. Indexed draws program the Vulkan-compatible fixed
 restart value from the bound 16- or 32-bit index type; list and patch restart
 requests fail before pipeline allocation.
 
-Fill, line, and point polygon modes, depth clamp, rasterizer discard, and
+Fill, line, and point polygon modes, depth clamp, explicit depth-clip enable
+or disable, rasterizer discard, and
 qualified 1–64 pixel static or dynamic line widths are encoded by the native
 pipeline. Depth bias is either a validated `static_depth_bias` descriptor or
 the dynamic state bit, never both. The v4 graphics descriptor carries all 16

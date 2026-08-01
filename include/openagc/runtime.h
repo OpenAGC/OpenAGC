@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-#define AGC_RUNTIME_API_VERSION 44u
+#define AGC_RUNTIME_API_VERSION 45u
 #define AGC_RUNTIME_MAX_VIEWPORTS 16u
 #define AGC_RUNTIME_STRUCTURE_VERSION_1 1u
 #define AGC_RUNTIME_STRUCTURE_VERSION_2 2u
@@ -785,6 +785,12 @@ typedef enum AgcFrontFace {
     AGC_FRONT_FACE_CLOCKWISE = 1
 } AgcFrontFace;
 
+typedef enum AgcRasterizationStateFlagBits {
+    AGC_RASTERIZATION_DEPTH_CLIP_ENABLE_BIT = 1u << 0,
+    AGC_RASTERIZATION_DEPTH_CLIP_DISABLE_BIT = 1u << 1
+} AgcRasterizationStateFlagBits;
+typedef uint32_t AgcRasterizationStateFlags;
+
 typedef struct AgcRasterizationState {
     uint32_t struct_size;
     uint32_t version;
@@ -795,7 +801,7 @@ typedef struct AgcRasterizationState {
     uint32_t rasterizer_discard_enable;
     uint32_t depth_bias_enable;
     float line_width;
-    uint32_t flags;
+    AgcRasterizationStateFlags flags;
     uint64_t reserved[3];
 } AgcRasterizationState;
 

@@ -6547,6 +6547,112 @@ static void test_runtime_dynamic_graphics_state(void)
         "dynamic-state device destroys");
 }
 
+static void test_runtime_depth_clip_control(void)
+{
+    AgcDevice device = create_device();
+    AgcQueue queue = create_queue(device, kAgcQueueGraphics);
+    AgcShader vs = create_shader(device, kAgcShaderStageVs);
+    AgcShader ps = create_shader(device, kAgcShaderStagePs);
+    AgcGraphicsPipelineDesc pipeline_desc = AGC_GRAPHICS_PIPELINE_DESC_INIT;
+    AgcRasterizationState rasterization = AGC_RASTERIZATION_STATE_INIT;
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
+    AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    AgcGraphicsPipeline pipeline = NULL;
+    AgcCommandBuffer command = NULL;
+    AgcFence fence = NULL;
+    const AgcCommandBufferSubmit *captured;
+    const uint32_t *words;
+    uint32_t value = 0u;
+
+    pipeline_desc.vertex_shader = vs;
+    pipeline_desc.pixel_shader = ps;
+    pipeline_desc.rasterization = &rasterization;
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
+        AGC_OK, "depth-clip command buffer creates");
+    TEST_ASSERT_EQ(agcCreateFence(device, &fence_desc, &fence), AGC_OK,
+        "depth-clip fence creates");
+    submit.command_buffer_count = 1u;
+    submit.command_buffers = &command;
+
+    rasterization.flags = AGC_RASTERIZATION_DEPTH_CLIP_DISABLE_BIT;
+    TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc,
+        &pipeline), AGC_OK, "explicit depth-clip disable creates");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+        "depth-clip-disable command begins");
+    TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(command, pipeline), AGC_OK,
+        "depth-clip-disable pipeline binds");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+        "depth-clip-disable command ends");
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
+        "depth-clip-disable command submits");
+    captured = agcDriverDebugLastDcbSubmit();
+    words = (const uint32_t *)(uintptr_t)captured->command_address;
+    TEST_ASSERT(runtime_find_context_register(words, captured->dword_count,
+        AGC_REG_PA_CL_CLIP_CNTL, &value),
+        "depth-clip-disable control is emitted");
+    TEST_ASSERT_EQ(value, AGC_GFX1013_DEPTH_CLIP_DISABLE_CONTROL,
+        "explicit disable turns off both hardware Z clip planes");
+    TEST_ASSERT_EQ(agcWaitFence(fence, 2000000000ull), AGC_OK,
+        "depth-clip-disable fence completes");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "depth-clip-disable fence resets");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+        "depth-clip-disable command recycles");
+    TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(pipeline), AGC_OK,
+        "depth-clip-disable pipeline destroys");
+    pipeline = NULL;
+
+    rasterization.depth_clamp_enable = 1u;
+    rasterization.flags = AGC_RASTERIZATION_DEPTH_CLIP_ENABLE_BIT;
+    TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc,
+        &pipeline), AGC_OK,
+        "explicit depth-clip enable is independent of depth clamp");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+        "depth-clip-enable command begins");
+    TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(command, pipeline), AGC_OK,
+        "depth-clip-enable pipeline binds");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+        "depth-clip-enable command ends");
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
+        "depth-clip-enable command submits");
+    captured = agcDriverDebugLastDcbSubmit();
+    words = (const uint32_t *)(uintptr_t)captured->command_address;
+    TEST_ASSERT(runtime_find_context_register(words, captured->dword_count,
+        AGC_REG_PA_CL_CLIP_CNTL, &value),
+        "depth-clip-enable baseline control is emitted");
+    TEST_ASSERT_EQ(value, AGC_GFX1013_VULKAN_CLIP_CONTROL,
+        "explicit enable overrides legacy depth-clamp clip disable");
+    TEST_ASSERT_EQ(agcWaitFence(fence, 2000000000ull), AGC_OK,
+        "depth-clip-enable fence completes");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+        "depth-clip-enable command recycles");
+    TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(pipeline), AGC_OK,
+        "depth-clip-enable pipeline destroys");
+    pipeline = NULL;
+
+    rasterization.flags = AGC_RASTERIZATION_DEPTH_CLIP_ENABLE_BIT |
+        AGC_RASTERIZATION_DEPTH_CLIP_DISABLE_BIT;
+    TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc,
+        &pipeline), AGC_ERROR_INVALID_ARGUMENT,
+        "conflicting explicit depth-clip flags fail closed");
+    TEST_ASSERT(pipeline == NULL,
+        "conflicting depth-clip flags leave pipeline output null");
+
+    TEST_ASSERT_EQ(agcDestroyFence(fence), AGC_OK,
+        "depth-clip fence destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+        "depth-clip command buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(ps), AGC_OK,
+        "depth-clip pixel shader destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(vs), AGC_OK,
+        "depth-clip vertex shader destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
+        "depth-clip queue destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "depth-clip device destroys");
+}
+
 static void test_runtime_depth_stencil_pipeline_state(void)
 {
     AgcDevice device = create_device();
@@ -9890,6 +9996,7 @@ TEST_RUN(test_runtime_image_region_and_buffer_copies);
     TEST_RUN(test_runtime_depth_stencil_target_binding);
     TEST_RUN(test_runtime_command_space_atomic_failure);
     TEST_RUN(test_runtime_dynamic_graphics_state);
+    TEST_RUN(test_runtime_depth_clip_control);
     TEST_RUN(test_runtime_depth_stencil_pipeline_state);
     TEST_RUN(test_runtime_multisample_pipeline_state);
     TEST_RUN(test_runtime_ps5_image_layouts);

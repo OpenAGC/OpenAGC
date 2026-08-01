@@ -79,7 +79,7 @@ succeeded. `agcErrorString` returns immutable library-owned text.
 | `AgcViewport`, `AgcScissor`, `AgcDepthBias` | Dynamic command state. |
 | `AgcImageSubresourceRange`, `AgcImageLayout`, `AgcImageSubresourceLayout` | Image selection and overflow-safe computed layout results. |
 | `AgcOffset3D`, `AgcExtent3D`, `AgcImageSubresourceLayers`, `AgcImageCopyRegion`, `AgcBufferImageCopyRegion` | Versioned layout-derived image-region and buffer/image transfer geometry. |
-| `AgcRasterizationState`, `AgcMultisampleState`, `AgcDepthStencilPipelineState`, `AgcStencilFaceState`, `AgcColorBlendAttachmentState` | Normalized immutable graphics-pipeline state. |
+| `AgcRasterizationState`, `AgcRasterizationStateFlagBits`, `AgcRasterizationStateFlags`, `AgcMultisampleState`, `AgcDepthStencilPipelineState`, `AgcStencilFaceState`, `AgcColorBlendAttachmentState` | Normalized immutable graphics-pipeline state. The depth-clip enable/disable flags provide an explicit override; leaving both clear preserves the legacy rule that depth clamp disables Z clipping. |
 | `AgcFenceInfo`, `AgcGpuLabelInfo` | Submission/profile/marker and last bounded-wait diagnostic snapshots. |
 | `AgcAllocationInfo`, `AgcMemoryStats` | Object placement and device allocation/leak/high-water snapshots. |
 | `AgcDebugCallbackDesc`, `AgcDebugMessage` | Severity/category filter and fixed-size pointer-free diagnostic payload. |
