@@ -7467,7 +7467,8 @@ int32_t PS5_SYSV_ABI agcCmdBindColorTargets(
     int32_t result;
 
     if (!command_buffer || command_buffer->magic != AGC_MAGIC_COMMAND_BUFFER ||
-        !agcDeviceValid(command_buffer->device) || !targets) {
+        !agcDeviceValid(command_buffer->device) ||
+        (target_count != 0u && !targets)) {
         return AGC_ERROR_INVALID_ARGUMENT;
     }
     if (command_buffer->state != AGC_COMMAND_BUFFER_STATE_RECORDING ||
@@ -7475,13 +7476,17 @@ int32_t PS5_SYSV_ABI agcCmdBindColorTargets(
         !command_buffer->graphics_pipeline) {
         return AGC_ERROR_INVALID_STATE;
     }
-    if (target_count == 0u || target_count > AGC_GFX1013_MAX_COLOR_TARGETS ||
+    if (target_count > AGC_GFX1013_MAX_COLOR_TARGETS ||
         target_count != command_buffer->graphics_pipeline->
             color_attachment_count) {
         return AGC_ERROR_VALIDATION_FAILED;
     }
-    if (command_buffer->color_target_count != 0u)
-        return AGC_ERROR_NOT_SUPPORTED;
+    if (target_count == 0u) {
+        command_buffer->color_target_count = 0u;
+        command_buffer->color_target_width = 0u;
+        command_buffer->color_target_height = 0u;
+        return AGC_OK;
+    }
     if (command_buffer->recorded_image_count >
         AGC_RUNTIME_MAX_RECORDED_RESOURCES - target_count) {
         return AGC_ERROR_OUT_OF_MEMORY;
@@ -7667,8 +7672,6 @@ int32_t PS5_SYSV_ABI agcCmdBindDepthStencilTarget(
         !command_buffer->graphics_pipeline) {
         return AGC_ERROR_INVALID_STATE;
     }
-    if (command_buffer->depth_stencil_target)
-        return AGC_ERROR_NOT_SUPPORTED;
     if (command_buffer->recorded_image_count ==
         AGC_RUNTIME_MAX_RECORDED_RESOURCES) {
         return AGC_ERROR_OUT_OF_MEMORY;

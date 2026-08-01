@@ -109,6 +109,10 @@ expert use, but make the native API the recommended application surface.
    behavior must remain valid for unrelated Vulkan applications and targeted
    CTS/deqp coverage. Runtime resource tables snapshot after consumption so a
    later bind cannot retroactively alter an earlier draw or dispatch.
+   Attachment bindings follow the same rule: color and depth/stencil targets
+   can be rebound within one command buffer, prior images remain retained, and
+   zero-color pipelines can explicitly clear the logical color binding before
+   depth-only work.
 6. **Documentation and validation are part of every milestone.** Do not defer
    public API reference material, negative tests, or capability labels to the
    final release phase.

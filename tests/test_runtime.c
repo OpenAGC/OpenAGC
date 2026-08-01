@@ -5948,9 +5948,9 @@ static void test_runtime_color_target_binding(void)
         "matching color target emits its native binding state");
     TEST_ASSERT_EQ(agcDestroyImage(image), AGC_ERROR_BUSY,
         "recorded color target remains retained by the command buffer");
-    TEST_ASSERT_EQ(agcCmdBindColorTargets(command, 1u, &target),
-        AGC_ERROR_NOT_SUPPORTED,
-        "color targets cannot be replaced within one command buffer");
+    target.array_layer = 0u;
+    TEST_ASSERT_EQ(agcCmdBindColorTargets(command, 1u, &target), AGC_OK,
+        "color target can be rebound while prior image retention remains");
     TEST_ASSERT_EQ(agcCmdDrawIndexed(command, 3u, 1u, 0u, 0, 0u), AGC_OK,
         "draw records after its reflected target binds");
     TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
@@ -6229,9 +6229,8 @@ static void test_runtime_depth_stencil_target_binding(void)
         "matching depth target emits native surface state");
     TEST_ASSERT_EQ(agcDestroyImage(image), AGC_ERROR_BUSY,
         "recorded depth target remains retained by the command buffer");
-    TEST_ASSERT_EQ(agcCmdBindDepthStencilTarget(command, &target),
-        AGC_ERROR_NOT_SUPPORTED,
-        "depth target cannot be replaced within one command buffer");
+    TEST_ASSERT_EQ(agcCmdBindDepthStencilTarget(command, &target), AGC_OK,
+        "depth target can be rebound while prior image retention remains");
     TEST_ASSERT_EQ(agcCmdDrawIndexed(command, 3u, 1u, 0u, 0, 0u), AGC_OK,
         "depth-enabled draw records after its target binds");
     TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,

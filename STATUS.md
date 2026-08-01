@@ -56,6 +56,15 @@ constants plus 70 inline-push dispatches in one command buffer. This internal
 contract is host-qualified; its first Vulkan consumer still requires Prospero
 build and endpoint execution evidence.
 
+Color and depth/stencil attachment bindings may now be replaced within one
+recording command buffer. Every emitted binding retains its image through
+command recycling, so later pipeline/attachment changes cannot invalidate
+earlier draws. A zero-color pipeline accepts `agcCmdBindColorTargets(command,
+0, NULL)` as an explicit logical unbind. Generic verification keeps the exact
+17,920-assertion baseline and exercises color-layer and depth-target rebinding;
+the Prospero library builds clean. Hardware execution of the Vulkan
+graphics-meta consumer remains pending.
+
 Push-constant backing is stage-local inside the reflected command resource
 arena. Vertex, hull, domain, geometry, pixel, and compute stages may retain
 different values at the same byte offset; pointer and inline user-SGPR
