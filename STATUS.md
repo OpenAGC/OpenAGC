@@ -113,6 +113,16 @@ correction. The final Vulkan ELF was pinned at SHA-256
 FW 11.60 replay remains part of the final endpoint gate. Table-driven generic
 coverage now checks the selectors for every affected regular and BC view.
 
+The linear sampled-image descriptor path now also encodes the queried gfx10.3
+row pitch rather than deriving pitch from the logical width, and RGB565 views
+select alpha one because those formats store no alpha component. A pinned
+Vulkan FW 5.500.008 probe sampled all 38 exposed scalar/vector/packed formats
+and returned 152 exact components twice with bounded waits and clean teardown.
+An attempted Mesa-inferred `EVENT_WRITE(CS_PARTIAL_FLUSH, index 4)` workaround
+caused a user-observed kernel panic and has been removed completely; it was
+never a qualified OpenAGC transition contract. Generic descriptor coverage
+locks the pitch and selector fields, and the Prospero consumer builds clean.
+
 Runtime API 49 adds the six scalar/vector 8-bit formats required by the next
 application-neutral Vulkan matrix slice: R8 and RG8 SNORM, UINT, and SINT.
 Their layouts, SQ sampled descriptors, absent-channel selectors, color-target

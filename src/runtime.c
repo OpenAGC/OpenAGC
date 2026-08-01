@@ -4321,6 +4321,8 @@ static int32_t agcRuntimeEncodeImageView(
         break;
     case AGC_FORMAT_R11G11B10_FLOAT:
     case AGC_FORMAT_RGB9E5_FLOAT:
+    case AGC_FORMAT_R5G6B5_UNORM:
+    case AGC_FORMAT_B5G6R5_UNORM:
     case AGC_FORMAT_BC6_UFLOAT:
     case AGC_FORMAT_BC6_SFLOAT:
         base[3] = 1u;
@@ -4383,6 +4385,11 @@ static int32_t agcRuntimeEncodeImageView(
         if (result != AGC_OK || layout.offset > UINT64_MAX - state.address)
             return result != AGC_OK ? result : AGC_ERROR_INVALID_ARGUMENT;
         state.address += layout.offset;
+        if (image->layout.block_width == 1u &&
+            image->layout.bytes_per_block != 0u &&
+            layout.row_pitch % image->layout.bytes_per_block == 0u)
+            state.linear_pitch =
+                layout.row_pitch / image->layout.bytes_per_block;
         if (desc->mip_level_count == 1u) {
             state.width = layout.width;
             state.height = layout.height;

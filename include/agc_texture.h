@@ -577,6 +577,8 @@ typedef struct AgcGfx1013Image2DState {
     uint32_t base_array_layer;
     uint32_t last_array_layer;
     uint32_t mip_level_count;
+    /* Gfx10.3 linear 1D/2D pitch in texels; zero selects width-derived pitch. */
+    uint32_t linear_pitch;
 } AgcGfx1013Image2DState;
 
 typedef struct AgcGfx1013BcFormatInfo {

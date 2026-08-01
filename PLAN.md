@@ -131,6 +131,12 @@ expert use, but make the native API the recommended application surface.
    matrix with R8/RG8 SNORM, UINT, and SINT layouts, sampled descriptors,
    color targets, and export validation. Preserve its selector, number-class,
    and CB-format regressions while Vulkan qualifies exact FW 5.50 pixels.
+   Linear sampled descriptors must preserve the queried subresource row pitch,
+   and RGB565 views must select alpha one. The 38-format Vulkan sampling gate
+   passes twice on FW 5.500.008. Do not reintroduce the unqualified
+   `EVENT_WRITE(CS_PARTIAL_FLUSH, index 4)` experiment that caused the console
+   panic; any future compute-completion change requires its own isolated native
+   API design and hardware qualification.
    API 50 extends that exact matrix with RGBA8 SNORM/UINT/SINT, RGB10A2 UINT,
    and selector-swapped BGR10A2 UNORM. Preserve the abstract-format versus SQ
    resource-format collision regression while Vulkan qualifies these forms.

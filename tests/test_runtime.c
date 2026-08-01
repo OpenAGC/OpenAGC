@@ -9974,6 +9974,9 @@ static void test_runtime_regular_color_sampled_image_views(void)
         AgcImageViewDesc view_desc = AGC_IMAGE_VIEW_DESC_INIT;
         AgcAllocationInfo image_info = AGC_ALLOCATION_INFO_INIT;
         AgcAllocationInfo view_info = AGC_ALLOCATION_INFO_INIT;
+        AgcImageSubresourceLayout subresource =
+            AGC_IMAGE_SUBRESOURCE_LAYOUT_INIT;
+        AgcImageLayout image_layout = AGC_IMAGE_LAYOUT_INIT;
         AgcGfx1013Image2DState state = {0};
         AgcGfx1013ImageDescriptor expected;
         AgcImage image = NULL;
@@ -10005,6 +10008,15 @@ static void test_runtime_regular_color_sampled_image_views(void)
         state.dst_sel_y = 5u;
         state.dst_sel_z = cases[i].bgra ? 4u : 6u;
         state.dst_sel_w = 7u;
+        TEST_ASSERT_EQ(agcGetImageSubresourceLayout(device, &image_desc,
+            0u, 0u, 0u, &subresource), AGC_OK,
+            "regular sampled image layout is queryable");
+        TEST_ASSERT_EQ(agcGetImageLayout(device, &image_desc, &image_layout),
+            AGC_OK, "regular sampled aggregate layout is queryable");
+        if (image_layout.block_width == 1u &&
+            image_layout.bytes_per_block != 0u)
+            state.linear_pitch =
+                subresource.row_pitch / image_layout.bytes_per_block;
         if (cases[i].format == AGC_FORMAT_R5G5B5A1_UNORM) {
             state.dst_sel_x = 7u;
             state.dst_sel_y = 6u;
@@ -10055,6 +10067,8 @@ static void test_runtime_regular_color_sampled_image_views(void)
             break;
         case AGC_FORMAT_R11G11B10_FLOAT:
         case AGC_FORMAT_RGB9E5_FLOAT:
+        case AGC_FORMAT_R5G6B5_UNORM:
+        case AGC_FORMAT_B5G6R5_UNORM:
         case AGC_FORMAT_BC6_UFLOAT:
         case AGC_FORMAT_BC6_SFLOAT:
             state.dst_sel_w = 1u;
@@ -10273,6 +10287,7 @@ static void test_runtime_extended_image_view_and_sampler(void)
     image_state.dst_sel_w = 7u;
     image_state.sample_count = 1u;
     image_state.mip_level_count = 1u;
+    image_state.linear_pitch = (uint32_t)(mip_zero.row_pitch / 4u);
     TEST_ASSERT_EQ(agcGfx1013Image2DDescriptorEncode(&expected_view,
         &image_state), AGC_OK, "expected swizzled view descriptor encodes");
     expected_view.words[3] &= ~0x000f0000u;
@@ -10315,6 +10330,7 @@ static void test_runtime_extended_image_view_and_sampler(void)
     image_state.width = mip_two.width;
     image_state.height = mip_two.height;
     image_state.mip_level_count = 1u;
+    image_state.linear_pitch = (uint32_t)(mip_two.row_pitch / 4u);
     TEST_ASSERT_EQ(agcGfx1013Image2DDescriptorEncode(&expected_view,
         &image_state), AGC_OK,
         "expected rebased single-mip descriptor encodes");
@@ -10387,6 +10403,8 @@ static void test_runtime_mutable_srgb_image_views(void)
     AgcAllocationInfo view_info = AGC_ALLOCATION_INFO_INIT;
     AgcGfx1013Image2DState state = {0};
     AgcGfx1013ImageDescriptor expected;
+    AgcImageSubresourceLayout subresource =
+        AGC_IMAGE_SUBRESOURCE_LAYOUT_INIT;
     AgcImage image = NULL;
     AgcImageView view = NULL;
 
@@ -10400,6 +10418,9 @@ static void test_runtime_mutable_srgb_image_views(void)
         "mutable BGRA8-SRGB image creates");
     TEST_ASSERT_EQ(agcGetObjectAllocationInfo(device, AGC_OBJECT_TYPE_IMAGE,
         image, &image_info), AGC_OK, "mutable image allocation is queryable");
+    TEST_ASSERT_EQ(agcGetImageSubresourceLayout(device, &image_desc,
+        0u, 0u, 0u, &subresource), AGC_OK,
+        "mutable image layout is queryable");
 
     view_desc.image = image;
     view_desc.format = AGC_FORMAT_BGRA8_UNORM;
@@ -10419,6 +10440,7 @@ static void test_runtime_mutable_srgb_image_views(void)
     state.dst_sel_w = 7u;
     state.sample_count = 1u;
     state.mip_level_count = 1u;
+    state.linear_pitch = (uint32_t)(subresource.row_pitch / 4u);
     TEST_ASSERT_EQ(agcGfx1013Image2DDescriptorEncode(&expected, &state),
         AGC_OK, "expected mutable UNORM descriptor encodes");
     TEST_ASSERT(memcmp(view_info.cpu_address, &expected, sizeof(expected)) == 0,

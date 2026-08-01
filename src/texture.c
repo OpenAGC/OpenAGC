@@ -638,7 +638,9 @@ int32_t PS5_SYSV_ABI agcGfx1013Image2DDescriptorEncode(
         state->dst_sel_y > 7u || state->dst_sel_z > 7u ||
         state->dst_sel_w > 7u || state->base_array_layer > 0x1fffu ||
         state->last_array_layer > 0x1fffu ||
-        state->last_array_layer < state->base_array_layer)
+        state->last_array_layer < state->base_array_layer ||
+        state->linear_pitch > 16384u ||
+        (state->linear_pitch != 0u && state->linear_pitch < state->width))
         return AGC_ERROR_VALIDATION_FAILED;
 
     sample_count = state->sample_count == 0u ? 1u : state->sample_count;
@@ -699,6 +701,13 @@ int32_t PS5_SYSV_ABI agcGfx1013Image2DDescriptorEncode(
         (state->image_type << 28u);
     encoded.words[4] = state->last_array_layer |
         (state->base_array_layer << 16u);
+    if (sample_count == 1u && state->swizzle_mode == 0u &&
+        state->image_type == AGC_GFX1013_IMAGE_TYPE_2D &&
+        state->linear_pitch != 0u) {
+        const uint32_t pitch_minus_one = state->linear_pitch - 1u;
+        encoded.words[4] = (pitch_minus_one & 0x1fffu) |
+            (((pitch_minus_one >> 13u) & 1u) << 13u);
+    }
     encoded.words[5] = (sample_count > 1u ? sample_log2 :
         mip_level_count - 1u) << 4u;
     *descriptor = encoded;
