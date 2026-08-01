@@ -5907,6 +5907,8 @@ static void test_runtime_color_target_binding(void)
     pipeline_desc.pixel_shader = pixel;
     pipeline_desc.color_attachment_count = 1u;
     pipeline_desc.color_attachments = &attachment;
+    pipeline_desc.logic_operation_enable = 1u;
+    pipeline_desc.logic_operation = AGC_LOGIC_OPERATION_XOR;
     TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc, &pipeline),
         AGC_OK, "color-target graphics pipeline creates");
 
@@ -6014,6 +6016,9 @@ static void test_runtime_color_target_binding(void)
     TEST_ASSERT(runtime_find_context_register(words, captured->dword_count,
         AGC_REG_CB_COLOR0_INFO, &value),
         "color-target binding records CB_COLOR0_INFO");
+    TEST_ASSERT(runtime_find_context_register(words, captured->dword_count,
+        AGC_REG_CB_COLOR_CONTROL, &value) && value == 0x00660010u,
+        "color-target binding preserves the pipeline XOR operation");
     TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
         "reset releases the retained color target");
     TEST_ASSERT_EQ(agcDestroyImage(image), AGC_OK,
@@ -7241,9 +7246,12 @@ static void test_runtime_graphics_pipeline_compatibility_matrix(void)
         AgcShader ps;
         AgcGraphicsPipeline pipeline = NULL;
 
-        requirements.color_export_count = 1u;
+        requirements.color_export_count = 2u;
         requirements.color_exports[0] = (AgcShaderColorExport){
-            0u, AGC_SHADER_COLOR_EXPORT_FP16_ABGR,
+            0u, AGC_SHADER_COLOR_EXPORT_32_ABGR,
+            AGC_SHADER_COMPONENT_FLOAT_OR_NORMALIZED, 0xfu, 0u};
+        requirements.color_exports[1] = (AgcShaderColorExport){
+            1u, AGC_SHADER_COLOR_EXPORT_32_ABGR,
             AGC_SHADER_COMPONENT_FLOAT_OR_NORMALIZED, 0xfu, 0u};
         requirements.flags = AGC_SHADER_REFLECTION_DUAL_SOURCE_EXPORT_BIT;
         ps = create_shader_with_reflection(
@@ -7253,20 +7261,65 @@ static void test_runtime_graphics_pipeline_compatibility_matrix(void)
         desc.pixel_shader = ps;
         desc.color_attachment_count = 1u;
         desc.color_attachments = &attachment;
+        attachment.blend_enable = 1u;
+        attachment.source_color_factor = AGC_BLEND_FACTOR_SRC1_COLOR;
         TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &pipeline),
-            AGC_ERROR_NOT_SUPPORTED,
-            "dual-source reflection fails without a native secondary export contract");
-        TEST_ASSERT(pipeline == NULL,
-            "dual-source reflection leaves pipeline output null");
+            AGC_OK,
+            "dual-source reflection and SRC1 factor create a native pipeline");
+        {
+            AgcQueue queue = create_queue(device, kAgcQueueGraphics);
+            AgcCommandBufferDesc command_desc =
+                AGC_COMMAND_BUFFER_DESC_INIT;
+            AgcCommandBuffer command = NULL;
+            AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+            const AgcCommandBufferSubmit *captured;
+            const uint32_t *words;
+            uint32_t value;
+
+            command_desc.capacity_dwords = 4096u;
+            TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc,
+                &command), AGC_OK,
+                "dual-source command buffer creates");
+            TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+                "dual-source command buffer begins");
+            TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(command, pipeline),
+                AGC_OK, "dual-source pipeline binds");
+            TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+                "dual-source command buffer ends");
+            submit.command_buffer_count = 1u;
+            submit.command_buffers = &command;
+            TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, NULL), AGC_OK,
+                "dual-source pipeline state submits on the host carrier");
+            captured = agcDriverDebugLastDcbSubmit();
+            words = (const uint32_t *)(uintptr_t)captured->command_address;
+            TEST_ASSERT(runtime_find_context_register(words,
+                captured->dword_count, AGC_REG_SPI_SHADER_COL_FORMAT,
+                &value) && value == AGC_SHADER_COLOR_EXPORT_FP16_ABGR,
+                "dual-source binding restores the qualified final color format");
+            TEST_ASSERT(runtime_find_context_register(words,
+                captured->dword_count, AGC_REG_CB_COLOR_CONTROL,
+                &value) && value == 0x00cc0011u,
+                "dual-source binding preserves disabled dual-quad control");
+            TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+                "dual-source command buffer resets");
+            TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+                "dual-source command buffer destroys");
+            TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
+                "dual-source graphics queue destroys");
+        }
+        TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(pipeline), AGC_OK,
+            "dual-source graphics pipeline destroys");
+        pipeline = NULL;
         TEST_ASSERT_EQ(agcDestroyShader(ps), AGC_OK,
             "dual-source pixel shader destroys");
 
         requirements.flags = 0u;
+        requirements.color_export_count = 1u;
+        memset(&requirements.color_exports[1], 0,
+            sizeof(requirements.color_exports[1]));
         ps = create_shader_with_reflection(
             device, kAgcShaderStagePs, &requirements);
         desc.pixel_shader = ps;
-        attachment.blend_enable = 1u;
-        attachment.source_color_factor = AGC_BLEND_FACTOR_SRC1_COLOR;
         TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &pipeline),
             AGC_ERROR_NOT_SUPPORTED,
             "SRC1 blend factor fails without a dual-source shader contract");
@@ -7756,6 +7809,57 @@ static void test_runtime_pipeline_layout_and_stage_validation(void)
             "invalid user-SGPR register leaves compute pipeline null");
         TEST_ASSERT_EQ(agcDestroyShader(cs), AGC_OK,
             "invalid user-SGPR compute shader destroys");
+    }
+    {
+        AgcShaderReflection builtin_vs = AGC_SHADER_REFLECTION_INIT;
+        AgcShaderReflection builtin_ps = AGC_SHADER_REFLECTION_INIT;
+        AgcGraphicsPipelineDesc pipeline_desc =
+            AGC_GRAPHICS_PIPELINE_DESC_INIT;
+        AgcRasterizationState raster = AGC_RASTERIZATION_STATE_INIT;
+        AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+        AgcGraphicsPipeline pipeline = NULL;
+        AgcCommandBuffer command = NULL;
+        AgcShader vertex;
+        AgcShader pixel;
+
+        builtin_vs.stage_output_mask = UINT64_C(1) << 32;
+        builtin_vs.user_sgpr_count = 1u;
+        builtin_vs.user_sgprs[0] = (AgcShaderUserSgpr){
+            AGC_SHADER_USER_SGPR_VERTEX_BUFFER_TABLE, 0u,
+            AGC_REG_SPI_SHADER_USER_DATA_GS_0, 1u};
+        builtin_ps.stage_input_mask = UINT64_C(1) << 32;
+        vertex = create_shader_with_reflection(
+            device, kAgcShaderStageVs, &builtin_vs);
+        pixel = create_shader_with_reflection(
+            device, kAgcShaderStagePs, &builtin_ps);
+        raster.rasterizer_discard_enable = 1u;
+        pipeline_desc.vertex_shader = vertex;
+        pipeline_desc.pixel_shader = pixel;
+        pipeline_desc.rasterization = &raster;
+        TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc,
+            &pipeline), AGC_OK,
+            "reserved vertex-table SGPR accepts built-in-only vertex stage");
+        TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc,
+            &command), AGC_OK,
+            "built-in-only vertex-table command buffer creates");
+        TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+            "built-in-only vertex-table command begins");
+        TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(command, pipeline), AGC_OK,
+            "built-in-only vertex-table pipeline binds");
+        TEST_ASSERT_EQ(agcCmdDraw(command, 3u, 1u, 0u, 0u), AGC_OK,
+            "reserved vertex-table SGPR records without synthetic binding");
+        TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+            "built-in-only vertex-table command ends");
+        TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+            "built-in-only vertex-table command resets");
+        TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+            "built-in-only vertex-table command destroys");
+        TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(pipeline), AGC_OK,
+            "built-in-only vertex-table pipeline destroys");
+        TEST_ASSERT_EQ(agcDestroyShader(pixel), AGC_OK,
+            "built-in-only pixel shader destroys");
+        TEST_ASSERT_EQ(agcDestroyShader(vertex), AGC_OK,
+            "built-in-only vertex shader destroys");
     }
     TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
         "pipeline layout validation device destroys");

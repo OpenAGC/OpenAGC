@@ -5297,8 +5297,7 @@ static int32_t agcPipelineValidateShaderUserData(
             inline_mask |= UINT64_C(1) << sgpr->index;
             break;
         case AGC_SHADER_USER_SGPR_VERTEX_BUFFER_TABLE:
-            if (sgpr->index != 0u || sgpr->dword_count != 1u ||
-                reflection->vertex_input_count == 0u)
+            if (sgpr->index != 0u || sgpr->dword_count != 1u)
                 return AGC_ERROR_VALIDATION_FAILED;
             break;
         case AGC_SHADER_USER_SGPR_BASE_VERTEX:
@@ -5835,6 +5834,48 @@ static AgcGfx1013BlendOp agcPipelineBlendOperation(
     return table[operation];
 }
 
+static uint32_t agcPipelineColorControl(AgcGraphicsPipeline pipeline)
+{
+    static const uint8_t rop3[AGC_LOGIC_OPERATION_COUNT] = {
+        0x00u, 0x88u, 0x44u, 0xccu,
+        0x22u, 0xaau, 0x66u, 0xeeu,
+        0x11u, 0x99u, 0x55u, 0xddu,
+        0x33u, 0xbbu, 0x77u, 0xffu,
+    };
+    uint32_t value =
+        1u << AGC_REG_CB_COLOR_CONTROL_MODE_SHIFT;
+    uint32_t i;
+
+    value |= (uint32_t)(pipeline->logic_operation_enable ?
+        rop3[pipeline->logic_operation] :
+        rop3[AGC_LOGIC_OPERATION_COPY]) <<
+        AGC_REG_CB_COLOR_CONTROL_ROP3_SHIFT;
+    for (i = 0u; i < pipeline->color_attachment_count; ++i) {
+        const AgcColorBlendAttachmentState *target =
+            &pipeline->color_attachments[i];
+        if (target->blend_enable &&
+            ((target->source_color_factor >= AGC_BLEND_FACTOR_SRC1_COLOR &&
+              target->source_color_factor <=
+                AGC_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA) ||
+             (target->destination_color_factor >=
+                AGC_BLEND_FACTOR_SRC1_COLOR &&
+              target->destination_color_factor <=
+                AGC_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA) ||
+             (target->source_alpha_factor >= AGC_BLEND_FACTOR_SRC1_COLOR &&
+              target->source_alpha_factor <=
+                AGC_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA) ||
+             (target->destination_alpha_factor >=
+                AGC_BLEND_FACTOR_SRC1_COLOR &&
+              target->destination_alpha_factor <=
+                AGC_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA))) {
+            value |= 1u <<
+                AGC_REG_CB_COLOR_CONTROL_DISABLE_DUAL_QUAD_SHIFT;
+            break;
+        }
+    }
+    return value;
+}
+
 static uint32_t agcPipelineCopyStaticShRegisters(AgcShader shader,
     AgcRegisterValue *destination, uint32_t capacity)
 {
@@ -6030,14 +6071,27 @@ static int32_t agcBuildGraphicsPipelineBind(
         if (!sceAgcCbSetCxRegistersDirect(&cb, &clip_register, 1u))
             return AGC_ERROR_INTERNAL;
     }
-    for (i = 0u; i < pipeline->color_attachment_count; ++i) {
-        color_export_format |= (uint32_t)pipeline->pixel_shader->reflection.
-            color_exports[i].format << (i * 4u);
+    /* The hardware-proven gfx1013 dual-source stream enables paired 32_ABGR
+     * exports while binding the pixel program, then settles COL_FORMAT back
+     * to the ordinary FP16_ABGR target format after the primitive half has
+     * restored DB_SHADER_CONTROL. Leaving 0x99 paired exports active with DB
+     * dual export disabled can fault the GPU. */
+    if ((pipeline->pixel_shader->reflection.flags &
+            AGC_SHADER_REFLECTION_DUAL_SOURCE_EXPORT_BIT) != 0u) {
+        color_format_register.offset = AGC_REG_SPI_SHADER_COL_FORMAT;
+        color_format_register.value = AGC_SHADER_COLOR_EXPORT_FP16_ABGR;
+        if (!sceAgcCbSetCxRegistersDirect(&cb, &color_format_register, 1u))
+            return AGC_ERROR_INTERNAL;
+    } else {
+        for (i = 0u; i < pipeline->color_attachment_count; ++i) {
+            color_export_format |= (uint32_t)pipeline->pixel_shader->reflection.
+                color_exports[i].format << (i * 4u);
+        }
+        color_format_register.offset = AGC_REG_SPI_SHADER_COL_FORMAT;
+        color_format_register.value = color_export_format;
+        if (!sceAgcCbSetCxRegistersDirect(&cb, &color_format_register, 1u))
+            return AGC_ERROR_INTERNAL;
     }
-    color_format_register.offset = AGC_REG_SPI_SHADER_COL_FORMAT;
-    color_format_register.value = color_export_format;
-    if (!sceAgcCbSetCxRegistersDirect(&cb, &color_format_register, 1u))
-        return AGC_ERROR_INTERNAL;
     if (pipeline->color_attachment_count != 0u) {
         blend_state.target_count = pipeline->color_attachment_count;
         blend_state.logic_enable = pipeline->logic_operation_enable;
@@ -6613,17 +6667,25 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
                 "push-constant range is empty, misaligned, unused, or has an invalid stage mask");
         }
     }
-    if ((ps->reflection.flags &
-         AGC_SHADER_REFLECTION_DUAL_SOURCE_EXPORT_BIT) != 0u) {
-        return agcPipelineDebugReport(device, "agcCreateGraphicsPipeline",
-            AGC_ERROR_NOT_SUPPORTED, AGC_DEBUG_MESSAGE_CATEGORY_CAPABILITY_BIT,
-            "dual-source shader exports are not supported by the qualified graphics profile");
-    }
-    if (desc->color_attachment_count != ps->reflection.color_export_count)
+    const int dual_source = (ps->reflection.flags &
+        AGC_SHADER_REFLECTION_DUAL_SOURCE_EXPORT_BIT) != 0u;
+    if ((!dual_source && desc->color_attachment_count !=
+            ps->reflection.color_export_count) ||
+        (dual_source && (desc->color_attachment_count != 1u ||
+            ps->reflection.color_export_count != 2u)))
         return agcPipelineDebugReport(device, "agcCreateGraphicsPipeline",
             AGC_ERROR_VALIDATION_FAILED,
             AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT,
-            "color-attachment count does not match pixel-shader exports");
+            "color-attachment count does not match ordinary or dual-source pixel-shader exports");
+    if (dual_source &&
+        (!agcPipelineColorExportCompatible(&ps->reflection.color_exports[1],
+             &desc->color_attachments[0]) ||
+         ps->reflection.color_exports[1].component_class !=
+             AGC_SHADER_COMPONENT_FLOAT_OR_NORMALIZED))
+        return agcPipelineDebugReport(device, "agcCreateGraphicsPipeline",
+            AGC_ERROR_VALIDATION_FAILED,
+            AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT,
+            "dual-source export 1 is incompatible with color attachment 0");
     for (i = 0u; i < desc->color_attachment_count; ++i) {
         const AgcColorBlendAttachmentState *attachment =
             &desc->color_attachments[i];
@@ -6640,14 +6702,14 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
                 AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT,
                 "color attachment format, write mask, or component class is incompatible with the shader export; integer targets cannot enable blending");
         }
-        if (agcPipelineBlendFactorUsesSource1(
+        if (!dual_source && (agcPipelineBlendFactorUsesSource1(
                 attachment->source_color_factor) ||
             agcPipelineBlendFactorUsesSource1(
                 attachment->destination_color_factor) ||
             agcPipelineBlendFactorUsesSource1(
                 attachment->source_alpha_factor) ||
             agcPipelineBlendFactorUsesSource1(
-                attachment->destination_alpha_factor)) {
+                attachment->destination_alpha_factor))) {
             return agcPipelineDebugReport(device,
                 "agcCreateGraphicsPipeline", AGC_ERROR_NOT_SUPPORTED,
                 AGC_DEBUG_MESSAGE_CATEGORY_CAPABILITY_BIT,
@@ -7485,8 +7547,9 @@ int32_t PS5_SYSV_ABI agcCmdBindColorTargets(
     const AgcColorTargetBinding *targets)
 {
     AgcGfx1013ColorTargetState states[AGC_GFX1013_MAX_COLOR_TARGETS];
-    uint32_t words[AGC_GFX1013_MAX_COLOR_TARGETS * 28u];
+    uint32_t words[AGC_GFX1013_MAX_COLOR_TARGETS * 28u + 3u];
     SceAgcCb scratch;
+    AgcRegisterValue color_control;
     uint32_t width = 0u;
     uint32_t height = 0u;
     AgcResourceUsage usage;
@@ -7648,6 +7711,14 @@ int32_t PS5_SYSV_ABI agcCmdBindColorTargets(
                 "gfx1013 color-target packet encoding failed");
         }
     }
+    /* Color-target state establishes a safe COPY default. Restore the bound
+     * pipeline's logic-operation and dual-source control after the final
+     * target so attachment rebinding cannot silently change pipeline state. */
+    color_control.offset = AGC_REG_CB_COLOR_CONTROL;
+    color_control.value = agcPipelineColorControl(
+        command_buffer->graphics_pipeline);
+    if (!sceAgcCbSetCxRegistersDirect(&scratch, &color_control, 1u))
+        return AGC_ERROR_COMMAND_SPACE_EXHAUSTED;
     result = agcCommandCommitScratch(command_buffer, &scratch, words);
     if (result != AGC_OK)
         return result;
@@ -11147,6 +11218,15 @@ static int32_t agcCommandUserSgprValue(AgcCommandBuffer command_buffer,
             sgpr->index * sizeof(uint32_t), sizeof(*value));
         return AGC_OK;
     case AGC_SHADER_USER_SGPR_VERTEX_BUFFER_TABLE:
+        /* ACO's merged LS/HS and ES/GS ABI may reserve the vertex-table
+         * user SGPR even when the front stage consumes only built-ins.  No
+         * descriptor can be dereferenced without reflected vertex inputs,
+         * so program the reserved location with null instead of requiring a
+         * synthetic vertex binding or resource-arena allocation. */
+        if (shader->reflection.vertex_input_count == 0u) {
+            *value = 0u;
+            return AGC_OK;
+        }
         if (!gpu_base || command_buffer->vertex_binding_mask !=
                 layout->vertex_binding_mask)
             return AGC_ERROR_RESOURCE_NOT_BOUND;
