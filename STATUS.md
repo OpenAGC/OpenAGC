@@ -136,8 +136,14 @@ force-disable flags; leaving both clear preserves the prior rule that depth
 clamp disables both Z clip planes. This tri-state contract lets Vulkan keep
 `depthClipEnable` independent from `depthClampEnable`. Generic validation
 rejects conflicting flags, and exact command inspection proves both-plane
-disable plus explicit-enable override. Hardware qualification remains owned by
-the consuming Vulkan/Zink FW 5.50 depth-sensitive gate.
+disable plus explicit-enable override. The FW 5.500.008 depth-sensitive probe
+then passed twice with exact coverage and depth/stencil readback. The first
+rebuilt Zink run exposed that explicit `PA_CL_CLIP_CNTL` programming must also
+set gfx10.3 `DX_LINEAR_ATTR_CLIP_ENA`; without that bit Mesa's generated
+interpolated clear pipeline produced zero RGBA. The corrected named-field
+encoding returned exact RGBA `64,128,191,255` through SDL/EGL/Zink with normal
+teardown, establishing the hardware requirement without exposing the register
+through the public runtime API.
 
 1. **Milestone 5 is complete.** Runtime API v23 has the optional
    allocation-free debug-callback layer. API v24 adds the

@@ -2510,9 +2510,9 @@ static void test_gfx1013_blend_depth_stencil_packets(void)
 
     TEST_ASSERT_EQ(AGC_GFX1013_DEPTH_BIAS_RASTER_MODE, 0x00001800u,
         "gfx1013 depth-bias front/back enable mask");
-    TEST_ASSERT_EQ(AGC_GFX1013_VULKAN_CLIP_CONTROL, 0x00080000u,
+    TEST_ASSERT_EQ(AGC_GFX1013_VULKAN_CLIP_CONTROL, 0x01080000u,
         "gfx1013 Vulkan zero-to-one clip control");
-    TEST_ASSERT_EQ(AGC_GFX1013_DEPTH_CLAMP_CLIP_CONTROL, 0x0c080000u,
+    TEST_ASSERT_EQ(AGC_GFX1013_DEPTH_CLAMP_CLIP_CONTROL, 0x0d080000u,
         "gfx1013 Vulkan depth-clamp clip control");
     agcCbReset(&cb, buffer, sizeof(buffer));
     TEST_ASSERT_EQ(agcGfx1013SetDepthBiasState(&cb, &bias), AGC_OK,
