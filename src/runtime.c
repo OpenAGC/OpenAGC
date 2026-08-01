@@ -2256,6 +2256,11 @@ static int agcGetRuntimeFormatInfo(uint32_t format, AgcRuntimeFormatInfo *info)
     case AGC_FORMAT_RGBA8_SRGB:
     case AGC_FORMAT_BGRA8_SRGB:
     case AGC_FORMAT_RGB10A2_UNORM:
+    case AGC_FORMAT_RGBA8_SNORM:
+    case AGC_FORMAT_RGBA8_UINT:
+    case AGC_FORMAT_RGBA8_SINT:
+    case AGC_FORMAT_RGB10A2_UINT:
+    case AGC_FORMAT_BGR10A2_UNORM:
     case AGC_FORMAT_RG16_FLOAT:
     case AGC_FORMAT_RG16_UNORM:
     case AGC_FORMAT_RG16_SNORM:
@@ -4143,12 +4148,25 @@ static int32_t agcRuntimeEncodeImageView(
     case AGC_FORMAT_BGRA8_UNORM:
         resource_format = AGC_GFX1013_IMAGE_FORMAT_RGBA8_UNORM;
         break;
+    case AGC_FORMAT_RGBA8_SNORM:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_RGBA8_SNORM;
+        break;
+    case AGC_FORMAT_RGBA8_UINT:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_RGBA8_UINT;
+        break;
+    case AGC_FORMAT_RGBA8_SINT:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_RGBA8_SINT;
+        break;
     case AGC_FORMAT_RGBA8_SRGB:
     case AGC_FORMAT_BGRA8_SRGB:
         resource_format = AGC_GFX1013_IMAGE_FORMAT_RGBA8_SRGB;
         break;
     case AGC_FORMAT_RGB10A2_UNORM:
+    case AGC_FORMAT_BGR10A2_UNORM:
         resource_format = AGC_GFX1013_IMAGE_FORMAT_RGB10A2_UNORM;
+        break;
+    case AGC_FORMAT_RGB10A2_UINT:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_RGB10A2_UINT;
         break;
     case AGC_FORMAT_R16_FLOAT:
         resource_format = AGC_GFX1013_IMAGE_FORMAT_R16_FLOAT;
@@ -4284,10 +4302,9 @@ static int32_t agcRuntimeEncodeImageView(
      * matching sampled-image resource encoding, so use the corresponding
      * RGBA8 encoding and compose the byte-order swap with the requested view
      * swizzle. */
-    if (resource_format == AGC_FORMAT_BGRA8_UNORM ||
-        resource_format == AGC_FORMAT_BGRA8_SRGB ||
-        desc->format == AGC_FORMAT_BGRA8_UNORM ||
-        desc->format == AGC_FORMAT_BGRA8_SRGB) {
+    if (desc->format == AGC_FORMAT_BGRA8_UNORM ||
+        desc->format == AGC_FORMAT_BGRA8_SRGB ||
+        desc->format == AGC_FORMAT_BGR10A2_UNORM) {
         base[0] = 6u;
         base[2] = 4u;
     }
@@ -5624,10 +5641,12 @@ static int agcPipelineFormatInfo(
     case AGC_FORMAT_R8_SNORM:
     case AGC_FORMAT_RG8_SNORM:
     case AGC_FORMAT_RGBA8_UNORM:
+    case AGC_FORMAT_RGBA8_SNORM:
     case AGC_FORMAT_BGRA8_UNORM:
     case AGC_FORMAT_RGBA8_SRGB:
     case AGC_FORMAT_BGRA8_SRGB:
     case AGC_FORMAT_RGB10A2_UNORM:
+    case AGC_FORMAT_BGR10A2_UNORM:
     case AGC_FORMAT_R16_FLOAT:
     case AGC_FORMAT_RG16_FLOAT:
     case AGC_FORMAT_R16_UNORM:
@@ -5649,6 +5668,8 @@ static int agcPipelineFormatInfo(
         *component_bits = 32u;
         return 1;
     case AGC_FORMAT_RGBA16_UINT:
+    case AGC_FORMAT_RGBA8_UINT:
+    case AGC_FORMAT_RGB10A2_UINT:
     case AGC_FORMAT_R8_UINT:
     case AGC_FORMAT_RG8_UINT:
     case AGC_FORMAT_R16_UINT:
@@ -5657,6 +5678,7 @@ static int agcPipelineFormatInfo(
         *component_bits = 16u;
         return 1;
     case AGC_FORMAT_RGBA16_SINT:
+    case AGC_FORMAT_RGBA8_SINT:
     case AGC_FORMAT_R8_SINT:
     case AGC_FORMAT_RG8_SINT:
     case AGC_FORMAT_R16_SINT:
@@ -5729,6 +5751,15 @@ static int agcRuntimeColorTargetFormat(uint32_t format,
     case AGC_FORMAT_RGBA8_UNORM:
         *target_format = AGC_GFX1013_RT_FORMAT_RGBA8_UNORM;
         return 1;
+    case AGC_FORMAT_RGBA8_SNORM:
+        *target_format = AGC_GFX1013_RT_FORMAT_RGBA8_SNORM;
+        return 1;
+    case AGC_FORMAT_RGBA8_UINT:
+        *target_format = AGC_GFX1013_RT_FORMAT_RGBA8_UINT;
+        return 1;
+    case AGC_FORMAT_RGBA8_SINT:
+        *target_format = AGC_GFX1013_RT_FORMAT_RGBA8_SINT;
+        return 1;
     case AGC_FORMAT_BGRA8_UNORM:
         *target_format = AGC_GFX1013_RT_FORMAT_BGRA8_UNORM;
         return 1;
@@ -5740,6 +5771,12 @@ static int agcRuntimeColorTargetFormat(uint32_t format,
         return 1;
     case AGC_FORMAT_RGB10A2_UNORM:
         *target_format = AGC_GFX1013_RT_FORMAT_RGB10A2_UNORM;
+        return 1;
+    case AGC_FORMAT_RGB10A2_UINT:
+        *target_format = AGC_GFX1013_RT_FORMAT_RGB10A2_UINT;
+        return 1;
+    case AGC_FORMAT_BGR10A2_UNORM:
+        *target_format = AGC_GFX1013_RT_FORMAT_BGR10A2_UNORM;
         return 1;
     case AGC_FORMAT_R16_FLOAT:
         *target_format = AGC_GFX1013_RT_FORMAT_R16_FLOAT;

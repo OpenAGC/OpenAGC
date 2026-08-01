@@ -122,6 +122,15 @@ assertions and the Prospero library builds without warnings. Vulkan format
 advertisement, clear/readback pixels, and FW 5.50 execution remain consumer
 qualification work.
 
+Runtime API 50 adds exact RGBA8 SNORM, UINT, and SINT, RGB10A2 UINT, and
+BGR10A2 UNORM contracts. The sampled-image encodings use the qualified SQ
+number formats, BGR10A2 composes the physical R/B selectors, and the render
+targets use the matching CB number class, component swap, and SPI export.
+Tests also lock the abstract-BGRA/SQ-SNORM numeric collision so translated SQ
+format `57` cannot spuriously swap channels. Generic verification passes
+19,127 assertions and the Prospero library builds without warnings; Vulkan
+advertisement and FW 5.50 exact-pixel qualification remain consumer work.
+
 Push-constant backing is stage-local inside the reflected command resource
 arena. Vertex, hull, domain, geometry, pixel, and compute stages may retain
 different values at the same byte offset; pointer and inline user-SGPR

@@ -131,6 +131,9 @@ expert use, but make the native API the recommended application surface.
    matrix with R8/RG8 SNORM, UINT, and SINT layouts, sampled descriptors,
    color targets, and export validation. Preserve its selector, number-class,
    and CB-format regressions while Vulkan qualifies exact FW 5.50 pixels.
+   API 50 extends that exact matrix with RGBA8 SNORM/UINT/SINT, RGB10A2 UINT,
+   and selector-swapped BGR10A2 UNORM. Preserve the abstract-format versus SQ
+   resource-format collision regression while Vulkan qualifies these forms.
 6. **Documentation and validation are part of every milestone.** Do not defer
    public API reference material, negative tests, or capability labels to the
    final release phase.

@@ -1695,6 +1695,16 @@ static void test_gfx1013_fixed_function_packets(void)
          0x0007040cu},
         {AGC_GFX1013_RT_FORMAT_RG8_SINT, 0x03u, 5u, 0u, 2u, 8u,
          0x0007050cu},
+        {AGC_GFX1013_RT_FORMAT_RGBA8_SNORM, 0x0au, 1u, 0u, 4u, 4u,
+         0x00028128u},
+        {AGC_GFX1013_RT_FORMAT_RGBA8_UINT, 0x0au, 4u, 0u, 4u, 7u,
+         0x00070428u},
+        {AGC_GFX1013_RT_FORMAT_RGBA8_SINT, 0x0au, 5u, 0u, 4u, 8u,
+         0x00070528u},
+        {AGC_GFX1013_RT_FORMAT_RGB10A2_UINT, 0x08u, 4u, 0u, 4u, 7u,
+         0x00070420u},
+        {AGC_GFX1013_RT_FORMAT_BGR10A2_UNORM, 0x08u, 0u, 1u, 4u, 4u,
+         0x00028820u},
     };
     uint32_t buffer[64] = {0};
     uint32_t expected_format[28];
@@ -1832,6 +1842,16 @@ static void test_gfx1013_fixed_function_packets(void)
         36u, "gfx1013 RG8 UINT enum is appended");
     TEST_ASSERT_EQ((uint32_t)AGC_GFX1013_RT_FORMAT_RG8_SINT,
         37u, "gfx1013 RG8 SINT enum is appended");
+    TEST_ASSERT_EQ((uint32_t)AGC_GFX1013_RT_FORMAT_RGBA8_SNORM,
+        38u, "gfx1013 RGBA8 SNORM enum is appended");
+    TEST_ASSERT_EQ((uint32_t)AGC_GFX1013_RT_FORMAT_RGBA8_UINT,
+        39u, "gfx1013 RGBA8 UINT enum is appended");
+    TEST_ASSERT_EQ((uint32_t)AGC_GFX1013_RT_FORMAT_RGBA8_SINT,
+        40u, "gfx1013 RGBA8 SINT enum is appended");
+    TEST_ASSERT_EQ((uint32_t)AGC_GFX1013_RT_FORMAT_RGB10A2_UINT,
+        41u, "gfx1013 RGB10A2 UINT enum is appended");
+    TEST_ASSERT_EQ((uint32_t)AGC_GFX1013_RT_FORMAT_BGR10A2_UNORM,
+        42u, "gfx1013 BGR10A2 UNORM enum is appended");
 
     agcCbInit(&cb, buffer, sizeof(buffer));
     TEST_ASSERT_EQ(agcGfx1013SetColorTarget(&cb, &color), AGC_OK,
