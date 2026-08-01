@@ -7640,6 +7640,62 @@ static void test_runtime_pipeline_layout_and_stage_validation(void)
             "descriptor-reflected compute shader destroys");
 
         mapping.byte_stride = 16u;
+        push_range.size = sizeof(uint32_t);
+        cs_requirements.push_constant_size = sizeof(uint32_t);
+        cs_requirements.push_constant_ranges[0] = push_range;
+        cs_requirements.inline_push_constant_mask = 1u;
+        cs_requirements.user_sgprs[1] = (AgcShaderUserSgpr){
+            AGC_SHADER_USER_SGPR_INLINE_PUSH_CONSTANT, 0u,
+            AGC_REG_COMPUTE_USER_DATA_0 + 1u, 1u};
+        cs = create_shader_with_reflection(
+            device, kAgcShaderStageCs, &cs_requirements);
+        compute_desc.shader = cs;
+        compute_desc.push_constant_ranges = &push_range;
+        TEST_ASSERT_EQ(agcCreateComputePipeline(device, &compute_desc,
+            &compute), AGC_OK,
+            "inline-push compute pipeline creates");
+        command_desc.capacity_dwords = 65536u;
+        TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc,
+            &command), AGC_OK,
+            "inline-push stress command buffer creates");
+        TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &storage),
+            AGC_OK, "inline-push stress storage buffer creates");
+        transition.buffer = storage;
+        TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+            "inline-push stress command begins");
+        TEST_ASSERT_EQ(agcCmdBindComputePipeline(command, compute), AGC_OK,
+            "inline-push stress pipeline binds");
+        TEST_ASSERT_EQ(agcCmdTransitionResources(command, 1u, &transition),
+            AGC_OK, "inline-push stress storage transition records");
+        write.buffer = storage;
+        write.buffer_offset = 0u;
+        write.buffer_range = buffer_desc.size;
+        TEST_ASSERT_EQ(agcCmdBindDescriptors(command, 1u, &write), AGC_OK,
+            "inline-push stress descriptor binds once");
+        int32_t stress_result = AGC_OK;
+        for (uint32_t dispatch = 0u; dispatch < 70u; ++dispatch) {
+            if (agcCmdPushConstants(command, 1u << kAgcShaderStageCs,
+                    0u, sizeof(dispatch), &dispatch) != AGC_OK ||
+                agcCmdDispatch(command, 1u, 1u, 1u) != AGC_OK) {
+                stress_result = AGC_ERROR_INTERNAL;
+                break;
+            }
+        }
+        TEST_ASSERT_EQ(stress_result, AGC_OK,
+            "70 inline push updates avoid unnecessary table snapshots");
+        TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+            "inline-push stress command ends");
+        TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+            "inline-push stress command resets");
+        TEST_ASSERT_EQ(agcDestroyBuffer(storage), AGC_OK,
+            "inline-push stress storage destroys");
+        TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+            "inline-push stress command destroys");
+        TEST_ASSERT_EQ(agcDestroyComputePipeline(compute), AGC_OK,
+            "inline-push compute pipeline destroys");
+        TEST_ASSERT_EQ(agcDestroyShader(cs), AGC_OK,
+            "inline-push compute shader destroys");
+
         cs_requirements.user_sgprs[0].register_offset =
             AGC_REG_SPI_SHADER_USER_DATA_GS_0;
         cs = create_shader_with_reflection(

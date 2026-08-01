@@ -10883,6 +10883,36 @@ int32_t PS5_SYSV_ABI agcCmdBindVertexBuffers(AgcCommandBuffer command_buffer,
     return AGC_OK;
 }
 
+static int agcShaderUsesPushConstantPointer(AgcShader shader,
+    uint32_t stage_mask)
+{
+    uint32_t i;
+    if (!shader || (stage_mask & (1u << shader->stage)) == 0u)
+        return 0;
+    for (i = 0u; i < shader->reflection.user_sgpr_count; ++i) {
+        if (shader->reflection.user_sgprs[i].kind ==
+                AGC_SHADER_USER_SGPR_PUSH_CONSTANT_POINTER)
+            return 1;
+    }
+    return 0;
+}
+
+static int agcCommandPushConstantsRequireSnapshot(
+    AgcCommandBuffer command_buffer, uint32_t stage_mask)
+{
+    if (command_buffer->compute_pipeline)
+        return agcShaderUsesPushConstantPointer(
+            command_buffer->compute_pipeline->shader, stage_mask);
+    if (!command_buffer->graphics_pipeline)
+        return 0;
+    return agcShaderUsesPushConstantPointer(
+            command_buffer->graphics_pipeline->primitive_shader, stage_mask) ||
+        agcShaderUsesPushConstantPointer(
+            command_buffer->graphics_pipeline->pixel_shader, stage_mask) ||
+        agcShaderUsesPushConstantPointer(
+            command_buffer->graphics_pipeline->hull_shader, stage_mask);
+}
+
 int32_t PS5_SYSV_ABI agcCmdPushConstants(AgcCommandBuffer command_buffer,
     uint32_t stage_mask, uint32_t offset, uint32_t size, const void *data)
 {
@@ -10934,9 +10964,11 @@ int32_t PS5_SYSV_ABI agcCmdPushConstants(AgcCommandBuffer command_buffer,
         if (!covered)
             return AGC_ERROR_VALIDATION_FAILED;
     }
-    result = agcSnapshotCommandResources(command_buffer, layout);
-    if (result != AGC_OK)
-        return result;
+    if (agcCommandPushConstantsRequireSnapshot(command_buffer, stage_mask)) {
+        result = agcSnapshotCommandResources(command_buffer, layout);
+        if (result != AGC_OK)
+            return result;
+    }
     for (stage = 0u; stage < kAgcShaderStageCount; ++stage) {
         if ((stage_mask & (1u << stage)) == 0u)
             continue;
