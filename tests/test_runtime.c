@@ -6566,17 +6566,12 @@ static void test_runtime_depth_clip_control(void)
     const uint32_t *words;
     uint32_t value = 0u;
 
-    TEST_ASSERT_EQ(agcRuntimeDepthClipControl(0u, 0),
+    TEST_ASSERT_EQ(agcRuntimeDepthClipControl(0),
         AGC_GFX1013_VULKAN_CLIP_CONTROL,
-        "generic explicit clip enable retains linear attributes");
-    TEST_ASSERT_EQ(agcRuntimeDepthClipControl(0x0550u, 0),
-        AGC_GFX1013_VULKAN_CLIP_CONTROL,
-        "FW 5.50 explicit clip enable retains linear attributes");
-    TEST_ASSERT_EQ(agcRuntimeDepthClipControl(0x1160u, 0), 0x00080000u,
-        "FW 11.60 explicit clip enable clears linear attributes");
-    TEST_ASSERT_EQ(agcRuntimeDepthClipControl(0x1160u, 1),
+        "explicit clip enable retains linear attributes on gfx1013");
+    TEST_ASSERT_EQ(agcRuntimeDepthClipControl(1),
         AGC_GFX1013_DEPTH_CLIP_DISABLE_CONTROL,
-        "FW 11.60 explicit clip disable retains qualified control");
+        "explicit clip disable retains qualified gfx1013 control");
 
     pipeline_desc.vertex_shader = vs;
     pipeline_desc.pixel_shader = ps;

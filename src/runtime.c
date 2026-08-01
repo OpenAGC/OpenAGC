@@ -5981,7 +5981,6 @@ static int32_t agcBuildGraphicsPipelineBind(
         pipeline->rasterization.rasterizer_discard_enable) {
         clip_register.offset = AGC_REG_PA_CL_CLIP_CNTL;
         clip_register.value = agcRuntimeDepthClipControl(
-            pipeline->device->runtime_info.firmware_abi_key,
             agcPipelineDepthClipDisabled(&pipeline->rasterization));
         if (pipeline->rasterization.rasterizer_discard_enable)
             clip_register.value |=
