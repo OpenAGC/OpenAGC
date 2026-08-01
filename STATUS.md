@@ -113,6 +113,15 @@ correction. The final Vulkan ELF was pinned at SHA-256
 FW 11.60 replay remains part of the final endpoint gate. Table-driven generic
 coverage now checks the selectors for every affected regular and BC view.
 
+Runtime API 49 adds the six scalar/vector 8-bit formats required by the next
+application-neutral Vulkan matrix slice: R8 and RG8 SNORM, UINT, and SINT.
+Their layouts, SQ sampled descriptors, absent-channel selectors, color-target
+number classes, integer/normalized SPI export contracts, and exact CB format
+words are native rather than aliases. Generic verification passes 19,022
+assertions and the Prospero library builds without warnings. Vulkan format
+advertisement, clear/readback pixels, and FW 5.50 execution remain consumer
+qualification work.
+
 Push-constant backing is stage-local inside the reflected command resource
 arena. Vertex, hull, domain, geometry, pixel, and compute stages may retain
 different values at the same byte offset; pointer and inline user-SGPR

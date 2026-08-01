@@ -127,7 +127,10 @@ expert use, but make the native API the recommended application surface.
    Vulkan BC sampling gate: R/BC4 use `(X,0,0,1)`, RG/BC5 use `(X,Y,0,1)`,
    and RGB/BC6 use `(X,Y,Z,1)`. All fourteen BC1-BC7 sampling encodings now
    pass that consumer gate twice; copy/mip-copy and the final FW 11.60 replay
-   remain separate qualification work.
+   remain separate qualification work. API 49 continues the same exact native
+   matrix with R8/RG8 SNORM, UINT, and SINT layouts, sampled descriptors,
+   color targets, and export validation. Preserve its selector, number-class,
+   and CB-format regressions while Vulkan qualifies exact FW 5.50 pixels.
 6. **Documentation and validation are part of every milestone.** Do not defer
    public API reference material, negative tests, or capability labels to the
    final release phase.

@@ -2235,9 +2235,15 @@ static int agcGetRuntimeFormatInfo(uint32_t format, AgcRuntimeFormatInfo *info)
     info->plane_count = 1u;
     switch (format) {
     case AGC_FORMAT_R8_UNORM:
+    case AGC_FORMAT_R8_SNORM:
+    case AGC_FORMAT_R8_UINT:
+    case AGC_FORMAT_R8_SINT:
         info->bytes[0] = 1u;
         return 1;
     case AGC_FORMAT_RG8_UNORM:
+    case AGC_FORMAT_RG8_SNORM:
+    case AGC_FORMAT_RG8_UINT:
+    case AGC_FORMAT_RG8_SINT:
     case AGC_FORMAT_R16_FLOAT:
     case AGC_FORMAT_R16_UNORM:
     case AGC_FORMAT_R16_SNORM:
@@ -4112,8 +4118,26 @@ static int32_t agcRuntimeEncodeImageView(
     case AGC_FORMAT_R8_UNORM:
         resource_format = AGC_GFX1013_IMAGE_FORMAT_R8_UNORM;
         break;
+    case AGC_FORMAT_R8_SNORM:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_R8_SNORM;
+        break;
+    case AGC_FORMAT_R8_UINT:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_R8_UINT;
+        break;
+    case AGC_FORMAT_R8_SINT:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_R8_SINT;
+        break;
     case AGC_FORMAT_RG8_UNORM:
         resource_format = AGC_GFX1013_IMAGE_FORMAT_RG8_UNORM;
+        break;
+    case AGC_FORMAT_RG8_SNORM:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_RG8_SNORM;
+        break;
+    case AGC_FORMAT_RG8_UINT:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_RG8_UINT;
+        break;
+    case AGC_FORMAT_RG8_SINT:
+        resource_format = AGC_GFX1013_IMAGE_FORMAT_RG8_SINT;
         break;
     case AGC_FORMAT_RGBA8_UNORM:
     case AGC_FORMAT_BGRA8_UNORM:
@@ -4211,6 +4235,9 @@ static int32_t agcRuntimeEncodeImageView(
      * components before composing an application view swizzle. */
     switch ((AgcFormat)desc->format) {
     case AGC_FORMAT_R8_UNORM:
+    case AGC_FORMAT_R8_SNORM:
+    case AGC_FORMAT_R8_UINT:
+    case AGC_FORMAT_R8_SINT:
     case AGC_FORMAT_R16_FLOAT:
     case AGC_FORMAT_R16_UNORM:
     case AGC_FORMAT_R16_SNORM:
@@ -4229,6 +4256,9 @@ static int32_t agcRuntimeEncodeImageView(
         base[3] = 1u;
         break;
     case AGC_FORMAT_RG8_UNORM:
+    case AGC_FORMAT_RG8_SNORM:
+    case AGC_FORMAT_RG8_UINT:
+    case AGC_FORMAT_RG8_SINT:
     case AGC_FORMAT_RG16_FLOAT:
     case AGC_FORMAT_RG16_UNORM:
     case AGC_FORMAT_RG16_SNORM:
@@ -5591,6 +5621,8 @@ static int agcPipelineFormatInfo(
     switch ((AgcFormat)format) {
     case AGC_FORMAT_R8_UNORM:
     case AGC_FORMAT_RG8_UNORM:
+    case AGC_FORMAT_R8_SNORM:
+    case AGC_FORMAT_RG8_SNORM:
     case AGC_FORMAT_RGBA8_UNORM:
     case AGC_FORMAT_BGRA8_UNORM:
     case AGC_FORMAT_RGBA8_SRGB:
@@ -5617,12 +5649,16 @@ static int agcPipelineFormatInfo(
         *component_bits = 32u;
         return 1;
     case AGC_FORMAT_RGBA16_UINT:
+    case AGC_FORMAT_R8_UINT:
+    case AGC_FORMAT_RG8_UINT:
     case AGC_FORMAT_R16_UINT:
     case AGC_FORMAT_RG16_UINT:
         *component_class = AGC_SHADER_COMPONENT_UINT;
         *component_bits = 16u;
         return 1;
     case AGC_FORMAT_RGBA16_SINT:
+    case AGC_FORMAT_R8_SINT:
+    case AGC_FORMAT_RG8_SINT:
     case AGC_FORMAT_R16_SINT:
     case AGC_FORMAT_RG16_SINT:
         *component_class = AGC_SHADER_COMPONENT_SINT;
@@ -5669,8 +5705,26 @@ static int agcRuntimeColorTargetFormat(uint32_t format,
     case AGC_FORMAT_R8_UNORM:
         *target_format = AGC_GFX1013_RT_FORMAT_R8_UNORM;
         return 1;
+    case AGC_FORMAT_R8_SNORM:
+        *target_format = AGC_GFX1013_RT_FORMAT_R8_SNORM;
+        return 1;
+    case AGC_FORMAT_R8_UINT:
+        *target_format = AGC_GFX1013_RT_FORMAT_R8_UINT;
+        return 1;
+    case AGC_FORMAT_R8_SINT:
+        *target_format = AGC_GFX1013_RT_FORMAT_R8_SINT;
+        return 1;
     case AGC_FORMAT_RG8_UNORM:
         *target_format = AGC_GFX1013_RT_FORMAT_RG8_UNORM;
+        return 1;
+    case AGC_FORMAT_RG8_SNORM:
+        *target_format = AGC_GFX1013_RT_FORMAT_RG8_SNORM;
+        return 1;
+    case AGC_FORMAT_RG8_UINT:
+        *target_format = AGC_GFX1013_RT_FORMAT_RG8_UINT;
+        return 1;
+    case AGC_FORMAT_RG8_SINT:
+        *target_format = AGC_GFX1013_RT_FORMAT_RG8_SINT;
         return 1;
     case AGC_FORMAT_RGBA8_UNORM:
         *target_format = AGC_GFX1013_RT_FORMAT_RGBA8_UNORM;

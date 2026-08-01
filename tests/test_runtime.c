@@ -8896,7 +8896,10 @@ static void test_runtime_ps5_image_layouts(void)
 
     {
         const uint32_t formats[] = { AGC_FORMAT_R8_UNORM,
-            AGC_FORMAT_RG8_UNORM, AGC_FORMAT_RGB10A2_UNORM,
+            AGC_FORMAT_R8_SNORM, AGC_FORMAT_R8_UINT, AGC_FORMAT_R8_SINT,
+            AGC_FORMAT_RG8_UNORM, AGC_FORMAT_RG8_SNORM,
+            AGC_FORMAT_RG8_UINT, AGC_FORMAT_RG8_SINT,
+            AGC_FORMAT_RGB10A2_UNORM,
             AGC_FORMAT_R16_FLOAT, AGC_FORMAT_RG16_FLOAT,
             AGC_FORMAT_R32_FLOAT, AGC_FORMAT_RG32_FLOAT,
             AGC_FORMAT_R11G11B10_FLOAT, AGC_FORMAT_BGRA8_SRGB,
@@ -8907,7 +8910,8 @@ static void test_runtime_ps5_image_layouts(void)
             AGC_FORMAT_RGBA16_UNORM, AGC_FORMAT_RGBA16_SNORM,
             AGC_FORMAT_R32_UINT, AGC_FORMAT_R32_SINT,
             AGC_FORMAT_RG32_UINT, AGC_FORMAT_RG32_SINT };
-        const uint32_t bytes[] = { 1u, 2u, 4u, 2u, 4u, 4u, 8u, 4u, 4u,
+        const uint32_t bytes[] = { 1u, 1u, 1u, 1u, 2u, 2u, 2u, 2u,
+            4u, 2u, 4u, 4u, 8u, 4u, 4u,
             2u, 2u, 2u, 2u, 4u, 4u, 4u, 4u, 8u, 8u, 4u, 4u, 8u, 8u };
         uint32_t i;
         for (i = 0u; i < sizeof(formats) / sizeof(formats[0]); ++i) {
@@ -9850,7 +9854,13 @@ static void test_runtime_regular_color_sampled_image_views(void)
     } RuntimeSampledFormatCase;
     static const RuntimeSampledFormatCase cases[] = {
         {AGC_FORMAT_R8_UNORM, AGC_GFX1013_IMAGE_FORMAT_R8_UNORM, 0u},
+        {AGC_FORMAT_R8_SNORM, AGC_GFX1013_IMAGE_FORMAT_R8_SNORM, 0u},
+        {AGC_FORMAT_R8_UINT, AGC_GFX1013_IMAGE_FORMAT_R8_UINT, 0u},
+        {AGC_FORMAT_R8_SINT, AGC_GFX1013_IMAGE_FORMAT_R8_SINT, 0u},
         {AGC_FORMAT_RG8_UNORM, AGC_GFX1013_IMAGE_FORMAT_RG8_UNORM, 0u},
+        {AGC_FORMAT_RG8_SNORM, AGC_GFX1013_IMAGE_FORMAT_RG8_SNORM, 0u},
+        {AGC_FORMAT_RG8_UINT, AGC_GFX1013_IMAGE_FORMAT_RG8_UINT, 0u},
+        {AGC_FORMAT_RG8_SINT, AGC_GFX1013_IMAGE_FORMAT_RG8_SINT, 0u},
         {AGC_FORMAT_RGBA8_UNORM, AGC_GFX1013_IMAGE_FORMAT_RGBA8_UNORM, 0u},
         {AGC_FORMAT_BGRA8_UNORM, AGC_GFX1013_IMAGE_FORMAT_RGBA8_UNORM, 1u},
         {AGC_FORMAT_RGBA8_SRGB, AGC_GFX1013_IMAGE_FORMAT_RGBA8_SRGB, 0u},
@@ -9947,6 +9957,9 @@ static void test_runtime_regular_color_sampled_image_views(void)
         state.dst_sel_w = 7u;
         switch ((AgcFormat)cases[i].format) {
         case AGC_FORMAT_R8_UNORM:
+        case AGC_FORMAT_R8_SNORM:
+        case AGC_FORMAT_R8_UINT:
+        case AGC_FORMAT_R8_SINT:
         case AGC_FORMAT_R16_FLOAT:
         case AGC_FORMAT_R16_UNORM:
         case AGC_FORMAT_R16_SNORM:
@@ -9962,6 +9975,9 @@ static void test_runtime_regular_color_sampled_image_views(void)
             state.dst_sel_w = 1u;
             break;
         case AGC_FORMAT_RG8_UNORM:
+        case AGC_FORMAT_RG8_SNORM:
+        case AGC_FORMAT_RG8_UINT:
+        case AGC_FORMAT_RG8_SINT:
         case AGC_FORMAT_RG16_FLOAT:
         case AGC_FORMAT_RG16_UNORM:
         case AGC_FORMAT_RG16_SNORM:
