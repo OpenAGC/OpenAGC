@@ -109,6 +109,27 @@ The consuming Vulkan candidate
 is FW 5.500.008-qualified with all 18,432 expected swizzled-blue samples,
 bounded self-exit, and no residual process.
 
+Runtime API 43 adds transactional zero/null descriptor encoding for the native
+descriptor table. Null buffers require zero offset, range, and stride;
+combined image/sampler writes may independently omit either typed handle.
+Generic coverage proves that an explicitly bound null storage buffer satisfies
+reflected array coverage and records a dispatch without retaining a resource.
+The SDL Zink gate now qualifies the complete descriptor path on FW 5.500.008:
+two immediate guarded runs returned the exact RGBA `64,128,191,255` oracle,
+presented, released all native children, self-exited, and relaunched without a
+reboot.
+
+Runtime API 44 adds typed mutable-format images for compatible RGBA8/BGRA8
+UNORM and SRGB views. Both BGRA variants are encoded through the corresponding
+RGBA SQ format with a composed channel swap. Linear color-target packets now
+distinguish logical width/height from physical pitch/padded height, so small
+Zink render targets retain their queried 256-byte row pitch. The split-stage
+fault was an inverted launch/continuation program selection: ES/LS front halves
+now supply `SPI_SHADER_PGM_LO`, while GS/HS back halves supply the continuation
+PC. Clean generic qualification passes 19/19 suites, and two consecutive FW
+5.500.008 SDL/EGL/Zink runs returned exact RGBA `64,128,191,255` with no GPU
+fault, retained child, stale process, or relaunch failure.
+
 1. **Milestone 5 is complete.** Runtime API v23 has the optional
    allocation-free debug-callback layer. API v24 adds the
    endian-defined framing and core command/submission records. API v25 adds

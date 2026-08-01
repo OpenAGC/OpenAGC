@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-#define AGC_RUNTIME_API_VERSION 43u
+#define AGC_RUNTIME_API_VERSION 44u
 #define AGC_RUNTIME_MAX_VIEWPORTS 16u
 #define AGC_RUNTIME_STRUCTURE_VERSION_1 1u
 #define AGC_RUNTIME_STRUCTURE_VERSION_2 2u
@@ -266,6 +266,11 @@ typedef enum AgcImageTiling {
     AGC_IMAGE_TILING_OPTIMAL = 1
 } AgcImageTiling;
 
+typedef enum AgcImageCreateFlagBits {
+    AGC_IMAGE_CREATE_MUTABLE_FORMAT_BIT = 1u << 0
+} AgcImageCreateFlagBits;
+typedef uint32_t AgcImageCreateFlags;
+
 typedef struct AgcImageDesc {
     uint32_t struct_size;
     uint32_t version;
@@ -279,7 +284,7 @@ typedef struct AgcImageDesc {
     AgcImageUsageFlags usage;
     uint64_t reserved[4];
     AgcImageTiling tiling;
-    uint32_t flags;
+    AgcImageCreateFlags flags;
 } AgcImageDesc;
 
 #define AGC_IMAGE_DESC_INIT \

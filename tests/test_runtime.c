@@ -130,9 +130,9 @@ static int32_t runtime_transition_buffer_to_graphics_read(
 typedef struct RuntimeShaderFixture {
     AgcShaderRecord record;
     AgcShaderSpecials specials;
-    AgcRegisterValue sh_registers[8];
+    AgcRegisterValue sh_registers[9];
     AgcRegisterValue cx_registers[1];
-    uint8_t code_padding[40];
+    uint8_t code_padding[32];
     uint32_t code[4];
 } RuntimeShaderFixture;
 
@@ -433,7 +433,7 @@ static AgcShader create_ngg_shader_bundle(AgcDevice device,
     binary.record.code = offsetof(RuntimeShaderFixture, code);
     binary.record.shader_type = (uint8_t)kAgcShaderBinaryTypeGsBack;
     binary.record.num_sh_registers =
-        reflection.front_stage == kAgcShaderStageDs ? 6u : 3u;
+        reflection.front_stage == kAgcShaderStageDs ? 8u : 5u;
     binary.record.sh_registers = offsetof(RuntimeShaderFixture, sh_registers);
     binary.record.num_cx_registers = 1u;
     binary.record.cx_registers = offsetof(RuntimeShaderFixture, cx_registers);
@@ -445,6 +445,10 @@ static AgcShader create_ngg_shader_bundle(AgcDevice device,
     binary.sh_registers[2] = (AgcRegisterValue){
         AGC_REG_SPI_SHADER_USER_DATA_GS_0 + 15u,
         OPENAGC_NEXT_STAGE_PC_PLACEHOLDER};
+    binary.sh_registers[3] = (AgcRegisterValue){
+        AGC_REG_SPI_SHADER_PGM_LO_ES, 0u};
+    binary.sh_registers[4] = (AgcRegisterValue){
+        AGC_REG_SPI_SHADER_PGM_HI_ES, 0u};
     if (reflection.front_stage == kAgcShaderStageDs) {
         binary.sh_registers[2] = (AgcRegisterValue){
             AGC_REG_SPI_SHADER_USER_DATA_ADDR_LO_GS,
@@ -458,6 +462,10 @@ static AgcShader create_ngg_shader_bundle(AgcDevice device,
         binary.sh_registers[5] = (AgcRegisterValue){
             AGC_REG_SPI_SHADER_USER_DATA_GS_0 + 15u,
             OPENAGC_NEXT_STAGE_PC_PLACEHOLDER};
+        binary.sh_registers[6] = (AgcRegisterValue){
+            AGC_REG_SPI_SHADER_PGM_LO_ES, 0u};
+        binary.sh_registers[7] = (AgcRegisterValue){
+            AGC_REG_SPI_SHADER_PGM_HI_ES, 0u};
     }
     binary.cx_registers[0] = (AgcRegisterValue){
         AGC_REG_SPI_PS_IN_CONTROL, 0u};
@@ -540,7 +548,7 @@ static AgcShader create_tessellation_control_bundle(AgcDevice device,
     binary.record.version = AGC_SHADER_RECORD_VERSION_GEN5;
     binary.record.code = offsetof(RuntimeShaderFixture, code);
     binary.record.shader_type = (uint8_t)kAgcShaderBinaryTypeHsBack;
-    binary.record.num_sh_registers = 7u;
+    binary.record.num_sh_registers = 9u;
     binary.record.sh_registers = offsetof(RuntimeShaderFixture, sh_registers);
     binary.record.specials = offsetof(RuntimeShaderFixture, specials);
     binary.sh_registers[0] = (AgcRegisterValue){
@@ -561,6 +569,10 @@ static AgcShader create_tessellation_control_bundle(AgcDevice device,
         OPENAGC_NEXT_STAGE_PC_PLACEHOLDER};
     binary.sh_registers[6] = (AgcRegisterValue){
         AGC_REG_SPI_SHADER_PGM_RSRC2_HS, 0x1cu};
+    binary.sh_registers[7] = (AgcRegisterValue){
+        AGC_REG_SPI_SHADER_PGM_LO_LS, 0u};
+    binary.sh_registers[8] = (AgcRegisterValue){
+        AGC_REG_SPI_SHADER_PGM_HI_LS, 0u};
     binary.specials.vgt_shader_stages_en =
         (AgcShaderSpecialRegister){
             AGC_REG_VGT_SHADER_STAGES_EN, 0x00200105u};
@@ -6333,6 +6345,7 @@ static void test_runtime_dynamic_graphics_state(void)
         AGC_DEPTH_STENCIL_TARGET_BINDING_INIT;
     AgcResourceTransition depth_transition = AGC_RESOURCE_TRANSITION_INIT;
     AgcGraphicsPipeline pipeline = NULL;
+    AgcGraphicsPipeline color_only_pipeline = NULL;
     AgcBuffer index_buffer = NULL;
     AgcImage depth_image = NULL;
     AgcCommandBuffer command = NULL;
@@ -6497,6 +6510,23 @@ static void test_runtime_dynamic_graphics_state(void)
         "second viewport scissor preserves its horizontal origin");
     TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
         "dynamic-state command buffer resets");
+    pipeline_desc.depth_stencil = NULL;
+    pipeline_desc.dynamic_state_mask = AGC_DYNAMIC_STATE_DEPTH_BIAS_BIT;
+    TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc,
+        &color_only_pipeline), AGC_OK,
+        "color-only dynamic-depth-bias pipeline creates");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+        "color-only dynamic-state command buffer begins");
+    TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(command, color_only_pipeline),
+        AGC_OK, "color-only dynamic-depth-bias pipeline binds");
+    TEST_ASSERT_EQ(agcCmdSetDepthBias(command, &depth_bias), AGC_OK,
+        "color-only depth bias satisfies dynamic state without DB emission");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+        "color-only dynamic-state command buffer becomes executable");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+        "color-only dynamic-state command buffer resets");
+    TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(color_only_pipeline), AGC_OK,
+        "color-only dynamic-depth-bias pipeline destroys");
     TEST_ASSERT_EQ(agcDestroyFence(fence), AGC_OK,
         "dynamic-state fence destroys");
     TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
@@ -7732,6 +7762,8 @@ static void test_runtime_geometry_pipeline_bundle(void)
     AgcShader redundant_vertex;
     const AgcCommandBufferSubmit *captured;
     const uint32_t *words;
+    AgcAllocationInfo geometry_allocation = AGC_ALLOCATION_INFO_INIT;
+    uint32_t launch_address = 0u;
     uint32_t continuation_address = 0u;
 
     gs_requirements.stage_output_mask = UINT64_C(1) << 32;
@@ -7756,6 +7788,9 @@ static void test_runtime_geometry_pipeline_bundle(void)
     TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc,
         &pipeline), AGC_OK,
         "fused VS-front/GS-back geometry bundle creates pipeline");
+    TEST_ASSERT_EQ(agcGetObjectAllocationInfo(device,
+        AGC_OBJECT_TYPE_SHADER, geometry, &geometry_allocation), AGC_OK,
+        "geometry bundle allocation is queryable");
 
     redundant_vertex = create_shader(device, kAgcShaderStageVs);
     pipeline_desc.vertex_shader = redundant_vertex;
@@ -7810,12 +7845,21 @@ static void test_runtime_geometry_pipeline_bundle(void)
         "geometry command submission is captured");
     words = (const uint32_t *)(uintptr_t)captured->command_address;
     TEST_ASSERT(runtime_find_shader_register(words, captured->dword_count,
+        AGC_REG_SPI_SHADER_PGM_LO_ES, &launch_address),
+        "geometry bind emits the ES-front launch address");
+    TEST_ASSERT_EQ(launch_address,
+        (uint32_t)((geometry_allocation.gpu_address +
+            ((sizeof(RuntimeShaderFixture) + 255u) & ~UINT64_C(255)) +
+            offsetof(RuntimeShaderFixture, code)) >> 8u),
+        "geometry bind launches the separately compiled front half");
+    TEST_ASSERT(runtime_find_shader_register(words, captured->dword_count,
         AGC_REG_SPI_SHADER_USER_DATA_GS_0 + 15u,
         &continuation_address),
-        "geometry bind emits its front-stage continuation address");
-    TEST_ASSERT(continuation_address != 0u &&
-        continuation_address != OPENAGC_NEXT_STAGE_PC_PLACEHOLDER,
-        "geometry continuation placeholder is patched by the pipeline");
+        "geometry bind emits its back-stage continuation address");
+    TEST_ASSERT_EQ(continuation_address,
+        (uint32_t)(geometry_allocation.gpu_address +
+            offsetof(RuntimeShaderFixture, code)),
+        "geometry continuation points at the separately compiled back half");
     TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
         "geometry command buffer resets");
     TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
@@ -9505,6 +9549,78 @@ static void test_runtime_extended_image_view_and_sampler(void)
         "extended resource device destroys");
 }
 
+static void test_runtime_mutable_srgb_image_views(void)
+{
+    AgcDevice device = create_device();
+    AgcImageDesc image_desc = AGC_IMAGE_DESC_INIT;
+    AgcImageViewDesc view_desc = AGC_IMAGE_VIEW_DESC_INIT;
+    AgcAllocationInfo image_info = AGC_ALLOCATION_INFO_INIT;
+    AgcAllocationInfo view_info = AGC_ALLOCATION_INFO_INIT;
+    AgcGfx1013Image2DState state = {0};
+    AgcGfx1013ImageDescriptor expected;
+    AgcImage image = NULL;
+    AgcImageView view = NULL;
+
+    image_desc.width = 32u;
+    image_desc.height = 16u;
+    image_desc.format = AGC_FORMAT_BGRA8_SRGB;
+    image_desc.usage = AGC_IMAGE_USAGE_SAMPLED_BIT;
+    image_desc.tiling = AGC_IMAGE_TILING_LINEAR;
+    image_desc.flags = AGC_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
+    TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &image), AGC_OK,
+        "mutable BGRA8-SRGB image creates");
+    TEST_ASSERT_EQ(agcGetObjectAllocationInfo(device, AGC_OBJECT_TYPE_IMAGE,
+        image, &image_info), AGC_OK, "mutable image allocation is queryable");
+
+    view_desc.image = image;
+    view_desc.format = AGC_FORMAT_BGRA8_UNORM;
+    TEST_ASSERT_EQ(agcCreateImageView(device, &view_desc, &view), AGC_OK,
+        "mutable SRGB image accepts compatible UNORM view");
+    TEST_ASSERT_EQ(agcGetObjectAllocationInfo(device,
+        AGC_OBJECT_TYPE_IMAGE_VIEW, view, &view_info), AGC_OK,
+        "mutable UNORM view allocation is queryable");
+    state.address = image_info.gpu_address;
+    state.width = image_desc.width;
+    state.height = image_desc.height;
+    state.format = AGC_FORMAT_RGBA8_UNORM;
+    state.image_type = AGC_GFX1013_IMAGE_TYPE_2D;
+    state.dst_sel_x = 6u;
+    state.dst_sel_y = 5u;
+    state.dst_sel_z = 4u;
+    state.dst_sel_w = 7u;
+    state.sample_count = 1u;
+    state.mip_level_count = 1u;
+    TEST_ASSERT_EQ(agcGfx1013Image2DDescriptorEncode(&expected, &state),
+        AGC_OK, "expected mutable UNORM descriptor encodes");
+    TEST_ASSERT(memcmp(view_info.cpu_address, &expected, sizeof(expected)) == 0,
+        "mutable BGRA8-UNORM view composes the SQ byte-order swizzle");
+    TEST_ASSERT_EQ(agcDestroyImageView(view), AGC_OK,
+        "mutable UNORM view destroys");
+
+    view = NULL;
+    view_info = (AgcAllocationInfo)AGC_ALLOCATION_INFO_INIT;
+    view_desc.format = AGC_FORMAT_BGRA8_SRGB;
+    TEST_ASSERT_EQ(agcCreateImageView(device, &view_desc, &view), AGC_OK,
+        "BGRA8-SRGB image accepts its native-format view");
+    TEST_ASSERT_EQ(agcGetObjectAllocationInfo(device,
+        AGC_OBJECT_TYPE_IMAGE_VIEW, view, &view_info), AGC_OK,
+        "BGRA8-SRGB view allocation is queryable");
+    state.format = AGC_FORMAT_RGBA8_SRGB;
+    state.dst_sel_x = 6u;
+    state.dst_sel_z = 4u;
+    TEST_ASSERT_EQ(agcGfx1013Image2DDescriptorEncode(&expected, &state),
+        AGC_OK, "expected BGRA8-SRGB descriptor encodes");
+    TEST_ASSERT(memcmp(view_info.cpu_address, &expected, sizeof(expected)) == 0,
+        "BGRA8-SRGB view composes the SQ byte-order swizzle");
+
+    TEST_ASSERT_EQ(agcDestroyImageView(view), AGC_OK,
+        "BGRA8-SRGB view destroys");
+    TEST_ASSERT_EQ(agcDestroyImage(image), AGC_OK,
+        "mutable BGRA8-SRGB image destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "mutable image-view device destroys cleanly");
+}
+
 static void test_runtime_stage_distinct_push_constants(void)
 {
     AgcDevice device = create_device();
@@ -9781,6 +9897,7 @@ TEST_RUN(test_runtime_image_region_and_buffer_copies);
     TEST_RUN(test_runtime_heap_staging_and_stats);
     TEST_RUN(test_runtime_explicit_placed_memory);
     TEST_RUN(test_runtime_extended_image_view_and_sampler);
+    TEST_RUN(test_runtime_mutable_srgb_image_views);
     TEST_RUN(test_runtime_stage_distinct_push_constants);
     TEST_RUN(test_runtime_occlusion_query_commands);
     TEST_RUN(test_runtime_fence_deferred_free);

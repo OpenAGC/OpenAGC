@@ -2347,7 +2347,8 @@ static int agcImageDescBasicValid(const AgcImageDesc *desc)
         desc->usage == 0u || (desc->usage & ~known_usage) != 0u ||
         !agcReservedZero(desc->reserved, 4u) ||
         (desc->version >= AGC_RUNTIME_STRUCTURE_VERSION_2 &&
-         (desc->tiling > AGC_IMAGE_TILING_OPTIMAL || desc->flags != 0u)) ||
+         (desc->tiling > AGC_IMAGE_TILING_OPTIMAL ||
+          (desc->flags & ~AGC_IMAGE_CREATE_MUTABLE_FORMAT_BIT) != 0u)) ||
         !agcGetRuntimeFormatInfo(desc->format, &format))
         return 0;
     if ((desc->sample_count > 1u && (desc->mip_levels > 1u ||
@@ -4076,16 +4077,29 @@ static int32_t agcRuntimeEncodeImageView(
         AGC_COMPONENT_SWIZZLE_IDENTITY };
     uint32_t *selectors[4] = { &state.dst_sel_x, &state.dst_sel_y,
         &state.dst_sel_z, &state.dst_sel_w };
-    const uint32_t base[4] = { 4u, 5u, 6u, 7u };
+    uint32_t base[4] = { 4u, 5u, 6u, 7u };
+    uint32_t resource_format = desc->format;
     uint32_t i;
 
-    if (desc->base_mip_level != 0u || image->desc.depth != 1u ||
-        desc->format > 0x1ffu)
+    if (desc->base_mip_level != 0u || image->desc.depth != 1u)
+        return AGC_ERROR_NOT_SUPPORTED;
+    /* BGRA8 encodings are abstract runtime render-target formats. SQ has no
+     * matching sampled-image resource encoding, so use the corresponding
+     * RGBA8 encoding and compose the byte-order swap with the requested view
+     * swizzle. */
+    if (resource_format == AGC_FORMAT_BGRA8_UNORM ||
+        resource_format == AGC_FORMAT_BGRA8_SRGB) {
+        resource_format = resource_format == AGC_FORMAT_BGRA8_SRGB ?
+            AGC_FORMAT_RGBA8_SRGB : AGC_FORMAT_RGBA8_UNORM;
+        base[0] = 6u;
+        base[2] = 4u;
+    }
+    if (resource_format > 0x1ffu)
         return AGC_ERROR_NOT_SUPPORTED;
     state.address = agcImageGpuAddress(image);
     state.width = image->desc.width;
     state.height = image->desc.height;
-    state.format = desc->format;
+    state.format = resource_format;
     if (desc->version >= AGC_RUNTIME_STRUCTURE_VERSION_2) {
         swizzles[0] = desc->swizzle_r;
         swizzles[1] = desc->swizzle_g;
@@ -4142,6 +4156,21 @@ static int agcImageViewDescHeaderValid(const AgcImageViewDesc *desc)
           desc->struct_size == sizeof(*desc)));
 }
 
+static int agcImageViewFormatCompatible(uint32_t image_format,
+    uint32_t view_format)
+{
+    if (image_format == view_format)
+        return 1;
+    return (image_format == AGC_FORMAT_RGBA8_UNORM &&
+            view_format == AGC_FORMAT_RGBA8_SRGB) ||
+        (image_format == AGC_FORMAT_RGBA8_SRGB &&
+         view_format == AGC_FORMAT_RGBA8_UNORM) ||
+        (image_format == AGC_FORMAT_BGRA8_UNORM &&
+         view_format == AGC_FORMAT_BGRA8_SRGB) ||
+        (image_format == AGC_FORMAT_BGRA8_SRGB &&
+         view_format == AGC_FORMAT_BGRA8_UNORM);
+}
+
 int32_t PS5_SYSV_ABI agcCreateImageView(
     AgcDevice device, const AgcImageViewDesc *desc, AgcImageView *view_out)
 {
@@ -4171,7 +4200,10 @@ int32_t PS5_SYSV_ABI agcCreateImageView(
     }
     image = desc->image;
     if (!image || image->magic != AGC_MAGIC_IMAGE || image->device != device ||
-        image->deferred || desc->format != image->desc.format ||
+        image->deferred ||
+        (desc->format != image->desc.format &&
+         (((image->desc.flags & AGC_IMAGE_CREATE_MUTABLE_FORMAT_BIT) == 0u) ||
+          !agcImageViewFormatCompatible(image->desc.format, desc->format))) ||
         desc->mip_level_count == 0u || desc->array_layer_count == 0u ||
         desc->base_mip_level >= image->desc.mip_levels ||
         desc->mip_level_count > image->desc.mip_levels - desc->base_mip_level ||
@@ -5842,9 +5874,15 @@ static int32_t agcBuildGraphicsPipelineBind(
     if (pipeline->hull_shader) {
         agcPipelineBuildShaderBinding(pipeline->hull_shader,
             &hull_record, hull_sh, &tess_shader_state.hull);
+        if (pipeline->hull_shader->has_front_record)
+            tess_shader_state.hull.code_address =
+                pipeline->hull_shader->front_program_gpu_address;
         agcPipelineBuildShaderBinding(pipeline->primitive_shader,
             &primitive_record, primitive_sh,
             &tess_shader_state.primitive);
+        if (pipeline->primitive_shader->has_front_record)
+            tess_shader_state.primitive.code_address =
+                pipeline->primitive_shader->front_program_gpu_address;
         if (pipeline->primitive_shader->has_front_record &&
             !agcPipelineShaderHasShValue(pipeline->primitive_shader,
                 OPENAGC_NEXT_STAGE_PC_PLACEHOLDER)) {
@@ -5856,9 +5894,9 @@ static int32_t agcBuildGraphicsPipelineBind(
         agcPipelineBuildShaderBinding(pipeline->pixel_shader,
             &pixel_record, pixel_sh, &tess_shader_state.pixel);
         tess_shader_state.hull_back_code_address =
-            pipeline->hull_shader->front_program_gpu_address;
+            pipeline->hull_shader->program_gpu_address;
         tess_shader_state.primitive_back_code_address =
-            pipeline->primitive_shader->front_program_gpu_address;
+            pipeline->primitive_shader->program_gpu_address;
         tess_shader_state.ring_descriptor_address = agcAllocationGpuAddress(
             pipeline->device->tessellation_table_allocation);
         tess_shader_state.tcs_offchip_layout =
@@ -5892,6 +5930,9 @@ static int32_t agcBuildGraphicsPipelineBind(
     } else {
         agcPipelineBuildShaderBinding(pipeline->primitive_shader,
             &primitive_record, primitive_sh, &shader_state.primitive);
+        if (pipeline->primitive_shader->has_front_record)
+            shader_state.primitive.code_address =
+                pipeline->primitive_shader->front_program_gpu_address;
         if (pipeline->primitive_shader->has_front_record &&
             !agcPipelineShaderHasShValue(pipeline->primitive_shader,
                 OPENAGC_NEXT_STAGE_PC_PLACEHOLDER)) {
@@ -5903,7 +5944,7 @@ static int32_t agcBuildGraphicsPipelineBind(
         agcPipelineBuildShaderBinding(pipeline->pixel_shader,
             &pixel_record, pixel_sh, &shader_state.pixel);
         shader_state.primitive_back_code_address =
-            pipeline->primitive_shader->front_program_gpu_address;
+            pipeline->primitive_shader->program_gpu_address;
         shader_state.primitive_type = pipeline->primitive_type;
         result = agcGfx1013BindVsPs(&cb, &shader_state);
     }
@@ -7378,6 +7419,7 @@ int32_t PS5_SYSV_ABI agcCmdBindColorTargets(
         AgcImage image;
         AgcImageSubresourceLayout layout = AGC_IMAGE_SUBRESOURCE_LAYOUT_INIT;
         AgcGfx1013ColorTargetFormat format;
+        AgcRuntimeFormatInfo format_info;
         uint64_t address;
         uint32_t j;
 
@@ -7385,14 +7427,24 @@ int32_t PS5_SYSV_ABI agcCmdBindColorTargets(
                 binding->version) || binding->flags != 0u ||
             binding->reserved0 != 0u ||
             !agcReservedZero(binding->reserved, 4u)) {
-            return AGC_ERROR_INVALID_ARGUMENT;
+            return agcDebugReport(command_buffer->device,
+                AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
+                AGC_DEBUG_MESSAGE_CATEGORY_PARAMETER_BIT,
+                AGC_ERROR_INVALID_ARGUMENT, "agcCmdBindColorTargets",
+                AGC_OBJECT_TYPE_IMAGE, NULL,
+                "color-target binding header, flags, or reserved fields are invalid");
         }
         image = binding->image;
         if (!image || image->magic != AGC_MAGIC_IMAGE ||
             image->device != command_buffer->device || image->deferred ||
             (image->desc.usage & AGC_IMAGE_USAGE_COLOR_TARGET_BIT) == 0u ||
             image->desc.depth != 1u) {
-            return AGC_ERROR_INVALID_ARGUMENT;
+            return agcDebugReport(command_buffer->device,
+                AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
+                AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT,
+                AGC_ERROR_INVALID_ARGUMENT, "agcCmdBindColorTargets",
+                AGC_OBJECT_TYPE_IMAGE, NULL,
+                "color target requires a live same-device color-target image with depth one");
         }
         if (image->desc.format != command_buffer->graphics_pipeline->
                 color_attachments[i].format ||
@@ -7412,14 +7464,34 @@ int32_t PS5_SYSV_ABI agcCmdBindColorTargets(
             &image->desc, binding->mip_level, binding->array_layer, 0u,
             &layout);
         if (result != AGC_OK)
-            return result;
+            return agcDebugReport(command_buffer->device,
+                AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
+                AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT, result,
+                "agcCmdBindColorTargets", AGC_OBJECT_TYPE_IMAGE, NULL,
+                "color-target subresource layout query failed");
         address = agcImageGpuAddress(image);
         if (layout.depth != 1u || layout.offset > UINT64_MAX - address)
             return AGC_ERROR_RESOURCE_INVALID;
         result = agcGfx1013InitColorTarget(&states[i], address + layout.offset,
             layout.width, layout.height, format);
         if (result != AGC_OK)
-            return result;
+            return agcDebugReport(command_buffer->device,
+                AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
+                AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT, result,
+                "agcCmdBindColorTargets", AGC_OBJECT_TYPE_IMAGE, NULL,
+                "gfx1013 color-target state initialization failed");
+        if (!agcGetRuntimeFormatInfo(image->desc.format, &format_info) ||
+            format_info.bytes[0] == 0u ||
+            layout.row_pitch % format_info.bytes[0] != 0u ||
+            layout.row_pitch / format_info.bytes[0] > UINT32_MAX ||
+            layout.row_pitch == 0u ||
+            layout.slice_pitch % layout.row_pitch != 0u ||
+            layout.slice_pitch / layout.row_pitch > UINT32_MAX) {
+            return AGC_ERROR_RESOURCE_INVALID;
+        }
+        states[i].pitch = (uint32_t)(layout.row_pitch / format_info.bytes[0]);
+        states[i].padded_height =
+            (uint32_t)(layout.slice_pitch / layout.row_pitch);
         if (image->desc.sample_count == 4u) {
             states[i].sample_count = 4u;
             states[i].fragment_count = 4u;
@@ -7444,9 +7516,15 @@ int32_t PS5_SYSV_ABI agcCmdBindColorTargets(
     agcCbInit(&scratch, words, sizeof(words));
     for (i = 0u; i < target_count; ++i) {
         result = agcGfx1013SetColorTargetSlot(&scratch, i, &states[i]);
-        if (result != AGC_OK)
-            return result == AGC_ERROR_BUFFER_TOO_SMALL ?
+        if (result != AGC_OK) {
+            result = result == AGC_ERROR_BUFFER_TOO_SMALL ?
                 AGC_ERROR_COMMAND_SPACE_EXHAUSTED : result;
+            return agcDebugReport(command_buffer->device,
+                AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
+                AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT, result,
+                "agcCmdBindColorTargets", AGC_OBJECT_TYPE_IMAGE, NULL,
+                "gfx1013 color-target packet encoding failed");
+        }
     }
     result = agcCommandCommitScratch(command_buffer, &scratch, words);
     if (result != AGC_OK)
@@ -11320,6 +11398,12 @@ int32_t PS5_SYSV_ABI agcCmdSetDepthBias(
         !agcReservedZero(depth_bias->reserved, 2u))
         return AGC_ERROR_INVALID_ARGUMENT;
     switch ((AgcFormat)command_buffer->graphics_pipeline->depth_stencil.format) {
+    case AGC_FORMAT_UNDEFINED:
+        /* Depth bias remains valid Vulkan-style dynamic state on a
+         * color-only pipeline, but there is no DB format register to emit. */
+        command_buffer->dynamic_state_set_mask |=
+            AGC_DYNAMIC_STATE_DEPTH_BIAS_BIT;
+        return AGC_OK;
     case AGC_FORMAT_D16_UNORM:
     case AGC_FORMAT_D16_UNORM_S8_UINT:
         state.format = AGC_GFX1013_DEPTH_FORMAT_D16_UNORM;

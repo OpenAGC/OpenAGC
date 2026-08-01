@@ -327,6 +327,10 @@ typedef struct AgcGfx1013ColorTargetState {
     uint32_t sample_count;
     uint32_t fragment_count;
     uint32_t swizzle_mode;
+    /* Optional physical row pitch and padded height in pixels. Zero selects
+     * the historical tightly packed width/height behavior. */
+    uint32_t pitch;
+    uint32_t padded_height;
 } AgcGfx1013ColorTargetState;
 
 typedef struct AgcGfx1013ColorSurfaceLayoutInput {

@@ -93,7 +93,7 @@ succeeded. `agcErrorString` returns immutable library-owned text.
 | `AgcMemoryHeap`, `AgcMemoryPropertyFlags`, `AgcMemoryCreateFlagBits`, `AgcObjectType` | Runtime heap, portable heap properties, dedicated-allocation policy, and debug/allocation-query object classification. |
 | `AgcResourceType`, `AgcResourceUsage`, `AgcResourceOwner` | Typed transition resource, use, and host/graphics/compute ownership. |
 | `AgcFormat`, `AgcImageAspectFlagBits`, `AgcImageAspectFlags` | Image/attachment encoding and aspect mask. |
-| `AgcImageTiling`, `AgcImageViewType`, `AgcComponentSwizzle` | Linear/optimal layout selection and normalized view type/component mapping. |
+| `AgcImageTiling`, `AgcImageCreateFlagBits`, `AgcImageCreateFlags`, `AgcImageViewType`, `AgcComponentSwizzle` | Linear/optimal layout selection, compatible UNORM/SRGB mutable views, and normalized view type/component mapping. |
 | `AgcMipFilter`, `AgcSamplerBorderColor` | Native sampler mip filtering and fixed/custom border selection. |
 | `AgcBufferUsageFlagBits`, `AgcBufferUsageFlags`, `AgcBufferCreateFlagBits` | Buffer permitted uses and upload/readback/dedicated policy. |
 | `AgcImageUsageFlagBits`, `AgcImageUsageFlags` | Image sampled/storage/target/transfer/scanout uses. |

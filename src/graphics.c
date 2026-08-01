@@ -73,15 +73,29 @@ static bool agcGfx1013FindProgramPair(
 {
     uint32_t i;
     uint32_t j;
+    uint32_t pass;
+    uint32_t required_offset = UINT32_MAX;
 
-    for (i = 0; i < binding->num_sh_registers; ++i) {
-        uint32_t candidate = binding->sh_registers[i].offset;
-        if (!agcGfx1013IsProgramLo(candidate))
-            continue;
-        for (j = 0; j < binding->num_sh_registers; ++j) {
-            if (binding->sh_registers[j].offset == candidate + 1u) {
-                *lo_offset = candidate;
-                return true;
+    if (binding->record->shader_type ==
+            (uint8_t)kAgcShaderBinaryTypeHsBack)
+        required_offset = AGC_REG_SPI_SHADER_PGM_LO_LS;
+    else if (binding->record->shader_type ==
+            (uint8_t)kAgcShaderBinaryTypeGsBack)
+        required_offset = AGC_REG_SPI_SHADER_PGM_LO_ES;
+
+    for (pass = 0u; pass < (required_offset == UINT32_MAX ? 1u : 2u); ++pass) {
+        for (i = 0; i < binding->num_sh_registers; ++i) {
+            uint32_t candidate = binding->sh_registers[i].offset;
+            if (!agcGfx1013IsProgramLo(candidate))
+                continue;
+            if (pass == 0u && required_offset != UINT32_MAX &&
+                candidate != required_offset)
+                continue;
+            for (j = 0; j < binding->num_sh_registers; ++j) {
+                if (binding->sh_registers[j].offset == candidate + 1u) {
+                    *lo_offset = candidate;
+                    return true;
+                }
             }
         }
     }
@@ -304,11 +318,9 @@ static int32_t agcGfx1013ValidateVsPsImpl(
             (uint8_t)kAgcShaderBinaryTypeGsBack &&
         !agcGfx1013BindingHasValue(
             &state->primitive, OPENAGC_NEXT_STAGE_PC_PLACEHOLDER) &&
-        (!agcGfx1013AddressIsProgramCompatible(
-             state->primitive_back_code_address) ||
-         !agcGfx1013BindingHasProgramAddress(&state->primitive,
-             AGC_REG_SPI_SHADER_PGM_LO_ES,
-             state->primitive_back_code_address)))
+        !agcGfx1013BindingHasProgramAddress(&state->primitive,
+            AGC_REG_SPI_SHADER_PGM_LO_ES,
+            state->primitive.code_address))
         return AGC_ERROR_SHADER_INVALID;
     if (agcGfx1013BindingHasValue(
             &state->primitive, OPENAGC_NEXT_STAGE_PC_PLACEHOLDER) &&
@@ -1594,6 +1606,8 @@ int32_t PS5_SYSV_ABI agcGfx1013InitColorTarget(
     state->sample_count = 1u;
     state->fragment_count = 1u;
     state->swizzle_mode = 0u;
+    state->pitch = width;
+    state->padded_height = height;
     return AGC_OK;
 }
 
@@ -1700,9 +1714,12 @@ int32_t PS5_SYSV_ABI agcGfx1013SetColorTargetSlot(
         state->swizzle_mode == 0u) {
         sample_log2 = 0u;
         fragment_log2 = 0u;
-        surface_pitch = state->width;
-        padded_height = state->height;
-        if ((state->width & 7u) != 0u)
+        surface_pitch = state->pitch == 0u ? state->width : state->pitch;
+        padded_height = state->padded_height == 0u ?
+            state->height : state->padded_height;
+        if (surface_pitch < state->width || surface_pitch > 0x4000u ||
+            padded_height < state->height || padded_height > 0x4000u ||
+            (surface_pitch & 7u) != 0u)
             return AGC_ERROR_INVALID_ARGUMENT;
         if (((uint64_t)surface_pitch * format_info.bytes_per_pixel &
              0xffu) != 0u)

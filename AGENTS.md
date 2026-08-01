@@ -129,6 +129,7 @@ Before marking a task complete:
   `_Static_assert(offsetof(T, field) == expected, "...")`.
 - **Code comments:**  Add or remove comments if it will help us in the development.
 - **Commit Messages:** Do not include AI assistant branding or automated co-author tags (e.g. Devin) in git commit messages.
+- **Meaningful Changes:** After each meaningful implementation slice is verified, update the relevant documentation with the completed evidence and create a scoped git commit. Do not leave substantial verified work undocumented or uncommitted.
 
 
 ## Architecture Notes

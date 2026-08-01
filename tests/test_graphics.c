@@ -234,7 +234,7 @@ static void test_gfx1013_wave32_vs_ps_binding(void)
     AgcShaderRecord primitive_record;
     AgcShaderRecord pixel_record;
     AgcShaderSpecials specials;
-    AgcRegisterValue primitive_sh[3];
+    AgcRegisterValue primitive_sh[5];
     AgcRegisterValue pixel_sh[2];
     AgcRegisterValue pixel_cx[1];
     uint32_t value = 0;
@@ -245,22 +245,33 @@ static void test_gfx1013_wave32_vs_ps_binding(void)
         AGC_REG_SPI_SHADER_USER_DATA_GS_0 + 1u,
         OPENAGC_NEXT_STAGE_PC_PLACEHOLDER,
     };
-    primitive_record.num_sh_registers = 3u;
-    state.primitive.num_sh_registers = 3u;
+    primitive_sh[3] = (AgcRegisterValue){
+        AGC_REG_SPI_SHADER_PGM_LO_ES, 0u};
+    primitive_sh[4] = (AgcRegisterValue){
+        AGC_REG_SPI_SHADER_PGM_HI_ES, 0u};
+    primitive_record.shader_type = (uint8_t)kAgcShaderBinaryTypeGsBack;
+    primitive_record.num_sh_registers = 5u;
+    state.primitive.num_sh_registers = 5u;
     state.primitive_back_code_address = 0x0000003234567800ull;
     agcCbInit(&cb, buffer, sizeof(buffer));
     TEST_ASSERT_EQ(agcGfx1013ValidateWave32VsPs(&state), AGC_OK,
         "gfx1013 Wave32 VS+PS validation succeeds");
     TEST_ASSERT_EQ(agcGfx1013BindWave32VsPs(&cb, &state), AGC_OK,
         "gfx1013 Wave32 VS+PS binding succeeds");
-    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 39u,
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 45u,
         "gfx1013 Wave32 VS+PS exact dword count");
     TEST_ASSERT(find_register(
         buffer, agcCbUsedDwords(&cb), AGC_PM4_OP_SET_SH_REG,
-        AGC_REG_SPI_SHADER_PGM_LO_GS, &value),
-        "gfx1013 primitive program low emitted");
+        AGC_REG_SPI_SHADER_PGM_LO_ES, &value),
+        "gfx1013 split primitive front program low emitted");
     TEST_ASSERT_EQ(value, (uint32_t)(state.primitive.code_address >> 8),
-        "gfx1013 primitive program address encoding");
+        "gfx1013 split primitive front program address encoding");
+    TEST_ASSERT(find_register(
+        buffer, agcCbUsedDwords(&cb), AGC_PM4_OP_SET_SH_REG,
+        AGC_REG_SPI_SHADER_PGM_LO_GS, &value),
+        "gfx1013 split primitive back program register is preserved");
+    TEST_ASSERT_EQ(value, 0u,
+        "gfx1013 split primitive does not launch through the back program register");
     TEST_ASSERT(find_register(
         buffer, agcCbUsedDwords(&cb), AGC_PM4_OP_SET_SH_REG,
         AGC_REG_SPI_SHADER_PGM_LO_PS, &value),
@@ -279,14 +290,11 @@ static void test_gfx1013_wave32_vs_ps_binding(void)
         "gfx1013 primitive continuation SGPR emitted");
     TEST_ASSERT_EQ(value, 0x34567800u,
         "gfx1013 primitive continuation placeholder patched");
-    primitive_record.shader_type = (uint8_t)kAgcShaderBinaryTypeGsBack;
-    primitive_record.num_sh_registers = 2u;
-    state.primitive.num_sh_registers = 2u;
+    primitive_sh[2].value = 0u;
     TEST_ASSERT_EQ(agcGfx1013ValidateWave32VsPs(&state),
         AGC_ERROR_SHADER_INVALID,
         "gfx1013 GsBack requires its front-stage continuation binding");
-    primitive_record.num_sh_registers = 3u;
-    state.primitive.num_sh_registers = 3u;
+    primitive_sh[2].value = OPENAGC_NEXT_STAGE_PC_PLACEHOLDER;
     TEST_ASSERT(find_register(
         buffer, agcCbUsedDwords(&cb), AGC_PM4_OP_SET_CONTEXT_REG,
         AGC_REG_VGT_DRAW_PAYLOAD_CNTL, &value),
@@ -1841,6 +1849,26 @@ static void test_gfx1013_fixed_function_packets(void)
             sizeof(expected_format)) == 0,
             "gfx1013 typed color target exact packet stream");
     }
+
+    TEST_ASSERT_EQ(agcGfx1013InitColorTarget(&typed_color, color.address,
+        1u, 1u, AGC_GFX1013_RT_FORMAT_RGBA8_UNORM), AGC_OK,
+        "gfx1013 narrow linear target initializes");
+    typed_color.pitch = 64u;
+    typed_color.padded_height = 1u;
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetColorTarget(&cb, &typed_color), AGC_OK,
+        "gfx1013 narrow target uses its explicit 256-byte row pitch");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 28u,
+        "gfx1013 narrow pitched target emits the exact packet count");
+    TEST_ASSERT_EQ(buffer[3], 7u,
+        "gfx1013 narrow target encodes eight tiles per physical row");
+    typed_color.pitch = 1u;
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetColorTarget(&cb, &typed_color),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "gfx1013 narrow tightly packed target remains invalid");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "gfx1013 rejected narrow target emits nothing");
 
     TEST_ASSERT_EQ(agcGfx1013InitColorTarget(&typed_color, color.address,
         2048u, color.height, AGC_GFX1013_RT_FORMAT_R16_UNORM), AGC_OK,

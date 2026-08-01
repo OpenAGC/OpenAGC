@@ -923,6 +923,20 @@ OpenAGC API 42 additionally moves custom-border table allocation, values,
 flushes, and base-register programming behind `AgcDevice`/`AgcSampler`. Retain
 the Vulkan custom-border readback as the FW 5.50 gate for this ownership fix.
 
+OpenAGC API 43 adds native zero/null descriptor encoding required by the
+pinned Mesa Zink profile. Preserve exact reflected write coverage while
+retaining only non-null typed resources; qualify this path through the FW 5.50
+SDL EGL/Zink readback gate before calling the combined endpoint complete.
+
+OpenAGC API 44 adds the mutable UNORM/SRGB view contract and explicit physical
+pitch needed by Mesa's small linear color targets. Preserve the host-tested
+descriptor/channel-swap and narrow-target packet coverage. FW 5.500.008 now
+qualifies the corrected ES/LS launch and GS/HS continuation program selection,
+BGRA8-UNORM sampling, deterministic clear/readback, presentation, complete
+native teardown, and immediate relaunch through the pinned SDL/EGL/Zink gate.
+Keep FW 11.60 deferred until that endpoint is available; do not weaken the
+identical host profile or reuse the postponed Reference Arena as evidence.
+
 Implement and publish an explicit constrained feature profile for common
 homebrew needs:
 
