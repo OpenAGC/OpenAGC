@@ -70,8 +70,10 @@ Native 4x sampled-image views now preserve gfx1013's overloaded
 cleared it to zero, causing Vulkan `sampler2DMS` resolves to observe sample
 zero and return zero for samples one through three. Generic verification now
 passes 17,932 assertions with an exact full-descriptor regression fixture.
-The corrected Vulkan resolve probe also passed all 1,024 exact pixels on FW
-11.600.005 with clean teardown; the identical FW 5.50 replay remains pending.
+The corrected Vulkan resolve probe, pinned at SHA-256
+`acd7aaf9b536f9335d1d69609eaa5a80d366ad040df6e7ce48fe8f6ddfb211de`,
+passed all 1,024 exact pixels twice on FW 5.500.008 and twice on FW 11.600.005
+with clean teardown and no residual process.
 See [analysis/runtime_msaa_image_view_last_level_20260801.md](analysis/runtime_msaa_image_view_last_level_20260801.md).
 
 Push-constant backing is stage-local inside the reflected command resource

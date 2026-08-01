@@ -17,9 +17,11 @@ Verification evidence:
 
 - generic OpenAGC tests: 17,932 passed, 0 failed;
 - Prospero OpenAGC and Vulkan resolve probe cross-build: clean;
-- FW 11.600.005 Vulkan probe: all 1,024 pixels resolved to exact
-  `0xff00ff80`, with bounded completion, clean system exit, and only the known
-  `amount=0x4000` baseline VM warning.
+- pinned Vulkan resolve ELF SHA-256
+  `acd7aaf9b536f9335d1d69609eaa5a80d366ad040df6e7ce48fe8f6ddfb211de`;
+- two FW 5.500.008 and two FW 11.600.005 runs: all 1,024 pixels resolved to
+  exact `0xff00ff80`, with bounded completion, clean system exit, no residual
+  process, and only the known `amount=0x4000` baseline VM warning.
 
-The FW 5.50 replay of the final identical Vulkan artifact remains required
-before the Vulkan resolve slice is cross-firmware qualified.
+The identical-byte endpoint replay cross-firmware qualifies the native view
+fix and Vulkan 4x color-resolve consumer.
