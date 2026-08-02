@@ -7984,7 +7984,13 @@ int32_t PS5_SYSV_ABI agcCmdBindColorTargets(
     if (target_count > AGC_GFX1013_MAX_COLOR_TARGETS ||
         target_count != command_buffer->graphics_pipeline->
             color_attachment_count) {
-        return AGC_ERROR_VALIDATION_FAILED;
+        return agcDebugReport(command_buffer->device,
+            AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
+            AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT,
+            AGC_ERROR_VALIDATION_FAILED, "agcCmdBindColorTargets",
+            AGC_OBJECT_TYPE_COMMAND_BUFFER,
+            command_buffer->allocation->debug_name,
+            "bound color-target count does not match the graphics pipeline");
     }
     if (target_count == 0u) {
         command_buffer->color_target_count = 0u;
@@ -7999,15 +8005,19 @@ int32_t PS5_SYSV_ABI agcCmdBindColorTargets(
     for (i = 0u; i < target_count; ++i) {
         const AgcColorTargetBinding *binding = &targets[i];
         AgcImage image;
+        uint32_t binding_format;
         AgcImageSubresourceLayout layout = AGC_IMAGE_SUBRESOURCE_LAYOUT_INIT;
         AgcGfx1013ColorTargetFormat format;
         AgcRuntimeFormatInfo format_info;
         uint64_t address;
         uint32_t j;
 
-        if (!agcHeaderValid(binding->struct_size, sizeof(*binding),
-                binding->version) || binding->flags != 0u ||
-            binding->reserved0 != 0u ||
+        if (binding->struct_size != sizeof(*binding) ||
+            (binding->version != AGC_RUNTIME_STRUCTURE_VERSION_1 &&
+             binding->version != AGC_RUNTIME_STRUCTURE_VERSION_2) ||
+            binding->flags != 0u ||
+            (binding->version == AGC_RUNTIME_STRUCTURE_VERSION_1 &&
+             binding->format != AGC_FORMAT_UNDEFINED) ||
             !agcReservedZero(binding->reserved, 4u)) {
             return agcDebugReport(command_buffer->device,
                 AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
@@ -8017,6 +8027,10 @@ int32_t PS5_SYSV_ABI agcCmdBindColorTargets(
                 "color-target binding header, flags, or reserved fields are invalid");
         }
         image = binding->image;
+        binding_format = binding->version >= AGC_RUNTIME_STRUCTURE_VERSION_2 &&
+                binding->format != AGC_FORMAT_UNDEFINED ?
+            binding->format : (image ? image->desc.format :
+                AGC_FORMAT_UNDEFINED);
         if (!image || image->magic != AGC_MAGIC_IMAGE ||
             image->device != command_buffer->device || image->deferred ||
             (image->desc.usage & AGC_IMAGE_USAGE_COLOR_TARGET_BIT) == 0u ||
@@ -8033,18 +8047,32 @@ int32_t PS5_SYSV_ABI agcCmdBindColorTargets(
                 AGC_OBJECT_TYPE_IMAGE, NULL,
                 "color target requires a live same-device image and an in-range array layer or 3D depth slice");
         }
-        if (image->desc.format != command_buffer->graphics_pipeline->
+        if ((binding_format != image->desc.format &&
+             (((image->desc.flags & AGC_IMAGE_CREATE_MUTABLE_FORMAT_BIT) == 0u) ||
+              !agcImageViewFormatCompatible(
+                  image->desc.format, binding_format))) ||
+            binding_format != command_buffer->graphics_pipeline->
                 color_attachments[i].format ||
             image->desc.sample_count != command_buffer->graphics_pipeline->
                 multisample.rasterization_samples ||
-            !agcRuntimeColorTargetFormat(image->desc.format, &format)) {
-            return AGC_ERROR_VALIDATION_FAILED;
+            !agcRuntimeColorTargetFormat(binding_format, &format)) {
+            return agcDebugReport(command_buffer->device,
+                AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
+                AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT,
+                AGC_ERROR_VALIDATION_FAILED, "agcCmdBindColorTargets",
+                AGC_OBJECT_TYPE_IMAGE, NULL,
+                "color-target format or sample count does not match the graphics pipeline");
         }
         for (j = 0u; j < i; ++j) {
             if (targets[j].image == image &&
                 targets[j].mip_level == binding->mip_level &&
                 targets[j].array_layer == binding->array_layer) {
-                return AGC_ERROR_VALIDATION_FAILED;
+                return agcDebugReport(command_buffer->device,
+                    AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
+                    AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT,
+                    AGC_ERROR_VALIDATION_FAILED,
+                    "agcCmdBindColorTargets", AGC_OBJECT_TYPE_IMAGE, NULL,
+                    "the same image subresource is bound to multiple color-target slots");
             }
         }
         result = agcGetImageSubresourceLayout(command_buffer->device,
@@ -8077,7 +8105,7 @@ int32_t PS5_SYSV_ABI agcCmdBindColorTargets(
                 AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT, result,
                 "agcCmdBindColorTargets", AGC_OBJECT_TYPE_IMAGE, NULL,
                 "gfx1013 color-target state initialization failed");
-        if (!agcGetRuntimeFormatInfo(image->desc.format, &format_info) ||
+        if (!agcGetRuntimeFormatInfo(binding_format, &format_info) ||
             format_info.bytes[0] == 0u ||
             layout.row_pitch % format_info.bytes[0] != 0u ||
             layout.row_pitch / format_info.bytes[0] > UINT32_MAX ||
@@ -8098,7 +8126,12 @@ int32_t PS5_SYSV_ABI agcCmdBindColorTargets(
             width = layout.width;
             height = layout.height;
         } else if (layout.width != width || layout.height != height) {
-            return AGC_ERROR_VALIDATION_FAILED;
+            return agcDebugReport(command_buffer->device,
+                AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
+                AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT,
+                AGC_ERROR_VALIDATION_FAILED, "agcCmdBindColorTargets",
+                AGC_OBJECT_TYPE_IMAGE, NULL,
+                "all bound color targets must have identical dimensions");
         }
     }
     for (i = 0u; i < target_count; ++i) {
@@ -12243,13 +12276,25 @@ int32_t PS5_SYSV_ABI agcCmdDraw(AgcCommandBuffer command_buffer,
     if (command_buffer->graphics_pipeline->hull_shader &&
         vertex_count % command_buffer->graphics_pipeline->
             tessellation_input_control_points != 0u)
-        return AGC_ERROR_VALIDATION_FAILED;
+        return agcDebugReport(command_buffer->device,
+            AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
+            AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT,
+            AGC_ERROR_VALIDATION_FAILED, "agcCmdDraw",
+            AGC_OBJECT_TYPE_COMMAND_BUFFER,
+            command_buffer->allocation->debug_name,
+            "draw vertex count is not a whole number of tessellation patches");
     if (!command_buffer->graphics_pipeline->hull_shader &&
         command_buffer->graphics_pipeline->geometry_input_vertices != 0u &&
         !agcPipelineGeometryIndexCountValid(
             command_buffer->graphics_pipeline->primitive_topology,
             vertex_count))
-        return AGC_ERROR_VALIDATION_FAILED;
+        return agcDebugReport(command_buffer->device,
+            AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
+            AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT,
+            AGC_ERROR_VALIDATION_FAILED, "agcCmdDraw",
+            AGC_OBJECT_TYPE_COMMAND_BUFFER,
+            command_buffer->allocation->debug_name,
+            "draw vertex count is incompatible with the geometry input topology");
     vertex_stage = command_buffer->graphics_pipeline->hull_shader ?
         command_buffer->graphics_pipeline->hull_shader :
         command_buffer->graphics_pipeline->primitive_shader;
@@ -12369,14 +12414,26 @@ int32_t PS5_SYSV_ABI agcCmdDrawIndexed(AgcCommandBuffer command_buffer,
     if (command_buffer->graphics_pipeline->hull_shader &&
         index_count % command_buffer->graphics_pipeline->
             tessellation_input_control_points != 0u)
-        return AGC_ERROR_VALIDATION_FAILED;
+        return agcDebugReport(command_buffer->device,
+            AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
+            AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT,
+            AGC_ERROR_VALIDATION_FAILED, "agcCmdDrawIndexed",
+            AGC_OBJECT_TYPE_COMMAND_BUFFER,
+            command_buffer->allocation->debug_name,
+            "indexed draw count is not a whole number of tessellation patches");
     if (!command_buffer->graphics_pipeline->hull_shader &&
         !command_buffer->graphics_pipeline->primitive_restart_enable &&
         command_buffer->graphics_pipeline->geometry_input_vertices != 0u &&
         !agcPipelineGeometryIndexCountValid(
             command_buffer->graphics_pipeline->primitive_topology,
             index_count))
-        return AGC_ERROR_VALIDATION_FAILED;
+        return agcDebugReport(command_buffer->device,
+            AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
+            AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT,
+            AGC_ERROR_VALIDATION_FAILED, "agcCmdDrawIndexed",
+            AGC_OBJECT_TYPE_COMMAND_BUFFER,
+            command_buffer->allocation->debug_name,
+            "indexed draw count is incompatible with the geometry input topology");
     vertex_stage = command_buffer->graphics_pipeline->hull_shader ?
         command_buffer->graphics_pipeline->hull_shader :
         command_buffer->graphics_pipeline->primitive_shader;

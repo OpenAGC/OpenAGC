@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-#define AGC_RUNTIME_API_VERSION 52u
+#define AGC_RUNTIME_API_VERSION 53u
 #define AGC_RUNTIME_MAX_VIEWPORTS 16u
 #define AGC_RUNTIME_STRUCTURE_VERSION_1 1u
 #define AGC_RUNTIME_STRUCTURE_VERSION_2 2u
@@ -584,8 +584,10 @@ typedef enum AgcComponentSwizzle {
 
 /* One color attachment for agcCmdBindColorTargets. For a 3D image,
  * array_layer selects a depth slice of mip_level; otherwise it selects an
- * array layer. The image subresource is retained by the command buffer until
- * it is reset or destroyed. */
+ * array layer. Version 2 may select a mutable-format-compatible attachment
+ * encoding through format; AGC_FORMAT_UNDEFINED preserves the image format.
+ * The image subresource is retained by the command buffer until it is reset
+ * or destroyed. */
 typedef struct AgcColorTargetBinding {
     uint32_t struct_size;
     uint32_t version;
@@ -593,13 +595,13 @@ typedef struct AgcColorTargetBinding {
     uint32_t mip_level;
     uint32_t array_layer;
     uint32_t flags;
-    uint32_t reserved0;
+    uint32_t format;
     uint64_t reserved[4];
 } AgcColorTargetBinding;
 
 #define AGC_COLOR_TARGET_BINDING_INIT \
-    { sizeof(AgcColorTargetBinding), AGC_RUNTIME_STRUCTURE_VERSION_1, NULL, \
-      0u, 0u, 0u, 0u, {0u, 0u, 0u, 0u} }
+    { sizeof(AgcColorTargetBinding), AGC_RUNTIME_STRUCTURE_VERSION_2, NULL, \
+      0u, 0u, 0u, AGC_FORMAT_UNDEFINED, {0u, 0u, 0u, 0u} }
 
 /* One depth/stencil attachment for agcCmdBindDepthStencilTarget. Single-mip
  * depth images are currently supported because their qualified subresource
@@ -1491,7 +1493,7 @@ _Static_assert(offsetof(AgcImageViewDesc, view_type) == 72u,
 _Static_assert(sizeof(AgcImageViewDesc) == 96u,
     "AgcImageViewDesc v2 size mismatch");
 _Static_assert(sizeof(AgcColorTargetBinding) == 64u,
-    "AgcColorTargetBinding v1 size mismatch");
+    "AgcColorTargetBinding size mismatch");
 _Static_assert(sizeof(AgcDepthStencilTargetBinding) == 64u,
     "AgcDepthStencilTargetBinding v1 size mismatch");
 _Static_assert(offsetof(AgcSamplerDesc, mip_filter) == 64u,

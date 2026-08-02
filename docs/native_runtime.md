@@ -421,8 +421,12 @@ must be set before a graphics draw.
 For a graphics pipeline with color exports, bind exactly one
 `AgcColorTargetBinding` per declared color attachment before drawing. Each
 binding names an `AGC_IMAGE_USAGE_COLOR_TARGET_BIT` image plus a mip/layer
-subresource; the runtime validates device ownership, usage, exact attachment
-format, sample count, matching target dimensions, and the proven gfx1013 base
+subresource. Runtime API 53 adds the version-2 `format` field: an image created
+with `AGC_IMAGE_CREATE_MUTABLE_FORMAT_BIT` may select a view-compatible native
+attachment encoding, while `AGC_FORMAT_UNDEFINED` preserves the image's base
+format. Version-1 bindings retain the old reserved-zero contract. The runtime
+validates device ownership, usage, exact effective attachment format, sample
+count, matching target dimensions, and the proven gfx1013 base
 alignment before emitting any packet. Multi-render-target validation is
 transactional: a mismatched target count or extent retains no image and emits
 no target state. Bound targets cannot be replaced within a command buffer and

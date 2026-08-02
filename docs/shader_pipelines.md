@@ -137,8 +137,10 @@ scanout states remain rejected on compute queues.
 
 A graphics pipeline whose reflected pixel shader exports color must bind one
 `AgcColorTargetBinding` per declared attachment with
-`agcCmdBindColorTargets` before drawing. The command validates exact format,
-sample count, dimensions, image usage, subresource layout, and target-base
+`agcCmdBindColorTargets` before drawing. Version-2 bindings may select a
+mutable-format-compatible attachment encoding; version 1 retains its original
+reserved-zero field. The command validates the exact effective format, sample
+count, dimensions, image usage, subresource layout, and target-base
 alignment, then retains the images through command-buffer reset. Rebinding
 targets in the same command buffer, incompatible MRT layouts, and a draw with
 an unbound declared attachment fail before work emission. This is attachment

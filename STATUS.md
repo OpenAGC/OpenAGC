@@ -204,6 +204,14 @@ workaround. Clean generic verification passes 19,405 assertions and the clean
 Prospero library builds without warnings. Vulkan owns exact clear/readback and
 FW 5.50 consumer qualification.
 
+Runtime API 53 adds a version-2 `AgcColorTargetBinding.format` override for
+mutable-format-compatible attachment views. Version 1 preserves its former
+reserved-zero ABI, and non-mutable or incompatible reinterpretations fail
+before packet emission or resource retention. Generic tests cover the
+SRGB-base/UNORM-attachment Vulkan use case and the v1 compatibility gate; the
+FW 5.50 SDL/EGL/Zink replay returns exact RGBA `64,128,191,255` with clean
+teardown through this contract.
+
 Push-constant backing is stage-local inside the reflected command resource
 arena. Vertex, hull, domain, geometry, pixel, and compute stages may retain
 different values at the same byte offset; pointer and inline user-SGPR

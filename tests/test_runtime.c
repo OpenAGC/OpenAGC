@@ -5973,6 +5973,7 @@ static void test_runtime_color_target_binding(void)
     AgcShader pixel;
     AgcImage image = NULL;
     AgcImage image_3d = NULL;
+    AgcImage mutable_srgb_image = NULL;
     AgcImage incompatible_image = NULL;
     AgcBuffer index_buffer = NULL;
     AgcCommandBuffer command = NULL;
@@ -6005,6 +6006,11 @@ static void test_runtime_color_target_binding(void)
     image_desc.usage = AGC_IMAGE_USAGE_COLOR_TARGET_BIT;
     TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &image), AGC_OK,
         "native RGBA8 color target creates");
+    image_desc.format = AGC_FORMAT_RGBA8_SRGB;
+    image_desc.flags = AGC_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
+    TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &mutable_srgb_image),
+        AGC_OK, "mutable SRGB color target creates");
+    image_desc.flags = 0u;
     image_desc.format = AGC_FORMAT_RGBA16_FLOAT;
     TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &incompatible_image),
         AGC_OK, "incompatible color target creates for validation");
@@ -6063,6 +6069,26 @@ static void test_runtime_color_target_binding(void)
     target.array_layer = 0u;
     TEST_ASSERT_EQ(agcCmdBindColorTargets(command, 1u, &target), AGC_OK,
         "color target can be rebound while prior image retention remains");
+    target_transition.image = mutable_srgb_image;
+    TEST_ASSERT_EQ(agcCmdTransitionResources(command, 1u,
+        &target_transition), AGC_OK,
+        "mutable SRGB color target transitions to graphics ownership");
+    target.image = mutable_srgb_image;
+    target.version = AGC_RUNTIME_STRUCTURE_VERSION_1;
+    target.format = AGC_FORMAT_RGBA8_UNORM;
+    TEST_ASSERT_EQ(agcCmdBindColorTargets(command, 1u, &target),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "v1 color target binding preserves its reserved-zero field");
+    target.version = AGC_RUNTIME_STRUCTURE_VERSION_2;
+    target.format = AGC_FORMAT_UNDEFINED;
+    TEST_ASSERT_EQ(agcCmdBindColorTargets(command, 1u, &target),
+        AGC_ERROR_VALIDATION_FAILED,
+        "mutable SRGB target requires an explicit compatible UNORM binding");
+    target.format = AGC_FORMAT_RGBA8_UNORM;
+    TEST_ASSERT_EQ(agcCmdBindColorTargets(command, 1u, &target), AGC_OK,
+        "mutable SRGB target binds through its compatible UNORM encoding");
+    TEST_ASSERT_EQ(agcDestroyImage(mutable_srgb_image), AGC_ERROR_BUSY,
+        "mutable-format color target remains retained after binding");
     target_transition.image = image_3d;
     target_transition.image_range.mip_level_count = 2u;
     target_transition.image_range.array_layer_count = 1u;
@@ -6070,6 +6096,7 @@ static void test_runtime_color_target_binding(void)
         &target_transition), AGC_OK,
         "3D color target transitions to graphics ownership");
     target.image = image_3d;
+    target.format = AGC_FORMAT_UNDEFINED;
     target.mip_level = 1u;
     target.array_layer = 2u;
     TEST_ASSERT_EQ(agcCmdBindColorTargets(command, 1u, &target),
@@ -6110,6 +6137,8 @@ static void test_runtime_color_target_binding(void)
         "released color target destroys after reset");
     TEST_ASSERT_EQ(agcDestroyImage(image_3d), AGC_OK,
         "released 3D color target destroys after reset");
+    TEST_ASSERT_EQ(agcDestroyImage(mutable_srgb_image), AGC_OK,
+        "released mutable-format color target destroys after reset");
     TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
         "color-target command buffer destroys");
     TEST_ASSERT_EQ(agcDestroyBuffer(index_buffer), AGC_OK,
