@@ -429,14 +429,23 @@ typedef struct AgcBufferImageCopyRegion {
  * RELEASE on the source queue, submit it, then record and submit the matching
  * ACQUIRE on the destination queue. Both sides name the same label/value. A
  * v2 batch-dependency record instead consumes the prior state of the same
- * resource from an earlier DCB in one ordered same-queue batch. */
+ * resource from an earlier DCB in one ordered same-queue batch. A v2
+ * committed-state record is for a command buffer recorded before its producer
+ * submission: its declared prior state is validated against the resource's
+ * committed global state at submit time, rather than against record-time state
+ * or another DCB in the submitted batch. */
 enum {
     AGC_RESOURCE_TRANSITION_RELEASE_BIT = 1u << 0,
     AGC_RESOURCE_TRANSITION_ACQUIRE_BIT = 1u << 1,
     /* A v2 transition whose source state is produced by an earlier command
      * buffer in the same ordered queue batch. It cannot be submitted alone
      * and cannot be combined with ownership release/acquire. */
-    AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT = 1u << 2
+    AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT = 1u << 2,
+    /* A v2 transition whose declared prior state must match the resource
+     * state committed by an earlier successful submission. It carries no
+     * dependency label/value, cannot be combined with release/acquire or a
+     * batch dependency, and may be submitted as a standalone command. */
+    AGC_RESOURCE_TRANSITION_COMMITTED_STATE_BIT = 1u << 3
 };
 
 #define AGC_RESOURCE_TRANSITION_V1_SIZE 128u

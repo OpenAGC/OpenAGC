@@ -8876,7 +8876,9 @@ static int agcRuntimeOrdinaryTransitionNeedsCompletionWait(uint32_t flags,
     uint32_t emit_low_transition,
     const AgcGfx1013ResourceTransition *transition)
 {
-    return flags == 0u && emit_low_transition && transition &&
+    return (flags == 0u ||
+            flags == AGC_RESOURCE_TRANSITION_COMMITTED_STATE_BIT) &&
+        emit_low_transition && transition &&
         transition->before != transition->after &&
         transition->after != AGC_GFX1013_RESOURCE_USAGE_UNDEFINED &&
         agcRuntimeLowUsageWrites(transition->before);
@@ -9283,7 +9285,8 @@ static int32_t agcRuntimeValidateTransition(
         transition->struct_size == sizeof(*transition)) {
         if (transition->flags != AGC_RESOURCE_TRANSITION_RELEASE_BIT &&
             transition->flags != AGC_RESOURCE_TRANSITION_ACQUIRE_BIT &&
-            transition->flags != AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT)
+            transition->flags != AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT &&
+            transition->flags != AGC_RESOURCE_TRANSITION_COMMITTED_STATE_BIT)
             return AGC_ERROR_INVALID_ARGUMENT;
         if (transition->reserved_v2 != 0u ||
             !agcReservedZero(transition->reserved2, 2u))
@@ -9291,7 +9294,8 @@ static int32_t agcRuntimeValidateTransition(
         flags = transition->flags;
         label = transition->dependency_label;
         value = transition->dependency_value;
-        if (flags == AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT) {
+        if (flags == AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT ||
+            flags == AGC_RESOURCE_TRANSITION_COMMITTED_STATE_BIT) {
             if (label || value != 0u)
                 return AGC_ERROR_INVALID_ARGUMENT;
         } else if (!label || label->magic != AGC_MAGIC_GPU_LABEL ||
@@ -9351,12 +9355,15 @@ static int32_t agcRuntimeValidateTransition(
     }
     if ((current_usage != transition->before ||
          current_owner != transition->before_owner) &&
-        flags != AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT)
+        flags != AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT &&
+        flags != AGC_RESOURCE_TRANSITION_COMMITTED_STATE_BIT)
         return AGC_ERROR_INVALID_STATE;
     /* A batch dependency is resolved against earlier command buffers in the
      * ordered submission.  It must therefore be allowed to follow an acquire
      * recorded by one of those buffers; submission-time validation verifies
-     * that complete sequence before any work is emitted. */
+     * that complete sequence before any work is emitted. A committed-state
+     * transition instead resolves only against global committed state at
+     * submit time, so it retains ordinary pending-transfer exclusion. */
     if (flags != AGC_RESOURCE_TRANSITION_ACQUIRE_BIT &&
         flags != AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT &&
         !(flags == AGC_RESOURCE_TRANSITION_RELEASE_BIT &&
@@ -9796,7 +9803,11 @@ static int32_t agcValidateSubmissionTransitions(
 
             if (record->resource_type == kAgcResourceTypeBuffer) {
                 if (!agcBatchBufferRangeState((AgcBuffer)record->resource,
-                        states, state_count, record->buffer_offset,
+                        states,
+                        record->flags ==
+                                AGC_RESOURCE_TRANSITION_COMMITTED_STATE_BIT ?
+                            0u : state_count,
+                        record->buffer_offset,
                         record->buffer_size, i,
                         record->flags ==
                             AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT,
@@ -9805,7 +9816,10 @@ static int32_t agcValidateSubmissionTransitions(
             } else {
                 const AgcImage image = (const AgcImage)record->resource;
                 if (!agcBatchImageRangeState((AgcImage)image, states,
-                        state_count, &record->image_range, i,
+                        record->flags ==
+                                AGC_RESOURCE_TRANSITION_COMMITTED_STATE_BIT ?
+                            0u : state_count,
+                        &record->image_range, i,
                         record->flags ==
                             AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT,
                         &usage, &owner))

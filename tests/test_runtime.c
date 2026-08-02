@@ -3399,6 +3399,123 @@ static void test_runtime_multi_compute_submission(void)
         "compute multi-submit device destroys");
 }
 
+static void test_runtime_committed_transition_prior_state(void)
+{
+    AgcDevice device = create_device();
+    AgcQueue queue = create_queue(device, kAgcQueueCompute);
+    AgcBufferDesc buffer_desc = AGC_BUFFER_DESC_INIT;
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
+    AgcResourceTransition producer_transition = AGC_RESOURCE_TRANSITION_INIT;
+    AgcResourceTransition consumer_transition =
+        AGC_RESOURCE_TRANSITION_V2_INIT;
+    AgcResourceStateInfo state = AGC_RESOURCE_STATE_INFO_INIT;
+    AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    AgcBuffer buffer = NULL;
+    AgcCommandBuffer producer = NULL;
+    AgcCommandBuffer consumer = NULL;
+    AgcFence fence = NULL;
+
+    buffer_desc.size = 64u;
+    buffer_desc.usage = AGC_BUFFER_USAGE_STORAGE_BIT;
+    buffer_desc.flags = AGC_BUFFER_CREATE_READBACK_BIT;
+    command_desc.queue_type = kAgcQueueCompute;
+    command_desc.capacity_dwords = 128u;
+    TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &buffer), AGC_OK,
+        "committed-state buffer creates");
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &producer),
+        AGC_OK, "committed-state producer creates");
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &consumer),
+        AGC_OK, "committed-state consumer creates");
+    TEST_ASSERT_EQ(agcCreateFence(device, &fence_desc, &fence), AGC_OK,
+        "committed-state fence creates");
+
+    consumer_transition.resource_type = kAgcResourceTypeBuffer;
+    consumer_transition.buffer = buffer;
+    consumer_transition.buffer_size = buffer_desc.size;
+    consumer_transition.before = kAgcResourceUsageShaderWrite;
+    consumer_transition.after = kAgcResourceUsageHostRead;
+    consumer_transition.before_owner = kAgcResourceOwnerCompute;
+    consumer_transition.after_owner = kAgcResourceOwnerHost;
+    consumer_transition.flags = AGC_RESOURCE_TRANSITION_COMMITTED_STATE_BIT;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(consumer), AGC_OK,
+        "committed-state consumer begins before producer submission");
+    consumer_transition.dependency_value = 1u;
+    TEST_ASSERT_EQ(agcCmdTransitionResources(consumer, 1u,
+        &consumer_transition), AGC_ERROR_INVALID_ARGUMENT,
+        "committed-state transition rejects a dependency value");
+    consumer_transition.dependency_value = 0u;
+    TEST_ASSERT_EQ(agcCmdTransitionResources(consumer, 1u,
+        &consumer_transition), AGC_OK,
+        "committed-state transition records despite record-time mismatch");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(consumer), AGC_OK,
+        "committed-state consumer ends before producer submission");
+
+    producer_transition.resource_type = kAgcResourceTypeBuffer;
+    producer_transition.buffer = buffer;
+    producer_transition.buffer_size = buffer_desc.size;
+    producer_transition.before = kAgcResourceUsageUndefined;
+    producer_transition.after = kAgcResourceUsageShaderWrite;
+    producer_transition.before_owner = kAgcResourceOwnerHost;
+    producer_transition.after_owner = kAgcResourceOwnerCompute;
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(producer), AGC_OK,
+        "committed-state producer begins");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(producer, 1u,
+        &producer_transition), AGC_OK,
+        "committed-state producer transition records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(producer), AGC_OK,
+        "committed-state producer ends");
+    submit.command_buffer_count = 1u;
+    submit.command_buffers = &producer;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
+        "earlier producer submission commits source state");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "committed-state producer fence resets");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(producer), AGC_OK,
+        "committed-state producer resets");
+
+    submit.command_buffers = &consumer;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
+        "committed-state transition permits standalone submit");
+    TEST_ASSERT_EQ(agcGetBufferStateInfo(buffer, &state), AGC_OK,
+        "committed-state final buffer state is queryable");
+    TEST_ASSERT_EQ(state.usage, kAgcResourceUsageHostRead,
+        "committed-state standalone submit commits its destination usage");
+    TEST_ASSERT_EQ(state.owner, kAgcResourceOwnerHost,
+        "committed-state standalone submit commits its destination owner");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "committed-state consumer fence resets");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(consumer), AGC_OK,
+        "committed-state consumer resets");
+
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(consumer), AGC_OK,
+        "mismatched committed-state consumer begins");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(consumer, 1u,
+        &consumer_transition), AGC_OK,
+        "mismatched committed-state records for submit-time validation");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(consumer), AGC_OK,
+        "mismatched committed-state consumer ends");
+    submit.command_buffers = &consumer;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence),
+        AGC_ERROR_INVALID_STATE,
+        "committed-state submit rejects a nonmatching global prior state");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(consumer), AGC_OK,
+        "rejected committed-state consumer resets");
+
+    TEST_ASSERT_EQ(agcDestroyFence(fence), AGC_OK,
+        "committed-state fence destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(consumer), AGC_OK,
+        "committed-state consumer destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(producer), AGC_OK,
+        "committed-state producer destroys");
+    TEST_ASSERT_EQ(agcDestroyBuffer(buffer), AGC_OK,
+        "committed-state buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
+        "committed-state queue destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "committed-state device destroys");
+}
+
 static void test_runtime_batch_transition_chain(void)
 {
     AgcDevice device = create_device();
@@ -12060,6 +12177,7 @@ void test_suite_runtime(void)
     TEST_RUN(test_runtime_indexed_graphics_submission);
     TEST_RUN(test_runtime_multi_graphics_submission);
     TEST_RUN(test_runtime_multi_compute_submission);
+    TEST_RUN(test_runtime_committed_transition_prior_state);
     TEST_RUN(test_runtime_batch_transition_chain);
     TEST_RUN(test_runtime_fence_driven_command_reuse);
     TEST_RUN(test_runtime_copy_buffer_submission);
