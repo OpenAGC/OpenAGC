@@ -11422,6 +11422,44 @@ static void test_runtime_extended_image_view_and_sampler(void)
 
 static void test_runtime_mutable_srgb_image_views(void)
 {
+    static const uint32_t compatible_32_bit_formats[] = {
+        AGC_FORMAT_RG16_FLOAT,
+        AGC_FORMAT_R11G11B10_FLOAT,
+        AGC_FORMAT_R32_FLOAT,
+        AGC_FORMAT_RGB10A2_UNORM,
+        AGC_FORMAT_RG16_UINT,
+        AGC_FORMAT_R32_UINT,
+        AGC_FORMAT_RG16_SINT,
+        AGC_FORMAT_R32_SINT,
+        AGC_FORMAT_RGBA8_UNORM,
+        AGC_FORMAT_RG16_UNORM,
+        AGC_FORMAT_RGBA8_SNORM,
+        AGC_FORMAT_RG16_SNORM,
+        AGC_FORMAT_RGBA8_SRGB,
+        AGC_FORMAT_RGB9E5_FLOAT,
+        AGC_FORMAT_BGRA8_UNORM,
+        AGC_FORMAT_BGRA8_SRGB,
+        AGC_FORMAT_RGBA8_UINT,
+        AGC_FORMAT_RGBA8_SINT,
+        AGC_FORMAT_RGB10A2_UINT
+    };
+    static const uint32_t incompatible_formats[] = {
+        AGC_FORMAT_R8_UNORM,
+        AGC_FORMAT_RG8_UNORM,
+        AGC_FORMAT_RG32_FLOAT,
+        AGC_FORMAT_D32_FLOAT,
+        AGC_FORMAT_BC1_UNORM
+    };
+    static const struct {
+        uint32_t image_format;
+        uint32_t view_format;
+    } compatible_class_pairs[] = {
+        {AGC_FORMAT_R8_UNORM, AGC_FORMAT_R4G4_UNORM},
+        {AGC_FORMAT_RG8_UNORM, AGC_FORMAT_R16_FLOAT},
+        {AGC_FORMAT_RG32_FLOAT, AGC_FORMAT_RGBA16_UINT},
+        {AGC_FORMAT_RGBA32_FLOAT, AGC_FORMAT_RGBA32_SINT},
+        {AGC_FORMAT_BC1_UNORM, AGC_FORMAT_BC1_SRGB}
+    };
     AgcDevice device = create_device();
     AgcImageDesc image_desc = AGC_IMAGE_DESC_INIT;
     AgcImageViewDesc view_desc = AGC_IMAGE_VIEW_DESC_INIT;
@@ -11433,6 +11471,7 @@ static void test_runtime_mutable_srgb_image_views(void)
         AGC_IMAGE_SUBRESOURCE_LAYOUT_INIT;
     AgcImage image = NULL;
     AgcImageView view = NULL;
+    uint32_t i;
 
     image_desc.width = 32u;
     image_desc.height = 16u;
@@ -11511,8 +11550,65 @@ static void test_runtime_mutable_srgb_image_views(void)
 
     TEST_ASSERT_EQ(agcDestroyImageView(view), AGC_OK,
         "BGRA8-SRGB view destroys");
+
+    for (i = 0u; i < sizeof(compatible_32_bit_formats) /
+            sizeof(compatible_32_bit_formats[0]); ++i) {
+        view = NULL;
+        view_desc.format = compatible_32_bit_formats[i];
+        TEST_ASSERT_EQ(agcCreateImageView(device, &view_desc, &view), AGC_OK,
+            "mutable BGRA8 image accepts every supported 32-bit-class view");
+        TEST_ASSERT(view != NULL,
+            "compatible 32-bit-class view returns a live handle");
+        TEST_ASSERT_EQ(agcDestroyImageView(view), AGC_OK,
+            "compatible 32-bit-class view destroys");
+    }
+
+    for (i = 0u; i < sizeof(incompatible_formats) /
+            sizeof(incompatible_formats[0]); ++i) {
+        view = NULL;
+        view_desc.format = incompatible_formats[i];
+        TEST_ASSERT_EQ(agcCreateImageView(device, &view_desc, &view),
+            AGC_ERROR_INVALID_ARGUMENT,
+            "mutable BGRA8 image rejects a different storage class");
+        TEST_ASSERT(view == NULL,
+            "incompatible storage-class view leaves output null");
+    }
+
     TEST_ASSERT_EQ(agcDestroyImage(image), AGC_OK,
         "mutable BGRA8-SRGB image destroys");
+
+    for (i = 0u; i < sizeof(compatible_class_pairs) /
+            sizeof(compatible_class_pairs[0]); ++i) {
+        image = NULL;
+        view = NULL;
+        image_desc.format = compatible_class_pairs[i].image_format;
+        TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &image), AGC_OK,
+            "mutable representative storage-class image creates");
+        view_desc.image = image;
+        view_desc.format = compatible_class_pairs[i].view_format;
+        TEST_ASSERT_EQ(agcCreateImageView(device, &view_desc, &view), AGC_OK,
+            "mutable image accepts a view from its storage class");
+        TEST_ASSERT_EQ(agcDestroyImageView(view), AGC_OK,
+            "representative storage-class view destroys");
+        TEST_ASSERT_EQ(agcDestroyImage(image), AGC_OK,
+            "representative mutable image destroys");
+    }
+
+    image = NULL;
+    view = NULL;
+    image_desc.format = AGC_FORMAT_BC1_UNORM;
+    TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &image), AGC_OK,
+        "mutable BC1 image creates for compressed-class isolation");
+    view_desc.image = image;
+    view_desc.format = AGC_FORMAT_BC4_UNORM;
+    TEST_ASSERT_EQ(agcCreateImageView(device, &view_desc, &view),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "equal-size BC1 and BC4 blocks remain different view classes");
+    TEST_ASSERT(view == NULL,
+        "cross-family compressed view leaves output null");
+    TEST_ASSERT_EQ(agcDestroyImage(image), AGC_OK,
+        "compressed-class isolation image destroys");
+
     TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
         "mutable image-view device destroys cleanly");
 }

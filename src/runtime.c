@@ -4551,23 +4551,66 @@ static int agcImageViewDescHeaderValid(const AgcImageViewDesc *desc)
         ((desc->version == AGC_RUNTIME_STRUCTURE_VERSION_1 &&
           desc->struct_size == offsetof(AgcImageViewDesc, view_type)) ||
          (desc->version == AGC_RUNTIME_STRUCTURE_VERSION_2 &&
-          desc->struct_size == sizeof(*desc)));
+         desc->struct_size == sizeof(*desc)));
+}
+
+static uint32_t agcImageViewBcClass(uint32_t format)
+{
+    switch ((AgcFormat)format) {
+    case AGC_FORMAT_BC1_UNORM:
+    case AGC_FORMAT_BC1_SRGB:
+        return 1u;
+    case AGC_FORMAT_BC2_UNORM:
+    case AGC_FORMAT_BC2_SRGB:
+        return 2u;
+    case AGC_FORMAT_BC3_UNORM:
+    case AGC_FORMAT_BC3_SRGB:
+        return 3u;
+    case AGC_FORMAT_BC4_UNORM:
+    case AGC_FORMAT_BC4_SNORM:
+        return 4u;
+    case AGC_FORMAT_BC5_UNORM:
+    case AGC_FORMAT_BC5_SNORM:
+        return 5u;
+    case AGC_FORMAT_BC6_UFLOAT:
+    case AGC_FORMAT_BC6_SFLOAT:
+        return 6u;
+    case AGC_FORMAT_BC7_UNORM:
+    case AGC_FORMAT_BC7_SRGB:
+        return 7u;
+    default:
+        return 0u;
+    }
 }
 
 static int agcImageViewFormatCompatible(uint32_t image_format,
     uint32_t view_format)
 {
+    AgcRuntimeFormatInfo image_info;
+    AgcRuntimeFormatInfo view_info;
+    uint32_t image_bc_class;
+
     if (image_format == view_format)
         return 1;
-    const int image_rgba8 = image_format == AGC_FORMAT_RGBA8_UNORM ||
-        image_format == AGC_FORMAT_RGBA8_SRGB ||
-        image_format == AGC_FORMAT_BGRA8_UNORM ||
-        image_format == AGC_FORMAT_BGRA8_SRGB;
-    const int view_rgba8 = view_format == AGC_FORMAT_RGBA8_UNORM ||
-        view_format == AGC_FORMAT_RGBA8_SRGB ||
-        view_format == AGC_FORMAT_BGRA8_UNORM ||
-        view_format == AGC_FORMAT_BGRA8_SRGB;
-    return image_rgba8 && view_rgba8;
+    if (!agcGetRuntimeFormatInfo(image_format, &image_info) ||
+        !agcGetRuntimeFormatInfo(view_format, &view_info) ||
+        image_info.depth_stencil || view_info.depth_stencil ||
+        image_info.plane_count != 1u || view_info.plane_count != 1u)
+        return 0;
+
+    /* Regular color formats are view-compatible by texel storage width.
+     * This covers the Vulkan-style 8-, 16-, 32-, 64-, and 128-bit classes
+     * without coupling the native runtime to individual API spellings. */
+    if (image_info.block_width == 1u && image_info.block_height == 1u &&
+        view_info.block_width == 1u && view_info.block_height == 1u)
+        return image_info.bytes[0] == view_info.bytes[0];
+
+    /* Block-compressed classes are format families, not merely equal block
+     * sizes: for example BC1 and BC4 both occupy eight bytes per block but
+     * cannot be reinterpreted as one another. */
+    image_bc_class = agcImageViewBcClass(image_format);
+    return image_bc_class != 0u &&
+        image_bc_class == agcImageViewBcClass(view_format);
 }
 
 int32_t PS5_SYSV_ABI agcCreateImageView(
