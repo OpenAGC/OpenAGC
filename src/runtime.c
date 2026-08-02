@@ -2499,10 +2499,6 @@ static int agcImageDescBasicValid(const AgcImageDesc *desc)
         return 0;
     if (desc->depth > 1u && desc->array_layers != 1u)
         return 0;
-    if (desc->version >= AGC_RUNTIME_STRUCTURE_VERSION_2 &&
-        (desc->flags & AGC_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT) != 0u &&
-        desc->depth == 1u)
-        return 0;
     if ((desc->usage & AGC_IMAGE_USAGE_CUBE_COMPATIBLE_BIT) != 0u &&
         (desc->depth != 1u || desc->array_layers % 6u != 0u))
         return 0;

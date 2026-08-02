@@ -11071,6 +11071,7 @@ static void test_runtime_3d_sampled_image_view(void)
     AgcGfx1013ImageDescriptor expected;
     AgcImage image = NULL;
     AgcImage compatible_image = NULL;
+    AgcImage compatible_depth_one = NULL;
     AgcImage image_2d = NULL;
     AgcImageView view = NULL;
 
@@ -11213,9 +11214,21 @@ static void test_runtime_3d_sampled_image_view(void)
 
     image_desc.depth = 1u;
     image_desc.mip_levels = 1u;
-    TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &image_2d),
-        AGC_ERROR_INVALID_ARGUMENT,
-        "2D-array-compatible flag rejects an image without 3D depth");
+    TEST_ASSERT_EQ(agcCreateImage(device, &image_desc,
+        &compatible_depth_one), AGC_OK,
+        "2D-array-compatible intent accepts a legal depth-one 3D image");
+    view_desc.image = compatible_depth_one;
+    view_desc.base_mip_level = 0u;
+    view_desc.base_array_layer = 0u;
+    view_desc.array_layer_count = 1u;
+    view_desc.view_type = AGC_IMAGE_VIEW_TYPE_2D;
+    TEST_ASSERT_EQ(agcCreateImageView(device, &view_desc, &view), AGC_OK,
+        "depth-one compatible image accepts its single 2D slice view");
+    TEST_ASSERT_EQ(agcDestroyImageView(view), AGC_OK,
+        "depth-one compatible image view destroys");
+    view = NULL;
+    TEST_ASSERT_EQ(agcDestroyImage(compatible_depth_one), AGC_OK,
+        "depth-one compatible image destroys");
     image_desc.flags = 0u;
     TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &image_2d), AGC_OK,
         "2D comparison image creates");
