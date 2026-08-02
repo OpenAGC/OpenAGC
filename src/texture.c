@@ -272,6 +272,15 @@ void agcSamplerDescriptorSetWrapModes(AgcSamplerDescriptor *desc,
     desc->words[0] |= (wrap_r & 0x7u) << 6;
 }
 
+void agcSamplerDescriptorSetUnnormalizedCoordinates(
+    AgcSamplerDescriptor *desc, uint32_t enable)
+{
+    if (!desc) return;
+    desc->words[0] &= ~(UINT32_C(1) << 15);
+    if (enable)
+        desc->words[0] |= UINT32_C(1) << 15;
+}
+
 void agcSamplerDescriptorSetLod(AgcSamplerDescriptor *desc,
     float min_lod, float max_lod, float lod_bias)
 {

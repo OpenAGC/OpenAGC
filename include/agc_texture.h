@@ -472,6 +472,8 @@ void agcSamplerDescriptorSetFilters(AgcSamplerDescriptor *desc,
     uint32_t min_filter, uint32_t mag_filter, uint32_t mip_filter);
 void agcSamplerDescriptorSetWrapModes(AgcSamplerDescriptor *desc,
     uint32_t wrap_s, uint32_t wrap_t, uint32_t wrap_r);
+void agcSamplerDescriptorSetUnnormalizedCoordinates(
+    AgcSamplerDescriptor *desc, uint32_t enable);
 void agcSamplerDescriptorSetLod(AgcSamplerDescriptor *desc,
     float min_lod, float max_lod, float lod_bias);
 void agcSamplerDescriptorSetCompareFunc(AgcSamplerDescriptor *desc,

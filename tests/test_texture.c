@@ -89,6 +89,19 @@ static void test_sampler_wrap_modes(void) {
     TEST_ASSERT_EQ((desc.words[0] >> 6) & 0x7u, 2u, "Wrap R = clamp (HW 2)");
 }
 
+static void test_sampler_unnormalized_coordinates(void) {
+    AgcSamplerDescriptor desc;
+    agcSamplerDescriptorInit(&desc);
+
+    agcSamplerDescriptorSetUnnormalizedCoordinates(&desc, 1u);
+    TEST_ASSERT_EQ(desc.words[0], UINT32_C(1) << 15,
+        "unnormalized coordinates set FORCE_UNNORMALIZED");
+
+    agcSamplerDescriptorSetUnnormalizedCoordinates(&desc, 0u);
+    TEST_ASSERT_EQ(desc.words[0], 0u,
+        "normalized coordinates clear FORCE_UNNORMALIZED");
+}
+
 static void test_sampler_lod(void) {
     AgcSamplerDescriptor desc;
     agcSamplerDescriptorInit(&desc);
@@ -1301,6 +1314,7 @@ void test_suite_texture(void) {
     TEST_RUN(test_sampler_filters);
     TEST_RUN(test_sampler_filters_nearest);
     TEST_RUN(test_sampler_wrap_modes);
+    TEST_RUN(test_sampler_unnormalized_coordinates);
     TEST_RUN(test_sampler_lod);
     TEST_RUN(test_sampler_lod_bias);
     TEST_RUN(test_sampler_compare_func);

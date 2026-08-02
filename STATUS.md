@@ -22,7 +22,10 @@ Runtime API 54 exposes `AGC_SAMPLER_UNNORMALIZED_COORDINATES_BIT` through the
 existing version-3 `AgcSamplerDesc.flags` field. `agcCreateSampler` validates
 that no unknown public bits are present and encodes the typed request as the
 gfx1013 sampler `FORCE_UNNORMALIZED` bit; applications never manipulate the
-hardware descriptor directly. Exact descriptor coverage raises generic
+hardware descriptor directly. The shared low-level descriptor helper is also
+declared, implemented, and unit-tested so a clean checkout builds the runtime
+and its expected-descriptor regression without relying on adjacent worktree
+changes. Exact descriptor coverage raises generic
 verification to 19,621 assertions, all 19 CTest entries pass, and the Prospero
 library builds clean without warnings. Vulkan-PS5 now translates Eden's exact
 linear and nearest unnormalized samplers through this public flag. The
