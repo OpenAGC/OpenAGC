@@ -1272,7 +1272,7 @@ static void test_gfx1013_eop_completion_fence(void)
     TEST_ASSERT_EQ(buffer[0],
         agcPm4Header3(AGC_PM4_OP_RELEASE_MEM, 8u),
         "gfx1013 EOP release header");
-    TEST_ASSERT_EQ(buffer[1], 0x06603514u,
+    TEST_ASSERT_EQ(buffer[1], 0x06703514u,
         "gfx1013 EOP event GCR and LRU policy");
     TEST_ASSERT_EQ(buffer[2], 0x20000000u,
         "gfx1013 EOP SEND_DATA32 selection");
@@ -1374,7 +1374,7 @@ static void test_gfx1013_resource_transitions(void)
     };
     const uint32_t release[AGC_GFX1013_EOP_FENCE_DWORDS] = {
         agcPm4Header3(AGC_PM4_OP_RELEASE_MEM, 8u),
-        0x06603514u, 0x20000000u, 0x014bb000u, 0x00000002u,
+        0x06703514u, 0x20000000u, 0x014bb000u, 0x00000002u,
         0x1234abcdu, 0u, 0u,
         agcPm4Header3(AGC_PM4_OP_NOP, 2u), 0u,
     };
@@ -1390,7 +1390,7 @@ static void test_gfx1013_resource_transitions(void)
         agcPm4Header3(AGC_PM4_OP_EVENT_WRITE, 2u),
         AGC_GFX1013_DB_META_FLUSH_EVENT,
         agcPm4Header3(AGC_PM4_OP_RELEASE_MEM, 8u),
-        0x0660352bu, 0x20000000u, 0x014bb000u, 0x00000002u,
+        0x0670352bu, 0x20000000u, 0x014bb000u, 0x00000002u,
         0x1234abcdu, 0u, 0u,
         agcPm4Header3(AGC_PM4_OP_NOP, 2u), 0u,
     };

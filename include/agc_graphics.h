@@ -84,7 +84,8 @@ extern "C" {
 #define AGC_GFX1013_DB_META_FLUSH_DWORDS           2u
 #define AGC_GFX1013_DB_DATA_FLUSH_EVENT          0x2Bu
 #define AGC_GFX1013_DB_META_FLUSH_EVENT          0x2Cu
-#define AGC_GFX1013_EOP_GCR_CONTROL            0x603u
+/* Forward-sequenced GLM writeback/invalidate plus GL2 writeback/invalidate. */
+#define AGC_GFX1013_EOP_GCR_CONTROL            0x703u
 #define AGC_GFX1013_EOP_CACHE_POLICY_LRU          3u
 #define AGC_GFX1013_ACQUIRE_MEM_DWORDS             8u
 #define AGC_GFX1013_TRANSITION_MAX_DWORDS          20u
