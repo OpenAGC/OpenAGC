@@ -5303,8 +5303,11 @@ static int agcShaderReflectionValid(
         if (export_info->location != i ||
             !agcShaderColorExportFormatValid(export_info->format) ||
             export_info->component_class > AGC_SHADER_COMPONENT_SINT ||
-            export_info->write_mask == 0u ||
             (export_info->write_mask & ~0xfu) != 0u ||
+            (export_info->write_mask == 0u &&
+             (export_info->format != AGC_SHADER_COLOR_EXPORT_DEFAULT ||
+              export_info->component_class !=
+                  AGC_SHADER_COMPONENT_FLOAT_OR_NORMALIZED)) ||
             export_info->flags != 0u) {
             return 0;
         }
@@ -6212,7 +6215,7 @@ static int agcPipelineColorStateValid(
 {
     return state &&
         agcHeaderValid(state->struct_size, sizeof(*state), state->version) &&
-        state->blend_enable <= 1u && state->write_mask != 0u &&
+        state->blend_enable <= 1u &&
         (state->write_mask & ~0xfu) == 0u &&
         state->source_color_factor < AGC_BLEND_FACTOR_COUNT &&
         state->destination_color_factor < AGC_BLEND_FACTOR_COUNT &&
@@ -6740,10 +6743,10 @@ static int32_t agcBuildGraphicsPipelineBind(
         if (!sceAgcCbSetCxRegistersDirect(&cb, &color_format_register, 1u))
             return AGC_ERROR_INTERNAL;
     } else {
-        for (i = 0u; i < pipeline->color_attachment_count; ++i) {
-            color_export_format |= (uint32_t)pipeline->pixel_shader->reflection.
-                color_exports[i].format << (i * 4u);
-        }
+        for (i = 0u; i < pipeline->color_attachment_count; ++i)
+            if (i < pipeline->pixel_shader->reflection.color_export_count)
+                color_export_format |= (uint32_t)pipeline->pixel_shader->
+                    reflection.color_exports[i].format << (i * 4u);
         color_format_register.offset = AGC_REG_SPI_SHADER_COL_FORMAT;
         color_format_register.value = color_export_format;
         if (!sceAgcCbSetCxRegistersDirect(&cb, &color_format_register, 1u))
@@ -7348,7 +7351,7 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
     }
     const int dual_source = (ps->reflection.flags &
         AGC_SHADER_REFLECTION_DUAL_SOURCE_EXPORT_BIT) != 0u;
-    if ((!dual_source && desc->color_attachment_count !=
+    if ((!dual_source && desc->color_attachment_count <
             ps->reflection.color_export_count) ||
         (dual_source && (desc->color_attachment_count != 1u ||
             ps->reflection.color_export_count != 2u)))
@@ -7368,14 +7371,28 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
     for (i = 0u; i < desc->color_attachment_count; ++i) {
         const AgcColorBlendAttachmentState *attachment =
             &desc->color_attachments[i];
+        if (i >= ps->reflection.color_export_count) {
+            if (!agcPipelineColorStateValid(attachment) ||
+                attachment->write_mask != 0u || attachment->blend_enable) {
+                return agcPipelineDebugReport(device,
+                    "agcCreateGraphicsPipeline",
+                    AGC_ERROR_VALIDATION_FAILED,
+                    AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT,
+                    "color attachment without a pixel-shader export must disable blending and all component writes");
+            }
+            continue;
+        }
         const AgcShaderColorExport *export_info =
             &ps->reflection.color_exports[i];
+        const int sparse_export = export_info->write_mask == 0u;
         if (!agcPipelineColorStateValid(attachment) ||
-            !agcPipelineColorExportCompatible(export_info, attachment) ||
-            (attachment->write_mask & ~export_info->write_mask) != 0u ||
-            (attachment->blend_enable &&
-             export_info->component_class !=
-                AGC_SHADER_COMPONENT_FLOAT_OR_NORMALIZED)) {
+            (sparse_export ?
+                attachment->write_mask != 0u || attachment->blend_enable :
+                !agcPipelineColorExportCompatible(export_info, attachment) ||
+                (attachment->write_mask & ~export_info->write_mask) != 0u ||
+                (attachment->blend_enable &&
+                 export_info->component_class !=
+                    AGC_SHADER_COMPONENT_FLOAT_OR_NORMALIZED))) {
             return agcPipelineDebugReport(device,
                 "agcCreateGraphicsPipeline", AGC_ERROR_VALIDATION_FAILED,
                 AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT,
@@ -8528,6 +8545,17 @@ static int agcPipelineDepthStencilWrites(const AgcGraphicsPipeline pipeline)
         (agcPipelineStencilFaceWrites(&state->front) ||
          (state->back_face_enable &&
           agcPipelineStencilFaceWrites(&state->back)));
+}
+
+static int agcPipelineDepthStencilAccesses(const AgcGraphicsPipeline pipeline)
+{
+    const AgcDepthStencilPipelineState *state = &pipeline->depth_stencil;
+
+    return state->depth_test_enable || state->depth_write_enable ||
+        state->depth_bounds_enable || state->stencil_test_enable ||
+        (pipeline->pixel_shader && (pipeline->pixel_shader->reflection.flags &
+            (AGC_SHADER_REFLECTION_WRITES_DEPTH_BIT |
+             AGC_SHADER_REFLECTION_WRITES_STENCIL_BIT)) != 0u);
 }
 
 int32_t PS5_SYSV_ABI agcCmdBindDepthStencilTarget(
@@ -12594,7 +12622,9 @@ int32_t PS5_SYSV_ABI agcCmdDraw(AgcCommandBuffer command_buffer,
             command_buffer->allocation->debug_name,
             "draw is missing one or more pipeline color attachments");
     if (command_buffer->graphics_pipeline->depth_stencil.format !=
-            AGC_FORMAT_UNDEFINED && !command_buffer->depth_stencil_target)
+            AGC_FORMAT_UNDEFINED &&
+        agcPipelineDepthStencilAccesses(command_buffer->graphics_pipeline) &&
+        !command_buffer->depth_stencil_target)
         return agcDebugReport(command_buffer->device,
             AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
             AGC_DEBUG_MESSAGE_CATEGORY_RESOURCE_STATE_BIT,
@@ -12731,7 +12761,9 @@ int32_t PS5_SYSV_ABI agcCmdDrawIndexed(AgcCommandBuffer command_buffer,
             "indexed draw is missing one or more pipeline color attachments");
     }
     if (command_buffer->graphics_pipeline->depth_stencil.format !=
-            AGC_FORMAT_UNDEFINED && !command_buffer->depth_stencil_target) {
+            AGC_FORMAT_UNDEFINED &&
+        agcPipelineDepthStencilAccesses(command_buffer->graphics_pipeline) &&
+        !command_buffer->depth_stencil_target) {
         return agcDebugReport(command_buffer->device,
             AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
             AGC_DEBUG_MESSAGE_CATEGORY_RESOURCE_STATE_BIT,
@@ -12893,7 +12925,9 @@ static int32_t agcCommandValidateIndirectGraphics(
             command_buffer->graphics_pipeline->color_attachment_count)
         return AGC_ERROR_RESOURCE_NOT_BOUND;
     if (command_buffer->graphics_pipeline->depth_stencil.format !=
-            AGC_FORMAT_UNDEFINED && !command_buffer->depth_stencil_target)
+            AGC_FORMAT_UNDEFINED &&
+        agcPipelineDepthStencilAccesses(command_buffer->graphics_pipeline) &&
+        !command_buffer->depth_stencil_target)
         return AGC_ERROR_RESOURCE_NOT_BOUND;
     if ((command_buffer->dynamic_state_set_mask &
          command_buffer->graphics_pipeline->dynamic_state_mask) !=

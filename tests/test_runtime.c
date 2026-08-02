@@ -6635,6 +6635,7 @@ static void test_runtime_depth_stencil_target_binding(void)
     AgcGraphicsPipelineDesc pipeline_desc = AGC_GRAPHICS_PIPELINE_DESC_INIT;
     AgcDepthStencilPipelineState depth_stencil =
         AGC_DEPTH_STENCIL_PIPELINE_STATE_INIT;
+    AgcShaderReflection depth_export_reflection = AGC_SHADER_REFLECTION_INIT;
     AgcImageDesc image_desc = AGC_IMAGE_DESC_INIT;
     AgcBufferDesc buffer_desc = AGC_BUFFER_DESC_INIT;
     AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
@@ -6642,10 +6643,13 @@ static void test_runtime_depth_stencil_target_binding(void)
         AGC_DEPTH_STENCIL_TARGET_BINDING_INIT;
     AgcResourceTransition target_transition = AGC_RESOURCE_TRANSITION_INIT;
     AgcGraphicsPipeline pipeline = NULL;
+    AgcGraphicsPipeline inactive_pipeline = NULL;
+    AgcGraphicsPipeline depth_export_pipeline = NULL;
     AgcImage image = NULL;
     AgcImage incompatible_image = NULL;
     AgcBuffer index_buffer = NULL;
     AgcCommandBuffer command = NULL;
+    AgcShader depth_export_pixel = NULL;
     AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
     const AgcCommandBufferSubmit *captured;
     const uint32_t *words;
@@ -6659,6 +6663,21 @@ static void test_runtime_depth_stencil_target_binding(void)
     pipeline_desc.depth_stencil = &depth_stencil;
     TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc, &pipeline),
         AGC_OK, "depth-target graphics pipeline creates");
+    depth_stencil.depth_test_enable = 0u;
+    depth_stencil.depth_write_enable = 0u;
+    TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc,
+        &inactive_pipeline), AGC_OK,
+        "inactive depth/stencil pipeline creates");
+    depth_export_reflection.flags = AGC_SHADER_REFLECTION_WRITES_DEPTH_BIT;
+    depth_export_pixel = create_shader_with_reflection(device, kAgcShaderStagePs,
+        &depth_export_reflection);
+    pipeline_desc.pixel_shader = depth_export_pixel;
+    TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc,
+        &depth_export_pipeline), AGC_OK,
+        "depth-export pipeline creates with declared depth format");
+    pipeline_desc.pixel_shader = pixel;
+    depth_stencil.depth_test_enable = 1u;
+    depth_stencil.depth_write_enable = 1u;
     image_desc.width = 64u;
     image_desc.height = 64u;
     image_desc.format = AGC_FORMAT_D16_UNORM;
@@ -6687,6 +6706,22 @@ static void test_runtime_depth_stencil_target_binding(void)
     TEST_ASSERT_EQ(agcCmdDrawIndexed(command, 3u, 1u, 0u, 0, 0u),
         AGC_ERROR_RESOURCE_NOT_BOUND,
         "depth-enabled draw requires a depth/stencil target");
+    TEST_ASSERT_EQ(agcCmdDraw(command, 3u, 1u, 0u, 0u),
+        AGC_ERROR_RESOURCE_NOT_BOUND,
+        "depth-enabled non-indexed draw requires a depth/stencil target");
+    TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(command, inactive_pipeline), AGC_OK,
+        "inactive depth/stencil pipeline binds without a target");
+    TEST_ASSERT_EQ(agcCmdDraw(command, 3u, 1u, 0u, 0u), AGC_OK,
+        "declared but inactive depth/stencil accepts an unbound target");
+    TEST_ASSERT_EQ(agcCmdDrawIndexed(command, 3u, 1u, 0u, 0, 0u), AGC_OK,
+        "indexed draw accepts declared but inactive unbound depth/stencil");
+    TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(command, depth_export_pipeline),
+        AGC_OK, "depth-export pipeline binds without a target");
+    TEST_ASSERT_EQ(agcCmdDraw(command, 3u, 1u, 0u, 0u),
+        AGC_ERROR_RESOURCE_NOT_BOUND,
+        "depth-export draw requires a depth/stencil target");
+    TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(command, pipeline), AGC_OK,
+        "depth-enabled pipeline rebinds after unbound compatibility draws");
     target.image = incompatible_image;
     TEST_ASSERT_EQ(agcCmdBindDepthStencilTarget(command, &target),
         AGC_ERROR_VALIDATION_FAILED,
@@ -6739,6 +6774,12 @@ static void test_runtime_depth_stencil_target_binding(void)
         "depth-target index buffer destroys");
     TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(pipeline), AGC_OK,
         "depth-target graphics pipeline destroys");
+    TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(depth_export_pipeline), AGC_OK,
+        "depth-export graphics pipeline destroys");
+    TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(inactive_pipeline), AGC_OK,
+        "inactive depth/stencil graphics pipeline destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(depth_export_pixel), AGC_OK,
+        "depth-export pixel shader destroys");
     TEST_ASSERT_EQ(agcDestroyShader(pixel), AGC_OK,
         "depth-target pixel shader destroys");
     TEST_ASSERT_EQ(agcDestroyShader(vertex), AGC_OK,
@@ -7783,6 +7824,53 @@ static void test_runtime_graphics_pipeline_compatibility_matrix(void)
             "invalid logic operation fails before pipeline allocation");
         TEST_ASSERT_EQ(agcDestroyShader(ps), AGC_OK,
             "export-count pixel shader destroys");
+
+        requirements.color_export_count = 2u;
+        requirements.color_exports[0] = (AgcShaderColorExport){
+            0u, AGC_SHADER_COLOR_EXPORT_DEFAULT,
+            AGC_SHADER_COMPONENT_FLOAT_OR_NORMALIZED, 0u, 0u};
+        requirements.color_exports[1] = (AgcShaderColorExport){
+            1u, AGC_SHADER_COLOR_EXPORT_FP16_ABGR,
+            AGC_SHADER_COMPONENT_FLOAT_OR_NORMALIZED, 0xfu, 0u};
+        ps = create_shader_with_reflection(
+            device, kAgcShaderStagePs, &requirements);
+        desc.pixel_shader = ps;
+        desc.color_attachment_count = 2u;
+        desc.logic_operation_enable = 0u;
+        desc.logic_operation = AGC_LOGIC_OPERATION_COPY;
+        attachments[0].format = AGC_FORMAT_RGBA8_UNORM;
+        attachments[0].write_mask = 0u;
+        attachments[0].blend_enable = 0u;
+        attachments[1].format = AGC_FORMAT_RGBA8_UNORM;
+        attachments[1].write_mask = 0xfu;
+        TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &pipeline),
+            AGC_OK,
+            "sparse location-one export accepts disabled location zero");
+        TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(pipeline), AGC_OK,
+            "sparse color-export pipeline destroys");
+        pipeline = NULL;
+        attachments[0].write_mask = 0x1u;
+        TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &pipeline),
+            AGC_ERROR_VALIDATION_FAILED,
+            "sparse export rejects enabled writes for its empty location");
+        TEST_ASSERT(pipeline == NULL,
+            "sparse write-mask rejection leaves pipeline output null");
+        TEST_ASSERT_EQ(agcDestroyShader(ps), AGC_OK,
+            "sparse color-export shader destroys");
+
+        requirements = (AgcShaderReflection)AGC_SHADER_REFLECTION_INIT;
+        ps = create_shader_with_reflection(
+            device, kAgcShaderStagePs, &requirements);
+        desc.pixel_shader = ps;
+        attachments[0].write_mask = 0u;
+        attachments[1].write_mask = 0u;
+        TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &desc, &pipeline),
+            AGC_OK,
+            "no-export pixel shader accepts fully disabled color targets");
+        TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(pipeline), AGC_OK,
+            "no-export color-target pipeline destroys");
+        TEST_ASSERT_EQ(agcDestroyShader(ps), AGC_OK,
+            "no-export pixel shader destroys");
     }
 
     {
