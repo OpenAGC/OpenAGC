@@ -426,6 +426,8 @@ struct AgcCommandBufferImpl {
     uint32_t *storage;
     AgcRuntimeAllocation *allocation;
     AgcRuntimeAllocation *resource_allocation;
+    AgcRuntimeAllocation *transition_completion_allocation;
+    uint32_t transition_completion_value;
     AgcFence completion_fence;
     SceAgcCb cursor;
     AgcGraphicsPipeline graphics_pipeline;
@@ -1638,6 +1640,10 @@ static int32_t agcRuntimeInitializeTessellationStorage(AgcDevice device)
         &device->tessellation_factor_allocation);
     if (result != AGC_OK)
         goto fail;
+    /* Same-queue write transitions need an observable EOP completion point
+     * before a following consumer. Keep that word in a dedicated allocation:
+     * command storage is kernel-owned packet memory, while pipeline resource
+     * allocations are nullable and may be snapshotted during recording. */
     result = agcRuntimeAllocate(device, AGC_MEMORY_HEAP_FLEXIBLE,
         sizeof(table), 256u, 0u, AGC_OBJECT_TYPE_COUNT, device,
         &device->tessellation_table_allocation);
@@ -8077,6 +8083,15 @@ int32_t PS5_SYSV_ABI agcCreateCommandBuffer(AgcDevice device,
     command_buffer->state = AGC_COMMAND_BUFFER_STATE_INITIAL;
     command_buffer->capacity_dwords = desc->capacity_dwords;
     agcCbInit(&command_buffer->cursor, command_buffer->storage, storage_size);
+    result = agcRuntimeAllocate(device, AGC_MEMORY_HEAP_FLEXIBLE,
+        sizeof(uint32_t), sizeof(uint32_t), 1u,
+        AGC_OBJECT_TYPE_COMMAND_BUFFER, command_buffer,
+        &command_buffer->transition_completion_allocation);
+    if (result != AGC_OK) {
+        agcRuntimeFree(device, command_buffer->allocation);
+        agcDestroyChild(device, command_buffer);
+        return result;
+    }
     agcCaptureRecordObjectCreate(device, command_buffer,
         AGC_CAPTURE_OBJECT_COMMAND_BUFFER, (uint32_t)desc->queue_type,
         desc->capacity_dwords);
@@ -8099,6 +8114,7 @@ int32_t PS5_SYSV_ABI agcDestroyCommandBuffer(AgcCommandBuffer command_buffer)
     }
     device = command_buffer->device;
     agcReleaseCommandReferences(command_buffer);
+    agcRuntimeFree(device, command_buffer->transition_completion_allocation);
     agcRuntimeFree(device, command_buffer->allocation);
     agcCaptureRecordObjectDestroy(device, command_buffer,
         AGC_CAPTURE_OBJECT_COMMAND_BUFFER);
@@ -8109,6 +8125,8 @@ int32_t PS5_SYSV_ABI agcDestroyCommandBuffer(AgcCommandBuffer command_buffer)
 
 int32_t PS5_SYSV_ABI agcBeginCommandBuffer(AgcCommandBuffer command_buffer)
 {
+    int32_t result;
+
     if (!command_buffer || command_buffer->magic != AGC_MAGIC_COMMAND_BUFFER ||
         !agcDeviceValid(command_buffer->device)) {
         return AGC_ERROR_INVALID_ARGUMENT;
@@ -8121,6 +8139,14 @@ int32_t PS5_SYSV_ABI agcBeginCommandBuffer(AgcCommandBuffer command_buffer)
             AGC_OBJECT_TYPE_COMMAND_BUFFER,
             command_buffer->allocation->debug_name,
             "command buffer must be in Initial state before begin");
+    *(uint32_t *)agcAllocationCpuAddress(
+        command_buffer->transition_completion_allocation) = 0u;
+    result = agcFlushRuntimeAllocation(
+        command_buffer->transition_completion_allocation, 0u,
+        sizeof(uint32_t));
+    if (result != AGC_OK)
+        return result;
+    command_buffer->transition_completion_value = 0u;
     agcCbReset(&command_buffer->cursor, command_buffer->storage,
         (size_t)command_buffer->capacity_dwords * sizeof(uint32_t));
     command_buffer->state = AGC_COMMAND_BUFFER_STATE_RECORDING;
@@ -8836,6 +8862,24 @@ static int agcRuntimeUsageIsGpu(AgcResourceUsage usage)
 {
     return usage != kAgcResourceUsageUndefined &&
         !agcRuntimeUsageIsHost(usage);
+}
+
+static int agcRuntimeLowUsageWrites(AgcGfx1013ResourceUsage usage)
+{
+    return usage == AGC_GFX1013_RESOURCE_USAGE_RENDER_TARGET ||
+        usage == AGC_GFX1013_RESOURCE_USAGE_COMPUTE_WRITE ||
+        usage == AGC_GFX1013_RESOURCE_USAGE_COPY_DESTINATION ||
+        usage == AGC_GFX1013_RESOURCE_USAGE_DEPTH_STENCIL_WRITE;
+}
+
+static int agcRuntimeOrdinaryTransitionNeedsCompletionWait(uint32_t flags,
+    uint32_t emit_low_transition,
+    const AgcGfx1013ResourceTransition *transition)
+{
+    return flags == 0u && emit_low_transition && transition &&
+        transition->before != transition->after &&
+        transition->after != AGC_GFX1013_RESOURCE_USAGE_UNDEFINED &&
+        agcRuntimeLowUsageWrites(transition->before);
 }
 
 static AgcResourceOwner agcRuntimeCommandOwner(
@@ -10236,6 +10280,19 @@ int32_t PS5_SYSV_ABI agcCmdTransitionResources(
                     command_buffer->allocation->debug_name,
                     "transition packet requirements exceed the supported command capacity");
             dword_count += transition_dwords;
+            if (agcRuntimeOrdinaryTransitionNeedsCompletionWait(flags,
+                    emit_low_transition, &low_transition)) {
+                if (dword_count > UINT32_MAX - 7u)
+                    return agcDebugReport(command_buffer->device,
+                        AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
+                        AGC_DEBUG_MESSAGE_CATEGORY_COMMAND_CAPACITY_BIT,
+                        AGC_ERROR_COMMAND_SPACE_EXHAUSTED,
+                        "agcCmdTransitionResources",
+                        AGC_OBJECT_TYPE_COMMAND_BUFFER,
+                        command_buffer->allocation->debug_name,
+                        "ordinary transition completion wait requirements overflow command capacity");
+                dword_count += 7u;
+            }
         }
         if (flags == AGC_RESOURCE_TRANSITION_ACQUIRE_BIT) {
             if (dword_count > UINT32_MAX - 7u)
@@ -10317,8 +10374,12 @@ int32_t PS5_SYSV_ABI agcCmdTransitionResources(
         int32_t result = agcRuntimeValidateTransition(command_buffer,
             &transitions[i], &resource, &low_transition, &emit_low_transition,
             &flags, &label, &value);
+        int wait_for_completion;
         if (result != AGC_OK)
             return AGC_ERROR_INTERNAL;
+        wait_for_completion =
+            agcRuntimeOrdinaryTransitionNeedsCompletionWait(flags,
+                emit_low_transition, &low_transition);
         if ((flags == AGC_RESOURCE_TRANSITION_RELEASE_BIT ||
              flags == AGC_RESOURCE_TRANSITION_ACQUIRE_BIT) &&
             !agcCommandRetainGpuLabel(command_buffer, label))
@@ -10329,8 +10390,28 @@ int32_t PS5_SYSV_ABI agcCmdTransitionResources(
                 agcAllocationGpuAddress(label->allocation), value, UINT32_MAX,
                 UINT32_MAX))
             return AGC_ERROR_INTERNAL;
-        if (emit_low_transition && (result = agcGfx1013TransitionResource(
-                &command_buffer->cursor, &low_transition)) != AGC_OK)
+        if (wait_for_completion) {
+            if (command_buffer->transition_completion_value == UINT32_MAX)
+                return AGC_ERROR_COMMAND_SPACE_EXHAUSTED;
+            /* A nonzero completion address selects write-confirmed ReleaseMem.
+             * The immediate wait prevents the consumer from overtaking its
+             * cache writeback; the submission-tail fence would be too late. */
+            low_transition.completion_address = agcAllocationGpuAddress(
+                command_buffer->transition_completion_allocation);
+            low_transition.completion_value =
+                ++command_buffer->transition_completion_value;
+        }
+        if (emit_low_transition) {
+            result = agcGfx1013TransitionResource(
+                &command_buffer->cursor, &low_transition);
+            if (result != AGC_OK)
+                return AGC_ERROR_INTERNAL;
+        }
+        if (wait_for_completion &&
+            !sceAgcDcbWaitRegMem(&command_buffer->cursor, 0u,
+                AGC_RUNTIME_WAIT_COMPARE_GREATER_EQUAL, 0u, 0u,
+                low_transition.completion_address,
+                low_transition.completion_value, UINT32_MAX, UINT32_MAX))
             return AGC_ERROR_INTERNAL;
         if (transitions[i].resource_type == kAgcResourceTypeBuffer) {
             if (!agcCommandRetainBuffer(command_buffer, (AgcBuffer)resource))

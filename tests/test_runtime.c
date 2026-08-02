@@ -5920,10 +5920,29 @@ static void test_runtime_resource_transitions(void)
     TEST_ASSERT_EQ(agcPm4Opcode(
         words[AGC_GFX1013_CB_META_FLUSH_DWORDS]), AGC_PM4_OP_RELEASE_MEM,
         "color-to-host transition emits qualified release");
+    TEST_ASSERT_EQ(agcPm4Opcode(
+        words[AGC_GFX1013_CB_META_FLUSH_DWORDS +
+            AGC_GFX1013_EOP_FENCE_DWORDS]), AGC_PM4_OP_WAIT_REG_MEM,
+        "ordinary color release waits for its private completion word");
+    TEST_ASSERT(words[AGC_GFX1013_CB_META_FLUSH_DWORDS + 3u] != 0u,
+        "ordinary color release uses a nonzero private completion address");
+    TEST_ASSERT_EQ(words[AGC_GFX1013_CB_META_FLUSH_DWORDS + 3u],
+        words[AGC_GFX1013_CB_META_FLUSH_DWORDS +
+            AGC_GFX1013_EOP_FENCE_DWORDS + 2u],
+        "ordinary color release and wait use the same completion address");
+    TEST_ASSERT_EQ(words[AGC_GFX1013_CB_META_FLUSH_DWORDS + 5u], 1u,
+        "first ordinary color release writes completion value one");
+    TEST_ASSERT_EQ(words[AGC_GFX1013_CB_META_FLUSH_DWORDS +
+        AGC_GFX1013_EOP_FENCE_DWORDS + 4u], 1u,
+        "first ordinary color wait requires completion value one");
+    TEST_ASSERT_EQ(words[
+        2u * AGC_GFX1013_CB_META_FLUSH_DWORDS +
+        AGC_GFX1013_EOP_FENCE_DWORDS + 7u + 5u], 2u,
+        "second ordinary color release increments its completion value");
     TEST_ASSERT_EQ(captured->dword_count,
         2u * (AGC_GFX1013_CB_META_FLUSH_DWORDS +
-            AGC_GFX1013_EOP_FENCE_DWORDS),
-        "two color transitions emit two qualified releases");
+            AGC_GFX1013_EOP_FENCE_DWORDS + 7u),
+        "two color transitions emit two ordered qualified releases");
     TEST_ASSERT_EQ(agcGetFenceStatus(fence), AGC_OK,
         "color-to-host transition completes on host");
     TEST_ASSERT_EQ(agcResetCommandBuffer(graphics_command), AGC_OK,
