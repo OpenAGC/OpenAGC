@@ -18,6 +18,19 @@ S8 view descriptors. Existing 4x D32 attachment and color-resolve hardware
 evidence supports the layout path; sampled D32/S8 pixels remain to be
 qualified before this capability is called hardware-complete.
 
+Runtime API 54 exposes `AGC_SAMPLER_UNNORMALIZED_COORDINATES_BIT` through the
+existing version-3 `AgcSamplerDesc.flags` field. `agcCreateSampler` validates
+that no unknown public bits are present and encodes the typed request as the
+gfx1013 sampler `FORCE_UNNORMALIZED` bit; applications never manipulate the
+hardware descriptor directly. Exact descriptor coverage raises generic
+verification to 19,621 assertions, all 19 CTest entries pass, and the Prospero
+library builds clean without warnings. Vulkan-PS5 now translates Eden's exact
+linear and nearest unnormalized samplers through this public flag. The
+cleanup-first FW 5.50 run `20260802T061452Z-swapchain-run1` created both native
+samplers and advanced past Eden's `BlitImageHelper`; exact sampled-pixel
+execution remains the qualification gate before this capability is labeled
+hardware-complete.
+
 Current execution order:
 
 The one-binary portability gate is complete. The FW 5.50 and FW 11.60 cleanup

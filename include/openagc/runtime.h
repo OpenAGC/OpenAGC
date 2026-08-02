@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-#define AGC_RUNTIME_API_VERSION 53u
+#define AGC_RUNTIME_API_VERSION 54u
 #define AGC_RUNTIME_MAX_VIEWPORTS 16u
 #define AGC_RUNTIME_STRUCTURE_VERSION_1 1u
 #define AGC_RUNTIME_STRUCTURE_VERSION_2 2u
@@ -648,6 +648,11 @@ typedef enum AgcSamplerBorderColor {
     AGC_SAMPLER_BORDER_CUSTOM = 3
 } AgcSamplerBorderColor;
 
+typedef enum AgcSamplerFlagBits {
+    AGC_SAMPLER_UNNORMALIZED_COORDINATES_BIT = 1u << 0
+} AgcSamplerFlagBits;
+typedef uint32_t AgcSamplerFlags;
+
 typedef struct AgcSamplerDesc {
     uint32_t struct_size;
     uint32_t version;
@@ -656,7 +661,7 @@ typedef struct AgcSamplerDesc {
     AgcAddressMode address_u;
     AgcAddressMode address_v;
     AgcAddressMode address_w;
-    uint32_t flags;
+    AgcSamplerFlags flags;
     uint64_t reserved[4];
     AgcMipFilter mip_filter;
     uint32_t anisotropy_enable;

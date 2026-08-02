@@ -10466,6 +10466,7 @@ static void test_runtime_extended_image_view_and_sampler(void)
     AgcImage image = NULL;
     AgcImageView view = NULL;
     AgcSampler sampler = NULL;
+    AgcSampler invalid_sampler = NULL;
 
     image_desc.width = 32u;
     image_desc.height = 16u;
@@ -10554,6 +10555,7 @@ static void test_runtime_extended_image_view_and_sampler(void)
 
     sampler_desc.min_filter = AGC_FILTER_LINEAR;
     sampler_desc.mag_filter = AGC_FILTER_NEAREST;
+    sampler_desc.flags = AGC_SAMPLER_UNNORMALIZED_COORDINATES_BIT;
     sampler_desc.address_u = AGC_ADDRESS_MODE_MIRRORED_REPEAT;
     sampler_desc.address_v = AGC_ADDRESS_MODE_CLAMP_TO_BORDER;
     sampler_desc.address_w = AGC_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE;
@@ -10588,6 +10590,7 @@ static void test_runtime_extended_image_view_and_sampler(void)
         kAgcFilterAnisoLinear, kAgcFilterAnisoPoint, kAgcMipFilterLinear);
     agcSamplerDescriptorSetClampMode(&expected_sampler, kAgcClampMirror,
         kAgcClampBorder, kAgcClampMirrorOnce);
+    agcSamplerDescriptorSetUnnormalizedCoordinates(&expected_sampler, 1u);
     agcSamplerDescriptorSetLod(&expected_sampler, 1.0f, 5.0f, 0.5f);
     agcSamplerDescriptorSetMaxAnisotropy(&expected_sampler, 8u);
     agcSamplerDescriptorSetCompareFunc(&expected_sampler,
@@ -10596,7 +10599,14 @@ static void test_runtime_extended_image_view_and_sampler(void)
         7u), AGC_OK, "expected custom-border sampler descriptor encodes");
     TEST_ASSERT(memcmp(sampler_info.cpu_address, &expected_sampler,
         sizeof(expected_sampler)) == 0,
-        "native sampler backing matches the complete normalized descriptor");
+        "native sampler backing matches the complete unnormalized descriptor");
+
+    sampler_desc.flags = 1u << 31;
+    TEST_ASSERT_EQ(agcCreateSampler(device, &sampler_desc, &invalid_sampler),
+        AGC_ERROR_INVALID_ARGUMENT, "sampler rejects unknown public flag bits");
+    TEST_ASSERT(invalid_sampler == NULL,
+        "unknown sampler flags leave the output handle null");
+    sampler_desc.flags = AGC_SAMPLER_UNNORMALIZED_COORDINATES_BIT;
 
     TEST_ASSERT_EQ(agcDestroySampler(sampler), AGC_OK,
         "extended sampler destroys");

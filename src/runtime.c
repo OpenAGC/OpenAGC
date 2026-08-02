@@ -4630,7 +4630,8 @@ int32_t PS5_SYSV_ABI agcCreateSampler(
             AGC_ADDRESS_MODE_CLAMP_TO_EDGE) ||
         desc->address_w > (version2 ? AGC_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE :
             AGC_ADDRESS_MODE_CLAMP_TO_EDGE) ||
-        desc->flags != 0u || !agcReservedZero(desc->reserved, 4u) ||
+        (desc->flags & ~AGC_SAMPLER_UNNORMALIZED_COORDINATES_BIT) != 0u ||
+        !agcReservedZero(desc->reserved, 4u) ||
         (version2 && (desc->mip_filter > AGC_MIP_FILTER_LINEAR ||
          desc->anisotropy_enable > 1u || desc->max_anisotropy == 0u ||
          desc->max_anisotropy > 16u || desc->compare_enable > 1u ||
@@ -4679,6 +4680,8 @@ int32_t PS5_SYSV_ABI agcCreateSampler(
             desc->address_w == AGC_ADDRESS_MODE_MIRRORED_REPEAT ? kAgcClampMirror :
             desc->address_w == AGC_ADDRESS_MODE_CLAMP_TO_BORDER ? kAgcClampBorder :
             kAgcClampMirrorOnce);
+    agcSamplerDescriptorSetUnnormalizedCoordinates(&descriptor,
+        (desc->flags & AGC_SAMPLER_UNNORMALIZED_COORDINATES_BIT) != 0u);
     if (version2) {
         agcSamplerDescriptorSetLod(&descriptor, desc->min_lod,
             desc->max_lod, desc->lod_bias);
