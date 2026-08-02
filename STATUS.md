@@ -51,6 +51,18 @@ for Vulkan-style interleaved graphics and compute work and matches the FW 5.50
 hardware-proven compute carrier; color, depth/stencil, and scanout states
 remain graphics-only.
 
+Shader-reflection API 18 adds the compute `NumWorkGroups` system-value SGPR
+location. Direct dispatches program the exact X/Y/Z group counts into the
+reflected three-dword range; indirect dispatches that require this value fail
+closed until a GPU-native indirect source is available. Generic verification
+passes 19,586 assertions and the Prospero library builds clean. Vulkan-PS5's
+dynamic-ID subgroup-broadcast probe, built through openagc-psbc with explicit
+Wave32, passed twice from cleanup through teardown on exact FW 5.50 using the
+identical ELF SHA-256
+`ed800f84e333434be743ec46d1f21db37c8f8eb05915c17a686f0093cb153d61`.
+The console subsequently sleeping was not a kernel panic and is not recorded
+as a failure.
+
 Command resource tables now support Vulkan-style descriptor, push-constant,
 and vertex-buffer rebinding after a draw or dispatch. The runtime snapshots the
 GPU-visible table before mutation, retains every snapshot through command

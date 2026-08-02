@@ -155,6 +155,12 @@ expert use, but make the native API the recommended application surface.
    API 52 adds RGB9E5 as a four-byte sampled-image contract with alpha fixed to
    one. Keep its color-target path disabled until the gfx10.3 RB+ partial-mask
    erratum has an explicit, hardware-qualified runtime workaround.
+   Shader-reflection API 18 now carries compute `NumWorkGroups` as a typed
+   three-dword system-value SGPR range. Preserve exact direct-dispatch X/Y/Z
+   programming and the indirect-dispatch fail-closed rule. This unblocks the
+   general Vulkan dynamic subgroup-broadcast path, which passes twice on FW
+   5.50 with identical bytes; multiview and border-color swizzle remain the
+   next mandatory-capability gaps before the broader Eden gate.
 6. **Documentation and validation are part of every milestone.** Do not defer
    public API reference material, negative tests, or capability labels to the
    final release phase.

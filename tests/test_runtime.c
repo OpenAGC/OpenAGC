@@ -2106,6 +2106,91 @@ static void test_runtime_compute_submission(void)
     TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK, "compute device destroys");
 }
 
+static void test_runtime_compute_num_workgroups_user_data(void)
+{
+    AgcDevice device = create_device();
+    AgcQueue queue = create_queue(device, kAgcQueueCompute);
+    AgcShaderReflection reflection = AGC_SHADER_REFLECTION_INIT;
+    AgcComputePipelineDesc pipeline_desc = AGC_COMPUTE_PIPELINE_DESC_INIT;
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    AgcShader shader;
+    AgcComputePipeline pipeline = NULL;
+    AgcCommandBuffer command = NULL;
+    const AgcCommandBufferSubmit *captured;
+    const uint32_t *words;
+    uint32_t owner = UINT32_MAX;
+    uint32_t user_packet = UINT32_MAX;
+
+    reflection.local_size_x = 32u;
+    reflection.system_sgpr_mask =
+        AGC_SHADER_SYSTEM_SGPR_NUM_WORKGROUPS_BIT;
+    reflection.user_sgpr_count = 1u;
+    reflection.user_sgprs[0] = (AgcShaderUserSgpr){
+        AGC_SHADER_USER_SGPR_NUM_WORKGROUPS, 0u,
+        AGC_REG_COMPUTE_USER_DATA_0 + 3u, 3u,
+    };
+    shader = create_shader_with_reflection(
+        device, kAgcShaderStageCs, &reflection);
+    pipeline_desc.shader = shader;
+    pipeline_desc.local_size_x = 32u;
+    command_desc.queue_type = kAgcQueueCompute;
+    command_desc.capacity_dwords = 1024u;
+    TEST_ASSERT_EQ(agcCreateComputePipeline(device, &pipeline_desc,
+        &pipeline), AGC_OK,
+        "compute pipeline accepts reflected num-workgroups SGPRs");
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
+        AGC_OK, "num-workgroups command buffer creates");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+        "num-workgroups command buffer begins");
+    TEST_ASSERT_EQ(agcCmdBindComputePipeline(command, pipeline), AGC_OK,
+        "num-workgroups compute pipeline binds");
+    TEST_ASSERT_EQ(agcCmdDispatch(command, 9u, 5u, 2u), AGC_OK,
+        "direct dispatch programs reflected group counts");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+        "num-workgroups command buffer ends");
+    submit.command_buffer_count = 1u;
+    submit.command_buffers = &command;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, NULL), AGC_OK,
+        "num-workgroups dispatch submits");
+    captured = agcDriverDebugLastAcbSubmit(&owner);
+    TEST_ASSERT(captured != NULL && owner != UINT32_MAX,
+        "num-workgroups submission is captured");
+    words = (const uint32_t *)(uintptr_t)captured->command_address;
+    for (uint32_t i = 0u; i + 8u <= captured->dword_count; ++i) {
+        if (agcPm4Opcode(words[i]) == AGC_PM4_OP_SET_SH_REG &&
+            agcPm4Length(words[i]) >= 8u &&
+            words[i + 1u] == AGC_REG_COMPUTE_USER_DATA_0 &&
+            words[i + 5u] == 9u && words[i + 6u] == 5u &&
+            words[i + 7u] == 2u) {
+            user_packet = i;
+            break;
+        }
+    }
+    TEST_ASSERT(user_packet != UINT32_MAX,
+        "dispatch emits the contiguous compute user-data packet");
+    if (user_packet != UINT32_MAX) {
+        TEST_ASSERT_EQ(words[user_packet + 5u], 9u,
+            "num-workgroups SGPR X matches direct dispatch");
+        TEST_ASSERT_EQ(words[user_packet + 6u], 5u,
+            "num-workgroups SGPR Y matches direct dispatch");
+        TEST_ASSERT_EQ(words[user_packet + 7u], 2u,
+            "num-workgroups SGPR Z matches direct dispatch");
+    }
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+        "num-workgroups command buffer resets");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+        "num-workgroups command buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyComputePipeline(pipeline), AGC_OK,
+        "num-workgroups pipeline destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(shader), AGC_OK,
+        "num-workgroups shader destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
+        "num-workgroups queue destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "num-workgroups device destroys");
+}
+
 static void test_runtime_compute_on_graphics_queue(void)
 {
     AgcDevice device = create_device();
@@ -10814,6 +10899,7 @@ void test_suite_runtime(void)
     TEST_RUN(test_runtime_all_object_lifecycle);
     TEST_RUN(test_runtime_fence_and_command_states);
     TEST_RUN(test_runtime_compute_submission);
+    TEST_RUN(test_runtime_compute_num_workgroups_user_data);
     TEST_RUN(test_runtime_compute_on_graphics_queue);
     TEST_RUN(test_runtime_empty_submission_eop_diagnostic);
     TEST_RUN(test_runtime_compiler_reflection_sidecar);

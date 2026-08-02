@@ -4957,6 +4957,8 @@ static int agcShaderReflectionValid(
          reflection->compiler_api_version ==
              AGC_SHADER_COMPILER_API_VERSION_16 ||
          reflection->compiler_api_version ==
+             AGC_SHADER_COMPILER_API_VERSION_17 ||
+         reflection->compiler_api_version ==
              AGC_SHADER_COMPILER_API_VERSION);
     if (!reflection || reflection->struct_size != sizeof(*reflection) ||
         (!legacy_reflection && !current_reflection) ||
@@ -5571,6 +5573,13 @@ static int32_t agcPipelineValidateShaderUserData(
         case AGC_SHADER_USER_SGPR_START_INSTANCE:
         case AGC_SHADER_USER_SGPR_DRAW_INDEX:
             if (sgpr->index != 0u || sgpr->dword_count != 1u)
+                return AGC_ERROR_VALIDATION_FAILED;
+            break;
+        case AGC_SHADER_USER_SGPR_NUM_WORKGROUPS:
+            if (reflection->stage != kAgcShaderStageCs ||
+                sgpr->index != 0u || sgpr->dword_count != 3u ||
+                (reflection->system_sgpr_mask &
+                 AGC_SHADER_SYSTEM_SGPR_NUM_WORKGROUPS_BIT) == 0u)
                 return AGC_ERROR_VALIDATION_FAILED;
             break;
         case AGC_SHADER_USER_SGPR_INDIRECT_DESCRIPTOR_SETS:
@@ -11756,7 +11765,8 @@ static int32_t agcCommandIndirectModifier(uint32_t base_vertex_location,
 
 static int32_t agcCommandBuildComputeUserData(
     AgcCommandBuffer command_buffer, AgcShader shader,
-    uint32_t values[16], uint32_t *value_count)
+    uint32_t group_count_x, uint32_t group_count_y, uint32_t group_count_z,
+    int indirect, uint32_t values[16], uint32_t *value_count)
 {
     uint32_t count = 0u;
     uint32_t i;
@@ -11767,15 +11777,27 @@ static int32_t agcCommandBuildComputeUserData(
         uint32_t index;
         int32_t result;
         if (sgpr->register_offset < AGC_REG_COMPUTE_USER_DATA_0 ||
-            sgpr->register_offset >= AGC_REG_COMPUTE_USER_DATA_0 + 16u)
+            sgpr->register_offset >= AGC_REG_COMPUTE_USER_DATA_0 + 16u ||
+            sgpr->dword_count > AGC_REG_COMPUTE_USER_DATA_0 + 16u -
+                sgpr->register_offset)
             return AGC_ERROR_NOT_SUPPORTED;
         index = sgpr->register_offset - AGC_REG_COMPUTE_USER_DATA_0;
+        if (sgpr->kind == AGC_SHADER_USER_SGPR_NUM_WORKGROUPS) {
+            if (indirect)
+                return AGC_ERROR_NOT_SUPPORTED;
+            values[index] = group_count_x;
+            values[index + 1u] = group_count_y;
+            values[index + 2u] = group_count_z;
+            if (index + 3u > count)
+                count = index + 3u;
+            continue;
+        }
         result = agcCommandUserSgprValue(
             command_buffer, shader, sgpr, 0, 0u, 0u, &values[index]);
         if (result != AGC_OK)
             return result;
-        if (index + 1u > count)
-            count = index + 1u;
+        if (index + sgpr->dword_count > count)
+            count = index + sgpr->dword_count;
     }
     *value_count = count;
     return AGC_OK;
@@ -12673,7 +12695,8 @@ int32_t PS5_SYSV_ABI agcCmdDispatch(AgcCommandBuffer command_buffer,
             command_buffer->allocation->debug_name,
             "dispatch is missing reflected descriptors, push constants, or required resource transitions");
     result = agcCommandBuildComputeUserData(
-        command_buffer, shader, user_data, &state.num_user_data);
+        command_buffer, shader, group_count_x, group_count_y, group_count_z,
+        0, user_data, &state.num_user_data);
     if (result != AGC_OK)
         return result;
     record = shader->record;
@@ -12768,7 +12791,8 @@ int32_t PS5_SYSV_ABI agcCmdDispatchIndirect(
     if (result != AGC_OK)
         return result;
     result = agcCommandBuildComputeUserData(
-        command_buffer, shader, user_data, &state.num_user_data);
+        command_buffer, shader, 0u, 0u, 0u, 1,
+        user_data, &state.num_user_data);
     if (result != AGC_OK)
         return result;
     record = shader->record;
