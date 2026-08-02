@@ -1216,6 +1216,11 @@ static bool agcGfx1013UsageWritesDepth(AgcGfx1013ResourceUsage usage)
     return usage == AGC_GFX1013_RESOURCE_USAGE_DEPTH_STENCIL_WRITE;
 }
 
+static bool agcGfx1013UsageWritesColor(AgcGfx1013ResourceUsage usage)
+{
+    return usage == AGC_GFX1013_RESOURCE_USAGE_RENDER_TARGET;
+}
+
 static int32_t agcGfx1013ValidateTransition(
     const AgcGfx1013ResourceTransition *transition, bool *release,
     bool *acquire)
@@ -1267,6 +1272,8 @@ int32_t PS5_SYSV_ABI agcGfx1013GetResourceTransitionDwords(
     if (error != AGC_OK)
         return error;
     *dword_count =
+        (release && agcGfx1013UsageWritesColor(transition->before) ?
+            AGC_GFX1013_CB_META_FLUSH_DWORDS : 0u) +
         (release && agcGfx1013UsageWritesDepth(transition->before) ?
             AGC_GFX1013_DB_META_FLUSH_DWORDS : 0u) +
         (release ? AGC_GFX1013_EOP_FENCE_DWORDS : 0u) +
@@ -1306,6 +1313,8 @@ int32_t PS5_SYSV_ABI agcGfx1013TransitionResource(
     if (error != AGC_OK)
         return error;
     dword_count =
+        (release && agcGfx1013UsageWritesColor(transition->before) ?
+            AGC_GFX1013_CB_META_FLUSH_DWORDS : 0u) +
         (release && agcGfx1013UsageWritesDepth(transition->before) ?
             AGC_GFX1013_DB_META_FLUSH_DWORDS : 0u) +
         (release ? AGC_GFX1013_EOP_FENCE_DWORDS : 0u) +
@@ -1313,6 +1322,10 @@ int32_t PS5_SYSV_ABI agcGfx1013TransitionResource(
     if (agcCbRemainingDwords(cb) < dword_count)
         return AGC_ERROR_BUFFER_TOO_SMALL;
 
+    if (release && agcGfx1013UsageWritesColor(transition->before) &&
+        !sceAgcDcbEventWrite(
+            cb, AGC_GFX1013_CB_META_FLUSH_EVENT, 0u))
+        return AGC_ERROR_INTERNAL;
     if (release && agcGfx1013UsageWritesDepth(transition->before) &&
         !sceAgcDcbEventWrite(
             cb, AGC_GFX1013_DB_META_FLUSH_EVENT, 0u))
@@ -1321,6 +1334,8 @@ int32_t PS5_SYSV_ABI agcGfx1013TransitionResource(
         (!sceAgcCbReleaseMem(
             cb, agcGfx1013UsageWritesDepth(transition->before) ?
                 AGC_GFX1013_DB_DATA_FLUSH_EVENT :
+                agcGfx1013UsageWritesColor(transition->before) ?
+                    AGC_GFX1013_CB_DATA_FLUSH_EVENT :
                 AGC_GFX1013_EOP_CACHE_FLUSH_EVENT,
             AGC_GFX1013_EOP_GCR_CONTROL, 0u,
             AGC_GFX1013_EOP_CACHE_POLICY_LRU,

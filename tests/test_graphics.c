@@ -1372,6 +1372,16 @@ static void test_gfx1013_resource_transitions(void)
         .completion_address = 0x00000002014bb000ull,
         .completion_value = 0x1234abcdu,
     };
+    const uint32_t color_release[
+        AGC_GFX1013_CB_META_FLUSH_DWORDS +
+        AGC_GFX1013_EOP_FENCE_DWORDS] = {
+        agcPm4Header3(AGC_PM4_OP_EVENT_WRITE, 2u),
+        AGC_GFX1013_CB_META_FLUSH_EVENT,
+        agcPm4Header3(AGC_PM4_OP_RELEASE_MEM, 8u),
+        0x0670352du, 0x20000000u, 0x014bb000u, 0x00000002u,
+        0x1234abcdu, 0u, 0u,
+        agcPm4Header3(AGC_PM4_OP_NOP, 2u), 0u,
+    };
     const uint32_t release[AGC_GFX1013_EOP_FENCE_DWORDS] = {
         agcPm4Header3(AGC_PM4_OP_RELEASE_MEM, 8u),
         0x06703514u, 0x20000000u, 0x014bb000u, 0x00000002u,
@@ -1395,14 +1405,17 @@ static void test_gfx1013_resource_transitions(void)
         agcPm4Header3(AGC_PM4_OP_NOP, 2u), 0u,
     };
 
-    memcpy(expected, release, sizeof(release));
-    memcpy(&expected[AGC_GFX1013_EOP_FENCE_DWORDS], acquire,
+    memcpy(expected, color_release, sizeof(color_release));
+    memcpy(&expected[AGC_GFX1013_CB_META_FLUSH_DWORDS +
+        AGC_GFX1013_EOP_FENCE_DWORDS], acquire,
         sizeof(acquire));
     TEST_ASSERT_EQ(agcGfx1013GetResourceTransitionDwords(
         &transition, &dword_count), AGC_OK,
         "render-to-shader transition sizes");
     TEST_ASSERT_EQ(dword_count,
-        AGC_GFX1013_EOP_FENCE_DWORDS + AGC_GFX1013_ACQUIRE_MEM_DWORDS,
+        AGC_GFX1013_CB_META_FLUSH_DWORDS +
+            AGC_GFX1013_EOP_FENCE_DWORDS +
+            AGC_GFX1013_ACQUIRE_MEM_DWORDS,
         "render-to-shader release and acquire size");
     agcCbInit(&cb, buffer, sizeof(buffer));
     TEST_ASSERT_EQ(agcGfx1013TransitionResource(&cb, &transition), AGC_OK,
@@ -1414,15 +1427,20 @@ static void test_gfx1013_resource_transitions(void)
     agcCbReset(&cb, buffer, sizeof(buffer));
     TEST_ASSERT_EQ(agcGfx1013TransitionResource(&cb, &transition), AGC_OK,
         "render-to-present transition emits");
-    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), AGC_GFX1013_EOP_FENCE_DWORDS,
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb),
+        AGC_GFX1013_CB_META_FLUSH_DWORDS +
+            AGC_GFX1013_EOP_FENCE_DWORDS,
         "render-to-present release-only size");
-    TEST_ASSERT(memcmp(buffer, release, sizeof(release)) == 0,
+    TEST_ASSERT(memcmp(buffer, color_release, sizeof(color_release)) == 0,
         "render-to-present exact EOP stream");
 
     transition.before = AGC_GFX1013_RESOURCE_USAGE_COMPUTE_WRITE;
     transition.after = AGC_GFX1013_RESOURCE_USAGE_COPY_DESTINATION;
     transition.completion_address = 0u;
     transition.completion_value = 0u;
+    memcpy(expected, release, sizeof(release));
+    memcpy(&expected[AGC_GFX1013_EOP_FENCE_DWORDS], acquire,
+        sizeof(acquire));
     expected[2] = 0u;
     expected[3] = 0u;
     expected[4] = 0u;
@@ -1535,6 +1553,9 @@ static void test_gfx1013_resource_transitions(void)
                  before == AGC_GFX1013_RESOURCE_USAGE_PRESENT);
             uint32_t expected_dwords =
                 (release_needed &&
+                 before == AGC_GFX1013_RESOURCE_USAGE_RENDER_TARGET ?
+                    AGC_GFX1013_CB_META_FLUSH_DWORDS : 0u) +
+                (release_needed &&
                  before == AGC_GFX1013_RESOURCE_USAGE_DEPTH_STENCIL_WRITE ?
                     AGC_GFX1013_DB_META_FLUSH_DWORDS : 0u) +
                 (release_needed ? AGC_GFX1013_EOP_FENCE_DWORDS : 0u) +
@@ -1556,6 +1577,8 @@ static void test_gfx1013_resource_transitions(void)
                 "complete transition matrix advances by exact packet size");
             if (release_needed) {
                 uint32_t release_offset =
+                    before == AGC_GFX1013_RESOURCE_USAGE_RENDER_TARGET ?
+                        AGC_GFX1013_CB_META_FLUSH_DWORDS :
                     before == AGC_GFX1013_RESOURCE_USAGE_DEPTH_STENCIL_WRITE ?
                         AGC_GFX1013_DB_META_FLUSH_DWORDS : 0u;
                 TEST_ASSERT_EQ(agcPm4Opcode(buffer[release_offset]),
@@ -1579,7 +1602,8 @@ static void test_gfx1013_resource_transitions(void)
     transition.before = AGC_GFX1013_RESOURCE_USAGE_RENDER_TARGET;
     transition.after = AGC_GFX1013_RESOURCE_USAGE_SHADER_READ;
     agcCbReset(&cb, buffer,
-        (AGC_GFX1013_EOP_FENCE_DWORDS +
+        (AGC_GFX1013_CB_META_FLUSH_DWORDS +
+         AGC_GFX1013_EOP_FENCE_DWORDS +
          AGC_GFX1013_ACQUIRE_MEM_DWORDS - 1u) * sizeof(uint32_t));
     TEST_ASSERT_EQ(agcGfx1013TransitionResource(&cb, &transition),
         AGC_ERROR_BUFFER_TOO_SMALL, "short transition rejects");

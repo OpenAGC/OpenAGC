@@ -5913,10 +5913,16 @@ static void test_runtime_resource_transitions(void)
         "color-to-host transition submits");
     captured = agcDriverDebugLastDcbSubmit();
     words = (const uint32_t *)(uintptr_t)captured->command_address;
-    TEST_ASSERT_EQ(agcPm4Opcode(words[0]), AGC_PM4_OP_RELEASE_MEM,
+    TEST_ASSERT_EQ(agcPm4Opcode(words[0]), AGC_PM4_OP_EVENT_WRITE,
+        "color-to-host transition flushes color metadata");
+    TEST_ASSERT_EQ(words[1], AGC_GFX1013_CB_META_FLUSH_EVENT,
+        "color-to-host transition selects the color metadata event");
+    TEST_ASSERT_EQ(agcPm4Opcode(
+        words[AGC_GFX1013_CB_META_FLUSH_DWORDS]), AGC_PM4_OP_RELEASE_MEM,
         "color-to-host transition emits qualified release");
     TEST_ASSERT_EQ(captured->dword_count,
-        2u * AGC_GFX1013_EOP_FENCE_DWORDS,
+        2u * (AGC_GFX1013_CB_META_FLUSH_DWORDS +
+            AGC_GFX1013_EOP_FENCE_DWORDS),
         "two color transitions emit two qualified releases");
     TEST_ASSERT_EQ(agcGetFenceStatus(fence), AGC_OK,
         "color-to-host transition completes on host");
@@ -5977,7 +5983,12 @@ static void test_runtime_resource_transitions(void)
         "image-handoff release submits on graphics");
     captured = agcDriverDebugLastDcbSubmit();
     words = (const uint32_t *)(uintptr_t)captured->command_address;
-    TEST_ASSERT_EQ(agcPm4Opcode(words[0]), AGC_PM4_OP_RELEASE_MEM,
+    TEST_ASSERT_EQ(agcPm4Opcode(words[0]), AGC_PM4_OP_EVENT_WRITE,
+        "image-handoff release flushes color metadata");
+    TEST_ASSERT_EQ(words[1], AGC_GFX1013_CB_META_FLUSH_EVENT,
+        "image-handoff release selects the color metadata event");
+    TEST_ASSERT_EQ(agcPm4Opcode(
+        words[AGC_GFX1013_CB_META_FLUSH_DWORDS]), AGC_PM4_OP_RELEASE_MEM,
         "image-handoff release emits the qualified EOP signal");
     TEST_ASSERT_EQ(agcResetCommandBuffer(graphics_command), AGC_OK,
         "image-handoff release command resets");
