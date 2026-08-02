@@ -313,9 +313,37 @@ static uint64_t shader_fixture_linkage_hash(
         sizeof(reflection->patch_output_mask));
 }
 
+static uint32_t shader_fixture_user_sgpr_count(
+    const AgcShaderReflection *reflection, uint32_t base, uint32_t minimum)
+{
+    uint32_t count = minimum;
+    uint32_t i;
+
+    for (i = 0u; i < reflection->user_sgpr_count; ++i) {
+        const AgcShaderUserSgpr *sgpr = &reflection->user_sgprs[i];
+        if (sgpr->register_offset >= base &&
+            sgpr->register_offset < base + 32u) {
+            uint32_t end = sgpr->register_offset - base + sgpr->dword_count;
+            if (end > count)
+                count = end;
+        }
+    }
+    return count;
+}
+
+static uint32_t shader_fixture_encode_user_sgprs(uint32_t count)
+{
+    return
+        ((count & AGC_REG_SPI_SHADER_PGM_RSRC2_USER_SGPR_MASK) <<
+            AGC_REG_SPI_SHADER_PGM_RSRC2_USER_SGPR_SHIFT) |
+        (((count >> 5u) &
+            AGC_REG_SPI_SHADER_PGM_RSRC2_USER_SGPR_MSB_MASK) <<
+            AGC_REG_SPI_SHADER_PGM_RSRC2_USER_SGPR_MSB_SHIFT);
+}
+
 static AgcShader create_shader_with_reflection_rsrc2(AgcDevice device,
     AgcShaderStage stage, const AgcShaderReflection *requirements,
-    uint32_t compute_rsrc2_override)
+    uint32_t rsrc2_override)
 {
     RuntimeShaderFixture binary = {0};
     AgcShaderReflection reflection = AGC_SHADER_REFLECTION_INIT;
@@ -357,8 +385,8 @@ static AgcShader create_shader_with_reflection_rsrc2(AgcDevice device,
         if (reflection.scratch_bytes_per_wave != 0u)
             compute_rsrc2 |=
                 AGC_REG_SPI_SHADER_PGM_RSRC2_SCRATCH_EN_MASK;
-        if (compute_rsrc2_override != UINT32_MAX)
-            compute_rsrc2 = compute_rsrc2_override;
+        if (rsrc2_override != UINT32_MAX)
+            compute_rsrc2 = rsrc2_override;
         binary.record.shader_type = kAgcShaderTypeCs;
         binary.record.num_sh_registers = 3u;
         binary.record.sh_registers =
@@ -370,8 +398,13 @@ static AgcShader create_shader_with_reflection_rsrc2(AgcDevice device,
         binary.sh_registers[2] = (AgcRegisterValue){
             AGC_REG_COMPUTE_PGM_RSRC3, 0u};
     } else if (stage == kAgcShaderStagePs) {
+        uint32_t rsrc2 = shader_fixture_encode_user_sgprs(
+            shader_fixture_user_sgpr_count(&reflection,
+                AGC_REG_SPI_SHADER_USER_DATA_PS_0, 0u));
+        if (rsrc2_override != UINT32_MAX)
+            rsrc2 = rsrc2_override;
         binary.record.shader_type = kAgcShaderTypePs;
-        binary.record.num_sh_registers = 2u;
+        binary.record.num_sh_registers = 3u;
         binary.record.sh_registers =
             offsetof(RuntimeShaderFixture, sh_registers);
         binary.record.num_cx_registers = 1u;
@@ -381,12 +414,19 @@ static AgcShader create_shader_with_reflection_rsrc2(AgcDevice device,
             AGC_REG_SPI_SHADER_PGM_LO_PS, 0u};
         binary.sh_registers[1] = (AgcRegisterValue){
             AGC_REG_SPI_SHADER_PGM_HI_PS, 0u};
+        binary.sh_registers[2] = (AgcRegisterValue){
+            AGC_REG_SPI_SHADER_PGM_RSRC2_PS, rsrc2};
         binary.cx_registers[0] = (AgcRegisterValue){
             AGC_REG_SPI_PS_IN_CONTROL,
             AGC_GFX1013_SPI_PS_IN_CONTROL_PS_W32_EN};
     } else {
+        uint32_t rsrc2 = shader_fixture_encode_user_sgprs(
+            shader_fixture_user_sgpr_count(&reflection,
+                AGC_REG_SPI_SHADER_USER_DATA_GS_0, 0u));
+        if (rsrc2_override != UINT32_MAX)
+            rsrc2 = rsrc2_override;
         binary.record.shader_type = (uint8_t)kAgcShaderBinaryTypeGs;
-        binary.record.num_sh_registers = 2u;
+        binary.record.num_sh_registers = 3u;
         binary.record.sh_registers =
             offsetof(RuntimeShaderFixture, sh_registers);
         binary.record.specials = offsetof(RuntimeShaderFixture, specials);
@@ -394,6 +434,8 @@ static AgcShader create_shader_with_reflection_rsrc2(AgcDevice device,
             AGC_REG_SPI_SHADER_PGM_LO_GS, 0u};
         binary.sh_registers[1] = (AgcRegisterValue){
             AGC_REG_SPI_SHADER_PGM_HI_GS, 0u};
+        binary.sh_registers[2] = (AgcRegisterValue){
+            AGC_REG_SPI_SHADER_PGM_RSRC2_GS, rsrc2};
         binary.specials.ge_cntl = (AgcShaderSpecialRegister){
             AGC_REG_GE_CNTL, 0x10u};
         binary.specials.vgt_shader_stages_en =
@@ -507,6 +549,12 @@ static AgcShader create_ngg_shader_bundle(AgcDevice device,
         binary.sh_registers[7] = (AgcRegisterValue){
             AGC_REG_SPI_SHADER_PGM_HI_ES, 0u};
     }
+    binary.sh_registers[binary.record.num_sh_registers++] =
+        (AgcRegisterValue){
+            AGC_REG_SPI_SHADER_PGM_RSRC2_GS,
+            shader_fixture_encode_user_sgprs(
+                shader_fixture_user_sgpr_count(&reflection,
+                    AGC_REG_SPI_SHADER_USER_DATA_GS_0, 16u))};
     binary.cx_registers[0] = (AgcRegisterValue){
         AGC_REG_SPI_PS_IN_CONTROL, 0u};
     binary.specials.ge_cntl = (AgcShaderSpecialRegister){
@@ -608,7 +656,10 @@ static AgcShader create_tessellation_control_bundle(AgcDevice device,
         AGC_REG_SPI_SHADER_USER_DATA_HS_0 + 13u,
         OPENAGC_NEXT_STAGE_PC_PLACEHOLDER};
     binary.sh_registers[6] = (AgcRegisterValue){
-        AGC_REG_SPI_SHADER_PGM_RSRC2_HS, 0x1cu};
+        AGC_REG_SPI_SHADER_PGM_RSRC2_HS,
+        shader_fixture_encode_user_sgprs(
+            shader_fixture_user_sgpr_count(&reflection,
+                AGC_REG_SPI_SHADER_USER_DATA_HS_0, 14u))};
     binary.sh_registers[7] = (AgcRegisterValue){
         AGC_REG_SPI_SHADER_PGM_LO_LS, 0u};
     binary.sh_registers[8] = (AgcRegisterValue){
@@ -2994,7 +3045,7 @@ static void test_runtime_indexed_graphics_submission(void)
     TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
         "indexed graphics command buffer submits");
     captured = agcDriverDebugLastDcbSubmit();
-    TEST_ASSERT_EQ(captured->dword_count, 2287u,
+    TEST_ASSERT_EQ(captured->dword_count, 2293u,
         "indexed graphics submission includes qualified defaults and draw");
     words = (const uint32_t *)(uintptr_t)captured->command_address;
     TEST_ASSERT_EQ(captured->command_address & 0xffu, 0u,
@@ -6714,7 +6765,7 @@ static void test_runtime_command_space_atomic_failure(void)
     pipeline_desc.pixel_shader = ps;
     buffer_desc.size = 64u;
     buffer_desc.usage = AGC_BUFFER_USAGE_INDEX_BIT;
-    command_desc.capacity_dwords = 2277u;
+    command_desc.capacity_dwords = 2283u;
     TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc, &pipeline),
         AGC_OK, "small-buffer graphics pipeline creation succeeds");
     TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &index_buffer), AGC_OK,
@@ -8117,6 +8168,7 @@ static void test_runtime_pipeline_layout_and_stage_validation(void)
             1u, 3u, AGC_SHADER_DESCRIPTOR_STORAGE_BUFFER, 1u, 0u, 16u};
         AgcShaderPushConstantRange push_range = {
             0u, 16u, 4u, 1u << kAgcShaderStageCs};
+        AgcShaderPushConstantRange overlapping_compute_ranges[2];
         AgcComputePipelineDesc compute_desc = AGC_COMPUTE_PIPELINE_DESC_INIT;
         AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
         AgcBufferDesc buffer_desc = AGC_BUFFER_DESC_INIT;
@@ -8126,6 +8178,7 @@ static void test_runtime_pipeline_layout_and_stage_validation(void)
         AgcCommandBuffer command = NULL;
         AgcBuffer storage = NULL;
         uint32_t push_data[4] = {1u, 2u, 3u, 4u};
+        uint32_t larger_compute_push[4] = {5u, 6u, 7u, 8u};
         AgcShader cs;
 
         cs_requirements.local_size_x = 64u;
@@ -8290,9 +8343,71 @@ static void test_runtime_pipeline_layout_and_stage_validation(void)
             "inline-push stress command destroys");
         TEST_ASSERT_EQ(agcDestroyComputePipeline(compute), AGC_OK,
             "inline-push compute pipeline destroys");
+
+        compute = NULL;
+        push_range.size = sizeof(larger_compute_push);
+        TEST_ASSERT_EQ(agcCreateComputePipeline(device, &compute_desc,
+            &compute), AGC_OK,
+            "larger application compute push range contains reflection");
+        TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc,
+            &command), AGC_OK,
+            "larger compute push-range command creates");
+        TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+            "larger compute push-range command begins");
+        TEST_ASSERT_EQ(agcCmdBindComputePipeline(command, compute), AGC_OK,
+            "larger compute push-range pipeline binds");
+        TEST_ASSERT_EQ(agcCmdPushConstants(command,
+            1u << kAgcShaderStageCs, 0u, sizeof(larger_compute_push),
+            larger_compute_push), AGC_OK,
+            "larger advertised compute push range accepts all bytes");
+        TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+            "larger compute push-range command ends");
+        TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+            "larger compute push-range command resets");
+        TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+            "larger compute push-range command destroys");
+        TEST_ASSERT_EQ(agcDestroyComputePipeline(compute), AGC_OK,
+            "larger compute push-range pipeline destroys");
+
+        compute = NULL;
+        push_range.size = sizeof(uint32_t);
+        push_range.stage_mask |= 1u << kAgcShaderStageVs;
+        TEST_ASSERT_EQ(agcCreateComputePipeline(device, &compute_desc,
+            &compute), AGC_ERROR_VALIDATION_FAILED,
+            "compute push range rejects inactive graphics stage");
+        TEST_ASSERT(compute == NULL,
+            "inactive compute push stage leaves pipeline output null");
+        push_range.stage_mask = 1u << kAgcShaderStageCs;
+        overlapping_compute_ranges[0] = push_range;
+        overlapping_compute_ranges[1] = push_range;
+        overlapping_compute_ranges[1].size = 8u;
+        compute_desc.push_constant_range_count = 2u;
+        compute_desc.push_constant_ranges = overlapping_compute_ranges;
+        TEST_ASSERT_EQ(agcCreateComputePipeline(device, &compute_desc,
+            &compute), AGC_ERROR_VALIDATION_FAILED,
+            "compute push ranges reject shared-stage overlap");
+        TEST_ASSERT(compute == NULL,
+            "overlapping compute push ranges leave pipeline output null");
+        compute_desc.push_constant_range_count = 1u;
+        compute_desc.push_constant_ranges = &push_range;
         TEST_ASSERT_EQ(agcDestroyShader(cs), AGC_OK,
             "inline-push compute shader destroys");
 
+        cs_requirements.user_sgprs[1].register_offset =
+            AGC_REG_COMPUTE_USER_DATA_0 + 16u;
+        cs = create_shader_with_reflection(
+            device, kAgcShaderStageCs, &cs_requirements);
+        compute_desc.shader = cs;
+        TEST_ASSERT_EQ(agcCreateComputePipeline(device, &compute_desc,
+            &compute), AGC_ERROR_NOT_SUPPORTED,
+            "compute user-SGPR 16 remains outside the 16-slot window");
+        TEST_ASSERT(compute == NULL,
+            "out-of-range compute user-SGPR leaves pipeline output null");
+        TEST_ASSERT_EQ(agcDestroyShader(cs), AGC_OK,
+            "out-of-range compute user-SGPR shader destroys");
+
+        cs_requirements.user_sgprs[1].register_offset =
+            AGC_REG_COMPUTE_USER_DATA_0 + 1u;
         cs_requirements.user_sgprs[0].register_offset =
             AGC_REG_SPI_SHADER_USER_DATA_GS_0;
         cs = create_shader_with_reflection(
@@ -8356,6 +8471,279 @@ static void test_runtime_pipeline_layout_and_stage_validation(void)
             "built-in-only pixel shader destroys");
         TEST_ASSERT_EQ(agcDestroyShader(vertex), AGC_OK,
             "built-in-only vertex shader destroys");
+    }
+    {
+        AgcShaderReflection sparse_vs = AGC_SHADER_REFLECTION_INIT;
+        AgcShaderReflection sparse_ps = AGC_SHADER_REFLECTION_INIT;
+        AgcShaderPushConstantRange full_range = {
+            0u, 128u, 4u, 1u << kAgcShaderStageVs};
+        AgcShaderPushConstantRange larger_range = {
+            0u, 144u, 4u, 1u << kAgcShaderStageVs};
+        AgcShaderPushConstantRange overlapping_ranges[2] = {
+            {0u, 64u, 4u, 1u << kAgcShaderStageVs},
+            {48u, 96u, 4u, 1u << kAgcShaderStageVs}};
+        AgcGraphicsPipelineDesc pipeline_desc =
+            AGC_GRAPHICS_PIPELINE_DESC_INIT;
+        AgcRasterizationState raster = AGC_RASTERIZATION_STATE_INIT;
+        AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+        AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+        AgcGraphicsPipeline pipeline = NULL;
+        AgcCommandBuffer command = NULL;
+        AgcQueue queue = create_queue(device, kAgcQueueGraphics);
+        AgcShader vertex;
+        AgcShader pixel;
+        const AgcCommandBufferSubmit *captured;
+        const uint32_t *words;
+        uint32_t push_data[32];
+        uint32_t larger_push_data[36];
+        uint32_t value = 0u;
+        uint32_t dword;
+        uint32_t dense_index = 1u;
+
+        sparse_vs.push_constant_size = sizeof(push_data);
+        sparse_vs.push_constant_alignment = 4u;
+        sparse_vs.push_constant_range_count = 1u;
+        sparse_vs.push_constant_ranges[0] = full_range;
+        sparse_vs.inline_push_constant_mask = UINT64_C(0xfffff0ff);
+        sparse_vs.system_sgpr_mask =
+            AGC_SHADER_SYSTEM_SGPR_BASE_VERTEX_BIT;
+        sparse_vs.user_sgpr_count = 29u;
+        sparse_vs.user_sgprs[0] = (AgcShaderUserSgpr){
+            AGC_SHADER_USER_SGPR_BASE_VERTEX, 0u,
+            AGC_REG_SPI_SHADER_USER_DATA_GS_0, 1u};
+        for (dword = 0u; dword < 32u; ++dword) {
+            push_data[dword] = UINT32_C(0x51000000) + dword;
+            larger_push_data[dword] = push_data[dword];
+            if ((sparse_vs.inline_push_constant_mask &
+                 (UINT64_C(1) << dword)) == 0u)
+                continue;
+            sparse_vs.user_sgprs[dense_index] = (AgcShaderUserSgpr){
+                AGC_SHADER_USER_SGPR_INLINE_PUSH_CONSTANT, dword,
+                AGC_REG_SPI_SHADER_USER_DATA_GS_0 + dense_index, 1u};
+            dense_index++;
+        }
+        for (; dword < 36u; ++dword)
+            larger_push_data[dword] = UINT32_C(0x52000000) + dword;
+        vertex = create_shader_with_reflection(
+            device, kAgcShaderStageVs, &sparse_vs);
+        pixel = create_shader_with_reflection(
+            device, kAgcShaderStagePs, &sparse_ps);
+        raster.rasterizer_discard_enable = 1u;
+        pipeline_desc.vertex_shader = vertex;
+        pipeline_desc.pixel_shader = pixel;
+        pipeline_desc.rasterization = &raster;
+        pipeline_desc.push_constant_range_count = 1u;
+        pipeline_desc.push_constant_ranges = &full_range;
+        TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc,
+            &pipeline), AGC_OK,
+            "Eden sparse inline graphics pipeline creates");
+        TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc,
+            &command), AGC_OK,
+            "Eden sparse inline command buffer creates");
+        TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+            "Eden sparse inline command begins");
+        TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(command, pipeline), AGC_OK,
+            "Eden sparse inline pipeline binds");
+        TEST_ASSERT_EQ(agcCmdPushConstants(command,
+            1u << kAgcShaderStageVs, 0u, 32u, push_data), AGC_OK,
+            "Eden sparse low inline span binds");
+        TEST_ASSERT_EQ(agcCmdPushConstants(command,
+            1u << kAgcShaderStageVs, 48u, 76u, &push_data[12]), AGC_OK,
+            "Eden sparse high inline span binds except its final dword");
+        TEST_ASSERT_EQ(agcCmdDraw(command, 3u, 1u, 0u, 0u),
+            AGC_ERROR_RESOURCE_NOT_BOUND,
+            "missing one used sparse inline dword rejects draw");
+        TEST_ASSERT_EQ(agcCmdPushConstants(command,
+            1u << kAgcShaderStageVs, 124u, 4u, &push_data[31]), AGC_OK,
+            "final used sparse inline dword binds");
+        TEST_ASSERT_EQ(agcCmdDraw(command, 3u, 1u, 0u, 0u), AGC_OK,
+            "complete sparse inline spans record draw");
+        TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+            "Eden sparse inline command ends");
+        submit.command_buffer_count = 1u;
+        submit.command_buffers = &command;
+        TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, NULL), AGC_OK,
+            "Eden sparse inline command submits");
+        captured = agcDriverDebugLastDcbSubmit();
+        TEST_ASSERT(captured != NULL,
+            "Eden sparse inline submission is captured");
+        if (captured) {
+            words = (const uint32_t *)(uintptr_t)captured->command_address;
+            TEST_ASSERT(runtime_find_shader_register(words,
+                captured->dword_count,
+                AGC_REG_SPI_SHADER_USER_DATA_GS_0 + 1u, &value) &&
+                value == push_data[0],
+                "Eden sparse inline low dword reaches GS_1");
+            TEST_ASSERT(runtime_find_shader_register(words,
+                captured->dword_count,
+                AGC_REG_SPI_SHADER_USER_DATA_GS_0 + 28u, &value) &&
+                value == push_data[31],
+                "Eden sparse inline high dword reaches GS_28");
+        }
+        TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+            "Eden sparse inline command resets");
+        TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+            "Eden sparse inline command destroys");
+        TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(pipeline), AGC_OK,
+            "Eden sparse inline graphics pipeline destroys");
+        TEST_ASSERT_EQ(agcDestroyShader(pixel), AGC_OK,
+            "Eden sparse inline pixel shader destroys");
+        TEST_ASSERT_EQ(agcDestroyShader(vertex), AGC_OK,
+            "Eden sparse inline vertex shader destroys");
+
+        vertex = create_shader_with_reflection_rsrc2(device,
+            kAgcShaderStageVs, &sparse_vs,
+            shader_fixture_encode_user_sgprs(28u));
+        pixel = create_shader_with_reflection(
+            device, kAgcShaderStagePs, &sparse_ps);
+        pipeline = NULL;
+        pipeline_desc.vertex_shader = vertex;
+        pipeline_desc.pixel_shader = pixel;
+        TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc,
+            &pipeline), AGC_ERROR_VALIDATION_FAILED,
+            "Eden reflection rejects RSRC2 under-allocation by one SGPR");
+        TEST_ASSERT(pipeline == NULL,
+            "under-allocated graphics RSRC2 leaves pipeline output null");
+        TEST_ASSERT_EQ(agcDestroyShader(pixel), AGC_OK,
+            "under-allocated graphics pixel shader destroys");
+        TEST_ASSERT_EQ(agcDestroyShader(vertex), AGC_OK,
+            "under-allocated graphics vertex shader destroys");
+
+        sparse_vs.push_constant_range_count = 2u;
+        sparse_vs.push_constant_ranges[0] = (AgcShaderPushConstantRange){
+            0u, 32u, 4u, 1u << kAgcShaderStageVs};
+        sparse_vs.push_constant_ranges[1] = (AgcShaderPushConstantRange){
+            48u, 76u, 4u, 1u << kAgcShaderStageVs};
+        vertex = create_shader_with_reflection(
+            device, kAgcShaderStageVs, &sparse_vs);
+        pixel = create_shader_with_reflection(
+            device, kAgcShaderStagePs, &sparse_ps);
+        pipeline = NULL;
+        pipeline_desc.vertex_shader = vertex;
+        pipeline_desc.pixel_shader = pixel;
+        TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc,
+            &pipeline), AGC_ERROR_VALIDATION_FAILED,
+            "inline dword outside reflected push ranges fails closed");
+        TEST_ASSERT(pipeline == NULL,
+            "out-of-range inline dword leaves pipeline output null");
+        TEST_ASSERT_EQ(agcDestroyShader(pixel), AGC_OK,
+            "out-of-range inline pixel shader destroys");
+        TEST_ASSERT_EQ(agcDestroyShader(vertex), AGC_OK,
+            "out-of-range inline vertex shader destroys");
+
+        sparse_vs.push_constant_ranges[1].size = 80u;
+        vertex = create_shader_with_reflection(
+            device, kAgcShaderStageVs, &sparse_vs);
+        pixel = create_shader_with_reflection(
+            device, kAgcShaderStagePs, &sparse_ps);
+        pipeline_desc.vertex_shader = vertex;
+        pipeline_desc.pixel_shader = pixel;
+        pipeline_desc.push_constant_ranges = &larger_range;
+        TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc,
+            &pipeline), AGC_OK,
+            "larger application push range contains sparse reflected ranges");
+        TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc,
+            &command), AGC_OK,
+            "larger advertised push-range command creates");
+        TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+            "larger advertised push-range command begins");
+        TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(command, pipeline), AGC_OK,
+            "larger advertised push-range pipeline binds");
+        TEST_ASSERT_EQ(agcCmdPushConstants(command,
+            1u << kAgcShaderStageVs, 0u, sizeof(larger_push_data),
+            larger_push_data), AGC_OK,
+            "larger advertised application push range accepts all bytes");
+        TEST_ASSERT_EQ(agcCmdDraw(command, 3u, 1u, 0u, 0u), AGC_OK,
+            "larger advertised push range satisfies sparse draw readiness");
+        TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+            "larger advertised push-range command ends");
+        TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+            "larger advertised push-range command resets");
+        TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+            "larger advertised push-range command destroys");
+        TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(pipeline), AGC_OK,
+            "contained sparse-range graphics pipeline destroys");
+
+        pipeline = NULL;
+        larger_range.stage_mask |= 1u << kAgcShaderStageCs;
+        TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc,
+            &pipeline), AGC_ERROR_VALIDATION_FAILED,
+            "graphics application push range rejects inactive compute stage");
+        TEST_ASSERT(pipeline == NULL,
+            "inactive graphics push stage leaves pipeline output null");
+        larger_range.stage_mask = 1u << kAgcShaderStageVs;
+
+        pipeline_desc.push_constant_range_count = 2u;
+        pipeline_desc.push_constant_ranges = overlapping_ranges;
+        TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc,
+            &pipeline), AGC_ERROR_VALIDATION_FAILED,
+            "graphics application push ranges reject shared-stage overlap");
+        TEST_ASSERT(pipeline == NULL,
+            "overlapping graphics push ranges leave pipeline output null");
+        TEST_ASSERT_EQ(agcDestroyShader(pixel), AGC_OK,
+            "contained sparse-range pixel shader destroys");
+        TEST_ASSERT_EQ(agcDestroyShader(vertex), AGC_OK,
+            "contained sparse-range vertex shader destroys");
+
+        {
+            AgcShaderReflection slot31_vs = AGC_SHADER_REFLECTION_INIT;
+
+            slot31_vs.user_sgpr_count = 1u;
+            slot31_vs.system_sgpr_mask =
+                AGC_SHADER_SYSTEM_SGPR_BASE_VERTEX_BIT;
+            slot31_vs.user_sgprs[0] = (AgcShaderUserSgpr){
+                AGC_SHADER_USER_SGPR_BASE_VERTEX, 0u,
+                AGC_REG_SPI_SHADER_USER_DATA_GS_0 + 31u, 1u};
+            vertex = create_shader_with_reflection(
+                device, kAgcShaderStageVs, &slot31_vs);
+            pixel = create_shader_with_reflection(
+                device, kAgcShaderStagePs, &sparse_ps);
+            pipeline_desc.vertex_shader = vertex;
+            pipeline_desc.pixel_shader = pixel;
+            pipeline_desc.push_constant_range_count = 0u;
+            pipeline_desc.push_constant_ranges = NULL;
+            TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc,
+                &pipeline), AGC_OK,
+                "standalone graphics pipeline accepts dynamic GS_31");
+            TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc,
+                &command), AGC_OK,
+                "GS_31 command buffer creates");
+            TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+                "GS_31 command begins");
+            TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(command, pipeline),
+                AGC_OK, "GS_31 pipeline binds");
+            TEST_ASSERT_EQ(agcCmdDraw(command, 3u, 1u, 7u, 0u), AGC_OK,
+                "GS_31 base-vertex draw records");
+            TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+                "GS_31 command ends");
+            submit.command_buffers = &command;
+            TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, NULL), AGC_OK,
+                "GS_31 command submits");
+            captured = agcDriverDebugLastDcbSubmit();
+            TEST_ASSERT(captured != NULL,
+                "GS_31 submission is captured");
+            if (captured) {
+                words = (const uint32_t *)(uintptr_t)
+                    captured->command_address;
+                TEST_ASSERT(runtime_find_shader_register(words,
+                    captured->dword_count,
+                    AGC_REG_SPI_SHADER_USER_DATA_GS_31, &value) &&
+                    value == 7u,
+                    "GS_31 dynamic base vertex reaches command stream");
+            }
+            TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+                "GS_31 command resets");
+            TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+                "GS_31 command destroys");
+            TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(pipeline), AGC_OK,
+                "GS_31 standalone graphics pipeline destroys");
+            TEST_ASSERT_EQ(agcDestroyShader(pixel), AGC_OK,
+                "GS_31 pixel shader destroys");
+            TEST_ASSERT_EQ(agcDestroyShader(vertex), AGC_OK,
+                "GS_31 vertex shader destroys");
+        }
+        TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
+            "Eden sparse inline graphics queue destroys");
     }
     TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
         "pipeline layout validation device destroys");
@@ -8605,6 +8993,8 @@ static void test_runtime_geometry_pipeline_bundle(void)
         AGC_SHADER_USER_SGPR_VERTEX_BUFFER_TABLE, 0u,
         AGC_REG_SPI_SHADER_USER_DATA_GS_0, 1u};
     ps_requirements.stage_input_mask = UINT64_C(1) << 32;
+    gs_requirements.user_sgprs[0].register_offset =
+        AGC_REG_SPI_SHADER_USER_DATA_GS_0 + 31u;
     geometry = create_ngg_shader_bundle(
         device, kAgcShaderStageGs, &gs_requirements);
     pixel = create_shader_with_reflection(
@@ -8614,6 +9004,46 @@ static void test_runtime_geometry_pipeline_bundle(void)
     pipeline_desc.primitive_topology = AGC_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
     pipeline_desc.vertex_inputs = &vertex_input;
     pipeline_desc.vertex_input_count = 1u;
+    TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc,
+        &pipeline), AGC_OK,
+        "primitive shader accepts the final graphics user-SGPR slot");
+    TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(pipeline), AGC_OK,
+        "GS_31 graphics pipeline destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(geometry), AGC_OK,
+        "GS_31 primitive shader destroys");
+
+    pipeline = NULL;
+    gs_requirements.user_sgprs[0].register_offset =
+        AGC_REG_SPI_SHADER_USER_DATA_GS_0 + 32u;
+    geometry = create_ngg_shader_bundle(
+        device, kAgcShaderStageGs, &gs_requirements);
+    pipeline_desc.geometry_shader = geometry;
+    TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc,
+        &pipeline), AGC_ERROR_NOT_SUPPORTED,
+        "primitive shader rejects graphics user-SGPR slot 32");
+    TEST_ASSERT(pipeline == NULL,
+        "GS_32 rejection leaves graphics pipeline output null");
+    TEST_ASSERT_EQ(agcDestroyShader(geometry), AGC_OK,
+        "GS_32 primitive shader destroys");
+
+    gs_requirements.user_sgprs[0].register_offset =
+        AGC_REG_SPI_SHADER_USER_DATA_GS_0 + 15u;
+    geometry = create_ngg_shader_bundle(
+        device, kAgcShaderStageGs, &gs_requirements);
+    pipeline_desc.geometry_shader = geometry;
+    TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc,
+        &pipeline), AGC_ERROR_VALIDATION_FAILED,
+        "fused primitive mapping rejects the GS_15 continuation slot");
+    TEST_ASSERT(pipeline == NULL,
+        "GS_15 continuation collision leaves pipeline output null");
+    TEST_ASSERT_EQ(agcDestroyShader(geometry), AGC_OK,
+        "GS_15 collision primitive shader destroys");
+
+    gs_requirements.user_sgprs[0].register_offset =
+        AGC_REG_SPI_SHADER_USER_DATA_GS_0;
+    geometry = create_ngg_shader_bundle(
+        device, kAgcShaderStageGs, &gs_requirements);
+    pipeline_desc.geometry_shader = geometry;
     TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc,
         &pipeline), AGC_OK,
         "fused VS-front/GS-back geometry bundle creates pipeline");

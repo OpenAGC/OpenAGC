@@ -5474,8 +5474,12 @@ static int agcPipelineReflectionPushRangesMatch(
         for (j = 0u; j < layout_count; ++j) {
             const AgcShaderPushConstantRange *range =
                 &reflection->push_constant_ranges[i];
-            if (range->offset == layout[j].offset &&
-                range->size == layout[j].size &&
+            uint64_t range_end =
+                (uint64_t)range->offset + range->size;
+            uint64_t layout_end =
+                (uint64_t)layout[j].offset + layout[j].size;
+            if (range->offset >= layout[j].offset &&
+                range_end <= layout_end &&
                 range->alignment == layout[j].alignment &&
                 (layout[j].stage_mask & (1u << reflection->stage)) != 0u)
                 break;
@@ -5528,8 +5532,12 @@ static int agcPipelinePushEntryUsed(
         for (i = 0u; i < reflection->push_constant_range_count; ++i) {
             const AgcShaderPushConstantRange *range =
                 &reflection->push_constant_ranges[i];
-            if (range->offset == entry->offset &&
-                range->size == entry->size &&
+            uint64_t range_end =
+                (uint64_t)range->offset + range->size;
+            uint64_t entry_end =
+                (uint64_t)entry->offset + entry->size;
+            if (range->offset >= entry->offset &&
+                range_end <= entry_end &&
                 range->alignment == entry->alignment &&
                 (entry->stage_mask & (1u << reflection->stage)) != 0u)
                 return 1;
@@ -5574,12 +5582,20 @@ static const AgcShaderUserSgpr *agcPipelineFindUserSgpr(
     return NULL;
 }
 
-static int32_t agcPipelineValidateShaderUserData(
-    const AgcShaderReflection *reflection)
+static int32_t agcPipelineValidateShaderUserData(AgcShader shader)
 {
+    const AgcShaderReflection *reflection = &shader->reflection;
+    const AgcRegisterValue *registers =
+        (const AgcRegisterValue *)(uintptr_t)shader->record.sh_registers;
     uint32_t descriptor_set_mask = 0u;
     uint32_t direct_descriptor_set_mask = 0u;
     uint32_t user_data_base;
+    uint32_t user_data_count;
+    uint32_t rsrc2_register;
+    uint32_t reflected_register_count = 0u;
+    uint32_t static_register_count = 0u;
+    uint32_t encoded_register_count = 0u;
+    uint32_t found_rsrc2 = 0u;
     uint32_t occupied_register_mask = 0u;
     uint32_t indirect_descriptor_set_count = 0u;
     uint64_t required_push_mask = 0u;
@@ -5591,15 +5607,23 @@ static int32_t agcPipelineValidateShaderUserData(
     case kAgcShaderStageDs:
     case kAgcShaderStageGs:
         user_data_base = AGC_REG_SPI_SHADER_USER_DATA_GS_0;
+        user_data_count = 32u;
+        rsrc2_register = AGC_REG_SPI_SHADER_PGM_RSRC2_GS;
         break;
     case kAgcShaderStageHs:
         user_data_base = AGC_REG_SPI_SHADER_USER_DATA_HS_0;
+        user_data_count = 32u;
+        rsrc2_register = AGC_REG_SPI_SHADER_PGM_RSRC2_HS;
         break;
     case kAgcShaderStagePs:
         user_data_base = AGC_REG_SPI_SHADER_USER_DATA_PS_0;
+        user_data_count = 32u;
+        rsrc2_register = AGC_REG_SPI_SHADER_PGM_RSRC2_PS;
         break;
     case kAgcShaderStageCs:
         user_data_base = AGC_REG_COMPUTE_USER_DATA_0;
+        user_data_count = 16u;
+        rsrc2_register = AGC_REG_COMPUTE_PGM_RSRC2;
         break;
     default:
         return reflection->user_sgpr_count == 0u ?
@@ -5608,6 +5632,25 @@ static int32_t agcPipelineValidateShaderUserData(
 
     for (i = 0u; i < reflection->descriptor_mapping_count; ++i)
         descriptor_set_mask |= 1u << reflection->descriptor_mappings[i].set;
+    for (i = 0u; i < shader->record.num_sh_registers; ++i) {
+        const AgcRegisterValue *reg = &registers[i];
+        if (reg->offset == rsrc2_register) {
+            encoded_register_count =
+                ((reg->value >>
+                    AGC_REG_SPI_SHADER_PGM_RSRC2_USER_SGPR_SHIFT) &
+                    AGC_REG_SPI_SHADER_PGM_RSRC2_USER_SGPR_MASK) |
+                (((reg->value >>
+                    AGC_REG_SPI_SHADER_PGM_RSRC2_USER_SGPR_MSB_SHIFT) &
+                    AGC_REG_SPI_SHADER_PGM_RSRC2_USER_SGPR_MSB_MASK) << 5u);
+            found_rsrc2 = 1u;
+        }
+        if (reg->offset >= user_data_base &&
+            reg->offset < user_data_base + user_data_count) {
+            uint32_t count = reg->offset - user_data_base + 1u;
+            if (count > static_register_count)
+                static_register_count = count;
+        }
+    }
     for (i = 0u; i < reflection->push_constant_range_count; ++i) {
         const AgcShaderPushConstantRange *range =
             &reflection->push_constant_ranges[i];
@@ -5622,16 +5665,29 @@ static int32_t agcPipelineValidateShaderUserData(
         uint32_t register_index;
         uint32_t register_mask;
         if (sgpr->register_offset < user_data_base ||
-            sgpr->register_offset >= user_data_base + 16u ||
+            sgpr->register_offset >= user_data_base + user_data_count ||
             sgpr->dword_count == 0u ||
             sgpr->dword_count >
-                user_data_base + 16u - sgpr->register_offset)
+                user_data_base + user_data_count - sgpr->register_offset)
             return AGC_ERROR_NOT_SUPPORTED;
         register_index = sgpr->register_offset - user_data_base;
-        register_mask = ((1u << sgpr->dword_count) - 1u) << register_index;
+        register_mask = sgpr->dword_count == 32u ? UINT32_MAX :
+            ((1u << sgpr->dword_count) - 1u) << register_index;
         if ((occupied_register_mask & register_mask) != 0u)
             return AGC_ERROR_VALIDATION_FAILED;
         occupied_register_mask |= register_mask;
+        if (register_index + sgpr->dword_count > reflected_register_count)
+            reflected_register_count = register_index + sgpr->dword_count;
+        for (uint32_t register_offset = 0u;
+             register_offset < shader->record.num_sh_registers;
+             ++register_offset) {
+            const AgcRegisterValue *reg = &registers[register_offset];
+            if ((reg->value == OPENAGC_NEXT_STAGE_PC_PLACEHOLDER ||
+                 reg->value == OPENAGC_TCS_OFFCHIP_LAYOUT_PLACEHOLDER) &&
+                reg->offset >= sgpr->register_offset &&
+                reg->offset < sgpr->register_offset + sgpr->dword_count)
+                return AGC_ERROR_VALIDATION_FAILED;
+        }
         switch (sgpr->kind) {
         case AGC_SHADER_USER_SGPR_DESCRIPTOR_SET:
             if (sgpr->index >= 8u || sgpr->dword_count != 1u ||
@@ -5698,10 +5754,15 @@ static int32_t agcPipelineValidateShaderUserData(
         !agcPipelineFindUserSgpr(reflection,
             AGC_SHADER_USER_SGPR_VERTEX_BUFFER_TABLE, 0u))
         return AGC_ERROR_VALIDATION_FAILED;
-    if (required_push_mask != 0u &&
+    if ((inline_mask & ~required_push_mask) != 0u)
+        return AGC_ERROR_VALIDATION_FAILED;
+    if (required_push_mask != 0u && inline_mask == 0u &&
         !agcPipelineFindUserSgpr(reflection,
-            AGC_SHADER_USER_SGPR_PUSH_CONSTANT_POINTER, 0u) &&
-        (inline_mask & required_push_mask) != required_push_mask)
+            AGC_SHADER_USER_SGPR_PUSH_CONSTANT_POINTER, 0u))
+        return AGC_ERROR_VALIDATION_FAILED;
+    if (!found_rsrc2 || encoded_register_count > user_data_count ||
+        encoded_register_count < reflected_register_count ||
+        encoded_register_count < static_register_count)
         return AGC_ERROR_VALIDATION_FAILED;
     return AGC_OK;
 }
@@ -7069,19 +7130,19 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
                 AGC_ERROR_VALIDATION_FAILED : result;
     }
     if (hull) {
-        result = agcPipelineValidateShaderUserData(&hull->reflection);
+        result = agcPipelineValidateShaderUserData(hull);
         if (result != AGC_OK)
             return agcPipelineDebugReport(device,
                 "agcCreateGraphicsPipeline", result,
                 AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT,
                 "hull-shader user-SGPR reflection is incompatible with the native resource binding contract");
     }
-    result = agcPipelineValidateShaderUserData(&primitive->reflection);
+    result = agcPipelineValidateShaderUserData(primitive);
     if (result != AGC_OK)
         return agcPipelineDebugReport(device, "agcCreateGraphicsPipeline",
             result, AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT,
             "primitive-shader user-SGPR reflection is incompatible with the native resource binding contract");
-    result = agcPipelineValidateShaderUserData(&ps->reflection);
+    result = agcPipelineValidateShaderUserData(ps);
     if (result != AGC_OK)
         return agcPipelineDebugReport(device, "agcCreateGraphicsPipeline",
             result, AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT,
@@ -7175,12 +7236,20 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
                     "descriptor mappings contain a duplicate set and binding");
         }
     }
+    push_constant_size = 0u;
     for (i = 0u; i < desc->push_constant_range_count; ++i) {
         const AgcShaderPushConstantRange *range =
             &desc->push_constant_ranges[i];
+        uint64_t range_end = (uint64_t)range->offset + range->size;
+        uint32_t active_stage_mask =
+            (1u << primitive->reflection.stage) |
+            (1u << ps->reflection.stage) |
+            (hull ? 1u << hull->reflection.stage : 0u);
         if (range->size == 0u || range->alignment != 4u ||
             (range->offset & 3u) != 0u || (range->size & 3u) != 0u ||
             (range->stage_mask & ~((1u << kAgcShaderStageCount) - 1u)) != 0u ||
+            range_end > 256u ||
+            (range->stage_mask & ~active_stage_mask) != 0u ||
             !agcPipelinePushEntryUsed(
                 hull ? &hull->reflection : NULL,
                 &primitive->reflection, &ps->reflection, range)) {
@@ -7189,6 +7258,20 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
                 AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT,
                 "push-constant range is empty, misaligned, unused, or has an invalid stage mask");
         }
+        for (j = 0u; j < i; ++j) {
+            const AgcShaderPushConstantRange *previous =
+                &desc->push_constant_ranges[j];
+            if ((range->stage_mask & previous->stage_mask) != 0u &&
+                range->offset < previous->offset + previous->size &&
+                previous->offset < range_end)
+                return agcPipelineDebugReport(device,
+                    "agcCreateGraphicsPipeline",
+                    AGC_ERROR_VALIDATION_FAILED,
+                    AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT,
+                    "push-constant ranges overlap for a shared shader stage");
+        }
+        if (range_end > push_constant_size)
+            push_constant_size = (uint32_t)range_end;
     }
     const int dual_source = (ps->reflection.flags &
         AGC_SHADER_REFLECTION_DUAL_SOURCE_EXPORT_BIT) != 0u;
@@ -7342,12 +7425,6 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
             AGC_ERROR_VALIDATION_FAILED,
             AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT,
             "pixel-shader sample frequency does not satisfy minimum sample shading");
-    push_constant_size = primitive->reflection.push_constant_size >
-        ps->reflection.push_constant_size ?
-        primitive->reflection.push_constant_size :
-        ps->reflection.push_constant_size;
-    if (hull && hull->reflection.push_constant_size > push_constant_size)
-        push_constant_size = hull->reflection.push_constant_size;
     result = agcPipelineBuildResourceLayout(desc->descriptor_mappings,
         desc->descriptor_mapping_count, desc->vertex_inputs,
         desc->vertex_input_count, push_constant_size,
@@ -7477,6 +7554,7 @@ int32_t PS5_SYSV_ABI agcCreateComputePipeline(AgcDevice device,
     uint32_t i;
     uint32_t j;
     uint32_t rsrc2;
+    uint32_t push_constant_size = 0u;
     AgcRuntimePipelineResourceLayout resource_layout;
     int32_t result;
 
@@ -7518,7 +7596,7 @@ int32_t PS5_SYSV_ABI agcCreateComputePipeline(AgcDevice device,
             AGC_ERROR_SHADER_INVALID,
             AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT,
             "compute pipeline shader requires valid compiler reflection metadata");
-    result = agcPipelineValidateShaderUserData(&shader->reflection);
+    result = agcPipelineValidateShaderUserData(shader);
     if (result != AGC_OK)
         return agcPipelineDebugReport(device, "agcCreateComputePipeline",
             result, AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT,
@@ -7581,8 +7659,6 @@ int32_t PS5_SYSV_ABI agcCreateComputePipeline(AgcDevice device,
         desc->local_size_z != shader->reflection.local_size_z ||
         desc->descriptor_mapping_count !=
             shader->reflection.descriptor_mapping_count ||
-        desc->push_constant_range_count !=
-            shader->reflection.push_constant_range_count ||
         !agcPipelineReflectionDescriptorsMatch(&shader->reflection,
             desc->descriptor_mappings, desc->descriptor_mapping_count) ||
         !agcPipelineReflectionPushRangesMatch(&shader->reflection,
@@ -7620,13 +7696,30 @@ int32_t PS5_SYSV_ABI agcCreateComputePipeline(AgcDevice device,
     for (i = 0u; i < desc->push_constant_range_count; ++i) {
         const AgcShaderPushConstantRange *range =
             &desc->push_constant_ranges[i];
+        uint64_t range_end = (uint64_t)range->offset + range->size;
         if (range->size == 0u || range->alignment != 4u ||
             (range->offset & 3u) != 0u || (range->size & 3u) != 0u ||
-            (range->stage_mask & (1u << kAgcShaderStageCs)) == 0u)
+            range_end > 256u ||
+            range->stage_mask != (1u << kAgcShaderStageCs) ||
+            !agcPipelinePushEntryUsed(&shader->reflection, NULL, NULL,
+                range))
             return agcPipelineDebugReport(device,
                 "agcCreateComputePipeline", AGC_ERROR_VALIDATION_FAILED,
                 AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT,
                 "compute push-constant range is empty, misaligned, or missing the compute stage");
+        for (j = 0u; j < i; ++j) {
+            const AgcShaderPushConstantRange *previous =
+                &desc->push_constant_ranges[j];
+            if (range->offset < previous->offset + previous->size &&
+                previous->offset < range_end)
+                return agcPipelineDebugReport(device,
+                    "agcCreateComputePipeline",
+                    AGC_ERROR_VALIDATION_FAILED,
+                    AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT,
+                    "compute push-constant ranges overlap");
+        }
+        if (range_end > push_constant_size)
+            push_constant_size = (uint32_t)range_end;
     }
     invocations = (uint64_t)desc->local_size_x * desc->local_size_y *
         desc->local_size_z;
@@ -7636,7 +7729,7 @@ int32_t PS5_SYSV_ABI agcCreateComputePipeline(AgcDevice device,
             "compute workgroup exceeds the qualified 1024-invocation limit");
     result = agcPipelineBuildResourceLayout(desc->descriptor_mappings,
         desc->descriptor_mapping_count, NULL, 0u,
-        shader->reflection.push_constant_size,
+        push_constant_size,
         agcPipelineUsesIndirectDescriptorSets(&shader->reflection),
         &resource_layout);
     if (result != AGC_OK)
@@ -11746,6 +11839,10 @@ static uint64_t agcCommandRequiredPushMask(
 {
     uint64_t mask = 0u;
     uint32_t i;
+
+    if (!agcPipelineFindUserSgpr(reflection,
+            AGC_SHADER_USER_SGPR_PUSH_CONSTANT_POINTER, 0u))
+        return reflection->inline_push_constant_mask;
 
     for (i = 0u; i < reflection->push_constant_range_count; ++i) {
         const AgcShaderPushConstantRange *range =

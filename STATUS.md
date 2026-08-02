@@ -58,6 +58,26 @@ after the later Eden failure entered the coredump path. A guarded GPU readback
 workload remains required before the ring itself is labeled
 hardware-qualified; Trinity and graphics-stage scratch remain fail-closed.
 
+Graphics user-data validation now follows the gfx1013 stage contract: VS/DS/GS,
+HS, and PS accept their 32 architectural user-SGPR slots, while compute remains
+bounded to 16. This removes the false rejection of Eden's 29-entry primitive
+reflection without weakening cross-stage or out-of-range checks. Pointer-free
+push-constant readiness now follows the compiler's sparse inline mask rather
+than treating unused holes in the declared range as required; reflected ranges
+may be contained by a larger application range, whose validated end now sizes
+the resource arena, while inactive-stage bits, shared-stage overlap, and inline
+bits outside every reflected range still fail closed. Pipeline creation also
+requires each stage's `PGM_RSRC2.USER_SGPR` count to cover both reflected and
+static ABI slots and rejects reflection mappings that collide with fused-stage
+continuation or tessellation-layout placeholders. Generic verification passes
+19,809 assertions and all 19 CTest entries. The exact `0xfffff0ff` Eden layout
+uses `BASE_VERTEX` at `GS_0`, rejects a draw with one used dword missing, then
+captures the low and high inline values in `GS_1` and `GS_28`; an independent
+draw captures dynamic base vertex at `GS_31`. Larger advertised graphics and
+compute push ranges are also command-qualified. The Prospero library
+cross-builds cleanly; an Eden hardware replay is still required before this
+correction is labeled hardware-qualified.
+
 Current execution order:
 
 The one-binary portability gate is complete. The FW 5.50 and FW 11.60 cleanup
