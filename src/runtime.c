@@ -421,6 +421,8 @@ struct AgcCommandBufferImpl {
     uint32_t resource_state_consumed;
     uint32_t vertex_binding_mask;
     uint32_t dynamic_state_set_mask;
+    uint32_t view_index;
+    uint32_t view_index_set;
     uint32_t color_target_count;
     uint32_t color_target_width;
     uint32_t color_target_height;
@@ -4937,7 +4939,8 @@ static int agcShaderReflectionValid(
         AGC_SHADER_SYSTEM_SGPR_START_INSTANCE_BIT |
         AGC_SHADER_SYSTEM_SGPR_DRAW_INDEX_BIT |
         AGC_SHADER_SYSTEM_SGPR_WORKGROUP_ID_BIT |
-        AGC_SHADER_SYSTEM_SGPR_NUM_WORKGROUPS_BIT;
+        AGC_SHADER_SYSTEM_SGPR_NUM_WORKGROUPS_BIT |
+        AGC_SHADER_SYSTEM_SGPR_VIEW_INDEX_BIT;
     uint64_t hash;
     int legacy_reflection;
     int current_reflection;
@@ -4958,6 +4961,8 @@ static int agcShaderReflectionValid(
              AGC_SHADER_COMPILER_API_VERSION_16 ||
          reflection->compiler_api_version ==
              AGC_SHADER_COMPILER_API_VERSION_17 ||
+         reflection->compiler_api_version ==
+             AGC_SHADER_COMPILER_API_VERSION_18 ||
          reflection->compiler_api_version ==
              AGC_SHADER_COMPILER_API_VERSION);
     if (!reflection || reflection->struct_size != sizeof(*reflection) ||
@@ -5580,6 +5585,13 @@ static int32_t agcPipelineValidateShaderUserData(
                 sgpr->index != 0u || sgpr->dword_count != 3u ||
                 (reflection->system_sgpr_mask &
                  AGC_SHADER_SYSTEM_SGPR_NUM_WORKGROUPS_BIT) == 0u)
+                return AGC_ERROR_VALIDATION_FAILED;
+            break;
+        case AGC_SHADER_USER_SGPR_VIEW_INDEX:
+            if (reflection->stage == kAgcShaderStageCs ||
+                sgpr->index != 0u || sgpr->dword_count != 1u ||
+                (reflection->system_sgpr_mask &
+                 AGC_SHADER_SYSTEM_SGPR_VIEW_INDEX_BIT) == 0u)
                 return AGC_ERROR_VALIDATION_FAILED;
             break;
         case AGC_SHADER_USER_SGPR_INDIRECT_DESCRIPTOR_SETS:
@@ -7583,6 +7595,8 @@ static void agcReleaseCommandReferences(AgcCommandBuffer command_buffer)
     command_buffer->resource_state_consumed = 0u;
     command_buffer->vertex_binding_mask = 0u;
     command_buffer->dynamic_state_set_mask = 0u;
+    command_buffer->view_index = 0u;
+    command_buffer->view_index_set = 0u;
     command_buffer->color_target_count = 0u;
     command_buffer->color_target_width = 0u;
     command_buffer->color_target_height = 0u;
@@ -11641,6 +11655,11 @@ static int32_t agcCommandUserSgprValue(AgcCommandBuffer command_buffer,
     case AGC_SHADER_USER_SGPR_DRAW_INDEX:
         *value = draw_index;
         return AGC_OK;
+    case AGC_SHADER_USER_SGPR_VIEW_INDEX:
+        if (!command_buffer->view_index_set)
+            return AGC_ERROR_RESOURCE_NOT_BOUND;
+        *value = command_buffer->view_index;
+        return AGC_OK;
     default:
         return AGC_ERROR_NOT_SUPPORTED;
     }
@@ -12124,6 +12143,20 @@ int32_t PS5_SYSV_ABI agcCmdSetLineWidth(
         command_buffer->dynamic_state_set_mask |=
             AGC_DYNAMIC_STATE_LINE_WIDTH_BIT;
     return result;
+}
+
+int32_t PS5_SYSV_ABI agcCmdSetViewIndex(
+    AgcCommandBuffer command_buffer, uint32_t view_index)
+{
+    if (!command_buffer || command_buffer->magic != AGC_MAGIC_COMMAND_BUFFER ||
+        !agcDeviceValid(command_buffer->device))
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (command_buffer->state != AGC_COMMAND_BUFFER_STATE_RECORDING ||
+        command_buffer->queue_type != kAgcQueueGraphics)
+        return AGC_ERROR_INVALID_STATE;
+    command_buffer->view_index = view_index;
+    command_buffer->view_index_set = 1u;
+    return AGC_OK;
 }
 
 int32_t PS5_SYSV_ABI agcCmdBindIndexBuffer(AgcCommandBuffer command_buffer,

@@ -10657,6 +10657,84 @@ static void test_runtime_mutable_srgb_image_views(void)
         "mutable image-view device destroys cleanly");
 }
 
+static void test_runtime_graphics_view_index_user_data(void)
+{
+    AgcDevice device = create_device();
+    AgcQueue queue = create_queue(device, kAgcQueueGraphics);
+    AgcShaderReflection vs_reflection = AGC_SHADER_REFLECTION_INIT;
+    AgcShaderReflection ps_reflection = AGC_SHADER_REFLECTION_INIT;
+    AgcGraphicsPipelineDesc pipeline_desc = AGC_GRAPHICS_PIPELINE_DESC_INIT;
+    AgcRasterizationState raster = AGC_RASTERIZATION_STATE_INIT;
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    AgcGraphicsPipeline pipeline = NULL;
+    AgcCommandBuffer command = NULL;
+    AgcShader vs;
+    AgcShader ps;
+    const AgcCommandBufferSubmit *captured;
+    const uint32_t *words;
+    uint32_t value = 0u;
+
+    vs_reflection.system_sgpr_mask =
+        AGC_SHADER_SYSTEM_SGPR_VIEW_INDEX_BIT;
+    vs_reflection.user_sgpr_count = 1u;
+    vs_reflection.user_sgprs[0] = (AgcShaderUserSgpr){
+        AGC_SHADER_USER_SGPR_VIEW_INDEX, 0u,
+        AGC_REG_SPI_SHADER_USER_DATA_GS_0 + 5u, 1u};
+    vs = create_shader_with_reflection(
+        device, kAgcShaderStageVs, &vs_reflection);
+    ps = create_shader_with_reflection(
+        device, kAgcShaderStagePs, &ps_reflection);
+    raster.rasterizer_discard_enable = 1u;
+    pipeline_desc.vertex_shader = vs;
+    pipeline_desc.pixel_shader = ps;
+    pipeline_desc.rasterization = &raster;
+    TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc,
+        &pipeline), AGC_OK, "view-index graphics pipeline creates");
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
+        AGC_OK, "view-index command buffer creates");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+        "view-index command buffer begins");
+    TEST_ASSERT_EQ(agcCmdBindGraphicsPipeline(command, pipeline), AGC_OK,
+        "view-index graphics pipeline binds");
+    TEST_ASSERT_EQ(agcCmdDraw(command, 3u, 1u, 0u, 0u),
+        AGC_ERROR_RESOURCE_NOT_BOUND,
+        "view-index shader rejects draw before typed state is set");
+    TEST_ASSERT_EQ(agcCmdSetViewIndex(command, 5u), AGC_OK,
+        "typed view index accepts graphics recording state");
+    TEST_ASSERT_EQ(agcCmdDraw(command, 3u, 1u, 0u, 0u), AGC_OK,
+        "view-index draw records after typed state is set");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+        "view-index command buffer ends");
+    submit.command_buffer_count = 1u;
+    submit.command_buffers = &command;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, NULL), AGC_OK,
+        "view-index command buffer submits");
+    captured = agcDriverDebugLastDcbSubmit();
+    TEST_ASSERT(captured != NULL, "view-index submission is captured");
+    words = (const uint32_t *)(uintptr_t)captured->command_address;
+    TEST_ASSERT(runtime_find_shader_register(words, captured->dword_count,
+        AGC_REG_SPI_SHADER_USER_DATA_GS_0 + 5u, &value),
+        "view-index user SGPR is emitted");
+    TEST_ASSERT_EQ(value, 5u,
+        "view-index user SGPR matches typed command state");
+
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+        "view-index command buffer resets");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+        "view-index command buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyGraphicsPipeline(pipeline), AGC_OK,
+        "view-index pipeline destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(ps), AGC_OK,
+        "view-index pixel shader destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(vs), AGC_OK,
+        "view-index vertex shader destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
+        "view-index queue destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "view-index device destroys");
+}
+
 static void test_runtime_stage_distinct_push_constants(void)
 {
     AgcDevice device = create_device();
@@ -10939,6 +11017,7 @@ TEST_RUN(test_runtime_image_region_and_buffer_copies);
     TEST_RUN(test_runtime_3d_sampled_image_view);
     TEST_RUN(test_runtime_extended_image_view_and_sampler);
     TEST_RUN(test_runtime_mutable_srgb_image_views);
+    TEST_RUN(test_runtime_graphics_view_index_user_data);
     TEST_RUN(test_runtime_stage_distinct_push_constants);
     TEST_RUN(test_runtime_occlusion_query_commands);
     TEST_RUN(test_runtime_fence_deferred_free);

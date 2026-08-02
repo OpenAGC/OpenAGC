@@ -159,8 +159,14 @@ expert use, but make the native API the recommended application surface.
    three-dword system-value SGPR range. Preserve exact direct-dispatch X/Y/Z
    programming and the indirect-dispatch fail-closed rule. This unblocks the
    general Vulkan dynamic subgroup-broadcast path, which passes twice on FW
-   5.50 with identical bytes; multiview and border-color swizzle remain the
-   next mandatory-capability gaps before the broader Eden gate.
+   5.50 with identical bytes.
+   Shader-reflection API 19 adds typed `ViewIndex` delivery through
+   `agcCmdSetViewIndex`, without exposing raw SGPR locations. Preserve the
+   resource-bound validation and exact register-emission regression. Vulkan's
+   six-layer `0x21` multiview pixel oracle passes twice on FW 5.50 using
+   identical bytes and clean immediate relaunch. Border-color swizzle is now
+   the remaining mandatory-capability gap before the broader Eden gate; defer
+   the identical-byte FW 11.60 multiview replay to the final endpoint pass.
 6. **Documentation and validation are part of every milestone.** Do not defer
    public API reference material, negative tests, or capability labels to the
    final release phase.

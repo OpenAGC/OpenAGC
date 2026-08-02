@@ -63,6 +63,18 @@ identical ELF SHA-256
 The console subsequently sleeping was not a kernel panic and is not recorded
 as a failure.
 
+Shader-reflection API 19 adds a typed graphics `ViewIndex` system-value SGPR.
+Applications select it through `agcCmdSetViewIndex`; raw SGPR locations remain
+private to reflection and command encoding. Draw validation requires the value
+when an active stage reflects it, and generic verification passes 19,610
+assertions with exact register-emission coverage. The Prospero library builds
+clean. Vulkan-PS5's six-layer multiview probe rendered view mask `0x21` twice
+from cleanup through teardown on exact FW 5.50, producing red view 0 and blue
+view 5 with identical ELF SHA-256
+`00b5361b49d00fdb133ce2e2882618be82cba918df7b83732e268b8a96b01e22`.
+Immediate relaunch left no process behind; the identical-byte FW 11.60 replay
+is deferred until the final endpoint gate.
+
 Command resource tables now support Vulkan-style descriptor, push-constant,
 and vertex-buffer rebinding after a draw or dispatch. The runtime snapshots the
 GPU-visible table before mutation, retains every snapshot through command

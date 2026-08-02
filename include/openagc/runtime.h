@@ -1771,6 +1771,11 @@ int32_t PS5_SYSV_ABI agcCmdSetDepthBias(
     AgcCommandBuffer command_buffer, const AgcDepthBias *depth_bias);
 int32_t PS5_SYSV_ABI agcCmdSetLineWidth(
     AgcCommandBuffer command_buffer, float line_width);
+/* Programs the typed graphics ViewIndex system value reflected by shaders.
+ * Applications select attachment layers independently through the typed
+ * color/depth target bindings; no user-SGPR register location is exposed. */
+int32_t PS5_SYSV_ABI agcCmdSetViewIndex(
+    AgcCommandBuffer command_buffer, uint32_t view_index);
 int32_t PS5_SYSV_ABI agcCmdBindIndexBuffer(AgcCommandBuffer command_buffer,
     AgcBuffer buffer, uint64_t offset, AgcIndexSize index_size);
 int32_t PS5_SYSV_ABI agcCmdDraw(AgcCommandBuffer command_buffer,
