@@ -313,8 +313,9 @@ static uint64_t shader_fixture_linkage_hash(
         sizeof(reflection->patch_output_mask));
 }
 
-static AgcShader create_shader_with_reflection(AgcDevice device,
-    AgcShaderStage stage, const AgcShaderReflection *requirements)
+static AgcShader create_shader_with_reflection_rsrc2(AgcDevice device,
+    AgcShaderStage stage, const AgcShaderReflection *requirements,
+    uint32_t compute_rsrc2_override)
 {
     RuntimeShaderFixture binary = {0};
     AgcShaderReflection reflection = AGC_SHADER_REFLECTION_INIT;
@@ -327,6 +328,37 @@ static AgcShader create_shader_with_reflection(AgcDevice device,
     binary.record.version = AGC_SHADER_RECORD_VERSION_GEN5;
     binary.record.code = offsetof(RuntimeShaderFixture, code);
     if (stage == kAgcShaderStageCs) {
+        uint32_t compute_user_sgprs = 0u;
+        uint32_t compute_rsrc2;
+
+        for (uint32_t i = 0u; i < reflection.user_sgpr_count; ++i) {
+            const AgcShaderUserSgpr *sgpr = &reflection.user_sgprs[i];
+            if (sgpr->register_offset >= AGC_REG_COMPUTE_USER_DATA_0 &&
+                sgpr->register_offset <
+                    AGC_REG_COMPUTE_USER_DATA_0 + 64u) {
+                uint32_t end =
+                    sgpr->register_offset - AGC_REG_COMPUTE_USER_DATA_0 +
+                    sgpr->dword_count;
+                if (end > compute_user_sgprs)
+                    compute_user_sgprs = end;
+            }
+        }
+        if (reflection.scratch_bytes_per_wave != 0u &&
+            compute_user_sgprs < 2u)
+            compute_user_sgprs = 2u;
+        compute_rsrc2 =
+            (compute_user_sgprs &
+                AGC_REG_SPI_SHADER_PGM_RSRC2_USER_SGPR_MASK) <<
+                    AGC_REG_SPI_SHADER_PGM_RSRC2_USER_SGPR_SHIFT;
+        compute_rsrc2 |=
+            ((compute_user_sgprs >> 5u) &
+                AGC_REG_SPI_SHADER_PGM_RSRC2_USER_SGPR_MSB_MASK) <<
+                    AGC_REG_SPI_SHADER_PGM_RSRC2_USER_SGPR_MSB_SHIFT;
+        if (reflection.scratch_bytes_per_wave != 0u)
+            compute_rsrc2 |=
+                AGC_REG_SPI_SHADER_PGM_RSRC2_SCRATCH_EN_MASK;
+        if (compute_rsrc2_override != UINT32_MAX)
+            compute_rsrc2 = compute_rsrc2_override;
         binary.record.shader_type = kAgcShaderTypeCs;
         binary.record.num_sh_registers = 3u;
         binary.record.sh_registers =
@@ -334,7 +366,7 @@ static AgcShader create_shader_with_reflection(AgcDevice device,
         binary.sh_registers[0] = (AgcRegisterValue){
             AGC_REG_COMPUTE_PGM_RSRC1, 0u};
         binary.sh_registers[1] = (AgcRegisterValue){
-            AGC_REG_COMPUTE_PGM_RSRC2, 0u};
+            AGC_REG_COMPUTE_PGM_RSRC2, compute_rsrc2};
         binary.sh_registers[2] = (AgcRegisterValue){
             AGC_REG_COMPUTE_PGM_RSRC3, 0u};
     } else if (stage == kAgcShaderStagePs) {
@@ -408,6 +440,13 @@ static AgcShader create_shader_with_reflection(AgcDevice device,
     TEST_ASSERT_EQ(agcCreateShader(device, &desc, &shader), AGC_OK,
         "native shader creation succeeds");
     return shader;
+}
+
+static AgcShader create_shader_with_reflection(AgcDevice device,
+    AgcShaderStage stage, const AgcShaderReflection *requirements)
+{
+    return create_shader_with_reflection_rsrc2(
+        device, stage, requirements, UINT32_MAX);
 }
 
 static AgcShader create_shader(AgcDevice device, AgcShaderStage stage)
@@ -2104,6 +2143,230 @@ static void test_runtime_compute_submission(void)
     TEST_ASSERT_EQ(agcDestroyShader(shader), AGC_OK, "compute shader destroys");
     TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK, "compute queue destroys");
     TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK, "compute device destroys");
+}
+
+static void test_runtime_compute_scratch_submission(void)
+{
+    AgcDevice device = create_device();
+    AgcQueue queue = create_queue(device, kAgcQueueCompute);
+    AgcQueue graphics_queue = create_queue(device, kAgcQueueGraphics);
+    AgcShaderReflection requirements = AGC_SHADER_REFLECTION_INIT;
+    AgcShaderPushConstantRange push_range = {
+        0u, sizeof(uint32_t), 4u, 1u << kAgcShaderStageCs};
+    AgcComputePipelineDesc pipeline_desc = AGC_COMPUTE_PIPELINE_DESC_INIT;
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcBufferDesc argument_desc = AGC_BUFFER_DESC_INIT;
+    AgcResourceTransition transition = AGC_RESOURCE_TRANSITION_INIT;
+    AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
+    AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    AgcMemoryStats before = AGC_MEMORY_STATS_INIT;
+    AgcMemoryStats after = AGC_MEMORY_STATS_INIT;
+    AgcMemoryStats graphics_before = AGC_MEMORY_STATS_INIT;
+    AgcMemoryStats graphics_after = AGC_MEMORY_STATS_INIT;
+    AgcComputePipeline pipeline = NULL;
+    AgcCommandBuffer command = NULL;
+    AgcCommandBuffer graphics_command = NULL;
+    AgcBuffer argument = NULL;
+    AgcFence fence = NULL;
+    AgcShader shader;
+    const AgcCommandBufferSubmit *captured;
+    const uint32_t *words;
+    uint32_t owner = UINT32_MAX;
+    uint32_t value = 0u;
+    const uint32_t push_value = 0xdecafbadu;
+    const uint32_t groups[3] = {2u, 1u, 1u};
+
+    requirements.local_size_x = 8u;
+    requirements.local_size_y = 8u;
+    requirements.local_size_z = 1u;
+    requirements.scratch_bytes_per_wave = 36u * 1024u;
+    requirements.push_constant_size = sizeof(push_value);
+    requirements.push_constant_alignment = 4u;
+    requirements.push_constant_range_count = 1u;
+    requirements.push_constant_ranges[0] = push_range;
+    requirements.inline_push_constant_mask = 1u;
+    requirements.user_sgpr_count = 1u;
+    requirements.user_sgprs[0] = (AgcShaderUserSgpr){
+        AGC_SHADER_USER_SGPR_INLINE_PUSH_CONSTANT, 0u,
+        AGC_REG_COMPUTE_USER_DATA_0 + 2u, 1u};
+    shader = create_shader_with_reflection(
+        device, kAgcShaderStageCs, &requirements);
+    pipeline_desc.shader = shader;
+    pipeline_desc.local_size_x = 8u;
+    pipeline_desc.local_size_y = 8u;
+    pipeline_desc.local_size_z = 1u;
+    pipeline_desc.push_constant_range_count = 1u;
+    pipeline_desc.push_constant_ranges = &push_range;
+    TEST_ASSERT_EQ(agcCreateComputePipeline(device, &pipeline_desc,
+        &pipeline), AGC_OK,
+        "36 KiB-per-wave compute scratch pipeline creates");
+
+    command_desc.queue_type = kAgcQueueCompute;
+    command_desc.capacity_dwords = 2048u;
+    argument_desc.size = 16u;
+    argument_desc.usage = AGC_BUFFER_USAGE_INDIRECT_BIT;
+    argument_desc.flags = AGC_BUFFER_CREATE_UPLOAD_BIT;
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
+        AGC_OK, "compute scratch command buffer creates");
+    TEST_ASSERT_EQ(agcCreateBuffer(device, &argument_desc, &argument), AGC_OK,
+        "compute scratch indirect argument creates");
+    TEST_ASSERT_EQ(agcWriteBuffer(argument, 4u, groups, sizeof(groups)),
+        AGC_OK, "compute scratch indirect groups upload");
+    TEST_ASSERT_EQ(agcCreateFence(device, &fence_desc, &fence), AGC_OK,
+        "compute scratch fence creates");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+        "compute scratch command begins");
+    TEST_ASSERT_EQ(agcCmdBindComputePipeline(command, pipeline), AGC_OK,
+        "compute scratch pipeline binds");
+    TEST_ASSERT_EQ(agcCmdPushConstants(command, 1u << kAgcShaderStageCs,
+        0u, sizeof(push_value), &push_value), AGC_OK,
+        "compute scratch inline push constant binds at SGPR2");
+    transition.resource_type = kAgcResourceTypeBuffer;
+    transition.buffer = argument;
+    transition.buffer_offset = 4u;
+    transition.buffer_size = sizeof(groups);
+    transition.before = kAgcResourceUsageUndefined;
+    transition.after = kAgcResourceUsageShaderRead;
+    transition.before_owner = kAgcResourceOwnerHost;
+    transition.after_owner = kAgcResourceOwnerCompute;
+    TEST_ASSERT_EQ(agcCmdTransitionResources(command, 1u, &transition),
+        AGC_OK, "compute scratch indirect range transitions");
+    TEST_ASSERT_EQ(agcGetMemoryStats(device, &before), AGC_OK,
+        "compute scratch pre-dispatch memory stats query succeeds");
+    TEST_ASSERT_EQ(agcCmdDispatch(command, 1u, 1u, 1u), AGC_OK,
+        "compute scratch direct dispatch records");
+    TEST_ASSERT_EQ(agcCmdDispatchIndirect(command, argument, 4u), AGC_OK,
+        "compute scratch indirect dispatch records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+        "compute scratch command ends");
+    TEST_ASSERT_EQ(agcGetMemoryStats(device, &after), AGC_OK,
+        "compute scratch allocated memory stats query succeeds");
+    TEST_ASSERT_EQ(after.live_bytes - before.live_bytes,
+        UINT64_C(85196800),
+        "compute scratch allocates one fixed 65 KiB by 1280-wave ring");
+
+    submit.command_buffer_count = 1u;
+    submit.command_buffers = &command;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
+        "compute scratch command submits");
+    captured = agcDriverDebugLastAcbSubmit(&owner);
+    words = (const uint32_t *)(uintptr_t)captured->command_address;
+    TEST_ASSERT(runtime_find_shader_register(words, captured->dword_count,
+        AGC_REG_COMPUTE_TMPRING_SIZE, &value),
+        "runtime compute scratch submission programs TMPRING_SIZE");
+    TEST_ASSERT_EQ(value, 0x00041500u,
+        "runtime compute scratch uses 65 KiB and 1280 waves");
+    TEST_ASSERT(runtime_find_shader_register(words, captured->dword_count,
+        AGC_REG_COMPUTE_USER_DATA_0 + 1u, &value),
+        "runtime compute scratch submission programs scratch address high");
+    TEST_ASSERT_EQ(value & 0x80000000u, 0x80000000u,
+        "runtime compute scratch enables address swizzling");
+    TEST_ASSERT(runtime_find_shader_register(words, captured->dword_count,
+        AGC_REG_COMPUTE_USER_DATA_0 + 2u, &value),
+        "runtime compute scratch submission preserves SGPR2");
+    TEST_ASSERT_EQ(value, push_value,
+        "runtime compute scratch submission preserves inline push data");
+    TEST_ASSERT(runtime_has_opcode(words, captured->dword_count,
+        AGC_PM4_OP_DISPATCH_DIRECT),
+        "runtime compute scratch submission contains direct dispatch");
+    TEST_ASSERT(runtime_has_opcode(words, captured->dword_count,
+        AGC_PM4_OP_DISPATCH_INDIRECT),
+        "runtime compute scratch submission contains indirect dispatch");
+    TEST_ASSERT_EQ(agcWaitFence(fence, 1u), AGC_OK,
+        "compute scratch submission completes");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+        "compute scratch command resets");
+
+    command_desc.queue_type = kAgcQueueGraphics;
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(
+        device, &command_desc, &graphics_command), AGC_OK,
+        "graphics-queue compute scratch command creates");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(graphics_command), AGC_OK,
+        "graphics-queue compute scratch command begins");
+    TEST_ASSERT_EQ(agcCmdBindComputePipeline(graphics_command, pipeline),
+        AGC_OK, "graphics queue binds compute scratch pipeline");
+    TEST_ASSERT_EQ(agcCmdPushConstants(graphics_command,
+        1u << kAgcShaderStageCs, 0u, sizeof(push_value), &push_value),
+        AGC_OK, "graphics queue binds compute scratch push data");
+    TEST_ASSERT_EQ(agcGetMemoryStats(device, &graphics_before), AGC_OK,
+        "graphics scratch pre-dispatch memory stats query succeeds");
+    TEST_ASSERT_EQ(agcCmdDispatch(graphics_command, 1u, 1u, 1u), AGC_OK,
+        "graphics queue records compute scratch dispatch");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(graphics_command), AGC_OK,
+        "graphics-queue compute scratch command ends");
+    TEST_ASSERT_EQ(agcGetMemoryStats(device, &graphics_after), AGC_OK,
+        "graphics scratch allocated memory stats query succeeds");
+    TEST_ASSERT_EQ(graphics_after.live_bytes - graphics_before.live_bytes,
+        UINT64_C(85196800),
+        "graphics queue receives a distinct fixed compute scratch ring");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "compute scratch fence resets for graphics submission");
+    submit.command_buffers = &graphics_command;
+    TEST_ASSERT_EQ(agcQueueSubmit(graphics_queue, &submit, fence), AGC_OK,
+        "graphics queue submits compute scratch command");
+    TEST_ASSERT_EQ(agcWaitFence(fence, 1u), AGC_OK,
+        "graphics-queue compute scratch submission completes");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(graphics_command), AGC_OK,
+        "graphics-queue compute scratch command resets");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(graphics_command), AGC_OK,
+        "graphics-queue compute scratch command destroys");
+    TEST_ASSERT_EQ(agcDestroyFence(fence), AGC_OK,
+        "compute scratch fence destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+        "compute scratch command destroys");
+    TEST_ASSERT_EQ(agcDestroyBuffer(argument), AGC_OK,
+        "compute scratch indirect argument destroys");
+    TEST_ASSERT_EQ(agcDestroyComputePipeline(pipeline), AGC_OK,
+        "compute scratch pipeline destroys");
+    TEST_ASSERT_EQ(agcDestroyShader(shader), AGC_OK,
+        "compute scratch shader destroys");
+
+    requirements.user_sgprs[0].register_offset =
+        AGC_REG_COMPUTE_USER_DATA_0;
+    shader = create_shader_with_reflection(
+        device, kAgcShaderStageCs, &requirements);
+    pipeline_desc.shader = shader;
+    pipeline = NULL;
+    TEST_ASSERT_EQ(agcCreateComputePipeline(device, &pipeline_desc,
+        &pipeline), AGC_ERROR_VALIDATION_FAILED,
+        "compute scratch rejects reflected SGPR0 overlap");
+    TEST_ASSERT(pipeline == NULL,
+        "scratch SGPR overlap leaves pipeline output null");
+    TEST_ASSERT_EQ(agcDestroyShader(shader), AGC_OK,
+        "scratch SGPR-overlap shader destroys");
+
+    requirements.user_sgprs[0].register_offset =
+        AGC_REG_COMPUTE_USER_DATA_0 + 2u;
+    shader = create_shader_with_reflection_rsrc2(device,
+        kAgcShaderStageCs, &requirements,
+        AGC_REG_SPI_SHADER_PGM_RSRC2_SCRATCH_EN_MASK |
+        (2u << AGC_REG_SPI_SHADER_PGM_RSRC2_USER_SGPR_SHIFT));
+    pipeline_desc.shader = shader;
+    TEST_ASSERT_EQ(agcCreateComputePipeline(device, &pipeline_desc,
+        &pipeline), AGC_ERROR_VALIDATION_FAILED,
+        "compute scratch rejects USER_SGPR count below reflected SGPR2");
+    TEST_ASSERT(pipeline == NULL,
+        "insufficient scratch USER_SGPR count leaves pipeline output null");
+    TEST_ASSERT_EQ(agcDestroyShader(shader), AGC_OK,
+        "insufficient scratch USER_SGPR shader destroys");
+
+    requirements.scratch_bytes_per_wave = 1u;
+    shader = create_shader_with_reflection(
+        device, kAgcShaderStageCs, &requirements);
+    pipeline_desc.shader = shader;
+    TEST_ASSERT_EQ(agcCreateComputePipeline(device, &pipeline_desc,
+        &pipeline), AGC_ERROR_NOT_SUPPORTED,
+        "non-granular reflected compute scratch fails closed");
+    TEST_ASSERT(pipeline == NULL,
+        "non-granular scratch leaves pipeline output null");
+    TEST_ASSERT_EQ(agcDestroyShader(shader), AGC_OK,
+        "non-granular scratch shader destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
+        "compute scratch queue destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(graphics_queue), AGC_OK,
+        "graphics scratch queue destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "compute scratch device destroys and releases its ring");
 }
 
 static void test_runtime_compute_num_workgroups_user_data(void)
@@ -11016,6 +11279,7 @@ void test_suite_runtime(void)
     TEST_RUN(test_runtime_all_object_lifecycle);
     TEST_RUN(test_runtime_fence_and_command_states);
     TEST_RUN(test_runtime_compute_submission);
+    TEST_RUN(test_runtime_compute_scratch_submission);
     TEST_RUN(test_runtime_compute_num_workgroups_user_data);
     TEST_RUN(test_runtime_compute_on_graphics_queue);
     TEST_RUN(test_runtime_empty_submission_eop_diagnostic);

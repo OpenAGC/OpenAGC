@@ -3602,11 +3602,13 @@ int32_t PS5_SYSV_ABI agcGfx1013SetContextControl(
     return AGC_OK;
 }
 
-int32_t PS5_SYSV_ABI agcGfx1013ValidateCompute(
-    const AgcGfx1013ComputeState *state)
+static int32_t agcGfx1013ValidateComputeCommon(
+    const AgcGfx1013ComputeState *state,
+    const AgcGfx1013ComputeScratchState *scratch)
 {
     AgcGfx1013ShaderBinding shader;
     uint32_t value;
+    uint32_t rsrc2;
     uint32_t i;
     uint64_t local_invocations;
 
@@ -3634,10 +3636,50 @@ int32_t PS5_SYSV_ABI agcGfx1013ValidateCompute(
     if (!agcGfx1013FindComputeRegister(
             state, AGC_REG_COMPUTE_PGM_RSRC1, &value) ||
         !agcGfx1013FindComputeRegister(
-            state, AGC_REG_COMPUTE_PGM_RSRC2, &value) ||
+            state, AGC_REG_COMPUTE_PGM_RSRC2, &rsrc2) ||
         !agcGfx1013FindComputeRegister(
             state, AGC_REG_COMPUTE_PGM_RSRC3, &value))
         return AGC_ERROR_SHADER_INVALID;
+    if (((rsrc2 & AGC_REG_SPI_SHADER_PGM_RSRC2_SCRATCH_EN_MASK) != 0u) !=
+        (scratch != NULL))
+        return AGC_ERROR_VALIDATION_FAILED;
+    if (scratch) {
+        uint64_t required_size;
+        uint32_t shader_user_sgprs =
+            ((rsrc2 >> AGC_REG_SPI_SHADER_PGM_RSRC2_USER_SGPR_SHIFT) &
+                AGC_REG_SPI_SHADER_PGM_RSRC2_USER_SGPR_MASK) |
+            (((rsrc2 >>
+                AGC_REG_SPI_SHADER_PGM_RSRC2_USER_SGPR_MSB_SHIFT) &
+                AGC_REG_SPI_SHADER_PGM_RSRC2_USER_SGPR_MSB_MASK) << 5u);
+        uint32_t required_user_sgprs =
+            state->num_user_data < 2u ? 2u : state->num_user_data;
+        uint32_t wave_size =
+            (state->modifier & AGC_GFX1013_COMPUTE_DISPATCH_WAVE32) != 0u ?
+                32u : 64u;
+        uint32_t workgroup_waves =
+            (uint32_t)((local_invocations + wave_size - 1u) / wave_size);
+
+        if (scratch->address == 0u ||
+            (scratch->address &
+                (AGC_GFX1013_COMPUTE_SCRATCH_ALIGNMENT - 1u)) != 0u ||
+            (scratch->address >> 48u) != 0u)
+            return AGC_ERROR_INVALID_ALIGNMENT;
+        if (scratch->bytes_per_wave == 0u ||
+            (scratch->bytes_per_wave &
+                (AGC_GFX1013_COMPUTE_SCRATCH_GRANULARITY - 1u)) != 0u ||
+            scratch->bytes_per_wave /
+                AGC_GFX1013_COMPUTE_SCRATCH_GRANULARITY >
+                AGC_GFX1013_COMPUTE_SCRATCH_MAX_WAVESIZE_UNITS ||
+            shader_user_sgprs < required_user_sgprs ||
+            scratch->wave_count < workgroup_waves ||
+            scratch->wave_count > AGC_GFX1013_COMPUTE_SCRATCH_MAX_WAVES)
+            return AGC_ERROR_INVALID_ARGUMENT;
+        required_size = (uint64_t)scratch->bytes_per_wave *
+            scratch->wave_count;
+        if (scratch->allocation_size < required_size ||
+            required_size > (UINT64_C(1) << 48u) - scratch->address)
+            return AGC_ERROR_RESOURCE_INVALID;
+    }
     shader.record = state->record;
     shader.sh_registers = state->sh_registers;
     shader.num_sh_registers = state->num_sh_registers;
@@ -3660,6 +3702,12 @@ int32_t PS5_SYSV_ABI agcGfx1013ValidateCompute(
         }
     }
     return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013ValidateCompute(
+    const AgcGfx1013ComputeState *state)
+{
+    return agcGfx1013ValidateComputeCommon(state, NULL);
 }
 
 static uint32_t agcGfx1013ComputeDefaultsDwords(
@@ -3736,11 +3784,16 @@ int32_t PS5_SYSV_ABI agcGfx1013ApplyComputeDefaultsV8(
 
 static int32_t agcGfx1013DispatchComputeCommon(
     SceAgcCb *cb, const AgcGfx1013ComputeState *state,
+    const AgcGfx1013ComputeScratchState *scratch,
     uint64_t argument_buffer_address, uint32_t argument_offset)
 {
     AgcGfx1013ShaderBinding shader;
     uint32_t limits0[3] = {0u, 0xffffffffu, 0xffffffffu};
     uint32_t limits1[2] = {0xffffffffu, 0xffffffffu};
+    uint32_t scratch_tmpring_size = 0u;
+    uint32_t scratch_user_data[16];
+    const uint32_t *user_data = state ? state->user_data : NULL;
+    uint32_t user_data_count = state ? state->num_user_data : 0u;
     uint32_t threads[6];
     uint32_t program[2];
     uint32_t resources[2];
@@ -3752,9 +3805,25 @@ static int32_t agcGfx1013DispatchComputeCommon(
 
     if (!cb)
         return AGC_ERROR_INVALID_ARGUMENT;
-    result = agcGfx1013ValidateCompute(state);
+    result = agcGfx1013ValidateComputeCommon(state, scratch);
     if (result != AGC_OK)
         return result;
+    if (scratch) {
+        memset(scratch_user_data, 0, sizeof(scratch_user_data));
+        if (user_data_count != 0u)
+            memcpy(scratch_user_data, user_data,
+                user_data_count * sizeof(*scratch_user_data));
+        scratch_user_data[0] = (uint32_t)scratch->address;
+        scratch_user_data[1] =
+            ((uint32_t)(scratch->address >> 32u) & 0xffffu) |
+            0x80000000u;
+        user_data = scratch_user_data;
+        if (user_data_count < 2u)
+            user_data_count = 2u;
+        scratch_tmpring_size = scratch->wave_count |
+            (scratch->bytes_per_wave /
+                AGC_GFX1013_COMPUTE_SCRATCH_GRANULARITY << 12u);
+    }
     {
         const uint64_t local_invocations =
             (uint64_t)state->local_size_x * state->local_size_y *
@@ -3791,7 +3860,7 @@ static int32_t agcGfx1013DispatchComputeCommon(
           (argument_offset & 3u) != 0u)))
         return AGC_ERROR_INVALID_ARGUMENT;
     required_dwords = (argument_buffer_address != 0u ? 40u : 38u) +
-        state->num_user_data + resource_count * 3u;
+        user_data_count + resource_count * 3u + (scratch ? 3u : 0u);
     if (agcCbRemainingDwords(cb) < required_dwords)
         return AGC_ERROR_BUFFER_TOO_SMALL;
 
@@ -3814,6 +3883,9 @@ static int32_t agcGfx1013DispatchComputeCommon(
             cb, 0x80000000u, 0x80000000u) != AGC_OK ||
         !agcGfx1013EmitComputeRegisters(
             cb, AGC_REG_COMPUTE_RESOURCE_LIMITS, limits0, 3u) ||
+        (scratch && !agcGfx1013EmitComputeRegisters(
+            cb, AGC_REG_COMPUTE_TMPRING_SIZE,
+            &scratch_tmpring_size, 1u)) ||
         !agcGfx1013EmitComputeRegisters(cb, 0x219u, limits1, 2u) ||
         !agcGfx1013EmitComputeRegisters(
             cb, AGC_REG_COMPUTE_START_X, threads, 6u) ||
@@ -3823,10 +3895,10 @@ static int32_t agcGfx1013DispatchComputeCommon(
             cb, AGC_REG_COMPUTE_PGM_RSRC1, resources, 2u) ||
         !agcGfx1013EmitComputeRegisters(
             cb, AGC_REG_COMPUTE_PGM_RSRC3, &resource3, 1u) ||
-        (state->num_user_data != 0u &&
+        (user_data_count != 0u &&
             !agcGfx1013EmitComputeRegisters(cb,
-                AGC_REG_COMPUTE_USER_DATA_0, state->user_data,
-                state->num_user_data)))
+                AGC_REG_COMPUTE_USER_DATA_0, user_data,
+                user_data_count)))
         return AGC_ERROR_INTERNAL;
     if (state->num_resource_tables != 0u) {
         result = agcGfx1013BindResourceTables(cb, &shader,
@@ -3856,7 +3928,7 @@ static int32_t agcGfx1013DispatchComputeCommon(
 int32_t PS5_SYSV_ABI agcGfx1013DispatchCompute(
     SceAgcCb *cb, const AgcGfx1013ComputeState *state)
 {
-    return agcGfx1013DispatchComputeCommon(cb, state, 0u, 0u);
+    return agcGfx1013DispatchComputeCommon(cb, state, NULL, 0u, 0u);
 }
 
 int32_t PS5_SYSV_ABI agcGfx1013DispatchComputeIndirect(
@@ -3865,7 +3937,27 @@ int32_t PS5_SYSV_ABI agcGfx1013DispatchComputeIndirect(
 {
     if (argument_buffer_address == 0u)
         return AGC_ERROR_INVALID_ARGUMENT;
-    return agcGfx1013DispatchComputeCommon(cb, state,
+    return agcGfx1013DispatchComputeCommon(cb, state, NULL,
+        argument_buffer_address, argument_offset);
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013DispatchComputeScratch(
+    SceAgcCb *cb, const AgcGfx1013ComputeState *state,
+    const AgcGfx1013ComputeScratchState *scratch)
+{
+    if (!scratch)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    return agcGfx1013DispatchComputeCommon(cb, state, scratch, 0u, 0u);
+}
+
+int32_t PS5_SYSV_ABI agcGfx1013DispatchComputeIndirectScratch(
+    SceAgcCb *cb, const AgcGfx1013ComputeState *state,
+    const AgcGfx1013ComputeScratchState *scratch,
+    uint64_t argument_buffer_address, uint32_t argument_offset)
+{
+    if (!scratch || argument_buffer_address == 0u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    return agcGfx1013DispatchComputeCommon(cb, state, scratch,
         argument_buffer_address, argument_offset);
 }
 

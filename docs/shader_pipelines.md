@@ -222,12 +222,30 @@ must contain whole input-control-point patches. The combined geometry form
 accepts the same qualified triangle/line and invocation metadata while its
 indexed input remains a complete tessellation patch.
 
-Compute supports Wave32, at most 1,024 invocations per group, no scratch, and
-at most 64 KiB LDS, including direct or indirect reflected descriptor-set
-addressing. Compiler API 16 marks pixel shaders whose epilog implements
-alpha-to-one; the pipeline must request exactly the reflected state.
-Alpha-to-coverage, point/adjacency geometry inputs, and unqualified pipeline
-forms remain fail-closed.
+Compute supports Wave32, at most 1,024 invocations per group, at most 64 KiB
+of compiler-reflected scratch per wave, and at most 64 KiB LDS, including
+direct or indirect reflected descriptor-set addressing. Scratch reserves
+compute user SGPR0 and SGPR1; reflected application resources begin at SGPR2.
+The standard-PS5 runtime lazily owns a distinct garlic ring for each graphics
+or compute queue type. Each ring uses a fixed 65 KiB stride and 1,280 records,
+derived from the documented four-engine, two-array, five-CU gfx1013 topology
+at 32 Wave32 records per CU. The extra one-KiB stride unit preserves the
+odd-granule memory-channel distribution used by the qualified GFX10 policy.
+Scratch on Trinity, graphics-stage scratch, non-KiB compiler requirements, and
+larger compute requirements remain fail-closed.
+
+The low-level scratch dispatch validates the complete 48-bit ring span, emits
+`COMPUTE_TMPRING_SIZE` through the compute SH-register bank, and requires the
+shader's `COMPUTE_PGM_RSRC2.USER_SGPR` count to cover both reserved scratch
+registers and every reflected application mapping. The application-facing
+pipeline performs the same `USER_SGPR` coverage check before any command can
+be recorded. Graphics and asynchronous-compute queues use separate immutable
+ring addresses for the device lifetime.
+
+Compiler API 16 marks pixel shaders whose epilog implements alpha-to-one; the
+pipeline must request exactly the reflected state. Alpha-to-coverage,
+point/adjacency geometry inputs, and unqualified pipeline forms remain
+fail-closed.
 
 ## Qualification
 

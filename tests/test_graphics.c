@@ -3655,6 +3655,124 @@ static void test_gfx1013_compute_packets(void)
         AGC_ERROR_INVALID_ALIGNMENT, "unaligned compute program rejects");
 }
 
+static void test_gfx1013_compute_scratch_packets(void)
+{
+    uint32_t buffer[256] = {0};
+    uint32_t user_data[4] = {
+        0xaaaaaaaau, 0xbbbbbbbbu, 0x11223344u, 0x55667788u};
+    AgcRegisterValue sh[3] = {
+        {AGC_REG_COMPUTE_PGM_RSRC1, 0x000000c0u},
+        {AGC_REG_COMPUTE_PGM_RSRC2,
+            AGC_REG_SPI_SHADER_PGM_RSRC2_SCRATCH_EN_MASK |
+            (4u << AGC_REG_SPI_SHADER_PGM_RSRC2_USER_SGPR_SHIFT)},
+        {AGC_REG_COMPUTE_PGM_RSRC3, 0u},
+    };
+    AgcShaderRecord record = {0};
+    AgcGfx1013ComputeState state = {0};
+    AgcGfx1013ComputeScratchState scratch = {
+        UINT64_C(0x0000000202600000), UINT64_C(48496640),
+        37u * 1024u, 1280u};
+    SceAgcCb cb;
+
+    record.magic = AGC_SHADER_RECORD_MAGIC;
+    record.version = AGC_SHADER_RECORD_VERSION_GEN5;
+    record.shader_type = kAgcShaderTypeCs;
+    record.num_sh_registers = 3u;
+    state.record = &record;
+    state.sh_registers = sh;
+    state.num_sh_registers = 3u;
+    state.code_address = UINT64_C(0x0000000201de9000);
+    state.user_data = user_data;
+    state.num_user_data = 4u;
+    state.local_size_x = 64u;
+    state.local_size_y = 1u;
+    state.local_size_z = 1u;
+    state.group_count_x = 1u;
+    state.group_count_y = 1u;
+    state.group_count_z = 1u;
+    state.modifier = AGC_GFX1013_COMPUTE_DISPATCH_WAVE32;
+
+    agcCbInit(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013ValidateCompute(&state),
+        AGC_ERROR_VALIDATION_FAILED,
+        "legacy compute dispatch rejects a scratch-enabled shader");
+    TEST_ASSERT_EQ(agcGfx1013DispatchComputeScratch(&cb, &state, &scratch),
+        AGC_OK, "typed gfx1013 compute scratch dispatch emits");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 45u,
+        "gfx1013 scratch dispatch exact dword count");
+    TEST_ASSERT_EQ(buffer[9], AGC_REG_COMPUTE_TMPRING_SIZE,
+        "gfx1013 scratch dispatch programs TMPRING_SIZE");
+    TEST_ASSERT_EQ(buffer[8] & 1u, 1u,
+        "gfx1013 scratch ring targets the compute SH register bank");
+    TEST_ASSERT_EQ(buffer[10], 0x00025500u,
+        "gfx1013 scratch dispatch encodes 1280 waves at 37 KiB");
+    TEST_ASSERT_EQ(buffer[35], AGC_REG_COMPUTE_USER_DATA_0,
+        "gfx1013 scratch dispatch starts at compute user data zero");
+    TEST_ASSERT_EQ(buffer[36], 0x02600000u,
+        "gfx1013 scratch descriptor contains the low address");
+    TEST_ASSERT_EQ(buffer[37], 0x80000002u,
+        "gfx1013 scratch descriptor contains high address and swizzle");
+    TEST_ASSERT_EQ(buffer[38], 0x11223344u,
+        "gfx1013 scratch dispatch preserves application SGPR2");
+    TEST_ASSERT_EQ(buffer[39], 0x55667788u,
+        "gfx1013 scratch dispatch preserves application SGPR3");
+    TEST_ASSERT_EQ(agcPm4Opcode(buffer[40]), AGC_PM4_OP_DISPATCH_DIRECT,
+        "gfx1013 scratch direct dispatch follows ring programming");
+
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013DispatchComputeIndirectScratch(&cb, &state,
+        &scratch, UINT64_C(0x0000000202700000), 4u), AGC_OK,
+        "typed gfx1013 indirect scratch dispatch emits");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 47u,
+        "gfx1013 indirect scratch dispatch exact dword count");
+    TEST_ASSERT_EQ(agcPm4Opcode(buffer[40]), AGC_PM4_OP_SET_BASE,
+        "gfx1013 indirect scratch dispatch establishes argument base");
+    TEST_ASSERT_EQ(agcPm4Opcode(buffer[44]), AGC_PM4_OP_DISPATCH_INDIRECT,
+        "gfx1013 indirect scratch dispatch follows ring programming");
+
+    agcCbReset(&cb, buffer, 44u * sizeof(uint32_t));
+    TEST_ASSERT_EQ(agcGfx1013DispatchComputeScratch(&cb, &state, &scratch),
+        AGC_ERROR_BUFFER_TOO_SMALL,
+        "short scratch dispatch buffer rejects atomically");
+    TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
+        "short scratch dispatch preserves the command cursor");
+
+    scratch.address++;
+    TEST_ASSERT_EQ(agcGfx1013DispatchComputeScratch(&cb, &state, &scratch),
+        AGC_ERROR_INVALID_ALIGNMENT,
+        "unaligned compute scratch address rejects");
+    scratch.address--;
+    scratch.bytes_per_wave++;
+    TEST_ASSERT_EQ(agcGfx1013DispatchComputeScratch(&cb, &state, &scratch),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "non-granular compute scratch stride rejects");
+    scratch.bytes_per_wave--;
+    scratch.wave_count = 1u;
+    TEST_ASSERT_EQ(agcGfx1013DispatchComputeScratch(&cb, &state, &scratch),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "scratch ring smaller than one workgroup rejects");
+    scratch.wave_count = 1280u;
+    scratch.allocation_size--;
+    TEST_ASSERT_EQ(agcGfx1013DispatchComputeScratch(&cb, &state, &scratch),
+        AGC_ERROR_RESOURCE_INVALID,
+        "undersized compute scratch allocation rejects");
+    scratch.allocation_size++;
+    scratch.address = (UINT64_C(1) << 48u) - 0x1000u;
+    TEST_ASSERT_EQ(agcGfx1013DispatchComputeScratch(&cb, &state, &scratch),
+        AGC_ERROR_RESOURCE_INVALID,
+        "compute scratch ring crossing the 48-bit VA limit rejects");
+    scratch.address = UINT64_C(0x0000000202600000);
+    sh[1].value = AGC_REG_SPI_SHADER_PGM_RSRC2_SCRATCH_EN_MASK |
+        (1u << AGC_REG_SPI_SHADER_PGM_RSRC2_USER_SGPR_SHIFT);
+    TEST_ASSERT_EQ(agcGfx1013DispatchComputeScratch(&cb, &state, &scratch),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "compute scratch rejects an undersized shader user-SGPR count");
+    sh[1].value = 0u;
+    TEST_ASSERT_EQ(agcGfx1013DispatchComputeScratch(&cb, &state, &scratch),
+        AGC_ERROR_VALIDATION_FAILED,
+        "scratch state without shader SCRATCH_EN rejects");
+}
+
 static void test_gfx1013_compute_resource_table(void)
 {
     uint32_t buffer[64] = {0};
@@ -4957,6 +5075,7 @@ void test_suite_graphics(void)
     TEST_RUN(test_gfx1013_graphics_defaults_v8);
     TEST_RUN(test_gfx1013_fixed_function_rejects_atomically);
     TEST_RUN(test_gfx1013_compute_packets);
+    TEST_RUN(test_gfx1013_compute_scratch_packets);
     TEST_RUN(test_gfx1013_compute_resource_table);
     TEST_RUN(test_gfx1013_compute_defaults_v8);
     TEST_RUN(test_gfx1013_htile_rmw_packets);

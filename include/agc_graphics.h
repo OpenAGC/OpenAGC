@@ -641,6 +641,10 @@ typedef struct AgcGfx1013ResourceTableBinding {
 /* COMPUTE_DISPATCH_INITIATOR modifiers accepted by gfx1013 dispatch packets. */
 #define AGC_GFX1013_COMPUTE_DISPATCH_WAVE64 0x0000u
 #define AGC_GFX1013_COMPUTE_DISPATCH_WAVE32 0x8000u
+#define AGC_GFX1013_COMPUTE_SCRATCH_ALIGNMENT 0x1000u
+#define AGC_GFX1013_COMPUTE_SCRATCH_GRANULARITY 0x400u
+#define AGC_GFX1013_COMPUTE_SCRATCH_MAX_WAVES 0xfffu
+#define AGC_GFX1013_COMPUTE_SCRATCH_MAX_WAVESIZE_UNITS 0x1fffu
 
 typedef struct AgcGfx1013ComputeState {
     const AgcShaderRecord *record;
@@ -659,6 +663,13 @@ typedef struct AgcGfx1013ComputeState {
     const AgcGfx1013ResourceTableBinding *resource_tables;
     uint32_t num_resource_tables;
 } AgcGfx1013ComputeState;
+
+typedef struct AgcGfx1013ComputeScratchState {
+    uint64_t address;
+    uint64_t allocation_size;
+    uint32_t bytes_per_wave;
+    uint32_t wave_count;
+} AgcGfx1013ComputeScratchState;
 
 typedef struct AgcGfx1013HtileRmwState {
     const AgcShaderRecord *record;
@@ -936,6 +947,13 @@ int32_t PS5_SYSV_ABI agcGfx1013DispatchCompute(
     SceAgcCb *cb, const AgcGfx1013ComputeState *state);
 int32_t PS5_SYSV_ABI agcGfx1013DispatchComputeIndirect(
     SceAgcCb *cb, const AgcGfx1013ComputeState *state,
+    uint64_t argument_buffer_address, uint32_t argument_offset);
+int32_t PS5_SYSV_ABI agcGfx1013DispatchComputeScratch(
+    SceAgcCb *cb, const AgcGfx1013ComputeState *state,
+    const AgcGfx1013ComputeScratchState *scratch);
+int32_t PS5_SYSV_ABI agcGfx1013DispatchComputeIndirectScratch(
+    SceAgcCb *cb, const AgcGfx1013ComputeState *state,
+    const AgcGfx1013ComputeScratchState *scratch,
     uint64_t argument_buffer_address, uint32_t argument_offset);
 int32_t PS5_SYSV_ABI agcGfx1013RmwHtile(
     SceAgcCb *cb, const AgcGfx1013HtileRmwState *state);

@@ -31,6 +31,30 @@ samplers and advanced past Eden's `BlitImageHelper`; exact sampled-pixel
 execution remains the qualification gate before this capability is labeled
 hardware-complete.
 
+Runtime API 55 adds automatic, fail-closed compute scratch for the standard
+gfx1013 profile. The ABI-preserving low-level surface uses a new typed
+`AgcGfx1013ComputeScratchState` and separate direct/indirect scratch-dispatch
+entry points; the original entry points now reject a shader whose
+`COMPUTE_PGM_RSRC2.SCRATCH_EN` bit is set. The application-facing runtime
+validates reflection against that bit, reserves compute user SGPR0/1, and
+lazily allocates separate device-lifetime garlic rings for graphics and
+compute queue types. Each ring has a fixed 65 KiB stride and 1,280 Wave32
+records, while compiler-reflected requirements remain capped at 64 KiB per
+wave. Generic packet and runtime coverage includes Eden's exact 36 KiB ASTC
+shape, SGPR2 preservation, direct/indirect dispatch, malformed tuple rejection,
+compute-bank packet selection, `USER_SGPR` coverage, complete 48-bit ring-span
+validation, distinct graphics/compute queue rings, and ring lifetime. A pinned
+FW 5.500.008 Eden replay accepted the previously rejected 36 KiB ASTC compute
+pipeline and advanced from `rasterizer-render-pass-cache` through
+`rasterizer-texture-cache`; the next application failure is later in
+`buffer_cache_runtime`. This proves firmware-side pipeline acceptance, not
+scratch execution; the evidence is the source-integrated ELF
+`8e4937d4b2680c1ef237317e5e313d52323a30ec97910320ed8471ad5b1deca4`
+in `20260802T071153Z-swapchain-run1.log`. The bounded runner rejected that run
+after the later Eden failure entered the coredump path. A guarded GPU readback
+workload remains required before the ring itself is labeled
+hardware-qualified; Trinity and graphics-stage scratch remain fail-closed.
+
 Current execution order:
 
 The one-binary portability gate is complete. The FW 5.50 and FW 11.60 cleanup

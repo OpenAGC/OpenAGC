@@ -63,6 +63,21 @@ _Static_assert(AGC_RUNTIME_MAX_VIEWPORTS == AGC_GFX1013_MAX_VIEWPORTS,
 #define AGC_RUNTIME_MAX_RESOURCE_ARENA_SIZE UINT64_C(0x100000)
 #define AGC_RUNTIME_OCCLUSION_QUERY_RECORD_SIZE \
     (AGC_GFX1013_OCCLUSION_QUERY_STRIDE + 16u)
+#define AGC_RUNTIME_COMPUTE_SCRATCH_QUEUE_COUNT 2u
+#define AGC_RUNTIME_COMPUTE_SCRATCH_WAVES_PER_CU 32u
+#define AGC_RUNTIME_COMPUTE_SCRATCH_WAVE_COUNT \
+    (AGC_GFX1013_SHADER_ENGINE_COUNT * \
+     AGC_GFX1013_SHADER_ARRAYS_PER_ENGINE * \
+     AGC_GFX1013_MAX_CUS_PER_SHADER_ARRAY * \
+     AGC_RUNTIME_COMPUTE_SCRATCH_WAVES_PER_CU)
+#define AGC_RUNTIME_COMPUTE_SCRATCH_MAX_BYTES_PER_WAVE 0x10000u
+#define AGC_RUNTIME_COMPUTE_SCRATCH_RING_STRIDE \
+    (AGC_RUNTIME_COMPUTE_SCRATCH_MAX_BYTES_PER_WAVE + \
+     AGC_GFX1013_COMPUTE_SCRATCH_GRANULARITY)
+
+_Static_assert(AGC_RUNTIME_COMPUTE_SCRATCH_WAVE_COUNT <=
+        AGC_GFX1013_COMPUTE_SCRATCH_MAX_WAVES,
+    "runtime compute scratch wave budget must fit TMPRING_SIZE");
 
 typedef struct AgcRuntimeBlock AgcRuntimeBlock;
 typedef struct AgcRuntimeAllocation AgcRuntimeAllocation;
@@ -224,6 +239,8 @@ struct AgcDeviceImpl {
     AgcRuntimeAllocation *tessellation_factor_allocation;
     AgcRuntimeAllocation *tessellation_table_allocation;
     AgcRuntimeAllocation *border_color_allocation;
+    AgcRuntimeAllocation *compute_scratch_allocations[
+        AGC_RUNTIME_COMPUTE_SCRATCH_QUEUE_COUNT];
     uint32_t tessellation_initialized;
     AgcDebugMessageFunction debug_callback;
     void *debug_user_data;
@@ -1673,6 +1690,68 @@ fail:
     return result;
 }
 
+static void agcRuntimeDestroyComputeScratch(AgcDevice device)
+{
+    uint32_t i;
+
+    for (i = 0u; i < AGC_RUNTIME_COMPUTE_SCRATCH_QUEUE_COUNT; ++i) {
+        if (device->compute_scratch_allocations[i]) {
+            agcRuntimeFree(device, device->compute_scratch_allocations[i]);
+            device->compute_scratch_allocations[i] = NULL;
+        }
+    }
+}
+
+static int32_t agcRuntimePrepareComputeScratch(
+    AgcCommandBuffer command_buffer, AgcShader shader,
+    AgcGfx1013ComputeScratchState *scratch)
+{
+    AgcRuntimeAllocation *allocation;
+    uint64_t allocation_size =
+        (uint64_t)AGC_RUNTIME_COMPUTE_SCRATCH_RING_STRIDE *
+        AGC_RUNTIME_COMPUTE_SCRATCH_WAVE_COUNT;
+    uint32_t index;
+    int32_t result;
+
+    if (!command_buffer || !shader || !scratch)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    memset(scratch, 0, sizeof(*scratch));
+    if (shader->reflection.scratch_bytes_per_wave == 0u)
+        return AGC_OK;
+    if (shader->reflection.scratch_bytes_per_wave >
+            AGC_RUNTIME_COMPUTE_SCRATCH_MAX_BYTES_PER_WAVE ||
+        (shader->reflection.scratch_bytes_per_wave &
+            (AGC_GFX1013_COMPUTE_SCRATCH_GRANULARITY - 1u)) != 0u)
+        return AGC_ERROR_NOT_SUPPORTED;
+    index = command_buffer->queue_type == kAgcQueueGraphics ? 0u : 1u;
+    allocation = command_buffer->device->compute_scratch_allocations[index];
+    if (!allocation) {
+        result = agcRuntimeAllocate(command_buffer->device,
+            AGC_MEMORY_HEAP_GARLIC, allocation_size,
+            AGC_GARLIC_ALIGNMENT, 1u, AGC_OBJECT_TYPE_COUNT,
+            command_buffer->device, &allocation);
+        if (result != AGC_OK)
+            return result;
+        (void)snprintf(allocation->debug_name,
+            AGC_RUNTIME_DEBUG_NAME_SIZE, "%s",
+            index == 0u ? "runtime-graphics-compute-scratch" :
+                "runtime-async-compute-scratch");
+        if ((agcAllocationGpuAddress(allocation) &
+                (AGC_GFX1013_COMPUTE_SCRATCH_ALIGNMENT - 1u)) != 0u ||
+            (agcAllocationGpuAddress(allocation) >> 48u) != 0u) {
+            agcRuntimeFree(command_buffer->device, allocation);
+            return AGC_ERROR_NOT_SUPPORTED;
+        }
+        command_buffer->device->compute_scratch_allocations[index] =
+            allocation;
+    }
+    scratch->address = agcAllocationGpuAddress(allocation);
+    scratch->allocation_size = allocation->requested_size;
+    scratch->bytes_per_wave = AGC_RUNTIME_COMPUTE_SCRATCH_RING_STRIDE;
+    scratch->wave_count = AGC_RUNTIME_COMPUTE_SCRATCH_WAVE_COUNT;
+    return AGC_OK;
+}
+
 static void agcDestroyMemoryBlocks(AgcDevice device)
 {
     uint32_t heap;
@@ -1871,6 +1950,7 @@ int32_t PS5_SYSV_ABI agcDestroyDevice(AgcDevice device)
         g_backend_agc_version = 0u;
     agcDeviceRegistryUnlock();
     agcRuntimeDestroyTessellationStorage(device);
+    agcRuntimeDestroyComputeScratch(device);
     if (device->border_color_allocation)
         agcRuntimeFree(device, device->border_color_allocation);
     agcDestroyMemoryBlocks(device);
@@ -6317,6 +6397,34 @@ static uint32_t agcPipelineCopyStaticShRegisters(AgcShader shader,
     return count;
 }
 
+static int agcPipelineShaderShRegisterValue(AgcShader shader,
+    uint32_t offset, uint32_t *value)
+{
+    const AgcRegisterValue *registers =
+        (const AgcRegisterValue *)(uintptr_t)shader->record.sh_registers;
+    uint32_t i;
+
+    if (!value)
+        return 0;
+    for (i = 0u; i < shader->record.num_sh_registers; ++i) {
+        if (registers[i].offset == offset) {
+            *value = registers[i].value;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static uint32_t agcPipelineShaderUserSgprCount(uint32_t rsrc2)
+{
+    return
+        ((rsrc2 >> AGC_REG_SPI_SHADER_PGM_RSRC2_USER_SGPR_SHIFT) &
+            AGC_REG_SPI_SHADER_PGM_RSRC2_USER_SGPR_MASK) |
+        (((rsrc2 >>
+            AGC_REG_SPI_SHADER_PGM_RSRC2_USER_SGPR_MSB_SHIFT) &
+            AGC_REG_SPI_SHADER_PGM_RSRC2_USER_SGPR_MSB_MASK) << 5u);
+}
+
 static int agcPipelineShaderHasShValue(AgcShader shader, uint32_t value)
 {
     const AgcRegisterValue *registers =
@@ -7368,6 +7476,7 @@ int32_t PS5_SYSV_ABI agcCreateComputePipeline(AgcDevice device,
     uint64_t invocations;
     uint32_t i;
     uint32_t j;
+    uint32_t rsrc2;
     AgcRuntimePipelineResourceLayout resource_layout;
     int32_t result;
 
@@ -7415,11 +7524,58 @@ int32_t PS5_SYSV_ABI agcCreateComputePipeline(AgcDevice device,
             result, AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT,
             "compute-shader user-SGPR reflection is incompatible with the native resource binding contract");
     if (shader->reflection.wave_size != 32u ||
-        shader->reflection.scratch_bytes_per_wave != 0u ||
         shader->reflection.lds_size > 65536u)
         return agcPipelineDebugReport(device, "agcCreateComputePipeline",
             AGC_ERROR_NOT_SUPPORTED, AGC_DEBUG_MESSAGE_CATEGORY_CAPABILITY_BIT,
-            "compute shader wave, scratch, or LDS requirements are outside the qualified profile");
+            "compute shader wave or LDS requirements are outside the qualified profile");
+    if (shader->reflection.scratch_bytes_per_wave >
+            AGC_RUNTIME_COMPUTE_SCRATCH_MAX_BYTES_PER_WAVE ||
+        (shader->reflection.scratch_bytes_per_wave &
+            (AGC_GFX1013_COMPUTE_SCRATCH_GRANULARITY - 1u)) != 0u ||
+        (shader->reflection.scratch_bytes_per_wave != 0u &&
+         device->runtime_info.hardware_family ==
+            AGC_HARDWARE_FAMILY_TRINITY_PS5))
+        return agcPipelineDebugReport(device, "agcCreateComputePipeline",
+            AGC_ERROR_NOT_SUPPORTED, AGC_DEBUG_MESSAGE_CATEGORY_CAPABILITY_BIT,
+            "compute scratch exceeds the aligned standard-PS5 qualification profile");
+    if (!agcPipelineShaderShRegisterValue(shader,
+            AGC_REG_COMPUTE_PGM_RSRC2, &rsrc2) ||
+        (((rsrc2 & AGC_REG_SPI_SHADER_PGM_RSRC2_SCRATCH_EN_MASK) != 0u) !=
+         (shader->reflection.scratch_bytes_per_wave != 0u)))
+        return agcPipelineDebugReport(device, "agcCreateComputePipeline",
+            AGC_ERROR_VALIDATION_FAILED,
+            AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT,
+            "compute scratch reflection and shader SCRATCH_EN state disagree");
+    if (shader->reflection.scratch_bytes_per_wave != 0u) {
+        uint32_t required_user_sgprs = 2u;
+        uint32_t shader_user_sgprs =
+            agcPipelineShaderUserSgprCount(rsrc2);
+
+        for (i = 0u; i < shader->reflection.user_sgpr_count; ++i) {
+            const AgcShaderUserSgpr *sgpr =
+                &shader->reflection.user_sgprs[i];
+            if (sgpr->register_offset <
+                    AGC_REG_COMPUTE_USER_DATA_0 + 2u &&
+                sgpr->register_offset + sgpr->dword_count >
+                    AGC_REG_COMPUTE_USER_DATA_0)
+                return agcPipelineDebugReport(device,
+                    "agcCreateComputePipeline",
+                    AGC_ERROR_VALIDATION_FAILED,
+                    AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT,
+                    "compute scratch reserves user SGPR0 and SGPR1");
+            if (sgpr->register_offset - AGC_REG_COMPUTE_USER_DATA_0 +
+                    sgpr->dword_count > required_user_sgprs)
+                required_user_sgprs =
+                    sgpr->register_offset -
+                    AGC_REG_COMPUTE_USER_DATA_0 + sgpr->dword_count;
+        }
+        if (shader_user_sgprs < required_user_sgprs)
+            return agcPipelineDebugReport(device,
+                "agcCreateComputePipeline",
+                AGC_ERROR_VALIDATION_FAILED,
+                AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT,
+                "compute shader USER_SGPR count does not cover the scratch ABI and reflected mappings");
+    }
     if (desc->local_size_x != shader->reflection.local_size_x ||
         desc->local_size_y != shader->reflection.local_size_y ||
         desc->local_size_z != shader->reflection.local_size_z ||
@@ -12756,6 +12912,7 @@ int32_t PS5_SYSV_ABI agcCmdDispatch(AgcCommandBuffer command_buffer,
     AgcComputePipeline pipeline;
     AgcShader shader;
     AgcGfx1013ComputeState state = {0};
+    AgcGfx1013ComputeScratchState scratch = {0};
     uint32_t dword_count;
     uint32_t *destination;
     int32_t result;
@@ -12787,6 +12944,10 @@ int32_t PS5_SYSV_ABI agcCmdDispatch(AgcCommandBuffer command_buffer,
             "agcCmdDispatch", AGC_OBJECT_TYPE_COMMAND_BUFFER,
             command_buffer->allocation->debug_name,
             "dispatch is missing reflected descriptors, push constants, or required resource transitions");
+    result = agcRuntimePrepareComputeScratch(
+        command_buffer, shader, &scratch);
+    if (result != AGC_OK)
+        return result;
     result = agcCommandBuildComputeUserData(
         command_buffer, shader, group_count_x, group_count_y, group_count_z,
         0, user_data, &state.num_user_data);
@@ -12817,7 +12978,10 @@ int32_t PS5_SYSV_ABI agcCmdDispatch(AgcCommandBuffer command_buffer,
     if (result != AGC_OK)
         return result == AGC_ERROR_BUFFER_TOO_SMALL ?
             AGC_ERROR_COMMAND_SPACE_EXHAUSTED : result;
-    result = agcGfx1013DispatchCompute(&temporary_cb, &state);
+    result = scratch.address != 0u ?
+        agcGfx1013DispatchComputeScratch(
+            &temporary_cb, &state, &scratch) :
+        agcGfx1013DispatchCompute(&temporary_cb, &state);
     if (result != AGC_OK)
         return result == AGC_ERROR_BUFFER_TOO_SMALL ?
             AGC_ERROR_COMMAND_SPACE_EXHAUSTED : result;
@@ -12850,6 +13014,7 @@ int32_t PS5_SYSV_ABI agcCmdDispatchIndirect(
     AgcComputePipeline pipeline;
     AgcShader shader;
     AgcGfx1013ComputeState state = {0};
+    AgcGfx1013ComputeScratchState scratch = {0};
     AgcResourceUsage usage;
     AgcResourceOwner owner;
     uint64_t argument_address;
@@ -12883,6 +13048,10 @@ int32_t PS5_SYSV_ABI agcCmdDispatchIndirect(
     result = agcCommandShaderResourcesReady(command_buffer, shader);
     if (result != AGC_OK)
         return result;
+    result = agcRuntimePrepareComputeScratch(
+        command_buffer, shader, &scratch);
+    if (result != AGC_OK)
+        return result;
     result = agcCommandBuildComputeUserData(
         command_buffer, shader, 0u, 0u, 0u, 1,
         user_data, &state.num_user_data);
@@ -12913,9 +13082,14 @@ int32_t PS5_SYSV_ABI agcCmdDispatchIndirect(
     if (result != AGC_OK)
         return result == AGC_ERROR_BUFFER_TOO_SMALL ?
             AGC_ERROR_COMMAND_SPACE_EXHAUSTED : result;
-    result = agcGfx1013DispatchComputeIndirect(&temporary_cb, &state,
-        argument_address & ~UINT64_C(7),
-        (uint32_t)(argument_address & UINT64_C(7)));
+    result = scratch.address != 0u ?
+        agcGfx1013DispatchComputeIndirectScratch(
+            &temporary_cb, &state, &scratch,
+            argument_address & ~UINT64_C(7),
+            (uint32_t)(argument_address & UINT64_C(7))) :
+        agcGfx1013DispatchComputeIndirect(&temporary_cb, &state,
+            argument_address & ~UINT64_C(7),
+            (uint32_t)(argument_address & UINT64_C(7)));
     if (result != AGC_OK)
         return result == AGC_ERROR_BUFFER_TOO_SMALL ?
             AGC_ERROR_COMMAND_SPACE_EXHAUSTED : result;
