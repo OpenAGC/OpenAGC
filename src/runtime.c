@@ -4559,14 +4559,15 @@ static int agcImageViewFormatCompatible(uint32_t image_format,
 {
     if (image_format == view_format)
         return 1;
-    return (image_format == AGC_FORMAT_RGBA8_UNORM &&
-            view_format == AGC_FORMAT_RGBA8_SRGB) ||
-        (image_format == AGC_FORMAT_RGBA8_SRGB &&
-         view_format == AGC_FORMAT_RGBA8_UNORM) ||
-        (image_format == AGC_FORMAT_BGRA8_UNORM &&
-         view_format == AGC_FORMAT_BGRA8_SRGB) ||
-        (image_format == AGC_FORMAT_BGRA8_SRGB &&
-         view_format == AGC_FORMAT_BGRA8_UNORM);
+    const int image_rgba8 = image_format == AGC_FORMAT_RGBA8_UNORM ||
+        image_format == AGC_FORMAT_RGBA8_SRGB ||
+        image_format == AGC_FORMAT_BGRA8_UNORM ||
+        image_format == AGC_FORMAT_BGRA8_SRGB;
+    const int view_rgba8 = view_format == AGC_FORMAT_RGBA8_UNORM ||
+        view_format == AGC_FORMAT_RGBA8_SRGB ||
+        view_format == AGC_FORMAT_BGRA8_UNORM ||
+        view_format == AGC_FORMAT_BGRA8_SRGB;
+    return image_rgba8 && view_rgba8;
 }
 
 int32_t PS5_SYSV_ABI agcCreateImageView(

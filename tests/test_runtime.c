@@ -11476,6 +11476,25 @@ static void test_runtime_mutable_srgb_image_views(void)
 
     view = NULL;
     view_info = (AgcAllocationInfo)AGC_ALLOCATION_INFO_INIT;
+    view_desc.format = AGC_FORMAT_RGBA8_UNORM;
+    TEST_ASSERT_EQ(agcCreateImageView(device, &view_desc, &view), AGC_OK,
+        "mutable BGRA8 image accepts a 32-bit-class RGBA8 view");
+    TEST_ASSERT_EQ(agcGetObjectAllocationInfo(device,
+        AGC_OBJECT_TYPE_IMAGE_VIEW, view, &view_info), AGC_OK,
+        "cross-order mutable view allocation is queryable");
+    state.dst_sel_x = 4u;
+    state.dst_sel_y = 5u;
+    state.dst_sel_z = 6u;
+    state.dst_sel_w = 7u;
+    TEST_ASSERT_EQ(agcGfx1013Image2DDescriptorEncode(&expected, &state),
+        AGC_OK, "expected cross-order mutable descriptor encodes");
+    TEST_ASSERT(memcmp(view_info.cpu_address, &expected, sizeof(expected)) == 0,
+        "cross-order mutable view uses its requested component order");
+    TEST_ASSERT_EQ(agcDestroyImageView(view), AGC_OK,
+        "cross-order mutable view destroys");
+
+    view = NULL;
+    view_info = (AgcAllocationInfo)AGC_ALLOCATION_INFO_INIT;
     view_desc.format = AGC_FORMAT_BGRA8_SRGB;
     TEST_ASSERT_EQ(agcCreateImageView(device, &view_desc, &view), AGC_OK,
         "BGRA8-SRGB image accepts its native-format view");
