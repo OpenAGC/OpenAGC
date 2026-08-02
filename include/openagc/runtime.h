@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-#define AGC_RUNTIME_API_VERSION 55u
+#define AGC_RUNTIME_API_VERSION 56u
 #define AGC_RUNTIME_MAX_VIEWPORTS 16u
 #define AGC_RUNTIME_STRUCTURE_VERSION_1 1u
 #define AGC_RUNTIME_STRUCTURE_VERSION_2 2u
@@ -267,7 +267,10 @@ typedef enum AgcImageTiling {
 } AgcImageTiling;
 
 typedef enum AgcImageCreateFlagBits {
-    AGC_IMAGE_CREATE_MUTABLE_FORMAT_BIT = 1u << 0
+    AGC_IMAGE_CREATE_MUTABLE_FORMAT_BIT = 1u << 0,
+    /* A depth-bearing 3D image may be viewed as a 2D image or 2D array.
+     * Image-view array layers select depth slices at the view's mip level. */
+    AGC_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT = 1u << 1
 } AgcImageCreateFlagBits;
 typedef uint32_t AgcImageCreateFlags;
 

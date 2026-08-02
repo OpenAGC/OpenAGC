@@ -58,6 +58,18 @@ after the later Eden failure entered the coredump path. A guarded GPU readback
 workload remains required before the ring itself is labeled
 hardware-qualified; Trinity and graphics-stage scratch remain fail-closed.
 
+Runtime API 56 adds the ABI-safe
+`AGC_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT` image flag. A flagged 3D image may
+produce a single-mip 2D or 2D-array view whose array interval selects depth
+slices at the view's base mip. Validation rejects the flag on a non-3D image,
+unflagged 3D slice views, multiple-mip slice views, and intervals beyond the
+selected mip's minified depth. Gfx10.3 encoding retains the original image
+allocation base and represents the requested slices with a 2D-array resource
+descriptor and exact base/last-array fields. Full-descriptor fixtures cover a
+nonzero slice and a three-slice array view; generic verification passes all 19
+CTest entries and 19,827 assertions. This is host descriptor qualification;
+sampled pixels through a compatible 3D slice remain hardware-pending.
+
 Graphics user-data validation now follows the gfx1013 stage contract: VS/DS/GS,
 HS, and PS accept their 32 architectural user-SGPR slots, while compute remains
 bounded to 16. This removes the false rejection of Eden's 29-entry primitive

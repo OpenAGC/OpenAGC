@@ -11065,10 +11065,12 @@ static void test_runtime_3d_sampled_image_view(void)
     AgcImageDesc image_desc = AGC_IMAGE_DESC_INIT;
     AgcImageViewDesc view_desc = AGC_IMAGE_VIEW_DESC_INIT;
     AgcAllocationInfo image_info = AGC_ALLOCATION_INFO_INIT;
+    AgcAllocationInfo compatible_info = AGC_ALLOCATION_INFO_INIT;
     AgcAllocationInfo view_info = AGC_ALLOCATION_INFO_INIT;
     AgcGfx1013Image2DState state = {0};
     AgcGfx1013ImageDescriptor expected;
     AgcImage image = NULL;
+    AgcImage compatible_image = NULL;
     AgcImage image_2d = NULL;
     AgcImageView view = NULL;
 
@@ -11121,8 +11123,100 @@ static void test_runtime_3d_sampled_image_view(void)
     TEST_ASSERT_EQ(agcCreateImageView(device, &view_desc, &view),
         AGC_ERROR_INVALID_ARGUMENT,
         "3D image rejects an ordinary 2D view");
+    view_desc.view_type = AGC_IMAGE_VIEW_TYPE_2D_ARRAY;
+    TEST_ASSERT_EQ(agcCreateImageView(device, &view_desc, &view),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "3D image rejects an unflagged 2D-array view");
+
+    image_desc.flags = AGC_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT;
+    TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &compatible_image),
+        AGC_OK, "3D 2D-array-compatible image creates");
+    TEST_ASSERT_EQ(agcGetObjectAllocationInfo(device,
+        AGC_OBJECT_TYPE_IMAGE, compatible_image, &compatible_info), AGC_OK,
+        "3D compatible image allocation is queryable");
+    view_desc.image = compatible_image;
+    view_desc.view_type = AGC_IMAGE_VIEW_TYPE_2D;
+    view_desc.base_mip_level = 1u;
+    view_desc.mip_level_count = 1u;
+    view_desc.base_array_layer = 2u;
+    view_desc.array_layer_count = 1u;
+    TEST_ASSERT_EQ(agcCreateImageView(device, &view_desc, &view), AGC_OK,
+        "compatible 3D image accepts a 2D depth-slice view");
+    view_info = (AgcAllocationInfo)AGC_ALLOCATION_INFO_INIT;
+    TEST_ASSERT_EQ(agcGetObjectAllocationInfo(device,
+        AGC_OBJECT_TYPE_IMAGE_VIEW, view, &view_info), AGC_OK,
+        "2D depth-slice view allocation is queryable");
+
+    memset(&state, 0, sizeof(state));
+    state.address = compatible_info.gpu_address;
+    state.width = image_desc.width;
+    state.height = image_desc.height;
+    state.format = image_desc.format;
+    state.image_type = AGC_GFX1013_IMAGE_TYPE_2D_ARRAY;
+    state.dst_sel_x = 4u;
+    state.dst_sel_y = 5u;
+    state.dst_sel_z = 6u;
+    state.dst_sel_w = 7u;
+    state.sample_count = 1u;
+    state.base_array_layer = 2u;
+    state.last_array_layer = 2u;
+    state.mip_level_count = image_desc.mip_levels;
+    TEST_ASSERT_EQ(agcGfx1013Image2DDescriptorEncode(&expected, &state),
+        AGC_OK, "expected 2D depth-slice descriptor encodes");
+    expected.words[3] = (expected.words[3] & ~0x000ff000u) |
+        (1u << 12u) | (1u << 16u);
+    TEST_ASSERT(memcmp(view_info.cpu_address, &expected,
+        sizeof(expected)) == 0,
+        "2D depth-slice view keeps allocation base and exact slice fields");
+    TEST_ASSERT_EQ(agcDestroyImageView(view), AGC_OK,
+        "2D depth-slice view destroys");
+    view = NULL;
+
+    view_desc.view_type = AGC_IMAGE_VIEW_TYPE_2D_ARRAY;
+    view_desc.base_array_layer = 1u;
+    view_desc.array_layer_count = 3u;
+    TEST_ASSERT_EQ(agcCreateImageView(device, &view_desc, &view), AGC_OK,
+        "compatible 3D image accepts an in-range 2D-array slice view");
+    view_info = (AgcAllocationInfo)AGC_ALLOCATION_INFO_INIT;
+    TEST_ASSERT_EQ(agcGetObjectAllocationInfo(device,
+        AGC_OBJECT_TYPE_IMAGE_VIEW, view, &view_info), AGC_OK,
+        "2D-array slice view allocation is queryable");
+    state.base_array_layer = 1u;
+    state.last_array_layer = 3u;
+    TEST_ASSERT_EQ(agcGfx1013Image2DDescriptorEncode(&expected, &state),
+        AGC_OK, "expected 2D-array slice descriptor encodes");
+    expected.words[3] = (expected.words[3] & ~0x000ff000u) |
+        (1u << 12u) | (1u << 16u);
+    TEST_ASSERT(memcmp(view_info.cpu_address, &expected,
+        sizeof(expected)) == 0,
+        "2D-array slice view keeps exact base and last depth slices");
+    TEST_ASSERT_EQ(agcDestroyImageView(view), AGC_OK,
+        "2D-array slice view destroys");
+    view = NULL;
+
+    view_desc.mip_level_count = 2u;
+    TEST_ASSERT_EQ(agcCreateImageView(device, &view_desc, &view),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "3D-compatible slice views reject multiple mip levels");
+    view_desc.mip_level_count = 1u;
+    view_desc.base_array_layer = 3u;
+    view_desc.array_layer_count = 2u;
+    TEST_ASSERT_EQ(agcCreateImageView(device, &view_desc, &view),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "3D-compatible slice views reject intervals beyond minified depth");
+    view_desc.base_mip_level = 3u;
+    view_desc.base_array_layer = 1u;
+    view_desc.array_layer_count = 1u;
+    TEST_ASSERT_EQ(agcCreateImageView(device, &view_desc, &view),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "3D-compatible slice views validate depth at the selected mip");
+
     image_desc.depth = 1u;
     image_desc.mip_levels = 1u;
+    TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &image_2d),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "2D-array-compatible flag rejects an image without 3D depth");
+    image_desc.flags = 0u;
     TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &image_2d), AGC_OK,
         "2D comparison image creates");
     view_desc.image = image_2d;
@@ -11134,6 +11228,8 @@ static void test_runtime_3d_sampled_image_view(void)
 
     TEST_ASSERT_EQ(agcDestroyImage(image_2d), AGC_OK,
         "2D comparison image destroys");
+    TEST_ASSERT_EQ(agcDestroyImage(compatible_image), AGC_OK,
+        "3D 2D-array-compatible image destroys");
     TEST_ASSERT_EQ(agcDestroyImage(image), AGC_OK,
         "3D sampled image destroys");
     TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,

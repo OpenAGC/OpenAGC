@@ -2473,7 +2473,8 @@ static int agcImageDescBasicValid(const AgcImageDesc *desc)
         !agcReservedZero(desc->reserved, 4u) ||
         (desc->version >= AGC_RUNTIME_STRUCTURE_VERSION_2 &&
          (desc->tiling > AGC_IMAGE_TILING_OPTIMAL ||
-          (desc->flags & ~AGC_IMAGE_CREATE_MUTABLE_FORMAT_BIT) != 0u)) ||
+          (desc->flags & ~(AGC_IMAGE_CREATE_MUTABLE_FORMAT_BIT |
+              AGC_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT)) != 0u)) ||
         !agcGetRuntimeFormatInfo(desc->format, &format))
         return 0;
     if ((desc->sample_count > 1u && (desc->mip_levels > 1u ||
@@ -2497,6 +2498,10 @@ static int agcImageDescBasicValid(const AgcImageDesc *desc)
              desc->sample_count != 1u)))
         return 0;
     if (desc->depth > 1u && desc->array_layers != 1u)
+        return 0;
+    if (desc->version >= AGC_RUNTIME_STRUCTURE_VERSION_2 &&
+        (desc->flags & AGC_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT) != 0u &&
+        desc->depth == 1u)
         return 0;
     if ((desc->usage & AGC_IMAGE_USAGE_CUBE_COMPATIBLE_BIT) != 0u &&
         (desc->depth != 1u || desc->array_layers % 6u != 0u))
@@ -4205,6 +4210,11 @@ static int32_t agcRuntimeEncodeImageView(
     uint32_t base[4] = { 4u, 5u, 6u, 7u };
     uint32_t resource_format;
     uint32_t rebased_single_mip = 0u;
+    const uint32_t slice_compatible = image->desc.depth > 1u &&
+        (image->desc.flags &
+            AGC_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT) != 0u &&
+        (view_type == AGC_IMAGE_VIEW_TYPE_2D ||
+         view_type == AGC_IMAGE_VIEW_TYPE_2D_ARRAY);
     uint32_t i;
 
     /* Runtime formats are an application-facing image/render-target contract;
@@ -4466,7 +4476,7 @@ static int32_t agcRuntimeEncodeImageView(
             *selectors[i] = base[swizzles[i] - AGC_COMPONENT_SWIZZLE_R];
     }
     state.sample_count = image->desc.sample_count;
-    if (view_type == AGC_IMAGE_VIEW_TYPE_2D) {
+    if (view_type == AGC_IMAGE_VIEW_TYPE_2D && !slice_compatible) {
         AgcImageSubresourceLayout layout = AGC_IMAGE_SUBRESOURCE_LAYOUT_INIT;
         int32_t result = agcGetImageSubresourceLayout(image->device,
             &image->desc,
@@ -4488,6 +4498,10 @@ static int32_t agcRuntimeEncodeImageView(
         }
         state.base_array_layer = 0u;
         state.last_array_layer = 0u;
+    } else if (slice_compatible) {
+        state.base_array_layer = desc->base_array_layer;
+        state.last_array_layer = desc->base_array_layer +
+            desc->array_layer_count - 1u;
     } else if (view_type == AGC_IMAGE_VIEW_TYPE_3D) {
         state.base_array_layer = 0u;
         state.last_array_layer = image->desc.depth - 1u;
@@ -4510,7 +4524,8 @@ static int32_t agcRuntimeEncodeImageView(
     } else if (view_type == AGC_IMAGE_VIEW_TYPE_CUBE ||
                view_type == AGC_IMAGE_VIEW_TYPE_CUBE_ARRAY) {
         state.image_type = AGC_GFX1013_IMAGE_TYPE_CUBE;
-    } else if (view_type == AGC_IMAGE_VIEW_TYPE_2D_ARRAY) {
+    } else if (slice_compatible ||
+               view_type == AGC_IMAGE_VIEW_TYPE_2D_ARRAY) {
         state.image_type = AGC_GFX1013_IMAGE_TYPE_2D_ARRAY;
     } else if (view_type == AGC_IMAGE_VIEW_TYPE_3D) {
         state.image_type = AGC_GFX1013_IMAGE_TYPE_3D;
@@ -4564,6 +4579,8 @@ int32_t PS5_SYSV_ABI agcCreateImageView(
     AgcImageView view;
     AgcImage image;
     AgcGfx1013ImageDescriptor descriptor;
+    uint32_t layer_limit;
+    uint32_t slice_compatible;
     int32_t result;
 
     if (!view_out)
@@ -4593,15 +4610,30 @@ int32_t PS5_SYSV_ABI agcCreateImageView(
           !agcImageViewFormatCompatible(image->desc.format, desc->format))) ||
         desc->mip_level_count == 0u || desc->array_layer_count == 0u ||
         desc->base_mip_level >= image->desc.mip_levels ||
-        desc->mip_level_count > image->desc.mip_levels - desc->base_mip_level ||
-        desc->base_array_layer >= image->desc.array_layers ||
-        desc->array_layer_count >
-            image->desc.array_layers - desc->base_array_layer) {
+        desc->mip_level_count > image->desc.mip_levels - desc->base_mip_level) {
         return agcDebugReport(device, AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
             AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT,
             AGC_ERROR_INVALID_ARGUMENT, "agcCreateImageView",
             AGC_OBJECT_TYPE_IMAGE_VIEW, NULL,
             "image view requires a live same-device image, matching format, and in-range mip/layer interval");
+    }
+    slice_compatible = desc->version >= AGC_RUNTIME_STRUCTURE_VERSION_2 &&
+        image->desc.depth > 1u &&
+        (image->desc.flags &
+            AGC_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT) != 0u &&
+        (desc->view_type == AGC_IMAGE_VIEW_TYPE_2D ||
+         desc->view_type == AGC_IMAGE_VIEW_TYPE_2D_ARRAY);
+    layer_limit = slice_compatible ?
+        agcRuntimeMipDimension(image->desc.depth, desc->base_mip_level) :
+        image->desc.array_layers;
+    if (desc->base_array_layer >= layer_limit ||
+        desc->array_layer_count > layer_limit - desc->base_array_layer) {
+        return agcDebugReport(device,
+            AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
+            AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT,
+            AGC_ERROR_INVALID_ARGUMENT, "agcCreateImageView",
+            AGC_OBJECT_TYPE_IMAGE_VIEW, NULL,
+            "image view mip/layer or 3D depth-slice interval is out of range");
     }
     if (desc->version >= AGC_RUNTIME_STRUCTURE_VERSION_2 &&
         (((desc->view_type == AGC_IMAGE_VIEW_TYPE_2D ||
@@ -4610,7 +4642,8 @@ int32_t PS5_SYSV_ABI agcCreateImageView(
          (desc->view_type == AGC_IMAGE_VIEW_TYPE_3D &&
           (image->desc.depth == 1u || desc->base_array_layer != 0u)) ||
          (desc->view_type != AGC_IMAGE_VIEW_TYPE_3D &&
-          image->desc.depth != 1u) ||
+          image->desc.depth != 1u && !slice_compatible) ||
+         (slice_compatible && desc->mip_level_count != 1u) ||
          ((desc->view_type == AGC_IMAGE_VIEW_TYPE_CUBE ||
            desc->view_type == AGC_IMAGE_VIEW_TYPE_CUBE_ARRAY) &&
           (((image->desc.usage & AGC_IMAGE_USAGE_CUBE_COMPATIBLE_BIT) == 0u) ||
