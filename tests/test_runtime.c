@@ -8429,7 +8429,7 @@ static void test_runtime_pipeline_layout_and_stage_validation(void)
     AgcShaderReflection ps_requirements = AGC_SHADER_REFLECTION_INIT;
     AgcGraphicsPipelineDesc graphics_desc = AGC_GRAPHICS_PIPELINE_DESC_INIT;
     AgcShaderVertexInput vertex_input = {
-        0u, 0u, 0u, 16u, AGC_SHADER_VERTEX_FORMAT_R32G32B32A32_SFLOAT,
+        0u, 0u, 0u, 0u, AGC_SHADER_VERTEX_FORMAT_R32G32B32A32_SFLOAT,
         AGC_SHADER_VERTEX_INPUT_RATE_VERTEX, 0u, 0xfu};
     AgcShader vs;
     AgcShader ps;
@@ -8509,12 +8509,12 @@ static void test_runtime_pipeline_layout_and_stage_validation(void)
         TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &vertex_buffer),
             AGC_OK, "replacement reflected vertex buffer creates");
         binding.buffer = vertex_buffer;
-        binding.stride = 16u;
+        binding.stride = 0u;
         TEST_ASSERT_EQ(runtime_transition_buffer_to_graphics_read(command,
             vertex_buffer, buffer_desc.size, kAgcResourceUsageUndefined, 0u),
             AGC_OK, "reflected vertex buffer transitions to graphics read");
         TEST_ASSERT_EQ(agcCmdBindVertexBuffers(command, 1u, &binding), AGC_OK,
-            "matching reflected vertex table binds");
+            "matching zero-stride reflected vertex table binds");
         TEST_ASSERT_EQ(agcCmdDrawIndexed(command, 3u, 1u, 0u, 0, 0u),
             AGC_OK, "fully bound reflected graphics draw records");
         TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,

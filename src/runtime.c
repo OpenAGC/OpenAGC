@@ -12173,8 +12173,7 @@ int32_t PS5_SYSV_ABI agcCmdBindVertexBuffers(AgcCommandBuffer command_buffer,
             bindings[i].buffer->device != command_buffer->device ||
             bindings[i].buffer->deferred ||
             (bindings[i].buffer->usage & AGC_BUFFER_USAGE_VERTEX_BIT) == 0u ||
-            bindings[i].offset >= bindings[i].buffer->size ||
-            bindings[i].stride == 0u)
+            bindings[i].offset >= bindings[i].buffer->size)
             return AGC_ERROR_RESOURCE_INVALID;
         for (j = 0u; j <
                 command_buffer->graphics_pipeline->vertex_input_count; ++j) {
@@ -12185,14 +12184,20 @@ int32_t PS5_SYSV_ABI agcCmdBindVertexBuffers(AgcCommandBuffer command_buffer,
                 return AGC_ERROR_VALIDATION_FAILED;
         }
         range = bindings[i].buffer->size - bindings[i].offset;
-        if (range / bindings[i].stride == 0u ||
-            range / bindings[i].stride > UINT32_MAX)
-            return AGC_ERROR_RESOURCE_INVALID;
+        uint32_t element_count;
+        if (bindings[i].stride == 0u) {
+            element_count = range > UINT32_MAX ? UINT32_MAX : (uint32_t)range;
+        } else {
+            if (range / bindings[i].stride == 0u ||
+                range / bindings[i].stride > UINT32_MAX)
+                return AGC_ERROR_RESOURCE_INVALID;
+            element_count = (uint32_t)(range / bindings[i].stride);
+        }
         result = agcGfx1013BufferDescriptorEncode(
             &descriptors[bindings[i].binding],
             agcBufferGpuAddress(bindings[i].buffer) +
                 bindings[i].offset,
-            bindings[i].stride, (uint32_t)(range / bindings[i].stride));
+            bindings[i].stride, element_count);
         if (result != AGC_OK)
             return result;
         seen |= 1u << bindings[i].binding;
