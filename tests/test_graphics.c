@@ -2332,6 +2332,16 @@ static void test_gfx1013_fixed_function_packets(void)
     TEST_ASSERT(memcmp(buffer, expected_scissor,
         sizeof(expected_scissor)) == 0,
         "gfx1013 scissor exact packet stream");
+    {
+        const AgcGfx1013ScissorState empty_scissor = {7u, 9u, 7u, 9u};
+        agcCbReset(&cb, buffer, sizeof(buffer));
+        TEST_ASSERT_EQ(agcGfx1013SetScissor(&cb, &empty_scissor), AGC_OK,
+            "gfx1013 empty scissor emits a zero-area rectangle");
+        TEST_ASSERT_EQ(buffer[2], 0x00090007u,
+            "gfx1013 empty scissor preserves the top-left coordinate");
+        TEST_ASSERT_EQ(buffer[3], 0x00090007u,
+            "gfx1013 empty scissor repeats top-left as bottom-right");
+    }
 
     agcCbReset(&cb, buffer, sizeof(buffer));
     TEST_ASSERT_EQ(agcGfx1013SetTargetMask(

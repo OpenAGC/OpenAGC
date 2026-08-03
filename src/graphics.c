@@ -2889,8 +2889,8 @@ int32_t PS5_SYSV_ABI agcGfx1013SetScissor(
     uint32_t br;
     uint32_t i;
 
-    if (!cb || !state || state->left >= state->right ||
-        state->top >= state->bottom || state->right > 0x7fffu ||
+    if (!cb || !state || state->left > state->right ||
+        state->top > state->bottom || state->right > 0x7fffu ||
         state->bottom > 0x7fffu)
         return AGC_ERROR_INVALID_ARGUMENT;
     if (agcCbRemainingDwords(cb) < 22u)
@@ -2944,8 +2944,8 @@ int32_t PS5_SYSV_ABI agcGfx1013SetViewportArray(
             !(viewport->min_depth >= 0.0f) ||
             !(viewport->max_depth <= 1.0f) ||
             viewport->min_depth > viewport->max_depth ||
-            scissor->left >= scissor->right ||
-            scissor->top >= scissor->bottom ||
+            scissor->left > scissor->right ||
+            scissor->top > scissor->bottom ||
             scissor->right > 0x7fffu || scissor->bottom > 0x7fffu)
             return AGC_ERROR_INVALID_ARGUMENT;
         if (scissor->left < union_left)

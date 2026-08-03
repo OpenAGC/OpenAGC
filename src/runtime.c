@@ -12766,7 +12766,8 @@ int32_t PS5_SYSV_ABI agcCmdSetScissor(
     if (!scissor || !agcHeaderValid(scissor->struct_size,
             sizeof(*scissor), scissor->version) ||
         !agcReservedZero(scissor->reserved, 2u) || scissor->x < 0 ||
-        scissor->y < 0 || scissor->width == 0u || scissor->height == 0u ||
+        scissor->y < 0 || scissor->width > 0x7fffu ||
+        scissor->height > 0x7fffu ||
         (uint32_t)scissor->x > 0x7fffu - scissor->width ||
         (uint32_t)scissor->y > 0x7fffu - scissor->height)
         return AGC_ERROR_INVALID_ARGUMENT;
@@ -12828,7 +12829,7 @@ int32_t PS5_SYSV_ABI agcCmdSetViewportScissors(
                 scissor->version) ||
             !agcReservedZero(scissor->reserved, 2u) ||
             scissor->x < 0 || scissor->y < 0 ||
-            scissor->width == 0u || scissor->height == 0u ||
+            scissor->width > 0x7fffu || scissor->height > 0x7fffu ||
             (uint32_t)scissor->x > 0x7fffu - scissor->width ||
             (uint32_t)scissor->y > 0x7fffu - scissor->height)
             return AGC_ERROR_INVALID_ARGUMENT;

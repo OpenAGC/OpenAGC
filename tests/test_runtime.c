@@ -7286,6 +7286,10 @@ static void test_runtime_dynamic_graphics_state(void)
         "valid viewport records");
     TEST_ASSERT_EQ(agcCmdSetScissor(command, &scissor), AGC_OK,
         "valid scissor records");
+    scissor.width = 0u;
+    TEST_ASSERT_EQ(agcCmdSetScissor(command, &scissor), AGC_OK,
+        "zero-width scissor records an empty rasterization area");
+    scissor.width = 1280u;
     TEST_ASSERT_EQ(agcCmdSetViewportScissors(command, 0u,
         viewport_array, scissor_array), AGC_ERROR_INVALID_ARGUMENT,
         "viewport/scissor array rejects an empty update");
