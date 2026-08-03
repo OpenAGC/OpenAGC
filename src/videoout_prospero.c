@@ -238,30 +238,43 @@ int32_t agcVideoOutPresent(AgcVideoOut *video_out, uint32_t buffer_index,
     return event_count == 1 ? AGC_OK : AGC_ERROR_TIMEOUT;
 }
 
+static int32_t videoout_teardown_error(const char *stage, int32_t native_result)
+{
+    fprintf(stderr,
+        "openagc: VideoOut teardown failed stage=%s native=0x%08x\n",
+        stage, (unsigned)native_result);
+    return AGC_ERROR_INTERNAL;
+}
+
 int32_t agcVideoOutCloseChecked(AgcVideoOut *video_out)
 {
     if (!video_out)
         return AGC_OK;
     if (video_out->event_added) {
-        if (sceVideoOutDeleteFlipEvent(
-                (void *)(uintptr_t)video_out->flip_queue,
-                video_out->handle) != 0)
-            return AGC_ERROR_INTERNAL;
+        const int32_t native_result = sceVideoOutDeleteFlipEvent(
+            (void *)(uintptr_t)video_out->flip_queue, video_out->handle);
+        if (native_result != 0)
+            return videoout_teardown_error("delete-flip-event", native_result);
         video_out->event_added = false;
     }
     if (video_out->buffers_registered) {
-        if (sceVideoOutUnregisterBuffers(video_out->handle, 0) != 0)
-            return AGC_ERROR_INTERNAL;
+        const int32_t native_result =
+            sceVideoOutUnregisterBuffers(video_out->handle, 0);
+        if (native_result != 0)
+            return videoout_teardown_error("unregister-buffers", native_result);
         video_out->buffers_registered = false;
     }
     if (video_out->handle >= 0) {
-        if (sceVideoOutClose(video_out->handle) != 0)
-            return AGC_ERROR_INTERNAL;
+        const int32_t native_result = sceVideoOutClose(video_out->handle);
+        if (native_result != 0)
+            return videoout_teardown_error("close-handle", native_result);
         video_out->handle = -1;
     }
     if (video_out->flip_queue) {
-        if (sceKernelDeleteEqueue(video_out->flip_queue) != 0)
-            return AGC_ERROR_INTERNAL;
+        const int32_t native_result =
+            sceKernelDeleteEqueue(video_out->flip_queue);
+        if (native_result != 0)
+            return videoout_teardown_error("delete-equeue", native_result);
         video_out->flip_queue = 0;
     }
     free(video_out);

@@ -25,7 +25,14 @@ ordered_calls = (
 )
 positions = [close_body.index(call) for call in ordered_calls]
 assert positions == sorted(positions), "unsafe Prospero VideoOut teardown order"
-assert "return AGC_ERROR_INTERNAL" in close_body
+assert "return AGC_ERROR_INTERNAL" in prospero
+for stage in (
+    "delete-flip-event",
+    "unregister-buffers",
+    "close-handle",
+    "delete-equeue",
+):
+    assert f'videoout_teardown_error("{stage}", native_result)' in close_body
 assert "buffers_registered = false" in close_body
 
 runtime = (ROOT / "src/runtime.c").read_text()
