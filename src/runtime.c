@@ -11714,7 +11714,15 @@ static int32_t agcCmdCopyBufferImage(AgcCommandBuffer command_buffer,
     }
     if (total_rows > UINT32_MAX / 7u || total_rows * 7u >
             agcCbRemainingDwords(&command_buffer->cursor))
-        return AGC_ERROR_COMMAND_SPACE_EXHAUSTED;
+        return agcDebugReport(command_buffer->device,
+            AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
+            AGC_DEBUG_MESSAGE_CATEGORY_COMMAND_CAPACITY_BIT,
+            AGC_ERROR_COMMAND_SPACE_EXHAUSTED,
+            buffer_is_source ? "agcCmdCopyBufferToImage" :
+                "agcCmdCopyImageToBuffer",
+            AGC_OBJECT_TYPE_COMMAND_BUFFER,
+            command_buffer->allocation->debug_name,
+            "buffer-image row packets exceed the remaining command-buffer capacity");
     if (!agcCommandCanRetainBuffer(command_buffer, buffer) ||
         !agcCommandCanRetainImage(command_buffer, image))
         return AGC_ERROR_OUT_OF_MEMORY;
