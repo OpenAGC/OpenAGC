@@ -447,8 +447,11 @@ directly-queryable single-mip depth layouts and one array layer per command
 binding; other depth mip layouts fail closed. The required typed state is
 derived from the graphics pipeline: `depth-stencil-write` when depth/stencil
 or reflected fragment-shader writes are possible, otherwise
-`depth-stencil-read`. The whole image must have that state and be owned by the
-graphics queue before target binding. The exact FW 5.50 D16 depth-write row
+`depth-stencil-read`. The whole image must be owned by the graphics queue
+before target binding. A write-requiring pipeline requires
+`depth-stencil-write`; a read-only pipeline accepts either
+`depth-stencil-read` or the conservative `depth-stencil-write` superset used
+by Vulkan attachment layouts. The exact FW 5.50 D16 depth-write row
 passed the public probe; see
 [`runtime_depth_stencil_state_gate_fw550_20260731.md`](../analysis/runtime_depth_stencil_state_gate_fw550_20260731.md).
 Load/store operations and clears remain explicit rather than implicit

@@ -7256,16 +7256,16 @@ static void test_runtime_dynamic_graphics_state(void)
     depth_transition.resource_type = kAgcResourceTypeImage;
     depth_transition.image = depth_image;
     depth_transition.before = kAgcResourceUsageUndefined;
-    depth_transition.after = kAgcResourceUsageDepthStencilRead;
+    depth_transition.after = kAgcResourceUsageDepthStencilWrite;
     depth_transition.before_owner = kAgcResourceOwnerHost;
     depth_transition.after_owner = kAgcResourceOwnerGraphics;
     depth_transition.image_range.aspect_mask = AGC_IMAGE_ASPECT_DEPTH_BIT |
         AGC_IMAGE_ASPECT_STENCIL_BIT;
     TEST_ASSERT_EQ(agcCmdTransitionResources(command, 1u,
         &depth_transition), AGC_OK,
-        "read-only depth target transitions to graphics ownership");
+        "write-capable depth target transitions to graphics ownership");
     TEST_ASSERT_EQ(agcCmdBindDepthStencilTarget(command, &depth_target),
-        AGC_OK, "dynamic-state depth/stencil target binds");
+        AGC_OK, "read-only pipeline accepts write-capable depth state");
     TEST_ASSERT_EQ(runtime_transition_buffer_to_graphics_read(command,
         index_buffer, buffer_desc.size, kAgcResourceUsageUndefined, 0u),
         AGC_OK, "dynamic-state index buffer transitions to graphics read");

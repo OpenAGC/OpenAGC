@@ -8971,7 +8971,10 @@ int32_t PS5_SYSV_ABI agcCmdBindDepthStencilTarget(
             agcRuntimeImageAspectMask(image), target->mip_level, 1u,
             target->array_layer, 1u, 0u };
         if (!agcCommandImageRangeState(command_buffer, image, &range,
-                &usage, &owner) || usage != required_usage ||
+                &usage, &owner) ||
+            (usage != required_usage &&
+             !(required_usage == kAgcResourceUsageDepthStencilRead &&
+               usage == kAgcResourceUsageDepthStencilWrite)) ||
             owner != kAgcResourceOwnerGraphics)
             return AGC_ERROR_INVALID_STATE;
     }
