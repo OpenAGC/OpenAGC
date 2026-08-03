@@ -732,10 +732,16 @@ static void test_gfx1013_buffer_copy_packets(void)
         "gfx1013 buffer copy rejects short command buffer");
     TEST_ASSERT_EQ(agcCbUsedDwords(&cb), 0u,
         "gfx1013 short buffer rejection is atomic");
+    agcCbInit(&cb, buffer, sizeof(buffer));
     TEST_ASSERT_EQ(agcGfx1013CopyBuffer(&cb,
-        UINT64_C(0x200010002), UINT64_C(0x200020000), 4u),
-        AGC_ERROR_INVALID_ALIGNMENT,
-        "gfx1013 buffer copy rejects unaligned source");
+        UINT64_C(0x200010001), UINT64_C(0x200020002), 3u), AGC_OK,
+        "gfx1013 buffer copy accepts byte-granular addresses and count");
+    TEST_ASSERT_EQ(buffer[2], 0x00010001u,
+        "gfx1013 byte copy preserves unaligned source");
+    TEST_ASSERT_EQ(buffer[4], 0x00020002u,
+        "gfx1013 byte copy preserves unaligned destination");
+    TEST_ASSERT_EQ(buffer[6], 3u,
+        "gfx1013 byte copy preserves exact byte count");
 }
 
 static void test_gfx1013_wave32_rejects_small_buffer_atomically(void)

@@ -11448,8 +11448,6 @@ static int32_t agcRuntimeValidateImageCopyRegion(AgcImage image,
         !agcAddU64(footprint, geometry->row_bytes,
             &geometry->buffer_footprint))
         return AGC_ERROR_INVALID_ARGUMENT;
-    if ((geometry->row_bytes & 3u) != 0u)
-        return AGC_ERROR_NOT_SUPPORTED;
     return AGC_OK;
 }
 
@@ -11481,8 +11479,7 @@ static int32_t agcRuntimeImageCopyRowAddress(AgcImage image,
         !agcAddU64(relative, column_offset, &relative) ||
         relative > layout.size || geometry->row_bytes > layout.size - relative ||
         !agcAddU64(layout.offset, relative, &absolute) ||
-        !agcAddU64(agcImageGpuAddress(image), absolute, &value) ||
-        (value & 3u) != 0u)
+        !agcAddU64(agcImageGpuAddress(image), absolute, &value))
         return AGC_ERROR_INVALID_ALIGNMENT;
     *address = value;
     return AGC_OK;
@@ -11678,8 +11675,7 @@ static int32_t agcCmdCopyBufferImage(AgcCommandBuffer command_buffer,
             copy->buffer_image_height, &geometry);
         if (result != AGC_OK)
             return result;
-        if ((copy->buffer_offset & 3u) != 0u ||
-            copy->buffer_offset > buffer->size ||
+        if (copy->buffer_offset > buffer->size ||
             geometry.buffer_footprint > buffer->size - copy->buffer_offset)
             return AGC_ERROR_INVALID_ARGUMENT;
         if (!agcCommandBufferRangeState(command_buffer, buffer,
@@ -11705,7 +11701,7 @@ static int32_t agcCmdCopyBufferImage(AgcCommandBuffer command_buffer,
                     !agcAddU64(buffer_relative, copy->buffer_offset,
                         &buffer_relative) ||
                     !agcAddU64(agcBufferGpuAddress(buffer), buffer_relative,
-                        &buffer_relative) || (buffer_relative & 3u) != 0u)
+                        &buffer_relative))
                     return AGC_ERROR_INVALID_ALIGNMENT;
                 if (result != AGC_OK)
                     return result;

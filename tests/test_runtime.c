@@ -4412,6 +4412,7 @@ static void test_runtime_image_region_and_buffer_copies(void)
     AgcBuffer readback = NULL;
     AgcImage first = NULL;
     AgcImage second = NULL;
+    AgcImage narrow = NULL;
     AgcCommandBuffer command = NULL;
     AgcFence fence = NULL;
     const AgcCommandBufferSubmit *captured;
@@ -4533,6 +4534,41 @@ static void test_runtime_image_region_and_buffer_copies(void)
 
     TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
         "region-copy command resets");
+
+    image_desc.width = 3u;
+    image_desc.height = 2u;
+    image_desc.format = AGC_FORMAT_R8_UNORM;
+    image_desc.usage = AGC_IMAGE_USAGE_TRANSFER_DST_BIT;
+    TEST_ASSERT_EQ(agcCreateImage(device, &image_desc, &narrow), AGC_OK,
+        "byte-row copy image creates");
+    transitions[0] = (AgcResourceTransition)AGC_RESOURCE_TRANSITION_INIT;
+    transitions[0].resource_type = kAgcResourceTypeImage;
+    transitions[0].image = narrow;
+    transitions[0].image_range =
+        (AgcImageSubresourceRange)AGC_IMAGE_SUBRESOURCE_RANGE_INIT;
+    transitions[0].before = kAgcResourceUsageUndefined;
+    transitions[0].after = kAgcResourceUsageCopyDestination;
+    transitions[0].before_owner = kAgcResourceOwnerHost;
+    transitions[0].after_owner = kAgcResourceOwnerCompute;
+    buffer_region =
+        (AgcBufferImageCopyRegion)AGC_BUFFER_IMAGE_COPY_REGION_INIT;
+    buffer_region.buffer_offset = 1u;
+    buffer_region.buffer_row_length = 3u;
+    buffer_region.buffer_image_height = 2u;
+    buffer_region.image_extent = (AgcExtent3D){3u, 2u, 1u};
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+        "byte-row copy command begins");
+    TEST_ASSERT_EQ(agcCmdTransitionResources(command, 1u, &transitions[0]),
+        AGC_OK, "byte-row copy image state records");
+    TEST_ASSERT_EQ(agcCmdCopyBufferToImage(command, upload, narrow, 1u,
+        &buffer_region), AGC_OK,
+        "R8 three-byte rows record from an unaligned buffer offset");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+        "byte-row copy command ends");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+        "byte-row copy command resets");
+    TEST_ASSERT_EQ(agcDestroyImage(narrow), AGC_OK,
+        "byte-row copy image destroys");
     TEST_ASSERT_EQ(agcDestroyFence(fence), AGC_OK,
         "region-copy fence destroys");
     TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,

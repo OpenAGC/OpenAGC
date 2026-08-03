@@ -793,8 +793,6 @@ int32_t PS5_SYSV_ABI agcGfx1013CopyBuffer(
     if (!cb || source_address == 0u || destination_address == 0u ||
         byte_count == 0u)
         return AGC_ERROR_INVALID_ARGUMENT;
-    if (((source_address | destination_address | byte_count) & 3u) != 0u)
-        return AGC_ERROR_INVALID_ALIGNMENT;
     if (source_address >= address_limit || destination_address >= address_limit ||
         byte_count > address_limit - source_address ||
         byte_count > address_limit - destination_address)
