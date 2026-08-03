@@ -53,6 +53,16 @@ fail-closed: leaking the current process on a teardown error is safer than
 unmapping memory still owned by VideoOut or `/dev/gc`, and the guarded runner
 must block relaunch until a reboot.
 
+The first post-panic hardware canaries established a narrower FW 5.50 rule.
+After the eighth successful present, unregistering set zero returns native
+VideoOut `RESOURCE_BUSY` (`0x80290009`) because that set remains the active
+scanout. Three earlier OpenAGC compute logs recorded the identical unregister
+result followed by a successful `sceVideoOutClose`. The checked close path now
+accepts only that specific busy result as a request to release ownership by
+closing the handle. It does not clear `buffers_registered` until handle close
+succeeds. Any other unregister result, or any close failure, still retains the
+present chain and caller memory.
+
 ## Offline validation
 
 - generic OpenAGC runtime: 20,085 assertions, zero failures, including retained

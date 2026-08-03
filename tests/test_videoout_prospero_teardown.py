@@ -34,6 +34,12 @@ for stage in (
 ):
     assert f'videoout_teardown_error("{stage}", native_result)' in close_body
 assert "buffers_registered = false" in close_body
+busy = close_body.index("SCE_VIDEO_OUT_ERROR_RESOURCE_BUSY")
+checked_close = close_body.index("sceVideoOutClose(video_out->handle)", busy)
+release_after_close = close_body.index(
+    "video_out->buffers_registered = false", checked_close
+)
+assert busy < checked_close < release_after_close
 
 runtime = (ROOT / "src/runtime.c").read_text()
 destroy_body = function_body(

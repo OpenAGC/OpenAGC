@@ -20,6 +20,8 @@ enum {
 };
 
 static const uint32_t SCE_VIDEO_OUT_PIXEL_FORMAT_A8R8G8B8_SRGB = 0x80000000u;
+static const int32_t SCE_VIDEO_OUT_ERROR_RESOURCE_BUSY =
+    (int32_t)0x80290009u;
 
 typedef int SceKernelEqueue;
 typedef struct SceKernelEvent { uint8_t opaque[64]; } SceKernelEvent;
@@ -260,15 +262,22 @@ int32_t agcVideoOutCloseChecked(AgcVideoOut *video_out)
     if (video_out->buffers_registered) {
         const int32_t native_result =
             sceVideoOutUnregisterBuffers(video_out->handle, 0);
-        if (native_result != 0)
+        if (native_result == 0) {
+            video_out->buffers_registered = false;
+        } else if (native_result == SCE_VIDEO_OUT_ERROR_RESOURCE_BUSY) {
+            fprintf(stderr,
+                "openagc: VideoOut active scanout requires checked handle "
+                "close before buffer release\n");
+        } else {
             return videoout_teardown_error("unregister-buffers", native_result);
-        video_out->buffers_registered = false;
+        }
     }
     if (video_out->handle >= 0) {
         const int32_t native_result = sceVideoOutClose(video_out->handle);
         if (native_result != 0)
             return videoout_teardown_error("close-handle", native_result);
         video_out->handle = -1;
+        video_out->buffers_registered = false;
     }
     if (video_out->flip_queue) {
         const int32_t native_result =
