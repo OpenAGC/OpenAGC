@@ -8524,6 +8524,9 @@ static int32_t agcCommandCommitScratch(AgcCommandBuffer command_buffer,
 static int agcCommandBufferRangeState(AgcCommandBuffer command_buffer,
     AgcBuffer buffer, uint64_t offset, uint64_t size,
     AgcResourceUsage *usage, AgcResourceOwner *owner);
+static int agcCommandBufferRangeStateSpan(AgcCommandBuffer command_buffer,
+    AgcBuffer buffer, uint64_t offset, uint64_t size,
+    AgcResourceUsage *usage, AgcResourceOwner *owner, uint64_t *span_size);
 static void agcCommandTransitionState(AgcCommandBuffer command_buffer,
     AgcResourceType resource_type, void *resource, AgcResourceUsage *usage,
     AgcResourceOwner *owner);
@@ -9325,9 +9328,9 @@ static int32_t agcRuntimeMapLowUsage(AgcResourceUsage usage,
     }
 }
 
-static int agcCommandBufferRangeState(AgcCommandBuffer command_buffer,
+static int agcCommandBufferRangeStateSpan(AgcCommandBuffer command_buffer,
     AgcBuffer buffer, uint64_t offset, uint64_t size,
-    AgcResourceUsage *usage, AgcResourceOwner *owner)
+    AgcResourceUsage *usage, AgcResourceOwner *owner, uint64_t *span_size)
 {
     const uint64_t end = offset + size;
     uint64_t position = offset;
@@ -9368,11 +9371,23 @@ static int agcCommandBufferRangeState(AgcCommandBuffer command_buffer,
             *owner = segment_owner;
             found = 1;
         } else if (*usage != segment_usage || *owner != segment_owner) {
-            return 0;
+            *span_size = position - offset;
+            return 1;
         }
         position = next_boundary;
     }
+    *span_size = position - offset;
     return found;
+}
+
+static int agcCommandBufferRangeState(AgcCommandBuffer command_buffer,
+    AgcBuffer buffer, uint64_t offset, uint64_t size,
+    AgcResourceUsage *usage, AgcResourceOwner *owner)
+{
+    uint64_t span_size = 0u;
+
+    return agcCommandBufferRangeStateSpan(command_buffer, buffer, offset,
+        size, usage, owner, &span_size) && span_size == size;
 }
 
 int32_t PS5_SYSV_ABI agcGetCommandBufferRangeStateInfo(
@@ -9393,6 +9408,31 @@ int32_t PS5_SYSV_ABI agcGetCommandBufferRangeStateInfo(
         return AGC_ERROR_INVALID_ARGUMENT;
     if (!agcCommandBufferRangeState(command_buffer, buffer, offset, size,
             &usage, &owner))
+        return AGC_ERROR_NOT_SUPPORTED;
+    info->usage = usage;
+    info->owner = owner;
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGetCommandBufferRangeStateSpan(
+    AgcCommandBuffer command_buffer, AgcBuffer buffer, uint64_t offset,
+    uint64_t size, AgcResourceStateInfo *info, uint64_t *span_size)
+{
+    AgcResourceUsage usage;
+    AgcResourceOwner owner;
+
+    if (!command_buffer || command_buffer->magic != AGC_MAGIC_COMMAND_BUFFER ||
+        !buffer || buffer->magic != AGC_MAGIC_BUFFER || !info || !span_size ||
+        !agcDeviceValid(command_buffer->device) ||
+        buffer->device != command_buffer->device || buffer->deferred ||
+        command_buffer->state != AGC_COMMAND_BUFFER_STATE_RECORDING ||
+        !agcHeaderValid(info->struct_size, sizeof(*info), info->version) ||
+        info->reserved0 != 0u || !agcReservedZero(info->reserved, 4u) ||
+        size == 0u || offset > buffer->size || size > buffer->size - offset)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (!agcCommandBufferRangeStateSpan(command_buffer, buffer, offset, size,
+            &usage, &owner, span_size) || *span_size == 0u ||
+        *span_size > size)
         return AGC_ERROR_NOT_SUPPORTED;
     info->usage = usage;
     info->owner = owner;

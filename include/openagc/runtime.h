@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-#define AGC_RUNTIME_API_VERSION 57u
+#define AGC_RUNTIME_API_VERSION 58u
 #define AGC_RUNTIME_MAX_VIEWPORTS 16u
 #define AGC_RUNTIME_STRUCTURE_VERSION_1 1u
 #define AGC_RUNTIME_STRUCTURE_VERSION_2 2u
@@ -1630,6 +1630,12 @@ int32_t PS5_SYSV_ABI agcGetBufferRangeStateInfo(AgcBuffer buffer,
 int32_t PS5_SYSV_ABI agcGetCommandBufferRangeStateInfo(
     AgcCommandBuffer command_buffer, AgcBuffer buffer, uint64_t offset,
     uint64_t size, AgcResourceStateInfo *info);
+/* Queries the first uniform state span in a command-local byte range. The
+ * returned span is nonzero and never exceeds size, allowing callers to walk a
+ * fragmented range without weakening whole-range state validation. */
+int32_t PS5_SYSV_ABI agcGetCommandBufferRangeStateSpan(
+    AgcCommandBuffer command_buffer, AgcBuffer buffer, uint64_t offset,
+    uint64_t size, AgcResourceStateInfo *info, uint64_t *span_size);
 /* Image counterpart of agcGetCommandBufferRangeStateInfo. The returned state
  * includes every transition already recorded for the queried subresources. */
 int32_t PS5_SYSV_ABI agcGetCommandBufferImageSubresourceStateInfo(

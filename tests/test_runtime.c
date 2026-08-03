@@ -4012,6 +4012,7 @@ static void test_runtime_buffer_range_fragmentation(void)
     AgcBuffer buffer = NULL;
     AgcCommandBuffer command = NULL;
     AgcFence fence = NULL;
+    uint64_t span_size = 0u;
     uint32_t i;
 
     buffer_desc.size = kRangeCount * kRangeSize;
@@ -4039,6 +4040,29 @@ static void test_runtime_buffer_range_fragmentation(void)
         TEST_ASSERT_EQ(agcCmdTransitionResources(command, 1u, &transition),
             AGC_OK, "alternating partial range records");
     }
+    info = (AgcResourceStateInfo)AGC_RESOURCE_STATE_INFO_INIT;
+    TEST_ASSERT_EQ(agcGetCommandBufferRangeStateInfo(command, buffer, 0u,
+        buffer_desc.size, &info), AGC_ERROR_NOT_SUPPORTED,
+        "command-local uniform query rejects alternating state");
+    for (i = 0u; i < kRangeCount; ++i) {
+        info = (AgcResourceStateInfo)AGC_RESOURCE_STATE_INFO_INIT;
+        span_size = 0u;
+        TEST_ASSERT_EQ(agcGetCommandBufferRangeStateSpan(command, buffer,
+            (uint64_t)i * kRangeSize,
+            buffer_desc.size - (uint64_t)i * kRangeSize, &info, &span_size),
+            AGC_OK, "command-local span query walks alternating state");
+        TEST_ASSERT_EQ(span_size, kRangeSize,
+            "command-local span stops at the next effective state");
+        TEST_ASSERT_EQ(info.usage, (i & 1u) != 0u ?
+            kAgcResourceUsageUndefined : kAgcResourceUsageCopySource,
+            "command-local span reports exact usage");
+        TEST_ASSERT_EQ(info.owner, (i & 1u) != 0u ?
+            kAgcResourceOwnerHost : kAgcResourceOwnerCompute,
+            "command-local span reports exact owner");
+    }
+    TEST_ASSERT_EQ(agcGetCommandBufferRangeStateSpan(command, buffer, 0u,
+        buffer_desc.size, &info, NULL), AGC_ERROR_INVALID_ARGUMENT,
+        "command-local span query rejects a missing span output");
     TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
         "fragmentation split command ends");
     submit.command_buffer_count = 1u;
