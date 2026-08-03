@@ -10563,6 +10563,8 @@ int32_t PS5_SYSV_ABI agcCmdTransitionResources(
     uint32_t dword_count = 0u;
     uint32_t release_count = 0u;
     uint32_t acquire_count = 0u;
+    uint32_t new_buffer_count = 0u;
+    uint32_t new_image_count = 0u;
     uint32_t i;
 
     if (!command_buffer || command_buffer->magic != AGC_MAGIC_COMMAND_BUFFER ||
@@ -10690,11 +10692,43 @@ int32_t PS5_SYSV_ABI agcCmdTransitionResources(
             "agcCmdTransitionResources", AGC_OBJECT_TYPE_COMMAND_BUFFER,
             command_buffer->allocation->debug_name,
             "command buffer has insufficient dwords for the transition packets");
-    if (command_buffer->recorded_buffer_count + transition_count >
-            AGC_RUNTIME_MAX_RECORDED_RESOURCES ||
-        command_buffer->recorded_image_count + transition_count >
-            AGC_RUNTIME_MAX_RECORDED_RESOURCES)
-        return AGC_ERROR_OUT_OF_MEMORY;
+    for (i = 0u; i < transition_count; ++i) {
+        uint32_t j;
+        int retained = 0;
+
+        if (transitions[i].resource_type == kAgcResourceTypeBuffer) {
+            for (j = 0u; j < command_buffer->recorded_buffer_count; ++j) {
+                if (command_buffer->recorded_buffers[j] ==
+                        transitions[i].buffer) {
+                    retained = 1;
+                    break;
+                }
+            }
+            if (!retained)
+                new_buffer_count++;
+        } else {
+            for (j = 0u; j < command_buffer->recorded_image_count; ++j) {
+                if (command_buffer->recorded_images[j] ==
+                        transitions[i].image) {
+                    retained = 1;
+                    break;
+                }
+            }
+            if (!retained)
+                new_image_count++;
+        }
+    }
+    if (new_buffer_count > AGC_RUNTIME_MAX_RECORDED_RESOURCES -
+            command_buffer->recorded_buffer_count ||
+        new_image_count > AGC_RUNTIME_MAX_RECORDED_RESOURCES -
+            command_buffer->recorded_image_count)
+        return agcDebugReport(command_buffer->device,
+            AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
+            AGC_DEBUG_MESSAGE_CATEGORY_COMMAND_CAPACITY_BIT,
+            AGC_ERROR_OUT_OF_MEMORY, "agcCmdTransitionResources",
+            AGC_OBJECT_TYPE_COMMAND_BUFFER,
+            command_buffer->allocation->debug_name,
+            "typed resource reference journal capacity is exhausted");
     /* Every v2 release or acquire retains its explicit dependency label.
      * Reserve their bookkeeping before any packet or resource mutation. */
     if (release_count + acquire_count > AGC_RUNTIME_MAX_RECORDED_RESOURCES -

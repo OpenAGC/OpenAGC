@@ -495,7 +495,9 @@ Runtime API v58 adds `agcGetCommandBufferRangeStateSpan`. It reports the
 effective usage and owner of the first uniform prefix in a command-local byte
 range, together with that prefix's nonzero size. Translators can therefore
 walk and transition fragmented ranges exactly; the existing uniform query
-continues to reject mixed state.
+continues to reject mixed state. Transition preflight accounts buffer and
+image reference journals independently and charges only resources not already
+retained by the command buffer.
 
 Runtime API v18 applies the same transactional contract to image aspects,
 mips, and array layers. State storage stays uniform until the first partial
