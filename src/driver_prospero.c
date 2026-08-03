@@ -758,6 +758,8 @@ int32_t PS5_SYSV_ABI agcProsperoInitialize(void)
     }
 
     g_prospero.initialized = true;
+    printf("[openagc] backend=direct-dev-gc fd_open=true capability=0x%08X\n",
+           g_prospero.ctx_capability);
     return AGC_OK;
 }
 
