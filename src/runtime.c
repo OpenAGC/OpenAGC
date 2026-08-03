@@ -189,6 +189,7 @@ struct AgcRuntimeBlock {
     AgcGpuMemory memory;
     uint32_t heap;
     uint32_t dedicated;
+    uint32_t address32_command_resource;
 };
 
 struct AgcDeferredFree {
@@ -229,6 +230,12 @@ struct AgcDeviceImpl {
     AgcAllocationCallbacks allocation;
     AgcRuntimeInfo runtime_info;
     AgcRuntimeBlock *heaps[AGC_MEMORY_HEAP_COUNT];
+    /* Command-resource tables are address32 shader inputs. Keep them out of
+     * the general flexible heap so all descriptor, indirect-set, push, and
+     * vertex tables use one dynamically selected 4 GiB window. */
+    AgcRuntimeBlock *address32_command_resource_blocks;
+    uint32_t address32_hi;
+    uint32_t address32_hi_valid;
     AgcDeferredFree *deferred;
     uint64_t live_allocation_count;
     uint64_t live_bytes;
@@ -1374,18 +1381,17 @@ static uint64_t agcAllocationGpuAddress(const AgcRuntimeAllocation *allocation)
 /* Generic-host captures use host virtual addresses and do not execute the
  * compiled shader ABI.  On Prospero every address32 user SGPR must retain the
  * compiler's fixed high dword; reject mismatches before writing a PM4 value. */
-static int32_t agcRuntimeAddress32Value(uint64_t base, uint64_t offset,
-    uint32_t *value)
+static int32_t agcRuntimeAddress32Value(AgcDevice device, uint64_t base,
+    uint64_t offset, uint32_t *value)
 {
     uint64_t address;
 
-    if (!value || offset > UINT64_MAX - base)
+    if (!agcDeviceValid(device) || !value || offset > UINT64_MAX - base)
         return AGC_ERROR_INVALID_ARGUMENT;
     address = base + offset;
-#if defined(OPENAGC_PROSPERO)
-    if (agcRuntimeValidateAddress32(address) != AGC_OK)
+    if (!device->address32_hi_valid ||
+        agcRuntimeValidateAddress32(address, device->address32_hi) != AGC_OK)
         return AGC_ERROR_NOT_SUPPORTED;
-#endif
     *value = (uint32_t)address;
     return AGC_OK;
 }
@@ -1499,7 +1505,9 @@ static int agcFindBlockOffset(AgcRuntimeBlock *block, uint64_t size,
 
 static void agcDestroyMemoryBlock(AgcDevice device, AgcRuntimeBlock *block)
 {
-    AgcRuntimeBlock **link = &device->heaps[block->heap];
+    AgcRuntimeBlock **link = block->address32_command_resource ?
+        &device->address32_command_resource_blocks :
+        &device->heaps[block->heap];
 
     while (*link != block)
         link = &(*link)->next;
@@ -1509,6 +1517,115 @@ static void agcDestroyMemoryBlock(AgcDevice device, AgcRuntimeBlock *block)
     else
         agcGpuMemoryFreeDirect(&block->memory);
     agcFree(device, block);
+}
+
+/* The address32 shader ABI carries only a low 32-bit table pointer.  These
+ * blocks are intentionally separate from ordinary flexible allocations: a
+ * descriptor/push/vertex table can never silently move to another window. */
+static int32_t agcCreateAddress32CommandResourceBlock(AgcDevice device,
+    uint64_t size, uint64_t alignment, uint32_t dedicated,
+    AgcRuntimeBlock **block_out)
+{
+    AgcRuntimeBlock *block;
+    uint32_t address32_hi;
+    int32_t result;
+
+    result = agcCreateMemoryBlock(device, AGC_MEMORY_HEAP_FLEXIBLE, size,
+        alignment, dedicated, &block);
+    if (result != AGC_OK)
+        return result;
+    address32_hi = (uint32_t)(block->memory.gpu_address >> 32u);
+    if (agcRuntimeValidateAddress32Range(block->memory.gpu_address,
+            block->memory.size, address32_hi) != AGC_OK ||
+        (device->address32_hi_valid &&
+         address32_hi != device->address32_hi)) {
+        agcDestroyMemoryBlock(device, block);
+        return AGC_ERROR_NOT_SUPPORTED;
+    }
+    /* agcCreateMemoryBlock links new blocks into the general heap. Move this
+     * one into the isolated command-resource arena before publishing it. */
+    device->heaps[AGC_MEMORY_HEAP_FLEXIBLE] = block->next;
+    block->address32_command_resource = 1u;
+    block->next = device->address32_command_resource_blocks;
+    device->address32_command_resource_blocks = block;
+    if (!device->address32_hi_valid) {
+        device->address32_hi = address32_hi;
+        device->address32_hi_valid = 1u;
+    }
+    *block_out = block;
+    return AGC_OK;
+}
+
+static int32_t agcRuntimeAllocateAddress32CommandResource(AgcDevice device,
+    uint64_t requested_size, uint64_t alignment, uint32_t owner_type,
+    void *owner, AgcRuntimeAllocation **allocation_out)
+{
+    AgcRuntimeBlock *block = NULL;
+    AgcRuntimeAllocation *allocation;
+    AgcRuntimeAllocation **link;
+    uint64_t size;
+    uint64_t offset = 0u;
+    uint32_t dedicated = 0u;
+    uint32_t created_block = 0u;
+    int32_t result;
+
+    if (!agcAlignU64(requested_size, alignment, &size) ||
+        alignment > AGC_FLEXIBLE_BLOCK_ALIGNMENT)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (size > AGC_FLEXIBLE_HEAP_BLOCK_SIZE / 2u)
+        dedicated = 1u;
+    if (!dedicated) {
+        for (block = device->address32_command_resource_blocks; block;
+                block = block->next) {
+            if (!block->dedicated && agcFindBlockOffset(block, size,
+                    alignment, &offset))
+                break;
+        }
+    }
+    if (!block) {
+        uint64_t block_size = dedicated ? size :
+            AGC_FLEXIBLE_HEAP_BLOCK_SIZE;
+        result = agcCreateAddress32CommandResourceBlock(device, block_size,
+            AGC_FLEXIBLE_BLOCK_ALIGNMENT, dedicated, &block);
+        if (result != AGC_OK)
+            return result;
+        created_block = 1u;
+        if (!agcFindBlockOffset(block, size, alignment, &offset)) {
+            agcDestroyMemoryBlock(device, block);
+            return AGC_ERROR_OUT_OF_MEMORY;
+        }
+    }
+    if (device->live_allocation_count == UINT64_MAX ||
+        UINT64_MAX - device->live_bytes < size) {
+        if (created_block)
+            agcDestroyMemoryBlock(device, block);
+        return AGC_ERROR_OUT_OF_MEMORY;
+    }
+    allocation = agcAlloc(device, sizeof(*allocation), sizeof(void *));
+    if (!allocation) {
+        if (created_block)
+            agcDestroyMemoryBlock(device, block);
+        return AGC_ERROR_OUT_OF_MEMORY;
+    }
+    allocation->block = block;
+    allocation->offset = offset;
+    allocation->size = size;
+    allocation->requested_size = requested_size;
+    allocation->owner_type = owner_type;
+    allocation->owner = owner;
+    link = &block->allocations;
+    while (*link && (*link)->offset < offset)
+        link = &(*link)->next;
+    allocation->next = *link;
+    *link = allocation;
+    device->live_allocation_count++;
+    device->live_bytes += size;
+    if (device->live_allocation_count > device->high_water_allocation_count)
+        device->high_water_allocation_count = device->live_allocation_count;
+    if (device->live_bytes > device->high_water_bytes)
+        device->high_water_bytes = device->live_bytes;
+    *allocation_out = allocation;
+    return AGC_OK;
 }
 
 static int32_t agcRuntimeAllocate(AgcDevice device, uint32_t heap,
@@ -1793,6 +1910,15 @@ static void agcDestroyMemoryBlocks(AgcDevice device)
         }
         device->heaps[heap] = NULL;
     }
+    while (device->address32_command_resource_blocks) {
+        AgcRuntimeBlock *block = device->address32_command_resource_blocks;
+
+        device->address32_command_resource_blocks = block->next;
+        (void)agcGpuMemoryFreeFlexible(&block->memory);
+        agcFree(device, block);
+    }
+    device->address32_hi = 0u;
+    device->address32_hi_valid = 0u;
 }
 
 static void *agcCreateChild(AgcDevice device, size_t size)
@@ -1859,6 +1985,7 @@ int32_t PS5_SYSV_ABI agcCreateDevice(
 {
     AgcAllocationCallbacks allocation = {0};
     AgcDevice device;
+    AgcRuntimeBlock *address32_block;
     int initialize_backend;
     int32_t result;
 
@@ -1919,8 +2046,24 @@ int32_t PS5_SYSV_ABI agcCreateDevice(
     }
 
     agcPopulateRuntimeInfo(device, desc->agc_version);
+    /* Vulkan must know the address32 ABI window before it compiles or binds
+     * a pipeline. Allocate the isolated arena eagerly, and fail device
+     * creation rather than exposing a late or unstable high dword. */
+    result = agcCreateAddress32CommandResourceBlock(device,
+        AGC_FLEXIBLE_HEAP_BLOCK_SIZE, AGC_FLEXIBLE_BLOCK_ALIGNMENT, 0u,
+        &address32_block);
+    if (result != AGC_OK) {
+        agcDestroyMemoryBlocks(device);
+        if (initialize_backend)
+            (void)agcDriverShutdown();
+        device->magic = 0u;
+        agcFree(device, device);
+        agcDeviceRegistryUnlock();
+        return result;
+    }
     if ((desc->required_capability_bits & ~device->runtime_info.capability_bits) !=
             0u) {
+        agcDestroyMemoryBlocks(device);
         if (initialize_backend)
             (void)agcDriverShutdown();
         device->magic = 0u;
@@ -2042,6 +2185,15 @@ int32_t PS5_SYSV_ABI agcGetDeviceProperties(
             capabilities.memory_profiles[i].property_flags;
         properties->memory_heaps[i].reserved = 0u;
     }
+    return AGC_OK;
+}
+
+int32_t PS5_SYSV_ABI agcGetDeviceAddress32High(AgcDevice device,
+    uint32_t *address32_hi_out)
+{
+    if (!agcDeviceValid(device) || !address32_hi_out)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    *address32_hi_out = device->address32_hi;
     return AGC_OK;
 }
 
@@ -7978,8 +8130,8 @@ static void agcReleaseCommandReferences(AgcCommandBuffer command_buffer)
     command_buffer->resource_allocation = NULL;
 }
 
-static int32_t agcValidateCommandResourceAddress32Layout(uint64_t gpu_base,
-    const AgcRuntimePipelineResourceLayout *layout)
+static int32_t agcValidateCommandResourceAddress32Layout(AgcDevice device,
+    uint64_t gpu_base, const AgcRuntimePipelineResourceLayout *layout)
 {
     uint32_t ignored_value;
     uint32_t i;
@@ -7988,7 +8140,7 @@ static int32_t agcValidateCommandResourceAddress32Layout(uint64_t gpu_base,
     if (!layout)
         return AGC_ERROR_INVALID_ARGUMENT;
     if (layout->uses_indirect_set_table) {
-        result = agcRuntimeAddress32Value(gpu_base,
+        result = agcRuntimeAddress32Value(device, gpu_base,
             layout->indirect_set_table_offset, &ignored_value);
         if (result != AGC_OK)
             return result;
@@ -7996,13 +8148,13 @@ static int32_t agcValidateCommandResourceAddress32Layout(uint64_t gpu_base,
     for (i = 0u; i < 8u; ++i) {
         if ((layout->set_mask & (1u << i)) == 0u)
             continue;
-        result = agcRuntimeAddress32Value(gpu_base, layout->set_offsets[i],
+        result = agcRuntimeAddress32Value(device, gpu_base, layout->set_offsets[i],
             &ignored_value);
         if (result != AGC_OK)
             return result;
     }
     if (layout->vertex_binding_mask != 0u) {
-        result = agcRuntimeAddress32Value(gpu_base,
+        result = agcRuntimeAddress32Value(device, gpu_base,
             layout->vertex_table_offset, &ignored_value);
         if (result != AGC_OK)
             return result;
@@ -8017,7 +8169,7 @@ static int32_t agcValidateCommandResourceAddress32Layout(uint64_t gpu_base,
             return AGC_ERROR_INVALID_ARGUMENT;
         stage_offset = layout->push_constant_offset +
             (uint64_t)i * layout->push_constant_stride;
-        result = agcRuntimeAddress32Value(gpu_base, stage_offset,
+        result = agcRuntimeAddress32Value(device, gpu_base, stage_offset,
             &ignored_value);
         if (result != AGC_OK)
             return result;
@@ -8040,14 +8192,15 @@ static int32_t agcPrepareCommandResources(AgcCommandBuffer command_buffer,
     if (command_buffer->recorded_resource_allocation_count >=
         AGC_RUNTIME_MAX_RECORDED_RESOURCES)
         return AGC_ERROR_OUT_OF_MEMORY;
-    result = agcRuntimeAllocate(command_buffer->device,
-        AGC_MEMORY_HEAP_FLEXIBLE, layout->total_size, 256u, 0u,
+    result = agcRuntimeAllocateAddress32CommandResource(
+        command_buffer->device, layout->total_size, 256u,
         AGC_OBJECT_TYPE_COMMAND_BUFFER, command_buffer, &allocation);
     if (result != AGC_OK)
         return result;
     cpu_base = agcAllocationCpuAddress(allocation);
     gpu_base = agcAllocationGpuAddress(allocation);
-    result = agcValidateCommandResourceAddress32Layout(gpu_base, layout);
+    result = agcValidateCommandResourceAddress32Layout(
+        command_buffer->device, gpu_base, layout);
     if (result != AGC_OK) {
         agcRuntimeFree(command_buffer->device, allocation);
         return result;
@@ -8059,7 +8212,7 @@ static int32_t agcPrepareCommandResources(AgcCommandBuffer command_buffer,
         uint32_t i;
         for (i = 0u; i < 8u; ++i) {
             if ((layout->set_mask & (1u << i)) != 0u) {
-                result = agcRuntimeAddress32Value(gpu_base,
+                result = agcRuntimeAddress32Value(command_buffer->device, gpu_base,
                     layout->set_offsets[i], &set_addresses[i]);
                 if (result != AGC_OK) {
                     agcRuntimeFree(command_buffer->device, allocation);
@@ -8110,7 +8263,7 @@ static int32_t agcSnapshotCommandResources(AgcCommandBuffer command_buffer,
                 set_addresses[i] = 0u;
                 continue;
             }
-            result = agcRuntimeAddress32Value(gpu_base,
+            result = agcRuntimeAddress32Value(command_buffer->device, gpu_base,
                 layout->set_offsets[i], &set_addresses[i]);
             if (result != AGC_OK)
                 return result;
@@ -12173,14 +12326,14 @@ static int32_t agcCommandUserSgprValue(AgcCommandBuffer command_buffer,
         if (!command_buffer->descriptors_bound || !gpu_base ||
             (layout->set_mask & (1u << sgpr->index)) == 0u)
             return AGC_ERROR_RESOURCE_NOT_BOUND;
-        return agcRuntimeAddress32Value(gpu_base,
+        return agcRuntimeAddress32Value(command_buffer->device, gpu_base,
             layout->set_offsets[sgpr->index], value);
     case AGC_SHADER_USER_SGPR_INDIRECT_DESCRIPTOR_SETS:
         if (!gpu_base || !layout->uses_indirect_set_table ||
             (layout->set_mask != 0u &&
              !command_buffer->descriptors_bound))
             return AGC_ERROR_RESOURCE_NOT_BOUND;
-        return agcRuntimeAddress32Value(gpu_base,
+        return agcRuntimeAddress32Value(command_buffer->device, gpu_base,
             layout->indirect_set_table_offset, value);
     case AGC_SHADER_USER_SGPR_PUSH_CONSTANT_POINTER:
         if (!gpu_base || layout->push_constant_size == 0u)
@@ -12189,7 +12342,7 @@ static int32_t agcCommandUserSgprValue(AgcCommandBuffer command_buffer,
                 (UINT64_MAX - layout->push_constant_offset) /
                     shader->stage)
             return AGC_ERROR_INVALID_ARGUMENT;
-        return agcRuntimeAddress32Value(gpu_base,
+        return agcRuntimeAddress32Value(command_buffer->device, gpu_base,
             layout->push_constant_offset +
                 (uint64_t)shader->stage * layout->push_constant_stride,
             value);
@@ -12215,7 +12368,7 @@ static int32_t agcCommandUserSgprValue(AgcCommandBuffer command_buffer,
         if (!gpu_base || command_buffer->vertex_binding_mask !=
                 layout->vertex_binding_mask)
             return AGC_ERROR_RESOURCE_NOT_BOUND;
-        return agcRuntimeAddress32Value(gpu_base,
+        return agcRuntimeAddress32Value(command_buffer->device, gpu_base,
             layout->vertex_table_offset, value);
     case AGC_SHADER_USER_SGPR_BASE_VERTEX:
         *value = (uint32_t)vertex_offset;

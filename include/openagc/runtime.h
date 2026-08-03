@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-#define AGC_RUNTIME_API_VERSION 56u
+#define AGC_RUNTIME_API_VERSION 57u
 #define AGC_RUNTIME_MAX_VIEWPORTS 16u
 #define AGC_RUNTIME_STRUCTURE_VERSION_1 1u
 #define AGC_RUNTIME_STRUCTURE_VERSION_2 2u
@@ -1586,6 +1586,11 @@ int32_t PS5_SYSV_ABI agcGetRuntimeInfo(
     AgcDevice device, AgcRuntimeInfo *info);
 int32_t PS5_SYSV_ABI agcGetDeviceProperties(
     AgcDevice device, AgcDeviceProperties *properties);
+/* Returns the high dword captured from the device's eagerly created isolated
+ * address32 command-resource arena. The value is stable for the device's
+ * lifetime and is available immediately after agcCreateDevice succeeds. */
+int32_t PS5_SYSV_ABI agcGetDeviceAddress32High(AgcDevice device,
+    uint32_t *address32_hi_out);
 
 int32_t PS5_SYSV_ABI agcCreateQueue(
     AgcDevice device, const AgcQueueDesc *desc, AgcQueue *queue_out);

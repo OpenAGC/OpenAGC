@@ -133,6 +133,7 @@ reset/destruction; “borrowed” means the input is read only during the call.
 | `agcDestroyDevice` | Requires no live children/deferred objects. | `AGC_ERROR_BUSY` if ownership remains | [cleanup](getting_started.md#first-compute-submission) |
 | `agcGetRuntimeInfo` | Writes a snapshot; no ownership transfer. | structure/version validation | [capabilities](getting_started.md#capability-and-error-policy) |
 | `agcGetDeviceProperties` | Returns firmware-neutral image/compute limits, format/sample masks, and heap profiles; a null device is valid for pre-device discovery. | structure/version/device validation | [capabilities](getting_started.md#capability-and-error-policy) |
+| `agcGetDeviceAddress32High` | Returns the stable high dword selected by the device's isolated address32 command-resource arena. | invalid device/output pointer | [descriptors](shader_pipelines.md#resource-and-dynamic-binding) |
 | `agcGetObjectAllocationInfo` | Queries a same-device resource/object. | invalid object/type | [memory](memory_resources.md#diagnostics-and-retirement) |
 | `agcSetObjectDebugName` | Copies the name into a supported same-device object. | invalid type/object, allocation | [capture](capture.md#application-setup) |
 | `agcGetMemoryStats` | Writes current/high-water/deferred statistics. | structure/version validation | [memory](memory_resources.md#diagnostics-and-retirement) |

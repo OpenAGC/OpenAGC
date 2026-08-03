@@ -9107,14 +9107,32 @@ static void test_runtime_indirect_descriptor_set_table(void)
 
 static void test_runtime_address32_shader_pointer_guard(void)
 {
-    const uint64_t qualified = UINT64_C(0x0000000201234500);
-    const uint64_t unqualified = UINT64_C(0x0000000301234500);
+    AgcDevice device = create_device();
+    const uint64_t high2 = UINT64_C(0x0000000201234500);
+    const uint64_t high3 = UINT64_C(0x0000000301234500);
+    const uint64_t boundary = UINT64_C(0x00000002ffffff00);
+    uint32_t device_high = 0u;
 
-    TEST_ASSERT_EQ(agcRuntimeValidateAddress32(qualified), AGC_OK,
-        "qualified address32 high dword is accepted before user-data emission");
-    TEST_ASSERT_EQ(agcRuntimeValidateAddress32(unqualified),
+    TEST_ASSERT_EQ(agcGetDeviceAddress32High(device, &device_high), AGC_OK,
+        "a created device immediately exposes its address32 arena window");
+    TEST_ASSERT_EQ(agcRuntimeValidateAddress32(
+            (uint64_t)device_high << 32u, device_high), AGC_OK,
+        "the eagerly captured device address32 high dword is self-consistent");
+
+    TEST_ASSERT_EQ(agcRuntimeValidateAddress32(high2, 2u), AGC_OK,
+        "the dynamically selected high-2 window is accepted");
+    TEST_ASSERT_EQ(agcRuntimeValidateAddress32(high3, 3u), AGC_OK,
+        "a dynamically selected high-3 window is accepted");
+    TEST_ASSERT_EQ(agcRuntimeValidateAddress32(high3, 2u),
         AGC_ERROR_NOT_SUPPORTED,
-        "unqualified address32 high dword is rejected before user-data emission");
+        "a command-resource pointer from a different window fails closed");
+    TEST_ASSERT_EQ(agcRuntimeValidateAddress32Range(boundary, 0x100u, 2u),
+        AGC_OK, "an address32 allocation ending at a window boundary is valid");
+    TEST_ASSERT_EQ(agcRuntimeValidateAddress32Range(boundary, 0x101u, 2u),
+        AGC_ERROR_NOT_SUPPORTED,
+        "an address32 allocation crossing a 4 GiB boundary fails closed");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "address32 arena device destroys cleanly");
 }
 
 static void test_runtime_primitive_restart_pipeline(void)
