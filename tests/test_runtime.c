@@ -4000,7 +4000,7 @@ static void test_runtime_copy_buffer_submission(void)
 
 static void test_runtime_buffer_range_fragmentation(void)
 {
-    enum { kRangeCount = 32u, kRangeSize = 8u };
+    enum { kRangeCount = 2048u, kRangeSize = 8u };
     AgcDevice device = create_device();
     AgcQueue queue = create_queue(device, kAgcQueueCompute);
     AgcBufferDesc buffer_desc = AGC_BUFFER_DESC_INIT;
@@ -4035,10 +4035,31 @@ static void test_runtime_buffer_range_fragmentation(void)
     transition.after_owner = kAgcResourceOwnerCompute;
     TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
         "fragmentation split command begins");
-    for (i = 0u; i < kRangeCount; i += 2u) {
+    for (i = 0u; i < kRangeCount / 2u; i += 2u) {
         transition.buffer_offset = (uint64_t)i * kRangeSize;
         TEST_ASSERT_EQ(agcCmdTransitionResources(command, 1u, &transition),
             AGC_OK, "alternating partial range records");
+    }
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+        "first persistent fragmentation batch ends");
+    submit.command_buffer_count = 1u;
+    submit.command_buffers = &command;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
+        "first persistent fragmentation batch submits");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+        "first persistent fragmentation command resets");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "first persistent fragmentation fence resets");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+        "second persistent fragmentation batch begins");
+    transition.before = kAgcResourceUsageUndefined;
+    transition.after = kAgcResourceUsageCopySource;
+    transition.before_owner = kAgcResourceOwnerHost;
+    transition.after_owner = kAgcResourceOwnerCompute;
+    for (i = kRangeCount / 2u; i < kRangeCount; i += 2u) {
+        transition.buffer_offset = (uint64_t)i * kRangeSize;
+        TEST_ASSERT_EQ(agcCmdTransitionResources(command, 1u, &transition),
+            AGC_OK, "persistent fragmentation exceeds one command journal");
     }
     info = (AgcResourceStateInfo)AGC_RESOURCE_STATE_INFO_INIT;
     TEST_ASSERT_EQ(agcGetCommandBufferRangeStateInfo(command, buffer, 0u,
@@ -4065,8 +4086,6 @@ static void test_runtime_buffer_range_fragmentation(void)
         "command-local span query rejects a missing span output");
     TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
         "fragmentation split command ends");
-    submit.command_buffer_count = 1u;
-    submit.command_buffers = &command;
     TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
         "alternating partial ranges submit atomically");
     TEST_ASSERT_EQ(agcGetBufferStateInfo(buffer, &info),
@@ -4095,10 +4114,25 @@ static void test_runtime_buffer_range_fragmentation(void)
     transition.after_owner = kAgcResourceOwnerHost;
     TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
         "fragmentation merge command begins");
-    for (i = 0u; i < kRangeCount; i += 2u) {
+    for (i = 0u; i < kRangeCount / 2u; i += 2u) {
         transition.buffer_offset = (uint64_t)i * kRangeSize;
         TEST_ASSERT_EQ(agcCmdTransitionResources(command, 1u, &transition),
             AGC_OK, "alternating partial range discard records");
+    }
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+        "first persistent merge batch ends");
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
+        "first persistent merge batch submits");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+        "first persistent merge command resets");
+    TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+        "first persistent merge fence resets");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+        "second persistent merge batch begins");
+    for (i = kRangeCount / 2u; i < kRangeCount; i += 2u) {
+        transition.buffer_offset = (uint64_t)i * kRangeSize;
+        TEST_ASSERT_EQ(agcCmdTransitionResources(command, 1u, &transition),
+            AGC_OK, "persistent fragmented tail discard records");
     }
     TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
         "fragmentation merge command ends");

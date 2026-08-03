@@ -497,7 +497,9 @@ range, together with that prefix's nonzero size. Translators can therefore
 walk and transition fragmented ranges exactly; the existing uniform query
 continues to reject mixed state. Transition preflight accounts buffer and
 image reference journals independently and charges only resources not already
-retained by the command buffer.
+retained by the command buffer. Persistent buffer intervals have a separate
+32,769-range bound (at most 512 KiB of interval metadata per fragmented
+buffer), because their lifetime can span many 512-transition commands.
 
 Runtime API v18 applies the same transactional contract to image aspects,
 mips, and array layers. State storage stays uniform until the first partial
