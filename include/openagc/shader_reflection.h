@@ -18,13 +18,16 @@ extern "C" {
 
 #define AGC_SHADER_REFLECTION_VERSION_1 1u
 #define AGC_SHADER_REFLECTION_VERSION_2 2u
-#define AGC_SHADER_REFLECTION_VERSION AGC_SHADER_REFLECTION_VERSION_2
+#define AGC_SHADER_REFLECTION_VERSION_3 3u
+#define AGC_SHADER_REFLECTION_VERSION AGC_SHADER_REFLECTION_VERSION_3
 #define AGC_SHADER_COMPILER_API_VERSION_14 14u
 #define AGC_SHADER_COMPILER_API_VERSION_15 15u
 #define AGC_SHADER_COMPILER_API_VERSION_16 16u
 #define AGC_SHADER_COMPILER_API_VERSION_17 17u
 #define AGC_SHADER_COMPILER_API_VERSION_18 18u
-#define AGC_SHADER_COMPILER_API_VERSION 19u
+#define AGC_SHADER_COMPILER_API_VERSION_19 19u
+#define AGC_SHADER_COMPILER_API_VERSION_20 20u
+#define AGC_SHADER_COMPILER_API_VERSION AGC_SHADER_COMPILER_API_VERSION_20
 #define AGC_SHADER_ENTRY_POINT_SIZE 64u
 #define AGC_SHADER_MAX_DESCRIPTOR_BINDINGS 128u
 #define AGC_SHADER_MAX_USER_SGPRS 64u
@@ -236,7 +239,9 @@ typedef struct AgcShaderReflection {
     uint32_t tessellation_reads_factors;
     uint32_t tessellation_lds_size;
     uint32_t pixel_shader_sample_count;
-    uint32_t reserved0;
+    /* Reflection v3: high dword supplied to the compiler for address32 user
+     * SGPR reconstruction. v1/v2 serialized zero in this slot. */
+    uint32_t address32_hi;
     uint64_t stage_linkage_hash;
     AgcShaderDescriptorMapping
         descriptor_mappings[AGC_SHADER_MAX_DESCRIPTOR_BINDINGS];

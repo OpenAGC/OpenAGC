@@ -39,7 +39,7 @@ extern "C" {
 
 /* openagc-psbc writes this value into the SH user-data register that must be
  * patched with the low 32 bits of the runtime vertex-buffer descriptor table.
- * PS5 user allocations share the fixed high address32 value 0x2. */
+ * PS5 user allocations share the compiler-qualified address32 high dword. */
 #define OPENAGC_VERTEX_BUFFER_TABLE_PLACEHOLDER 0x56424450u /* "VBDP" */
 
 /* Separately compiled gfx1013 GsFront code jumps to GsBack through this
@@ -56,7 +56,8 @@ extern "C" {
 
 /* openagc-psbc tags RADV address32 descriptor-set user SGPRs with these
  * values. Applications replace the tag with the low 32 bits of the runtime
- * descriptor table; PS5 user allocations share address32_hi=0x2. */
+ * descriptor table; PS5 user allocations share the compiler-qualified
+ * address32 high dword recorded in reflection v3. */
 #define OPENAGC_DESCRIPTOR_SET_PLACEHOLDER(set) \
     (0x44530000u | ((uint32_t)(set) & 0xffu)) /* "DS" + set index */
 

@@ -5121,6 +5121,19 @@ static uint64_t agcShaderHashBytes(
     return hash;
 }
 
+/* Shader sidecars are portable binary data.  Encode v3's address32 ABI
+ * selector explicitly rather than hashing the host representation of a
+ * uint32_t. */
+static uint64_t agcShaderHashU32Le(uint64_t hash, uint32_t value)
+{
+    const uint8_t bytes[4] = {
+        (uint8_t)(value >> 0u), (uint8_t)(value >> 8u),
+        (uint8_t)(value >> 16u), (uint8_t)(value >> 24u),
+    };
+
+    return agcShaderHashBytes(hash, bytes, sizeof(bytes));
+}
+
 static uint64_t agcShaderLinkageHash(
     const AgcShaderReflection *reflection)
 {
@@ -5132,8 +5145,13 @@ static uint64_t agcShaderLinkageHash(
         sizeof(reflection->stage_output_mask));
     hash = agcShaderHashBytes(hash, &reflection->patch_input_mask,
         sizeof(reflection->patch_input_mask));
-    return agcShaderHashBytes(hash, &reflection->patch_output_mask,
+    hash = agcShaderHashBytes(hash, &reflection->patch_output_mask,
         sizeof(reflection->patch_output_mask));
+    /* v1/v2 serialized the original four-field linkage hash.  Preserve that
+     * encoding so non-address32 legacy artifacts remain loadable. */
+    if (reflection->version == AGC_SHADER_REFLECTION_VERSION_3)
+        hash = agcShaderHashU32Le(hash, reflection->address32_hi);
+    return hash;
 }
 
 static int agcShaderRecordMatchesStage(
@@ -5227,7 +5245,7 @@ static int agcShaderTessellationReflectionValid(
             (reflection->tessellation_reads_factors != 0u))
         return 0;
     if (reflection->stage == kAgcShaderStageHs) {
-        return (reflection->version != AGC_SHADER_REFLECTION_VERSION_2 ||
+        return (reflection->version == AGC_SHADER_REFLECTION_VERSION_1 ||
                 reflection->front_stage == kAgcShaderStageVs) &&
             reflection->tessellation_input_control_points != 0u &&
             reflection->tessellation_input_control_points <= 32u &&
@@ -5241,7 +5259,7 @@ static int agcShaderTessellationReflectionValid(
     }
     if (reflection->stage == kAgcShaderStageDs ||
         reflection->stage == kAgcShaderStageGs) {
-        return (reflection->version != AGC_SHADER_REFLECTION_VERSION_2 ||
+        return (reflection->version == AGC_SHADER_REFLECTION_VERSION_1 ||
                 reflection->front_stage == kAgcShaderStageDs) &&
             reflection->tessellation_input_control_points == 0u &&
             reflection->tessellation_vertex_output_count == 0u &&
@@ -5287,7 +5305,7 @@ static int agcShaderReflectionValid(
         reflection->compiler_api_version ==
             AGC_SHADER_COMPILER_API_VERSION_14;
     current_reflection =
-        reflection->version == AGC_SHADER_REFLECTION_VERSION_2 &&
+        (reflection->version == AGC_SHADER_REFLECTION_VERSION_2 &&
         (reflection->compiler_api_version ==
              AGC_SHADER_COMPILER_API_VERSION_15 ||
          reflection->compiler_api_version ==
@@ -5296,6 +5314,9 @@ static int agcShaderReflectionValid(
              AGC_SHADER_COMPILER_API_VERSION_17 ||
          reflection->compiler_api_version ==
              AGC_SHADER_COMPILER_API_VERSION_18 ||
+         reflection->compiler_api_version ==
+             AGC_SHADER_COMPILER_API_VERSION_19)) ||
+        (reflection->version == AGC_SHADER_REFLECTION_VERSION_3 &&
          reflection->compiler_api_version ==
              AGC_SHADER_COMPILER_API_VERSION);
     if (!reflection || reflection->struct_size != sizeof(*reflection) ||
@@ -5324,7 +5345,8 @@ static int agcShaderReflectionValid(
         reflection->code_offset >= binary_size ||
         reflection->code_size == 0u ||
         reflection->code_size > binary_size - reflection->code_offset ||
-        reflection->reserved0 != 0u ||
+        (reflection->version != AGC_SHADER_REFLECTION_VERSION_3 &&
+         reflection->address32_hi != 0u) ||
         !agcShaderTessellationReflectionValid(reflection)) {
         return 0;
     }
@@ -5507,6 +5529,37 @@ static int agcShaderReflectionValid(
     return hash == reflection->code_hash;
 }
 
+static int agcShaderReflectionUsesAddress32(
+    const AgcShaderReflection *reflection)
+{
+    uint32_t i;
+
+    for (i = 0u; i < reflection->user_sgpr_count; ++i) {
+        switch (reflection->user_sgprs[i].kind) {
+        case AGC_SHADER_USER_SGPR_DESCRIPTOR_SET:
+        case AGC_SHADER_USER_SGPR_INDIRECT_DESCRIPTOR_SETS:
+        case AGC_SHADER_USER_SGPR_PUSH_CONSTANT_POINTER:
+        case AGC_SHADER_USER_SGPR_VERTEX_BUFFER_TABLE:
+            return 1;
+        default:
+            break;
+        }
+    }
+    return 0;
+}
+
+/* v1/v2 artifacts did not serialize the compiler's address32 high dword.
+ * They remain usable only when they have no address32 resource pointer; for
+ * those artifacts the missing value cannot influence execution. */
+static int agcShaderReflectionAddress32Compatible(AgcDevice device,
+    const AgcShaderReflection *reflection)
+{
+    if (!agcShaderReflectionUsesAddress32(reflection))
+        return 1;
+    return reflection->version == AGC_SHADER_REFLECTION_VERSION_3 &&
+        reflection->address32_hi == device->address32_hi;
+}
+
 int32_t PS5_SYSV_ABI agcCreateShader(
     AgcDevice device, const AgcShaderDesc *desc, AgcShader *shader_out)
 {
@@ -5548,6 +5601,8 @@ int32_t PS5_SYSV_ABI agcCreateShader(
             !agcShaderReflectionValid(desc->reflection, desc->stage,
                 desc->code, desc->code_size, desc->front_code,
                 desc->front_code_size) ||
+            !agcShaderReflectionAddress32Compatible(device,
+                desc->reflection) ||
             !agcAlignU64(desc->code_size, 256u, &front_offset) ||
             !agcAddU64(front_offset, desc->front_code_size,
                 &allocation_size)) {
@@ -5556,7 +5611,7 @@ int32_t PS5_SYSV_ABI agcCreateShader(
                 AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT,
                 AGC_ERROR_SHADER_INVALID, "agcCreateShader",
                 AGC_OBJECT_TYPE_SHADER, NULL,
-                "shader reflection, binary hash, code range, front half, or linkage metadata is invalid");
+                "shader reflection, address32 ABI window, binary hash, code range, front half, or linkage metadata is invalid");
         }
     }
     shader = agcCreateChild(device, sizeof(*shader));
@@ -5667,7 +5722,6 @@ int32_t PS5_SYSV_ABI agcGetShaderReflection(
         !agcDeviceValid(shader->device) || !reflection ||
         reflection->struct_size != sizeof(*reflection) ||
         reflection->version != AGC_SHADER_REFLECTION_VERSION ||
-        reflection->reserved0 != 0u ||
         reflection->reserved1 != 0u) {
         return AGC_ERROR_INVALID_ARGUMENT;
     }
@@ -7304,7 +7358,7 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
             AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT,
             "graphics pipeline shaders require valid compiler reflection metadata");
     if (desc->geometry_shader && !tessellated &&
-        (primitive->reflection.version != AGC_SHADER_REFLECTION_VERSION_2 ||
+        (primitive->reflection.version != AGC_SHADER_REFLECTION_VERSION ||
          primitive->reflection.front_stage != kAgcShaderStageVs ||
          !primitive->has_front_record ||
          (primitive->reflection.flags &
@@ -7330,11 +7384,11 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
             prim->front_patch_input_mask : prim->patch_input_mask;
         AgcGfx1013TessellationLayoutState layout;
 
-        if (hs->version != AGC_SHADER_REFLECTION_VERSION_2 ||
+        if (hs->version != AGC_SHADER_REFLECTION_VERSION ||
             hs->front_stage != kAgcShaderStageVs ||
             !hull->has_front_record || hs->wave_size != 32u ||
             (hs->flags & AGC_SHADER_REFLECTION_FUSED_STAGE_BIT) == 0u ||
-            prim->version != AGC_SHADER_REFLECTION_VERSION_2 ||
+            prim->version != AGC_SHADER_REFLECTION_VERSION ||
             prim->front_stage != kAgcShaderStageDs ||
             !primitive->has_front_record || prim->wave_size != 32u ||
             (prim->flags & AGC_SHADER_REFLECTION_NGG_BIT) == 0u ||

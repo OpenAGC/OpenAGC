@@ -298,6 +298,16 @@ static uint64_t shader_fixture_hash(const void *data, size_t size)
         UINT64_C(14695981039346656037), data, size);
 }
 
+static uint64_t shader_fixture_hash_u32_le(uint64_t hash, uint32_t value)
+{
+    const uint8_t bytes[4] = {
+        (uint8_t)(value >> 0u), (uint8_t)(value >> 8u),
+        (uint8_t)(value >> 16u), (uint8_t)(value >> 24u),
+    };
+
+    return shader_fixture_hash_update(hash, bytes, sizeof(bytes));
+}
+
 static uint64_t shader_fixture_linkage_hash(
     const AgcShaderReflection *reflection)
 {
@@ -309,8 +319,11 @@ static uint64_t shader_fixture_linkage_hash(
         sizeof(reflection->stage_output_mask));
     hash = shader_fixture_hash_update(hash, &reflection->patch_input_mask,
         sizeof(reflection->patch_input_mask));
-    return shader_fixture_hash_update(hash, &reflection->patch_output_mask,
+    hash = shader_fixture_hash_update(hash, &reflection->patch_output_mask,
         sizeof(reflection->patch_output_mask));
+    if (reflection->version == AGC_SHADER_REFLECTION_VERSION_3)
+        hash = shader_fixture_hash_u32_le(hash, reflection->address32_hi);
+    return hash;
 }
 
 static uint32_t shader_fixture_user_sgpr_count(
@@ -453,6 +466,11 @@ static AgcShader create_shader_with_reflection_rsrc2(AgcDevice device,
     reflection.shader_record_version = AGC_SHADER_RECORD_VERSION_GEN5;
     if (reflection.compiler_api_version == 0u)
         reflection.compiler_api_version = AGC_SHADER_COMPILER_API_VERSION;
+    if (reflection.version == AGC_SHADER_REFLECTION_VERSION_3 &&
+        reflection.address32_hi == 0u)
+        TEST_ASSERT_EQ(agcGetDeviceAddress32High(device,
+                &reflection.address32_hi), AGC_OK,
+            "shader fixture obtains the device address32 ABI window");
     if (reflection.wave_size == 0u)
         reflection.wave_size = 32u;
     reflection.hash_algorithm = AGC_SHADER_HASH_FNV1A64;
@@ -494,6 +512,55 @@ static AgcShader create_shader_with_reflection(AgcDevice device,
 static AgcShader create_shader(AgcDevice device, AgcShaderStage stage)
 {
     return create_shader_with_reflection(device, stage, NULL);
+}
+
+static int32_t create_address32_shader_fixture(AgcDevice device,
+    uint32_t address32_hi, uint32_t linkage_address32_hi,
+    AgcShader *shader_out)
+{
+    RuntimeShaderFixture binary = {0};
+    AgcShaderReflection reflection = AGC_SHADER_REFLECTION_INIT;
+    AgcShaderDesc desc = AGC_SHADER_DESC_INIT;
+
+    binary.record.magic = AGC_SHADER_RECORD_MAGIC;
+    binary.record.version = AGC_SHADER_RECORD_VERSION_GEN5;
+    binary.record.code = offsetof(RuntimeShaderFixture, code);
+    binary.record.shader_type = kAgcShaderTypeCs;
+    binary.record.num_sh_registers = 3u;
+    binary.record.sh_registers = offsetof(RuntimeShaderFixture, sh_registers);
+    binary.sh_registers[0] = (AgcRegisterValue){
+        AGC_REG_COMPUTE_PGM_RSRC1, 0u};
+    binary.sh_registers[1] = (AgcRegisterValue){
+        AGC_REG_COMPUTE_PGM_RSRC2, shader_fixture_encode_user_sgprs(1u)};
+    binary.sh_registers[2] = (AgcRegisterValue){
+        AGC_REG_COMPUTE_PGM_RSRC3, 0u};
+    binary.code[0] = 0xBF810000u;
+    reflection.stage = kAgcShaderStageCs;
+    reflection.shader_record_version = AGC_SHADER_RECORD_VERSION_GEN5;
+    reflection.compiler_api_version = AGC_SHADER_COMPILER_API_VERSION;
+    reflection.wave_size = 32u;
+    reflection.hash_algorithm = AGC_SHADER_HASH_FNV1A64;
+    reflection.address32_hi = linkage_address32_hi;
+    reflection.local_size_x = 1u;
+    reflection.local_size_y = 1u;
+    reflection.local_size_z = 1u;
+    reflection.code_offset = offsetof(RuntimeShaderFixture, code);
+    reflection.code_size = sizeof(binary.code);
+    reflection.user_sgpr_count = 1u;
+    reflection.user_sgprs[0] = (AgcShaderUserSgpr){
+        AGC_SHADER_USER_SGPR_DESCRIPTOR_SET, 0u,
+        AGC_REG_COMPUTE_USER_DATA_0, 1u};
+    memcpy(reflection.entry_point, "main", sizeof("main"));
+    reflection.stage_linkage_hash = shader_fixture_linkage_hash(&reflection);
+    /* Test callers may deliberately alter the serialized high dword after
+     * integrity generation to model a stale or tampered v3 sidecar. */
+    reflection.address32_hi = address32_hi;
+    reflection.code_hash = shader_fixture_hash(&binary, sizeof(binary));
+    desc.stage = kAgcShaderStageCs;
+    desc.code = &binary;
+    desc.code_size = sizeof(binary);
+    desc.reflection = &reflection;
+    return agcCreateShader(device, &desc, shader_out);
 }
 
 static AgcShader create_ngg_shader_bundle(AgcDevice device,
@@ -581,6 +648,9 @@ static AgcShader create_ngg_shader_bundle(AgcDevice device,
         reflection.flags |= AGC_SHADER_REFLECTION_FUSED_STAGE_BIT;
     reflection.shader_record_version = AGC_SHADER_RECORD_VERSION_GEN5;
     reflection.compiler_api_version = AGC_SHADER_COMPILER_API_VERSION;
+    TEST_ASSERT_EQ(agcGetDeviceAddress32High(device,
+            &reflection.address32_hi), AGC_OK,
+        "NGG fixture obtains the device address32 ABI window");
     reflection.wave_size = 32u;
     reflection.hash_algorithm = AGC_SHADER_HASH_FNV1A64;
     reflection.code_offset = offsetof(RuntimeShaderFixture, code);
@@ -681,6 +751,9 @@ static AgcShader create_tessellation_control_bundle(AgcDevice device,
     reflection.flags |= AGC_SHADER_REFLECTION_FUSED_STAGE_BIT;
     reflection.shader_record_version = AGC_SHADER_RECORD_VERSION_GEN5;
     reflection.compiler_api_version = AGC_SHADER_COMPILER_API_VERSION;
+    TEST_ASSERT_EQ(agcGetDeviceAddress32High(device,
+            &reflection.address32_hi), AGC_OK,
+        "tessellation fixture obtains the device address32 ABI window");
     reflection.wave_size = 32u;
     reflection.hash_algorithm = AGC_SHADER_HASH_FNV1A64;
     reflection.code_offset = offsetof(RuntimeShaderFixture, code);
@@ -2670,8 +2743,19 @@ static void test_runtime_compiler_reflection_sidecar(void)
     shader_desc.code = fill_color_native_data;
     shader_desc.code_size = fill_color_native_data_len;
     shader_desc.reflection = &reflection;
-    TEST_ASSERT_EQ(agcCreateShader(device, &shader_desc, &shader), AGC_OK,
-        "serialized compute artifact creates a native shader");
+    /* This v2 artifact contains descriptor/push address32 SGPRs but did not
+     * serialize the compiler high dword. It is intentionally rejected rather
+     * than retagged with this device's dynamically selected window. */
+    TEST_ASSERT_EQ(agcCreateShader(device, &shader_desc, &shader),
+        AGC_ERROR_SHADER_INVALID,
+        "legacy address32 compute sidecar fails closed without v3 metadata");
+    TEST_ASSERT(shader == NULL,
+        "rejected legacy compute sidecar leaves shader output null");
+    TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
+        "legacy compute sidecar queue destroys after rejection");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "legacy compute sidecar device destroys after rejection");
+    return;
 
     pipeline_desc.shader = shader;
     pipeline_desc.local_size_x = reflection.local_size_x;
@@ -2833,8 +2917,16 @@ static void test_runtime_compiler_graphics_sidecar(void)
     vertex_desc.front_code = runtime_triangle_vert_front_data;
     vertex_desc.front_code_size = runtime_triangle_vert_front_data_len;
     vertex_desc.reflection = &vertex_reflection;
-    TEST_ASSERT_EQ(agcCreateShader(device, &vertex_desc, &vertex), AGC_OK,
-        "compiler-sidecar NGG vertex shader creates");
+    TEST_ASSERT_EQ(agcCreateShader(device, &vertex_desc, &vertex),
+        AGC_ERROR_SHADER_INVALID,
+        "legacy address32 graphics sidecar fails closed without v3 metadata");
+    TEST_ASSERT(vertex == NULL,
+        "rejected legacy graphics sidecar leaves shader output null");
+    TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
+        "legacy graphics sidecar queue destroys after rejection");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "legacy graphics sidecar device destroys after rejection");
+    return;
     pixel_desc.stage = pixel_reflection.stage;
     pixel_desc.code = runtime_triangle_frag_data;
     pixel_desc.code_size = runtime_triangle_frag_data_len;
@@ -7633,6 +7725,29 @@ static void test_runtime_shader_reflection_contract(void)
     }
 
     {
+        AgcShaderReflection legacy = {0};
+        AgcShader legacy_shader;
+
+        legacy.struct_size = sizeof(legacy);
+        legacy.version = AGC_SHADER_REFLECTION_VERSION_2;
+        legacy.compiler_api_version = AGC_SHADER_COMPILER_API_VERSION_19;
+        legacy.front_stage = kAgcShaderStageCount;
+        legacy_shader = create_shader_with_reflection(
+            device, kAgcShaderStageCs, &legacy);
+        reflection = (AgcShaderReflection)AGC_SHADER_REFLECTION_INIT;
+        TEST_ASSERT_EQ(agcGetShaderReflection(legacy_shader, &reflection),
+            AGC_OK, "API-19 reflection without address32 pointers remains queryable");
+        TEST_ASSERT_EQ(reflection.version,
+            AGC_SHADER_REFLECTION_VERSION_2,
+            "legacy shader preserves reflection v2");
+        TEST_ASSERT_EQ(reflection.compiler_api_version,
+            AGC_SHADER_COMPILER_API_VERSION_19,
+            "legacy shader preserves compiler API 19");
+        TEST_ASSERT_EQ(agcDestroyShader(legacy_shader), AGC_OK,
+            "v2 legacy reflected shader destroys");
+    }
+
+    {
         RuntimeShaderFixture back_only = {0};
         AgcShaderDesc desc = AGC_SHADER_DESC_INIT;
         AgcShader invalid = NULL;
@@ -9112,12 +9227,32 @@ static void test_runtime_address32_shader_pointer_guard(void)
     const uint64_t high3 = UINT64_C(0x0000000301234500);
     const uint64_t boundary = UINT64_C(0x00000002ffffff00);
     uint32_t device_high = 0u;
+    AgcShader shader = NULL;
+    uint32_t mismatched_high;
 
     TEST_ASSERT_EQ(agcGetDeviceAddress32High(device, &device_high), AGC_OK,
         "a created device immediately exposes its address32 arena window");
     TEST_ASSERT_EQ(agcRuntimeValidateAddress32(
             (uint64_t)device_high << 32u, device_high), AGC_OK,
         "the eagerly captured device address32 high dword is self-consistent");
+    TEST_ASSERT_EQ(create_address32_shader_fixture(device, device_high,
+            device_high, &shader), AGC_OK,
+        "v3 address32 reflection matching the device window creates");
+    TEST_ASSERT_EQ(agcDestroyShader(shader), AGC_OK,
+        "matching v3 address32 reflection shader destroys");
+    shader = NULL;
+    mismatched_high = device_high == UINT32_MAX ? device_high - 1u :
+        device_high + 1u;
+    TEST_ASSERT_EQ(create_address32_shader_fixture(device, mismatched_high,
+            device_high, &shader), AGC_ERROR_SHADER_INVALID,
+        "tampering v3 address32 high without recomputing linkage fails closed");
+    TEST_ASSERT(shader == NULL,
+        "tampered v3 address32 reflection leaves shader output null");
+    TEST_ASSERT_EQ(create_address32_shader_fixture(device, mismatched_high,
+            mismatched_high, &shader), AGC_ERROR_SHADER_INVALID,
+        "v3 address32 reflection from another window fails closed");
+    TEST_ASSERT(shader == NULL,
+        "mismatched v3 address32 reflection leaves shader output null");
 
     TEST_ASSERT_EQ(agcRuntimeValidateAddress32(high2, 2u), AGC_OK,
         "the dynamically selected high-2 window is accepted");
