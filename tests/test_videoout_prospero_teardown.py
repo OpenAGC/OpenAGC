@@ -40,6 +40,12 @@ release_after_close = close_body.index(
     "video_out->buffers_registered = false", checked_close
 )
 assert busy < checked_close < release_after_close
+bad_fd = close_body.index("SCE_KERNEL_ERROR_EBADF")
+delete_queue_error = close_body.index(
+    'videoout_teardown_error("delete-equeue", native_result)', bad_fd
+)
+queue_retired = close_body.index("video_out->flip_queue = 0", delete_queue_error)
+assert bad_fd < delete_queue_error < queue_retired
 
 runtime = (ROOT / "src/runtime.c").read_text()
 destroy_body = function_body(

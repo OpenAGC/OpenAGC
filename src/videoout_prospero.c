@@ -22,6 +22,7 @@ enum {
 static const uint32_t SCE_VIDEO_OUT_PIXEL_FORMAT_A8R8G8B8_SRGB = 0x80000000u;
 static const int32_t SCE_VIDEO_OUT_ERROR_RESOURCE_BUSY =
     (int32_t)0x80290009u;
+static const int32_t SCE_KERNEL_ERROR_EBADF = (int32_t)0x80020009u;
 
 typedef int SceKernelEqueue;
 typedef struct SceKernelEvent { uint8_t opaque[64]; } SceKernelEvent;
@@ -282,8 +283,13 @@ int32_t agcVideoOutCloseChecked(AgcVideoOut *video_out)
     if (video_out->flip_queue) {
         const int32_t native_result =
             sceKernelDeleteEqueue(video_out->flip_queue);
-        if (native_result != 0)
+        if (native_result == SCE_KERNEL_ERROR_EBADF) {
+            fprintf(stderr,
+                "openagc: VideoOut equeue already retired during checked "
+                "teardown\n");
+        } else if (native_result != 0) {
             return videoout_teardown_error("delete-equeue", native_result);
+        }
         video_out->flip_queue = 0;
     }
     free(video_out);

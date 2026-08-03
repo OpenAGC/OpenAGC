@@ -63,6 +63,15 @@ closing the handle. It does not clear `buffers_registered` until handle close
 succeeds. Any other unregister result, or any close failure, still retains the
 present chain and caller memory.
 
+The next canary proved checked handle close succeeds, then
+`sceKernelDeleteEqueue` returns `0x80020009` (`EBADF`). This is the same
+terminal equeue status retained as non-fatal evidence across numerous earlier
+stable FW 5.50 1,800-flip qualifications. At that point the flip event is
+deleted, the buffer registration is released by successful handle close, and
+the equeue descriptor is already invalid. The checked path therefore accepts
+only exact `EBADF` as already retired and clears the local descriptor. Any
+other delete-equeue error remains a teardown failure.
+
 ## Offline validation
 
 - generic OpenAGC runtime: 20,085 assertions, zero failures, including retained
