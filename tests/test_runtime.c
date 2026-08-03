@@ -5635,6 +5635,55 @@ static void test_runtime_partial_resource_handoffs(void)
         "partial-handoff device destroys");
 }
 
+static void test_runtime_global_memory_barrier(void)
+{
+    AgcDevice device = create_device();
+    AgcQueue queue = create_queue(device, kAgcQueueGraphics);
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcCommandBuffer command = NULL;
+    AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    const AgcCommandBufferSubmit *captured;
+    const uint32_t *words;
+
+    command_desc.queue_type = kAgcQueueGraphics;
+    command_desc.capacity_dwords = 64u;
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
+        AGC_OK, "global memory barrier command creates");
+    TEST_ASSERT_EQ(agcCmdMemoryBarrier(command), AGC_ERROR_INVALID_ARGUMENT,
+        "global memory barrier requires recording state");
+    TEST_ASSERT_EQ(agcBeginCommandBuffer(command), AGC_OK,
+        "global memory barrier command begins");
+    TEST_ASSERT_EQ(agcCmdMemoryBarrier(command), AGC_OK,
+        "global memory barrier records");
+    TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+        "global memory barrier command ends");
+    submit.command_buffer_count = 1u;
+    submit.command_buffers = &command;
+    TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, NULL), AGC_OK,
+        "global memory barrier command submits");
+    captured = agcDriverDebugLastDcbSubmit();
+    TEST_ASSERT(captured != NULL,
+        "global memory barrier submission is captured");
+    words = (const uint32_t *)(uintptr_t)captured->command_address;
+    TEST_ASSERT(runtime_has_opcode(words, captured->dword_count,
+        AGC_PM4_OP_EVENT_WRITE),
+        "global memory barrier flushes attachment metadata");
+    TEST_ASSERT(runtime_has_opcode(words, captured->dword_count,
+        AGC_PM4_OP_RELEASE_MEM),
+        "global memory barrier emits an EOP cache release");
+    TEST_ASSERT(runtime_has_opcode(words, captured->dword_count,
+        AGC_PM4_OP_ACQUIRE_MEM),
+        "global memory barrier invalidates GPU caches");
+    TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+        "global memory barrier command resets");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+        "global memory barrier command destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
+        "global memory barrier queue destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "global memory barrier device destroys");
+}
+
 static void test_runtime_resource_transitions(void)
 {
     AgcDevice device = create_device();
@@ -12399,6 +12448,7 @@ TEST_RUN(test_runtime_image_region_and_buffer_copies);
     TEST_RUN(test_runtime_submit_label_lists);
     TEST_RUN(test_runtime_image_transfer);
     TEST_RUN(test_runtime_partial_resource_handoffs);
+    TEST_RUN(test_runtime_global_memory_barrier);
     TEST_RUN(test_runtime_resource_transitions);
     TEST_RUN(test_runtime_sampled_image_handoff);
     TEST_RUN(test_runtime_color_target_binding);

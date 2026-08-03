@@ -85,6 +85,7 @@ extern "C" {
 #define AGC_GFX1013_CB_META_FLUSH_EVENT         0x2Eu
 #define AGC_GFX1013_CB_META_FLUSH_DWORDS           2u
 #define AGC_GFX1013_DB_META_FLUSH_DWORDS           2u
+#define AGC_GFX1013_GLOBAL_MEMORY_BARRIER_DWORDS  22u
 #define AGC_GFX1013_DB_DATA_FLUSH_EVENT          0x2Bu
 #define AGC_GFX1013_DB_META_FLUSH_EVENT          0x2Cu
 /* Forward-sequenced GLM writeback/invalidate plus GL2 writeback/invalidate. */
@@ -871,6 +872,9 @@ int32_t PS5_SYSV_ABI agcGfx1013GetResourceTransitionDwords(
     const AgcGfx1013ResourceTransition *transition, uint32_t *dword_count);
 int32_t PS5_SYSV_ABI agcGfx1013TransitionResource(
     SceAgcCb *cb, const AgcGfx1013ResourceTransition *transition);
+/* Emits a conservative graphics-queue dependency: color/depth metadata and
+ * data caches are flushed at EOP, followed by a full GPU-cache acquire. */
+int32_t PS5_SYSV_ABI agcGfx1013GlobalMemoryBarrier(SceAgcCb *cb);
 int32_t PS5_SYSV_ABI agcGfx1013ValidateWave32TessVsPs(
     const AgcGfx1013Wave32TessVsPsState *state);
 int32_t PS5_SYSV_ABI agcGfx1013BindWave32TessVsPs(

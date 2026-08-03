@@ -470,6 +470,13 @@ and explicit host/graphics/compute ownership. Applications never supply cache
 control words. The runtime maps supported requests to the qualified gfx1013
 release/flush and acquire/invalidate sequence.
 
+`agcCmdMemoryBarrier` covers global dependencies that do not identify a
+resource or one destination usage. On a graphics command buffer it flushes
+color and depth metadata, performs an EOP data/cache release, and follows it
+with a full GPU-cache acquire. It deliberately leaves every resource's typed
+state unchanged. Compute-queue global barriers remain fail-closed until their
+separate packet contract is qualified.
+
 The initial v1 implementation accepted whole buffers and complete image
 mip/layer/aspect ranges. Runtime API v17 extends buffer transitions to bounded
 byte ranges. Internally, sorted contiguous intervals split on submission and

@@ -10778,6 +10778,44 @@ int32_t PS5_SYSV_ABI agcCmdTransitionResources(
     return AGC_OK;
 }
 
+int32_t PS5_SYSV_ABI agcCmdMemoryBarrier(AgcCommandBuffer command_buffer)
+{
+    int32_t result;
+
+    if (!command_buffer || command_buffer->magic != AGC_MAGIC_COMMAND_BUFFER ||
+        !agcDeviceValid(command_buffer->device))
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (command_buffer->state != AGC_COMMAND_BUFFER_STATE_RECORDING)
+        return agcDebugReport(command_buffer->device,
+            AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
+            AGC_DEBUG_MESSAGE_CATEGORY_OBJECT_STATE_BIT,
+            AGC_ERROR_INVALID_ARGUMENT, "agcCmdMemoryBarrier",
+            AGC_OBJECT_TYPE_COMMAND_BUFFER,
+            command_buffer->allocation->debug_name,
+            "memory barriers require a Recording command buffer");
+    if (command_buffer->queue_type != kAgcQueueGraphics)
+        return agcDebugReport(command_buffer->device,
+            AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
+            AGC_DEBUG_MESSAGE_CATEGORY_CAPABILITY_BIT,
+            AGC_ERROR_NOT_SUPPORTED, "agcCmdMemoryBarrier",
+            AGC_OBJECT_TYPE_COMMAND_BUFFER,
+            command_buffer->allocation->debug_name,
+            "global attachment-cache barriers require a graphics queue");
+    result = agcGfx1013GlobalMemoryBarrier(&command_buffer->cursor);
+    if (result != AGC_OK)
+        return agcDebugReport(command_buffer->device,
+            AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
+            result == AGC_ERROR_BUFFER_TOO_SMALL ?
+                AGC_DEBUG_MESSAGE_CATEGORY_COMMAND_CAPACITY_BIT :
+                AGC_DEBUG_MESSAGE_CATEGORY_SYNCHRONIZATION_BIT,
+            result == AGC_ERROR_BUFFER_TOO_SMALL ?
+                AGC_ERROR_COMMAND_SPACE_EXHAUSTED : result,
+            "agcCmdMemoryBarrier", AGC_OBJECT_TYPE_COMMAND_BUFFER,
+            command_buffer->allocation->debug_name,
+            "global memory dependency packet emission failed");
+    return AGC_OK;
+}
+
 int32_t PS5_SYSV_ABI agcCmdCopyBuffer(AgcCommandBuffer command_buffer,
     AgcBuffer source, uint64_t source_offset, AgcBuffer destination,
     uint64_t destination_offset, uint64_t size)

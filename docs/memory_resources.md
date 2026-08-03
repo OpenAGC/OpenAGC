@@ -127,6 +127,10 @@ contract accepts complete buffers and complete image ranges only, and publishes
 their new state only after submit succeeds. See `native_runtime.md` for the
 supported usage/ownership matrix and current fail-closed limits.
 
+Global graphics dependencies that name no resource use `agcCmdMemoryBarrier`;
+the runtime emits its conservative attachment/data flush and GPU-cache acquire
+through the same public command path.
+
 `agcCmdUpdateBuffer` embeds caller bytes in the recorded stream, while
 `agcCmdFillBuffer` embeds a repeated 32-bit value. Both operate only on
 four-byte-aligned, nonempty, in-bounds ranges that have been transitioned to

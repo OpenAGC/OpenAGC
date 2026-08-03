@@ -1349,6 +1349,24 @@ int32_t PS5_SYSV_ABI agcGfx1013TransitionResource(
     return AGC_OK;
 }
 
+int32_t PS5_SYSV_ABI agcGfx1013GlobalMemoryBarrier(SceAgcCb *cb)
+{
+    if (!cb)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (agcCbRemainingDwords(cb) <
+        AGC_GFX1013_GLOBAL_MEMORY_BARRIER_DWORDS)
+        return AGC_ERROR_BUFFER_TOO_SMALL;
+    if (!sceAgcDcbEventWrite(cb, AGC_GFX1013_CB_META_FLUSH_EVENT, 0u) ||
+        !sceAgcDcbEventWrite(cb, AGC_GFX1013_DB_META_FLUSH_EVENT, 0u) ||
+        !sceAgcCbReleaseMem(cb, AGC_GFX1013_EOP_CACHE_FLUSH_EVENT,
+            AGC_GFX1013_EOP_GCR_CONTROL, 0u,
+            AGC_GFX1013_EOP_CACHE_POLICY_LRU, 0u, 0u, 0u,
+            0u, 0u, 0u, 0u) ||
+        !sceAgcCbNop(cb, 2u) || !agcGfx1013EmitAcquireAll(cb))
+        return AGC_ERROR_INTERNAL;
+    return AGC_OK;
+}
+
 int32_t PS5_SYSV_ABI agcGfx1013SignalEopFence(
     SceAgcCb *cb, const AgcGfx1013EopFenceState *state)
 {

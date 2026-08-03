@@ -1731,6 +1731,10 @@ int32_t PS5_SYSV_ABI agcCmdBindDepthStencilTarget(
 int32_t PS5_SYSV_ABI agcCmdTransitionResources(
     AgcCommandBuffer command_buffer, uint32_t transition_count,
     const AgcResourceTransition *transitions);
+/* Records a conservative graphics-queue memory dependency without changing
+ * any resource's tracked typed state. It flushes color/depth metadata and
+ * data caches at EOP, then invalidates GPU caches before later commands. */
+int32_t PS5_SYSV_ABI agcCmdMemoryBarrier(AgcCommandBuffer command_buffer);
 /* Copies a four-byte-aligned buffer range after explicit CopySource and
  * CopyDestination transitions establish ownership on this command buffer's
  * queue. Overlapping source/destination ranges are rejected. */
