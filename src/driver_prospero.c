@@ -139,6 +139,71 @@ extern int32_t sceKernelSetProcessProperty(
     const char *name, const void *addr, size_t len,
     uint64_t reserved0, uint64_t reserved1);
 
+static int32_t agcProsperoVmMapNamedSystemFlexibleMemory(
+    void **addr, size_t size, int type, int flags, const char *name)
+{
+    int32_t result;
+    kernel_vm_operation_lock();
+    result = sceKernelMapNamedSystemFlexibleMemory(
+        addr, size, type, flags, name);
+    kernel_vm_operation_unlock();
+    return result;
+}
+
+static int32_t agcProsperoVmReleaseFlexibleMemory(void *addr, size_t len)
+{
+    int32_t result;
+    kernel_vm_operation_lock();
+    result = sceKernelReleaseFlexibleMemory(addr, len);
+    kernel_vm_operation_unlock();
+    return result;
+}
+
+static int32_t agcProsperoVmMunmap(void *addr, size_t len)
+{
+    int32_t result;
+    kernel_vm_operation_lock();
+    result = sceKernelMunmap(addr, len);
+    kernel_vm_operation_unlock();
+    return result;
+}
+
+static int32_t agcProsperoVmAllocateDirectMemory(
+    int64_t search_start, int64_t search_end, size_t length,
+    uint64_t alignment, int memory_type, off_t *physical_address)
+{
+    int32_t result;
+    kernel_vm_operation_lock();
+    result = sceKernelAllocateDirectMemory(
+        search_start, search_end, length, alignment, memory_type,
+        physical_address);
+    kernel_vm_operation_unlock();
+    return result;
+}
+
+static int32_t agcProsperoVmMapNamedDirectMemory(
+    void **virtual_address, size_t length, int protection, int flags,
+    off_t physical_address, uint64_t alignment, const char *name)
+{
+    int32_t result;
+    kernel_vm_operation_lock();
+    result = sceKernelMapNamedDirectMemory(
+        virtual_address, length, protection, flags, physical_address,
+        alignment, name);
+    kernel_vm_operation_unlock();
+    return result;
+}
+
+static int32_t agcProsperoVmReleaseDirectMemory(
+    off_t physical_address, size_t length)
+{
+    int32_t result;
+    kernel_vm_operation_lock();
+    result = sceKernelReleaseDirectMemory(physical_address, length);
+    kernel_vm_operation_unlock();
+    return result;
+}
+
 /* Named internal memory region allocated by agcProsperoInitializeInternalMemory */
 typedef struct {
     void    *cpu_addr;
@@ -479,7 +544,7 @@ static int32_t agcProsperoAllocRegion(AgcProsperoRegion *region,
     /* Use sceKernelMapNamedSystemFlexibleMemory (matches SPRX behavior).
      * The SPRX passes type=0x33 for GPU regions, type=3 for SceGnmGpuInfo. */
     void *addr = (void *)address_hint;
-    int32_t ret = sceKernelMapNamedSystemFlexibleMemory(
+    int32_t ret = agcProsperoVmMapNamedSystemFlexibleMemory(
         &addr, size, mem_type, 0, name);
     if (ret != 0 || !addr) {
         printf("    [alloc] flexible mem ret=%d (size=0x%zx type=%d name=%s)\n",
@@ -506,8 +571,8 @@ static void agcProsperoFreeRegion(AgcProsperoRegion *region)
         return;
 
     if (region->cpu_addr &&
-        sceKernelReleaseFlexibleMemory(region->cpu_addr, region->size) != 0)
-        sceKernelMunmap(region->cpu_addr, region->size);
+        agcProsperoVmReleaseFlexibleMemory(region->cpu_addr, region->size) != 0)
+        agcProsperoVmMunmap(region->cpu_addr, region->size);
 
     memset(region, 0, sizeof(*region));
 }
@@ -525,7 +590,7 @@ static int32_t agcProsperoAllocateDriverMemory(void)
     if (region->cpu_addr)
         return AGC_OK;
 
-    result = sceKernelAllocateDirectMemory(0,
+    result = agcProsperoVmAllocateDirectMemory(0,
         (int64_t)sceKernelGetDirectMemorySize(),
         AGC_GC_DRIVER_MEMORY_SIZE, AGC_GC_DRIVER_MEMORY_ALIGNMENT,
         AGC_GC_DRIVER_MEMORY_TYPE, &physical_address);
@@ -533,11 +598,11 @@ static int32_t agcProsperoAllocateDriverMemory(void)
         return AGC_ERROR_OUT_OF_MEMORY;
 
     address = (void *)(uintptr_t)AGC_GC_DRIVER_MEMORY_ADDRESS_HINT;
-    result = sceKernelMapNamedDirectMemory(&address,
+    result = agcProsperoVmMapNamedDirectMemory(&address,
         AGC_GC_DRIVER_MEMORY_SIZE, AGC_GC_DRIVER_MEMORY_PROT, 0,
         physical_address, AGC_GC_DRIVER_MEMORY_ALIGNMENT, "SceAgcDriver");
     if (result != 0 || !address) {
-        (void)sceKernelReleaseDirectMemory(physical_address,
+        (void)agcProsperoVmReleaseDirectMemory(physical_address,
             AGC_GC_DRIVER_MEMORY_SIZE);
         return AGC_ERROR_OUT_OF_MEMORY;
     }
@@ -557,8 +622,8 @@ static void agcProsperoFreeDriverMemory(void)
     if (!region->size)
         return;
     if (region->cpu_addr)
-        (void)sceKernelMunmap(region->cpu_addr, region->size);
-    (void)sceKernelReleaseDirectMemory(region->physical_addr, region->size);
+        (void)agcProsperoVmMunmap(region->cpu_addr, region->size);
+    (void)agcProsperoVmReleaseDirectMemory(region->physical_addr, region->size);
     memset(region, 0, sizeof(*region));
 }
 

@@ -9,6 +9,25 @@ runtime. `PLAN.md` is the authoritative forward roadmap; chronological entries
 below remain qualification evidence and may describe a gate that a later entry
 closes.
 
+### Eden process-VM serialization (2026-08-03)
+
+The Prospero memory backend now brackets every production direct
+`sceKernelMap*`, `sceKernelMunmap`, and flexible/direct release operation with
+the process-wide, bootstrap-safe VM-operation lock exported by the pinned
+payload SDK. This covers `src/memory.c` resource allocations and
+`src/driver_prospero.c` internal/driver regions; ordinary `/dev/gc` MMIO
+`mmap`/`munmap` is serialized by the same SDK libc. Lock scopes contain only
+the mapping call, never GPU submission, presentation, logging, or callbacks.
+The lock is cooperative and protects participating Eden/OpenAGC/SDK paths; it
+does not claim to replace an unavailable kernel `vm_map` lock.
+
+The generic library and core test executable build, and `openagc_all_tests`
+passes. Four reference-game CTest entries currently fail in pre-existing,
+uncommitted shader-artifact work with `AGC_ERROR_SHADER_INVALID`; that work is
+outside this Prospero-only change. A separate Prospero build completes cleanly
+with `-Wall -Wextra -Wpedantic`. Hardware qualification remains pending the
+cleanup-first concurrent JIT/map stress gate.
+
 The public runtime now reports 1x/4x depth sample counts and emits 4x sampled
 D16, D32, and S8 image views with their scalar SQ resource formats and
 `64KB_Z_X` swizzle. The descriptor encoder accepts the hardware depth swizzle

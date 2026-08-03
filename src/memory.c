@@ -6,6 +6,10 @@
 #include <string.h>
 #include <time.h>
 
+#if defined(OPENAGC_PROSPERO)
+#include <ps5/kernel.h>
+#endif
+
 #define AGC_FLEXIBLE_PAGE_SIZE 0x4000u
 #define AGC_DIRECT_ALIGNMENT 0x200000u
 #define AGC_DIRECT_SEARCH_END 0x300000000ll
@@ -25,6 +29,71 @@ extern int32_t sceKernelMapDirectMemory(
     int64_t physical_address, uint64_t alignment);
 extern int32_t sceKernelReleaseDirectMemory(
     int64_t physical_address, size_t length);
+
+static int32_t agcVmMapNamedSystemFlexibleMemory(
+    void **addr, size_t size, int type, int flags, const char *name)
+{
+    int32_t result;
+    kernel_vm_operation_lock();
+    result = sceKernelMapNamedSystemFlexibleMemory(
+        addr, size, type, flags, name);
+    kernel_vm_operation_unlock();
+    return result;
+}
+
+static int32_t agcVmMunmap(void *addr, size_t len)
+{
+    int32_t result;
+    kernel_vm_operation_lock();
+    result = sceKernelMunmap(addr, len);
+    kernel_vm_operation_unlock();
+    return result;
+}
+
+static int32_t agcVmReleaseFlexibleMemory(void *addr, size_t len)
+{
+    int32_t result;
+    kernel_vm_operation_lock();
+    result = sceKernelReleaseFlexibleMemory(addr, len);
+    kernel_vm_operation_unlock();
+    return result;
+}
+
+static int32_t agcVmAllocateDirectMemory(
+    int64_t search_start, int64_t search_end, size_t length,
+    uint64_t alignment, int memory_type, int64_t *physical_address)
+{
+    int32_t result;
+    kernel_vm_operation_lock();
+    result = sceKernelAllocateDirectMemory(
+        search_start, search_end, length, alignment, memory_type,
+        physical_address);
+    kernel_vm_operation_unlock();
+    return result;
+}
+
+static int32_t agcVmMapDirectMemory(
+    void **virtual_address, size_t length, int protection, int flags,
+    int64_t physical_address, uint64_t alignment)
+{
+    int32_t result;
+    kernel_vm_operation_lock();
+    result = sceKernelMapDirectMemory(
+        virtual_address, length, protection, flags, physical_address,
+        alignment);
+    kernel_vm_operation_unlock();
+    return result;
+}
+
+static int32_t agcVmReleaseDirectMemory(
+    int64_t physical_address, size_t length)
+{
+    int32_t result;
+    kernel_vm_operation_lock();
+    result = sceKernelReleaseDirectMemory(physical_address, length);
+    kernel_vm_operation_unlock();
+    return result;
+}
 #endif
 
 static int32_t agcGpuMemoryValidateRange(
@@ -53,7 +122,7 @@ int32_t PS5_SYSV_ABI agcGpuMemoryAllocateFlexible(
         ~(size_t)(AGC_FLEXIBLE_PAGE_SIZE - 1u);
 
 #if defined(OPENAGC_PROSPERO)
-    if (sceKernelMapNamedSystemFlexibleMemory(
+    if (agcVmMapNamedSystemFlexibleMemory(
             &address, mapped_size, 0x33, 0,
             name ? name : "openagc_gpu") != 0 || !address)
         return AGC_ERROR_OUT_OF_MEMORY;
@@ -64,7 +133,7 @@ int32_t PS5_SYSV_ABI agcGpuMemoryAllocateFlexible(
 #endif
     if (((uintptr_t)address & (alignment - 1u)) != 0u) {
 #if defined(OPENAGC_PROSPERO)
-        sceKernelMunmap(address, mapped_size);
+        agcVmMunmap(address, mapped_size);
 #else
         free(address);
 #endif
@@ -83,9 +152,9 @@ void PS5_SYSV_ABI agcGpuMemoryFreeFlexible(AgcGpuMemory *memory)
     if (!memory) return;
     if (memory->cpu_address && memory->mapped_size) {
 #if defined(OPENAGC_PROSPERO)
-        if (sceKernelReleaseFlexibleMemory(
+        if (agcVmReleaseFlexibleMemory(
                 memory->cpu_address, memory->mapped_size) != 0)
-            sceKernelMunmap(memory->cpu_address, memory->mapped_size);
+            agcVmMunmap(memory->cpu_address, memory->mapped_size);
 #else
         free(memory->cpu_address);
 #endif
@@ -110,14 +179,14 @@ int32_t PS5_SYSV_ABI agcGpuMemoryAllocateDirectWriteCombined(
     mapped_size = (size + alignment - 1u) & ~(alignment - 1u);
 
 #if defined(OPENAGC_PROSPERO)
-    if (sceKernelAllocateDirectMemory(
+    if (agcVmAllocateDirectMemory(
             0, AGC_DIRECT_SEARCH_END, mapped_size, alignment, 3,
             &physical) != 0)
         return AGC_ERROR_OUT_OF_MEMORY;
-    if (sceKernelMapDirectMemory(
+    if (agcVmMapDirectMemory(
             &address, mapped_size, 0x33, 0, physical, alignment) != 0 ||
         !address) {
-        sceKernelReleaseDirectMemory(physical, mapped_size);
+        agcVmReleaseDirectMemory(physical, mapped_size);
         return AGC_ERROR_OUT_OF_MEMORY;
     }
 #else
@@ -138,8 +207,8 @@ void PS5_SYSV_ABI agcGpuMemoryFreeDirect(AgcGpuMemory *memory)
     if (!memory) return;
     if (memory->cpu_address && memory->mapped_size) {
 #if defined(OPENAGC_PROSPERO)
-        sceKernelMunmap(memory->cpu_address, memory->mapped_size);
-        sceKernelReleaseDirectMemory(
+        agcVmMunmap(memory->cpu_address, memory->mapped_size);
+        agcVmReleaseDirectMemory(
             memory->physical_offset, memory->mapped_size);
 #else
         free(memory->cpu_address);
