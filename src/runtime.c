@@ -1371,6 +1371,25 @@ static uint64_t agcAllocationGpuAddress(const AgcRuntimeAllocation *allocation)
     return allocation->block->memory.gpu_address + allocation->offset;
 }
 
+/* Generic-host captures use host virtual addresses and do not execute the
+ * compiled shader ABI.  On Prospero every address32 user SGPR must retain the
+ * compiler's fixed high dword; reject mismatches before writing a PM4 value. */
+static int32_t agcRuntimeAddress32Value(uint64_t base, uint64_t offset,
+    uint32_t *value)
+{
+    uint64_t address;
+
+    if (!value || offset > UINT64_MAX - base)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    address = base + offset;
+#if defined(OPENAGC_PROSPERO)
+    if (agcRuntimeValidateAddress32(address) != AGC_OK)
+        return AGC_ERROR_NOT_SUPPORTED;
+#endif
+    *value = (uint32_t)address;
+    return AGC_OK;
+}
+
 static void *agcBufferCpuAddress(const AgcBuffer buffer)
 {
     return (uint8_t *)agcAllocationCpuAddress(buffer->allocation) +
@@ -7959,6 +7978,53 @@ static void agcReleaseCommandReferences(AgcCommandBuffer command_buffer)
     command_buffer->resource_allocation = NULL;
 }
 
+static int32_t agcValidateCommandResourceAddress32Layout(uint64_t gpu_base,
+    const AgcRuntimePipelineResourceLayout *layout)
+{
+    uint32_t ignored_value;
+    uint32_t i;
+    int32_t result;
+
+    if (!layout)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (layout->uses_indirect_set_table) {
+        result = agcRuntimeAddress32Value(gpu_base,
+            layout->indirect_set_table_offset, &ignored_value);
+        if (result != AGC_OK)
+            return result;
+    }
+    for (i = 0u; i < 8u; ++i) {
+        if ((layout->set_mask & (1u << i)) == 0u)
+            continue;
+        result = agcRuntimeAddress32Value(gpu_base, layout->set_offsets[i],
+            &ignored_value);
+        if (result != AGC_OK)
+            return result;
+    }
+    if (layout->vertex_binding_mask != 0u) {
+        result = agcRuntimeAddress32Value(gpu_base,
+            layout->vertex_table_offset, &ignored_value);
+        if (result != AGC_OK)
+            return result;
+    }
+    for (i = 0u; i < kAgcShaderStageCount; ++i) {
+        uint64_t stage_offset;
+
+        if (layout->push_constant_size == 0u)
+            break;
+        if (i > 0u && layout->push_constant_stride >
+                (UINT64_MAX - layout->push_constant_offset) / i)
+            return AGC_ERROR_INVALID_ARGUMENT;
+        stage_offset = layout->push_constant_offset +
+            (uint64_t)i * layout->push_constant_stride;
+        result = agcRuntimeAddress32Value(gpu_base, stage_offset,
+            &ignored_value);
+        if (result != AGC_OK)
+            return result;
+    }
+    return AGC_OK;
+}
+
 static int32_t agcPrepareCommandResources(AgcCommandBuffer command_buffer,
     const AgcRuntimePipelineResourceLayout *layout)
 {
@@ -7981,15 +8047,25 @@ static int32_t agcPrepareCommandResources(AgcCommandBuffer command_buffer,
         return result;
     cpu_base = agcAllocationCpuAddress(allocation);
     gpu_base = agcAllocationGpuAddress(allocation);
+    result = agcValidateCommandResourceAddress32Layout(gpu_base, layout);
+    if (result != AGC_OK) {
+        agcRuntimeFree(command_buffer->device, allocation);
+        return result;
+    }
     memset(cpu_base, 0, (size_t)layout->total_size);
     if (layout->uses_indirect_set_table) {
         uint32_t *set_addresses = (uint32_t *)(void *)(cpu_base +
             layout->indirect_set_table_offset);
         uint32_t i;
         for (i = 0u; i < 8u; ++i) {
-            if ((layout->set_mask & (1u << i)) != 0u)
-                set_addresses[i] = (uint32_t)(gpu_base +
-                    layout->set_offsets[i]);
+            if ((layout->set_mask & (1u << i)) != 0u) {
+                result = agcRuntimeAddress32Value(gpu_base,
+                    layout->set_offsets[i], &set_addresses[i]);
+                if (result != AGC_OK) {
+                    agcRuntimeFree(command_buffer->device, allocation);
+                    return result;
+                }
+            }
         }
         result = agcFlushRuntimeAllocation(allocation,
             layout->indirect_set_table_offset,
@@ -8030,8 +8106,14 @@ static int32_t agcSnapshotCommandResources(AgcCommandBuffer command_buffer,
             layout->indirect_set_table_offset);
         uint32_t i;
         for (i = 0u; i < 8u; ++i) {
-            set_addresses[i] = (layout->set_mask & (1u << i)) != 0u ?
-                (uint32_t)(gpu_base + layout->set_offsets[i]) : 0u;
+            if ((layout->set_mask & (1u << i)) == 0u) {
+                set_addresses[i] = 0u;
+                continue;
+            }
+            result = agcRuntimeAddress32Value(gpu_base,
+                layout->set_offsets[i], &set_addresses[i]);
+            if (result != AGC_OK)
+                return result;
         }
     }
     result = agcFlushRuntimeAllocation(command_buffer->resource_allocation,
@@ -12091,22 +12173,26 @@ static int32_t agcCommandUserSgprValue(AgcCommandBuffer command_buffer,
         if (!command_buffer->descriptors_bound || !gpu_base ||
             (layout->set_mask & (1u << sgpr->index)) == 0u)
             return AGC_ERROR_RESOURCE_NOT_BOUND;
-        *value = (uint32_t)(gpu_base + layout->set_offsets[sgpr->index]);
-        return AGC_OK;
+        return agcRuntimeAddress32Value(gpu_base,
+            layout->set_offsets[sgpr->index], value);
     case AGC_SHADER_USER_SGPR_INDIRECT_DESCRIPTOR_SETS:
         if (!gpu_base || !layout->uses_indirect_set_table ||
             (layout->set_mask != 0u &&
              !command_buffer->descriptors_bound))
             return AGC_ERROR_RESOURCE_NOT_BOUND;
-        *value = (uint32_t)(gpu_base +
-            layout->indirect_set_table_offset);
-        return AGC_OK;
+        return agcRuntimeAddress32Value(gpu_base,
+            layout->indirect_set_table_offset, value);
     case AGC_SHADER_USER_SGPR_PUSH_CONSTANT_POINTER:
         if (!gpu_base || layout->push_constant_size == 0u)
             return AGC_ERROR_RESOURCE_NOT_BOUND;
-        *value = (uint32_t)(gpu_base + layout->push_constant_offset +
-            (uint64_t)shader->stage * layout->push_constant_stride);
-        return AGC_OK;
+        if (shader->stage > 0u && layout->push_constant_stride >
+                (UINT64_MAX - layout->push_constant_offset) /
+                    shader->stage)
+            return AGC_ERROR_INVALID_ARGUMENT;
+        return agcRuntimeAddress32Value(gpu_base,
+            layout->push_constant_offset +
+                (uint64_t)shader->stage * layout->push_constant_stride,
+            value);
     case AGC_SHADER_USER_SGPR_INLINE_PUSH_CONSTANT:
         if (!cpu_base || sgpr->index >= 64u ||
             (command_buffer->push_constant_masks[shader->stage] &
@@ -12129,8 +12215,8 @@ static int32_t agcCommandUserSgprValue(AgcCommandBuffer command_buffer,
         if (!gpu_base || command_buffer->vertex_binding_mask !=
                 layout->vertex_binding_mask)
             return AGC_ERROR_RESOURCE_NOT_BOUND;
-        *value = (uint32_t)(gpu_base + layout->vertex_table_offset);
-        return AGC_OK;
+        return agcRuntimeAddress32Value(gpu_base,
+            layout->vertex_table_offset, value);
     case AGC_SHADER_USER_SGPR_BASE_VERTEX:
         *value = (uint32_t)vertex_offset;
         return AGC_OK;

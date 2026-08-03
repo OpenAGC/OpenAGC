@@ -9105,6 +9105,18 @@ static void test_runtime_indirect_descriptor_set_table(void)
         "indirect descriptor device destroys");
 }
 
+static void test_runtime_address32_shader_pointer_guard(void)
+{
+    const uint64_t qualified = UINT64_C(0x0000000201234500);
+    const uint64_t unqualified = UINT64_C(0x0000000301234500);
+
+    TEST_ASSERT_EQ(agcRuntimeValidateAddress32(qualified), AGC_OK,
+        "qualified address32 high dword is accepted before user-data emission");
+    TEST_ASSERT_EQ(agcRuntimeValidateAddress32(unqualified),
+        AGC_ERROR_NOT_SUPPORTED,
+        "unqualified address32 high dword is rejected before user-data emission");
+}
+
 static void test_runtime_primitive_restart_pipeline(void)
 {
     AgcDevice device = create_device();
@@ -12159,6 +12171,7 @@ void test_suite_runtime(void)
     TEST_RUN(test_runtime_pipeline_switching);
     TEST_RUN(test_runtime_pipeline_layout_and_stage_validation);
     TEST_RUN(test_runtime_indirect_descriptor_set_table);
+    TEST_RUN(test_runtime_address32_shader_pointer_guard);
     TEST_RUN(test_runtime_primitive_restart_pipeline);
     TEST_RUN(test_runtime_geometry_pipeline_bundle);
     TEST_RUN(test_runtime_tessellation_pipeline_bundles);
