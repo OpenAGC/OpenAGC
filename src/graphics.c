@@ -2940,7 +2940,7 @@ int32_t PS5_SYSV_ABI agcGfx1013SetViewportArray(
             !agcGfx1013FiniteFloat(viewport->height) ||
             !agcGfx1013FiniteFloat(viewport->min_depth) ||
             !agcGfx1013FiniteFloat(viewport->max_depth) ||
-            !(viewport->width > 0.0f) || !(viewport->height > 0.0f) ||
+            !(viewport->width > 0.0f) || viewport->height == 0.0f ||
             !(viewport->min_depth >= 0.0f) ||
             !(viewport->max_depth <= 1.0f) ||
             viewport->min_depth > viewport->max_depth ||

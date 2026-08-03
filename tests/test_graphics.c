@@ -2443,6 +2443,18 @@ static void test_gfx1013_viewport_array_packets(void)
     TEST_ASSERT(memcmp(buffer, expected, sizeof(expected)) == 0,
         "gfx1013 viewport array exact packet stream");
 
+    state.viewports[1].y = 480.0f;
+    state.viewports[1].height = -480.0f;
+    agcCbReset(&cb, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(agcGfx1013SetViewportArray(&cb, &state), AGC_OK,
+        "gfx1013 viewport array accepts inverted Y extent");
+    TEST_ASSERT_EQ(buffer[10], 0xc3700000u,
+        "gfx1013 inverted viewport emits negative Y scale");
+    TEST_ASSERT_EQ(buffer[11], 0x43700000u,
+        "gfx1013 inverted viewport preserves Y center");
+    state.viewports[1].y = 0.0f;
+    state.viewports[1].height = 480.0f;
+
     memset(short_buffer, 0xa5, sizeof(short_buffer));
     agcCbInit(&cb, short_buffer, sizeof(short_buffer));
     TEST_ASSERT_EQ(agcGfx1013SetViewportArray(&cb, &state),

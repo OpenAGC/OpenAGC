@@ -12720,7 +12720,7 @@ int32_t PS5_SYSV_ABI agcCmdSetViewport(
         !agcRuntimeFloatFinite(viewport->height) ||
         !agcRuntimeFloatFinite(viewport->min_depth) ||
         !agcRuntimeFloatFinite(viewport->max_depth) ||
-        !(viewport->width > 0.0f) || !(viewport->height > 0.0f) ||
+        !(viewport->width > 0.0f) || viewport->height == 0.0f ||
         !(viewport->min_depth >= 0.0f) ||
         !(viewport->max_depth <= 1.0f) ||
         viewport->min_depth > viewport->max_depth)
@@ -12821,7 +12821,7 @@ int32_t PS5_SYSV_ABI agcCmdSetViewportScissors(
             !agcRuntimeFloatFinite(viewport->height) ||
             !agcRuntimeFloatFinite(viewport->min_depth) ||
             !agcRuntimeFloatFinite(viewport->max_depth) ||
-            !(viewport->width > 0.0f) || !(viewport->height > 0.0f) ||
+            !(viewport->width > 0.0f) || viewport->height == 0.0f ||
             !(viewport->min_depth >= 0.0f) ||
             !(viewport->max_depth <= 1.0f) ||
             viewport->min_depth > viewport->max_depth ||

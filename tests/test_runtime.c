@@ -7284,6 +7284,12 @@ static void test_runtime_dynamic_graphics_state(void)
     scissor.height = 720u;
     TEST_ASSERT_EQ(agcCmdSetViewport(command, &viewport), AGC_OK,
         "valid viewport records");
+    viewport.y = 720.0f;
+    viewport.height = -720.0f;
+    TEST_ASSERT_EQ(agcCmdSetViewport(command, &viewport), AGC_OK,
+        "inverted Y viewport records");
+    viewport.y = 0.0f;
+    viewport.height = 720.0f;
     TEST_ASSERT_EQ(agcCmdSetScissor(command, &scissor), AGC_OK,
         "valid scissor records");
     scissor.width = 0u;
@@ -7297,13 +7303,15 @@ static void test_runtime_dynamic_graphics_state(void)
     viewport_array[1] = viewport;
     viewport_array[1].x = 640.0f;
     viewport_array[1].width = 640.0f;
+    viewport_array[1].y = 720.0f;
+    viewport_array[1].height = -720.0f;
     scissor_array[0] = scissor;
     scissor_array[1] = scissor;
     scissor_array[1].x = 640;
     scissor_array[1].width = 640u;
     TEST_ASSERT_EQ(agcCmdSetViewportScissors(command, 2u,
         viewport_array, scissor_array), AGC_OK,
-        "two viewport/scissor pairs record atomically");
+        "two viewport/scissor pairs including inverted Y record atomically");
     TEST_ASSERT_EQ(agcCmdSetBlendConstants(command, blend_constants), AGC_OK,
         "valid blend constants record");
     TEST_ASSERT_EQ(agcCmdSetStencilReference(command, 3u, 7u), AGC_OK,
