@@ -13,6 +13,7 @@
 #include "agc_pm4.h"
 #include "agc_registers.h"
 #include "agc_texture.h"
+#include "agc_videoout.h"
 #include "openagc/capture.h"
 #include "openagc/runtime.h"
 #include "runtime_profile.h"
@@ -10912,6 +10913,18 @@ static void test_runtime_present_chain(void)
         "second present image creates");
     present_desc.image_count = 2u;
     present_desc.images = images;
+    agcVideoOutDebugSetNextCloseResult(AGC_ERROR_INTERNAL);
+    agcVideoOutDebugSetNextOpenResult(AGC_ERROR_NOT_SUPPORTED);
+    TEST_ASSERT_EQ(agcCreatePresentChain(device, &present_desc,
+        &present_chain), AGC_ERROR_INTERNAL,
+        "partial present open returns its retained teardown owner");
+    TEST_ASSERT(present_chain != NULL,
+        "partial present open exposes its quarantined chain");
+    TEST_ASSERT_EQ(agcDestroyImage(images[0]), AGC_ERROR_BUSY,
+        "partial present open retains registered image ownership");
+    TEST_ASSERT_EQ(agcDestroyPresentChain(present_chain), AGC_OK,
+        "partial present open retries checked teardown");
+    present_chain = NULL;
     TEST_ASSERT_EQ(agcCreatePresentChain(device, &present_desc,
         &present_chain), AGC_OK, "present chain registers opaque image");
     TEST_ASSERT_EQ(agcDestroyImage(images[0]), AGC_ERROR_BUSY,
@@ -10985,6 +10998,11 @@ static void test_runtime_present_chain(void)
     TEST_ASSERT_EQ(agcPresent(present_chain, 0u, 3u, fence,
         UINT64_C(1000000)), AGC_ERROR_INVALID_STATE,
         "retiring present image rejects new flips");
+    agcVideoOutDebugSetNextCloseResult(AGC_ERROR_INTERNAL);
+    TEST_ASSERT_EQ(agcDestroyPresentChain(present_chain), AGC_ERROR_INTERNAL,
+        "present chain preserves ownership after VideoOut teardown failure");
+    TEST_ASSERT_EQ(agcDestroyImage(images[1]), AGC_ERROR_BUSY,
+        "failed VideoOut teardown retains registered image dependency");
     TEST_ASSERT_EQ(agcDestroyPresentChain(present_chain), AGC_OK,
         "present chain releases registered image");
     TEST_ASSERT_EQ(agcCollectDeferredFrees(device), AGC_OK,

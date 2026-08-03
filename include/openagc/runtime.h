@@ -1664,7 +1664,11 @@ int32_t PS5_SYSV_ABI agcDestroyImageDeferred(
     AgcImage image, AgcFence fence);
 /* Creates a main-display chain from dedicated runtime images. Images must use
  * AGC_IMAGE_USAGE_SCANOUT_BIT; dimensions and pitch are validated against the
- * firmware-neutral default VideoOut mode. The chain retains every image. */
+ * firmware-neutral default VideoOut mode. The chain retains every image.
+ * If setup fails after VideoOut has registered caller memory and rollback also
+ * fails, this function returns the teardown error with a non-NULL chain. The
+ * caller must retain all images/device ownership and retry
+ * agcDestroyPresentChain; it must not free registered memory on that error. */
 int32_t PS5_SYSV_ABI agcCreatePresentChain(AgcDevice device,
     const AgcPresentChainDesc *desc, AgcPresentChain *present_chain_out);
 int32_t PS5_SYSV_ABI agcDestroyPresentChain(

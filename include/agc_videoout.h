@@ -51,8 +51,19 @@ int32_t PS5_SYSV_ABI agcVideoOutPresent(
     AgcVideoOut *video_out, uint32_t buffer_index, uint64_t frame_id,
     uint64_t timeout_us);
 
-/* Unregisters display state.  Caller-owned buffer memory is never released. */
+/* Unregisters display state and reports any teardown failure.  Caller-owned
+ * buffer memory is never released. */
+int32_t PS5_SYSV_ABI agcVideoOutCloseChecked(AgcVideoOut *video_out);
+
+/* Compatibility wrapper.  New ownership-sensitive code must use the checked
+ * form before releasing registered buffer memory. */
 void PS5_SYSV_ABI agcVideoOutClose(AgcVideoOut *video_out);
+
+#ifdef OPENAGC_GENERIC
+/* Host-test fault injection; absent from the Prospero backend. */
+void agcVideoOutDebugSetNextCloseResult(int32_t result);
+void agcVideoOutDebugSetNextOpenResult(int32_t result);
+#endif
 
 #ifdef __cplusplus
 }

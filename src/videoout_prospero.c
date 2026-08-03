@@ -8,6 +8,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -41,6 +42,7 @@ int32_t sceVideoOutOpen(int32_t, int32_t, int32_t, const void *);
 int32_t sceVideoOutClose(int32_t);
 int32_t sceVideoOutRegisterBuffers(int32_t, int32_t, void *const *, int32_t,
                                    const SceVideoOutBufferAttribute *);
+int32_t sceVideoOutUnregisterBuffers(int32_t, int32_t);
 int32_t sceVideoOutSetFlipRate(int32_t, int32_t);
 int32_t sceVideoOutSubmitFlip(int32_t, int32_t, int32_t, int64_t);
 int32_t sceVideoOutAddFlipEvent(void *, int32_t, void *);
@@ -54,6 +56,7 @@ struct AgcVideoOut {
     SceKernelEqueue flip_queue;
     uint32_t buffer_count;
     bool event_added;
+    bool buffers_registered;
 };
 
 static int32_t validate_create_info(const AgcVideoOutCreateInfo *info)
@@ -176,6 +179,7 @@ int32_t agcVideoOutOpen(const AgcVideoOutCreateInfo *info,
         err = AGC_ERROR_NOT_SUPPORTED;
         goto fail;
     }
+    result->buffers_registered = true;
     if (restore_result != AGC_OK) {
         err = restore_result;
         goto fail;
@@ -200,7 +204,13 @@ int32_t agcVideoOutOpen(const AgcVideoOutCreateInfo *info,
     return AGC_OK;
 
 fail:
-    agcVideoOutClose(result);
+    {
+        const int32_t close_result = agcVideoOutCloseChecked(result);
+        if (close_result != AGC_OK) {
+            *video_out = result;
+            return close_result;
+        }
+    }
     return err;
 }
 
@@ -228,16 +238,43 @@ int32_t agcVideoOutPresent(AgcVideoOut *video_out, uint32_t buffer_index,
     return event_count == 1 ? AGC_OK : AGC_ERROR_TIMEOUT;
 }
 
-void agcVideoOutClose(AgcVideoOut *video_out)
+int32_t agcVideoOutCloseChecked(AgcVideoOut *video_out)
 {
     if (!video_out)
-        return;
-    if (video_out->event_added)
-        sceVideoOutDeleteFlipEvent((void *)(uintptr_t)video_out->flip_queue,
-                                   video_out->handle);
-    if (video_out->handle >= 0)
-        sceVideoOutClose(video_out->handle);
-    if (video_out->flip_queue)
-        sceKernelDeleteEqueue(video_out->flip_queue);
+        return AGC_OK;
+    if (video_out->event_added) {
+        if (sceVideoOutDeleteFlipEvent(
+                (void *)(uintptr_t)video_out->flip_queue,
+                video_out->handle) != 0)
+            return AGC_ERROR_INTERNAL;
+        video_out->event_added = false;
+    }
+    if (video_out->buffers_registered) {
+        if (sceVideoOutUnregisterBuffers(video_out->handle, 0) != 0)
+            return AGC_ERROR_INTERNAL;
+        video_out->buffers_registered = false;
+    }
+    if (video_out->handle >= 0) {
+        if (sceVideoOutClose(video_out->handle) != 0)
+            return AGC_ERROR_INTERNAL;
+        video_out->handle = -1;
+    }
+    if (video_out->flip_queue) {
+        if (sceKernelDeleteEqueue(video_out->flip_queue) != 0)
+            return AGC_ERROR_INTERNAL;
+        video_out->flip_queue = 0;
+    }
     free(video_out);
+    return AGC_OK;
+}
+
+void agcVideoOutClose(AgcVideoOut *video_out)
+{
+    const int32_t result = agcVideoOutCloseChecked(video_out);
+    if (result != AGC_OK) {
+        fprintf(stderr,
+            "openagc: VideoOut teardown failed before buffer release: 0x%08x\n",
+            (unsigned)result);
+        abort();
+    }
 }

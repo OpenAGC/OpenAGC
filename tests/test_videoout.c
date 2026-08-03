@@ -121,8 +121,10 @@ static void test_lifecycle(void)
         AGC_ERROR_TIMEOUT, "VideoOut zero timeout is bounded");
     TEST_ASSERT_EQ(agcVideoOutPresent(video_out, 0, 1, 1000), AGC_OK,
         "VideoOut presents a registered buffer");
-    agcVideoOutClose(video_out);
-    agcVideoOutClose(NULL);
+    TEST_ASSERT_EQ(agcVideoOutCloseChecked(video_out), AGC_OK,
+        "VideoOut checked close releases display ownership");
+    TEST_ASSERT_EQ(agcVideoOutCloseChecked(NULL), AGC_OK,
+        "VideoOut checked close accepts NULL");
 
     info.width = 1280;
     TEST_ASSERT_EQ(agcVideoOutOpen(&info, &video_out),

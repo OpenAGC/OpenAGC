@@ -4293,6 +4293,17 @@ int32_t PS5_SYSV_ABI agcCreatePresentChain(AgcDevice device,
     video_desc.format = AGC_VIDEO_OUT_FORMAT_BGRA8_SRGB;
     result = agcVideoOutOpen(&video_desc, &present_chain->video_out);
     if (result != AGC_OK) {
+        if (present_chain->video_out) {
+            present_chain->magic = AGC_MAGIC_PRESENT_CHAIN;
+            present_chain->device = device;
+            present_chain->image_count = desc->image_count;
+            for (i = 0u; i < desc->image_count; ++i) {
+                present_chain->images[i] = desc->images[i];
+                desc->images[i]->dependency_refs++;
+            }
+            *present_chain_out = present_chain;
+            return result;
+        }
         agcDestroyChild(device, present_chain);
         return result;
     }
@@ -4317,7 +4328,10 @@ int32_t PS5_SYSV_ABI agcDestroyPresentChain(
         !agcDeviceValid(present_chain->device))
         return AGC_ERROR_INVALID_ARGUMENT;
     device = present_chain->device;
-    agcVideoOutClose(present_chain->video_out);
+    int32_t result = agcVideoOutCloseChecked(present_chain->video_out);
+    if (result != AGC_OK)
+        return result;
+    present_chain->video_out = NULL;
     for (i = 0u; i < present_chain->image_count; ++i)
         present_chain->images[i]->dependency_refs--;
     present_chain->magic = 0u;

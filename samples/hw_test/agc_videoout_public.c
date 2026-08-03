@@ -135,6 +135,7 @@ int main(void)
     bool marker_ok = false;
     bool presentation_ok = false;
     bool success;
+    int32_t videoout_close_result = AGC_OK;
     int32_t shutdown_result = AGC_OK;
     int submit_release_result = 0;
     int unmap_result = 0;
@@ -252,24 +253,26 @@ int main(void)
         presentation_ok ? "PASS" : "FAIL");
 
 cleanup:
-    agcVideoOutClose(video_out);
+    videoout_close_result = agcVideoOutCloseChecked(video_out);
     if (driver_initialized)
         shutdown_result = agcDriverShutdown();
     if (submit_memory)
         submit_release_result = sceKernelReleaseFlexibleMemory(
             submit_memory, SUBMIT_MEMORY_SIZE);
-    if (display_mapping)
+    if (display_mapping && videoout_close_result == AGC_OK)
         unmap_result = munmap(display_mapping, display_size);
-    if (direct_memory >= 0)
+    if (direct_memory >= 0 && videoout_close_result == AGC_OK)
         direct_release_result = sceKernelReleaseDirectMemory(
             direct_memory, display_size);
-    printf("Public VideoOut cleanup: shutdown=0x%08x submit=0x%08x "
-           "unmap=0x%08x direct=0x%08x\n",
-        (unsigned)shutdown_result, (unsigned)submit_release_result,
+    printf("Public VideoOut cleanup: videoout=0x%08x shutdown=0x%08x "
+           "submit=0x%08x unmap=0x%08x direct=0x%08x\n",
+        (unsigned)videoout_close_result, (unsigned)shutdown_result,
+        (unsigned)submit_release_result,
         (unsigned)unmap_result, (unsigned)direct_release_result);
 
     success = runtime_ok && defaults_ok && async_ok && marker_ok &&
-        presentation_ok && shutdown_result == AGC_OK &&
+        presentation_ok && videoout_close_result == AGC_OK &&
+        shutdown_result == AGC_OK &&
         submit_release_result == 0 && unmap_result == 0 &&
         direct_release_result == 0;
 #ifdef AGC_PORTABILITY_GATE
