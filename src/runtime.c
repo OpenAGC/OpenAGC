@@ -447,6 +447,12 @@ struct AgcCommandBufferImpl {
     uint32_t resource_state_consumed;
     uint32_t vertex_binding_mask;
     uint32_t dynamic_state_set_mask;
+    uint32_t dynamic_stencil_reference_front;
+    uint32_t dynamic_stencil_reference_back;
+    uint32_t dynamic_stencil_compare_mask_front;
+    uint32_t dynamic_stencil_compare_mask_back;
+    uint32_t dynamic_stencil_write_mask_front;
+    uint32_t dynamic_stencil_write_mask_back;
     uint32_t view_index;
     uint32_t view_index_set;
     uint32_t color_target_count;
@@ -7232,7 +7238,10 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
         AGC_DYNAMIC_STATE_BLEND_CONSTANTS_BIT |
         AGC_DYNAMIC_STATE_STENCIL_REFERENCE_BIT |
         AGC_DYNAMIC_STATE_DEPTH_BIAS_BIT |
-        AGC_DYNAMIC_STATE_LINE_WIDTH_BIT;
+        AGC_DYNAMIC_STATE_LINE_WIDTH_BIT |
+        AGC_DYNAMIC_STATE_DEPTH_BOUNDS_BIT |
+        AGC_DYNAMIC_STATE_STENCIL_COMPARE_MASK_BIT |
+        AGC_DYNAMIC_STATE_STENCIL_WRITE_MASK_BIT;
     uint32_t i;
     uint32_t j;
     uint32_t tessellation_tcs_layout = 0u;
@@ -12824,14 +12833,67 @@ int32_t PS5_SYSV_ABI agcCmdSetBlendConstants(
     return result;
 }
 
-int32_t PS5_SYSV_ABI agcCmdSetStencilReference(
-    AgcCommandBuffer command_buffer, uint32_t front, uint32_t back)
+static int32_t agcCommandEmitDynamicStencilMasks(
+    AgcCommandBuffer command_buffer)
 {
     const AgcDepthStencilPipelineState *state;
     const AgcStencilFaceState *back_state;
     uint32_t words[4];
     uint32_t *packet;
     SceAgcCb scratch;
+    uint32_t front_reference;
+    uint32_t back_reference;
+    uint32_t front_compare_mask;
+    uint32_t back_compare_mask;
+    uint32_t front_write_mask;
+    uint32_t back_write_mask;
+    state = &command_buffer->graphics_pipeline->depth_stencil;
+    if (!state->stencil_test_enable)
+        return AGC_ERROR_VALIDATION_FAILED;
+    back_state = state->back_face_enable ? &state->back : &state->front;
+    front_reference = (command_buffer->dynamic_state_set_mask &
+        AGC_DYNAMIC_STATE_STENCIL_REFERENCE_BIT) ?
+        command_buffer->dynamic_stencil_reference_front :
+        state->front.reference;
+    back_reference = (command_buffer->dynamic_state_set_mask &
+        AGC_DYNAMIC_STATE_STENCIL_REFERENCE_BIT) ?
+        command_buffer->dynamic_stencil_reference_back :
+        back_state->reference;
+    front_compare_mask = (command_buffer->dynamic_state_set_mask &
+        AGC_DYNAMIC_STATE_STENCIL_COMPARE_MASK_BIT) ?
+        command_buffer->dynamic_stencil_compare_mask_front :
+        state->front.compare_mask;
+    back_compare_mask = (command_buffer->dynamic_state_set_mask &
+        AGC_DYNAMIC_STATE_STENCIL_COMPARE_MASK_BIT) ?
+        command_buffer->dynamic_stencil_compare_mask_back :
+        back_state->compare_mask;
+    front_write_mask = (command_buffer->dynamic_state_set_mask &
+        AGC_DYNAMIC_STATE_STENCIL_WRITE_MASK_BIT) ?
+        command_buffer->dynamic_stencil_write_mask_front :
+        state->front.write_mask;
+    back_write_mask = (command_buffer->dynamic_state_set_mask &
+        AGC_DYNAMIC_STATE_STENCIL_WRITE_MASK_BIT) ?
+        command_buffer->dynamic_stencil_write_mask_back :
+        back_state->write_mask;
+    if (!state->back_face_enable) {
+        back_reference = front_reference;
+        back_compare_mask = front_compare_mask;
+        back_write_mask = front_write_mask;
+    }
+    agcCbInit(&scratch, words, sizeof(words));
+    packet = agcCbAllocDwords(&scratch, 4u);
+    packet[0] = agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 4u);
+    packet[1] = AGC_REG_DB_STENCILREFMASK;
+    packet[2] = front_reference | (front_compare_mask << 8u) |
+        (front_write_mask << 16u) | (front_reference << 24u);
+    packet[3] = back_reference | (back_compare_mask << 8u) |
+        (back_write_mask << 16u) | (back_reference << 24u);
+    return agcCommandCommitScratch(command_buffer, &scratch, words);
+}
+
+int32_t PS5_SYSV_ABI agcCmdSetStencilReference(
+    AgcCommandBuffer command_buffer, uint32_t front, uint32_t back)
+{
     int32_t result = agcCommandDynamicStateValid(
         command_buffer, AGC_DYNAMIC_STATE_STENCIL_REFERENCE_BIT);
 
@@ -12839,24 +12901,86 @@ int32_t PS5_SYSV_ABI agcCmdSetStencilReference(
         return result;
     if (front > 0xffu || back > 0xffu)
         return AGC_ERROR_INVALID_ARGUMENT;
-    state = &command_buffer->graphics_pipeline->depth_stencil;
-    if (!state->stencil_test_enable)
+    command_buffer->dynamic_stencil_reference_front = front;
+    command_buffer->dynamic_stencil_reference_back = back;
+    command_buffer->dynamic_state_set_mask |=
+        AGC_DYNAMIC_STATE_STENCIL_REFERENCE_BIT;
+    result = agcCommandEmitDynamicStencilMasks(command_buffer);
+    if (result != AGC_OK)
+        command_buffer->dynamic_state_set_mask &=
+            ~AGC_DYNAMIC_STATE_STENCIL_REFERENCE_BIT;
+    return result;
+}
+
+int32_t PS5_SYSV_ABI agcCmdSetStencilCompareMask(
+    AgcCommandBuffer command_buffer, uint32_t front, uint32_t back)
+{
+    int32_t result = agcCommandDynamicStateValid(
+        command_buffer, AGC_DYNAMIC_STATE_STENCIL_COMPARE_MASK_BIT);
+
+    if (result != AGC_OK)
+        return result;
+    if (front > 0xffu || back > 0xffu)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    command_buffer->dynamic_stencil_compare_mask_front = front;
+    command_buffer->dynamic_stencil_compare_mask_back = back;
+    command_buffer->dynamic_state_set_mask |=
+        AGC_DYNAMIC_STATE_STENCIL_COMPARE_MASK_BIT;
+    result = agcCommandEmitDynamicStencilMasks(command_buffer);
+    if (result != AGC_OK)
+        command_buffer->dynamic_state_set_mask &=
+            ~AGC_DYNAMIC_STATE_STENCIL_COMPARE_MASK_BIT;
+    return result;
+}
+
+int32_t PS5_SYSV_ABI agcCmdSetStencilWriteMask(
+    AgcCommandBuffer command_buffer, uint32_t front, uint32_t back)
+{
+    int32_t result = agcCommandDynamicStateValid(
+        command_buffer, AGC_DYNAMIC_STATE_STENCIL_WRITE_MASK_BIT);
+
+    if (result != AGC_OK)
+        return result;
+    if (front > 0xffu || back > 0xffu)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    command_buffer->dynamic_stencil_write_mask_front = front;
+    command_buffer->dynamic_stencil_write_mask_back = back;
+    command_buffer->dynamic_state_set_mask |=
+        AGC_DYNAMIC_STATE_STENCIL_WRITE_MASK_BIT;
+    result = agcCommandEmitDynamicStencilMasks(command_buffer);
+    if (result != AGC_OK)
+        command_buffer->dynamic_state_set_mask &=
+            ~AGC_DYNAMIC_STATE_STENCIL_WRITE_MASK_BIT;
+    return result;
+}
+
+int32_t PS5_SYSV_ABI agcCmdSetDepthBounds(
+    AgcCommandBuffer command_buffer, float minimum, float maximum)
+{
+    uint32_t words[4];
+    uint32_t *packet;
+    SceAgcCb scratch;
+    int32_t result = agcCommandDynamicStateValid(
+        command_buffer, AGC_DYNAMIC_STATE_DEPTH_BOUNDS_BIT);
+
+    if (result != AGC_OK)
+        return result;
+    if (!command_buffer->graphics_pipeline->depth_stencil.depth_bounds_enable)
         return AGC_ERROR_VALIDATION_FAILED;
-    back_state = state->back_face_enable ? &state->back : &state->front;
-    if (!state->back_face_enable)
-        back = front;
+    if (!agcRuntimeFloatFinite(minimum) ||
+        !agcRuntimeFloatFinite(maximum) || minimum < 0.0f ||
+        maximum > 1.0f || minimum > maximum)
+        return AGC_ERROR_INVALID_ARGUMENT;
     agcCbInit(&scratch, words, sizeof(words));
     packet = agcCbAllocDwords(&scratch, 4u);
     packet[0] = agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 4u);
-    packet[1] = AGC_REG_DB_STENCILREFMASK;
-    packet[2] = front | (state->front.compare_mask << 8u) |
-        (state->front.write_mask << 16u) | (front << 24u);
-    packet[3] = back | (back_state->compare_mask << 8u) |
-        (back_state->write_mask << 16u) | (back << 24u);
+    packet[1] = AGC_REG_DB_DEPTH_BOUNDS_MIN;
+    packet[2] = agcRuntimeFloatBits(minimum);
+    packet[3] = agcRuntimeFloatBits(maximum);
     result = agcCommandCommitScratch(command_buffer, &scratch, words);
     if (result == AGC_OK)
         command_buffer->dynamic_state_set_mask |=
-            AGC_DYNAMIC_STATE_STENCIL_REFERENCE_BIT;
+            AGC_DYNAMIC_STATE_DEPTH_BOUNDS_BIT;
     return result;
 }
 

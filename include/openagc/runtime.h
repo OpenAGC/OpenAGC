@@ -920,7 +920,10 @@ typedef enum AgcDynamicStateFlagBits {
     AGC_DYNAMIC_STATE_BLEND_CONSTANTS_BIT = 1u << 2,
     AGC_DYNAMIC_STATE_STENCIL_REFERENCE_BIT = 1u << 3,
     AGC_DYNAMIC_STATE_DEPTH_BIAS_BIT = 1u << 4,
-    AGC_DYNAMIC_STATE_LINE_WIDTH_BIT = 1u << 5
+    AGC_DYNAMIC_STATE_LINE_WIDTH_BIT = 1u << 5,
+    AGC_DYNAMIC_STATE_DEPTH_BOUNDS_BIT = 1u << 6,
+    AGC_DYNAMIC_STATE_STENCIL_COMPARE_MASK_BIT = 1u << 7,
+    AGC_DYNAMIC_STATE_STENCIL_WRITE_MASK_BIT = 1u << 8
 } AgcDynamicStateFlagBits;
 typedef uint32_t AgcDynamicStateFlags;
 
@@ -1795,6 +1798,12 @@ int32_t PS5_SYSV_ABI agcCmdSetBlendConstants(
     AgcCommandBuffer command_buffer, const float constants[4]);
 int32_t PS5_SYSV_ABI agcCmdSetStencilReference(
     AgcCommandBuffer command_buffer, uint32_t front, uint32_t back);
+int32_t PS5_SYSV_ABI agcCmdSetStencilCompareMask(
+    AgcCommandBuffer command_buffer, uint32_t front, uint32_t back);
+int32_t PS5_SYSV_ABI agcCmdSetStencilWriteMask(
+    AgcCommandBuffer command_buffer, uint32_t front, uint32_t back);
+int32_t PS5_SYSV_ABI agcCmdSetDepthBounds(
+    AgcCommandBuffer command_buffer, float minimum, float maximum);
 int32_t PS5_SYSV_ABI agcCmdSetDepthBias(
     AgcCommandBuffer command_buffer, const AgcDepthBias *depth_bias);
 int32_t PS5_SYSV_ABI agcCmdSetLineWidth(

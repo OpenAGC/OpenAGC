@@ -7122,6 +7122,8 @@ static void test_runtime_dynamic_graphics_state(void)
     pipeline_desc.vertex_shader = vs;
     pipeline_desc.pixel_shader = ps;
     depth_stencil.format = AGC_FORMAT_D32_FLOAT_S8_UINT;
+    depth_stencil.depth_test_enable = 1u;
+    depth_stencil.depth_bounds_enable = 1u;
     depth_stencil.stencil_test_enable = 1u;
     depth_stencil.back_face_enable = 1u;
     depth_stencil.front.compare_mask = 0x3fu;
@@ -7138,7 +7140,10 @@ static void test_runtime_dynamic_graphics_state(void)
         AGC_DYNAMIC_STATE_BLEND_CONSTANTS_BIT |
         AGC_DYNAMIC_STATE_STENCIL_REFERENCE_BIT |
         AGC_DYNAMIC_STATE_DEPTH_BIAS_BIT |
-        AGC_DYNAMIC_STATE_LINE_WIDTH_BIT;
+        AGC_DYNAMIC_STATE_LINE_WIDTH_BIT |
+        AGC_DYNAMIC_STATE_DEPTH_BOUNDS_BIT |
+        AGC_DYNAMIC_STATE_STENCIL_COMPARE_MASK_BIT |
+        AGC_DYNAMIC_STATE_STENCIL_WRITE_MASK_BIT;
     TEST_ASSERT_EQ(agcCreateGraphicsPipeline(device, &pipeline_desc,
         &pipeline), AGC_OK, "dynamic-state graphics pipeline creates");
     buffer_desc.size = 64u;
@@ -7214,6 +7219,15 @@ static void test_runtime_dynamic_graphics_state(void)
         "valid blend constants record");
     TEST_ASSERT_EQ(agcCmdSetStencilReference(command, 3u, 7u), AGC_OK,
         "valid stencil references record");
+    TEST_ASSERT_EQ(agcCmdSetStencilCompareMask(command, 0x12u, 0x34u),
+        AGC_OK, "valid stencil compare masks record");
+    TEST_ASSERT_EQ(agcCmdSetStencilWriteMask(command, 0x56u, 0x78u),
+        AGC_OK, "valid stencil write masks record");
+    TEST_ASSERT_EQ(agcCmdSetDepthBounds(command, 0.75f, 0.25f),
+        AGC_ERROR_INVALID_ARGUMENT,
+        "reversed dynamic depth bounds are rejected");
+    TEST_ASSERT_EQ(agcCmdSetDepthBounds(command, 0.25f, 0.75f), AGC_OK,
+        "valid dynamic depth bounds record");
     TEST_ASSERT_EQ(agcCmdSetDepthBias(command, NULL),
         AGC_ERROR_INVALID_ARGUMENT,
         "declared dynamic depth bias validates its descriptor");
@@ -7249,13 +7263,23 @@ static void test_runtime_dynamic_graphics_state(void)
     TEST_ASSERT(runtime_find_context_register(words, captured->dword_count,
         AGC_REG_DB_STENCILREFMASK, &value),
         "dynamic front stencil reference is emitted");
-    TEST_ASSERT_EQ(value, 0x035a3f03u,
-        "dynamic front reference preserves static compare/write masks");
+    TEST_ASSERT_EQ(value, 0x03561203u,
+        "dynamic front stencil fields preserve each other");
     TEST_ASSERT(runtime_find_context_register(words, captured->dword_count,
         AGC_REG_DB_STENCILREFMASK_BF, &value),
         "dynamic back stencil reference is emitted");
-    TEST_ASSERT_EQ(value, 0x07a5c307u,
-        "dynamic back reference preserves static compare/write masks");
+    TEST_ASSERT_EQ(value, 0x07783407u,
+        "dynamic back stencil fields preserve each other");
+    TEST_ASSERT(runtime_find_context_register(words, captured->dword_count,
+        AGC_REG_DB_DEPTH_BOUNDS_MIN, &value),
+        "dynamic minimum depth bound is emitted");
+    TEST_ASSERT_EQ(value, 0x3e800000u,
+        "dynamic minimum depth bound preserves its float bits");
+    TEST_ASSERT(runtime_find_context_register(words, captured->dword_count,
+        AGC_REG_DB_DEPTH_BOUNDS_MAX, &value),
+        "dynamic maximum depth bound is emitted");
+    TEST_ASSERT_EQ(value, 0x3f400000u,
+        "dynamic maximum depth bound preserves its float bits");
     TEST_ASSERT(runtime_find_context_register(words, captured->dword_count,
         AGC_REG_PA_SU_POLY_OFFSET_DB_FMT_CNTL, &value),
         "dynamic depth bias emits its depth-format control");

@@ -224,6 +224,9 @@ reset/destruction; “borrowed” means the input is read only during the call.
 | `agcCmdSetViewportScissors` | Records one to sixteen paired viewport/scissor entries. | pipeline/dynamic/count/value errors | [triangle](../examples/first_triangle.c) |
 | `agcCmdSetBlendConstants` | Copies four finite dynamic constants. | pipeline/dynamic/value errors | [binding](shader_pipelines.md#resource-and-dynamic-binding) |
 | `agcCmdSetStencilReference` | Records front/back dynamic references. | pipeline/dynamic/state errors | [binding](shader_pipelines.md#resource-and-dynamic-binding) |
+| `agcCmdSetStencilCompareMask` | Records front/back eight-bit dynamic compare masks while preserving references and write masks. | pipeline/dynamic/state errors | [binding](shader_pipelines.md#resource-and-dynamic-binding) |
+| `agcCmdSetStencilWriteMask` | Records front/back eight-bit dynamic write masks while preserving references and compare masks. | pipeline/dynamic/state errors | [binding](shader_pipelines.md#resource-and-dynamic-binding) |
+| `agcCmdSetDepthBounds` | Records finite ordered dynamic depth bounds in the qualified zero-to-one range. | pipeline/dynamic/value errors | [binding](shader_pipelines.md#resource-and-dynamic-binding) |
 | `agcCmdSetDepthBias` | Copies dynamic bias state. | pipeline/dynamic/value errors | [binding](shader_pipelines.md#resource-and-dynamic-binding) |
 | `agcCmdSetLineWidth` | Records a qualified dynamic line width. | pipeline/dynamic/value errors | [binding](shader_pipelines.md#resource-and-dynamic-binding) |
 
