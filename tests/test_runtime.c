@@ -847,6 +847,12 @@ static void test_runtime_descriptor_and_info_contract(void)
         (properties.memory_heaps[AGC_MEMORY_HEAP_GARLIC].property_flags &
             AGC_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != 0u,
         "device properties expose portable heap property flags");
+    properties = (AgcDeviceProperties)AGC_DEVICE_PROPERTIES_INIT;
+    TEST_ASSERT_EQ(agcGetDeviceProperties(NULL, &properties), AGC_OK,
+        "device properties support Vulkan pre-device capability queries");
+    TEST_ASSERT(properties.max_image_dimension_2d != 0u &&
+        properties.memory_heap_count == AGC_MEMORY_HEAP_COUNT,
+        "pre-device properties match the firmware-neutral capability contract");
     properties.reserved[0] = 1u;
     TEST_ASSERT_EQ(agcGetDeviceProperties(device, &properties),
         AGC_ERROR_INVALID_ARGUMENT,

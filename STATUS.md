@@ -28,7 +28,7 @@ Qualification runners must require this exact marker and reject any
 `backend=direct-dev-gc` marker; a linked dependency alone does not prove which
 backend submitted the workload.
 
-Host verification passes 36,723 assertions in the current worktree. Clean
+Host verification passes 36,725 assertions in the current worktree. Clean
 Sony-first and direct-only Prospero libraries build without warnings. Paired
 FW 5.50 artifacts pass their opposing `DT_NEEDED` check, and the Prospero
 Vulkan-PS5 compute artifact inherits `libSceAgcDriver.sprx` through
@@ -37,6 +37,15 @@ remains experimental/hardware-unqualified. Prior mutating installed-driver
 attempts returned `AGC_OK` without marker execution; they are failed evidence,
 not qualification. Reboot between the direct baseline and Sony artifact, and
 never return to direct testing after a Sony failure without another reboot.
+
+An offline audit of the current `../Vulkan-PS5` source found 78 distinct
+public `agc*` calls and twelve direct query families. Vulkan initializes every
+versioned query result, checks failures before consuming output, and never
+queries Sony exports or `/dev/gc` itself. The query implementations are
+firmware-neutral and do not dispatch through `AgcDriverOps`. Host coverage now
+also exercises Vulkan's exact pre-device `agcGetDeviceProperties(NULL, ...)`
+call. See `analysis/vulkan_ps5_openagc_query_audit.md` for the call contract and
+the separately recorded consumer-tree build/test drift.
 
 The FW 5.50 sample Makefile now links its two qualification artifacts from
 separate configured libraries: `build-sony-direct` with installed-driver
