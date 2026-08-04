@@ -28,7 +28,7 @@ Qualification runners must require this exact marker and reject any
 `backend=direct-dev-gc` marker; a linked dependency alone does not prove which
 backend submitted the workload.
 
-Host verification passes 36,721 assertions in the current worktree. Clean
+Host verification passes 36,723 assertions in the current worktree. Clean
 Sony-first and direct-only Prospero libraries build without warnings. Paired
 FW 5.50 artifacts pass their opposing `DT_NEEDED` check, and the Prospero
 Vulkan-PS5 compute artifact inherits `libSceAgcDriver.sprx` through
