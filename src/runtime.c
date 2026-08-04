@@ -1977,10 +1977,21 @@ static void agcPopulateRuntimeInfo(AgcDevice device, uint32_t agc_version)
             /* Direct-carrier qualification does not qualify an unrun native
              * runtime slice. Keep its capability labels host-tested until a
              * public runtime artifact passes its own exact-firmware oracle. */
-            (void)snprintf(info->profile_name, sizeof(info->profile_name),
-                "%s-%s-%s", diagnostics.backend_name,
-                agcProsperoAbiFamilyName(diagnostics.profile.family),
-                diagnostics.profile.is_trinity ? "trinity" : "standard");
+            if (diagnostics.backend_name &&
+                strcmp(diagnostics.backend_name, "sony-installed") == 0) {
+                /* The installed carrier is an exact module profile. Keep the
+                 * public runtime identity identical to the selection marker;
+                 * firmware ABI and hardware family have dedicated fields. */
+                (void)snprintf(info->profile_name,
+                    sizeof(info->profile_name), "%s",
+                    diagnostics.backend_name);
+            } else {
+                (void)snprintf(info->profile_name,
+                    sizeof(info->profile_name), "%s-%s-%s",
+                    diagnostics.backend_name,
+                    agcProsperoAbiFamilyName(diagnostics.profile.family),
+                    diagnostics.profile.is_trinity ? "trinity" : "standard");
+            }
         }
     }
 #else

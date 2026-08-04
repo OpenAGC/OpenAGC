@@ -13,6 +13,10 @@ in the separately built `OPENAGC_PREFER_INSTALLED_AGC_DRIVER=OFF` artifact.
 On successful selection the runtime emits
 `[openagc] backend=sony-installed installed_driver=true direct_gc=false` so a
 client gate can prove the carrier choice and reject direct-backend activation.
+`agcGetRuntimeInfo` and fence diagnostics expose the same exact
+`sony-installed` value in `profile_name`; the separate firmware ABI key and
+hardware-family fields carry the details that direct-backend profile names
+historically encoded as suffixes.
 This is an implementation promotion, not a hardware-qualification claim. The
 only previous installed-driver hardware attempts returned `AGC_OK` without
 executing observable markers. They used mutating module loading and altered

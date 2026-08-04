@@ -26,7 +26,11 @@ Successful runtime selection now emits
 `[openagc] backend=sony-installed installed_driver=true direct_gc=false`.
 Qualification runners must require this exact marker and reject any
 `backend=direct-dev-gc` marker; a linked dependency alone does not prove which
-backend submitted the workload.
+backend submitted the workload. `AgcRuntimeInfo.profile_name` and copied fence
+diagnostics now report the same exact `sony-installed` identity rather than
+appending redundant ABI and hardware suffixes; their dedicated fields continue
+to report the exact firmware and hardware family. Direct-backend naming is
+unchanged.
 
 Host verification passes 36,725 assertions in the current worktree. Clean
 Sony-first and direct-only Prospero libraries build without warnings. Paired
