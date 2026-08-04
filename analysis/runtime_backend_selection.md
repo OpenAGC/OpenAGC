@@ -16,12 +16,20 @@ direct-only build with no Sony dependency.
 
 The preferred path uses `kernel_dynlib_handle` followed by
 `kernel_dynlib_dlsym` on that exact module handle. It never calls `dlopen`,
-never uses `RTLD_DEFAULT`, and never unloads the module. Selection has three
-outcomes:
+never uses `RTLD_DEFAULT`, and never unloads the module. The reusable selector
+has three outcomes when both candidates are supplied:
 
 - complete preloaded profile: select `sony-installed`;
 - genuinely absent module: select the exact `/dev/gc` profile, if available;
 - present but incomplete or self-resolving module: fail closed.
+
+The default Sony-linked production artifact deliberately supplies no direct
+candidate. Its `DT_NEEDED` dependency also means the matching module must be
+available before application entry. It therefore selects a complete
+`sony-installed` profile or fails closed; absent-module fallback applies only
+to an explicitly configured selector/test that supplies a direct candidate.
+The `OPENAGC_PREFER_INSTALLED_AGC_DRIVER=OFF` artifact is the normal direct-only
+qualification build.
 
 Once Sony is selected, errors and fence timeouts are returned to the caller.
 There is no runtime switch to `/dev/gc`. Shutdown resets OpenAGC dispatch state
@@ -52,9 +60,9 @@ context transition is still a blocking lifecycle question. Exhaustive private-
 ioctl parity is not required unless a native/Vulkan capability depends on the
 operation.
 
-`agcDriverDebugBackendName()` reports `sony-installed`, and the existing
-`agcGetRuntimeInfo()` profile string incorporates that backend name without a
-public ABI change.
+`agcDriverDebugBackendName()` and `AgcRuntimeInfo.profile_name` both report the
+exact value `sony-installed`. Firmware ABI and hardware family remain in their
+dedicated runtime-info fields; no public ABI changed.
 
 ## Verification
 
