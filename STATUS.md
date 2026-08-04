@@ -76,6 +76,15 @@ its final link inherits `--no-as-needed -lSceAgcDriver` and its dynamic table
 contains the matching `DT_NEEDED`. This verifies build transitivity only, not
 GPU execution.
 
+A detached clean worktree at feature commit `3f236cf` builds generic,
+Sony-first Prospero, and direct-only Prospero configurations without compiler
+warnings. Its committed core executable passes 36,697 assertions with zero
+failures. Full CTest passes 9/12; the three failures are the pre-existing
+`installed_package_examples`, `native_api_reference_complete`, and
+`reference_capture_deterministic` reference-game/documentation failures whose
+fixes remain unrelated uncommitted work in the primary tree. No Sony carrier
+test fails, and those unrelated changes were not staged or committed.
+
 ### Eden process-VM serialization (2026-08-03)
 
 The Prospero memory backend now brackets every production direct

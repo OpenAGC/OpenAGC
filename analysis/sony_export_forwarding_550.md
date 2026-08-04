@@ -226,6 +226,13 @@ Vulkan-PS5 Prospero compute build also inherits
 `llvm-readelf -d` confirms `libSceAgcDriver.sprx` in the ELF's `DT_NEEDED`
 set. Vulkan required no source-level backend selection or build change.
 
+Clean verification from detached feature commit `3f236cf` passes all 36,697
+core assertions and both Prospero carrier builds without warnings. CTest is
+9/12 because three existing reference-game/API-documentation tests fail on the
+committed base; their fixes are unrelated dirty-tree work and remain excluded
+from these carrier commits. None of the failures exercises Sony selection,
+export adaptation, or submission.
+
 Hardware order is strict: clean reboot, direct baseline, reboot, Sony marker
 and bounded-fence gate, then native compute/graphics and Vulkan compute/
 presentation. Never run a direct test after a Sony failure without rebooting.
