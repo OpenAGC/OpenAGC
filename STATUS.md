@@ -38,6 +38,13 @@ attempts returned `AGC_OK` without marker execution; they are failed evidence,
 not qualification. Reboot between the direct baseline and Sony artifact, and
 never return to direct testing after a Sony failure without another reboot.
 
+The FW 5.50 sample Makefile now links its two qualification artifacts from
+separate configured libraries: `build-sony-direct` with installed-driver
+preference OFF for `agc_init.elf`, and `build-prospero` with it ON for
+`agc_init_sony.elf`. The dependency gate also verifies both CMake cache values,
+closing a false-positive configuration where both artifacts used the same
+Sony-only archive even though only one ELF carried the Sony `DT_NEEDED` entry.
+
 ### Eden process-VM serialization (2026-08-03)
 
 The Prospero memory backend now brackets every production direct

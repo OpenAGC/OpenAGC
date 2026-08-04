@@ -8,7 +8,9 @@
 #
 # Prerequisites:
 #   export PS5_PAYLOAD_SDK=~/ps5-payload-sdk
-#   Build openagc first: cmake --build build-prospero
+#   Build both carriers first:
+#     cmake --build build-sony-direct
+#     cmake --build build-prospero
 #   Build LibProsperoPkg for eboot.bin: see AGENTS.md
 
 PS5_HOST ?= 10.0.1.41
@@ -27,7 +29,13 @@ endif
 
 # Path to openagc root
 OPENAGC_ROOT := $(abspath $(THIS_DIR)/../..)
-OPENAGC_LIB  := $(OPENAGC_ROOT)/build-prospero/libopenagc.a
+OPENAGC_DIRECT_BUILD ?= $(OPENAGC_ROOT)/build-sony-direct
+OPENAGC_SONY_BUILD   ?= $(OPENAGC_ROOT)/build-prospero
+OPENAGC_DIRECT_LIB   := $(OPENAGC_DIRECT_BUILD)/libopenagc.a
+OPENAGC_SONY_LIB     := $(OPENAGC_SONY_BUILD)/libopenagc.a
+# Historical samples are direct-backend tests unless their target explicitly
+# opts into the installed Sony carrier.
+OPENAGC_LIB          := $(OPENAGC_DIRECT_LIB)
 OPENAGC_INC  := $(OPENAGC_ROOT)/include
 
 # LibProsperoPkg tools (for eboot.bin and .pkg packaging)
@@ -51,7 +59,7 @@ VIDEOOUT_LDFLAGS := -lSceVideoOut -lkernel
 
 # agc_init: links libopenagc.a + VideoOut + kernel
 AGC_LDFLAGS := $(OPENAGC_LIB) -lSceVideoOut -lkernel
-AGC_SONY_LDFLAGS := $(OPENAGC_LIB) -Wl,--no-as-needed -lSceAgcDriver \
+AGC_SONY_LDFLAGS := $(OPENAGC_SONY_LIB) -Wl,--no-as-needed -lSceAgcDriver \
 	-lSceVideoOut -lkernel
 FW_STAGE_LDFLAGS := $(OPENAGC_LIB) -lSceVideoOut -lkernel
 FW_SONY_ORACLE_LDFLAGS := $(OPENAGC_LIB) -lkernel
@@ -165,12 +173,22 @@ agc_init.elf: agc_init.c ps5_video_out.h $(OPENAGC_LIB)
 # This forced dependency makes the process loader initialize the matching
 # installed module before main. A failed run requires a reboot before any
 # direct /dev/gc qualification.
-agc_init_sony.elf: agc_init.c ps5_video_out.h $(OPENAGC_LIB)
+agc_init_sony.elf: agc_init.c ps5_video_out.h $(OPENAGC_SONY_LIB)
 	$(CC) $(CFLAGS) -DAGC_EXPECT_SONY_DRIVER=1 \
 		-DAGC_EXPECT_WORKLOAD=0 -o $@ agc_init.c $(AGC_SONY_LDFLAGS)
 
 .PHONY: backend_fw550_check
 backend_fw550_check: agc_init.elf agc_init_sony.elf
+	@grep -q '^OPENAGC_PREFER_INSTALLED_AGC_DRIVER:BOOL=OFF$$' \
+		$(OPENAGC_DIRECT_BUILD)/CMakeCache.txt || { \
+		echo "direct artifact library is not configured with the Sony carrier OFF" >&2; \
+		exit 1; \
+	}
+	@grep -q '^OPENAGC_PREFER_INSTALLED_AGC_DRIVER:BOOL=ON$$' \
+		$(OPENAGC_SONY_BUILD)/CMakeCache.txt || { \
+		echo "Sony artifact library is not configured with the Sony carrier ON" >&2; \
+		exit 1; \
+	}
 	@if $(READELF) -d agc_init.elf | grep -q 'libSceAgcDriver\.sprx'; then \
 		echo "agc_init.elf unexpectedly needs libSceAgcDriver.sprx" >&2; \
 		exit 1; \

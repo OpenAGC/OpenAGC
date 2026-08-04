@@ -160,7 +160,10 @@ direct backend. `agc_init_sony.elf` forces the FW 5.50 dependency, requires
 `sony-installed`, and gates three two-DCB marker runs, the nine-dword bounded
 wait path, async setup, unsupported private helpers, memory release, and clean
 OpenAGC shutdown. `make backend_fw550_check` verifies the opposing dependency
-sets locally.
+sets and the opposing CMake carrier selections locally. The direct sample
+links `build-sony-direct/libopenagc.a`; the Sony sample links the strict
+`build-prospero/libopenagc.a`. Sharing one archive between these artifacts is
+invalid even if their `DT_NEEDED` sets happen to differ.
 
 Hardware order is strict: clean reboot, direct baseline, reboot, Sony marker
 and bounded-fence gate, then native compute/graphics and Vulkan compute/
