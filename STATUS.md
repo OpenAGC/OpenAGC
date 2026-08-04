@@ -45,6 +45,18 @@ preference OFF for `agc_init.elf`, and `build-prospero` with it ON for
 closing a false-positive configuration where both artifacts used the same
 Sony-only archive even though only one ELF carried the Sony `DT_NEEDED` entry.
 
+The first cleanup-first Eden/Flappy replay through the strict carrier selected
+`sony-installed`, prepared GPU authorization, and returned success from async
+graphics setup and submission, but the first Vulkan native queue wait timed
+out with `AGC_ERROR_TIMEOUT` (`0x80890007`). The kernel trace shows the graphics
+queue still active and non-empty during teardown, followed by a queue reset;
+there was no game frame. This reproduces the earlier installed-driver result
+at full-client scale: export forwarding is correct enough to reach submission,
+but the websrv payload context still lacks the Sony-private workload/context
+state required to execute submitted DCBs. Do not paper over this with retries
+or a direct fallback. Recover and qualify that state transition before another
+installed-carrier workload run.
+
 ### Eden process-VM serialization (2026-08-03)
 
 The Prospero memory backend now brackets every production direct

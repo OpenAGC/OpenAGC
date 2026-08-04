@@ -170,6 +170,16 @@ and bounded-fence gate, then native compute/graphics and Vulkan compute/
 presentation. Never run a direct test after a Sony failure without rebooting.
 An `AGC_OK` return without marker execution is a failed gate.
 
+The 2026-08-04 Eden/Flappy carrier run reached the same boundary with a real
+Vulkan client. It logged
+`backend=sony-installed installed_driver=true direct_gc=false`, completed GPU
+authorization and async setup, then timed out its first native queue wait with
+`0x80890007`. The target klog reported an active, non-empty graphics queue and
+reset it during teardown. This is execution evidence against the current
+loader-owned no-op initialization/workload adapters, not evidence for changing
+the public submission ABI or enabling `/dev/gc` fallback. The next carrier
+slice is recovery of the installed driver's required workload/context setup.
+
 FW 3.20 and the other exact installed profiles are cross-firmware RE evidence
 only and remain hardware-unverified. Generated stubs and firmware binaries are
 not committed.
