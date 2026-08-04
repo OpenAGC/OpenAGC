@@ -68,6 +68,14 @@ self-resolved exports fail closed. This matches the FW 5.50 `sceAgcInit`
 call-site disassembly and SharpProspero's higher-level initialization order;
 hardware marker/fence execution remains the next gate.
 
+The repaired tree also passes `samples/hw_test`'s paired
+`backend_fw550_check`: the direct oracle has no Sony dependency and the strict
+Sony oracle requires `libSceAgcDriver.sprx`. Rebuilding Vulkan-PS5's Prospero
+compute example against this OpenAGC tree succeeds without a consumer change;
+its final link inherits `--no-as-needed -lSceAgcDriver` and its dynamic table
+contains the matching `DT_NEEDED`. This verifies build transitivity only, not
+GPU execution.
+
 ### Eden process-VM serialization (2026-08-03)
 
 The Prospero memory backend now brackets every production direct

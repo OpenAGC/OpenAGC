@@ -220,6 +220,12 @@ links `build-sony-direct/libopenagc.a`; the Sony sample links the strict
 `build-prospero/libopenagc.a`. Sharing one archive between these artifacts is
 invalid even if their `DT_NEEDED` sets happen to differ.
 
+After the default-state repair, `backend_fw550_check` passes again. A current
+Vulkan-PS5 Prospero compute build also inherits
+`--no-as-needed -lSceAgcDriver` from `OpenAGC::openagc`, and
+`llvm-readelf -d` confirms `libSceAgcDriver.sprx` in the ELF's `DT_NEEDED`
+set. Vulkan required no source-level backend selection or build change.
+
 Hardware order is strict: clean reboot, direct baseline, reboot, Sony marker
 and bounded-fence gate, then native compute/graphics and Vulkan compute/
 presentation. Never run a direct test after a Sony failure without rebooting.
