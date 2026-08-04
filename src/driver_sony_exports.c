@@ -11,6 +11,7 @@
 #include "agc_context.h"
 #include "game_compat_internal.h"
 
+#include <stdio.h>
 #include <string.h>
 
 #ifdef OPENAGC_PROSPERO
@@ -164,9 +165,12 @@ typedef int32_t (PS5_SYSV_ABI *AgcSonyNotifyDefaultStatesFn)(
     const AgcRegisterDefaultValue *, const AgcRegisterDefaultValue *,
     const AgcRegisterDefaultValue *, uint32_t, uint32_t, uint32_t);
 typedef int32_t (PS5_SYSV_ABI *AgcSonyRuntimeInitFn)(uint32_t);
+typedef int32_t (PS5_SYSV_ABI *AgcSonyGetReservedDmemFn)(
+    uintptr_t *, uint32_t *);
 static AgcSonySubmitMultiDcbsFn g_sony_submit_multi_dcbs;
 static AgcSonyNotifyDefaultStatesFn g_sony_notify_default_states;
 static AgcSonyRuntimeInitFn g_sony_runtime_init;
+static AgcSonyGetReservedDmemFn g_sony_get_reserved_dmem;
 static AgcRegisterDefaultValue
     g_sony_default_pairs[3][AGC_SONY_MAX_DEFAULT_PAIRS];
 static bool g_sony_defaults_notified;
@@ -220,6 +224,15 @@ static int32_t PS5_SYSV_ABI agcSonySelectRegisterDefaultsVersion(
     }
     if (g_sony_defaults_notified && g_sony_defaults_version != version)
         return AGC_ERROR_INVALID_ARGUMENT;
+
+    if (g_sony_get_reserved_dmem) {
+        uintptr_t address = 0u;
+        uint32_t size = 0u;
+        int32_t query_result = g_sony_get_reserved_dmem(&address, &size);
+
+        printf("[openagc] installed reserved dmem result=0x%08X address=0x%llX size=0x%X\n",
+            (uint32_t)query_result, (unsigned long long)address, size);
+    }
 
     g_sony_defaults_version = version;
     g_sony_runtime_init_attempted = true;
@@ -353,6 +366,7 @@ static int32_t agcSonyReject(const AgcSonyLoader *loader, void *module,
     g_sony_submit_multi_dcbs = NULL;
     g_sony_notify_default_states = NULL;
     g_sony_runtime_init = NULL;
+    g_sony_get_reserved_dmem = NULL;
     memset(out_ops, 0, sizeof(*out_ops));
     *out_module = NULL;
     return AGC_ERROR_NOT_SUPPORTED;
@@ -416,6 +430,14 @@ int32_t agcSonyDriverResolve(const AgcSonyLoader *loader,
         agcSonySelectRegisterDefaultsVersion;
     out_ops->shutdown = agcSonyShutdown;
     out_ops->notify_default_states = agcSonyNotifyDefaultStates;
+
+    {
+        void *address = loader->resolve_symbol(loader->context, module,
+            "sceAgcDriverGetReservedDmemForAgc");
+
+        if (address)
+            memcpy(&g_sony_get_reserved_dmem, &address, sizeof(address));
+    }
 
     {
         const AgcSonyDriverExport *entry =

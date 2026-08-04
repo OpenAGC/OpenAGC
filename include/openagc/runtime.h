@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-#define AGC_RUNTIME_API_VERSION 58u
+#define AGC_RUNTIME_API_VERSION 59u
 #define AGC_RUNTIME_MAX_VIEWPORTS 16u
 #define AGC_RUNTIME_STRUCTURE_VERSION_1 1u
 #define AGC_RUNTIME_STRUCTURE_VERSION_2 2u
@@ -445,7 +445,13 @@ enum {
      * state committed by an earlier successful submission. It carries no
      * dependency label/value, cannot be combined with release/acquire or a
      * batch dependency, and may be submitted as a standalone command. */
-    AGC_RESOURCE_TRANSITION_COMMITTED_STATE_BIT = 1u << 3
+    AGC_RESOURCE_TRANSITION_COMMITTED_STATE_BIT = 1u << 3,
+    /* A buffer-only v2 transition for command buffers recorded ahead of
+     * earlier same-queue submissions. The runtime emits a conservative full
+     * buffer writeback/invalidate dependency and resolves the exact prior
+     * usage from committed state when submitted. Cross-GPU-queue ownership
+     * changes still require RELEASE/ACQUIRE. */
+    AGC_RESOURCE_TRANSITION_CONSERVATIVE_BUFFER_BIT = 1u << 4
 };
 
 #define AGC_RESOURCE_TRANSITION_V1_SIZE 128u

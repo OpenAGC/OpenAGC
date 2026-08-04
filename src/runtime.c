@@ -56,6 +56,10 @@ _Static_assert(AGC_RUNTIME_MAX_VIEWPORTS == AGC_GFX1013_MAX_VIEWPORTS,
 #define AGC_RUNTIME_MAX_DESCRIPTOR_WRITES 256u
 #define AGC_RUNTIME_MAX_RECORDED_RESOURCES 512u
 #define AGC_RUNTIME_MAX_RECORDED_TRANSITIONS 512u
+/* Ordinary transitions may accumulate across a long-lived Vulkan command
+ * buffer even though each public call remains bounded. Keep the journal
+ * growable, but fail closed before unbounded host metadata growth. */
+#define AGC_RUNTIME_MAX_TRANSITION_JOURNAL 65536u
 #define AGC_RUNTIME_WAIT_COMPARE_GREATER_EQUAL 5u
 /* Persistent buffer state can accumulate across many bounded command
  * journals. A 128 MiB streaming buffer populated at the qualified 256-byte
@@ -472,6 +476,7 @@ struct AgcCommandBufferImpl {
     uint32_t recorded_graphics_pipeline_count;
     uint32_t recorded_compute_pipeline_count;
     uint32_t recorded_resource_allocation_count;
+    uint32_t recorded_transition_capacity;
     uint32_t recorded_label_wait_count;
     uint32_t recorded_label_signal_count;
     uint64_t push_constant_masks[kAgcShaderStageCount];
@@ -486,8 +491,9 @@ struct AgcCommandBufferImpl {
         AGC_RUNTIME_MAX_RECORDED_RESOURCES];
     AgcRuntimeAllocation *recorded_resource_allocations[
         AGC_RUNTIME_MAX_RECORDED_RESOURCES];
+    AgcRuntimeRecordedTransition *recorded_transitions;
     AgcRuntimeRecordedTransition
-        recorded_transitions[AGC_RUNTIME_MAX_RECORDED_TRANSITIONS];
+        inline_recorded_transitions[AGC_RUNTIME_MAX_RECORDED_TRANSITIONS];
     AgcRuntimeRecordedLabelWait
         recorded_label_waits[AGC_RUNTIME_MAX_RECORDED_TRANSITIONS];
     AgcRuntimeRecordedLabelSignal
@@ -3725,6 +3731,44 @@ static int32_t agcEnsureTransferCapacity(AgcDevice device,
         agcFree(device, *transfers);
     *transfers = replacement;
     *capacity = new_capacity;
+    return AGC_OK;
+}
+
+static int32_t agcCommandEnsureTransitionCapacity(
+    AgcCommandBuffer command_buffer, uint32_t required)
+{
+    AgcRuntimeRecordedTransition *replacement;
+    uint32_t new_capacity;
+
+    if (required <= command_buffer->recorded_transition_capacity)
+        return AGC_OK;
+    if (required > AGC_RUNTIME_MAX_TRANSITION_JOURNAL)
+        return AGC_ERROR_OUT_OF_MEMORY;
+    new_capacity = command_buffer->recorded_transition_capacity;
+    while (new_capacity < required) {
+        if (new_capacity > AGC_RUNTIME_MAX_TRANSITION_JOURNAL / 2u) {
+            new_capacity = AGC_RUNTIME_MAX_TRANSITION_JOURNAL;
+            break;
+        }
+        new_capacity *= 2u;
+    }
+    replacement = agcAlloc(command_buffer->device,
+        (size_t)new_capacity * sizeof(*replacement),
+        _Alignof(AgcRuntimeRecordedTransition));
+    if (!replacement)
+        return AGC_ERROR_OUT_OF_MEMORY;
+    if (command_buffer->recorded_transition_count != 0u) {
+        memcpy(replacement, command_buffer->recorded_transitions,
+            (size_t)command_buffer->recorded_transition_count *
+                sizeof(*replacement));
+    }
+    if (command_buffer->recorded_transitions !=
+            command_buffer->inline_recorded_transitions) {
+        agcFree(command_buffer->device,
+            command_buffer->recorded_transitions);
+    }
+    command_buffer->recorded_transitions = replacement;
+    command_buffer->recorded_transition_capacity = new_capacity;
     return AGC_OK;
 }
 
@@ -8397,6 +8441,10 @@ int32_t PS5_SYSV_ABI agcCreateCommandBuffer(AgcDevice device,
     command_buffer->queue_type = desc->queue_type;
     command_buffer->state = AGC_COMMAND_BUFFER_STATE_INITIAL;
     command_buffer->capacity_dwords = desc->capacity_dwords;
+    command_buffer->recorded_transition_capacity =
+        AGC_RUNTIME_MAX_RECORDED_TRANSITIONS;
+    command_buffer->recorded_transitions =
+        command_buffer->inline_recorded_transitions;
     agcCbInit(&command_buffer->cursor, command_buffer->storage, storage_size);
     result = agcRuntimeAllocate(device, AGC_MEMORY_HEAP_FLEXIBLE,
         sizeof(uint32_t), sizeof(uint32_t), 1u,
@@ -8429,6 +8477,10 @@ int32_t PS5_SYSV_ABI agcDestroyCommandBuffer(AgcCommandBuffer command_buffer)
     }
     device = command_buffer->device;
     agcReleaseCommandReferences(command_buffer);
+    if (command_buffer->recorded_transitions !=
+            command_buffer->inline_recorded_transitions) {
+        agcFree(device, command_buffer->recorded_transitions);
+    }
     agcRuntimeFree(device, command_buffer->transition_completion_allocation);
     agcRuntimeFree(device, command_buffer->allocation);
     agcCaptureRecordObjectDestroy(device, command_buffer,
@@ -9198,7 +9250,8 @@ static int agcRuntimeOrdinaryTransitionNeedsCompletionWait(uint32_t flags,
     const AgcGfx1013ResourceTransition *transition)
 {
     return (flags == 0u ||
-            flags == AGC_RESOURCE_TRANSITION_COMMITTED_STATE_BIT) &&
+            flags == AGC_RESOURCE_TRANSITION_COMMITTED_STATE_BIT ||
+            flags == AGC_RESOURCE_TRANSITION_CONSERVATIVE_BUFFER_BIT) &&
         emit_low_transition && transition &&
         transition->before != transition->after &&
         transition->after != AGC_GFX1013_RESOURCE_USAGE_UNDEFINED &&
@@ -9644,7 +9697,9 @@ static int32_t agcRuntimeValidateTransition(
         if (transition->flags != AGC_RESOURCE_TRANSITION_RELEASE_BIT &&
             transition->flags != AGC_RESOURCE_TRANSITION_ACQUIRE_BIT &&
             transition->flags != AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT &&
-            transition->flags != AGC_RESOURCE_TRANSITION_COMMITTED_STATE_BIT)
+            transition->flags != AGC_RESOURCE_TRANSITION_COMMITTED_STATE_BIT &&
+            transition->flags !=
+                AGC_RESOURCE_TRANSITION_CONSERVATIVE_BUFFER_BIT)
             return AGC_ERROR_INVALID_ARGUMENT;
         if (transition->reserved_v2 != 0u ||
             !agcReservedZero(transition->reserved2, 2u))
@@ -9653,7 +9708,8 @@ static int32_t agcRuntimeValidateTransition(
         label = transition->dependency_label;
         value = transition->dependency_value;
         if (flags == AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT ||
-            flags == AGC_RESOURCE_TRANSITION_COMMITTED_STATE_BIT) {
+            flags == AGC_RESOURCE_TRANSITION_COMMITTED_STATE_BIT ||
+            flags == AGC_RESOURCE_TRANSITION_CONSERVATIVE_BUFFER_BIT) {
             if (label || value != 0u)
                 return AGC_ERROR_INVALID_ARGUMENT;
         } else if (!label || label->magic != AGC_MAGIC_GPU_LABEL ||
@@ -9688,6 +9744,9 @@ static int32_t agcRuntimeValidateTransition(
             return AGC_ERROR_INVALID_ARGUMENT;
         resource = image;
     }
+    if (flags == AGC_RESOURCE_TRANSITION_CONSERVATIVE_BUFFER_BIT &&
+        transition->resource_type != kAgcResourceTypeBuffer)
+        return AGC_ERROR_NOT_SUPPORTED;
     if (agcRuntimeUsageIsGpu(transition->after) &&
         transition->after_owner != agcRuntimeCommandOwner(command_buffer) &&
         flags != AGC_RESOURCE_TRANSITION_RELEASE_BIT)
@@ -9714,7 +9773,8 @@ static int32_t agcRuntimeValidateTransition(
     if ((current_usage != transition->before ||
          current_owner != transition->before_owner) &&
         flags != AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT &&
-        flags != AGC_RESOURCE_TRANSITION_COMMITTED_STATE_BIT)
+        flags != AGC_RESOURCE_TRANSITION_COMMITTED_STATE_BIT &&
+        flags != AGC_RESOURCE_TRANSITION_CONSERVATIVE_BUFFER_BIT)
         return AGC_ERROR_INVALID_STATE;
     /* A batch dependency is resolved against earlier command buffers in the
      * ordered submission.  It must therefore be allowed to follow an acquire
@@ -9758,6 +9818,13 @@ static int32_t agcRuntimeValidateTransition(
     result = agcRuntimeMapLowUsage(transition->after, &after);
     if (result != AGC_OK)
         return result;
+    if (flags == AGC_RESOURCE_TRANSITION_CONSERVATIVE_BUFFER_BIT) {
+        /* Buffers do not carry color/depth metadata. Model the unknown prior
+         * usage as the strongest buffer writer so the recorded stream always
+         * contains the EOP writeback, completion wait, and all-cache acquire
+         * required by any same-owner buffer state observed at submission. */
+        before = AGC_GFX1013_RESOURCE_USAGE_COMPUTE_WRITE;
+    }
     if (flags == AGC_RESOURCE_TRANSITION_RELEASE_BIT) {
         if (!agcRuntimeUsageIsGpu(transition->before) ||
             !agcRuntimeUsageIsGpu(transition->after) ||
@@ -10185,20 +10252,29 @@ static int32_t agcValidateSubmissionTransitions(
             }
             if (result != AGC_OK)
                 break;
+            const int conservative_buffer_prior =
+                record->flags ==
+                    AGC_RESOURCE_TRANSITION_CONSERVATIVE_BUFFER_BIT &&
+                record->resource_type == kAgcResourceTypeBuffer &&
+                (owner == record->after_owner ||
+                 owner == kAgcResourceOwnerHost);
             if ((usage != record->before ||
                     owner != record->before_owner) &&
+                !conservative_buffer_prior &&
                 !(record->flags == 0u && usage == record->after &&
                     owner == record->after_owner)) {
-#ifdef OPENAGC_PROSPERO
                 fprintf(stderr,
                     "[openagc] transition state mismatch command=%u "
                     "record=%u type=%u flags=0x%x "
-                    "expected_usage=%u actual_usage=%u "
-                    "expected_owner=%u actual_owner=%u\n",
+                    "expected_usage=%u actual_usage=%u after_usage=%u "
+                    "expected_owner=%u actual_owner=%u after_owner=%u "
+                    "offset=%llu size=%llu\n",
                     i, transition_index, record->resource_type,
                     record->flags, record->before, usage,
-                    record->before_owner, owner);
-#endif
+                    record->after, record->before_owner, owner,
+                    record->after_owner,
+                    (unsigned long long)record->buffer_offset,
+                    (unsigned long long)record->buffer_size);
                 result = AGC_ERROR_INVALID_STATE;
                 break;
             }
@@ -10591,7 +10667,7 @@ int32_t PS5_SYSV_ABI agcCmdTransitionResources(
             command_buffer->allocation->debug_name,
             "resource transitions require a Recording command buffer");
     if (command_buffer->recorded_transition_count >
-            AGC_RUNTIME_MAX_RECORDED_TRANSITIONS - transition_count)
+            AGC_RUNTIME_MAX_TRANSITION_JOURNAL - transition_count)
         return agcDebugReport(command_buffer->device,
             AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
             AGC_DEBUG_MESSAGE_CATEGORY_COMMAND_CAPACITY_BIT,
@@ -10732,6 +10808,18 @@ int32_t PS5_SYSV_ABI agcCmdTransitionResources(
             AGC_OBJECT_TYPE_COMMAND_BUFFER,
             command_buffer->allocation->debug_name,
             "typed resource reference journal capacity is exhausted");
+    {
+        int32_t result = agcCommandEnsureTransitionCapacity(command_buffer,
+            command_buffer->recorded_transition_count + transition_count);
+        if (result != AGC_OK)
+            return agcDebugReport(command_buffer->device,
+                AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
+                AGC_DEBUG_MESSAGE_CATEGORY_COMMAND_CAPACITY_BIT,
+                result, "agcCmdTransitionResources",
+                AGC_OBJECT_TYPE_COMMAND_BUFFER,
+                command_buffer->allocation->debug_name,
+                "transition journal allocation failed or reached its bounded capacity");
+    }
     /* Every v2 release or acquire retains its explicit dependency label.
      * Reserve their bookkeeping before any packet or resource mutation. */
     if (release_count + acquire_count > AGC_RUNTIME_MAX_RECORDED_RESOURCES -
