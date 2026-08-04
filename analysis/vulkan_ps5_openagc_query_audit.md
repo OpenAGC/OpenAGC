@@ -15,6 +15,12 @@ operations are device initialization, queue submission, fence completion,
 tessellation-factor-ring setup, and teardown. Resource and state queries remain
 implemented by the firmware-neutral OpenAGC runtime.
 
+A direct source scan across Vulkan-PS5's `src`, `include`, `examples`, and
+`tests` trees finds no `sceAgcDriver*`, `libSceAgcDriver`, `/dev/gc`, or
+`AgcDriverOps` reference. Its Prospero ELF still has a transitive
+`libSceAgcDriver.sprx` `DT_NEEDED` entry because `OpenAGC::openagc` requires the
+module to be preloaded; that dependency is not a direct Vulkan source call.
+
 ## Query contract
 
 The consumer directly uses these twelve OpenAGC queries:

@@ -4,6 +4,30 @@
 #include "agc_error.h"
 #include "agc_graphics.h"
 
+#include <stdio.h>
+#include <string.h>
+
+static inline int32_t agcRuntimeFormatProsperoProfileName(
+    char *profile_name, size_t profile_name_size, const char *backend_name,
+    const char *abi_family_name, int is_trinity)
+{
+    int written;
+
+    if (!profile_name || profile_name_size == 0u || !backend_name ||
+        !abi_family_name)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (strcmp(backend_name, "sony-installed") == 0) {
+        written = snprintf(profile_name, profile_name_size, "%s",
+            backend_name);
+    } else {
+        written = snprintf(profile_name, profile_name_size, "%s-%s-%s",
+            backend_name, abi_family_name,
+            is_trinity ? "trinity" : "standard");
+    }
+    return written >= 0 && (size_t)written < profile_name_size ? AGC_OK :
+        AGC_ERROR_BUFFER_TOO_SMALL;
+}
+
 static inline uint32_t agcRuntimeDepthClipControl(int depth_clip_disabled)
 {
     return depth_clip_disabled ?

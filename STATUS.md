@@ -37,7 +37,7 @@ carrier boundary: a Sony DCB export returning `AGC_ERROR_DEVICE_LOST` leaves
 the Sony table selected, and a later DCB call reaches the same Sony export
 again. No retry or fallback table is installed after an operation failure.
 
-Host verification passes 36,729 assertions in the current worktree. Clean
+Host verification passes 36,733 assertions in the current worktree. Clean
 Sony-first and direct-only Prospero libraries build without warnings. Paired
 FW 5.50 artifacts pass their opposing `DT_NEEDED` check, and the Prospero
 Vulkan-PS5 compute artifact inherits `libSceAgcDriver.sprx` through

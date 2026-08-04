@@ -795,7 +795,20 @@ static void test_runtime_descriptor_and_info_contract(void)
     AgcDeviceDesc desc = AGC_DEVICE_DESC_INIT;
     AgcRuntimeInfo info = AGC_RUNTIME_INFO_INIT;
     AgcDeviceProperties properties = AGC_DEVICE_PROPERTIES_INIT;
+    char profile_name[AGC_RUNTIME_PROFILE_NAME_SIZE];
     AgcDevice device = NULL;
+
+    TEST_ASSERT_EQ(agcRuntimeFormatProsperoProfileName(profile_name,
+        sizeof(profile_name), "sony-installed", "standard", 0), AGC_OK,
+        "Sony runtime profile name formats without backend suffixes");
+    TEST_ASSERT(strcmp(profile_name, "sony-installed") == 0,
+        "Sony runtime profile identity exactly matches carrier selection");
+    TEST_ASSERT_EQ(agcRuntimeFormatProsperoProfileName(profile_name,
+        sizeof(profile_name), "prospero-gc-submit16", "standard", 0), AGC_OK,
+        "direct runtime profile name retains compatibility details");
+    TEST_ASSERT(strcmp(profile_name,
+        "prospero-gc-submit16-standard-standard") == 0,
+        "direct runtime profile naming remains unchanged");
 
     desc.version++;
     TEST_ASSERT_EQ(agcCreateDevice(&desc, &device),
