@@ -12,6 +12,8 @@ typedef struct FakeSonyLoader {
 
 static uint32_t g_fake_multi_count;
 static uint32_t g_fake_multi_sizes[2];
+static uint32_t g_fake_submit_dcb_calls;
+static int32_t g_fake_submit_dcb_result;
 static uintptr_t g_fake_tf_ring_address;
 static uint32_t g_fake_tf_ring_size;
 static uint32_t g_fake_defaults_calls;
@@ -28,6 +30,15 @@ static int32_t PS5_SYSV_ABI fakeSonySubmitMultiDcbs(
     memcpy(g_fake_multi_sizes, dcb_sizes_in_dwords,
         count * sizeof(dcb_sizes_in_dwords[0]));
     return AGC_OK;
+}
+
+static int32_t PS5_SYSV_ABI fakeSonySubmitDcb(
+    const AgcCommandBufferSubmit *packet)
+{
+    if (!packet || !packet->command_address || packet->dword_count == 0u)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    ++g_fake_submit_dcb_calls;
+    return g_fake_submit_dcb_result;
 }
 
 static int32_t PS5_SYSV_ABI fakeSonySetTFRing(
@@ -111,6 +122,11 @@ static void *fakeSonyResolve(void *context, void *module, const char *symbol)
     if (strcmp(symbol, "sceAgcDriverSetTFRing") == 0) {
         int32_t (PS5_SYSV_ABI *callback)(uintptr_t, uint32_t) =
             fakeSonySetTFRing;
+        return fakeCallbackAddress(&callback);
+    }
+    if (strcmp(symbol, "sceAgcDriverSubmitDcb") == 0) {
+        int32_t (PS5_SYSV_ABI *callback)(
+            const AgcCommandBufferSubmit *) = fakeSonySubmitDcb;
         return fakeCallbackAddress(&callback);
     }
     if (strcmp(symbol, "sceAgcDriverNotifyDefaultStates") == 0) {
@@ -231,7 +247,7 @@ static void test_sony_export_resolution(void)
     TEST_ASSERT(module == &fake, "resolved module handle retained");
     TEST_ASSERT(strcmp(ops.name, "sony-installed") == 0,
         "Sony operations table is named");
-    TEST_ASSERT(ops.submit_dcb == agcGenericDriverOps.submit_dcb,
+    TEST_ASSERT(ops.submit_dcb == fakeSonySubmitDcb,
         "Sony submit callback populated from module export");
     TEST_ASSERT(ops.set_tf_ring == fakeSonySetTFRing,
         "Sony TF-ring callback populated from functional public export");
@@ -278,6 +294,27 @@ static void test_sony_export_resolution(void)
 
     TEST_ASSERT_EQ(agcDriverInstallOpsForTesting(&ops), AGC_OK,
         "install resolved Sony operations table");
+    {
+        uint32_t dcb[2] = {0};
+        AgcCommandBufferSubmit submit = {
+            .command_address = (uintptr_t)dcb,
+            .dword_count = 2u,
+        };
+
+        g_fake_submit_dcb_calls = 0u;
+        g_fake_submit_dcb_result = AGC_ERROR_DEVICE_LOST;
+        TEST_ASSERT_EQ(sceAgcDriverSubmitDcb(&submit),
+            AGC_ERROR_DEVICE_LOST,
+            "Sony submission failure is returned without carrier fallback");
+        TEST_ASSERT(agcDriverGetOps() == &ops,
+            "Sony operations remain selected after submission failure");
+        TEST_ASSERT_EQ(sceAgcDriverSubmitDcb(&submit),
+            AGC_ERROR_DEVICE_LOST,
+            "later submission still dispatches to the selected Sony export");
+        TEST_ASSERT_EQ(g_fake_submit_dcb_calls, 2u,
+            "both failed submissions reached Sony and no fallback table");
+        g_fake_submit_dcb_result = AGC_OK;
+    }
     TEST_ASSERT_EQ(sceAgcInit(8u), AGC_OK,
         "public init selects Sony register defaults");
     g_fake_defaults_calls = 0;

@@ -32,7 +32,12 @@ appending redundant ABI and hardware suffixes; their dedicated fields continue
 to report the exact firmware and hardware family. Direct-backend naming is
 unchanged.
 
-Host verification passes 36,725 assertions in the current worktree. Clean
+The private `AgcDriverOps` table is also regression-tested as the immutable
+carrier boundary: a Sony DCB export returning `AGC_ERROR_DEVICE_LOST` leaves
+the Sony table selected, and a later DCB call reaches the same Sony export
+again. No retry or fallback table is installed after an operation failure.
+
+Host verification passes 36,729 assertions in the current worktree. Clean
 Sony-first and direct-only Prospero libraries build without warnings. Paired
 FW 5.50 artifacts pass their opposing `DT_NEEDED` check, and the Prospero
 Vulkan-PS5 compute artifact inherits `libSceAgcDriver.sprx` through

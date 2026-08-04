@@ -68,8 +68,10 @@ dedicated runtime-info fields; no public ABI changed.
 
 Host tests cover exact profile lookup, optional and mandatory exports,
 self-resolution rejection, preference, absent-module fallback, incompatible
-module fail-closed behavior, lifecycle reuse, and byte-to-dword multi-DCB
-adaptation. Both Prospero modes build with `-Wall -Wextra -Wpedantic`.
+module fail-closed behavior, lifecycle reuse, byte-to-dword multi-DCB
+adaptation, and persistence of the selected Sony operations table across a
+Sony submission failure. Both Prospero modes build with
+`-Wall -Wextra -Wpedantic`.
 
 The Prospero Vulkan-PS5 compute target inherits `libSceAgcDriver.sprx` through
 `OpenAGC::openagc`; no Vulkan source-level selector is present.
