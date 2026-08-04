@@ -4159,6 +4159,92 @@ static void test_runtime_buffer_range_fragmentation(void)
         "fragmentation device destroys");
 }
 
+static void test_runtime_streaming_buffer_range_budget(void)
+{
+    enum {
+        kOldRangeLimit = 32769u,
+        kTransitionCount = kOldRangeLimit / 2u + 1u,
+        kBatchCount = 512u,
+        kStride = 256u,
+        kRangeSize = 16u
+    };
+    AgcDevice device = create_device();
+    AgcQueue queue = create_queue(device, kAgcQueueCompute);
+    AgcBufferDesc buffer_desc = AGC_BUFFER_DESC_INIT;
+    AgcCommandBufferDesc command_desc = AGC_COMMAND_BUFFER_DESC_INIT;
+    AgcFenceDesc fence_desc = AGC_FENCE_DESC_INIT;
+    AgcResourceTransition transition = AGC_RESOURCE_TRANSITION_INIT;
+    AgcSubmitInfo submit = AGC_SUBMIT_INFO_INIT;
+    AgcResourceStateInfo info = AGC_RESOURCE_STATE_INFO_INIT;
+    AgcBuffer buffer = NULL;
+    AgcCommandBuffer command = NULL;
+    AgcFence fence = NULL;
+    uint32_t base;
+
+    buffer_desc.size = (uint64_t)kTransitionCount * kStride;
+    buffer_desc.usage = AGC_BUFFER_USAGE_UNIFORM_BIT;
+    command_desc.queue_type = kAgcQueueCompute;
+    command_desc.capacity_dwords = 8192u;
+    TEST_ASSERT_EQ(agcCreateBuffer(device, &buffer_desc, &buffer), AGC_OK,
+        "large streaming buffer creates");
+    TEST_ASSERT_EQ(agcCreateCommandBuffer(device, &command_desc, &command),
+        AGC_OK, "streaming fragmentation command creates");
+    TEST_ASSERT_EQ(agcCreateFence(device, &fence_desc, &fence), AGC_OK,
+        "streaming fragmentation fence creates");
+
+    transition.resource_type = kAgcResourceTypeBuffer;
+    transition.buffer = buffer;
+    transition.buffer_size = kRangeSize;
+    transition.before = kAgcResourceUsageUndefined;
+    transition.after = kAgcResourceUsageShaderRead;
+    transition.before_owner = kAgcResourceOwnerHost;
+    transition.after_owner = kAgcResourceOwnerCompute;
+    submit.command_buffer_count = 1u;
+    submit.command_buffers = &command;
+    for (base = 0u; base < kTransitionCount; base += kBatchCount) {
+        const uint32_t end = base + kBatchCount < kTransitionCount ?
+            base + kBatchCount : kTransitionCount;
+        uint32_t i;
+        int32_t result = agcBeginCommandBuffer(command);
+
+        for (i = base; i < end && result == AGC_OK; ++i) {
+            transition.buffer_offset = (uint64_t)i * kStride;
+            result = agcCmdTransitionResources(command, 1u, &transition);
+        }
+        TEST_ASSERT_EQ(result, AGC_OK,
+            "streaming ranges record beyond the former interval ceiling");
+        TEST_ASSERT_EQ(agcEndCommandBuffer(command), AGC_OK,
+            "streaming fragmentation batch ends");
+        TEST_ASSERT_EQ(agcQueueSubmit(queue, &submit, fence), AGC_OK,
+            "streaming fragmentation batch submits");
+        TEST_ASSERT_EQ(agcResetCommandBuffer(command), AGC_OK,
+            "streaming fragmentation command resets");
+        TEST_ASSERT_EQ(agcResetFence(fence), AGC_OK,
+            "streaming fragmentation fence resets");
+    }
+    TEST_ASSERT_EQ(agcGetBufferRangeStateInfo(buffer,
+        (uint64_t)(kTransitionCount - 1u) * kStride, kRangeSize, &info),
+        AGC_OK, "range beyond the former interval ceiling is queryable");
+    TEST_ASSERT_EQ(info.usage, kAgcResourceUsageShaderRead,
+        "range beyond the former ceiling preserves shader-read usage");
+    TEST_ASSERT_EQ(info.owner, kAgcResourceOwnerCompute,
+        "range beyond the former ceiling preserves compute ownership");
+    TEST_ASSERT_EQ(agcGetBufferStateInfo(buffer, &info),
+        AGC_ERROR_NOT_SUPPORTED,
+        "large sparse streaming buffer remains precisely fragmented");
+
+    TEST_ASSERT_EQ(agcDestroyFence(fence), AGC_OK,
+        "streaming fragmentation fence destroys");
+    TEST_ASSERT_EQ(agcDestroyCommandBuffer(command), AGC_OK,
+        "streaming fragmentation command destroys");
+    TEST_ASSERT_EQ(agcDestroyBuffer(buffer), AGC_OK,
+        "large streaming buffer destroys");
+    TEST_ASSERT_EQ(agcDestroyQueue(queue), AGC_OK,
+        "streaming fragmentation queue destroys");
+    TEST_ASSERT_EQ(agcDestroyDevice(device), AGC_OK,
+        "streaming fragmentation device destroys");
+}
+
 static void test_runtime_image_subresource_states(void)
 {
     AgcDevice device = create_device();
@@ -12545,6 +12631,7 @@ void test_suite_runtime(void)
     TEST_RUN(test_runtime_fence_driven_command_reuse);
     TEST_RUN(test_runtime_copy_buffer_submission);
     TEST_RUN(test_runtime_buffer_range_fragmentation);
+    TEST_RUN(test_runtime_streaming_buffer_range_budget);
     TEST_RUN(test_runtime_image_subresource_states);
 TEST_RUN(test_runtime_copy_image_submission);
 TEST_RUN(test_runtime_image_region_and_buffer_copies);

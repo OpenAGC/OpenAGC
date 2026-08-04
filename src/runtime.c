@@ -58,8 +58,11 @@ _Static_assert(AGC_RUNTIME_MAX_VIEWPORTS == AGC_GFX1013_MAX_VIEWPORTS,
 #define AGC_RUNTIME_MAX_RECORDED_TRANSITIONS 512u
 #define AGC_RUNTIME_WAIT_COMPARE_GREATER_EQUAL 5u
 /* Persistent buffer state can accumulate across many bounded command
- * journals. Keep it independently bounded to 512 KiB per fragmented buffer. */
-#define AGC_RUNTIME_MAX_BUFFER_STATE_RANGES 32769u
+ * journals. A 128 MiB streaming buffer populated at the qualified 256-byte
+ * allocation alignment can require 524,288 disjoint live ranges plus the
+ * gaps between them before it wraps. Bound that complete cycle to 16 MiB of
+ * interval metadata per maximally fragmented buffer. */
+#define AGC_RUNTIME_MAX_BUFFER_STATE_RANGES 1048577u
 #define AGC_RUNTIME_MAX_SUBMIT_COMMAND_BUFFERS 63u
 #define AGC_RUNTIME_MAX_RESOURCE_ARENA_SIZE UINT64_C(0x100000)
 #define AGC_RUNTIME_OCCLUSION_QUERY_RECORD_SIZE \
