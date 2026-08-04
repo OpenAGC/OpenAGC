@@ -55,6 +55,10 @@ firmware-neutral and do not dispatch through `AgcDriverOps`. Host coverage now
 also exercises Vulkan's exact pre-device `agcGetDeviceProperties(NULL, ...)`
 call. See `analysis/vulkan_ps5_openagc_query_audit.md` for the call contract and
 the separately recorded consumer-tree build/test drift.
+Vulkan-PS5 commit `cd20c8a` now mechanically rejects any future source-level
+Sony-module lookup, `/dev/gc`, private `AgcDriverOps`, `kernel_dynlib_*`, or
+mutating `dlopen` coupling; its focused migration audit passes with zero direct
+low-level calls.
 
 The FW 5.50 sample Makefile now links its two qualification artifacts from
 separate configured libraries: `build-sony-direct` with installed-driver

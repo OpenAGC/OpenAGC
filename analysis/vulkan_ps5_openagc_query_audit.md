@@ -20,6 +20,9 @@ A direct source scan across Vulkan-PS5's `src`, `include`, `examples`, and
 `AgcDriverOps` reference. Its Prospero ELF still has a transitive
 `libSceAgcDriver.sprx` `DT_NEEDED` entry because `OpenAGC::openagc` requires the
 module to be preloaded; that dependency is not a direct Vulkan source call.
+Vulkan-PS5 commit `cd20c8a` extends its existing zero-inventory native-migration
+test to reject those private carrier tokens, module-loader calls, mutating
+`dlopen`, and the device path in future `src/*.c` changes.
 
 ## Query contract
 
