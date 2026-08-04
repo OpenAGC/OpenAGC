@@ -1,0 +1,109 @@
+/*
+ * openagc — SPDX-License-Identifier: Apache-2.0
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef _AGC_ERROR_H_
+#define _AGC_ERROR_H_
+
+#include <stdint.h>
+
+/*
+ * AGC error codes.
+ *
+ * PS5 AGC uses the same SCE error code convention:
+ * 0x00000000 = success
+ * 0x80AAxxxx = AGC module errors (AA = module, xxxx = code)
+ *
+ * The AGC module ID is 0x89 (from firmware analysis of libSceAgc/libSceAgcDriver).
+ */
+
+#define AGC_OK                          0
+
+/* Generic errors */
+#define AGC_ERROR_INVALID_ARGUMENT      ((int32_t)0x80890001)
+#define AGC_ERROR_NOT_INITIALIZED       ((int32_t)0x80890002)
+#define AGC_ERROR_INVALID_STATE         ((int32_t)0x80890003)
+#define AGC_ERROR_OUT_OF_MEMORY         ((int32_t)0x80890004)
+#define AGC_ERROR_BUFFER_TOO_SMALL      ((int32_t)0x80890005)
+#define AGC_ERROR_INVALID_ALIGNMENT     ((int32_t)0x80890006)
+#define AGC_ERROR_TIMEOUT               ((int32_t)0x80890007)
+#define AGC_ERROR_BUSY                  ((int32_t)0x80890008)
+#define AGC_ERROR_NOT_FOUND             ((int32_t)0x80890009)
+#define AGC_ERROR_INTERNAL              ((int32_t)0x8089000A)
+#define AGC_ERROR_NOT_SUPPORTED         ((int32_t)0x8089000B)
+#define AGC_ERROR_COMMAND_SPACE_EXHAUSTED ((int32_t)0x8089000C)
+#define AGC_ERROR_DEVICE_LOST           ((int32_t)0x8089000D)
+
+/* Command buffer errors */
+#define AGC_ERROR_CB_INVALID_SIZE       ((int32_t)0x80890101)
+#define AGC_ERROR_CB_OVERFLOW           ((int32_t)0x80890102)
+#define AGC_ERROR_CB_INVALID_QUEUE      ((int32_t)0x80890103)
+
+/* Submission errors */
+#define AGC_ERROR_SUBMIT_FAILED         ((int32_t)0x80890201)
+#define AGC_ERROR_SUBMIT_NOT_ALLOWED    ((int32_t)0x80890202)
+
+/* Shader errors */
+#define AGC_ERROR_SHADER_INVALID        ((int32_t)0x80890301)
+#define AGC_ERROR_SHADER_COMPILE        ((int32_t)0x80890302)
+/* Shader type mismatch during linking — matches SPRX error 0x8a6c0008
+ * observed in sceAgcShaderLinkHsGs (ordinal 131) when the source shader
+ * type is not HS(4)/LS(5) or the CS shader type is not CS(6). */
+#define AGC_ERROR_SHADER_INVALID_TYPE   ((int32_t)0x8a6c0008)
+/* Shader halves don't form a valid front/back pair during fusion.
+ * reference-confirmed: GRAPHICS5_ERROR_INVALID_SHADER_HALVES. */
+#define AGC_ERROR_SHADER_INVALID_HALVES ((int32_t)0x8a6c000a)
+
+/* Resource errors */
+#define AGC_ERROR_RESOURCE_INVALID      ((int32_t)0x80890401)
+#define AGC_ERROR_RESOURCE_NOT_BOUND    ((int32_t)0x80890402)
+
+/* Validation errors */
+#define AGC_ERROR_VALIDATION_FAILED     ((int32_t)0x80890501)
+
+static inline const char* agcErrorString(int32_t err) {
+    switch (err) {
+    case AGC_OK:                        return "AGC_OK";
+    case AGC_ERROR_INVALID_ARGUMENT:    return "AGC_ERROR_INVALID_ARGUMENT";
+    case AGC_ERROR_NOT_INITIALIZED:     return "AGC_ERROR_NOT_INITIALIZED";
+    case AGC_ERROR_INVALID_STATE:       return "AGC_ERROR_INVALID_STATE";
+    case AGC_ERROR_OUT_OF_MEMORY:       return "AGC_ERROR_OUT_OF_MEMORY";
+    case AGC_ERROR_BUFFER_TOO_SMALL:    return "AGC_ERROR_BUFFER_TOO_SMALL";
+    case AGC_ERROR_INVALID_ALIGNMENT:   return "AGC_ERROR_INVALID_ALIGNMENT";
+    case AGC_ERROR_TIMEOUT:             return "AGC_ERROR_TIMEOUT";
+    case AGC_ERROR_BUSY:                return "AGC_ERROR_BUSY";
+    case AGC_ERROR_NOT_FOUND:           return "AGC_ERROR_NOT_FOUND";
+    case AGC_ERROR_INTERNAL:            return "AGC_ERROR_INTERNAL";
+    case AGC_ERROR_NOT_SUPPORTED:       return "AGC_ERROR_NOT_SUPPORTED";
+    case AGC_ERROR_COMMAND_SPACE_EXHAUSTED:
+                                        return "AGC_ERROR_COMMAND_SPACE_EXHAUSTED";
+    case AGC_ERROR_DEVICE_LOST:         return "AGC_ERROR_DEVICE_LOST";
+    case AGC_ERROR_CB_INVALID_SIZE:     return "AGC_ERROR_CB_INVALID_SIZE";
+    case AGC_ERROR_CB_OVERFLOW:         return "AGC_ERROR_CB_OVERFLOW";
+    case AGC_ERROR_CB_INVALID_QUEUE:    return "AGC_ERROR_CB_INVALID_QUEUE";
+    case AGC_ERROR_SUBMIT_FAILED:       return "AGC_ERROR_SUBMIT_FAILED";
+    case AGC_ERROR_SUBMIT_NOT_ALLOWED:  return "AGC_ERROR_SUBMIT_NOT_ALLOWED";
+    case AGC_ERROR_SHADER_INVALID:      return "AGC_ERROR_SHADER_INVALID";
+    case AGC_ERROR_SHADER_COMPILE:      return "AGC_ERROR_SHADER_COMPILE";
+    case AGC_ERROR_SHADER_INVALID_TYPE: return "AGC_ERROR_SHADER_INVALID_TYPE";
+    case AGC_ERROR_SHADER_INVALID_HALVES: return "AGC_ERROR_SHADER_INVALID_HALVES";
+    case AGC_ERROR_RESOURCE_INVALID:    return "AGC_ERROR_RESOURCE_INVALID";
+    case AGC_ERROR_RESOURCE_NOT_BOUND:  return "AGC_ERROR_RESOURCE_NOT_BOUND";
+    case AGC_ERROR_VALIDATION_FAILED:   return "AGC_ERROR_VALIDATION_FAILED";
+    default:                            return "AGC_ERROR_UNKNOWN";
+    }
+}
+
+#endif /* _AGC_ERROR_H_ */

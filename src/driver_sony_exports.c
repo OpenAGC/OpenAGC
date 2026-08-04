@@ -1,0 +1,593 @@
+/*
+ * openagc - SPDX-License-Identifier: Apache-2.0
+ *
+ * Installed libSceAgcDriver export forwarding. Symbols are resolved from a
+ * module-specific handle so OpenAGC's identically named wrappers cannot be
+ * selected through a process-global lookup.
+ */
+
+#include "driver_sony_exports.h"
+
+#include "agc_context.h"
+#include "game_compat_internal.h"
+
+#include <string.h>
+
+#ifdef OPENAGC_PROSPERO
+#include <ps5/kernel.h>
+#endif
+
+#define AGC_SONY_MAX_SUBMIT_DCBS 0xfffu
+#define AGC_SONY_MAX_DEFAULT_PAIRS 0x800u
+#define AGC_SONY_REQUIRED(symbol) {symbol, true}
+#define AGC_SONY_OPTIONAL(symbol) {symbol, false}
+#define AGC_SONY_UNAVAILABLE {NULL, false}
+
+static const AgcSonyDriverExport g_legacy_v3_exports[] = {
+    [AGC_SONY_EXPORT_SUBMIT_MULTI_DCBS] =
+        AGC_SONY_REQUIRED("sceAgcDriverSubmitMultiDcbs"),
+    [AGC_SONY_EXPORT_SUBMIT_DCB] =
+        AGC_SONY_REQUIRED("sceAgcDriverSubmitDcb"),
+    [AGC_SONY_EXPORT_SUBMIT_ACB] =
+        AGC_SONY_REQUIRED("sceAgcDriverSubmitAcb"),
+    [AGC_SONY_EXPORT_SETUP_ASYNC_GRAPHICS] =
+        AGC_SONY_REQUIRED("sceAgcDriverSetupAsyncGraphics"),
+    [AGC_SONY_EXPORT_SET_TF_RING] =
+        AGC_SONY_REQUIRED("sceAgcDriverSetTFRing"),
+    [AGC_SONY_EXPORT_NOTIFY_DEFAULT_STATES] =
+        AGC_SONY_REQUIRED("sceAgcDriverNotifyDefaultStates"),
+    [AGC_SONY_EXPORT_GET_PA_DEBUG_INTERFACE_VERSION] =
+        AGC_SONY_REQUIRED("sceAgcDriverGetPaDebugInterfaceVersion"),
+    [AGC_SONY_EXPORT_SET_TARGET_RING_FOR_DIAG] =
+        AGC_SONY_OPTIONAL("sceAgcDriverSetTargetRingForDiag"),
+    [AGC_SONY_EXPORT_SDMA_COPY_LINEAR_BLOCKING] = AGC_SONY_UNAVAILABLE,
+    [AGC_SONY_EXPORT_REGISTER_CAPTURE_INTERFACE] =
+        AGC_SONY_OPTIONAL("sceAgcDriverRegisterCaptureInterface"),
+    [AGC_SONY_EXPORT_DEREGISTER_CAPTURE_INTERFACE] =
+        AGC_SONY_OPTIONAL("sceAgcDriverDeregisterCaptureInterface"),
+    [AGC_SONY_EXPORT_ACQUIRE_RAZOR_ACQ] =
+        AGC_SONY_OPTIONAL("sceAgcDriverAcquireRazorACQ"),
+    [AGC_SONY_EXPORT_RELEASE_RAZOR_ACQ] =
+        AGC_SONY_OPTIONAL("sceAgcDriverReleaseRazorACQ"),
+    [AGC_SONY_EXPORT_SUBMIT_TO_RAZOR_ACQ] =
+        AGC_SONY_OPTIONAL("sceAgcDriverSubmitToRazorACQ"),
+};
+
+static const AgcSonyDriverExport g_standard_exports[] = {
+    [AGC_SONY_EXPORT_SUBMIT_MULTI_DCBS] =
+        AGC_SONY_REQUIRED("sceAgcDriverSubmitMultiDcbs"),
+    [AGC_SONY_EXPORT_SUBMIT_DCB] =
+        AGC_SONY_REQUIRED("sceAgcDriverSubmitDcb"),
+    [AGC_SONY_EXPORT_SUBMIT_ACB] =
+        AGC_SONY_REQUIRED("sceAgcDriverSubmitAcb"),
+    [AGC_SONY_EXPORT_SETUP_ASYNC_GRAPHICS] =
+        AGC_SONY_REQUIRED("sceAgcDriverSetupAsyncGraphics"),
+    [AGC_SONY_EXPORT_SET_TF_RING] =
+        AGC_SONY_REQUIRED("sceAgcDriverSetTFRing"),
+    [AGC_SONY_EXPORT_NOTIFY_DEFAULT_STATES] =
+        AGC_SONY_REQUIRED("sceAgcDriverNotifyDefaultStates"),
+    [AGC_SONY_EXPORT_GET_PA_DEBUG_INTERFACE_VERSION] =
+        AGC_SONY_REQUIRED("sceAgcDriverGetPaDebugInterfaceVersion"),
+    [AGC_SONY_EXPORT_SET_TARGET_RING_FOR_DIAG] =
+        AGC_SONY_OPTIONAL("sceAgcDriverSetTargetRingForDiag"),
+    [AGC_SONY_EXPORT_SDMA_COPY_LINEAR_BLOCKING] =
+        AGC_SONY_OPTIONAL("sceAgcDriverSdmaCopyLinearBlocking"),
+    [AGC_SONY_EXPORT_REGISTER_CAPTURE_INTERFACE] =
+        AGC_SONY_OPTIONAL("sceAgcDriverRegisterCaptureInterface"),
+    [AGC_SONY_EXPORT_DEREGISTER_CAPTURE_INTERFACE] =
+        AGC_SONY_OPTIONAL("sceAgcDriverDeregisterCaptureInterface"),
+    [AGC_SONY_EXPORT_ACQUIRE_RAZOR_ACQ] =
+        AGC_SONY_OPTIONAL("sceAgcDriverAcquireRazorACQ"),
+    [AGC_SONY_EXPORT_RELEASE_RAZOR_ACQ] =
+        AGC_SONY_OPTIONAL("sceAgcDriverReleaseRazorACQ"),
+    [AGC_SONY_EXPORT_SUBMIT_TO_RAZOR_ACQ] =
+        AGC_SONY_OPTIONAL("sceAgcDriverSubmitToRazorACQ"),
+};
+
+_Static_assert(sizeof(g_legacy_v3_exports) /
+    sizeof(g_legacy_v3_exports[0]) == AGC_SONY_EXPORT_COUNT,
+    "legacy v3 Sony export manifest");
+_Static_assert(sizeof(g_standard_exports) /
+    sizeof(g_standard_exports[0]) == AGC_SONY_EXPORT_COUNT,
+    "standard Sony export manifest");
+
+/* PS5-specific layout corroborated by the payload SDK, etaHEN/libhijacker,
+ * ps5debug-NG, PS5_kldload, and prosperous structures. The older FreeBSD 9
+ * header bundled by Kstuff-lite is not a PS5 kernel-layout source. Every
+ * active firmware remains an exact profile even while these fields agree. */
+static const AgcSonyCredentialLayout g_ps5_credential_layout = {
+    .process_threads_offset = 0x10u,
+    .process_ucred_offset = 0x40u,
+    .thread_next_offset = 0x10u,
+    .thread_ucred_offset = 0x140u,
+    .ucred_authid_offset = 0x58u,
+};
+
+#define AGC_SONY_PROFILE(key, label, manifest) { \
+    .firmware_abi_key = key, \
+    .name = label, \
+    .module_name = "libSceAgcDriver.sprx", \
+    .runtime_module_name = "libSceAgc.sprx", \
+    .runtime_init_name = "sceAgcInit", \
+    .exports = manifest, \
+    .export_count = AGC_SONY_EXPORT_COUNT, \
+    .credential_layout = &g_ps5_credential_layout, \
+}
+
+static const AgcSonyDriverProfile g_sony_driver_profiles[] = {
+    AGC_SONY_PROFILE(0x0320u, "fw320-installed", g_legacy_v3_exports),
+    AGC_SONY_PROFILE(0x0400u, "fw400-installed", g_standard_exports),
+    AGC_SONY_PROFILE(0x0403u, "fw403-installed", g_standard_exports),
+    AGC_SONY_PROFILE(0x0450u, "fw450-installed", g_standard_exports),
+    AGC_SONY_PROFILE(0x0451u, "fw451-installed", g_standard_exports),
+    AGC_SONY_PROFILE(0x0502u, "fw502-installed", g_standard_exports),
+    AGC_SONY_PROFILE(0x0510u, "fw510-installed", g_standard_exports),
+    AGC_SONY_PROFILE(0x0550u, "fw550-installed", g_standard_exports),
+    AGC_SONY_PROFILE(0x0600u, "fw600-installed", g_standard_exports),
+    AGC_SONY_PROFILE(0x0602u, "fw602-installed", g_standard_exports),
+    AGC_SONY_PROFILE(0x0650u, "fw650-installed", g_standard_exports),
+    AGC_SONY_PROFILE(0x0700u, "fw700-installed", g_standard_exports),
+    AGC_SONY_PROFILE(0x0701u, "fw701-installed", g_standard_exports),
+    AGC_SONY_PROFILE(0x0720u, "fw720-installed", g_standard_exports),
+    AGC_SONY_PROFILE(0x0740u, "fw740-installed", g_standard_exports),
+    AGC_SONY_PROFILE(0x0760u, "fw760-installed", g_standard_exports),
+    AGC_SONY_PROFILE(0x0761u, "fw761-installed", g_standard_exports),
+    AGC_SONY_PROFILE(0x0800u, "fw800-installed", g_standard_exports),
+    AGC_SONY_PROFILE(0x0820u, "fw820-installed", g_standard_exports),
+    AGC_SONY_PROFILE(0x0840u, "fw840-installed", g_standard_exports),
+    AGC_SONY_PROFILE(0x0860u, "fw860-installed", g_standard_exports),
+    AGC_SONY_PROFILE(0x0900u, "fw900-installed", g_standard_exports),
+    AGC_SONY_PROFILE(0x0905u, "fw905-installed", g_standard_exports),
+    AGC_SONY_PROFILE(0x0920u, "fw920-installed", g_standard_exports),
+    AGC_SONY_PROFILE(0x0940u, "fw940-installed", g_standard_exports),
+    AGC_SONY_PROFILE(0x0960u, "fw960-installed", g_standard_exports),
+    AGC_SONY_PROFILE(0x1001u, "fw1001-installed", g_standard_exports),
+    AGC_SONY_PROFILE(0x1020u, "fw1020-installed", g_standard_exports),
+    AGC_SONY_PROFILE(0x1040u, "fw1040-installed", g_standard_exports),
+    AGC_SONY_PROFILE(0x1060u, "fw1060-installed", g_standard_exports),
+    AGC_SONY_PROFILE(0x1100u, "fw1100-installed", g_standard_exports),
+    AGC_SONY_PROFILE(0x1120u, "fw1120-installed", g_standard_exports),
+    AGC_SONY_PROFILE(0x1140u, "fw1140-installed", g_standard_exports),
+    AGC_SONY_PROFILE(0x1160u, "fw1160-installed", g_standard_exports),
+    AGC_SONY_PROFILE(0x1200u, "fw1200-installed", g_standard_exports),
+    AGC_SONY_PROFILE(0x1202u, "fw1202-installed", g_standard_exports),
+    AGC_SONY_PROFILE(0x1220u, "fw1220-installed", g_standard_exports),
+    AGC_SONY_PROFILE(0x1240u, "fw1240-installed", g_standard_exports),
+    AGC_SONY_PROFILE(0x1260u, "fw1260-installed", g_standard_exports),
+    AGC_SONY_PROFILE(0x1270u, "fw1270-installed", g_standard_exports),
+};
+
+static const char *g_sony_failure;
+typedef int32_t (PS5_SYSV_ABI *AgcSonySubmitMultiDcbsFn)(
+    void *const[], const uint32_t *, uint32_t);
+typedef int32_t (PS5_SYSV_ABI *AgcSonyNotifyDefaultStatesFn)(
+    const AgcRegisterDefaultValue *, const AgcRegisterDefaultValue *,
+    const AgcRegisterDefaultValue *, uint32_t, uint32_t, uint32_t);
+typedef int32_t (PS5_SYSV_ABI *AgcSonyRuntimeInitFn)(uint32_t);
+static AgcSonySubmitMultiDcbsFn g_sony_submit_multi_dcbs;
+static AgcSonyNotifyDefaultStatesFn g_sony_notify_default_states;
+static AgcSonyRuntimeInitFn g_sony_runtime_init;
+static AgcRegisterDefaultValue
+    g_sony_default_pairs[3][AGC_SONY_MAX_DEFAULT_PAIRS];
+static bool g_sony_defaults_notified;
+static uint32_t g_sony_defaults_version = UINT32_MAX;
+static bool g_sony_runtime_init_attempted;
+static int32_t g_sony_runtime_init_result = AGC_ERROR_NOT_INITIALIZED;
+
+const AgcSonyDriverProfile *agcSonyDriverProfileForFirmware(
+    uint32_t raw_version)
+{
+    uint16_t abi_key = (uint16_t)(raw_version >> 16);
+
+    for (size_t i = 0; i < sizeof(g_sony_driver_profiles) /
+            sizeof(g_sony_driver_profiles[0]); ++i) {
+        if (g_sony_driver_profiles[i].firmware_abi_key == abi_key)
+            return &g_sony_driver_profiles[i];
+    }
+    return NULL;
+}
+
+static int32_t PS5_SYSV_ABI agcSonyInitialize(void)
+{
+#ifdef OPENAGC_PROSPERO
+#ifdef OPENAGC_PREFER_INSTALLED_AGC_DRIVER
+    return agcSonyPreloadCredentialResult();
+#else
+    return AGC_ERROR_NOT_SUPPORTED;
+#endif
+#else
+    return AGC_OK;
+#endif
+}
+
+static int32_t PS5_SYSV_ABI agcSonyInitializeInternalMemory(void)
+{
+    return AGC_OK;
+}
+
+static int32_t PS5_SYSV_ABI agcSonySelectRegisterDefaultsVersion(
+    uint32_t version)
+{
+    int32_t result;
+
+    if (!g_sony_runtime_init)
+        return AGC_ERROR_NOT_INITIALIZED;
+    if (g_sony_runtime_init_attempted) {
+        if (g_sony_runtime_init_result != AGC_OK)
+            return g_sony_runtime_init_result;
+        return g_sony_defaults_version == version
+            ? AGC_OK : AGC_ERROR_INVALID_ARGUMENT;
+    }
+    if (g_sony_defaults_notified && g_sony_defaults_version != version)
+        return AGC_ERROR_INVALID_ARGUMENT;
+
+    g_sony_defaults_version = version;
+    g_sony_runtime_init_attempted = true;
+    result = g_sony_runtime_init(version);
+    g_sony_runtime_init_result = result;
+    if (result == AGC_OK)
+        g_sony_defaults_notified = true;
+    return result;
+}
+
+static int32_t PS5_SYSV_ABI agcSonyShutdown(void)
+{
+    if (g_sony_runtime_init_attempted && g_sony_runtime_init_result != AGC_OK)
+        return g_sony_runtime_init_result;
+    g_sony_defaults_notified = false;
+    g_sony_defaults_version = UINT32_MAX;
+    g_sony_runtime_init_attempted = false;
+    g_sony_runtime_init_result = AGC_ERROR_NOT_INITIALIZED;
+    return AGC_OK;
+}
+
+static int32_t agcSonyAppendDefaultGroups(
+    const AgcRegisterDefaultsGroup *groups, uint32_t group_count,
+    uint32_t counts[3])
+{
+    if (!groups)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    for (uint32_t i = 0; i < group_count; ++i) {
+        const AgcRegisterDefaultsGroup *group = &groups[i];
+        uint32_t space = (uint32_t)group->space;
+
+        if (space >= 3u || !group->registers ||
+            group->register_count > AGC_SONY_MAX_DEFAULT_PAIRS - counts[space])
+            return AGC_ERROR_OUT_OF_MEMORY;
+        memcpy(&g_sony_default_pairs[space][counts[space]], group->registers,
+            (size_t)group->register_count * sizeof(group->registers[0]));
+        counts[space] += group->register_count;
+    }
+    return AGC_OK;
+}
+
+static int32_t PS5_SYSV_ABI agcSonyNotifyDefaultStates(uint32_t flags)
+{
+    const AgcRegisterDefaultsGroup *primary;
+    const AgcRegisterDefaultsGroup *internal;
+    uint32_t primary_count = 0;
+    uint32_t internal_count = 0;
+    uint32_t counts[3] = {0};
+    uint32_t version = g_sony_defaults_version;
+    int32_t result;
+
+    (void)flags;
+    if (g_sony_defaults_notified)
+        return AGC_OK;
+    if (!g_sony_notify_default_states || version == UINT32_MAX)
+        return AGC_ERROR_NOT_INITIALIZED;
+    primary = agcRegisterDefaultsGetPrimaryGroupsForVersion(
+        version, &primary_count);
+    internal = agcRegisterDefaultsGetInternalGroupsForVersion(
+        version, &internal_count);
+    result = agcSonyAppendDefaultGroups(primary, primary_count, counts);
+    if (result != AGC_OK)
+        return result;
+    result = agcSonyAppendDefaultGroups(internal, internal_count, counts);
+    if (result != AGC_OK)
+        return result;
+    result = g_sony_notify_default_states(
+        g_sony_default_pairs[kAgcRegisterDefaultSpaceCx],
+        g_sony_default_pairs[kAgcRegisterDefaultSpaceSh],
+        g_sony_default_pairs[kAgcRegisterDefaultSpaceUc],
+        counts[kAgcRegisterDefaultSpaceCx],
+        counts[kAgcRegisterDefaultSpaceSh],
+        counts[kAgcRegisterDefaultSpaceUc]);
+    if (result == AGC_OK)
+        g_sony_defaults_notified = true;
+    return result;
+}
+
+static int32_t PS5_SYSV_ABI agcSonySubmitMultiCommandBuffersDirect(
+    uint32_t count, void *const dcb_gpu_addrs[], uint32_t *dcb_sizes_in_bytes,
+    void *const acb_gpu_addrs[], uint32_t *acb_sizes_in_bytes)
+{
+    uint32_t dword_sizes[AGC_SONY_MAX_SUBMIT_DCBS];
+
+    if (!g_sony_submit_multi_dcbs)
+        return AGC_ERROR_NOT_SUPPORTED;
+    if (count == 0 || count > AGC_SONY_MAX_SUBMIT_DCBS ||
+        !dcb_gpu_addrs || !dcb_sizes_in_bytes)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    if (acb_gpu_addrs || acb_sizes_in_bytes)
+        return AGC_ERROR_NOT_SUPPORTED;
+    for (uint32_t i = 0; i < count; ++i) {
+        if (!dcb_gpu_addrs[i] || dcb_sizes_in_bytes[i] == 0 ||
+            (dcb_sizes_in_bytes[i] & 3u) != 0)
+            return AGC_ERROR_INVALID_ARGUMENT;
+        dword_sizes[i] = dcb_sizes_in_bytes[i] / 4u;
+    }
+    return g_sony_submit_multi_dcbs(dcb_gpu_addrs, dword_sizes, count);
+}
+
+static bool agcSonyProfileIsValid(const AgcSonyDriverProfile *profile)
+{
+    static const AgcSonyDriverExportSlot required_slots[] = {
+        AGC_SONY_EXPORT_SUBMIT_MULTI_DCBS,
+        AGC_SONY_EXPORT_SUBMIT_DCB,
+        AGC_SONY_EXPORT_SUBMIT_ACB,
+        AGC_SONY_EXPORT_SETUP_ASYNC_GRAPHICS,
+        AGC_SONY_EXPORT_SET_TF_RING,
+        AGC_SONY_EXPORT_NOTIFY_DEFAULT_STATES,
+        AGC_SONY_EXPORT_GET_PA_DEBUG_INTERFACE_VERSION,
+    };
+
+    if (!profile || !profile->name || !profile->module_name ||
+        !profile->runtime_module_name || !profile->runtime_init_name ||
+        !profile->exports || profile->export_count != AGC_SONY_EXPORT_COUNT)
+        return false;
+    for (size_t i = 0; i < sizeof(required_slots) /
+            sizeof(required_slots[0]); ++i) {
+        const AgcSonyDriverExport *entry = &profile->exports[required_slots[i]];
+        if (!entry->required || !entry->name)
+            return false;
+    }
+    return true;
+}
+
+static int32_t agcSonyReject(const AgcSonyLoader *loader, void *module,
+    AgcDriverOps *out_ops, void **out_module)
+{
+    if (module && loader->close_module)
+        loader->close_module(loader->context, module);
+    g_sony_submit_multi_dcbs = NULL;
+    g_sony_notify_default_states = NULL;
+    g_sony_runtime_init = NULL;
+    memset(out_ops, 0, sizeof(*out_ops));
+    *out_module = NULL;
+    return AGC_ERROR_NOT_SUPPORTED;
+}
+
+static int32_t agcSonyRejectRuntime(const AgcSonyLoader *loader,
+    void *driver_module, void *runtime_module, AgcDriverOps *out_ops,
+    void **out_module)
+{
+    if (runtime_module && loader->close_module)
+        loader->close_module(loader->context, runtime_module);
+    return agcSonyReject(loader, driver_module, out_ops, out_module);
+}
+
+#define AGC_SONY_RESOLVE(field, slot, public_symbol) do { \
+    const AgcSonyDriverExport *entry = &profile->exports[slot]; \
+    void *address = entry->name ? loader->resolve_symbol( \
+        loader->context, module, entry->name) : NULL; \
+    _Static_assert(sizeof(out_ops->field) == sizeof(address), \
+        "Sony export pointer size"); \
+    if (address) { \
+        memcpy(&out_ops->field, &address, sizeof(address)); \
+        if (out_ops->field == public_symbol) { \
+            g_sony_failure = entry->name; \
+            return agcSonyReject(loader, module, out_ops, out_module); \
+        } \
+    } else if (entry->required) { \
+        g_sony_failure = entry->name; \
+        return agcSonyReject(loader, module, out_ops, out_module); \
+    } \
+} while (0)
+
+int32_t agcSonyDriverResolve(const AgcSonyLoader *loader,
+    const AgcSonyDriverProfile *profile, AgcDriverOps *out_ops,
+    void **out_module)
+{
+    void *module;
+
+    if (!loader || !loader->open_module || !loader->resolve_symbol ||
+        !agcSonyProfileIsValid(profile) || !out_ops || !out_module)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    memset(out_ops, 0, sizeof(*out_ops));
+    *out_module = NULL;
+    g_sony_failure = NULL;
+    g_sony_submit_multi_dcbs = NULL;
+    g_sony_notify_default_states = NULL;
+    g_sony_runtime_init = NULL;
+    g_sony_defaults_notified = false;
+    g_sony_defaults_version = UINT32_MAX;
+    g_sony_runtime_init_attempted = false;
+    g_sony_runtime_init_result = AGC_ERROR_NOT_INITIALIZED;
+    module = loader->open_module(loader->context, profile->module_name);
+    if (!module)
+        return AGC_ERROR_NOT_SUPPORTED;
+
+    out_ops->name = "sony-installed";
+    out_ops->compute_uses_dcb = true;
+    out_ops->initialize = agcSonyInitialize;
+    out_ops->initialize_internal_memory = agcSonyInitializeInternalMemory;
+    out_ops->select_register_defaults_version =
+        agcSonySelectRegisterDefaultsVersion;
+    out_ops->shutdown = agcSonyShutdown;
+    out_ops->notify_default_states = agcSonyNotifyDefaultStates;
+
+    {
+        const AgcSonyDriverExport *entry =
+            &profile->exports[AGC_SONY_EXPORT_SUBMIT_MULTI_DCBS];
+        void *address = loader->resolve_symbol(
+            loader->context, module, entry->name);
+        if (address)
+            memcpy(&g_sony_submit_multi_dcbs, &address, sizeof(address));
+        if (!g_sony_submit_multi_dcbs ||
+            g_sony_submit_multi_dcbs == sceAgcDriverSubmitMultiDcbs) {
+            g_sony_failure = entry->name;
+            return agcSonyReject(loader, module, out_ops, out_module);
+        }
+        out_ops->submit_multi_command_buffers_direct =
+            agcSonySubmitMultiCommandBuffersDirect;
+    }
+    AGC_SONY_RESOLVE(submit_dcb, AGC_SONY_EXPORT_SUBMIT_DCB,
+        sceAgcDriverSubmitDcb);
+    AGC_SONY_RESOLVE(submit_acb, AGC_SONY_EXPORT_SUBMIT_ACB,
+        sceAgcDriverSubmitAcb);
+    AGC_SONY_RESOLVE(setup_async_graphics,
+        AGC_SONY_EXPORT_SETUP_ASYNC_GRAPHICS,
+        sceAgcDriverSetupAsyncGraphics);
+    AGC_SONY_RESOLVE(set_tf_ring, AGC_SONY_EXPORT_SET_TF_RING,
+        sceAgcDriverSetTFRing);
+    {
+        const AgcSonyDriverExport *entry =
+            &profile->exports[AGC_SONY_EXPORT_NOTIFY_DEFAULT_STATES];
+        void *address = loader->resolve_symbol(
+            loader->context, module, entry->name);
+        void *public_address = NULL;
+        int32_t (PS5_SYSV_ABI *public_callback)(uint32_t) =
+            sceAgcDriverNotifyDefaultStates;
+
+        memcpy(&public_address, &public_callback, sizeof(public_address));
+        if (address)
+            memcpy(&g_sony_notify_default_states, &address, sizeof(address));
+        if (!g_sony_notify_default_states || address == public_address) {
+            g_sony_failure = entry->name;
+            return agcSonyReject(loader, module, out_ops, out_module);
+        }
+    }
+    AGC_SONY_RESOLVE(get_pa_debug_interface_version,
+        AGC_SONY_EXPORT_GET_PA_DEBUG_INTERFACE_VERSION,
+        sceAgcDriverGetPaDebugInterfaceVersion);
+    AGC_SONY_RESOLVE(set_target_ring_for_diag,
+        AGC_SONY_EXPORT_SET_TARGET_RING_FOR_DIAG,
+        sceAgcDriverSetTargetRingForDiag);
+    AGC_SONY_RESOLVE(sdma_copy_linear_blocking,
+        AGC_SONY_EXPORT_SDMA_COPY_LINEAR_BLOCKING,
+        sceAgcDriverSdmaCopyLinearBlocking);
+    AGC_SONY_RESOLVE(register_capture_interface,
+        AGC_SONY_EXPORT_REGISTER_CAPTURE_INTERFACE,
+        sceAgcDriverRegisterCaptureInterface);
+    AGC_SONY_RESOLVE(deregister_capture_interface,
+        AGC_SONY_EXPORT_DEREGISTER_CAPTURE_INTERFACE,
+        sceAgcDriverDeregisterCaptureInterface);
+    AGC_SONY_RESOLVE(acquire_razor_acq,
+        AGC_SONY_EXPORT_ACQUIRE_RAZOR_ACQ, sceAgcDriverAcquireRazorACQ);
+    AGC_SONY_RESOLVE(release_razor_acq,
+        AGC_SONY_EXPORT_RELEASE_RAZOR_ACQ, sceAgcDriverReleaseRazorACQ);
+    AGC_SONY_RESOLVE(submit_to_razor_acq,
+        AGC_SONY_EXPORT_SUBMIT_TO_RAZOR_ACQ,
+        sceAgcDriverSubmitToRazorACQ);
+
+    {
+        void *runtime_module = loader->open_module(
+            loader->context, profile->runtime_module_name);
+        void *address;
+        void *public_address = NULL;
+        int32_t (PS5_SYSV_ABI *public_callback)(uint32_t) = sceAgcInit;
+
+        if (!runtime_module) {
+            g_sony_failure = profile->runtime_module_name;
+            return agcSonyReject(loader, module, out_ops, out_module);
+        }
+        address = loader->resolve_symbol(loader->context, runtime_module,
+            profile->runtime_init_name);
+        memcpy(&public_address, &public_callback, sizeof(public_address));
+        if (address)
+            memcpy(&g_sony_runtime_init, &address, sizeof(address));
+        if (!g_sony_runtime_init || address == public_address) {
+            g_sony_failure = profile->runtime_init_name;
+            return agcSonyRejectRuntime(
+                loader, module, runtime_module, out_ops, out_module);
+        }
+    }
+
+    *out_module = module;
+    return AGC_OK;
+}
+
+const char *agcSonyDriverDebugFailure(void)
+{
+    return g_sony_failure;
+}
+
+#ifdef OPENAGC_PROSPERO
+static bool g_sony_attempted;
+static AgcSonyDriverLoadStatus g_sony_status;
+static const AgcSonyDriverProfile *g_sony_profile;
+static void *g_sony_module;
+static AgcDriverOps g_sony_ops;
+
+static void *agcSonyFindLoadedModule(void *context, const char *name)
+{
+    uint32_t handle = 0;
+
+    (void)context;
+    if (kernel_dynlib_handle(-1, name, &handle) != 0 || handle == 0)
+        return NULL;
+    return (void *)(uintptr_t)handle;
+}
+
+static void *agcSonyResolveLoadedSymbol(
+    void *context, void *module, const char *name)
+{
+    (void)context;
+    return (void *)(uintptr_t)kernel_dynlib_dlsym(
+        -1, (uint32_t)(uintptr_t)module, name);
+}
+
+static void agcSonyKeepLoadedModule(void *context, void *module)
+{
+    (void)context;
+    (void)module;
+}
+
+const AgcDriverOps *agcSonyDriverTryLoad(
+    const AgcSonyDriverProfile *profile,
+    AgcSonyDriverLoadStatus *status_out)
+{
+    const AgcSonyLoader loader = {
+        .open_module = agcSonyFindLoadedModule,
+        .resolve_symbol = agcSonyResolveLoadedSymbol,
+        .close_module = agcSonyKeepLoadedModule,
+    };
+
+    if (!profile) {
+        if (status_out)
+            *status_out = AGC_SONY_DRIVER_NOT_PRESENT;
+        return NULL;
+    }
+    if (g_sony_attempted && g_sony_profile != profile) {
+        if (status_out)
+            *status_out = AGC_SONY_DRIVER_INCOMPATIBLE;
+        return NULL;
+    }
+    if (!g_sony_attempted || g_sony_status == AGC_SONY_DRIVER_NOT_PRESENT) {
+        g_sony_attempted = true;
+        g_sony_profile = profile;
+        if (agcSonyDriverResolve(
+                &loader, profile, &g_sony_ops, &g_sony_module) == AGC_OK) {
+            g_sony_status = AGC_SONY_DRIVER_READY;
+        } else if (agcSonyDriverDebugFailure()) {
+            g_sony_status = AGC_SONY_DRIVER_INCOMPATIBLE;
+        } else {
+            g_sony_status = AGC_SONY_DRIVER_NOT_PRESENT;
+        }
+    }
+    if (status_out)
+        *status_out = g_sony_status;
+    return g_sony_module ? &g_sony_ops : NULL;
+}
+#else
+const AgcDriverOps *agcSonyDriverTryLoad(
+    const AgcSonyDriverProfile *profile,
+    AgcSonyDriverLoadStatus *status_out)
+{
+    (void)profile;
+    if (status_out)
+        *status_out = AGC_SONY_DRIVER_NOT_PRESENT;
+    return NULL;
+}
+#endif

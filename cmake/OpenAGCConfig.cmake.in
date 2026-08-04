@@ -1,0 +1,62 @@
+@PACKAGE_INIT@
+
+include("${CMAKE_CURRENT_LIST_DIR}/OpenAGCTargets.cmake")
+
+set(OpenAGC_INCLUDE_DIR "@PACKAGE_CMAKE_INSTALL_INCLUDEDIR@")
+set(OpenAGC_HAS_PSBC @OPENAGC_PACKAGE_PSBC@)
+set(OpenAGC_PSBC_EXECUTABLE "")
+
+if(OpenAGC_HAS_PSBC)
+    set(OpenAGC_PSBC_EXECUTABLE
+        "@PACKAGE_CMAKE_INSTALL_BINDIR@/openagc-psbc")
+    if(NOT EXISTS "${OpenAGC_PSBC_EXECUTABLE}")
+        set(OpenAGC_FOUND FALSE)
+        set(OpenAGC_NOT_FOUND_MESSAGE
+            "OpenAGC package is missing ${OpenAGC_PSBC_EXECUTABLE}")
+        return()
+    endif()
+    if(NOT TARGET OpenAGC::psbc)
+        add_executable(OpenAGC::psbc IMPORTED)
+        set_target_properties(OpenAGC::psbc PROPERTIES
+            IMPORTED_LOCATION "${OpenAGC_PSBC_EXECUTABLE}")
+    endif()
+endif()
+
+function(openagc_compile_shader)
+    set(options)
+    set(one_value_args OUTPUT SOURCE STAGE RESULT)
+    set(multi_value_args OPTIONS DEPENDS)
+    cmake_parse_arguments(OPENAGC_SHADER
+        "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
+
+    if(NOT TARGET OpenAGC::psbc)
+        message(FATAL_ERROR
+            "openagc_compile_shader requires a package built with OPENAGC_PACKAGE_PSBC=ON")
+    endif()
+    foreach(required OUTPUT SOURCE STAGE)
+        if(NOT OPENAGC_SHADER_${required})
+            message(FATAL_ERROR
+                "openagc_compile_shader requires ${required}")
+        endif()
+    endforeach()
+
+    get_filename_component(source
+        "${OPENAGC_SHADER_SOURCE}" ABSOLUTE BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+    get_filename_component(output
+        "${OPENAGC_SHADER_OUTPUT}" ABSOLUTE BASE_DIR "${CMAKE_CURRENT_BINARY_DIR}")
+    get_filename_component(output_dir "${output}" DIRECTORY)
+    add_custom_command(
+        OUTPUT "${output}"
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "${output_dir}"
+        COMMAND OpenAGC::psbc
+            -f "${source}" -s "${OPENAGC_SHADER_STAGE}"
+            -o "${output}" ${OPENAGC_SHADER_OPTIONS}
+        DEPENDS "${source}" ${OPENAGC_SHADER_DEPENDS}
+        COMMENT "Compiling ${OPENAGC_SHADER_STAGE} shader ${source}"
+        VERBATIM)
+    if(OPENAGC_SHADER_RESULT)
+        set(${OPENAGC_SHADER_RESULT} "${output}" PARENT_SCOPE)
+    endif()
+endfunction()
+
+check_required_components(OpenAGC)

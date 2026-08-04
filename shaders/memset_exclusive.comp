@@ -1,0 +1,31 @@
+#version 450
+#extension GL_EXT_buffer_reference : enable
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+layout(buffer_reference, std430) buffer BlockBuffer {
+    uvec4 data[];
+};
+
+/*
+ * Inline push constants follow openagc-psbc's compute ABI:
+ *   s0-s1: unused ring offsets
+ *   s2-s3: destination GPU address
+ *   s4:    number of complete 16-byte blocks
+ *   s5-s8: repeated 16-byte pattern
+ */
+layout(push_constant) uniform PushConstants {
+    BlockBuffer buf;
+    uint block_count;
+    uint p0;
+    uint p1;
+    uint p2;
+    uint p3;
+} pc;
+
+void main()
+{
+    uint block = gl_GlobalInvocationID.x;
+    if (block < pc.block_count)
+        pc.buf.data[block] = uvec4(pc.p0, pc.p1, pc.p2, pc.p3);
+}

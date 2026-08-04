@@ -1,0 +1,52 @@
+/* openagc — SPDX-License-Identifier: Apache-2.0 */
+#ifndef OPENAGC_MEMORY_H
+#define OPENAGC_MEMORY_H
+
+#include <stddef.h>
+#include <stdint.h>
+
+#include "agc_types.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef struct AgcGpuMemory {
+    void *cpu_address;
+    uint64_t gpu_address;
+    size_t size;
+    size_t mapped_size;
+    int64_t physical_offset;
+    uint32_t type;
+} AgcGpuMemory;
+
+typedef enum AgcGpuMemoryType {
+    AGC_GPU_MEMORY_TYPE_NONE = 0,
+    AGC_GPU_MEMORY_TYPE_FLEXIBLE = 1,
+    AGC_GPU_MEMORY_TYPE_DIRECT_WRITE_COMBINED = 2,
+} AgcGpuMemoryType;
+
+/* Allocates unified CPU/GPU-visible flexible memory.  The generic backend
+ * provides aligned host memory with the same lifetime and address contract. */
+int32_t PS5_SYSV_ABI agcGpuMemoryAllocateFlexible(
+    AgcGpuMemory *memory, size_t size, size_t alignment, const char *name);
+void PS5_SYSV_ABI agcGpuMemoryFreeFlexible(AgcGpuMemory *memory);
+int32_t PS5_SYSV_ABI agcGpuMemoryAllocateDirectWriteCombined(
+    AgcGpuMemory *memory, size_t size, size_t alignment);
+void PS5_SYSV_ABI agcGpuMemoryFreeDirect(AgcGpuMemory *memory);
+
+/* Publish CPU writes before GPU access, or discard stale CPU cache lines
+ * before reading GPU writes. */
+int32_t PS5_SYSV_ABI agcGpuMemoryFlush(
+    const AgcGpuMemory *memory, size_t offset, size_t size);
+int32_t PS5_SYSV_ABI agcGpuMemoryInvalidate(
+    const AgcGpuMemory *memory, size_t offset, size_t size);
+int32_t PS5_SYSV_ABI agcGpuMemoryWait32(
+    const AgcGpuMemory *memory, size_t offset, uint32_t value,
+    uint32_t timeout_microseconds);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif
