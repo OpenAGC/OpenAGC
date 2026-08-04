@@ -47,7 +47,9 @@ Loader-owned initialization, internal memory, and shutdown use adapters.
 Credential repair runs before the first forwarded operation. Default-state
 notification is functional: OpenAGC flattens its selected-version primary and
 internal defaults into persistent CX/SH/UC pair arrays and calls Sony's exact
-six-argument export. The module is never unloaded.
+six-argument export. Shutdown clears OpenAGC's notification state, so a later
+full initialization notifies the retained loader-owned module again. The
+module is never unloaded.
 
 ## Required OpenAGC/Vulkan functional parity
 

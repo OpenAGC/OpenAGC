@@ -297,8 +297,12 @@ static void test_sony_export_resolution(void)
         "idempotent notification does not call Sony twice");
     TEST_ASSERT_EQ(agcDriverShutdown(), AGC_OK,
         "public shutdown forwards through Sony operations table");
-    TEST_ASSERT_EQ(sce_agc_initialize(), AGC_OK,
-        "installed operations can initialize again after shutdown");
+    TEST_ASSERT_EQ(sceAgcInit(8u), AGC_OK,
+        "installed operations can select defaults again after shutdown");
+    TEST_ASSERT_EQ(sceAgcDriverNotifyDefaultStates(0), AGC_OK,
+        "Sony defaults can be notified again after shutdown");
+    TEST_ASSERT_EQ(g_fake_defaults_calls, 2u,
+        "reinitialization calls the installed defaults export again");
     agcDriverResetOpsForTesting();
 }
 

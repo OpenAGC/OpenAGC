@@ -63,7 +63,8 @@ primary and internal defaults into the three CX/SH/UC `{register,value}`
 segments used by the installed driver's six-argument
 `sceAgcDriverNotifyDefaultStates`, keeps those arrays alive for the selected
 module, and treats that export as mandatory. Host tests prove the selected V8
-data reaches the module, repeated notification is idempotent, and missing or
+data reaches the module, repeated notification is idempotent, shutdown followed
+by full reinitialization notifies the retained module again, and missing or
 self-resolved exports fail closed. This matches the FW 5.50 `sceAgcInit`
 call-site disassembly and SharpProspero's higher-level initialization order;
 hardware marker/fence execution remains the next gate.
