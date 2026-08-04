@@ -15,12 +15,14 @@ Prospero now defaults `OPENAGC_PREFER_INSTALLED_AGC_DRIVER=ON`. Exact
 installed-driver manifests cover the active FW 3.20-12.70 evidence set, with
 FW 5.50 as the first hardware target. Discovery uses
 `kernel_dynlib_handle`/`kernel_dynlib_dlsym` on the preloaded module and never
-loads or unloads an SPRX. A complete profile selects `sony-installed`; a
-genuinely absent module permits the exact `/dev/gc` fallback; a present but
-incomplete module fails closed. Errors and fence timeouts never trigger a
-backend switch.
+loads or unloads an SPRX. A complete profile selects `sony-installed`;
+otherwise the default Sony-linked artifact fails closed. It never falls back
+to `/dev/gc`, whether the module is absent, incomplete, or a later operation
+fails. The direct backend remains available only in the explicitly separate
+`-DOPENAGC_PREFER_INSTALLED_AGC_DRIVER=OFF` artifact, which must be used on a
+different clean boot.
 
-Host verification passes 36,691 assertions in the current worktree. Clean
+Host verification passes 36,698 assertions in the current worktree. Clean
 Sony-first and direct-only Prospero libraries build without warnings. Paired
 FW 5.50 artifacts pass their opposing `DT_NEEDED` check, and the Prospero
 Vulkan-PS5 compute artifact inherits `libSceAgcDriver.sprx` through

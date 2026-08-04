@@ -4,10 +4,12 @@
 
 OpenAGC now treats a complete, already-loaded FW 5.50
 `libSceAgcDriver.sprx` as the experimental primary carrier. Discovery is
-module-specific and non-mutating. If the module is absent, the qualified
-direct `/dev/gc` backend remains available; if it is present but incomplete,
-initialization fails closed and never falls back.
+module-specific and non-mutating. The Sony-linked artifact requires a complete
+installed module and fails closed for any discovery or resolution failure.
 
+The Sony-linked artifact is strict: module absence or incomplete resolution
+fails initialization and never selects `/dev/gc`. Direct operation exists only
+in the separately built `OPENAGC_PREFER_INSTALLED_AGC_DRIVER=OFF` artifact.
 This is an implementation promotion, not a hardware-qualification claim. The
 only previous installed-driver hardware attempts returned `AGC_OK` without
 executing observable markers. They used mutating module loading and altered

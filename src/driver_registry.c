@@ -635,8 +635,12 @@ int32_t agcDriverSelectRuntime(AgcFirmwareVersion *version_out,
         return result;
     }
 #ifdef OPENAGC_PREFER_INSTALLED_AGC_DRIVER
+    /* Sony-first production artifacts are strict Sony-only artifacts.  The
+     * direct backend remains available through the explicit CMake OFF build,
+     * but it must never become a runtime fallback after this artifact has
+     * acquired an installed-driver dependency for the current boot. */
     result = agcDriverSelectFirmwareBackend(raw_version,
-        entry ? entry->ops : NULL, agcResolveRuntimeSonyDriver, NULL,
+        NULL, agcResolveRuntimeSonyDriver, NULL,
         NULL, NULL, ops_out);
     if (result != AGC_OK)
         return result;

@@ -977,6 +977,14 @@ static void test_installed_or_direct_selection(void)
     TEST_ASSERT(ops == &direct_ops,
         "absent module selects direct operations");
 
+    ops = &direct_ops;
+    TEST_ASSERT_EQ(agcDriverSelectFirmwareBackend(0x05500008u,
+        NULL, fake_resolve_installed, &resolution,
+        NULL, &status, &ops), AGC_ERROR_NOT_SUPPORTED,
+        "Sony-only policy rejects an absent installed module");
+    TEST_ASSERT(ops == NULL,
+        "Sony-only policy cannot select direct operations");
+
     resolution.status = AGC_SONY_DRIVER_INCOMPATIBLE;
     ops = &direct_ops;
     TEST_ASSERT_EQ(agcDriverSelectFirmwareBackend(0x05500008u,
