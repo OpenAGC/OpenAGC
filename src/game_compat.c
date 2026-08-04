@@ -50,6 +50,11 @@ void agcGameCompatResetRegisterDefaultsVersion(void)
     g_agc_defaults_version = UINT32_MAX;
 }
 
+uint32_t agcGameCompatRegisterDefaultsVersion(void)
+{
+    return g_agc_defaults_version;
+}
+
 /* ===================================================================== */
 /* libSceAgcDriver non-Direct variants                                   */
 /* ===================================================================== */

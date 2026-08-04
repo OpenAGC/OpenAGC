@@ -34,9 +34,10 @@ or module discovery.
 ## Runtime ownership
 
 OpenAGC still owns PM4 generation, resources, transitions, EOP fence packets,
-bounded waits, and VideoOut. The installed driver only carries DCB, ACB,
-multi-DCB, async-graphics, and ABI-safe diagnostics. Module initialization,
-internal memory, defaults, and shutdown use loader-owned adapters. Private
+bounded waits, and VideoOut. The installed driver carries DCB, ACB,
+multi-DCB, async-graphics, TF-ring setup, default-state notification, and
+ABI-safe diagnostics. Module initialization, internal memory, and shutdown use
+loader-owned adapters. Private
 queue/suspend carriers, permission stubs, incompatible workload builders, and
 nonexistent EOP convenience exports remain unsupported.
 
@@ -44,10 +45,12 @@ That list describes the current implementation, not the completion criterion.
 The Sony backend is complete only when carrier selection preserves every
 native OpenAGC capability consumed by Vulkan-PS5. Functional
 `sceAgcDriverSetTFRing` forwarding is mandatory and now preserves the
-tessellation entry point; hardware qualification remains pending. The current
-success-only lifecycle adapters are still a blocking gap. Exhaustive
-private-ioctl parity is not required unless a native/Vulkan capability depends
-on the operation.
+tessellation entry point. The former success-only defaults adapter now calls
+Sony's six-argument export with OpenAGC's exact selected-version CX/SH/UC
+pairs. Hardware marker/fence qualification remains pending, so any additional
+context transition is still a blocking lifecycle question. Exhaustive private-
+ioctl parity is not required unless a native/Vulkan capability depends on the
+operation.
 
 `agcDriverDebugBackendName()` reports `sony-installed`, and the existing
 `agcGetRuntimeInfo()` profile string incorporates that backend name without a

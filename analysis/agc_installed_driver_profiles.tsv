@@ -4,6 +4,7 @@
 0x0550	fw550-installed	libSceAgcDriver.sprx	required	sceAgcDriverSubmitAcb
 0x0550	fw550-installed	libSceAgcDriver.sprx	required	sceAgcDriverSetupAsyncGraphics
 0x0550	fw550-installed	libSceAgcDriver.sprx	required	sceAgcDriverSetTFRing
+0x0550	fw550-installed	libSceAgcDriver.sprx	required	sceAgcDriverNotifyDefaultStates
 0x0550	fw550-installed	libSceAgcDriver.sprx	required	sceAgcDriverGetPaDebugInterfaceVersion
 0x0550	fw550-installed	libSceAgcDriver.sprx	optional	sceAgcDriverSetTargetRingForDiag
 0x0550	fw550-installed	libSceAgcDriver.sprx	optional	sceAgcDriverSdmaCopyLinearBlocking

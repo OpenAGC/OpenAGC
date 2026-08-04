@@ -50,14 +50,15 @@ The required parity surface is:
 5. bounded teardown and reinitialization without unloading the loader-owned
    module or falling through to direct `/dev/gc` calls.
 
-The current preload-only lifecycle adapters are not parity-complete: they
-return success without proving the installed driver's required state exists.
-SharpProspero's higher-level path calls `sceAgcInit` before `SubmitDcb`, and the
-current Sony hardware gate returns `AGC_OK` without fence execution. Recover
-the exact installed lifecycle rather than copying SharpProspero's hard-coded
-revision or ambiguous bindings. `sceAgcDriverSetTFRing` is also present across
-the inspected active driver corpus and must be forwarded before tessellation
-can claim parity.
+The preload-only lifecycle is not yet hardware parity-complete. The former
+success-only defaults adapter has been replaced with the exact six-argument
+installed-driver notification using OpenAGC's caller-selected CX/SH/UC
+register pairs, and the functional `sceAgcDriverSetTFRing` export is now
+mandatory. SharpProspero's higher-level path corroborates the `sceAgcInit`
+before-submit ordering, but its hard-coded revision and ambiguous bindings are
+not copied. The current Sony hardware gate still returns `AGC_OK` without fence
+execution, so qualify the repaired defaults path and recover any remaining
+installed context transition only from observed evidence.
 
 Private suspend carriers, special-queue ioctls, workload diagnostics, Razor,
 and other low-level operations are not parity requirements unless the native

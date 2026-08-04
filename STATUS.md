@@ -28,7 +28,7 @@ Qualification runners must require this exact marker and reject any
 `backend=direct-dev-gc` marker; a linked dependency alone does not prove which
 backend submitted the workload.
 
-Host verification passes 36,698 assertions in the current worktree. Clean
+Host verification passes 36,721 assertions in the current worktree. Clean
 Sony-first and direct-only Prospero libraries build without warnings. Paired
 FW 5.50 artifacts pass their opposing `DT_NEEDED` check, and the Prospero
 Vulkan-PS5 compute artifact inherits `libSceAgcDriver.sprx` through
@@ -56,6 +56,17 @@ but the websrv payload context still lacks the Sony-private workload/context
 state required to execute submitted DCBs. Do not paper over this with retries
 or a direct fallback. Recover and qualify that state transition before another
 installed-carrier workload run.
+
+The first lifecycle repair now replaces the Sony backend's success-only
+default-state adapter. OpenAGC flattens its caller-selected, exact-version
+primary and internal defaults into the three CX/SH/UC `{register,value}`
+segments used by the installed driver's six-argument
+`sceAgcDriverNotifyDefaultStates`, keeps those arrays alive for the selected
+module, and treats that export as mandatory. Host tests prove the selected V8
+data reaches the module, repeated notification is idempotent, and missing or
+self-resolved exports fail closed. This matches the FW 5.50 `sceAgcInit`
+call-site disassembly and SharpProspero's higher-level initialization order;
+hardware marker/fence execution remains the next gate.
 
 ### Eden process-VM serialization (2026-08-03)
 

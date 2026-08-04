@@ -21,8 +21,8 @@ qualification artifact before its status changes.
 
 ## Forwarded surface
 
-Six exports are mandatory for FW 5.50. The first five establish the submission
-and diagnostic carrier; TF-ring setup is required to preserve Vulkan
+Seven exports are mandatory for FW 5.50. Submission, defaults, and diagnostics
+establish the carrier; TF-ring setup is required to preserve Vulkan
 tessellation functionality:
 
 - `sceAgcDriverSubmitMultiDcbs`
@@ -30,6 +30,7 @@ tessellation functionality:
 - `sceAgcDriverSubmitAcb`
 - `sceAgcDriverSetupAsyncGraphics`
 - `sceAgcDriverSetTFRing`
+- `sceAgcDriverNotifyDefaultStates`
 - `sceAgcDriverGetPaDebugInterfaceVersion`
 
 The multi-DCB adapter validates nonzero aligned byte sizes, bounds the array to
@@ -42,9 +43,11 @@ exports, private queue helpers, the incompatible workload builders,
 `sceAgcDriverSubmitToHDRScopesACQ`, or the nonexistent EOP convenience export.
 OpenAGC emits its own EOP fence packets and continues to own VideoOut.
 
-The loader-owned initialization, internal-memory, default-state, and shutdown
-operations use adapters. Credential repair runs in the Sony initialize adapter
-before the first forwarded operation. The module is never unloaded.
+Loader-owned initialization, internal memory, and shutdown use adapters.
+Credential repair runs before the first forwarded operation. Default-state
+notification is functional: OpenAGC flattens its selected-version primary and
+internal defaults into persistent CX/SH/UC pair arrays and calls Sony's exact
+six-argument export. The module is never unloaded.
 
 ## Required OpenAGC/Vulkan functional parity
 
@@ -58,7 +61,7 @@ requirements reduce to the following carrier matrix:
 
 | Vulkan-visible OpenAGC behavior | Required Sony/OpenAGC path | Current status |
 | --- | --- | --- |
-| Device creation | establish credentials plus the installed AGC context, internal state, and defaults | **Blocking gap:** current lifecycle adapters return success without establishing or proving this state |
+| Device creation | establish credentials plus the installed AGC context, internal state, and defaults | default-state forwarding implemented; installed context execution still requires hardware proof |
 | Graphics queue submission | `sceAgcDriverSubmitDcb` and `sceAgcDriverSubmitMultiDcbs` | resolved and host-adapted; hardware marker/fence still fails |
 | Compute queue submission | `sceAgcDriverSetupAsyncGraphics`, then OpenAGC's qualified DCB compute path | export resolved; depends on the lifecycle fix |
 | Multi-command-buffer batches | convert OpenAGC byte sizes to Sony dword sizes and call multi-DCB | adapter implemented; ACB arrays are not used by the Prospero Vulkan runtime |
@@ -102,7 +105,7 @@ decoder in `/Volumes/Untitled/unp/build_import_export_db.py` and the local SDK
 recovered name rather than by address. This is reference evidence only;
 firmware modules and generated proprietary stubs are not committed.
 
-All six mandatory exports exist in every parseable active module from FW 3.20
+All seven mandatory exports exist in every parseable active module from FW 3.20
 through FW 12.70, including every directly inspected exact firmware profile
 selected by OpenAGC. Their NIDs are stable across the checked corpus:
 
@@ -113,6 +116,7 @@ selected by OpenAGC. Their NIDs are stable across the checked corpus:
 | `sceAgcDriverSubmitAcb` | `gSRnr79F8tQ` | all parseable versions |
 | `sceAgcDriverSetupAsyncGraphics` | `Vlaj1gwmIFA` | all parseable versions |
 | `sceAgcDriverSetTFRing` | `XlNp7jzGiPo` | all parseable active versions |
+| `sceAgcDriverNotifyDefaultStates` | `nR6xhiFsOoc` | all parseable active versions |
 | `sceAgcDriverGetPaDebugInterfaceVersion` | `Pqxglq1oKec` | all parseable versions |
 
 The optional exports have two historical availability differences:
@@ -191,7 +195,7 @@ before either project is used to change the other:
 | `sceAgcDriverSubmitMultiDcbs` | `void(ptr, ptr, u32)` | `int32_t(ptr[], u32[], u32)` | input ABI agrees; OpenAGC preserves the status return observed through the carrier |
 | `sceAgcDriverSubmitAcb` | `void(u32 queueId)` | `int32_t(u32 owner, submit*)` | SharpProspero omits the second register argument that the wrappers preserve; do not adopt |
 | `sceAgcDriverSubmitCommandBuffer` | `int(ptr context, ptr buffer)` | `int32_t(u32 queue, ptr buffer, u32 dwords)` | unresolved public-wrapper disagreement; not part of the installed Sony manifest |
-| `sceAgcDriverNotifyDefaultStates` | six segment/count arguments | one flags argument in OpenAGC | incompatible surfaces; Sony-first uses a loader-owned adapter and does not forward this export |
+| `sceAgcDriverNotifyDefaultStates` | six segment/count arguments | one flags argument in OpenAGC | private Sony adapter now translates OpenAGC's selected defaults; public source ABI stays unchanged |
 | `sceAgcDriverSetWorkloadsActive` / `SetWorkloadComplete` | packet-builder arguments | one workload identifier | known incompatible workload builders; deliberately not forwarded |
 | `sceAgcDriverSetHsOffchipParam` | `void(void)` | `int32_t(u32, u64, u32)` | unresolved binding disagreement; deliberately not forwarded |
 

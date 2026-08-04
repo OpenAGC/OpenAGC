@@ -16,5 +16,6 @@ void agcGameCompatConfigureContextState(
     uint32_t restore_count,
     uint32_t append_restore);
 void agcGameCompatResetRegisterDefaultsVersion(void);
+uint32_t agcGameCompatRegisterDefaultsVersion(void);
 
 #endif /* OPENAGC_GAME_COMPAT_INTERNAL_H */

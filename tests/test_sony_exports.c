@@ -1,4 +1,5 @@
 #include "test.h"
+#include "agc_context.h"
 #include "driver_sony_exports.h"
 
 typedef struct FakeSonyLoader {
@@ -13,6 +14,9 @@ static uint32_t g_fake_multi_count;
 static uint32_t g_fake_multi_sizes[2];
 static uintptr_t g_fake_tf_ring_address;
 static uint32_t g_fake_tf_ring_size;
+static uint32_t g_fake_defaults_calls;
+static uint32_t g_fake_defaults_counts[3];
+static AgcRegisterDefaultValue g_fake_defaults_first[3];
 
 static int32_t PS5_SYSV_ABI fakeSonySubmitMultiDcbs(
     void *const dcb_gpu_addrs[], const uint32_t *dcb_sizes_in_dwords,
@@ -31,6 +35,24 @@ static int32_t PS5_SYSV_ABI fakeSonySetTFRing(
 {
     g_fake_tf_ring_address = ring_address;
     g_fake_tf_ring_size = ring_size;
+    return AGC_OK;
+}
+
+static int32_t PS5_SYSV_ABI fakeSonyNotifyDefaultStates(
+    const AgcRegisterDefaultValue *cx, const AgcRegisterDefaultValue *sh,
+    const AgcRegisterDefaultValue *uc, uint32_t cx_count, uint32_t sh_count,
+    uint32_t uc_count)
+{
+    const AgcRegisterDefaultValue *pairs[3] = {cx, sh, uc};
+    uint32_t counts[3] = {cx_count, sh_count, uc_count};
+
+    for (uint32_t i = 0; i < 3u; ++i) {
+        if (!pairs[i] || counts[i] == 0)
+            return AGC_ERROR_INVALID_ARGUMENT;
+        g_fake_defaults_counts[i] = counts[i];
+        g_fake_defaults_first[i] = pairs[i][0];
+    }
+    ++g_fake_defaults_calls;
     return AGC_OK;
 }
 
@@ -74,6 +96,11 @@ static void *fakeSonyResolve(void *context, void *module, const char *symbol)
                 sceAgcDriverSetTFRing;
             return fakeCallbackAddress(&callback);
         }
+        if (strcmp(symbol, "sceAgcDriverNotifyDefaultStates") == 0) {
+            int32_t (PS5_SYSV_ABI *callback)(uint32_t) =
+                sceAgcDriverNotifyDefaultStates;
+            return fakeCallbackAddress(&callback);
+        }
     }
 
     if (strcmp(symbol, "sceAgcDriverSubmitMultiDcbs") == 0) {
@@ -86,13 +113,19 @@ static void *fakeSonyResolve(void *context, void *module, const char *symbol)
             fakeSonySetTFRing;
         return fakeCallbackAddress(&callback);
     }
+    if (strcmp(symbol, "sceAgcDriverNotifyDefaultStates") == 0) {
+        int32_t (PS5_SYSV_ABI *callback)(
+            const AgcRegisterDefaultValue *, const AgcRegisterDefaultValue *,
+            const AgcRegisterDefaultValue *, uint32_t, uint32_t, uint32_t) =
+            fakeSonyNotifyDefaultStates;
+        return fakeCallbackAddress(&callback);
+    }
 
     FAKE_SYMBOL("sceAgcDriverSubmitMultiCommandBuffersDirect",
         submit_multi_command_buffers_direct);
     FAKE_SYMBOL("sceAgcDriverSubmitDcb", submit_dcb);
     FAKE_SYMBOL("sceAgcDriverSubmitAcb", submit_acb);
     FAKE_SYMBOL("sceAgcDriverSetupAsyncGraphics", setup_async_graphics);
-    FAKE_SYMBOL("sceAgcDriverNotifyDefaultStates", notify_default_states);
     FAKE_SYMBOL("sceAgcDriverSetWorkloadsActive", set_workloads_active);
     FAKE_SYMBOL("sceAgcDriverSetWorkloadComplete", set_workload_complete);
     FAKE_SYMBOL("_sceAgcDriverCreateUserSpecialQueue",
@@ -164,7 +197,7 @@ static void test_sony_firmware_profiles(void)
         "profile manifest covers every resolver slot");
     for (size_t i = 0; i < profile->export_count; ++i)
         required += profile->exports[i].required ? 1u : 0u;
-    TEST_ASSERT_EQ(required, 6u, "profile has six Vulkan-required exports");
+    TEST_ASSERT_EQ(required, 7u, "profile has seven Vulkan-required exports");
     for (size_t i = 0; i < sizeof(keys) / sizeof(keys[0]); ++i) {
         const AgcSonyDriverProfile *candidate =
             agcSonyDriverProfileForFirmware((uint32_t)keys[i] << 16);
@@ -218,8 +251,6 @@ static void test_sony_export_resolution(void)
         "module-backed initialization adapter succeeds");
     TEST_ASSERT_EQ(ops.shutdown(), AGC_OK,
         "loader-owned shutdown adapter succeeds");
-    TEST_ASSERT_EQ(ops.notify_default_states(0), AGC_OK,
-        "module-owned default states use a safe adapter");
     {
         uint32_t dcb0[2] = {0};
         uint32_t dcb1[4] = {0};
@@ -247,8 +278,23 @@ static void test_sony_export_resolution(void)
 
     TEST_ASSERT_EQ(agcDriverInstallOpsForTesting(&ops), AGC_OK,
         "install resolved Sony operations table");
-    TEST_ASSERT_EQ(sce_agc_initialize(), AGC_OK,
-        "public initialize forwards through Sony operations table");
+    TEST_ASSERT_EQ(sceAgcInit(8u), AGC_OK,
+        "public init selects Sony register defaults");
+    g_fake_defaults_calls = 0;
+    memset(g_fake_defaults_counts, 0, sizeof(g_fake_defaults_counts));
+    TEST_ASSERT_EQ(sceAgcDriverNotifyDefaultStates(0), AGC_OK,
+        "Sony default-state adapter forwards the selected defaults");
+    TEST_ASSERT_EQ(g_fake_defaults_calls, 1u,
+        "Sony default-state export is called once");
+    TEST_ASSERT(g_fake_defaults_counts[0] > 0 &&
+            g_fake_defaults_counts[1] > 0 && g_fake_defaults_counts[2] > 0,
+        "Sony default-state adapter supplies all three register spaces");
+    TEST_ASSERT_EQ(g_fake_defaults_first[0].offset, 0x0202u,
+        "Sony CX defaults preserve the first selected register");
+    TEST_ASSERT_EQ(sceAgcDriverNotifyDefaultStates(0), AGC_OK,
+        "repeated Sony default-state notification is idempotent");
+    TEST_ASSERT_EQ(g_fake_defaults_calls, 1u,
+        "idempotent notification does not call Sony twice");
     TEST_ASSERT_EQ(agcDriverShutdown(), AGC_OK,
         "public shutdown forwards through Sony operations table");
     TEST_ASSERT_EQ(sce_agc_initialize(), AGC_OK,
@@ -311,6 +357,25 @@ static void test_sony_missing_tf_ring_export(void)
         "TF-ring-incomplete Sony module is rejected");
 }
 
+static void test_sony_missing_default_states_export(void)
+{
+    FakeSonyLoader fake = {
+        .missing_symbol = "sceAgcDriverNotifyDefaultStates",
+    };
+    AgcSonyLoader loader = fakeLoader(&fake);
+    AgcDriverOps ops;
+    void *module = (void *)1;
+
+    TEST_ASSERT_EQ(agcSonyDriverResolve(
+        &loader, fw550Profile(), &ops, &module),
+        AGC_ERROR_NOT_SUPPORTED,
+        "missing Vulkan-required Sony defaults export is rejected");
+    TEST_ASSERT(module == NULL,
+        "defaults-incomplete Sony module handle is cleared");
+    TEST_ASSERT_EQ(fake.close_count, 1u,
+        "defaults-incomplete Sony module is rejected");
+}
+
 static void test_sony_recursion_rejected(void)
 {
     FakeSonyLoader fake = {
@@ -343,6 +408,23 @@ static void test_sony_tf_ring_recursion_rejected(void)
         "recursive TF-ring module is rejected");
 }
 
+static void test_sony_default_states_recursion_rejected(void)
+{
+    FakeSonyLoader fake = {
+        .recursive_symbol = "sceAgcDriverNotifyDefaultStates",
+    };
+    AgcSonyLoader loader = fakeLoader(&fake);
+    AgcDriverOps ops;
+    void *module = NULL;
+
+    TEST_ASSERT_EQ(agcSonyDriverResolve(
+        &loader, fw550Profile(), &ops, &module),
+        AGC_ERROR_NOT_SUPPORTED,
+        "OpenAGC defaults wrapper self-resolution is rejected");
+    TEST_ASSERT_EQ(fake.close_count, 1u,
+        "recursive defaults module is rejected");
+}
+
 static void test_sony_loader_validation(void)
 {
     FakeSonyLoader fake = {0};
@@ -367,7 +449,9 @@ void test_suite_sony_exports(void)
     TEST_RUN(test_sony_missing_mandatory_export);
     TEST_RUN(test_sony_missing_optional_export);
     TEST_RUN(test_sony_missing_tf_ring_export);
+    TEST_RUN(test_sony_missing_default_states_export);
     TEST_RUN(test_sony_recursion_rejected);
     TEST_RUN(test_sony_tf_ring_recursion_rejected);
+    TEST_RUN(test_sony_default_states_recursion_rejected);
     TEST_RUN(test_sony_loader_validation);
 }
