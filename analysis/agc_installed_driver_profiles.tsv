@@ -1,0 +1,13 @@
+# firmware_abi_key	profile	module	requirement	symbol
+0x0550	fw550-installed	libSceAgcDriver.sprx	required	sceAgcDriverSubmitMultiDcbs
+0x0550	fw550-installed	libSceAgcDriver.sprx	required	sceAgcDriverSubmitDcb
+0x0550	fw550-installed	libSceAgcDriver.sprx	required	sceAgcDriverSubmitAcb
+0x0550	fw550-installed	libSceAgcDriver.sprx	required	sceAgcDriverSetupAsyncGraphics
+0x0550	fw550-installed	libSceAgcDriver.sprx	required	sceAgcDriverGetPaDebugInterfaceVersion
+0x0550	fw550-installed	libSceAgcDriver.sprx	optional	sceAgcDriverSetTargetRingForDiag
+0x0550	fw550-installed	libSceAgcDriver.sprx	optional	sceAgcDriverSdmaCopyLinearBlocking
+0x0550	fw550-installed	libSceAgcDriver.sprx	optional	sceAgcDriverRegisterCaptureInterface
+0x0550	fw550-installed	libSceAgcDriver.sprx	optional	sceAgcDriverDeregisterCaptureInterface
+0x0550	fw550-installed	libSceAgcDriver.sprx	optional	sceAgcDriverAcquireRazorACQ
+0x0550	fw550-installed	libSceAgcDriver.sprx	optional	sceAgcDriverReleaseRazorACQ
+0x0550	fw550-installed	libSceAgcDriver.sprx	optional	sceAgcDriverSubmitToRazorACQ

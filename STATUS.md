@@ -9,6 +9,27 @@ runtime. `PLAN.md` is the authoritative forward roadmap; chronological entries
 below remain qualification evidence and may describe a gate that a later entry
 closes.
 
+### Experimental Sony-first carrier (2026-08-04)
+
+Prospero now defaults `OPENAGC_PREFER_INSTALLED_AGC_DRIVER=ON`. Exact
+installed-driver manifests cover the active FW 3.20-12.70 evidence set, with
+FW 5.50 as the first hardware target. Discovery uses
+`kernel_dynlib_handle`/`kernel_dynlib_dlsym` on the preloaded module and never
+loads or unloads an SPRX. A complete profile selects `sony-installed`; a
+genuinely absent module permits the exact `/dev/gc` fallback; a present but
+incomplete module fails closed. Errors and fence timeouts never trigger a
+backend switch.
+
+Host verification passes 36,691 assertions in the current worktree. Clean
+Sony-first and direct-only Prospero libraries build without warnings. Paired
+FW 5.50 artifacts pass their opposing `DT_NEEDED` check, and the Prospero
+Vulkan-PS5 compute artifact inherits `libSceAgcDriver.sprx` through
+`OpenAGC::openagc`. No new Sony-first hardware run has occurred, so the carrier
+remains experimental/hardware-unqualified. Prior mutating installed-driver
+attempts returned `AGC_OK` without marker execution; they are failed evidence,
+not qualification. Reboot between the direct baseline and Sony artifact, and
+never return to direct testing after a Sony failure without another reboot.
+
 ### Eden process-VM serialization (2026-08-03)
 
 The Prospero memory backend now brackets every production direct

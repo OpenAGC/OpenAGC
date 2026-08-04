@@ -22,6 +22,18 @@ The project target is native PS5 AGC behavior, not PS4 GNM compatibility. GNM
 is still a valuable reference because PS5 backward compatibility, GNM, AGC, and
 AMD PM4 packet ancestry overlap in useful ways.
 
+## Experimental Sony-first backend gate
+
+Prospero builds currently promote an exact, preloaded `libSceAgcDriver.sprx`
+profile ahead of the retained direct backend. This is an experimental product
+choice, not a qualification claim. Complete the FW 5.50 ladder in this order:
+clean reboot, direct marker/fence baseline, reboot, Sony DCB and multi-DCB
+markers with bounded fence, native compute/graphics, then Vulkan compute and
+presentation. `AGC_OK` without marker execution fails the gate. Never switch
+to direct after Sony selection or run a direct artifact after a Sony failure
+without rebooting. Other installed profiles remain RE-qualified and
+hardware-unverified.
+
 ## Primary Product Requirement: One Firmware-Neutral Homebrew Binary
 
 The main deliverable is one homebrew game binary linked with OpenAGC that can

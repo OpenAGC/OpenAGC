@@ -15,6 +15,10 @@ contract using host memory; it is not a non-PS5 GPU backend.
 > OpenAGC is an experimental homebrew GPU stack, not a complete official-SDK
 > replacement. Support claims are capability- and exact-firmware-specific.
 > Consult [STATUS.md](STATUS.md) before relying on a path on hardware.
+>
+> Prospero builds now prefer the preloaded `libSceAgcDriver.sprx` carrier by
+> default. That carrier is experimental and hardware-unqualified; use
+> `-DOPENAGC_PREFER_INSTALLED_AGC_DRIVER=OFF` for direct-only qualification.
 
 ## At a Glance
 
@@ -22,7 +26,7 @@ contract using host memory; it is not a non-PS5 GPU backend.
 | --- | --- |
 | Low-level AGC compatibility | Implemented for the mapped `sceAgc*`, driver, cursor, packet, shader, queue, and submit surfaces |
 | Host validation | Generic host-memory harness for native-runtime and low-level regression tests across six CTest suites; it is not a GPU backend |
-| PS5 backend | Native `/dev/gc` implementation built with ps5-payload-sdk |
+| PS5 backend | Experimental-primary preloaded Sony carrier with the mature native `/dev/gc` implementation retained as an absent-module fallback and direct-only option |
 | Hardware evidence | Qualified subsets on standard PS5 FW 5.50 and FW 11.60 |
 | Firmware profiles | 39 exact active ABI keys from FW 3.20 through FW 12.70; untested profiles remain hardware-unverified |
 | Shader compiler | Packaged `openagc-psbc` workflow for SPIR-V → `AgcShaderRecord` |
@@ -33,6 +37,8 @@ contract using host memory; it is not a non-PS5 GPU backend.
 
 ### Driver and firmware foundation
 
+- Exact-profile, module-specific `libSceAgcDriver.sprx` discovery with no
+  `dlopen`, `RTLD_DEFAULT`, unload, or post-selection backend switching.
 - Native `/dev/gc` initialization, internal-memory management, queues,
   submission, suspend points, default-state construction, and clean shutdown.
 - Exact runtime firmware selection. Unknown keys and unsupported optional
@@ -77,6 +83,8 @@ contract using host memory; it is not a non-PS5 GPU backend.
 - `generic` and `prospero` CMake targets.
 - Make-based host build and test workflow.
 - Relocatable `OpenAGC::openagc` CMake package.
+- Prospero CMake consumers inherit `--no-as-needed -lSceAgcDriver` by default;
+  Make consumers must supply those flags explicitly for Sony-first behavior.
 - Optional packaged `OpenAGC::psbc` executable and
   `openagc_compile_shader()` helper.
 - Deterministic host fixtures, guarded hardware runners, pinned ELF hashes,
@@ -267,9 +275,11 @@ Output:
 build-prospero/libopenagc.a
 ```
 
-The exported OpenAGC target links `kernel` and `SceVideoOut`. It does not
-link or preload `libSceAgcDriver.sprx`; the Prospero backend owns direct
-`/dev/gc` submission.
+The exported OpenAGC target links `kernel`, `SceVideoOut`, and—by default—
+`SceAgcDriver` with `--no-as-needed`. Configure with
+`-DOPENAGC_PREFER_INSTALLED_AGC_DRIVER=OFF` for a direct-only artifact with no
+Sony `DT_NEEDED` entry. Non-CMake consumers that want Sony-first behavior must
+link `libopenagc.a -Wl,--no-as-needed -lSceAgcDriver -lSceVideoOut -lkernel`.
 
 ## Install the SDK
 
