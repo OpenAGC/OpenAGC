@@ -26,13 +26,53 @@ AMD PM4 packet ancestry overlap in useful ways.
 
 Prospero builds currently promote an exact, preloaded `libSceAgcDriver.sprx`
 profile ahead of the retained direct backend. This is an experimental product
-choice, not a qualification claim. Complete the FW 5.50 ladder in this order:
-clean reboot, direct marker/fence baseline, reboot, Sony DCB and multi-DCB
-markers with bounded fence, native compute/graphics, then Vulkan compute and
-presentation. `AGC_OK` without marker execution fails the gate. Never switch
-to direct after Sony selection or run a direct artifact after a Sony failure
-without rebooting. Other installed profiles remain RE-qualified and
-hardware-unverified.
+choice, not a qualification claim.
+
+The target is **native-runtime and Vulkan functional parity**, not a one-to-one
+replacement for every private `/dev/gc` ioctl or low-level diagnostic export.
+When `sony-installed` is selected, every OpenAGC capability consumed by
+`../Vulkan-PS5` that works through the qualified direct backend must remain
+available with the same public behavior. Vulkan must not select a backend or
+lose a feature because the carrier changed. OpenAGC continues to own PM4,
+memory/resources, transitions, EOP fences, bounded waits, and VideoOut; the
+installed driver replaces OpenAGC's direct `/dev/gc` submission/state carrier.
+
+The required parity surface is:
+
+1. complete device/driver lifecycle establishment before the first submit,
+   including the installed driver's context, internal state, and defaults;
+2. graphics and compute operation through async setup and the qualified DCB
+   path, including multi-command-buffer submission and observable EOP fences;
+3. tessellation factor-ring registration through the functional non-Direct
+   Sony export;
+4. unchanged OpenAGC memory, resource, pipeline, command, synchronization, and
+   VideoOut behavior; and
+5. bounded teardown and reinitialization without unloading the loader-owned
+   module or falling through to direct `/dev/gc` calls.
+
+The current preload-only lifecycle adapters are not parity-complete: they
+return success without proving the installed driver's required state exists.
+SharpProspero's higher-level path calls `sceAgcInit` before `SubmitDcb`, and the
+current Sony hardware gate returns `AGC_OK` without fence execution. Recover
+the exact installed lifecycle rather than copying SharpProspero's hard-coded
+revision or ambiguous bindings. `sceAgcDriverSetTFRing` is also present across
+the inspected active driver corpus and must be forwarded before tessellation
+can claim parity.
+
+Private suspend carriers, special-queue ioctls, workload diagnostics, Razor,
+and other low-level operations are not parity requirements unless the native
+runtime or Vulkan consumes them. They remain independently gated and must not
+delay the required carrier slice. Conversely, an operation cannot be omitted
+merely because it is private if a Vulkan-visible OpenAGC capability depends on
+it.
+
+Complete the FW 5.50 ladder in this order: clean reboot, direct marker/fence
+baseline, reboot, Sony lifecycle preflight, DCB and multi-DCB markers with a
+bounded fence, native compute/graphics, tessellation, then Vulkan compute,
+graphics, and presentation. `AGC_OK` without marker execution fails the gate.
+Never switch to direct after Sony selection or run a direct artifact after a
+Sony failure without rebooting. Other installed profiles remain RE-qualified
+and hardware-unverified.
 
 ## Primary Product Requirement: One Firmware-Neutral Homebrew Binary
 

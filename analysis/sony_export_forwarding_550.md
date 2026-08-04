@@ -43,6 +43,53 @@ The loader-owned initialization, internal-memory, default-state, and shutdown
 operations use adapters. Credential repair runs in the Sony initialize adapter
 before the first forwarded operation. The module is never unloaded.
 
+## Required OpenAGC/Vulkan functional parity
+
+The product goal is not exhaustive parity with every private `/dev/gc` ioctl.
+It is carrier substitution below OpenAGC's native runtime: selecting
+`sony-installed` must preserve every OpenAGC capability currently consumed by
+`../Vulkan-PS5` and available through the qualified direct backend.
+
+The Vulkan consumer calls only the firmware-neutral `agc*` API. Its backend
+requirements reduce to the following carrier matrix:
+
+| Vulkan-visible OpenAGC behavior | Required Sony/OpenAGC path | Current status |
+| --- | --- | --- |
+| Device creation | establish credentials plus the installed AGC context, internal state, and defaults | **Blocking gap:** current lifecycle adapters return success without establishing or proving this state |
+| Graphics queue submission | `sceAgcDriverSubmitDcb` and `sceAgcDriverSubmitMultiDcbs` | resolved and host-adapted; hardware marker/fence still fails |
+| Compute queue submission | `sceAgcDriverSetupAsyncGraphics`, then OpenAGC's qualified DCB compute path | export resolved; depends on the lifecycle fix |
+| Multi-command-buffer batches | convert OpenAGC byte sizes to Sony dword sizes and call multi-DCB | adapter implemented; ACB arrays are not used by the Prospero Vulkan runtime |
+| Tessellation | OpenAGC-owned ring storage and PM4 plus `sceAgcDriverSetTFRing` | **Blocking gap:** functional Sony export exists across the inspected active corpus but is not forwarded |
+| Fences and finite waits | OpenAGC-emitted EOP packets, Sony DCB transport, CPU bounded wait | implementation exists; first Sony hardware fence times out |
+| Memory, resources, pipelines, and transitions | remain OpenAGC-owned | carrier-independent by design |
+| Presentation | OpenAGC-owned VideoOut path | carrier-independent by design |
+| Device destruction/recreation | reset OpenAGC state while preserving valid loader-owned Sony state | adapter exists, but lifecycle semantics are not yet proven |
+
+Prospero compute currently uses DCB submission after async setup; it does not
+require the direct backend's authenticated user-special queue or ACB carrier.
+Likewise, Vulkan does not consume the private suspend, workload-diagnostic,
+Razor, capture, HDR-scopes, or permission-only Direct exports. Those operations
+remain separate low-level compatibility work and are not blockers for this
+parity target. If a future Vulkan/OpenAGC feature begins consuming one, it
+enters the required carrier matrix at that point.
+
+SharpProspero provides one important lifecycle clue: its `AgcDevice.Initialize`
+calls `sceAgcInit` and retains the associated state before calling
+`sceAgcDriverSubmitDcb`. This agrees with the observed failure of OpenAGC's
+preload-only/no-op lifecycle assumption. It does not establish the exact fix:
+SharpProspero hard-codes defaults revision 8, exposes a legacy two-argument init
+shape, and is not tied to an exact firmware. OpenAGC must recover the matching
+module-specific lifecycle and version contract, avoid resolving its own public
+wrappers, and retain exact-firmware fail-closed selection.
+
+Acceptance requires the Sony artifact to preserve the same Vulkan-visible
+capability set as the direct artifact and pass, after a clean reboot: lifecycle
+preflight, DCB/multi-DCB marker execution, bounded fence completion, native
+compute and graphics, tessellation factor-ring use, Vulkan compute/graphics,
+presentation, teardown, and immediate relaunch. A successful return value
+without observable GPU completion is failure. No parity step may open or issue
+an ioctl to `/dev/gc` directly after Sony selection.
+
 ## Cross-firmware export audit (2026-08-04)
 
 The forwarded surface was checked by decoded export name and raw NID against
