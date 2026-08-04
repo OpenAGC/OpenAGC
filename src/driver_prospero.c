@@ -402,7 +402,7 @@ int32_t agcProsperoSelectRegisterDefaultsVersion(uint32_t version)
  * offsets proven by the hardware qualification samples. Keeping this inside
  * the Prospero backend lets ordinary OpenAGC and Vulkan clients stay unaware
  * of kernel credential layout. */
-static int32_t agcProsperoPrepareGpuCredentials(void)
+int32_t agcProsperoPrepareGpuCredentials(void)
 {
     pid_t pid = getpid();
     uint64_t authid;

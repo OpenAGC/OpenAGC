@@ -8,6 +8,7 @@
 #include "agc_ioctl.h"
 #include "agc_runtime_diag.h"
 #include "driver_ops.h"
+#include "driver_sony_exports.h"
 
 typedef struct AgcFirmwareVersion {
     uint32_t raw;
@@ -95,6 +96,10 @@ typedef struct AgcDriverRegistryEntry {
     const AgcDriverOps *ops;
 } AgcDriverRegistryEntry;
 
+typedef const AgcDriverOps *(*AgcInstalledDriverResolveFn)(
+    void *context, const AgcSonyDriverProfile *profile,
+    AgcSonyDriverLoadStatus *status_out);
+
 AgcFirmwareVersion agcFirmwareNormalize(uint32_t raw_version);
 uint16_t agcDriverRuntimeFirmwareAbiKey(void);
 bool agcProsperoFirmwareSupported(uint32_t raw_version);
@@ -117,6 +122,15 @@ int32_t agcDriverSelectFromRegistry(const AgcFirmwareDetector *detector,
     const AgcDriverRegistryEntry *entries, size_t entry_count,
     uint32_t required_capabilities, AgcFirmwareVersion *version_out,
     const AgcDriverOps **ops_out);
+int32_t agcDriverChooseInstalledOrDirect(
+    AgcSonyDriverLoadStatus installed_status,
+    const AgcDriverOps *installed_ops, const AgcDriverOps *direct_ops,
+    const AgcDriverOps **ops_out);
+int32_t agcDriverSelectFirmwareBackend(
+    uint32_t raw_version, const AgcDriverOps *direct_ops,
+    AgcInstalledDriverResolveFn resolve_installed, void *resolver_context,
+    const AgcSonyDriverProfile **profile_out,
+    AgcSonyDriverLoadStatus *status_out, const AgcDriverOps **ops_out);
 int32_t agcDriverSelectRuntime(AgcFirmwareVersion *version_out,
     const AgcDriverOps **ops_out);
 

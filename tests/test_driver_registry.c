@@ -929,6 +929,72 @@ static void test_invalid_registry_arguments(void)
         AGC_ERROR_INVALID_ARGUMENT, "NULL operations output rejected");
 }
 
+typedef struct FakeInstalledResolution {
+    AgcSonyDriverLoadStatus status;
+    const AgcDriverOps *ops;
+    uint32_t calls;
+} FakeInstalledResolution;
+
+static const AgcDriverOps *fake_resolve_installed(void *context,
+    const AgcSonyDriverProfile *profile, AgcSonyDriverLoadStatus *status_out)
+{
+    FakeInstalledResolution *resolution = context;
+
+    TEST_ASSERT(profile != NULL, "selector supplies an exact Sony profile");
+    resolution->calls++;
+    *status_out = resolution->status;
+    return resolution->ops;
+}
+
+static void test_installed_or_direct_selection(void)
+{
+    static const AgcDriverOps direct_ops = {.name = "direct-test"};
+    FakeInstalledResolution resolution = {
+        AGC_SONY_DRIVER_READY, &agcGenericDriverOps, 0u
+    };
+    const AgcSonyDriverProfile *profile = NULL;
+    AgcSonyDriverLoadStatus status = AGC_SONY_DRIVER_NOT_PRESENT;
+    const AgcDriverOps *ops = NULL;
+
+    TEST_ASSERT_EQ(agcDriverSelectFirmwareBackend(0x05500008u,
+        &direct_ops, fake_resolve_installed, &resolution,
+        &profile, &status, &ops), AGC_OK,
+        "complete installed driver is preferred");
+    TEST_ASSERT(ops == &agcGenericDriverOps,
+        "installed operations win over the direct candidate");
+    TEST_ASSERT(profile != NULL && profile->firmware_abi_key == 0x0550u,
+        "selector uses the exact FW 5.50 profile");
+    TEST_ASSERT_EQ(status, AGC_SONY_DRIVER_READY,
+        "selected status is preserved");
+
+    resolution.status = AGC_SONY_DRIVER_NOT_PRESENT;
+    resolution.ops = NULL;
+    ops = NULL;
+    TEST_ASSERT_EQ(agcDriverSelectFirmwareBackend(0x05500008u,
+        &direct_ops, fake_resolve_installed, &resolution,
+        NULL, &status, &ops), AGC_OK,
+        "genuinely absent module permits direct fallback");
+    TEST_ASSERT(ops == &direct_ops,
+        "absent module selects direct operations");
+
+    resolution.status = AGC_SONY_DRIVER_INCOMPATIBLE;
+    ops = &direct_ops;
+    TEST_ASSERT_EQ(agcDriverSelectFirmwareBackend(0x05500008u,
+        &direct_ops, fake_resolve_installed, &resolution,
+        NULL, &status, &ops), AGC_ERROR_NOT_SUPPORTED,
+        "present but incomplete module fails closed");
+    TEST_ASSERT(ops == NULL,
+        "incompatible module never falls back to direct operations");
+
+    ops = NULL;
+    TEST_ASSERT_EQ(agcDriverSelectFirmwareBackend(0x05510000u,
+        &direct_ops, fake_resolve_installed, &resolution,
+        &profile, &status, &ops), AGC_OK,
+        "unprofiled firmware does not probe installed exports");
+    TEST_ASSERT(profile == NULL && ops == &direct_ops,
+        "unprofiled installed path leaves an explicit direct candidate intact");
+}
+
 void test_suite_driver_registry(void)
 {
     TEST_SUITE("Runtime Driver Registry");
@@ -944,4 +1010,5 @@ void test_suite_driver_registry(void)
     TEST_RUN(test_exact_alias_and_capability_selection);
     TEST_RUN(test_unknown_and_detection_failure_fail_closed);
     TEST_RUN(test_invalid_registry_arguments);
+    TEST_RUN(test_installed_or_direct_selection);
 }

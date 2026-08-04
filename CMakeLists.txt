@@ -9,6 +9,8 @@ include(CMakePackageConfigHelpers)
 
 set(OPENAGC_PLATFORM "auto" CACHE STRING "openagc platform: auto, prospero, or generic")
 set_property(CACHE OPENAGC_PLATFORM PROPERTY STRINGS auto prospero generic)
+option(OPENAGC_PREFER_INSTALLED_AGC_DRIVER
+    "Prefer an already-loaded libSceAgcDriver on Prospero" ON)
 
 if(OPENAGC_PLATFORM STREQUAL "prospero")
     set(OPENAGC_PROSPERO_PLATFORM ON)
@@ -87,6 +89,12 @@ endif()
 if(OPENAGC_PROSPERO_PLATFORM)
     target_compile_definitions(openagc PUBLIC OPENAGC_PROSPERO OPENAGC_REQUIRE_ABI)
     target_link_libraries(openagc PUBLIC kernel SceVideoOut)
+    if(OPENAGC_PREFER_INSTALLED_AGC_DRIVER)
+        target_compile_definitions(openagc PRIVATE
+            OPENAGC_PREFER_INSTALLED_AGC_DRIVER)
+        target_link_options(openagc INTERFACE "LINKER:--no-as-needed")
+        target_link_libraries(openagc PUBLIC SceAgcDriver)
+    endif()
 else()
     target_compile_definitions(openagc PUBLIC OPENAGC_GENERIC)
 endif()

@@ -53,6 +53,7 @@ extern const AgcDriverOps agcProsperoDriverOps;
 int32_t agcProsperoConfigureRuntimeProfile(uint32_t raw_version);
 int32_t agcProsperoGetRuntimeProfile(AgcProsperoRuntimeProfile *profile_out);
 int32_t agcProsperoSelectRegisterDefaultsVersion(uint32_t version);
+int32_t agcProsperoPrepareGpuCredentials(void);
 #endif
 
 const AgcDriverOps *agcDriverGetOps(void);

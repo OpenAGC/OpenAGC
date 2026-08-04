@@ -7,6 +7,7 @@
 #include "agc_context.h"
 #include "agc_error.h"
 #include "agc_ioctl.h"
+#include "driver_sony_exports.h"
 
 static const uint32_t g_legacy_v1_aliases[] = {
     0x0100u
@@ -482,6 +483,55 @@ int32_t agcDriverSelectFromRegistry(const AgcFirmwareDetector *detector,
     return AGC_OK;
 }
 
+int32_t agcDriverChooseInstalledOrDirect(
+    AgcSonyDriverLoadStatus installed_status,
+    const AgcDriverOps *installed_ops, const AgcDriverOps *direct_ops,
+    const AgcDriverOps **ops_out)
+{
+    if (!ops_out)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    *ops_out = NULL;
+    if (installed_status == AGC_SONY_DRIVER_INCOMPATIBLE)
+        return AGC_ERROR_NOT_SUPPORTED;
+    if (installed_status == AGC_SONY_DRIVER_READY) {
+        if (!installed_ops)
+            return AGC_ERROR_NOT_SUPPORTED;
+        *ops_out = installed_ops;
+        return AGC_OK;
+    }
+    if (installed_status != AGC_SONY_DRIVER_NOT_PRESENT || !direct_ops)
+        return AGC_ERROR_NOT_SUPPORTED;
+    *ops_out = direct_ops;
+    return AGC_OK;
+}
+
+int32_t agcDriverSelectFirmwareBackend(
+    uint32_t raw_version, const AgcDriverOps *direct_ops,
+    AgcInstalledDriverResolveFn resolve_installed, void *resolver_context,
+    const AgcSonyDriverProfile **profile_out,
+    AgcSonyDriverLoadStatus *status_out, const AgcDriverOps **ops_out)
+{
+    const AgcSonyDriverProfile *profile;
+    const AgcDriverOps *installed_ops = NULL;
+    AgcSonyDriverLoadStatus status = AGC_SONY_DRIVER_NOT_PRESENT;
+
+    if (!ops_out)
+        return AGC_ERROR_INVALID_ARGUMENT;
+    *ops_out = NULL;
+    profile = agcSonyDriverProfileForFirmware(raw_version);
+    if (profile) {
+        if (!resolve_installed)
+            return AGC_ERROR_INVALID_ARGUMENT;
+        installed_ops = resolve_installed(resolver_context, profile, &status);
+    }
+    if (profile_out)
+        *profile_out = profile;
+    if (status_out)
+        *status_out = status;
+    return agcDriverChooseInstalledOrDirect(
+        status, installed_ops, direct_ops, ops_out);
+}
+
 #ifdef OPENAGC_PROSPERO
 typedef struct AgcKernelSwVersion {
     uint64_t reserved0;
@@ -513,6 +563,16 @@ static int32_t agcQueryProsperoFirmware(void *context, uint32_t *raw_version)
         version.version, version.version_string);
     return AGC_OK;
 }
+
+#ifdef OPENAGC_PREFER_INSTALLED_AGC_DRIVER
+static const AgcDriverOps *agcResolveRuntimeSonyDriver(
+    void *context, const AgcSonyDriverProfile *profile,
+    AgcSonyDriverLoadStatus *status_out)
+{
+    (void)context;
+    return agcSonyDriverTryLoad(profile, status_out);
+}
+#endif
 #endif
 
 int32_t agcDriverSelectRuntime(AgcFirmwareVersion *version_out,
@@ -564,19 +624,27 @@ int32_t agcDriverSelectRuntime(AgcFirmwareVersion *version_out,
     result = agcQueryProsperoFirmware(NULL, &raw_version);
     if (result != AGC_OK)
         return AGC_ERROR_NOT_SUPPORTED;
-    if (!agcProsperoFirmwareSupported(raw_version))
-        return AGC_ERROR_NOT_SUPPORTED;
     entry = agcDriverRegistryLookup(registry,
         sizeof(registry) / sizeof(registry[0]), agcFirmwareAbiKey(raw_version),
         AGC_BACKEND_CAP_NATIVE_SUBMIT);
-    if (!entry)
+    if (!entry && !agcSonyDriverProfileForFirmware(raw_version))
         return AGC_ERROR_NOT_SUPPORTED;
-    *ops_out = entry->ops;
     result = agcProsperoConfigureRuntimeProfile(raw_version);
     if (result != AGC_OK) {
         *ops_out = NULL;
         return result;
     }
+#ifdef OPENAGC_PREFER_INSTALLED_AGC_DRIVER
+    result = agcDriverSelectFirmwareBackend(raw_version,
+        entry ? entry->ops : NULL, agcResolveRuntimeSonyDriver, NULL,
+        NULL, NULL, ops_out);
+    if (result != AGC_OK)
+        return result;
+#else
+    if (!entry)
+        return AGC_ERROR_NOT_SUPPORTED;
+    *ops_out = entry->ops;
+#endif
     g_runtime_firmware_version = raw_version;
     if (version_out)
         *version_out = agcFirmwareNormalize(raw_version);
