@@ -396,12 +396,11 @@ int32_t agcProsperoSelectRegisterDefaultsVersion(uint32_t version)
 #define AGC_FW550_THREAD_UCRED_OFFSET 0x140u
 #define AGC_FW550_UCRED_AUTHID_OFFSET 0x58u
 
-/* Prepare the payload process for /dev/gc before any file descriptor is
- * opened. The SDK helper updates p_ucred. FW 5.50's ioctl path reads
- * curthread->td_ucred, so also repair a detached thread credential using the
- * offsets proven by the hardware qualification samples. Keeping this inside
- * the Prospero backend lets ordinary OpenAGC and Vulkan clients stay unaware
- * of kernel credential layout. */
+/* Prepare the payload process for GPU driver calls. The SDK helper updates
+ * p_ucred. FW 5.50 GPU paths can read curthread->td_ucred, so also repair a
+ * detached thread credential using the offsets proven by the hardware
+ * qualification samples. This is required by both the installed Sony driver
+ * and the explicit direct-backend build; it does not open or select /dev/gc. */
 int32_t agcProsperoPrepareGpuCredentials(void)
 {
     pid_t pid = getpid();

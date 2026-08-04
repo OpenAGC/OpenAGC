@@ -15,6 +15,11 @@
 #endif
 
 #ifdef OPENAGC_PROSPERO
+#include <stdio.h>
+#include <string.h>
+#endif
+
+#ifdef OPENAGC_PROSPERO
 static const AgcDriverOps *g_driver_ops;
 #else
 static const AgcDriverOps *g_driver_ops = &AGC_DEFAULT_DRIVER_OPS;
@@ -77,6 +82,10 @@ int32_t PS5_SYSV_ABI sce_agc_initialize(void)
 
         if (result != AGC_OK)
             return result;
+        printf("[openagc] backend=%s installed_driver=%s direct_gc=%s\n",
+            g_driver_ops->name,
+            strcmp(g_driver_ops->name, "sony-installed") == 0 ? "true" : "false",
+            strcmp(g_driver_ops->name, "sony-installed") == 0 ? "false" : "true");
     }
 #endif
     AGC_DISPATCH_OR_UNSUPPORTED(initialize, ());

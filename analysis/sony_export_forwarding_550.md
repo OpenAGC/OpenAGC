@@ -10,6 +10,9 @@ installed module and fails closed for any discovery or resolution failure.
 The Sony-linked artifact is strict: module absence or incomplete resolution
 fails initialization and never selects `/dev/gc`. Direct operation exists only
 in the separately built `OPENAGC_PREFER_INSTALLED_AGC_DRIVER=OFF` artifact.
+On successful selection the runtime emits
+`[openagc] backend=sony-installed installed_driver=true direct_gc=false` so a
+client gate can prove the carrier choice and reject direct-backend activation.
 This is an implementation promotion, not a hardware-qualification claim. The
 only previous installed-driver hardware attempts returned `AGC_OK` without
 executing observable markers. They used mutating module loading and altered
