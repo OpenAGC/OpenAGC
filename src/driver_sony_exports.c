@@ -99,6 +99,7 @@ static const AgcSonyDriverProfile g_sony_driver_profiles[] = {
     AGC_SONY_PROFILE(0x0600u, "fw600-installed", g_standard_exports),
     AGC_SONY_PROFILE(0x0602u, "fw602-installed", g_standard_exports),
     AGC_SONY_PROFILE(0x0650u, "fw650-installed", g_standard_exports),
+    AGC_SONY_PROFILE(0x0700u, "fw700-installed", g_standard_exports),
     AGC_SONY_PROFILE(0x0701u, "fw701-installed", g_standard_exports),
     AGC_SONY_PROFILE(0x0720u, "fw720-installed", g_standard_exports),
     AGC_SONY_PROFILE(0x0740u, "fw740-installed", g_standard_exports),

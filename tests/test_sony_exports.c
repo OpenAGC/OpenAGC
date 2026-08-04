@@ -126,7 +126,7 @@ static void test_sony_firmware_profiles(void)
     static const uint16_t keys[] = {
         0x0320u, 0x0400u, 0x0403u, 0x0450u, 0x0451u,
         0x0502u, 0x0510u, 0x0550u, 0x0600u, 0x0602u, 0x0650u,
-        0x0701u, 0x0720u, 0x0740u, 0x0760u, 0x0761u,
+        0x0700u, 0x0701u, 0x0720u, 0x0740u, 0x0760u, 0x0761u,
         0x0800u, 0x0820u, 0x0840u, 0x0860u,
         0x0900u, 0x0905u, 0x0920u, 0x0940u, 0x0960u,
         0x1001u, 0x1020u, 0x1040u, 0x1060u,
@@ -154,6 +154,13 @@ static void test_sony_firmware_profiles(void)
     }
     TEST_ASSERT(agcSonyDriverProfileForFirmware(0x05510000u) == NULL,
         "nearby uninspected firmware is rejected");
+    {
+        const AgcSonyDriverProfile *fw700 =
+            agcSonyDriverProfileForFirmware(0x07000000u);
+        TEST_ASSERT(fw700 != NULL, "FW 7.00 installed profile exists");
+        TEST_ASSERT(strcmp(fw700->name, "fw700-installed") == 0,
+            "FW 7.00 installed profile is exact");
+    }
     TEST_ASSERT(agcSonyDriverProfileForFirmware(0x03000000u) == NULL,
         "archival firmware is not promoted");
 }
