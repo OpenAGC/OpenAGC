@@ -2,7 +2,7 @@
  * agc_init.c — PS5 AGC initialization + NOP submit test
  *
  * Adapted from freegnm-examples/triangle/src/main.c for PS5 AGC.
- * Tests the native /dev/gc backend:
+ * Tests the selected native driver backend:
  *   1. sce_agc_initialize() — open /dev/gc + CONTEXT_QUERY ioctl + mmap
  *   2. sceAgcDriverGetPaDebugInterfaceVersion() — PA debug query
  *   3. Submit two marker DCBs as one descriptor-array frame
@@ -244,6 +244,7 @@ int main(void) {
     int32_t cred_err = -1; /* result of credential bypass (step 0) */
     uint32_t version;
     bool profile_ok = false;
+    bool backend_ok = false;
     bool wait64_ok = false;
     bool defaults_ok = false;
     bool async_ok = false;
@@ -274,6 +275,8 @@ int main(void) {
     /* Pre-init diagnostics: check process identity and firmware */
     printf("    DIAG: pid=%d, uid=%d, euid=%d\n", getpid(), getuid(), geteuid());
 
+    /* A Sony-first artifact must not mutate /dev/gc before selection. */
+#ifndef AGC_EXPECT_SONY_DRIVER
     /* Check /dev/gc open + CONTEXT_QUERY with detailed diagnostics */
     int test_fd = open("/dev/gc", O_RDWR);
     if (test_fd < 0) {
@@ -301,6 +304,9 @@ int main(void) {
 
         close(test_fd);
     }
+#else
+    printf("    DIAG: direct /dev/gc preflight skipped for installed driver\n");
+#endif
 
     err = sce_agc_initialize();
     printf("    result: 0x%08X (%s)\n", (unsigned)err, errstr(err));
@@ -308,7 +314,17 @@ int main(void) {
         printf("    FATAL: cannot initialize AGC\n");
         return 1;
     }
-    printf("    backend: %s\n", agcDriverDebugBackendName());
+    const char *backend_name = agcDriverDebugBackendName();
+    printf("    backend: %s\n", backend_name);
+#ifdef AGC_EXPECT_SONY_DRIVER
+    backend_ok = strcmp(backend_name, "sony-installed") == 0;
+#else
+    backend_ok = strcmp(backend_name, "prospero-gc-submit16") == 0;
+#endif
+    printf("    Expected backend selection: %s\n",
+           backend_ok ? "PASS" : "FAIL");
+    if (!backend_ok)
+        return 1;
     err = agcDriverDebugRuntimeProfile(&runtime_diag);
     if (err == AGC_OK) {
         printf("    profile: fw=0x%08X family=%s model=%s\n",
@@ -561,7 +577,12 @@ int main(void) {
 
     int32_t queue_handle = _sceAgcDriverCreateUserSpecialQueue();
     printf("    result: %d (handle)\n", queue_handle);
-    queue_contract_ok = queue_handle >= 0;
+    queue_contract_ok =
+#ifdef AGC_EXPECT_SONY_DRIVER
+        queue_handle == AGC_ERROR_NOT_SUPPORTED;
+#else
+        queue_handle >= 0;
+#endif
     if (queue_handle < 0)
         printf("    WARNING: queue creation failed (err=0x%08X)\n",
                (unsigned)queue_handle);
@@ -607,6 +628,9 @@ int main(void) {
                    ? "permission stub" : "unexpected");
     } else {
         printf("    skipped — no queue for suspend point\n");
+#ifdef AGC_EXPECT_SONY_DRIVER
+        suspend_ok = queue_handle == AGC_ERROR_NOT_SUPPORTED;
+#endif
     }
 
     /* --- Step 9: Destroy the queue (only if created) --- */
@@ -684,7 +708,8 @@ int main(void) {
     shutdown_ok = err == AGC_OK;
     printf("    result: 0x%08X (%s)\n", (unsigned)err, errstr(err));
 
-    success = profile_ok && defaults_ok && dcb_err == AGC_OK && wait64_ok &&
+    success = backend_ok && profile_ok && defaults_ok &&
+        dcb_err == AGC_OK && wait64_ok &&
         async_ok && queue_contract_ok && suspend_ok && workload_ok &&
         submit_memory_release_ok && shutdown_ok;
 
@@ -693,6 +718,7 @@ int main(void) {
     printf("  GPU credentials:   %s\n",
            cred_err == 0 ? "set (cr_sceAuthId)" : "FAILED");
     printf("  AGC init:          OK\n");
+    printf("  Backend selection: %s\n", backend_ok ? "PASS" : "FAILED");
     printf("  Runtime profile:   FW ABI 0x%04X %s\n",
            AGC_EXPECT_FIRMWARE_ABI_KEY, profile_ok ? "PASS" : "FAILED");
     printf("  Internal memory:   OK\n");

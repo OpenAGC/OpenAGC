@@ -2,7 +2,8 @@
 #
 # Three test programs adapted from freegnm-examples:
 #   videoout_linear.elf — VideoOut display pipeline smoke test (no GPU)
-#   agc_init.elf        — AGC init + NOP submit + queue test (GPU commands)
+#   agc_init.elf        — direct /dev/gc init + submit + queue oracle
+#   agc_init_sony.elf   — preloaded Sony driver submit oracle (run last)
 #   agc_videoout.elf    — Combined AGC + VideoOut test (GPU + display)
 #
 # Prerequisites:
@@ -50,6 +51,8 @@ VIDEOOUT_LDFLAGS := -lSceVideoOut -lkernel
 
 # agc_init: links libopenagc.a + VideoOut + kernel
 AGC_LDFLAGS := $(OPENAGC_LIB) -lSceVideoOut -lkernel
+AGC_SONY_LDFLAGS := $(OPENAGC_LIB) -Wl,--no-as-needed -lSceAgcDriver \
+	-lSceVideoOut -lkernel
 FW_STAGE_LDFLAGS := $(OPENAGC_LIB) -lSceVideoOut -lkernel
 FW_SONY_ORACLE_LDFLAGS := $(OPENAGC_LIB) -lkernel
 FIRMWARE_PROBE_LDFLAGS := -lkernel
@@ -158,6 +161,25 @@ videoout_linear.elf: videoout_linear.c ps5_video_out.h
 # AGC init + NOP submit test (links libopenagc.a)
 agc_init.elf: agc_init.c ps5_video_out.h $(OPENAGC_LIB)
 	$(CC) $(CFLAGS) -o $@ agc_init.c $(AGC_LDFLAGS)
+
+# This forced dependency makes the process loader initialize the matching
+# installed module before main. A failed run requires a reboot before any
+# direct /dev/gc qualification.
+agc_init_sony.elf: agc_init.c ps5_video_out.h $(OPENAGC_LIB)
+	$(CC) $(CFLAGS) -DAGC_EXPECT_SONY_DRIVER=1 \
+		-DAGC_EXPECT_WORKLOAD=0 -o $@ agc_init.c $(AGC_SONY_LDFLAGS)
+
+.PHONY: backend_fw550_check
+backend_fw550_check: agc_init.elf agc_init_sony.elf
+	@if $(READELF) -d agc_init.elf | grep -q 'libSceAgcDriver\.sprx'; then \
+		echo "agc_init.elf unexpectedly needs libSceAgcDriver.sprx" >&2; \
+		exit 1; \
+	fi
+	@$(READELF) -d agc_init_sony.elf | grep -q 'libSceAgcDriver\.sprx' || { \
+		echo "agc_init_sony.elf is missing libSceAgcDriver.sprx" >&2; \
+		exit 1; \
+	}
+	@echo "FW 5.50 backend ELF split: PASS"
 
 # FW 11.60 full public-path qualification artifact. It self-terminates after
 # flushing its verdict so websrv cannot retain a completed foreground process.
@@ -1945,6 +1967,10 @@ deploy_videoout: videoout_linear.elf
 
 deploy_agc: agc_init.elf
 	PS5_HOST=$(PS5_HOST) ./run_fw550_conformance.sh --sample agc_init
+
+.PHONY: deploy_agc_sony
+deploy_agc_sony: agc_init_sony.elf
+	PS5_HOST=$(PS5_HOST) ./run_fw550_conformance.sh --sample agc_init_sony
 
 .PHONY: deploy_agc_fw1160
 deploy_agc_fw1160: agc_init_fw1160.elf

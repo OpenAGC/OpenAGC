@@ -50,7 +50,7 @@ done
 
 artifact_for() {
     case "$1" in
-        videoout_linear|agc_init|agc_videoout|agc_compute|agc_graphics|\
+        videoout_linear|agc_init|agc_init_sony|agc_videoout|agc_compute|agc_graphics|\
         agc_graphics_rgba8|agc_graphics_amplify|agc_graphics_lines|\
         agc_graphics_invocations|agc_tessellation|agc_tess_geometry|\
         agc_tess_geometry_invocations|agc_tess_geometry_lines|\
@@ -110,8 +110,15 @@ validate_log() {
     esac
 
     case "$sample" in
-        agc_init)
+        agc_init|agc_init_sony)
             require_log 'Runtime profile:[[:space:]]+FW ABI 0x0550 PASS' "$log" 'FW 5.50 runtime profile' || return
+            if [ "$sample" = agc_init_sony ]; then
+                require_log 'backend: sony-installed' "$log" 'installed Sony backend' || return
+            else
+                require_log 'backend: prospero-gc-submit16' "$log" 'direct /dev/gc backend' || return
+            fi
+            require_log 'Batched DCB execution:[[:space:]]+PASS' "$log" 'two-DCB GPU execution' || return
+            require_log 'Driver shutdown:[[:space:]]+PASS' "$log" 'clean backend shutdown' || return
             require_log '=== Done ===' "$log" 'completed init lifecycle'
             ;;
         agc_videoout)
