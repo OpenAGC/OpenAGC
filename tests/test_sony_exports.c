@@ -11,6 +11,8 @@ typedef struct FakeSonyLoader {
 
 static uint32_t g_fake_multi_count;
 static uint32_t g_fake_multi_sizes[2];
+static uintptr_t g_fake_tf_ring_address;
+static uint32_t g_fake_tf_ring_size;
 
 static int32_t PS5_SYSV_ABI fakeSonySubmitMultiDcbs(
     void *const dcb_gpu_addrs[], const uint32_t *dcb_sizes_in_dwords,
@@ -21,6 +23,14 @@ static int32_t PS5_SYSV_ABI fakeSonySubmitMultiDcbs(
     g_fake_multi_count = count;
     memcpy(g_fake_multi_sizes, dcb_sizes_in_dwords,
         count * sizeof(dcb_sizes_in_dwords[0]));
+    return AGC_OK;
+}
+
+static int32_t PS5_SYSV_ABI fakeSonySetTFRing(
+    uintptr_t ring_address, uint32_t ring_size)
+{
+    g_fake_tf_ring_address = ring_address;
+    g_fake_tf_ring_size = ring_size;
     return AGC_OK;
 }
 
@@ -59,11 +69,21 @@ static void *fakeSonyResolve(void *context, void *module, const char *symbol)
                 sceAgcDriverSubmitDcb;
             return fakeCallbackAddress(&callback);
         }
+        if (strcmp(symbol, "sceAgcDriverSetTFRing") == 0) {
+            int32_t (PS5_SYSV_ABI *callback)(uintptr_t, uint32_t) =
+                sceAgcDriverSetTFRing;
+            return fakeCallbackAddress(&callback);
+        }
     }
 
     if (strcmp(symbol, "sceAgcDriverSubmitMultiDcbs") == 0) {
         int32_t (PS5_SYSV_ABI *callback)(
             void *const[], const uint32_t *, uint32_t) = fakeSonySubmitMultiDcbs;
+        return fakeCallbackAddress(&callback);
+    }
+    if (strcmp(symbol, "sceAgcDriverSetTFRing") == 0) {
+        int32_t (PS5_SYSV_ABI *callback)(uintptr_t, uint32_t) =
+            fakeSonySetTFRing;
         return fakeCallbackAddress(&callback);
     }
 
@@ -144,7 +164,7 @@ static void test_sony_firmware_profiles(void)
         "profile manifest covers every resolver slot");
     for (size_t i = 0; i < profile->export_count; ++i)
         required += profile->exports[i].required ? 1u : 0u;
-    TEST_ASSERT_EQ(required, 5u, "profile has five mandatory exports");
+    TEST_ASSERT_EQ(required, 6u, "profile has six Vulkan-required exports");
     for (size_t i = 0; i < sizeof(keys) / sizeof(keys[0]); ++i) {
         const AgcSonyDriverProfile *candidate =
             agcSonyDriverProfileForFirmware((uint32_t)keys[i] << 16);
@@ -180,6 +200,16 @@ static void test_sony_export_resolution(void)
         "Sony operations table is named");
     TEST_ASSERT(ops.submit_dcb == agcGenericDriverOps.submit_dcb,
         "Sony submit callback populated from module export");
+    TEST_ASSERT(ops.set_tf_ring == fakeSonySetTFRing,
+        "Sony TF-ring callback populated from functional public export");
+    g_fake_tf_ring_address = 0;
+    g_fake_tf_ring_size = 0;
+    TEST_ASSERT_EQ(ops.set_tf_ring((uintptr_t)0x12345000u, 0x4000u), AGC_OK,
+        "Sony TF-ring callback is callable");
+    TEST_ASSERT_EQ(g_fake_tf_ring_address, (uintptr_t)0x12345000u,
+        "Sony TF-ring callback preserves the GPU address");
+    TEST_ASSERT_EQ(g_fake_tf_ring_size, 0x4000u,
+        "Sony TF-ring callback preserves the byte size");
     TEST_ASSERT(ops.internal_suspend_point_submit_primary == NULL,
         "installed driver does not expose its private primary carrier");
     TEST_ASSERT(ops.internal_suspend_point_submit_final == NULL,
@@ -262,6 +292,25 @@ static void test_sony_missing_optional_export(void)
         "eligible module is not released for an optional absence");
 }
 
+static void test_sony_missing_tf_ring_export(void)
+{
+    FakeSonyLoader fake = {
+        .missing_symbol = "sceAgcDriverSetTFRing",
+    };
+    AgcSonyLoader loader = fakeLoader(&fake);
+    AgcDriverOps ops;
+    void *module = (void *)1;
+
+    TEST_ASSERT_EQ(agcSonyDriverResolve(
+        &loader, fw550Profile(), &ops, &module),
+        AGC_ERROR_NOT_SUPPORTED,
+        "missing Vulkan-required Sony TF-ring export is rejected");
+    TEST_ASSERT(module == NULL,
+        "TF-ring-incomplete Sony module handle is cleared");
+    TEST_ASSERT_EQ(fake.close_count, 1u,
+        "TF-ring-incomplete Sony module is rejected");
+}
+
 static void test_sony_recursion_rejected(void)
 {
     FakeSonyLoader fake = {
@@ -275,6 +324,23 @@ static void test_sony_recursion_rejected(void)
         &loader, fw550Profile(), &ops, &module),
         AGC_ERROR_NOT_SUPPORTED, "OpenAGC wrapper self-resolution is rejected");
     TEST_ASSERT_EQ(fake.close_count, 1u, "recursive module is closed");
+}
+
+static void test_sony_tf_ring_recursion_rejected(void)
+{
+    FakeSonyLoader fake = {
+        .recursive_symbol = "sceAgcDriverSetTFRing",
+    };
+    AgcSonyLoader loader = fakeLoader(&fake);
+    AgcDriverOps ops;
+    void *module = NULL;
+
+    TEST_ASSERT_EQ(agcSonyDriverResolve(
+        &loader, fw550Profile(), &ops, &module),
+        AGC_ERROR_NOT_SUPPORTED,
+        "OpenAGC TF-ring wrapper self-resolution is rejected");
+    TEST_ASSERT_EQ(fake.close_count, 1u,
+        "recursive TF-ring module is rejected");
 }
 
 static void test_sony_loader_validation(void)
@@ -300,6 +366,8 @@ void test_suite_sony_exports(void)
     TEST_RUN(test_sony_export_resolution);
     TEST_RUN(test_sony_missing_mandatory_export);
     TEST_RUN(test_sony_missing_optional_export);
+    TEST_RUN(test_sony_missing_tf_ring_export);
     TEST_RUN(test_sony_recursion_rejected);
+    TEST_RUN(test_sony_tf_ring_recursion_rejected);
     TEST_RUN(test_sony_loader_validation);
 }

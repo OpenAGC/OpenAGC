@@ -28,6 +28,8 @@ static const AgcSonyDriverExport g_legacy_v3_exports[] = {
         AGC_SONY_REQUIRED("sceAgcDriverSubmitAcb"),
     [AGC_SONY_EXPORT_SETUP_ASYNC_GRAPHICS] =
         AGC_SONY_REQUIRED("sceAgcDriverSetupAsyncGraphics"),
+    [AGC_SONY_EXPORT_SET_TF_RING] =
+        AGC_SONY_REQUIRED("sceAgcDriverSetTFRing"),
     [AGC_SONY_EXPORT_GET_PA_DEBUG_INTERFACE_VERSION] =
         AGC_SONY_REQUIRED("sceAgcDriverGetPaDebugInterfaceVersion"),
     [AGC_SONY_EXPORT_SET_TARGET_RING_FOR_DIAG] =
@@ -54,6 +56,8 @@ static const AgcSonyDriverExport g_standard_exports[] = {
         AGC_SONY_REQUIRED("sceAgcDriverSubmitAcb"),
     [AGC_SONY_EXPORT_SETUP_ASYNC_GRAPHICS] =
         AGC_SONY_REQUIRED("sceAgcDriverSetupAsyncGraphics"),
+    [AGC_SONY_EXPORT_SET_TF_RING] =
+        AGC_SONY_REQUIRED("sceAgcDriverSetTFRing"),
     [AGC_SONY_EXPORT_GET_PA_DEBUG_INTERFACE_VERSION] =
         AGC_SONY_REQUIRED("sceAgcDriverGetPaDebugInterfaceVersion"),
     [AGC_SONY_EXPORT_SET_TARGET_RING_FOR_DIAG] =
@@ -202,6 +206,7 @@ static bool agcSonyProfileIsValid(const AgcSonyDriverProfile *profile)
         AGC_SONY_EXPORT_SUBMIT_DCB,
         AGC_SONY_EXPORT_SUBMIT_ACB,
         AGC_SONY_EXPORT_SETUP_ASYNC_GRAPHICS,
+        AGC_SONY_EXPORT_SET_TF_RING,
         AGC_SONY_EXPORT_GET_PA_DEBUG_INTERFACE_VERSION,
     };
 
@@ -290,6 +295,8 @@ int32_t agcSonyDriverResolve(const AgcSonyLoader *loader,
     AGC_SONY_RESOLVE(setup_async_graphics,
         AGC_SONY_EXPORT_SETUP_ASYNC_GRAPHICS,
         sceAgcDriverSetupAsyncGraphics);
+    AGC_SONY_RESOLVE(set_tf_ring, AGC_SONY_EXPORT_SET_TF_RING,
+        sceAgcDriverSetTFRing);
     AGC_SONY_RESOLVE(get_pa_debug_interface_version,
         AGC_SONY_EXPORT_GET_PA_DEBUG_INTERFACE_VERSION,
         sceAgcDriverGetPaDebugInterfaceVersion);

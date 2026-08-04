@@ -42,10 +42,12 @@ nonexistent EOP convenience exports remain unsupported.
 
 That list describes the current implementation, not the completion criterion.
 The Sony backend is complete only when carrier selection preserves every
-native OpenAGC capability consumed by Vulkan-PS5. The current success-only
-lifecycle adapters and missing functional `sceAgcDriverSetTFRing` forwarding
-are blocking gaps. Exhaustive private-ioctl parity is not required unless a
-native/Vulkan capability depends on the operation.
+native OpenAGC capability consumed by Vulkan-PS5. Functional
+`sceAgcDriverSetTFRing` forwarding is mandatory and now preserves the
+tessellation entry point; hardware qualification remains pending. The current
+success-only lifecycle adapters are still a blocking gap. Exhaustive
+private-ioctl parity is not required unless a native/Vulkan capability depends
+on the operation.
 
 `agcDriverDebugBackendName()` reports `sony-installed`, and the existing
 `agcGetRuntimeInfo()` profile string incorporates that backend name without a

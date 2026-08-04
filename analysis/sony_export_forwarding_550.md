@@ -21,12 +21,15 @@ qualification artifact before its status changes.
 
 ## Forwarded surface
 
-Five exports are mandatory for FW 5.50:
+Six exports are mandatory for FW 5.50. The first five establish the submission
+and diagnostic carrier; TF-ring setup is required to preserve Vulkan
+tessellation functionality:
 
 - `sceAgcDriverSubmitMultiDcbs`
 - `sceAgcDriverSubmitDcb`
 - `sceAgcDriverSubmitAcb`
 - `sceAgcDriverSetupAsyncGraphics`
+- `sceAgcDriverSetTFRing`
 - `sceAgcDriverGetPaDebugInterfaceVersion`
 
 The multi-DCB adapter validates nonzero aligned byte sizes, bounds the array to
@@ -59,7 +62,7 @@ requirements reduce to the following carrier matrix:
 | Graphics queue submission | `sceAgcDriverSubmitDcb` and `sceAgcDriverSubmitMultiDcbs` | resolved and host-adapted; hardware marker/fence still fails |
 | Compute queue submission | `sceAgcDriverSetupAsyncGraphics`, then OpenAGC's qualified DCB compute path | export resolved; depends on the lifecycle fix |
 | Multi-command-buffer batches | convert OpenAGC byte sizes to Sony dword sizes and call multi-DCB | adapter implemented; ACB arrays are not used by the Prospero Vulkan runtime |
-| Tessellation | OpenAGC-owned ring storage and PM4 plus `sceAgcDriverSetTFRing` | **Blocking gap:** functional Sony export exists across the inspected active corpus but is not forwarded |
+| Tessellation | OpenAGC-owned ring storage and PM4 plus `sceAgcDriverSetTFRing` | forwarded as a mandatory functional export; hardware qualification pending |
 | Fences and finite waits | OpenAGC-emitted EOP packets, Sony DCB transport, CPU bounded wait | implementation exists; first Sony hardware fence times out |
 | Memory, resources, pipelines, and transitions | remain OpenAGC-owned | carrier-independent by design |
 | Presentation | OpenAGC-owned VideoOut path | carrier-independent by design |
@@ -99,7 +102,7 @@ decoder in `/Volumes/Untitled/unp/build_import_export_db.py` and the local SDK
 recovered name rather than by address. This is reference evidence only;
 firmware modules and generated proprietary stubs are not committed.
 
-All five mandatory exports exist in every parseable module from FW 1.00
+All six mandatory exports exist in every parseable active module from FW 3.20
 through FW 12.70, including every directly inspected exact firmware profile
 selected by OpenAGC. Their NIDs are stable across the checked corpus:
 
@@ -109,6 +112,7 @@ selected by OpenAGC. Their NIDs are stable across the checked corpus:
 | `sceAgcDriverSubmitDcb` | `UglJIZjGssM` | all parseable versions |
 | `sceAgcDriverSubmitAcb` | `gSRnr79F8tQ` | all parseable versions |
 | `sceAgcDriverSetupAsyncGraphics` | `Vlaj1gwmIFA` | all parseable versions |
+| `sceAgcDriverSetTFRing` | `XlNp7jzGiPo` | all parseable active versions |
 | `sceAgcDriverGetPaDebugInterfaceVersion` | `Pqxglq1oKec` | all parseable versions |
 
 The optional exports have two historical availability differences:
