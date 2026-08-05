@@ -1731,7 +1731,9 @@ int32_t PS5_SYSV_ABI agcGfx1013GetColorSurfaceLayout(
     if (!input || !layout || input->width == 0u || input->height == 0u ||
         input->width > 0x4000u || input->height > 0x4000u ||
         input->layer_count == 0u || input->layer_count > 0x2000u ||
-        input->mip_level_count != 1u || input->sample_count != 4u ||
+        input->mip_level_count != 1u ||
+        (input->sample_count != 2u && input->sample_count != 4u &&
+         input->sample_count != 8u) ||
         input->swizzle_mode != AGC_GFX1013_SWIZZLE_64KB_R_X)
         return AGC_ERROR_INVALID_ARGUMENT;
     if (agcGfx1013GetColorTargetFormatInfo(input->format, &info) != AGC_OK)
@@ -1744,7 +1746,8 @@ int32_t PS5_SYSV_ABI agcGfx1013GetColorSurfaceLayout(
     case 16u: element_log2 = 4u; break;
     default: return AGC_ERROR_NOT_SUPPORTED;
     }
-    sample_log2 = 2u;
+    sample_log2 = input->sample_count == 8u ? 3u :
+        (input->sample_count == 4u ? 2u : 1u);
     element_count_log2 = 16u - element_log2 - sample_log2;
     width_log2 = (element_count_log2 + 1u) / 2u;
     result.block_width = 1u << width_log2;
@@ -1829,10 +1832,12 @@ int32_t PS5_SYSV_ABI agcGfx1013SetColorTargetSlot(
         if (((uint64_t)surface_pitch * format_info.bytes_per_pixel &
              0xffu) != 0u)
             return AGC_ERROR_INVALID_ALIGNMENT;
-    } else if (sample_count == 4u && fragment_count == 4u &&
+    } else if ((sample_count == 2u || sample_count == 4u ||
+                sample_count == 8u) &&
+               fragment_count == sample_count &&
                state->swizzle_mode == AGC_GFX1013_SWIZZLE_64KB_R_X) {
         AgcGfx1013ColorSurfaceLayoutInput input = {
-            state->width, state->height, 1u, 1u, 4u,
+            state->width, state->height, 1u, 1u, sample_count,
             AGC_GFX1013_RT_FORMAT_COUNT,
             AGC_GFX1013_SWIZZLE_64KB_R_X,
         };
@@ -1851,8 +1856,9 @@ int32_t PS5_SYSV_ABI agcGfx1013SetColorTargetSlot(
         if (input.format == AGC_GFX1013_RT_FORMAT_COUNT ||
             agcGfx1013GetColorSurfaceLayout(&input, &layout) != AGC_OK)
             return AGC_ERROR_NOT_SUPPORTED;
-        sample_log2 = 2u;
-        fragment_log2 = 2u;
+        sample_log2 = sample_count == 8u ? 3u :
+            (sample_count == 4u ? 2u : 1u);
+        fragment_log2 = sample_log2;
         surface_pitch = layout.pitch;
         padded_height = layout.padded_height;
         if ((state->address &
@@ -1928,14 +1934,17 @@ int32_t PS5_SYSV_ABI agcGfx1013SetSampleState(
     uint32_t sample_log2;
     uint32_t ps_iter_log2;
     uint32_t max_distance;
-    uint32_t sample_locations;
+    uint32_t sample_locations[4] = {0u, 0u, 0u, 0u};
     uint64_t centroid_priority;
     uint32_t mask;
 
     if (!cb || !state || (state->sample_count != 1u &&
-        state->sample_count != 4u) ||
+        state->sample_count != 2u && state->sample_count != 4u &&
+        state->sample_count != 8u) ||
         (state->pixel_shader_sample_count != 1u &&
          state->pixel_shader_sample_count != 2u &&
+         state->pixel_shader_sample_count != 4u &&
+         state->pixel_shader_sample_count != 8u &&
          state->pixel_shader_sample_count != state->sample_count) ||
         (state->pixel_shader_sample_count > state->sample_count) ||
         (state->sample_mask & ~((1u << state->sample_count) - 1u)) != 0u)
@@ -1943,14 +1952,28 @@ int32_t PS5_SYSV_ABI agcGfx1013SetSampleState(
     if (agcCbRemainingDwords(cb) < AGC_GFX1013_SAMPLE_STATE_DWORDS)
         return AGC_ERROR_BUFFER_TOO_SMALL;
 
-    sample_log2 = state->sample_count == 4u ? 2u : 0u;
-    ps_iter_log2 = state->pixel_shader_sample_count == 4u ? 2u :
-        (state->pixel_shader_sample_count == 2u ? 1u : 0u);
-    max_distance = state->sample_count == 4u ? 6u : 0u;
-    /* Standard DX 4x positions: (-2,-6), (2,6), (-6,2), (6,-2). */
-    sample_locations = state->sample_count == 4u ? 0xE62A62AEu : 0u;
-    centroid_priority = state->sample_count == 4u ?
-        UINT64_C(0x3210321032103210) : 0u;
+    sample_log2 = state->sample_count == 8u ? 3u :
+        (state->sample_count == 4u ? 2u :
+         (state->sample_count == 2u ? 1u : 0u));
+    ps_iter_log2 = state->pixel_shader_sample_count == 8u ? 3u :
+        (state->pixel_shader_sample_count == 4u ? 2u :
+         (state->pixel_shader_sample_count == 2u ? 1u : 0u));
+    max_distance = state->sample_count == 8u ? 7u :
+        (state->sample_count == 4u ? 6u :
+         (state->sample_count == 2u ? 4u : 0u));
+    /* Standard GFX10 positions, matching Mesa RADV's qualified defaults. */
+    if (state->sample_count == 8u) {
+        sample_locations[0] = 0xBD153FD1u;
+        sample_locations[1] = 0x9773F95Bu;
+        centroid_priority = UINT64_C(0x7654321076543210);
+    } else {
+        sample_locations[0] = state->sample_count == 4u ? 0xE62A62AEu :
+            (state->sample_count == 2u ? 0x0000CC44u : 0u);
+        centroid_priority = state->sample_count == 4u ?
+            UINT64_C(0x3210321032103210) :
+            (state->sample_count == 2u ?
+             UINT64_C(0x1010101010101010) : 0u);
+    }
     mask = (state->sample_mask & 0xffffu) |
         ((state->sample_mask & 0xffffu) << 16u);
 
@@ -1958,7 +1981,7 @@ int32_t PS5_SYSV_ABI agcGfx1013SetSampleState(
             (sample_log2 << AGC_REG_PA_SC_AA_CONFIG_MSAA_NUM_SAMPLES_SHIFT) |
             (max_distance << AGC_REG_PA_SC_AA_CONFIG_MAX_SAMPLE_DIST_SHIFT) |
             (sample_log2 << AGC_REG_PA_SC_AA_CONFIG_MSAA_EXPOSED_SAMPLES_SHIFT) |
-            (state->sample_count == 4u ? (1u <<
+            (state->sample_count > 1u ? (1u <<
                 AGC_REG_PA_SC_AA_CONFIG_COVERED_CENTROID_IS_CENTER_SHIFT) : 0u)) ||
         !agcGfx1013EmitCx(cb, AGC_REG_DB_EQAA,
             (sample_log2 << AGC_REG_DB_EQAA_MAX_ANCHOR_SAMPLES_SHIFT) |
@@ -1966,7 +1989,7 @@ int32_t PS5_SYSV_ABI agcGfx1013SetSampleState(
             (sample_log2 << AGC_REG_DB_EQAA_MASK_EXPORT_NUM_SAMPLES_SHIFT) |
             (sample_log2 << AGC_REG_DB_EQAA_ALPHA_TO_MASK_NUM_SAMPLES_SHIFT)) ||
         !agcGfx1013EmitCx(cb, AGC_REG_PA_SC_MODE_CNTL_0,
-            (state->sample_count == 4u ? 1u : 0u) |
+            (state->sample_count > 1u ? 1u : 0u) |
             (1u << AGC_REG_PA_SC_MODE_CNTL_0_VPORT_SCISSOR_ENABLE_SHIFT)) ||
         !agcGfx1013EmitCx(cb, AGC_REG_PA_SC_MODE_CNTL_1,
             (state->pixel_shader_sample_count > 1u ? 1u : 0u) <<
@@ -1980,15 +2003,18 @@ int32_t PS5_SYSV_ABI agcGfx1013SetSampleState(
         cmd[2] = (uint32_t)centroid_priority;
         cmd[3] = (uint32_t)(centroid_priority >> 32u);
     }
-    if (!agcGfx1013EmitCx(cb, AGC_REG_PA_SC_AA_SAMPLE_LOCS_PIXEL_X0Y0_0,
-            sample_locations) ||
-        !agcGfx1013EmitCx(cb, AGC_REG_PA_SC_AA_SAMPLE_LOCS_PIXEL_X1Y0_0,
-            sample_locations) ||
-        !agcGfx1013EmitCx(cb, AGC_REG_PA_SC_AA_SAMPLE_LOCS_PIXEL_X0Y1_0,
-            sample_locations) ||
-        !agcGfx1013EmitCx(cb, AGC_REG_PA_SC_AA_SAMPLE_LOCS_PIXEL_X1Y1_0,
-            sample_locations))
-        return AGC_ERROR_INTERNAL;
+    {
+        uint32_t *cmd = agcCbAllocDwords(cb, 16u);
+        uint32_t quadrant;
+        if (!cmd) return AGC_ERROR_INTERNAL;
+        cmd[0] = agcPm4Header3(AGC_PM4_OP_SET_CONTEXT_REG, 16u);
+        cmd[1] = AGC_REG_PA_SC_AA_SAMPLE_LOCS_PIXEL_X0Y0_0;
+        for (quadrant = 0u; quadrant < 3u; ++quadrant)
+            memcpy(&cmd[2u + quadrant * 4u], sample_locations,
+                sizeof(sample_locations));
+        cmd[14] = sample_locations[0];
+        cmd[15] = sample_locations[1];
+    }
     {
         uint32_t *cmd = agcCbAllocDwords(cb, 4u);
         if (!cmd) return AGC_ERROR_INTERNAL;

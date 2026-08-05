@@ -680,8 +680,10 @@ int32_t PS5_SYSV_ABI agcGfx1013Image2DDescriptorEncode(
                    state->image_type != AGC_GFX1013_IMAGE_TYPE_3D) {
             return AGC_ERROR_NOT_SUPPORTED;
         }
-    } else if (sample_count == 4u) {
-        sample_log2 = 2u;
+    } else if (sample_count == 2u || sample_count == 4u ||
+               sample_count == 8u) {
+        sample_log2 = sample_count == 8u ? 3u :
+            (sample_count == 4u ? 2u : 1u);
         mip_level_count = 1u;
         if (state->mip_level_count > 1u)
             return AGC_ERROR_NOT_SUPPORTED;

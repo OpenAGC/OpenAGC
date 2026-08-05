@@ -270,7 +270,10 @@ typedef enum AgcImageCreateFlagBits {
     AGC_IMAGE_CREATE_MUTABLE_FORMAT_BIT = 1u << 0,
     /* A depth-bearing 3D image may be viewed as a 2D image or 2D array.
      * Image-view array layers select depth slices at the view's mip level. */
-    AGC_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT = 1u << 1
+    AGC_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT = 1u << 1,
+    /* Preserve 3D image identity when depth is one. Depth greater than one
+     * remains sufficient for compatibility with version-1 callers. */
+    AGC_IMAGE_CREATE_3D_BIT = 1u << 2
 } AgcImageCreateFlagBits;
 typedef uint32_t AgcImageCreateFlags;
 
@@ -451,7 +454,13 @@ enum {
      * buffer writeback/invalidate dependency and resolves the exact prior
      * usage from committed state when submitted. Cross-GPU-queue ownership
      * changes still require RELEASE/ACQUIRE. */
-    AGC_RESOURCE_TRANSITION_CONSERVATIVE_BUFFER_BIT = 1u << 4
+    AGC_RESOURCE_TRANSITION_CONSERVATIVE_BUFFER_BIT = 1u << 4,
+    /* An image-only v2 transition for command buffers recorded ahead of
+     * earlier same-queue submissions. The runtime emits a conservative color,
+     * depth, and all-cache barrier and resolves the exact prior subresource
+     * usage from submission state. Cross-GPU-queue ownership changes still
+     * require RELEASE/ACQUIRE. */
+    AGC_RESOURCE_TRANSITION_CONSERVATIVE_IMAGE_BIT = 1u << 5
 };
 
 #define AGC_RESOURCE_TRANSITION_V1_SIZE 128u
@@ -503,7 +512,11 @@ typedef struct AgcResourceTransition {
 enum {
     AGC_RESOURCE_STATE_TRANSFER_PENDING_BIT = 1u << 0,
     AGC_RESOURCE_STATE_ACQUIRE_RECORDED_BIT = 1u << 1,
-    AGC_RESOURCE_STATE_DEFERRED_BIT = 1u << 2
+    AGC_RESOURCE_STATE_DEFERRED_BIT = 1u << 2,
+    /* The effective command-buffer query includes at least one overlapping
+     * transition recorded by that command. Translators can distinguish an
+     * exact command-local state from an unchanged committed-state snapshot. */
+    AGC_RESOURCE_STATE_COMMAND_RECORDED_BIT = 1u << 3
 };
 
 typedef struct AgcResourceStateInfo {

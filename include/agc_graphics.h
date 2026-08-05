@@ -126,7 +126,7 @@ extern "C" {
 #define AGC_GFX1013_SWIZZLE_64KB_Z_X               24u
 #define AGC_GFX1013_SWIZZLE_64KB_R_X               27u
 #define AGC_GFX1013_64KB_SURFACE_ALIGNMENT    0x10000u
-#define AGC_GFX1013_SAMPLE_STATE_DWORDS             32u
+#define AGC_GFX1013_SAMPLE_STATE_DWORDS             36u
 #define AGC_GFX1013_MAX_COLOR_TARGETS              8u
 #define AGC_GFX1013_MAX_VIEWPORTS                  16u
 #define AGC_GFX1013_VIEWPORT_ARRAY_DWORDS(count) (21u + 10u * (count))

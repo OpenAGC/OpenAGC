@@ -1543,6 +1543,10 @@ static int32_t agcCreateAddress32CommandResourceBlock(AgcDevice device,
     AgcRuntimeBlock **block_out)
 {
     AgcRuntimeBlock *block;
+#if !defined(OPENAGC_PROSPERO)
+    AgcRuntimeBlock *existing;
+    uint64_t host_gpu_offset = AGC_FLEXIBLE_BLOCK_ALIGNMENT;
+#endif
     uint32_t address32_hi;
     int32_t result;
 
@@ -1550,6 +1554,31 @@ static int32_t agcCreateAddress32CommandResourceBlock(AgcDevice device,
         alignment, dedicated, &block);
     if (result != AGC_OK)
         return result;
+#if !defined(OPENAGC_PROSPERO)
+    /* Host validation never submits these addresses to a GPU. Give the
+     * isolated command-resource arena a deterministic model of Prospero's
+     * qualified high-2 address32 window so packaged shader artifacts remain
+     * portable across host processes. Keep every live block disjoint. */
+    for (existing = device->address32_command_resource_blocks; existing;
+         existing = existing->next) {
+        uint64_t end = (uint32_t)existing->memory.gpu_address;
+
+        if (!agcAddU64(end, existing->memory.mapped_size, &end) ||
+            !agcAlignU64(end, AGC_FLEXIBLE_BLOCK_ALIGNMENT, &end)) {
+            agcDestroyMemoryBlock(device, block);
+            return AGC_ERROR_OUT_OF_MEMORY;
+        }
+        if (end > host_gpu_offset)
+            host_gpu_offset = end;
+    }
+    if (host_gpu_offset > UINT32_MAX ||
+        block->memory.mapped_size > UINT32_MAX - host_gpu_offset + 1u) {
+        agcDestroyMemoryBlock(device, block);
+        return AGC_ERROR_OUT_OF_MEMORY;
+    }
+    block->memory.gpu_address =
+        ((uint64_t)AGC_GFX1013_ADDRESS32_HIGH << 32u) | host_gpu_offset;
+#endif
     address32_hi = (uint32_t)(block->memory.gpu_address >> 32u);
     if (agcRuntimeValidateAddress32Range(block->memory.gpu_address,
             block->memory.size, address32_hi) != AGC_OK ||
@@ -2660,13 +2689,15 @@ static int agcImageDescBasicValid(const AgcImageDesc *desc)
         desc->depth > 0x2000u ||
         desc->mip_levels == 0u || desc->array_layers == 0u ||
         desc->mip_levels > 15u || desc->array_layers > 0x2000u ||
-        (desc->sample_count != 1u && desc->sample_count != 4u) ||
+        (desc->sample_count != 1u && desc->sample_count != 2u &&
+         desc->sample_count != 4u && desc->sample_count != 8u) ||
         desc->usage == 0u || (desc->usage & ~known_usage) != 0u ||
         !agcReservedZero(desc->reserved, 4u) ||
         (desc->version >= AGC_RUNTIME_STRUCTURE_VERSION_2 &&
          (desc->tiling > AGC_IMAGE_TILING_OPTIMAL ||
           (desc->flags & ~(AGC_IMAGE_CREATE_MUTABLE_FORMAT_BIT |
-              AGC_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT)) != 0u)) ||
+              AGC_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT |
+              AGC_IMAGE_CREATE_3D_BIT)) != 0u)) ||
         !agcGetRuntimeFormatInfo(desc->format, &format))
         return 0;
     if ((desc->sample_count > 1u && (desc->mip_levels > 1u ||
@@ -2689,7 +2720,10 @@ static int agcImageDescBasicValid(const AgcImageDesc *desc)
              desc->mip_levels != 1u || desc->array_layers != 1u ||
              desc->sample_count != 1u)))
         return 0;
-    if (desc->depth > 1u && desc->array_layers != 1u)
+    if ((desc->depth > 1u ||
+         (desc->flags & (AGC_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT |
+                         AGC_IMAGE_CREATE_3D_BIT)) != 0u) &&
+        desc->array_layers != 1u)
         return 0;
     if ((desc->usage & AGC_IMAGE_USAGE_CUBE_COMPATIBLE_BIT) != 0u &&
         (desc->depth != 1u || desc->array_layers % 6u != 0u))
@@ -3064,24 +3098,33 @@ static int32_t agcComputeDepthLayout(AgcDevice device,
     return AGC_OK;
 }
 
+static int agcRuntimeColorTargetFormat(uint32_t format,
+    AgcGfx1013ColorTargetFormat *target_format);
+
 static int32_t agcComputeMsaaColorLayout(const AgcImageDesc *desc,
     uint32_t target_layer, AgcImageSubresourceLayout *target,
     AgcImageLayout *aggregate)
 {
     AgcGfx1013ColorSurfaceLayoutInput input;
     AgcGfx1013ColorSurfaceLayout low = {0};
+    AgcGfx1013ColorTargetFormat target_format;
+    AgcGfx1013ColorTargetFormatInfo format_info;
     int32_t result;
 
     if (!desc || !agcImageDescBasicValid(desc) ||
-        desc->format != AGC_FORMAT_RGBA8_UNORM || desc->depth != 1u ||
-        desc->mip_levels != 1u || desc->sample_count != 4u)
+        desc->depth != 1u || desc->mip_levels != 1u ||
+        (desc->sample_count != 2u && desc->sample_count != 4u &&
+         desc->sample_count != 8u) ||
+        !agcRuntimeColorTargetFormat(desc->format, &target_format) ||
+        agcGfx1013GetColorTargetFormatInfo(target_format, &format_info) !=
+            AGC_OK)
         return AGC_ERROR_INVALID_ARGUMENT;
     input.width = desc->width;
     input.height = desc->height;
     input.layer_count = desc->array_layers;
     input.mip_level_count = 1u;
-    input.sample_count = 4u;
-    input.format = AGC_GFX1013_RT_FORMAT_RGBA8_UNORM;
+    input.sample_count = desc->sample_count;
+    input.format = target_format;
     input.swizzle_mode = AGC_GFX1013_SWIZZLE_64KB_R_X;
     result = agcGfx1013GetColorSurfaceLayout(&input, &low);
     if (result != AGC_OK)
@@ -3093,7 +3136,7 @@ static int32_t agcComputeMsaaColorLayout(const AgcImageDesc *desc,
         aggregate->subresource_count = desc->array_layers;
         aggregate->block_width = low.block_width;
         aggregate->block_height = low.block_height;
-        aggregate->bytes_per_block = 4u;
+        aggregate->bytes_per_block = format_info.bytes_per_pixel;
         aggregate->first_mip_in_tail = 1u;
     }
     if (target) {
@@ -3107,7 +3150,8 @@ static int32_t agcComputeMsaaColorLayout(const AgcImageDesc *desc,
         target->depth = 1u;
         target->offset = low.slice_size * target_layer;
         target->size = low.slice_size;
-        target->row_pitch = (uint64_t)low.pitch * 4u * desc->sample_count;
+        target->row_pitch = (uint64_t)low.pitch *
+            format_info.bytes_per_pixel * desc->sample_count;
         target->slice_pitch = low.slice_size;
     }
     return AGC_OK;
@@ -3127,7 +3171,7 @@ int32_t PS5_SYSV_ABI agcGetImageLayout(
     if (desc && (desc->usage & AGC_IMAGE_USAGE_DEPTH_STENCIL_BIT) != 0u &&
         agcImageDescTiling(desc) == AGC_IMAGE_TILING_OPTIMAL)
         return agcComputeDepthLayout(device, desc, 0u, 0u, 0u, NULL, layout);
-    if (desc && desc->sample_count == 4u)
+    if (desc && desc->sample_count > 1u)
         return agcComputeMsaaColorLayout(desc, 0u, NULL, layout);
     return agcComputeLinearSubresource(desc, 0u, 0u, 0u, NULL, layout);
 }
@@ -3151,7 +3195,7 @@ int32_t PS5_SYSV_ABI agcGetImageSubresourceLayout(AgcDevice device,
         agcImageDescTiling(desc) == AGC_IMAGE_TILING_OPTIMAL)
         return agcComputeDepthLayout(device, desc, mip_level, array_layer,
             plane, layout, NULL);
-    if (desc && desc->sample_count == 4u) {
+    if (desc && desc->sample_count > 1u) {
         if (mip_level != 0u || plane != 0u)
             return AGC_ERROR_INVALID_ARGUMENT;
         return agcComputeMsaaColorLayout(desc, array_layer, layout, NULL);
@@ -4755,7 +4799,7 @@ static int32_t agcRuntimeEncodeImageView(
      * array/cube pitch calculation and nonzero-base Vulkan image views. */
     state.mip_level_count = rebased_single_mip ? 1u :
         image->desc.mip_levels;
-    if (image->desc.sample_count == 4u) {
+    if (image->desc.sample_count > 1u) {
         state.image_type = AGC_GFX1013_IMAGE_TYPE_2D_MSAA;
         state.swizzle_mode =
             (image->desc.usage & AGC_IMAGE_USAGE_DEPTH_STENCIL_BIT) != 0u ?
@@ -4864,6 +4908,7 @@ int32_t PS5_SYSV_ABI agcCreateImageView(
     AgcImage image;
     AgcGfx1013ImageDescriptor descriptor;
     uint32_t layer_limit;
+    uint32_t image_is_3d;
     uint32_t slice_compatible;
     int32_t result;
 
@@ -4895,14 +4940,27 @@ int32_t PS5_SYSV_ABI agcCreateImageView(
         desc->mip_level_count == 0u || desc->array_layer_count == 0u ||
         desc->base_mip_level >= image->desc.mip_levels ||
         desc->mip_level_count > image->desc.mip_levels - desc->base_mip_level) {
+#if defined(OPENAGC_PROSPERO)
+        fprintf(stderr, "[openagc] agcCreateImageView stage=validate image=%p magic=0x%08x same_device=%u deferred=%u image_format=%u view_format=%u mutable=%u image_mips=%u base_mip=%u mip_count=%u image_layers=%u base_layer=%u layer_count=%u\n",
+            (void *)image, image ? image->magic : 0u,
+            image && image->device == device, image ? image->deferred : 0u,
+            image ? image->desc.format : 0u, desc->format,
+            image ? !!(image->desc.flags &
+                AGC_IMAGE_CREATE_MUTABLE_FORMAT_BIT) : 0u,
+            image ? image->desc.mip_levels : 0u, desc->base_mip_level,
+            desc->mip_level_count, image ? image->desc.array_layers : 0u,
+            desc->base_array_layer, desc->array_layer_count);
+#endif
         return agcDebugReport(device, AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
             AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT,
             AGC_ERROR_INVALID_ARGUMENT, "agcCreateImageView",
             AGC_OBJECT_TYPE_IMAGE_VIEW, NULL,
             "image view requires a live same-device image, matching format, and in-range mip/layer interval");
     }
+    image_is_3d = image->desc.depth > 1u ||
+        (image->desc.flags & (AGC_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT |
+                              AGC_IMAGE_CREATE_3D_BIT)) != 0u;
     slice_compatible = desc->version >= AGC_RUNTIME_STRUCTURE_VERSION_2 &&
-        image->desc.depth > 1u &&
         (image->desc.flags &
             AGC_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT) != 0u &&
         (desc->view_type == AGC_IMAGE_VIEW_TYPE_2D ||
@@ -4922,11 +4980,11 @@ int32_t PS5_SYSV_ABI agcCreateImageView(
     if (desc->version >= AGC_RUNTIME_STRUCTURE_VERSION_2 &&
         (((desc->view_type == AGC_IMAGE_VIEW_TYPE_2D ||
            desc->view_type == AGC_IMAGE_VIEW_TYPE_3D) &&
-          desc->array_layer_count != 1u) ||
+         desc->array_layer_count != 1u) ||
          (desc->view_type == AGC_IMAGE_VIEW_TYPE_3D &&
-          (image->desc.depth == 1u || desc->base_array_layer != 0u)) ||
+          (!image_is_3d || desc->base_array_layer != 0u)) ||
          (desc->view_type != AGC_IMAGE_VIEW_TYPE_3D &&
-          image->desc.depth != 1u && !slice_compatible) ||
+          image_is_3d && !slice_compatible) ||
          (slice_compatible && desc->mip_level_count != 1u) ||
          ((desc->view_type == AGC_IMAGE_VIEW_TYPE_CUBE ||
            desc->view_type == AGC_IMAGE_VIEW_TYPE_CUBE_ARRAY) &&
@@ -4936,8 +4994,17 @@ int32_t PS5_SYSV_ABI agcCreateImageView(
             desc->array_layer_count != 6u)))))
         return AGC_ERROR_INVALID_ARGUMENT;
     result = agcRuntimeEncodeImageView(image, desc, &descriptor);
-    if (result != AGC_OK)
+    if (result != AGC_OK) {
+#if defined(OPENAGC_PROSPERO)
+        fprintf(stderr, "[openagc] agcCreateImageView stage=encode result=0x%08x gpu=0x%llx memory_offset=0x%llx format=%u view_type=%u base_mip=%u mip_count=%u base_layer=%u layer_count=%u\n",
+            (uint32_t)result,
+            (unsigned long long)agcImageGpuAddress(image),
+            (unsigned long long)image->memory_offset, desc->format,
+            desc->view_type, desc->base_mip_level, desc->mip_level_count,
+            desc->base_array_layer, desc->array_layer_count);
+#endif
         return result;
+    }
     view = agcCreateChild(device, sizeof(*view));
     if (!view)
         return AGC_ERROR_OUT_OF_MEMORY;
@@ -4945,6 +5012,10 @@ int32_t PS5_SYSV_ABI agcCreateImageView(
         sizeof(AgcGfx1013ImageDescriptor), 32u, 0u,
         AGC_OBJECT_TYPE_IMAGE_VIEW, view, &view->allocation);
     if (result != AGC_OK) {
+#if defined(OPENAGC_PROSPERO)
+        fprintf(stderr, "[openagc] agcCreateImageView stage=allocate result=0x%08x\n",
+            (uint32_t)result);
+#endif
         agcDestroyChild(device, view);
         return result;
     }
@@ -4953,6 +5024,13 @@ int32_t PS5_SYSV_ABI agcCreateImageView(
     result = agcFlushRuntimeAllocation(view->allocation, 0u,
         sizeof(AgcGfx1013ImageDescriptor));
     if (result != AGC_OK) {
+#if defined(OPENAGC_PROSPERO)
+        fprintf(stderr, "[openagc] agcCreateImageView stage=flush result=0x%08x allocation_offset=0x%llx requested=0x%llx block_size=0x%llx\n",
+            (uint32_t)result,
+            (unsigned long long)view->allocation->offset,
+            (unsigned long long)view->allocation->requested_size,
+            (unsigned long long)view->allocation->block->memory.size);
+#endif
         agcRuntimeFree(device, view->allocation);
         agcDestroyChild(device, view);
         return result;
@@ -6712,7 +6790,9 @@ static int agcPipelineMultisampleStateValid(
     return state &&
         agcHeaderValid(state->struct_size, sizeof(*state), state->version) &&
         (state->rasterization_samples == 1u ||
-         state->rasterization_samples == 4u) &&
+         state->rasterization_samples == 2u ||
+         state->rasterization_samples == 4u ||
+         state->rasterization_samples == 8u) &&
         state->sample_shading_enable <= 1u &&
         agcRuntimeFloatFinite(state->minimum_sample_shading) &&
         state->minimum_sample_shading >= 0.0f &&
@@ -8190,10 +8270,7 @@ static void agcReleaseCommandReferences(AgcCommandBuffer command_buffer)
         command_buffer->recorded_compute_pipelines[i]->recorded_refs--;
     command_buffer->graphics_pipeline = NULL;
     command_buffer->compute_pipeline = NULL;
-    if (command_buffer->index_buffer) {
-        command_buffer->index_buffer->recorded_refs--;
-        command_buffer->index_buffer = NULL;
-    }
+    command_buffer->index_buffer = NULL;
     for (i = 0u; i < command_buffer->recorded_buffer_count; ++i)
         command_buffer->recorded_buffers[i]->recorded_refs--;
     for (i = 0u; i < command_buffer->recorded_image_count; ++i)
@@ -8694,6 +8771,12 @@ int32_t PS5_SYSV_ABI agcCmdBindGraphicsPipeline(
     return AGC_OK;
 }
 
+static int agcCommandRetainImage(AgcCommandBuffer command_buffer,
+    AgcImage image);
+
+static int agcCommandCanRetainImage(AgcCommandBuffer command_buffer,
+    AgcImage image);
+
 int32_t PS5_SYSV_ABI agcCmdBindColorTargets(
     AgcCommandBuffer command_buffer, uint32_t target_count,
     const AgcColorTargetBinding *targets)
@@ -8706,6 +8789,7 @@ int32_t PS5_SYSV_ABI agcCmdBindColorTargets(
     uint32_t height = 0u;
     AgcResourceUsage usage;
     AgcResourceOwner owner;
+    uint32_t required_images = 0u;
     uint32_t i;
     int32_t result;
 
@@ -8735,10 +8819,6 @@ int32_t PS5_SYSV_ABI agcCmdBindColorTargets(
         command_buffer->color_target_width = 0u;
         command_buffer->color_target_height = 0u;
         return AGC_OK;
-    }
-    if (command_buffer->recorded_image_count >
-        AGC_RUNTIME_MAX_RECORDED_RESOURCES - target_count) {
-        return AGC_ERROR_OUT_OF_MEMORY;
     }
     for (i = 0u; i < target_count; ++i) {
         const AgcColorTargetBinding *binding = &targets[i];
@@ -8855,9 +8935,9 @@ int32_t PS5_SYSV_ABI agcCmdBindColorTargets(
         states[i].pitch = (uint32_t)(layout.row_pitch / format_info.bytes[0]);
         states[i].padded_height =
             (uint32_t)(layout.slice_pitch / layout.row_pitch);
-        if (image->desc.sample_count == 4u) {
-            states[i].sample_count = 4u;
-            states[i].fragment_count = 4u;
+        if (image->desc.sample_count > 1u) {
+            states[i].sample_count = image->desc.sample_count;
+            states[i].fragment_count = image->desc.sample_count;
             states[i].swizzle_mode = AGC_GFX1013_SWIZZLE_64KB_R_X;
         }
         if (i == 0u) {
@@ -8871,6 +8951,39 @@ int32_t PS5_SYSV_ABI agcCmdBindColorTargets(
                 AGC_OBJECT_TYPE_IMAGE, NULL,
                 "all bound color targets must have identical dimensions");
         }
+    }
+    /* Retain each image once per command buffer, even when a render pass
+     * rebinds the same image across many draw batches or subresources. */
+    for (i = 0u; i < target_count; ++i) {
+        uint32_t j;
+        int recorded = 0;
+
+        for (j = 0u; j < command_buffer->recorded_image_count; ++j) {
+            if (command_buffer->recorded_images[j] == targets[i].image) {
+                recorded = 1;
+                break;
+            }
+        }
+        if (!recorded) {
+            for (j = 0u; j < i; ++j) {
+                if (targets[j].image == targets[i].image) {
+                    recorded = 1;
+                    break;
+                }
+            }
+        }
+        if (!recorded)
+            required_images++;
+    }
+    if (command_buffer->recorded_image_count >
+        AGC_RUNTIME_MAX_RECORDED_RESOURCES - required_images) {
+        return agcDebugReport(command_buffer->device,
+            AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
+            AGC_DEBUG_MESSAGE_CATEGORY_COMMAND_CAPACITY_BIT,
+            AGC_ERROR_OUT_OF_MEMORY, "agcCmdBindColorTargets",
+            AGC_OBJECT_TYPE_COMMAND_BUFFER,
+            command_buffer->allocation->debug_name,
+            "typed image reference journal capacity is exhausted");
     }
     for (i = 0u; i < target_count; ++i) {
         AgcImageSubresourceRange range = { AGC_IMAGE_ASPECT_COLOR_BIT,
@@ -8909,9 +9022,8 @@ int32_t PS5_SYSV_ABI agcCmdBindColorTargets(
         return result;
     for (i = 0u; i < target_count; ++i) {
         AgcImage image = targets[i].image;
-        command_buffer->recorded_images[
-            command_buffer->recorded_image_count++] = image;
-        image->recorded_refs++;
+        if (!agcCommandRetainImage(command_buffer, image))
+            return AGC_ERROR_INTERNAL;
     }
     command_buffer->color_target_count = target_count;
     command_buffer->color_target_width = width;
@@ -8984,10 +9096,6 @@ int32_t PS5_SYSV_ABI agcCmdBindDepthStencilTarget(
         !command_buffer->graphics_pipeline) {
         return AGC_ERROR_INVALID_STATE;
     }
-    if (command_buffer->recorded_image_count ==
-        AGC_RUNTIME_MAX_RECORDED_RESOURCES) {
-        return AGC_ERROR_OUT_OF_MEMORY;
-    }
     if (command_buffer->graphics_pipeline->depth_stencil.format ==
         AGC_FORMAT_UNDEFINED) {
         return AGC_ERROR_VALIDATION_FAILED;
@@ -9007,6 +9115,8 @@ int32_t PS5_SYSV_ABI agcCmdBindDepthStencilTarget(
         !agcRuntimeDepthFormat(image->desc.format, &format)) {
         return AGC_ERROR_VALIDATION_FAILED;
     }
+    if (!agcCommandCanRetainImage(command_buffer, image))
+        return AGC_ERROR_OUT_OF_MEMORY;
     has_depth = image->desc.format != AGC_FORMAT_S8_UINT;
     has_stencil = image->desc.format == AGC_FORMAT_S8_UINT ||
         image->desc.format == AGC_FORMAT_D16_UNORM_S8_UINT ||
@@ -9076,9 +9186,8 @@ int32_t PS5_SYSV_ABI agcCmdBindDepthStencilTarget(
     result = agcCommandCommitScratch(command_buffer, &scratch, words);
     if (result != AGC_OK)
         return result;
-    command_buffer->recorded_images[command_buffer->recorded_image_count++] =
-        image;
-    image->recorded_refs++;
+    if (!agcCommandRetainImage(command_buffer, image))
+        return AGC_ERROR_INTERNAL;
     command_buffer->depth_stencil_target = image;
     return AGC_OK;
 }
@@ -9467,6 +9576,20 @@ int32_t PS5_SYSV_ABI agcGetCommandBufferRangeStateInfo(
         return AGC_ERROR_NOT_SUPPORTED;
     info->usage = usage;
     info->owner = owner;
+    info->flags &= ~AGC_RESOURCE_STATE_COMMAND_RECORDED_BIT;
+    for (uint32_t i = 0u; i < command_buffer->recorded_transition_count;
+         ++i) {
+        const AgcRuntimeRecordedTransition *record =
+            &command_buffer->recorded_transitions[i];
+        if (record->resource_type == kAgcResourceTypeBuffer &&
+            record->resource == buffer &&
+            record->flags != AGC_RESOURCE_TRANSITION_RELEASE_BIT &&
+            agcBufferRangesOverlap(record->buffer_offset,
+                record->buffer_size, offset, size)) {
+            info->flags |= AGC_RESOURCE_STATE_COMMAND_RECORDED_BIT;
+            break;
+        }
+    }
     return AGC_OK;
 }
 
@@ -9581,6 +9704,19 @@ int32_t PS5_SYSV_ABI agcGetCommandBufferImageSubresourceStateInfo(
         return AGC_ERROR_NOT_SUPPORTED;
     info->usage = usage;
     info->owner = owner;
+    info->flags &= ~AGC_RESOURCE_STATE_COMMAND_RECORDED_BIT;
+    for (uint32_t i = 0u; i < command_buffer->recorded_transition_count;
+         ++i) {
+        const AgcRuntimeRecordedTransition *record =
+            &command_buffer->recorded_transitions[i];
+        if (record->resource_type == kAgcResourceTypeImage &&
+            record->resource == image &&
+            record->flags != AGC_RESOURCE_TRANSITION_RELEASE_BIT &&
+            agcImageRangesOverlap(&record->image_range, range)) {
+            info->flags |= AGC_RESOURCE_STATE_COMMAND_RECORDED_BIT;
+            break;
+        }
+    }
     return AGC_OK;
 }
 
@@ -9699,7 +9835,9 @@ static int32_t agcRuntimeValidateTransition(
             transition->flags != AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT &&
             transition->flags != AGC_RESOURCE_TRANSITION_COMMITTED_STATE_BIT &&
             transition->flags !=
-                AGC_RESOURCE_TRANSITION_CONSERVATIVE_BUFFER_BIT)
+                AGC_RESOURCE_TRANSITION_CONSERVATIVE_BUFFER_BIT &&
+            transition->flags !=
+                AGC_RESOURCE_TRANSITION_CONSERVATIVE_IMAGE_BIT)
             return AGC_ERROR_INVALID_ARGUMENT;
         if (transition->reserved_v2 != 0u ||
             !agcReservedZero(transition->reserved2, 2u))
@@ -9709,7 +9847,8 @@ static int32_t agcRuntimeValidateTransition(
         value = transition->dependency_value;
         if (flags == AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT ||
             flags == AGC_RESOURCE_TRANSITION_COMMITTED_STATE_BIT ||
-            flags == AGC_RESOURCE_TRANSITION_CONSERVATIVE_BUFFER_BIT) {
+            flags == AGC_RESOURCE_TRANSITION_CONSERVATIVE_BUFFER_BIT ||
+            flags == AGC_RESOURCE_TRANSITION_CONSERVATIVE_IMAGE_BIT) {
             if (label || value != 0u)
                 return AGC_ERROR_INVALID_ARGUMENT;
         } else if (!label || label->magic != AGC_MAGIC_GPU_LABEL ||
@@ -9747,6 +9886,9 @@ static int32_t agcRuntimeValidateTransition(
     if (flags == AGC_RESOURCE_TRANSITION_CONSERVATIVE_BUFFER_BIT &&
         transition->resource_type != kAgcResourceTypeBuffer)
         return AGC_ERROR_NOT_SUPPORTED;
+    if (flags == AGC_RESOURCE_TRANSITION_CONSERVATIVE_IMAGE_BIT &&
+        transition->resource_type != kAgcResourceTypeImage)
+        return AGC_ERROR_NOT_SUPPORTED;
     if (agcRuntimeUsageIsGpu(transition->after) &&
         transition->after_owner != agcRuntimeCommandOwner(command_buffer) &&
         flags != AGC_RESOURCE_TRANSITION_RELEASE_BIT)
@@ -9774,7 +9916,8 @@ static int32_t agcRuntimeValidateTransition(
          current_owner != transition->before_owner) &&
         flags != AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT &&
         flags != AGC_RESOURCE_TRANSITION_COMMITTED_STATE_BIT &&
-        flags != AGC_RESOURCE_TRANSITION_CONSERVATIVE_BUFFER_BIT)
+        flags != AGC_RESOURCE_TRANSITION_CONSERVATIVE_BUFFER_BIT &&
+        flags != AGC_RESOURCE_TRANSITION_CONSERVATIVE_IMAGE_BIT)
         return AGC_ERROR_INVALID_STATE;
     /* A batch dependency is resolved against earlier command buffers in the
      * ordered submission.  It must therefore be allowed to follow an acquire
@@ -10258,9 +10401,16 @@ static int32_t agcValidateSubmissionTransitions(
                 record->resource_type == kAgcResourceTypeBuffer &&
                 (owner == record->after_owner ||
                  owner == kAgcResourceOwnerHost);
+            const int conservative_image_prior =
+                record->flags ==
+                    AGC_RESOURCE_TRANSITION_CONSERVATIVE_IMAGE_BIT &&
+                record->resource_type == kAgcResourceTypeImage &&
+                (owner == record->after_owner ||
+                 owner == kAgcResourceOwnerHost);
             if ((usage != record->before ||
                     owner != record->before_owner) &&
                 !conservative_buffer_prior &&
+                !conservative_image_prior &&
                 !(record->flags == 0u && usage == record->after &&
                     owner == record->after_owner)) {
                 fprintf(stderr,
@@ -10715,8 +10865,15 @@ int32_t PS5_SYSV_ABI agcCmdTransitionResources(
                     "one transition call cannot contain duplicate resources; issue ordered calls for disjoint or chained ranges");
         }
         if (emit_low_transition) {
-            result = agcGfx1013GetResourceTransitionDwords(&low_transition,
-                &transition_dwords);
+            if (flags ==
+                    AGC_RESOURCE_TRANSITION_CONSERVATIVE_IMAGE_BIT) {
+                transition_dwords =
+                    AGC_GFX1013_GLOBAL_MEMORY_BARRIER_DWORDS;
+                result = AGC_OK;
+            } else {
+                result = agcGfx1013GetResourceTransitionDwords(
+                    &low_transition, &transition_dwords);
+            }
             if (result != AGC_OK || transition_dwords > UINT32_MAX - dword_count)
                 return agcDebugReport(command_buffer->device,
                     AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
@@ -10896,8 +11053,11 @@ int32_t PS5_SYSV_ABI agcCmdTransitionResources(
                 ++command_buffer->transition_completion_value;
         }
         if (emit_low_transition) {
-            result = agcGfx1013TransitionResource(
-                &command_buffer->cursor, &low_transition);
+            result = flags ==
+                    AGC_RESOURCE_TRANSITION_CONSERVATIVE_IMAGE_BIT ?
+                agcGfx1013GlobalMemoryBarrier(&command_buffer->cursor) :
+                agcGfx1013TransitionResource(
+                    &command_buffer->cursor, &low_transition);
             if (result != AGC_OK)
                 return AGC_ERROR_INTERNAL;
         }
@@ -13306,8 +13466,6 @@ int32_t PS5_SYSV_ABI agcCmdBindIndexBuffer(AgcCommandBuffer command_buffer,
     if (command_buffer->state != AGC_COMMAND_BUFFER_STATE_RECORDING ||
         command_buffer->queue_type != kAgcQueueGraphics)
         return AGC_ERROR_INVALID_STATE;
-    if (command_buffer->index_buffer && command_buffer->index_buffer != buffer)
-        return AGC_ERROR_NOT_SUPPORTED;
     {
         AgcResourceUsage usage;
         AgcResourceOwner owner;
@@ -13318,10 +13476,12 @@ int32_t PS5_SYSV_ABI agcCmdBindIndexBuffer(AgcCommandBuffer command_buffer,
             owner != kAgcResourceOwnerGraphics)
             return AGC_ERROR_INVALID_STATE;
     }
-    if (!command_buffer->index_buffer) {
-        command_buffer->index_buffer = buffer;
-        buffer->recorded_refs++;
-    }
+    /* Vulkan permits rebinding a different index buffer. Retain every unique
+     * buffer referenced by already-emitted draw packets, while this pointer
+     * tracks only the binding used by subsequent draws. */
+    if (!agcCommandRetainBuffer(command_buffer, buffer))
+        return AGC_ERROR_OUT_OF_MEMORY;
+    command_buffer->index_buffer = buffer;
     command_buffer->index_offset = offset;
     command_buffer->index_size = index_size;
     return AGC_OK;
@@ -13335,7 +13495,6 @@ int32_t PS5_SYSV_ABI agcCmdDraw(AgcCommandBuffer command_buffer,
     SceAgcCb temporary_cb;
     uint32_t dword_count;
     uint32_t *destination;
-    AgcShader vertex_stage;
     int32_t result;
 
     if (!command_buffer || command_buffer->magic != AGC_MAGIC_COMMAND_BUFFER ||
@@ -13396,16 +13555,10 @@ int32_t PS5_SYSV_ABI agcCmdDraw(AgcCommandBuffer command_buffer,
             AGC_OBJECT_TYPE_COMMAND_BUFFER,
             command_buffer->allocation->debug_name,
             "draw vertex count is incompatible with the geometry input topology");
-    vertex_stage = command_buffer->graphics_pipeline->hull_shader ?
-        command_buffer->graphics_pipeline->hull_shader :
-        command_buffer->graphics_pipeline->primitive_shader;
-    if ((first_vertex != 0u &&
-         (vertex_stage->reflection.system_sgpr_mask &
-          AGC_SHADER_SYSTEM_SGPR_BASE_VERTEX_BIT) == 0u) ||
-        (first_instance != 0u &&
-         (vertex_stage->reflection.system_sgpr_mask &
-          AGC_SHADER_SYSTEM_SGPR_START_INSTANCE_BIT) == 0u))
-        return AGC_ERROR_NOT_SUPPORTED;
+    /* Nonzero draw parameters are legal even when the compiled shader does
+     * not consume the corresponding Vulkan built-ins. In that case ACO does
+     * not allocate their user SGPRs and there is nothing to program; vertex
+     * inputs that depend on either value reflect the required SGPR normally. */
     if (command_buffer->graphics_pipeline->hull_shader) {
         result = agcCommandShaderResourcesReady(command_buffer,
             command_buffer->graphics_pipeline->hull_shader);
@@ -13472,7 +13625,6 @@ int32_t PS5_SYSV_ABI agcCmdDrawIndexed(AgcCommandBuffer command_buffer,
     uint64_t byte_count;
     uint32_t dword_count;
     uint32_t *destination;
-    AgcShader vertex_stage;
     int32_t result;
 
     if (!command_buffer || command_buffer->magic != AGC_MAGIC_COMMAND_BUFFER ||
@@ -13537,17 +13689,9 @@ int32_t PS5_SYSV_ABI agcCmdDrawIndexed(AgcCommandBuffer command_buffer,
             AGC_OBJECT_TYPE_COMMAND_BUFFER,
             command_buffer->allocation->debug_name,
             "indexed draw count is incompatible with the geometry input topology");
-    vertex_stage = command_buffer->graphics_pipeline->hull_shader ?
-        command_buffer->graphics_pipeline->hull_shader :
-        command_buffer->graphics_pipeline->primitive_shader;
-    if ((vertex_offset != 0 &&
-        (vertex_stage->reflection.
-          system_sgpr_mask & AGC_SHADER_SYSTEM_SGPR_BASE_VERTEX_BIT) == 0u) ||
-        (first_instance != 0u &&
-         (vertex_stage->reflection.
-          system_sgpr_mask &
-          AGC_SHADER_SYSTEM_SGPR_START_INSTANCE_BIT) == 0u))
-        return AGC_ERROR_NOT_SUPPORTED;
+    /* As with non-indexed draws, an absent reflected SGPR means the shader
+     * does not consume that built-in. The draw remains valid and emission
+     * simply has no matching user register to update. */
     if (command_buffer->graphics_pipeline->hull_shader) {
         result = agcCommandShaderResourcesReady(command_buffer,
             command_buffer->graphics_pipeline->hull_shader);
