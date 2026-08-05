@@ -45,6 +45,31 @@ _Static_assert(AGC_RUNTIME_MAX_VIEWPORTS == AGC_GFX1013_MAX_VIEWPORTS,
 #define AGC_MAGIC_PRESENT_CHAIN UINT32_C(0x50435641)
 #define AGC_MAGIC_CAPTURE UINT32_C(0x4350564f)
 
+typedef enum AgcRuntimeChildType {
+    AGC_RUNTIME_CHILD_CAPTURE = 0,
+    AGC_RUNTIME_CHILD_QUEUE,
+    AGC_RUNTIME_CHILD_MEMORY,
+    AGC_RUNTIME_CHILD_BUFFER,
+    AGC_RUNTIME_CHILD_IMAGE,
+    AGC_RUNTIME_CHILD_PRESENT_CHAIN,
+    AGC_RUNTIME_CHILD_IMAGE_VIEW,
+    AGC_RUNTIME_CHILD_SAMPLER,
+    AGC_RUNTIME_CHILD_SHADER,
+    AGC_RUNTIME_CHILD_GRAPHICS_PIPELINE,
+    AGC_RUNTIME_CHILD_COMPUTE_PIPELINE,
+    AGC_RUNTIME_CHILD_COMMAND_BUFFER,
+    AGC_RUNTIME_CHILD_GPU_LABEL,
+    AGC_RUNTIME_CHILD_FENCE,
+    AGC_RUNTIME_CHILD_COUNT
+} AgcRuntimeChildType;
+
+static const char *const agc_runtime_child_type_names[
+    AGC_RUNTIME_CHILD_COUNT] = {
+    "capture", "queue", "memory", "buffer", "image", "present_chain",
+    "image_view", "sampler", "shader", "graphics_pipeline",
+    "compute_pipeline", "command_buffer", "gpu_label", "fence"
+};
+
 #define AGC_FLEXIBLE_HEAP_BLOCK_SIZE UINT64_C(0x01000000)
 #define AGC_GARLIC_HEAP_BLOCK_SIZE UINT64_C(0x02000000)
 #define AGC_FLEXIBLE_BLOCK_ALIGNMENT UINT64_C(0x4000)
@@ -232,6 +257,7 @@ struct AgcCaptureImpl {
 struct AgcDeviceImpl {
     uint32_t magic;
     uint32_t child_count;
+    uint32_t child_counts[AGC_RUNTIME_CHILD_COUNT];
     struct AgcDeviceImpl *next_device;
     uint32_t graphics_queue_count;
     uint32_t compute_queue_count;
@@ -1966,22 +1992,28 @@ static void agcDestroyMemoryBlocks(AgcDevice device)
     device->address32_hi_valid = 0u;
 }
 
-static void *agcCreateChild(AgcDevice device, size_t size)
+static void *agcCreateChild(AgcDevice device, size_t size,
+    AgcRuntimeChildType type)
 {
     void *child;
 
     if (!agcDeviceValid(device))
         return NULL;
     child = agcAlloc(device, size, sizeof(void *));
-    if (child)
+    if (child) {
         device->child_count++;
+        device->child_counts[type]++;
+    }
     return child;
 }
 
-static void agcDestroyChild(AgcDevice device, void *child)
+static void agcDestroyChild(AgcDevice device, void *child,
+    AgcRuntimeChildType type)
 {
     if (device->child_count > 0u)
         device->child_count--;
+    if (device->child_counts[type] > 0u)
+        device->child_counts[type]--;
     agcFree(device, child);
 }
 
@@ -2133,6 +2165,7 @@ int32_t PS5_SYSV_ABI agcDestroyDevice(AgcDevice device)
 {
     AgcAllocationCallbacks allocation;
     AgcDevice *link;
+    char live_children[AGC_RUNTIME_DEBUG_MESSAGE_SIZE];
     int last_device;
     int32_t result;
 
@@ -2142,11 +2175,35 @@ int32_t PS5_SYSV_ABI agcDestroyDevice(AgcDevice device)
         return AGC_ERROR_INVALID_ARGUMENT;
     }
     if (device->child_count != 0u) {
+        size_t offset;
+        uint32_t type;
+
+        offset = (size_t)snprintf(live_children, sizeof(live_children),
+            "device destruction requires all child objects to be destroyed: total=%u",
+            device->child_count);
+        for (type = 0u; type < AGC_RUNTIME_CHILD_COUNT &&
+                offset < sizeof(live_children); ++type) {
+            int written;
+
+            if (device->child_counts[type] == 0u)
+                continue;
+            written = snprintf(live_children + offset,
+                sizeof(live_children) - offset, " %s=%u",
+                agc_runtime_child_type_names[type],
+                device->child_counts[type]);
+            if (written < 0)
+                break;
+            if ((size_t)written >= sizeof(live_children) - offset) {
+                offset = sizeof(live_children);
+                break;
+            }
+            offset += (size_t)written;
+        }
         agcDeviceRegistryUnlock();
         return agcDebugReport(device, AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
             AGC_DEBUG_MESSAGE_CATEGORY_LIFETIME_BIT, AGC_ERROR_BUSY,
             "agcDestroyDevice", AGC_DEBUG_OBJECT_TYPE_NONE, NULL,
-            "device destruction requires all child objects to be destroyed");
+            live_children);
     }
     last_device = g_device_count == 1u;
     if (last_device) {
@@ -2260,7 +2317,8 @@ int32_t PS5_SYSV_ABI agcCreateCapture(AgcDevice device,
         !agcReservedZero(desc->reserved, 4u)) {
         return AGC_ERROR_INVALID_ARGUMENT;
     }
-    capture = agcCreateChild(device, sizeof(*capture));
+    capture = agcCreateChild(device, sizeof(*capture),
+        AGC_RUNTIME_CHILD_CAPTURE);
     if (!capture)
         return AGC_ERROR_OUT_OF_MEMORY;
     capture->magic = AGC_MAGIC_CAPTURE;
@@ -2287,7 +2345,7 @@ int32_t PS5_SYSV_ABI agcDestroyCapture(AgcCapture capture)
     device = capture->device;
     agcCaptureClearObjects(capture);
     capture->magic = 0u;
-    agcDestroyChild(device, capture);
+    agcDestroyChild(device, capture, AGC_RUNTIME_CHILD_CAPTURE);
     return AGC_OK;
 }
 
@@ -2471,7 +2529,7 @@ int32_t PS5_SYSV_ABI agcCreateQueue(
     } else {
         return AGC_ERROR_NOT_SUPPORTED;
     }
-    queue = agcCreateChild(device, sizeof(*queue));
+    queue = agcCreateChild(device, sizeof(*queue), AGC_RUNTIME_CHILD_QUEUE);
     if (!queue) {
 #ifndef OPENAGC_PROSPERO
         if (desc->type == kAgcQueueCompute)
@@ -2518,7 +2576,7 @@ int32_t PS5_SYSV_ABI agcDestroyQueue(AgcQueue queue)
     }
     agcCaptureRecordObjectDestroy(device, queue, AGC_CAPTURE_OBJECT_QUEUE);
     queue->magic = 0u;
-    agcDestroyChild(device, queue);
+    agcDestroyChild(device, queue, AGC_RUNTIME_CHILD_QUEUE);
     return AGC_OK;
 }
 
@@ -3353,7 +3411,7 @@ static void agcReleasePlacedMemory(AgcMemory memory)
     device = memory->device;
     agcRuntimeFree(device, memory->allocation);
     memory->magic = 0u;
-    agcDestroyChild(device, memory);
+    agcDestroyChild(device, memory, AGC_RUNTIME_CHILD_MEMORY);
 }
 
 int32_t PS5_SYSV_ABI agcCreateMemory(
@@ -3382,14 +3440,14 @@ int32_t PS5_SYSV_ABI agcCreateMemory(
     if ((alignment & (alignment - 1u)) != 0u ||
         alignment > maximum_alignment)
         return AGC_ERROR_INVALID_ALIGNMENT;
-    memory = agcCreateChild(device, sizeof(*memory));
+    memory = agcCreateChild(device, sizeof(*memory), AGC_RUNTIME_CHILD_MEMORY);
     if (!memory)
         return AGC_ERROR_OUT_OF_MEMORY;
     result = agcRuntimeAllocate(device, desc->heap, desc->size, alignment,
         (desc->flags & AGC_MEMORY_CREATE_DEDICATED_BIT) != 0u,
         AGC_OBJECT_TYPE_MEMORY, memory, &memory->allocation);
     if (result != AGC_OK) {
-        agcDestroyChild(device, memory);
+        agcDestroyChild(device, memory, AGC_RUNTIME_CHILD_MEMORY);
         return result;
     }
     memory->magic = AGC_MAGIC_MEMORY;
@@ -3413,7 +3471,7 @@ int32_t PS5_SYSV_ABI agcDestroyMemory(AgcMemory memory)
     device = memory->device;
     agcRuntimeFree(device, memory->allocation);
     memory->magic = 0u;
-    agcDestroyChild(device, memory);
+    agcDestroyChild(device, memory, AGC_RUNTIME_CHILD_MEMORY);
     return AGC_OK;
 }
 
@@ -3490,7 +3548,7 @@ static int32_t agcCreateBufferInternal(AgcDevice device,
             AGC_OBJECT_TYPE_BUFFER, NULL,
             "buffer descriptor has an invalid version, size, usage, flags, or reserved field");
     }
-    buffer = agcCreateChild(device, sizeof(*buffer));
+    buffer = agcCreateChild(device, sizeof(*buffer), AGC_RUNTIME_CHILD_BUFFER);
     if (!buffer)
         return AGC_ERROR_OUT_OF_MEMORY;
     heap = (desc->flags & (AGC_BUFFER_CREATE_UPLOAD_BIT |
@@ -3505,7 +3563,7 @@ static int32_t agcCreateBufferInternal(AgcDevice device,
             memory_offset > memory->size ||
             desc->size > memory->size - memory_offset ||
             memory->resource_refs == UINT32_MAX) {
-            agcDestroyChild(device, buffer);
+            agcDestroyChild(device, buffer, AGC_RUNTIME_CHILD_BUFFER);
             return AGC_ERROR_INVALID_ARGUMENT;
         }
         buffer->allocation = memory->allocation;
@@ -3517,7 +3575,7 @@ static int32_t agcCreateBufferInternal(AgcDevice device,
             (desc->flags & AGC_BUFFER_CREATE_DEDICATED_BIT) != 0u,
             AGC_OBJECT_TYPE_BUFFER, buffer, &buffer->allocation);
         if (result != AGC_OK) {
-            agcDestroyChild(device, buffer);
+            agcDestroyChild(device, buffer, AGC_RUNTIME_CHILD_BUFFER);
             return result;
         }
         buffer->owns_allocation = 1u;
@@ -3589,7 +3647,7 @@ int32_t PS5_SYSV_ABI agcDestroyBuffer(AgcBuffer buffer)
     if (buffer->transfers != &buffer->inline_transfer)
         agcFree(device, buffer->transfers);
     buffer->magic = 0u;
-    agcDestroyChild(device, buffer);
+    agcDestroyChild(device, buffer, AGC_RUNTIME_CHILD_BUFFER);
     return AGC_OK;
 }
 
@@ -4163,7 +4221,7 @@ static int32_t agcCreateImageInternal(AgcDevice device,
                 AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT,
             result, "agcCreateImage", AGC_OBJECT_TYPE_IMAGE, NULL,
             "image format, usage, sample count, or layout is unsupported by this runtime profile");
-    image = agcCreateChild(device, sizeof(*image));
+    image = agcCreateChild(device, sizeof(*image), AGC_RUNTIME_CHILD_IMAGE);
     if (!image)
         return AGC_ERROR_OUT_OF_MEMORY;
     if (memory) {
@@ -4175,7 +4233,7 @@ static int32_t agcCreateImageInternal(AgcDevice device,
             memory_offset > memory->size ||
             layout.allocation_size > memory->size - memory_offset ||
             memory->resource_refs == UINT32_MAX) {
-            agcDestroyChild(device, image);
+            agcDestroyChild(device, image, AGC_RUNTIME_CHILD_IMAGE);
             return AGC_ERROR_INVALID_ARGUMENT;
         }
         image->allocation = memory->allocation;
@@ -4188,7 +4246,7 @@ static int32_t agcCreateImageInternal(AgcDevice device,
             (desc->usage & AGC_IMAGE_USAGE_SCANOUT_BIT) != 0u,
             AGC_OBJECT_TYPE_IMAGE, image, &image->allocation);
         if (result != AGC_OK) {
-            agcDestroyChild(device, image);
+            agcDestroyChild(device, image, AGC_RUNTIME_CHILD_IMAGE);
             return result;
         }
         image->owns_allocation = 1u;
@@ -4261,7 +4319,7 @@ int32_t PS5_SYSV_ABI agcDestroyImage(AgcImage image)
     if (image->transfers != &image->inline_transfer)
         agcFree(device, image->transfers);
     image->magic = 0u;
-    agcDestroyChild(device, image);
+    agcDestroyChild(device, image, AGC_RUNTIME_CHILD_IMAGE);
     return AGC_OK;
 }
 
@@ -4379,7 +4437,8 @@ int32_t PS5_SYSV_ABI agcCreatePresentChain(AgcDevice device,
         buffers[i] = (uint8_t *)agcImageCpuAddress(image) +
             layout.offset;
     }
-    present_chain = agcCreateChild(device, sizeof(*present_chain));
+    present_chain = agcCreateChild(device, sizeof(*present_chain),
+        AGC_RUNTIME_CHILD_PRESENT_CHAIN);
     if (!present_chain)
         return AGC_ERROR_OUT_OF_MEMORY;
     video_desc.width = mode.width;
@@ -4401,7 +4460,8 @@ int32_t PS5_SYSV_ABI agcCreatePresentChain(AgcDevice device,
             *present_chain_out = present_chain;
             return result;
         }
-        agcDestroyChild(device, present_chain);
+        agcDestroyChild(device, present_chain,
+            AGC_RUNTIME_CHILD_PRESENT_CHAIN);
         return result;
     }
     present_chain->magic = AGC_MAGIC_PRESENT_CHAIN;
@@ -4432,7 +4492,7 @@ int32_t PS5_SYSV_ABI agcDestroyPresentChain(
     for (i = 0u; i < present_chain->image_count; ++i)
         present_chain->images[i]->dependency_refs--;
     present_chain->magic = 0u;
-    agcDestroyChild(device, present_chain);
+    agcDestroyChild(device, present_chain, AGC_RUNTIME_CHILD_PRESENT_CHAIN);
     return AGC_OK;
 }
 
@@ -5005,7 +5065,8 @@ int32_t PS5_SYSV_ABI agcCreateImageView(
 #endif
         return result;
     }
-    view = agcCreateChild(device, sizeof(*view));
+    view = agcCreateChild(device, sizeof(*view),
+        AGC_RUNTIME_CHILD_IMAGE_VIEW);
     if (!view)
         return AGC_ERROR_OUT_OF_MEMORY;
     result = agcRuntimeAllocate(device, AGC_MEMORY_HEAP_FLEXIBLE,
@@ -5016,7 +5077,7 @@ int32_t PS5_SYSV_ABI agcCreateImageView(
         fprintf(stderr, "[openagc] agcCreateImageView stage=allocate result=0x%08x\n",
             (uint32_t)result);
 #endif
-        agcDestroyChild(device, view);
+        agcDestroyChild(device, view, AGC_RUNTIME_CHILD_IMAGE_VIEW);
         return result;
     }
     memcpy(agcAllocationCpuAddress(view->allocation), &descriptor,
@@ -5032,7 +5093,7 @@ int32_t PS5_SYSV_ABI agcCreateImageView(
             (unsigned long long)view->allocation->block->memory.size);
 #endif
         agcRuntimeFree(device, view->allocation);
-        agcDestroyChild(device, view);
+        agcDestroyChild(device, view, AGC_RUNTIME_CHILD_IMAGE_VIEW);
         return result;
     }
     view->magic = AGC_MAGIC_IMAGE_VIEW;
@@ -5070,7 +5131,7 @@ int32_t PS5_SYSV_ABI agcDestroyImageView(AgcImageView view)
     view->image->dependency_refs--;
     agcRuntimeFree(device, view->allocation);
     view->magic = 0u;
-    agcDestroyChild(device, view);
+    agcDestroyChild(device, view, AGC_RUNTIME_CHILD_IMAGE_VIEW);
     return AGC_OK;
 }
 
@@ -5197,14 +5258,15 @@ int32_t PS5_SYSV_ABI agcCreateSampler(
                     kAgcBorderWhite : kAgcBorderTransparentBlack);
         }
     }
-    sampler = agcCreateChild(device, sizeof(*sampler));
+    sampler = agcCreateChild(device, sizeof(*sampler),
+        AGC_RUNTIME_CHILD_SAMPLER);
     if (!sampler)
         return AGC_ERROR_OUT_OF_MEMORY;
     result = agcRuntimeAllocate(device, AGC_MEMORY_HEAP_FLEXIBLE,
         sizeof(AgcSamplerDescriptor), 16u, 0u,
         AGC_OBJECT_TYPE_SAMPLER, sampler, &sampler->allocation);
     if (result != AGC_OK) {
-        agcDestroyChild(device, sampler);
+        agcDestroyChild(device, sampler, AGC_RUNTIME_CHILD_SAMPLER);
         return result;
     }
     memcpy(agcAllocationCpuAddress(sampler->allocation), &descriptor,
@@ -5213,7 +5275,7 @@ int32_t PS5_SYSV_ABI agcCreateSampler(
         sizeof(AgcSamplerDescriptor));
     if (result != AGC_OK) {
         agcRuntimeFree(device, sampler->allocation);
-        agcDestroyChild(device, sampler);
+        agcDestroyChild(device, sampler, AGC_RUNTIME_CHILD_SAMPLER);
         return result;
     }
     sampler->magic = AGC_MAGIC_SAMPLER;
@@ -5249,7 +5311,7 @@ int32_t PS5_SYSV_ABI agcDestroySampler(AgcSampler sampler)
         AGC_CAPTURE_OBJECT_SAMPLER);
     agcRuntimeFree(device, sampler->allocation);
     sampler->magic = 0u;
-    agcDestroyChild(device, sampler);
+    agcDestroyChild(device, sampler, AGC_RUNTIME_CHILD_SAMPLER);
     return AGC_OK;
 }
 
@@ -5759,14 +5821,14 @@ int32_t PS5_SYSV_ABI agcCreateShader(
                 "shader reflection, address32 ABI window, binary hash, code range, front half, or linkage metadata is invalid");
         }
     }
-    shader = agcCreateChild(device, sizeof(*shader));
+    shader = agcCreateChild(device, sizeof(*shader), AGC_RUNTIME_CHILD_SHADER);
     if (!shader)
         return AGC_ERROR_OUT_OF_MEMORY;
     result = agcRuntimeAllocate(device, AGC_MEMORY_HEAP_FLEXIBLE,
         allocation_size, 256u, 0u, AGC_OBJECT_TYPE_SHADER,
         shader, &shader->allocation);
     if (result != AGC_OK) {
-        agcDestroyChild(device, shader);
+        agcDestroyChild(device, shader, AGC_RUNTIME_CHILD_SHADER);
         return result;
     }
     shader->code = agcAllocationCpuAddress(shader->allocation);
@@ -5779,7 +5841,7 @@ int32_t PS5_SYSV_ABI agcCreateShader(
         allocation_size);
     if (result != AGC_OK) {
         agcRuntimeFree(device, shader->allocation);
-        agcDestroyChild(device, shader);
+        agcDestroyChild(device, shader, AGC_RUNTIME_CHILD_SHADER);
         return result;
     }
     if (reflected) {
@@ -5798,7 +5860,7 @@ int32_t PS5_SYSV_ABI agcCreateShader(
                shader->record.shader_type ==
                    (uint8_t)kAgcShaderBinaryTypeGsBack)))) {
             agcRuntimeFree(device, shader->allocation);
-            agcDestroyChild(device, shader);
+            agcDestroyChild(device, shader, AGC_RUNTIME_CHILD_SHADER);
             return result != AGC_OK ? result : AGC_ERROR_SHADER_INVALID_TYPE;
         }
         shader->reflection = *desc->reflection;
@@ -5815,7 +5877,7 @@ int32_t PS5_SYSV_ABI agcCreateShader(
                     desc->reflection->flags, shader->record.shader_type,
                     shader->front_record.shader_type)) {
                 agcRuntimeFree(device, shader->allocation);
-                agcDestroyChild(device, shader);
+                agcDestroyChild(device, shader, AGC_RUNTIME_CHILD_SHADER);
                 return result != AGC_OK ? result :
                     AGC_ERROR_SHADER_INVALID_TYPE;
             }
@@ -5856,7 +5918,7 @@ int32_t PS5_SYSV_ABI agcDestroyShader(AgcShader shader)
     agcCaptureRecordObjectDestroy(device, shader, AGC_CAPTURE_OBJECT_SHADER);
     agcRuntimeFree(device, shader->allocation);
     shader->magic = 0u;
-    agcDestroyChild(device, shader);
+    agcDestroyChild(device, shader, AGC_RUNTIME_CHILD_SHADER);
     return AGC_OK;
 }
 
@@ -5876,14 +5938,39 @@ int32_t PS5_SYSV_ABI agcGetShaderReflection(
     return AGC_OK;
 }
 
-static int agcPipelineDescriptorEqual(
-    const AgcShaderDescriptorMapping *a,
-    const AgcShaderDescriptorMapping *b)
+static uint32_t agcPipelineDescriptorAccess(
+    const AgcShaderDescriptorMapping *mapping)
 {
-    return a->set == b->set && a->binding == b->binding &&
-        a->type == b->type && a->array_size == b->array_size &&
-        a->byte_offset == b->byte_offset &&
-        a->byte_stride == b->byte_stride;
+    const uint32_t access =
+        AGC_SHADER_DESCRIPTOR_ACCESS(mapping->array_size);
+
+    if (access != 0u)
+        return access;
+    switch (mapping->type) {
+    case AGC_SHADER_DESCRIPTOR_STORAGE_IMAGE:
+    case AGC_SHADER_DESCRIPTOR_STORAGE_TEXEL_BUFFER:
+    case AGC_SHADER_DESCRIPTOR_STORAGE_BUFFER:
+        return AGC_SHADER_DESCRIPTOR_ACCESS_MASK;
+    default:
+        return AGC_SHADER_DESCRIPTOR_ACCESS_READ_BIT;
+    }
+}
+
+static int agcPipelineDescriptorLayoutContains(
+    const AgcShaderDescriptorMapping *reflection,
+    const AgcShaderDescriptorMapping *layout)
+{
+    const uint32_t required = agcPipelineDescriptorAccess(reflection);
+    const uint32_t available = agcPipelineDescriptorAccess(layout);
+
+    return reflection->set == layout->set &&
+        reflection->binding == layout->binding &&
+        reflection->type == layout->type &&
+        AGC_SHADER_DESCRIPTOR_ARRAY_SIZE(reflection->array_size) ==
+            AGC_SHADER_DESCRIPTOR_ARRAY_SIZE(layout->array_size) &&
+        reflection->byte_offset == layout->byte_offset &&
+        reflection->byte_stride == layout->byte_stride &&
+        (required & ~available) == 0u;
 }
 
 static int agcPipelineVertexInputEqual(
@@ -5905,7 +5992,7 @@ static int agcPipelineReflectionDescriptorsMatch(
 
     for (i = 0u; i < reflection->descriptor_mapping_count; ++i) {
         for (j = 0u; j < layout_count; ++j) {
-            if (agcPipelineDescriptorEqual(
+            if (agcPipelineDescriptorLayoutContains(
                     &reflection->descriptor_mappings[i], &layout[j]))
                 break;
         }
@@ -5958,7 +6045,7 @@ static int agcPipelineLayoutEntryUsed(
         if (!reflection)
             continue;
         for (i = 0u; i < reflection->descriptor_mapping_count; ++i) {
-            if (agcPipelineDescriptorEqual(
+            if (agcPipelineDescriptorLayoutContains(
                     &reflection->descriptor_mappings[i], entry))
                 return 1;
         }
@@ -7913,7 +8000,8 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
         if (result != AGC_OK)
             return result;
     }
-    pipeline = agcCreateChild(device, sizeof(*pipeline));
+    pipeline = agcCreateChild(device, sizeof(*pipeline),
+        AGC_RUNTIME_CHILD_GRAPHICS_PIPELINE);
     if (!pipeline)
         return AGC_ERROR_OUT_OF_MEMORY;
     pipeline->magic = AGC_MAGIC_GRAPHICS_PIPELINE;
@@ -7974,7 +8062,8 @@ int32_t PS5_SYSV_ABI agcCreateGraphicsPipeline(AgcDevice device,
     result = agcBuildGraphicsPipelineBind(pipeline);
     if (result != AGC_OK) {
         pipeline->magic = 0u;
-        agcDestroyChild(device, pipeline);
+        agcDestroyChild(device, pipeline,
+            AGC_RUNTIME_CHILD_GRAPHICS_PIPELINE);
         return agcPipelineDebugReport(device, "agcCreateGraphicsPipeline",
             result, AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT,
             "reflected shader registers and fixed-function state cannot be encoded into the native graphics-pipeline bind packet");
@@ -8012,7 +8101,8 @@ int32_t PS5_SYSV_ABI agcDestroyGraphicsPipeline(AgcGraphicsPipeline pipeline)
     pipeline->primitive_shader->dependency_refs--;
     pipeline->pixel_shader->dependency_refs--;
     pipeline->magic = 0u;
-    agcDestroyChild(device, pipeline);
+    agcDestroyChild(device, pipeline,
+        AGC_RUNTIME_CHILD_GRAPHICS_PIPELINE);
     return AGC_OK;
 }
 
@@ -8207,7 +8297,8 @@ int32_t PS5_SYSV_ABI agcCreateComputePipeline(AgcDevice device,
         return agcPipelineDebugReport(device, "agcCreateComputePipeline",
             result, AGC_DEBUG_MESSAGE_CATEGORY_COMPATIBILITY_BIT,
             "reflected descriptor or push-constant layout exceeds the native resource arena contract");
-    pipeline = agcCreateChild(device, sizeof(*pipeline));
+    pipeline = agcCreateChild(device, sizeof(*pipeline),
+        AGC_RUNTIME_CHILD_COMPUTE_PIPELINE);
     if (!pipeline)
         return AGC_ERROR_OUT_OF_MEMORY;
     pipeline->magic = AGC_MAGIC_COMPUTE_PIPELINE;
@@ -8256,7 +8347,8 @@ int32_t PS5_SYSV_ABI agcDestroyComputePipeline(AgcComputePipeline pipeline)
         AGC_CAPTURE_OBJECT_COMPUTE_PIPELINE);
     pipeline->shader->dependency_refs--;
     pipeline->magic = 0u;
-    agcDestroyChild(device, pipeline);
+    agcDestroyChild(device, pipeline,
+        AGC_RUNTIME_CHILD_COMPUTE_PIPELINE);
     return AGC_OK;
 }
 
@@ -8498,7 +8590,8 @@ int32_t PS5_SYSV_ABI agcCreateCommandBuffer(AgcDevice device,
     storage_size = (size_t)desc->capacity_dwords * sizeof(uint32_t);
     if (storage_size / sizeof(uint32_t) != desc->capacity_dwords)
         return AGC_ERROR_INVALID_ARGUMENT;
-    command_buffer = agcCreateChild(device, sizeof(*command_buffer));
+    command_buffer = agcCreateChild(device, sizeof(*command_buffer),
+        AGC_RUNTIME_CHILD_COMMAND_BUFFER);
     if (!command_buffer)
         return AGC_ERROR_OUT_OF_MEMORY;
     /* A submitted DCB is a kernel-consumed command stream, not ordinary
@@ -8509,7 +8602,8 @@ int32_t PS5_SYSV_ABI agcCreateCommandBuffer(AgcDevice device,
         storage_size, 256u, 1u, AGC_OBJECT_TYPE_COMMAND_BUFFER,
         command_buffer, &command_buffer->allocation);
     if (result != AGC_OK) {
-        agcDestroyChild(device, command_buffer);
+        agcDestroyChild(device, command_buffer,
+            AGC_RUNTIME_CHILD_COMMAND_BUFFER);
         return result;
     }
     command_buffer->storage = agcAllocationCpuAddress(command_buffer->allocation);
@@ -8529,7 +8623,8 @@ int32_t PS5_SYSV_ABI agcCreateCommandBuffer(AgcDevice device,
         &command_buffer->transition_completion_allocation);
     if (result != AGC_OK) {
         agcRuntimeFree(device, command_buffer->allocation);
-        agcDestroyChild(device, command_buffer);
+        agcDestroyChild(device, command_buffer,
+            AGC_RUNTIME_CHILD_COMMAND_BUFFER);
         return result;
     }
     agcCaptureRecordObjectCreate(device, command_buffer,
@@ -8563,7 +8658,8 @@ int32_t PS5_SYSV_ABI agcDestroyCommandBuffer(AgcCommandBuffer command_buffer)
     agcCaptureRecordObjectDestroy(device, command_buffer,
         AGC_CAPTURE_OBJECT_COMMAND_BUFFER);
     command_buffer->magic = 0u;
-    agcDestroyChild(device, command_buffer);
+    agcDestroyChild(device, command_buffer,
+        AGC_RUNTIME_CHILD_COMMAND_BUFFER);
     return AGC_OK;
 }
 
@@ -9125,11 +9221,9 @@ int32_t PS5_SYSV_ABI agcCmdBindDepthStencilTarget(
         &image->desc, 0u, target->array_layer, 0u, &layout);
     if (result != AGC_OK)
         return result;
-    if (command_buffer->color_target_count != 0u &&
-        (layout.width != command_buffer->color_target_width ||
-         layout.height != command_buffer->color_target_height)) {
-        return AGC_ERROR_VALIDATION_FAILED;
-    }
+    /* Attachment backing subresources need not have identical extents.
+     * Vulkan framebuffers only require each attachment to cover the render
+     * area, and gfx1013 carries independent color and depth surface sizes. */
     required_usage = agcPipelineDepthStencilWrites(
         command_buffer->graphics_pipeline) ?
         kAgcResourceUsageDepthStencilWrite :
@@ -10083,6 +10177,49 @@ static int agcBatchBufferRangeState(AgcBuffer buffer,
     return found;
 }
 
+static int agcBatchConservativeBufferRangeCompatible(AgcBuffer buffer,
+    const AgcRuntimeBatchTransitionState *states, uint32_t state_count,
+    uint64_t offset, uint64_t size, AgcResourceOwner before_owner,
+    AgcResourceOwner after_owner)
+{
+    const uint64_t end = offset + size;
+    uint64_t position = offset;
+
+    while (position < end) {
+        AgcResourceUsage segment_usage;
+        AgcResourceOwner segment_owner;
+        uint64_t next_boundary;
+        uint32_t i;
+
+        agcBufferCommittedStateAt(buffer, position, &segment_usage,
+            &segment_owner, &next_boundary);
+        if (next_boundary > end)
+            next_boundary = end;
+        for (i = 0u; i < state_count; ++i) {
+            uint64_t state_end;
+            if (states[i].resource_type != kAgcResourceTypeBuffer ||
+                states[i].resource != buffer)
+                continue;
+            state_end = states[i].buffer_offset + states[i].buffer_size;
+            if (states[i].buffer_offset <= position && position < state_end) {
+                segment_usage = states[i].usage;
+                segment_owner = states[i].owner;
+            }
+            if (states[i].buffer_offset > position &&
+                states[i].buffer_offset < next_boundary)
+                next_boundary = states[i].buffer_offset;
+            if (state_end > position && state_end < next_boundary)
+                next_boundary = state_end;
+        }
+        (void)segment_usage;
+        if (segment_owner != before_owner && segment_owner != after_owner &&
+            segment_owner != kAgcResourceOwnerHost)
+            return 0;
+        position = next_boundary;
+    }
+    return position == end;
+}
+
 static int agcBatchImageRangeState(AgcImage image,
     const AgcRuntimeBatchTransitionState *states, uint32_t state_count,
     const AgcImageSubresourceRange *range, uint32_t command_index,
@@ -10244,14 +10381,78 @@ static int32_t agcReserveSubmissionBufferStates(
     return AGC_OK;
 }
 
+static void agcDescribeTransitionFailure(char *diagnostic,
+    size_t diagnostic_size, const char *reason, uint32_t command_index,
+    uint32_t transition_index, const AgcRuntimeRecordedTransition *record,
+    int actual_known, AgcResourceUsage actual_usage,
+    AgcResourceOwner actual_owner)
+{
+    if (!diagnostic || diagnostic_size == 0u)
+        return;
+    if (record->resource_type == kAgcResourceTypeBuffer) {
+        if (actual_known) {
+            (void)snprintf(diagnostic, diagnostic_size,
+                "transition reason=%s cmd=%u rec=%u type=buffer "
+                "resource=%p flags=0x%x before=%u/%u actual=%u/%u "
+                "after=%u/%u range=%llu+%llu",
+                reason, command_index, transition_index, record->resource,
+                record->flags, record->before, record->before_owner,
+                actual_usage, actual_owner, record->after,
+                record->after_owner,
+                (unsigned long long)record->buffer_offset,
+                (unsigned long long)record->buffer_size);
+        } else {
+            (void)snprintf(diagnostic, diagnostic_size,
+                "transition reason=%s cmd=%u rec=%u type=buffer "
+                "resource=%p flags=0x%x before=%u/%u actual=unknown "
+                "after=%u/%u range=%llu+%llu",
+                reason, command_index, transition_index, record->resource,
+                record->flags, record->before, record->before_owner,
+                record->after, record->after_owner,
+                (unsigned long long)record->buffer_offset,
+                (unsigned long long)record->buffer_size);
+        }
+    } else if (actual_known) {
+        (void)snprintf(diagnostic, diagnostic_size,
+            "transition reason=%s cmd=%u rec=%u type=image resource=%p "
+            "flags=0x%x before=%u/%u actual=%u/%u after=%u/%u "
+            "subres=0x%x:%u+%u:%u+%u",
+            reason, command_index, transition_index, record->resource,
+            record->flags, record->before, record->before_owner,
+            actual_usage, actual_owner, record->after, record->after_owner,
+            record->image_range.aspect_mask,
+            record->image_range.base_mip_level,
+            record->image_range.mip_level_count,
+            record->image_range.base_array_layer,
+            record->image_range.array_layer_count);
+    } else {
+        (void)snprintf(diagnostic, diagnostic_size,
+            "transition reason=%s cmd=%u rec=%u type=image resource=%p "
+            "flags=0x%x before=%u/%u actual=unknown after=%u/%u "
+            "subres=0x%x:%u+%u:%u+%u",
+            reason, command_index, transition_index, record->resource,
+            record->flags, record->before, record->before_owner,
+            record->after, record->after_owner,
+            record->image_range.aspect_mask,
+            record->image_range.base_mip_level,
+            record->image_range.mip_level_count,
+            record->image_range.base_array_layer,
+            record->image_range.array_layer_count);
+    }
+}
+
 static int32_t agcValidateSubmissionTransitions(
-    AgcCommandBuffer const *command_buffers, uint32_t command_count)
+    AgcCommandBuffer const *command_buffers, uint32_t command_count,
+    char *diagnostic, size_t diagnostic_size)
 {
     AgcRuntimeBatchTransitionState *states = NULL;
     size_t state_capacity = 0u;
     uint32_t state_count = 0u;
     uint32_t i;
     int32_t result = AGC_OK;
+
+    if (diagnostic && diagnostic_size != 0u)
+        diagnostic[0] = '\0';
 
     for (i = 0u; i < command_count; ++i) {
         if (command_buffers[i]->recorded_transition_count >
@@ -10280,6 +10481,7 @@ static int32_t agcValidateSubmissionTransitions(
             AgcResourceUsage usage;
             AgcResourceOwner owner;
             uint32_t prior_index;
+            int conservative_buffer_prior = 0;
 
             if (record->flags == AGC_RESOURCE_TRANSITION_ACQUIRE_BIT) {
                 AgcRuntimePendingTransfer *transfer;
@@ -10298,6 +10500,11 @@ static int32_t agcValidateSubmissionTransitions(
                     transfer->acquire_command != command_buffer ||
                     transfer->label->last_signal_submission_id == 0u ||
                     transfer->label->last_signal_value < transfer->value) {
+                    agcDescribeTransitionFailure(diagnostic, diagnostic_size,
+                        "acquire-dependency", i, transition_index, record,
+                        transfer != NULL,
+                        transfer ? transfer->usage : 0u,
+                        transfer ? transfer->owner : 0u);
                     result = AGC_ERROR_INVALID_STATE;
                     break;
                 }
@@ -10337,6 +10544,9 @@ static int32_t agcValidateSubmissionTransitions(
                         (AgcImage)record->resource, &record->image_range);
                 }
                 if (overlaps && !acquired_in_batch) {
+                    agcDescribeTransitionFailure(diagnostic, diagnostic_size,
+                        "pending-transfer-overlap", i, transition_index,
+                        record, 0, 0u, 0u);
                     result = AGC_ERROR_INVALID_STATE;
                     break;
                 }
@@ -10361,6 +10571,9 @@ static int32_t agcValidateSubmissionTransitions(
                             &record->image_range);
                     }
                     if (overlaps) {
+                        agcDescribeTransitionFailure(diagnostic,
+                            diagnostic_size, "duplicate-release", i,
+                            transition_index, record, 0, 0u, 0u);
                         result = AGC_ERROR_INVALID_STATE;
                         break;
                     }
@@ -10370,7 +10583,24 @@ static int32_t agcValidateSubmissionTransitions(
             }
 
             if (record->resource_type == kAgcResourceTypeBuffer) {
-                if (!agcBatchBufferRangeState((AgcBuffer)record->resource,
+                if (record->flags ==
+                        AGC_RESOURCE_TRANSITION_CONSERVATIVE_BUFFER_BIT) {
+                    conservative_buffer_prior =
+                        agcBatchConservativeBufferRangeCompatible(
+                            (AgcBuffer)record->resource, states, state_count,
+                            record->buffer_offset, record->buffer_size,
+                            record->before_owner, record->after_owner);
+                    usage = record->before;
+                    owner = record->after_owner;
+                    if (!conservative_buffer_prior) {
+                        agcDescribeTransitionFailure(diagnostic,
+                            diagnostic_size,
+                            "incompatible-conservative-prior", i,
+                            transition_index, record, 0, 0u, 0u);
+                        result = AGC_ERROR_INVALID_STATE;
+                    }
+                } else if (!agcBatchBufferRangeState(
+                        (AgcBuffer)record->resource,
                         states,
                         record->flags ==
                                 AGC_RESOURCE_TRANSITION_COMMITTED_STATE_BIT ?
@@ -10379,8 +10609,12 @@ static int32_t agcValidateSubmissionTransitions(
                         record->buffer_size, i,
                         record->flags ==
                             AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT,
-                        &usage, &owner))
+                        &usage, &owner)) {
+                    agcDescribeTransitionFailure(diagnostic, diagnostic_size,
+                        "nonuniform-prior-state", i, transition_index,
+                        record, 0, 0u, 0u);
                     result = AGC_ERROR_INVALID_STATE;
+                }
             } else {
                 const AgcImage image = (const AgcImage)record->resource;
                 if (!agcBatchImageRangeState((AgcImage)image, states,
@@ -10390,17 +10624,15 @@ static int32_t agcValidateSubmissionTransitions(
                         &record->image_range, i,
                         record->flags ==
                             AGC_RESOURCE_TRANSITION_BATCH_DEPENDENCY_BIT,
-                        &usage, &owner))
+                        &usage, &owner)) {
+                    agcDescribeTransitionFailure(diagnostic, diagnostic_size,
+                        "nonuniform-prior-state", i, transition_index,
+                        record, 0, 0u, 0u);
                     result = AGC_ERROR_INVALID_STATE;
+                }
             }
             if (result != AGC_OK)
                 break;
-            const int conservative_buffer_prior =
-                record->flags ==
-                    AGC_RESOURCE_TRANSITION_CONSERVATIVE_BUFFER_BIT &&
-                record->resource_type == kAgcResourceTypeBuffer &&
-                (owner == record->after_owner ||
-                 owner == kAgcResourceOwnerHost);
             const int conservative_image_prior =
                 record->flags ==
                     AGC_RESOURCE_TRANSITION_CONSERVATIVE_IMAGE_BIT &&
@@ -10413,18 +10645,9 @@ static int32_t agcValidateSubmissionTransitions(
                 !conservative_image_prior &&
                 !(record->flags == 0u && usage == record->after &&
                     owner == record->after_owner)) {
-                fprintf(stderr,
-                    "[openagc] transition state mismatch command=%u "
-                    "record=%u type=%u flags=0x%x "
-                    "expected_usage=%u actual_usage=%u after_usage=%u "
-                    "expected_owner=%u actual_owner=%u after_owner=%u "
-                    "offset=%llu size=%llu\n",
-                    i, transition_index, record->resource_type,
-                    record->flags, record->before, usage,
-                    record->after, record->before_owner, owner,
-                    record->after_owner,
-                    (unsigned long long)record->buffer_offset,
-                    (unsigned long long)record->buffer_size);
+                agcDescribeTransitionFailure(diagnostic, diagnostic_size,
+                    "prior-state-mismatch", i, transition_index, record, 1,
+                    usage, owner);
                 result = AGC_ERROR_INVALID_STATE;
                 break;
             }
@@ -10447,6 +10670,8 @@ static int32_t agcValidateSubmissionTransitions(
     if (result == AGC_OK)
         result = agcReserveSubmissionBufferStates(
             command_buffers, command_count);
+    if (result == AGC_ERROR_INVALID_STATE && diagnostic && diagnostic[0])
+        fprintf(stderr, "[openagc] %s\n", diagnostic);
     agcFree(command_buffers[0]->device, states);
     return result;
 }
@@ -14210,14 +14435,15 @@ int32_t PS5_SYSV_ABI agcCreateGpuLabel(
         !agcHeaderValid(desc->struct_size, sizeof(*desc), desc->version) ||
         desc->flags != 0u || !agcReservedZero(desc->reserved, 4u))
         return AGC_ERROR_INVALID_ARGUMENT;
-    label = agcCreateChild(device, sizeof(*label));
+    label = agcCreateChild(device, sizeof(*label),
+        AGC_RUNTIME_CHILD_GPU_LABEL);
     if (!label)
         return AGC_ERROR_OUT_OF_MEMORY;
     result = agcRuntimeAllocate(device, AGC_MEMORY_HEAP_FLEXIBLE,
         sizeof(*value), 8u, 0u, AGC_OBJECT_TYPE_COUNT, label,
         &label->allocation);
     if (result != AGC_OK) {
-        agcDestroyChild(device, label);
+        agcDestroyChild(device, label, AGC_RUNTIME_CHILD_GPU_LABEL);
         return result;
     }
     value = agcAllocationCpuAddress(label->allocation);
@@ -14226,7 +14452,7 @@ int32_t PS5_SYSV_ABI agcCreateGpuLabel(
         sizeof(*value));
     if (result != AGC_OK) {
         agcRuntimeFree(device, label->allocation);
-        agcDestroyChild(device, label);
+        agcDestroyChild(device, label, AGC_RUNTIME_CHILD_GPU_LABEL);
         return result;
     }
     label->magic = AGC_MAGIC_GPU_LABEL;
@@ -14256,7 +14482,7 @@ int32_t PS5_SYSV_ABI agcDestroyGpuLabel(AgcGpuLabel label)
     agcCaptureRecordObjectDestroy(device, label,
         AGC_CAPTURE_OBJECT_GPU_LABEL);
     label->magic = 0u;
-    agcDestroyChild(device, label);
+    agcDestroyChild(device, label, AGC_RUNTIME_CHILD_GPU_LABEL);
     return AGC_OK;
 }
 
@@ -14466,7 +14692,7 @@ int32_t PS5_SYSV_ABI agcCreateFence(
         !agcReservedZero(desc->reserved, 4u)) {
         return AGC_ERROR_INVALID_ARGUMENT;
     }
-    fence = agcCreateChild(device, sizeof(*fence));
+    fence = agcCreateChild(device, sizeof(*fence), AGC_RUNTIME_CHILD_FENCE);
     if (!fence)
         return AGC_ERROR_OUT_OF_MEMORY;
     fence->device = device;
@@ -14480,7 +14706,7 @@ int32_t PS5_SYSV_ABI agcCreateFence(
         sizeof(*completion), sizeof(*completion), 0u,
         AGC_OBJECT_TYPE_COUNT, fence, &fence->allocation);
     if (result != AGC_OK) {
-        agcDestroyChild(device, fence);
+        agcDestroyChild(device, fence, AGC_RUNTIME_CHILD_FENCE);
         return result;
     }
     completion = agcAllocationCpuAddress(fence->allocation);
@@ -14489,7 +14715,7 @@ int32_t PS5_SYSV_ABI agcCreateFence(
         sizeof(*completion));
     if (result != AGC_OK) {
         agcRuntimeFree(device, fence->allocation);
-        agcDestroyChild(device, fence);
+        agcDestroyChild(device, fence, AGC_RUNTIME_CHILD_FENCE);
         return result;
     }
 #endif
@@ -14516,7 +14742,7 @@ int32_t PS5_SYSV_ABI agcDestroyFence(AgcFence fence)
         agcRuntimeFree(device, fence->allocation);
     agcCaptureRecordObjectDestroy(device, fence, AGC_CAPTURE_OBJECT_FENCE);
     fence->magic = 0u;
-    agcDestroyChild(device, fence);
+    agcDestroyChild(device, fence, AGC_RUNTIME_CHILD_FENCE);
     return AGC_OK;
 }
 
@@ -14751,6 +14977,7 @@ int32_t PS5_SYSV_ABI agcRecycleCommandBuffers(AgcFence fence,
 static int32_t agcQueueSubmitBatch(
     AgcQueue queue, const AgcSubmitInfo *submit_info, AgcFence fence)
 {
+    char transition_diagnostic[AGC_RUNTIME_DEBUG_MESSAGE_SIZE];
     AgcCommandBuffer command_buffers[AGC_RUNTIME_MAX_SUBMIT_COMMAND_BUFFERS];
     void *addresses[AGC_RUNTIME_MAX_SUBMIT_COMMAND_BUFFERS];
     uint32_t sizes[AGC_RUNTIME_MAX_SUBMIT_COMMAND_BUFFERS];
@@ -14806,9 +15033,16 @@ static int32_t agcQueueSubmitBatch(
     result = agcValidateBatchLabelSignalOrder(command_buffers, count);
     if (result != AGC_OK)
         return result;
-    result = agcValidateSubmissionTransitions(command_buffers, count);
+    result = agcValidateSubmissionTransitions(command_buffers, count,
+        transition_diagnostic, sizeof(transition_diagnostic));
     if (result != AGC_OK)
-        return result;
+        return agcDebugReport(queue->device,
+            AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
+            AGC_DEBUG_MESSAGE_CATEGORY_RESOURCE_STATE_BIT, result,
+            "agcQueueSubmit", AGC_OBJECT_TYPE_COMMAND_BUFFER,
+            first->allocation->debug_name,
+            transition_diagnostic[0] ? transition_diagnostic :
+                "recorded resource transitions do not match committed state");
     result = agcValidateSubmitLabelLists(queue, last, submit_info);
     if (result != AGC_OK)
         return result;
@@ -15002,6 +15236,7 @@ rollback_batch_lists:
 int32_t PS5_SYSV_ABI agcQueueSubmit(
     AgcQueue queue, const AgcSubmitInfo *submit_info, AgcFence fence)
 {
+    char transition_diagnostic[AGC_RUNTIME_DEBUG_MESSAGE_SIZE];
     AgcCommandBuffer command_buffer;
     AgcCommandBufferSubmit packet;
     int32_t result;
@@ -15096,14 +15331,16 @@ int32_t PS5_SYSV_ABI agcQueueSubmit(
             "agcQueueSubmit", AGC_OBJECT_TYPE_COMMAND_BUFFER,
             command_buffer->allocation->debug_name,
             "command buffer contains a stale or decreasing GPU-label signal");
-    result = agcValidateSubmissionTransitions(&command_buffer, 1u);
+    result = agcValidateSubmissionTransitions(&command_buffer, 1u,
+        transition_diagnostic, sizeof(transition_diagnostic));
     if (result != AGC_OK)
         return agcDebugReport(queue->device,
             AGC_DEBUG_MESSAGE_SEVERITY_ERROR_BIT,
             AGC_DEBUG_MESSAGE_CATEGORY_RESOURCE_STATE_BIT, result,
             "agcQueueSubmit", AGC_OBJECT_TYPE_COMMAND_BUFFER,
             command_buffer->allocation->debug_name,
-            "recorded resource transitions do not match committed state");
+            transition_diagnostic[0] ? transition_diagnostic :
+                "recorded resource transitions do not match committed state");
     result = agcValidateSubmitLabelLists(queue, command_buffer, submit_info);
     if (result != AGC_OK)
         return agcDebugReport(queue->device,
