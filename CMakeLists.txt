@@ -59,11 +59,14 @@ set(OPENAGC_SOURCES
 # Platform-specific sources
 if(OPENAGC_PROSPERO_PLATFORM)
     list(APPEND OPENAGC_SOURCES
-        src/driver_prospero.c
         src/videoout_prospero.c
     )
     if(OPENAGC_PREFER_INSTALLED_AGC_DRIVER)
-        list(APPEND OPENAGC_SOURCES src/driver_sony_preload.c)
+        list(APPEND OPENAGC_SOURCES
+            src/driver_prospero_installed.c
+            src/driver_sony_preload.c)
+    else()
+        list(APPEND OPENAGC_SOURCES src/driver_prospero.c)
     endif()
 else()
     list(APPEND OPENAGC_SOURCES

@@ -205,13 +205,33 @@ bool agcProsperoFirmwareSupported(uint32_t raw_version)
 bool agcProsperoBuildRuntimeProfile(uint32_t raw_version, bool is_trinity,
     AgcProsperoRuntimeProfile *profile_out)
 {
-    AgcProsperoDirectProfile direct_profile;
+    AgcProsperoRuntimeProfile profile = {0};
+    uint16_t abi_key = agcFirmwareAbiKey(raw_version);
 
-    if (!profile_out ||
-        !agcProsperoBuildDirectProfile(raw_version, is_trinity,
-            &direct_profile))
+    if (!profile_out)
         return false;
-    *profile_out = direct_profile.runtime;
+    if (is_trinity && !agcProsperoFirmwareUsesTrinityPredicate(raw_version))
+        return false;
+    if (agcProsperoFirmwareIsArchival(raw_version))
+        return false;
+    if (agcFirmwareAliasContains(g_legacy_v3_aliases,
+            sizeof(g_legacy_v3_aliases) / sizeof(g_legacy_v3_aliases[0]),
+            abi_key)) {
+        profile.family = AGC_PROSPERO_ABI_LEGACY_V3;
+    } else if (agcProsperoStandardDirectAbiSupportsFirmware(raw_version)) {
+        profile.family = AGC_PROSPERO_ABI_STANDARD;
+    } else {
+        return false;
+    }
+    profile.authenticated_special_queue = true;
+    profile.eop_ring_offset = 0x39000u;
+    profile.is_trinity = is_trinity;
+    profile.gpu_info_span = is_trinity ? 0x180000u : 0x100000u;
+    profile.cwsr_work_offset = is_trinity ? 0x1000000u : 0xa00000u;
+    profile.cwsr_size = is_trinity ? 0x1600000u : 0x1000000u;
+    profile.supports_tf_ring = abi_key == 0x0320u ||
+        agcProsperoStandardDirectAbiSupportsFirmware(raw_version);
+    *profile_out = profile;
     return true;
 }
 
@@ -222,31 +242,9 @@ bool agcProsperoBuildDirectProfile(uint32_t raw_version, bool is_trinity,
     AgcProsperoRuntimeProfile profile = {0};
     uint16_t abi_key = agcFirmwareAbiKey(raw_version);
 
-    if (!profile_out)
+    if (!profile_out ||
+        !agcProsperoBuildRuntimeProfile(raw_version, is_trinity, &profile))
         return false;
-    if (is_trinity && !agcProsperoFirmwareUsesTrinityPredicate(raw_version))
-        return false;
-    if (agcProsperoFirmwareIsArchival(raw_version))
-        return false;
-
-    if (agcFirmwareAliasContains(g_legacy_v3_aliases,
-            sizeof(g_legacy_v3_aliases) / sizeof(g_legacy_v3_aliases[0]),
-            abi_key)) {
-        profile.family = AGC_PROSPERO_ABI_LEGACY_V3;
-        profile.authenticated_special_queue = true;
-        profile.eop_ring_offset = 0x39000u;
-    } else if (agcProsperoStandardDirectAbiSupportsFirmware(raw_version)) {
-        profile.family = AGC_PROSPERO_ABI_STANDARD;
-        profile.authenticated_special_queue = true;
-        profile.eop_ring_offset = 0x39000u;
-    } else {
-        return false;
-    }
-
-    profile.is_trinity = is_trinity;
-    profile.gpu_info_span = is_trinity ? 0x180000u : 0x100000u;
-    profile.cwsr_work_offset = is_trinity ? 0x1000000u : 0xa00000u;
-    profile.cwsr_size = is_trinity ? 0x1600000u : 0x1000000u;
     direct.runtime = profile;
     direct.capabilities = AGC_DIRECT_CAP_SUBMIT;
     direct.defaults_max_version = AGC_DIRECT_DEFAULTS_VERSION_UNKNOWN;
@@ -579,6 +577,7 @@ int32_t agcDriverSelectRuntime(AgcFirmwareVersion *version_out,
     const AgcDriverOps **ops_out)
 {
 #ifdef OPENAGC_PROSPERO
+#ifndef OPENAGC_PREFER_INSTALLED_AGC_DRIVER
     static const AgcDriverRegistryEntry registry[] = {
         {
             "prospero-gcabi-v1-submit16",
@@ -615,6 +614,7 @@ int32_t agcDriverSelectRuntime(AgcFirmwareVersion *version_out,
         }
     };
     const AgcDriverRegistryEntry *entry;
+#endif
     uint32_t raw_version;
     int32_t result;
 
@@ -624,11 +624,16 @@ int32_t agcDriverSelectRuntime(AgcFirmwareVersion *version_out,
     result = agcQueryProsperoFirmware(NULL, &raw_version);
     if (result != AGC_OK)
         return AGC_ERROR_NOT_SUPPORTED;
+#ifndef OPENAGC_PREFER_INSTALLED_AGC_DRIVER
     entry = agcDriverRegistryLookup(registry,
         sizeof(registry) / sizeof(registry[0]), agcFirmwareAbiKey(raw_version),
         AGC_BACKEND_CAP_NATIVE_SUBMIT);
-    if (!entry && !agcSonyDriverProfileForFirmware(raw_version))
+    if (!entry)
         return AGC_ERROR_NOT_SUPPORTED;
+#else
+    if (!agcSonyDriverProfileForFirmware(raw_version))
+        return AGC_ERROR_NOT_SUPPORTED;
+#endif
     result = agcProsperoConfigureRuntimeProfile(raw_version);
     if (result != AGC_OK) {
         *ops_out = NULL;

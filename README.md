@@ -16,9 +16,11 @@ contract using host memory; it is not a non-PS5 GPU backend.
 > replacement. Support claims are capability- and exact-firmware-specific.
 > Consult [STATUS.md](STATUS.md) before relying on a path on hardware.
 >
-> Prospero builds now prefer the preloaded `libSceAgcDriver.sprx` carrier by
-> default. That carrier is experimental and hardware-unqualified; use
-> `-DOPENAGC_PREFER_INSTALLED_AGC_DRIVER=OFF` for direct-only qualification.
+> Prospero production builds use the preloaded `libSceAgcDriver.sprx` and
+> `libSceAgc.sprx` carrier by default and fail closed if it cannot be resolved.
+> The installed-driver build does not compile the direct `/dev/gc` backend.
+> `-DOPENAGC_PREFER_INSTALLED_AGC_DRIVER=OFF` is an explicit legacy-development
+> build and must not be used by Eden or installed-driver qualification.
 
 ## At a Glance
 
@@ -282,10 +284,15 @@ build-prospero/libopenagc.a
 ```
 
 The exported OpenAGC target links `kernel`, `SceVideoOut`, and—by default—
-`SceAgcDriver` plus `SceAgc` with `--no-as-needed`. Configure with
-`-DOPENAGC_PREFER_INSTALLED_AGC_DRIVER=OFF` for a direct-only artifact with no
-Sony AGC `DT_NEEDED` entries. Non-CMake consumers that want Sony-first behavior must
-link `libopenagc.a -Wl,--wrap=__rtld_lib_open -Wl,--no-as-needed
+`SceAgcDriver` plus `SceAgc` with `--no-as-needed`. This default selects
+`driver_prospero_installed.c`, which contains only firmware-profile discovery
+for the Sony carrier; `driver_prospero.c` and its direct `/dev/gc` operations
+are excluded from the target. Runtime selection accepts only an installed Sony
+profile and has no direct fallback. Configure with
+`-DOPENAGC_PREFER_INSTALLED_AGC_DRIVER=OFF` only for an explicit direct-backend
+development artifact with no Sony AGC `DT_NEEDED` entries. Non-CMake consumers
+that want installed-driver behavior must link
+`libopenagc.a -Wl,--wrap=__rtld_lib_open -Wl,--no-as-needed
 -lSceAgcDriver -lSceAgc -lSceVideoOut -lkernel`.
 
 ## Install the SDK
