@@ -54,6 +54,11 @@ make
 The host backend is intended for deterministic API and command-stream
 validation. It is not a software GPU and does not emulate PS5 rendering.
 
+The repository also contains host regression sources under [`tests/`](tests/),
+but the complete suite consumes generated shader fixtures from the separate
+hardware-validation sample bundle. The standalone distribution leaves that
+suite disabled unless the fixtures are present.
+
 ## Build for Prospero
 
 Install the [ps5-payload-sdk](https://github.com/OpenAGC/ps5-payload-sdk), then
@@ -106,9 +111,10 @@ shaders/     Small reusable shader sources
 tools/       Firmware, packet, capture, and artifact utilities
 ```
 
-Hardware qualification programs, host regression tests, development notes,
-extended documentation, and examples are maintained separately from this
-public library distribution.
+The `docs/`, `examples/`, and `tests/` directories provide API guidance,
+small consumer programs, and host regression sources. Firmware-specific
+qualification payloads remain separate because they require a matching PS5
+SDK, firmware profile, and console environment.
 
 ## Scope and safety
 

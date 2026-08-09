@@ -1,8 +1,12 @@
 #!/bin/sh
 set -eu
 
-firmware_root=${1:-/Volumes/Untitled/unp}
-aerolib=${2:-/Users/bizkut/Downloads/PS5/sdk/sce_stubs/aerolib.csv}
+if [ "$#" -lt 2 ]; then
+    echo "usage: $0 FIRMWARE_ROOT AEROLIB_CSV" >&2
+    exit 2
+fi
+firmware_root=$1
+aerolib=$2
 tmp=${TMPDIR:-/tmp}/openagc-driver-wrapper-fingerprints.$$
 trap 'rm -f "$tmp"' EXIT HUP INT TERM
 

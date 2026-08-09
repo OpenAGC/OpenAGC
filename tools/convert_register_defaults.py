@@ -261,10 +261,10 @@ def generate_c_file(version, public_groups, internal_groups):
 
 
 def main():
-    inc_path = sys.argv[1] if len(sys.argv) > 1 else \
-        '/Users/bizkut/Downloads/PS5/homebrew/reference emulator/src/libs/agcRegisterDefaults.inc'
-    out_dir = sys.argv[2] if len(sys.argv) > 2 else \
-        '/Users/bizkut/Downloads/PS5/homebrew/ps4-freegnm/OpenAGC/src'
+    if len(sys.argv) != 3:
+        raise SystemExit(f"usage: {sys.argv[0]} INPUT.inc OUTPUT_DIR")
+    inc_path = sys.argv[1]
+    out_dir = sys.argv[2]
 
     data = parse_inc(inc_path)
 

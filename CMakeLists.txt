@@ -108,8 +108,9 @@ else()
 endif()
 
 # === Tests ===
-option(OPENAGC_BUILD_TESTS "Build openagc tests" OFF)
-if(OPENAGC_BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_main.c")
+option(OPENAGC_BUILD_TESTS "Build OpenAGC host tests" OFF)
+if(OPENAGC_BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_main.c" AND
+   EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/samples/hw_test")
     enable_testing()
     find_package(Threads REQUIRED)
 
@@ -193,6 +194,7 @@ if(Python3_Interpreter_FOUND)
             ${CMAKE_CURRENT_SOURCE_DIR}/tools/decode_openagc_capture.py
             ${Python3_EXECUTABLE})
 endif()
+
 endif()
 
 # === Optional compiler/runtime integration test ===
@@ -284,6 +286,14 @@ if(OPENAGC_PACKAGE_PSBC)
 endif()
 install(FILES LICENSE README.md
     DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/doc/OpenAGC)
+install(FILES
+    docs/getting_started.md docs/api_reference.md
+    docs/capabilities_debugging.md docs/native_runtime.md
+    docs/memory_resources.md docs/shader_pipelines.md
+    docs/validation.md docs/capture.md
+    DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/doc/OpenAGC)
+install(FILES examples/first_compute.c examples/first_triangle.c
+    DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/doc/OpenAGC/examples)
 
 set(OPENAGC_CMAKE_INSTALL_DIR
     "${CMAKE_INSTALL_LIBDIR}/cmake/OpenAGC")
@@ -316,14 +326,3 @@ set(CPACK_PACKAGE_FILE_NAME
 set(CPACK_GENERATOR TGZ)
 set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
 include(CPack)
-
-# Public-API examples are deliberately separate from the large PS5 hardware
-# qualification programs under samples/hw_test.
-option(OPENAGC_BUILD_EXAMPLES "Build OpenAGC public API examples" OFF)
-if(OPENAGC_BUILD_EXAMPLES)
-    add_library(openagc_triangle_example STATIC
-        samples/triangle/triangle.c)
-    target_include_directories(openagc_triangle_example PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/samples/triangle)
-    target_link_libraries(openagc_triangle_example PUBLIC openagc)
-endif()
