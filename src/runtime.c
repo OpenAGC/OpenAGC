@@ -295,13 +295,13 @@ struct AgcDeviceImpl {
 
 struct AgcQueueImpl {
     uint32_t magic;
-    uint32_t pending_count;
+    atomic_uint pending_count;
     uint32_t label_refs;
     AgcDevice device;
     AgcQueueType type;
     int32_t backend_handle;
     uint64_t next_submission_id;
-    uint64_t last_completed_submission_id;
+    atomic_uint_fast64_t last_completed_submission_id;
 };
 
 struct AgcMemoryImpl {
@@ -543,6 +543,7 @@ struct AgcGpuLabelImpl {
 
 struct AgcFenceImpl {
     uint32_t magic;
+    atomic_flag completion_lock;
     uint32_t pending_refs;
     AgcDevice device;
     AgcRuntimeAllocation *allocation;
@@ -593,6 +594,41 @@ static void agcDeviceRegistryLock(void)
 static void agcDeviceRegistryUnlock(void)
 {
     atomic_flag_clear_explicit(&g_device_registry_lock, memory_order_release);
+}
+
+static void agcFenceCompletionLock(AgcFence fence)
+{
+    while (atomic_flag_test_and_set_explicit(
+               &fence->completion_lock, memory_order_acquire)) {}
+}
+
+static void agcFenceCompletionUnlock(AgcFence fence)
+{
+    atomic_flag_clear_explicit(&fence->completion_lock, memory_order_release);
+}
+
+static void agcFenceRecordWaitResult(
+    AgcFence fence, int32_t result, uint64_t timeout_ns)
+{
+    agcFenceCompletionLock(fence);
+    fence->last_wait_result = result;
+    if (result == AGC_ERROR_TIMEOUT) {
+        fence->timeout_count++;
+        fence->last_timeout_ns = timeout_ns;
+    }
+    agcFenceCompletionUnlock(fence);
+}
+
+static void agcQueueRecordCompletedSubmission(
+    AgcQueue queue, uint64_t submission_id)
+{
+    uint64_t completed = atomic_load_explicit(
+        &queue->last_completed_submission_id, memory_order_relaxed);
+
+    while (completed < submission_id &&
+           !atomic_compare_exchange_weak_explicit(
+               &queue->last_completed_submission_id, &completed,
+               submission_id, memory_order_release, memory_order_relaxed)) {}
 }
 
 static int agcDeviceRegistered(AgcDevice device)
@@ -2538,6 +2574,8 @@ int32_t PS5_SYSV_ABI agcCreateQueue(
         return AGC_ERROR_OUT_OF_MEMORY;
     }
     queue->magic = AGC_MAGIC_QUEUE;
+    atomic_init(&queue->pending_count, 0u);
+    atomic_init(&queue->last_completed_submission_id, 0u);
     queue->device = device;
     queue->type = desc->type;
     queue->backend_handle = handle;
@@ -14696,6 +14734,7 @@ int32_t PS5_SYSV_ABI agcCreateFence(
     if (!fence)
         return AGC_ERROR_OUT_OF_MEMORY;
     fence->device = device;
+    atomic_flag_clear_explicit(&fence->completion_lock, memory_order_relaxed);
     fence->completion_value = 1u;
     fence->observed_completion_value = desc->signaled ? 1u : 0u;
     fence->last_queue_type = UINT32_MAX;
@@ -14735,8 +14774,12 @@ int32_t PS5_SYSV_ABI agcDestroyFence(AgcFence fence)
         !agcDeviceValid(fence->device)) {
         return AGC_ERROR_INVALID_ARGUMENT;
     }
-    if (fence->pending_refs != 0u)
+    agcFenceCompletionLock(fence);
+    if (fence->pending_refs != 0u) {
+        agcFenceCompletionUnlock(fence);
         return AGC_ERROR_BUSY;
+    }
+    agcFenceCompletionUnlock(fence);
     device = fence->device;
     if (fence->allocation)
         agcRuntimeFree(device, fence->allocation);
@@ -14750,25 +14793,31 @@ static int32_t agcFencePollCompletion(AgcFence fence)
 {
 #ifdef OPENAGC_PROSPERO
     uint32_t completion;
-    int32_t result;
 #endif
+    int32_t result = AGC_OK;
 
+    agcFenceCompletionLock(fence);
     if (fence->signaled)
-        return AGC_OK;
+        goto done;
 #ifdef OPENAGC_PROSPERO
-    if (!fence->allocation)
-        return AGC_ERROR_INTERNAL;
+    if (!fence->allocation) {
+        result = AGC_ERROR_INTERNAL;
+        goto done;
+    }
     result = agcGpuMemoryInvalidate(&fence->allocation->block->memory,
         (size_t)fence->allocation->offset, sizeof(completion));
     if (result != AGC_OK)
-        return result;
+        goto done;
     completion = *(const volatile uint32_t *)
         agcAllocationCpuAddress(fence->allocation);
     fence->observed_completion_value = completion;
-    if (completion != fence->completion_value)
-        return AGC_ERROR_BUSY;
+    if (completion != fence->completion_value) {
+        result = AGC_ERROR_BUSY;
+        goto done;
+    }
 #else
-    return AGC_ERROR_BUSY;
+    result = AGC_ERROR_BUSY;
+    goto done;
 #endif
     fence->signaled = 1u;
     if (fence->pending_command_buffer_count != 0u) {
@@ -14784,14 +14833,16 @@ static int32_t agcFencePollCompletion(AgcFence fence)
             command_buffer->completion_fence = NULL;
             queue->pending_count--;
         }
-        queue->last_completed_submission_id = fence->submission_id;
+        agcQueueRecordCompletedSubmission(queue, fence->submission_id);
         fence->pending_refs--;
         fence->pending_command_buffer_count = 0u;
         fence->queue = NULL;
         fence->last_completed_submission_id = fence->submission_id;
         fence->last_command_buffer_state = AGC_COMMAND_BUFFER_STATE_EXECUTABLE;
     }
-    return AGC_OK;
+done:
+    agcFenceCompletionUnlock(fence);
+    return result;
 }
 
 int32_t PS5_SYSV_ABI agcGetFenceStatus(AgcFence fence)
@@ -14819,6 +14870,7 @@ int32_t PS5_SYSV_ABI agcGetFenceInfo(AgcFence fence, AgcFenceInfo *info)
     result = agcFencePollCompletion(fence);
     if (result != AGC_OK && result != AGC_ERROR_BUSY)
         return result;
+    agcFenceCompletionLock(fence);
     *info = (AgcFenceInfo)AGC_FENCE_INFO_INIT;
     info->state = fence->signaled ? AGC_FENCE_STATE_SIGNALED :
         fence->pending_refs != 0u ? AGC_FENCE_STATE_PENDING :
@@ -14837,6 +14889,7 @@ int32_t PS5_SYSV_ABI agcGetFenceInfo(AgcFence fence, AgcFenceInfo *info)
     info->last_timeout_ns = fence->last_timeout_ns;
     memcpy(info->profile_name, fence->device->runtime_info.profile_name,
         sizeof(info->profile_name));
+    agcFenceCompletionUnlock(fence);
     return AGC_OK;
 }
 
@@ -14846,8 +14899,11 @@ int32_t PS5_SYSV_ABI agcResetFence(AgcFence fence)
         !agcDeviceValid(fence->device)) {
         return AGC_ERROR_INVALID_ARGUMENT;
     }
-    if (fence->pending_refs != 0u)
+    agcFenceCompletionLock(fence);
+    if (fence->pending_refs != 0u) {
+        agcFenceCompletionUnlock(fence);
         return AGC_ERROR_BUSY;
+    }
 #ifdef OPENAGC_PROSPERO
     if (fence->allocation) {
         uint32_t *completion = agcAllocationCpuAddress(fence->allocation);
@@ -14856,14 +14912,17 @@ int32_t PS5_SYSV_ABI agcResetFence(AgcFence fence)
         *completion = 0u;
         result = agcFlushRuntimeAllocation(fence->allocation, 0u,
             sizeof(*completion));
-        if (result != AGC_OK)
+        if (result != AGC_OK) {
+            agcFenceCompletionUnlock(fence);
             return result;
+        }
     }
 #endif
     fence->signaled = 0u;
     fence->observed_completion_value = 0u;
     fence->last_wait_result = AGC_ERROR_BUSY;
     fence->last_command_buffer_state = AGC_COMMAND_BUFFER_STATE_INITIAL;
+    agcFenceCompletionUnlock(fence);
     return AGC_OK;
 }
 
@@ -14879,7 +14938,7 @@ int32_t PS5_SYSV_ABI agcWaitFence(AgcFence fence, uint64_t timeout_ns)
         return AGC_ERROR_INVALID_ARGUMENT;
     result = agcFencePollCompletion(fence);
     if (result != AGC_ERROR_BUSY) {
-        fence->last_wait_result = result;
+        agcFenceRecordWaitResult(fence, result, timeout_ns);
         agcCaptureRecordFenceResult(fence, result, timeout_ns);
         return result;
     }
@@ -14895,31 +14954,21 @@ int32_t PS5_SYSV_ABI agcWaitFence(AgcFence fence, uint64_t timeout_ns)
             (size_t)fence->allocation->offset, fence->completion_value,
             (uint32_t)timeout_microseconds);
         if (result != AGC_OK) {
-            fence->last_wait_result = result;
-            if (result == AGC_ERROR_TIMEOUT) {
-                fence->timeout_count++;
-                fence->last_timeout_ns = timeout_ns;
-            }
+            agcFenceRecordWaitResult(fence, result, timeout_ns);
             agcCaptureRecordFenceResult(fence, result, timeout_ns);
             return result;
         }
         result = agcFencePollCompletion(fence);
         if (result == AGC_ERROR_BUSY)
             result = AGC_ERROR_TIMEOUT;
-        fence->last_wait_result = result;
-        if (result == AGC_ERROR_TIMEOUT) {
-            fence->timeout_count++;
-            fence->last_timeout_ns = timeout_ns;
-        }
+        agcFenceRecordWaitResult(fence, result, timeout_ns);
         agcCaptureRecordFenceResult(fence, result, timeout_ns);
         return result;
     }
     agcCaptureRecordFenceResult(fence, AGC_ERROR_INTERNAL, timeout_ns);
     return AGC_ERROR_INTERNAL;
 #else
-    fence->last_wait_result = AGC_ERROR_TIMEOUT;
-    fence->timeout_count++;
-    fence->last_timeout_ns = timeout_ns;
+    agcFenceRecordWaitResult(fence, AGC_ERROR_TIMEOUT, timeout_ns);
     agcCaptureRecordFenceResult(fence, AGC_ERROR_TIMEOUT, timeout_ns);
     return AGC_ERROR_TIMEOUT;
 #endif
@@ -15213,7 +15262,7 @@ static int32_t agcQueueSubmitBatch(
         fence->observed_completion_value = fence->completion_value;
         fence->last_completed_submission_id = fence->submission_id;
         fence->last_command_buffer_state = AGC_COMMAND_BUFFER_STATE_EXECUTABLE;
-        queue->last_completed_submission_id = queue->next_submission_id;
+        agcQueueRecordCompletedSubmission(queue, queue->next_submission_id);
     }
     agcFree(queue->device, first_snapshot);
     agcFree(queue->device, last_snapshot);
@@ -15510,7 +15559,7 @@ int32_t PS5_SYSV_ABI agcQueueSubmit(
         }
     }
     if (result == AGC_OK)
-        queue->last_completed_submission_id = queue->next_submission_id;
+        agcQueueRecordCompletedSubmission(queue, queue->next_submission_id);
     agcFree(queue->device, snapshot);
     return result;
 

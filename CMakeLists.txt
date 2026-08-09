@@ -111,6 +111,7 @@ endif()
 option(OPENAGC_BUILD_TESTS "Build openagc tests" ON)
 if(OPENAGC_BUILD_TESTS)
     enable_testing()
+    find_package(Threads REQUIRED)
 
     add_executable(openagc_tests
         tests/test_main.c
@@ -134,7 +135,7 @@ if(OPENAGC_BUILD_TESTS)
         tests/test_workload_packet.c
         tests/test_videoout.c
     )
-    target_link_libraries(openagc_tests PRIVATE openagc)
+    target_link_libraries(openagc_tests PRIVATE openagc Threads::Threads)
     target_include_directories(openagc_tests PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/tests
         ${CMAKE_CURRENT_SOURCE_DIR}/src

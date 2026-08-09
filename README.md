@@ -142,7 +142,11 @@ consumes the shared
 records and hashes, and creates fail-closed graphics and compute pipelines.
 Applications query capabilities rather than branching on firmware.
 
-Heap suballocation and fence-keyed deferred retirement are implemented.
+Heap suballocation and fence-keyed deferred retirement are implemented. Fence
+completion finalization is serialized per fence, so concurrent status, wait,
+present, and retirement observers release pending command-buffer ownership
+exactly once. Queue pending/completed counters are atomic and completed
+submission identity is monotonic.
 Reflected Wave32 graphics/compute pipelines cache qualified gfx1013 bind and
 dispatch groups that the generic host harness validates. Typed descriptor arrays, reflected
 vertex tables, push constants, and declared viewport/scissor/blend/stencil-
