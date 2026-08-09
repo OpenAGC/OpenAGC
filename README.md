@@ -56,7 +56,7 @@ validation. It is not a software GPU and does not emulate PS5 rendering.
 
 ## Build for Prospero
 
-Install the [ps5-payload-sdk](https://github.com/ps5-payload-dev/sdk), then
+Install the [ps5-payload-sdk](https://github.com/OpenAGC/ps5-payload-sdk), then
 configure with its toolchain:
 
 ```sh
