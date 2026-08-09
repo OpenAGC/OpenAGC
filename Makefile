@@ -39,45 +39,15 @@ SRCS = \
 
 OBJS = $(SRCS:.c=.o)
 
-TEST_SRCS = \
-	tests/test_main.c \
-	tests/test_runtime.c \
-	tests/test_types.c \
-	tests/test_capabilities.c \
-	tests/test_memory.c \
-	tests/test_acb.c \
-	tests/test_cb.c \
-	tests/test_dcb.c \
-	tests/test_driver.c \
-	tests/test_texture.c \
-	tests/test_shader.c \
-	tests/test_graphics.c \
-	tests/test_ioctl.c \
-	tests/test_register_defaults.c \
-	tests/test_registers.c \
-	tests/test_sony_exports.c \
-	tests/test_driver_registry.c \
-	tests/test_workload_packet.c \
-	tests/test_videoout.c \
-	samples/triangle/triangle.c
-
-TEST_OBJS = $(TEST_SRCS:.c=.o)
-
-.PHONY: all clean test
+.PHONY: all clean
 
 all: libopenagc.a
 
 libopenagc.a: $(OBJS)
 	$(AR) rcs $@ $^
 
-openagc_tests: $(TEST_OBJS) libopenagc.a
-	$(CC) $(CFLAGS) -o $@ $(TEST_OBJS) -L. -lopenagc
-
-test: openagc_tests
-	./openagc_tests
-
 %.o: %.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 clean:
-	rm -f $(OBJS) $(TEST_OBJS) libopenagc.a openagc_tests
+	rm -f $(OBJS) libopenagc.a

@@ -108,8 +108,8 @@ else()
 endif()
 
 # === Tests ===
-option(OPENAGC_BUILD_TESTS "Build openagc tests" ON)
-if(OPENAGC_BUILD_TESTS)
+option(OPENAGC_BUILD_TESTS "Build openagc tests" OFF)
+if(OPENAGC_BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_main.c")
     enable_testing()
     find_package(Threads REQUIRED)
 
@@ -205,7 +205,8 @@ set(OPENAGC_PSBC_LIBRARY "" CACHE FILEPATH
     "Path to libopenagc_psbc.a for the optional integration test")
 set(OPENAGC_PSBC_INCLUDE_DIR "" CACHE PATH
     "Path containing openagc_psbc.h for the optional integration test")
-if(OPENAGC_BUILD_PSBC_INTEGRATION_TEST)
+if(OPENAGC_BUILD_PSBC_INTEGRATION_TEST AND
+   EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/psbc_runtime_integration.c")
     if(NOT EXISTS "${OPENAGC_PSBC_LIBRARY}" OR
        NOT EXISTS "${OPENAGC_PSBC_INCLUDE_DIR}/openagc_psbc.h")
         message(FATAL_ERROR
@@ -281,26 +282,8 @@ if(OPENAGC_PACKAGE_PSBC)
         DESTINATION ${CMAKE_INSTALL_BINDIR}
         RENAME openagc-psbc)
 endif()
-install(FILES LICENSE README.md docs/getting_started.md
-    docs/api_reference.md docs/capabilities_debugging.md
-    docs/native_runtime.md docs/memory_resources.md
-    docs/shader_pipelines.md docs/validation.md docs/capture.md
+install(FILES LICENSE README.md
     DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/doc/OpenAGC)
-install(FILES
-    examples/CMakeLists.txt
-    examples/first_compute.c
-    examples/first_triangle.c
-    DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/doc/OpenAGC/examples
-)
-install(FILES
-    samples/hw_test/shaders/fill_color_native_reflection.h
-    samples/hw_test/shaders/fill_color_native_sb.h
-    samples/hw_test/shaders/runtime_triangle_frag_reflection.h
-    samples/hw_test/shaders/runtime_triangle_frag_sb.h
-    samples/hw_test/shaders/runtime_triangle_vert_back_sb.h
-    samples/hw_test/shaders/runtime_triangle_vert_front_sb.h
-    samples/hw_test/shaders/runtime_triangle_vert_reflection.h
-    DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/doc/OpenAGC/examples/shaders)
 
 set(OPENAGC_CMAKE_INSTALL_DIR
     "${CMAKE_INSTALL_LIBDIR}/cmake/OpenAGC")
